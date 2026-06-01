@@ -5,7 +5,7 @@ set -e
 SCRIPT_DIR="${0:A:h}"
 DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"
 SHARED_PACKAGE_DIR="$SCRIPT_DIR/packages/shared"
-BUILD_DIR="$SCRIPT_DIR/.artifacts/build"
+BUILD_DIR="$SCRIPT_DIR/.artifacts/build/agent-dev"
 BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
 INSTALL_STAMP="$BUILD_DIR/dev-deps.stamp"
 INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"

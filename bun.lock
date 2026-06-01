@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tao-lang-2",
+      "name": "tao-lang",
       "devDependencies": {
         "typescript": "5.9.3",
       },

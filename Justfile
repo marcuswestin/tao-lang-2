@@ -13,7 +13,7 @@ fmt:
   dprint fmt --config config/dprint.jsonc --incremental=false
 
 # Check all code
-check: _install_deps
+check: parser-gen
   dprint check --config config/dprint.jsonc --incremental=false
   bunx tsc --build packages/*/tsconfig.json
 
