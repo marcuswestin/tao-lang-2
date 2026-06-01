@@ -12,6 +12,8 @@ export type TaoParserServices = {
   TaoLang: LGM.LangiumCoreServices
 }
 
+export type LexTaoResult = ReturnType<TaoParserServices['TaoLang']['parser']['Lexer']['tokenize']>
+
 export type ParseTaoOptions = {
   uri?: LGM.URI
 }
@@ -36,6 +38,11 @@ export function createTaoParserServices(
   shared.ServiceRegistry.register(TaoLang)
 
   return { shared, TaoLang }
+}
+
+export function lexTaoSource(source: string): LexTaoResult {
+  const services = createTaoParserServices()
+  return services.TaoLang.parser.Lexer.tokenize(source)
 }
 
 export async function parseTaoFile(path: string): Promise<ParseTaoResult> {
