@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "sourceMap": true,
+    "declaration": true,
+    "composite": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "baseUrl": ".",
+    "rootDir": ".",
+    "paths": {
+      "@shared": [
+        "./shared/shared-src/shared.ts"
+      ],
+      "@shared/*": [
+        "./shared/shared-src/*"
+      ]
+    }
+  },
+  "include": [
+    "./shared/shared-src/**/*"
+  ],
+  "exclude": [
+    "**/node_modules/**/*"
+  ]
+}

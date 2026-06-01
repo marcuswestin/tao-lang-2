@@ -1,0 +1,13 @@
+{
+  "name": "@tao/shared",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "latest",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
