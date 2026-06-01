@@ -88,6 +88,7 @@ You will do all your work with Ro, the project lead and language designer. They 
 - Instructions
   - Create a `feat/<feature>` branch _if in a worktree_
   - Do not stage changes unless instructed
-  - Commit message format `<Summary line>\n\n<Newline-separated bullet list of changes>`
-  - Always squash-merge into main with message `<Summary line>\n\n<Newline-separated bullet list of changes>\n\n<Git's default squash-merge list of commits and messages>`
+  - Always run `./agent just prep-commit` before making commits
+  - Commit message format `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`
+  - Always squash-merge into main with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`
   - When merged into main, rename branch to `merged/...`, and sync that with origin

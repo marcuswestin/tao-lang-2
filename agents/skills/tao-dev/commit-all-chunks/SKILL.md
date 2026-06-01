@@ -11,6 +11,7 @@ Commit all uncommitted changes in small, self-contained pieces, with an appropri
 Make no further changes to the codebase—only commits. If you need a code change, ask first.
 
 Prefer the smallest self-contained commits first.
+Commit message bullet lists must use one bullet per line with no blank lines between bullets.
 
 ## Proccess:
 
