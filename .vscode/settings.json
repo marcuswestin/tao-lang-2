@@ -21,6 +21,7 @@
     ".android": true,
     ".artifacts": true,
     ".codex": true,
+    ".dprint.jsonc": true,
     "**/.DS_Store": true,
     "**/node_modules": true,
     "**/bun.lock": true,

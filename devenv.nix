@@ -64,6 +64,10 @@ in
     exec = ''just test "$@"'';
     description = "just test";
   };
+  scripts.f = {
+    exec = ''just fix "$@"'';
+    description = "just fix";
+  };
   scripts.b = {
     exec = ''just build "$@"'';
     description = "just build";
