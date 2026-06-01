@@ -15,6 +15,7 @@ describe('minimal Tao parser diagnostics', () => {
 
     expect(parsed.document.parseResult.lexerErrors).toEqual([])
     expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
 
   test('reports parser errors for incomplete render statements', async () => {
@@ -22,11 +23,13 @@ describe('minimal Tao parser diagnostics', () => {
 
     expect(parsed.document.parseResult.lexerErrors).toEqual([])
     expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
 
   test('reports lexer errors separately from parser errors', async () => {
     const parsed = await parseTaoSource('ui Broken { render @ }')
 
     expect(parsed.document.parseResult.lexerErrors.length).toBeGreaterThan(0)
+    expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
 })

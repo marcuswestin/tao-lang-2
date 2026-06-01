@@ -62,7 +62,7 @@ async function buildDocument(services: TaoParserServices, document: AST.Document
   services.shared.workspace.LangiumDocuments.addDocument(document)
   await services.shared.workspace.DocumentBuilder.build([document], {
     eagerLinking: true,
-    validation: false,
+    validation: true,
   })
 
   return {
