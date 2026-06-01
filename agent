@@ -1,0 +1,18 @@
+#!/bin/zsh
+
+CMD_WHITELIST="ls rg git cd cp mv rm just"
+
+if [[ "$1" == "help" || -z "$1" ]]; then
+  echo "just $(just --list)"
+	echo "shell available commands (ask to add if needed):"
+	echo "$CMD_WHITELIST" | tr ' ' '\n' | grep -v '^$' | sed 's/^/    /'
+  exit 0
+fi
+
+
+if [[ ! " $CMD_WHITELIST " =~ " $1 " ]]; then
+  echo "Error: Command '$1' is not whitelisted. Ask if you can add it."
+  exit 1
+fi
+
+"$@"
