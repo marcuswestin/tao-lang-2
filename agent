@@ -1,18 +1,106 @@
 #!/bin/zsh
 
-CMD_WHITELIST="ls rg git cd cp mv rm just"
+set -e
 
-if [[ "$1" == "help" || -z "$1" ]]; then
-  echo "just $(just --list)"
-	echo "shell available commands (ask to add if needed):"
-	echo "$CMD_WHITELIST" | tr ' ' '\n' | grep -v '^$' | sed 's/^/    /'
-  exit 0
-fi
+SCRIPT_DIR="${0:A:h}"
+DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"
+SHARED_PACKAGE_DIR="$SCRIPT_DIR/packages/shared"
+BUILD_DIR="$SCRIPT_DIR/.artifacts/build"
+BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
+INSTALL_STAMP="$BUILD_DIR/dev-deps.stamp"
+INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"
+BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
+BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
+export TAO_AGENT_CWD="$PWD"
+export TAO_REPO_ROOT="$SCRIPT_DIR"
 
+mkdir -p "$BUILD_DIR"
 
-if [[ ! " $CMD_WHITELIST " =~ " $1 " ]]; then
-  echo "Error: Command '$1' is not whitelisted. Ask if you can add it."
-  exit 1
-fi
+function needs_install() {
+  [[ ! -d "$DEV_PACKAGE_DIR/node_modules" ]] && return 0
+  [[ ! -f "$INSTALL_STAMP" ]] && return 0
+  [[ "$DEV_PACKAGE_DIR/package.json" -nt "$INSTALL_STAMP" ]] && return 0
+  [[ "$DEV_PACKAGE_DIR/bun.lock" -nt "$INSTALL_STAMP" ]] && return 0
+  return 1
+}
 
-"$@"
+function install_dev_deps() {
+  if ! install_output="$(bun install --cwd "$DEV_PACKAGE_DIR" 2>&1)"; then
+    echo "$install_output" >&2
+    exit 1
+  fi
+  touch "$INSTALL_STAMP"
+}
+
+function wait_for_lock() {
+  local lock_dir="$1"
+
+  while [[ -d "$lock_dir" ]]; do
+    sleep 0.1
+  done
+}
+
+function ensure_dev_deps() {
+  if ! needs_install; then
+    return
+  fi
+
+  if mkdir "$INSTALL_LOCK" 2>/dev/null; then
+    trap 'rm -rf "$INSTALL_LOCK" "$BUILD_LOCK"' EXIT INT TERM
+    needs_install && install_dev_deps
+    rm -rf "$INSTALL_LOCK"
+    trap - EXIT INT TERM
+    return
+  fi
+
+  wait_for_lock "$INSTALL_LOCK"
+  needs_install && ensure_dev_deps
+}
+
+function needs_build() {
+  [[ ! -f "$BUILD_OUTPUT" ]] && return 0
+  [[ ! -f "$BUILD_STAMP" ]] && return 0
+
+  for source_path in \
+    "$DEV_PACKAGE_DIR"/dev-src/**/*.ts(N) \
+    "$SHARED_PACKAGE_DIR"/shared-src/**/*.ts(N) \
+    "$DEV_PACKAGE_DIR"/package.json \
+    "$DEV_PACKAGE_DIR"/bun.lock \
+    "$SHARED_PACKAGE_DIR"/package.json \
+    "$SHARED_PACKAGE_DIR"/bun.lock
+  do
+    [[ "$source_path" -nt "$BUILD_STAMP" ]] && return 0
+  done
+
+  return 1
+}
+
+function build_agent() {
+  if ! build_output="$(bun build --cwd "$DEV_PACKAGE_DIR" dev-src/dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
+    echo "$build_output" >&2
+    exit 1
+  fi
+  touch "$BUILD_STAMP"
+}
+
+function ensure_agent_build() {
+  if ! needs_build; then
+    return
+  fi
+
+  if mkdir "$BUILD_LOCK" 2>/dev/null; then
+    trap 'rm -rf "$INSTALL_LOCK" "$BUILD_LOCK"' EXIT INT TERM
+    needs_build && build_agent
+    rm -rf "$BUILD_LOCK"
+    trap - EXIT INT TERM
+    return
+  fi
+
+  wait_for_lock "$BUILD_LOCK"
+  needs_build && ensure_agent_build
+}
+
+ensure_dev_deps
+ensure_agent_build
+
+exec bun "$BUILD_OUTPUT" "$@"

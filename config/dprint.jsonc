@@ -10,7 +10,9 @@
     "**/*-lock.json",
     "**/_gen-*",
     "**/_gen/**",
-    ".agents/skills/**",
+    ".*",
+    "packages/old-*",
+    "packages/old-*/**",
   ],
   "typescript": {
     "semiColons": "asi",

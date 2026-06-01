@@ -6,4 +6,7 @@ node_modules
 .direnv
 
 .android
+.artifacts
 local.properties
+
+.artifacts

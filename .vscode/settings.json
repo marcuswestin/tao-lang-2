@@ -8,12 +8,17 @@
   "files.exclude": {
     ".devenv": true,
     ".direnv": true,
+    ".android": true,
+    ".artifacts": true,
+    ".codex": true,
+    "**/.DS_Store": true,
     "**/node_modules": true,
+    "**/bun.lock": true,
+    "devenv.lock": true,
+    "devenv.yaml": true,
     "**/tsconfig.tsbuildinfo": true,
     "local.properties": true,
-    "skills-lock.json": true,
-    ".android": true,
-    ".codex": true
+    "skills-lock.json": true
   },
   "search.exclude": {
     "**/bun.lock": true
