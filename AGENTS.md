@@ -9,7 +9,7 @@ You will do all your work with Ro, the project lead and language designer. They 
 ## Instructions:
 
 1. Instructions:
-   - **ALWAYS** start with `direnv allow`, then `./agent help`
+   - On a fresh worktree or after `.envrc` / `devenv.*` changes, run `direnv allow` once, then `./agent help`
    - **ALWAYS** use `./agent <cmd> ...` for executable shell commands; use normal `cd` or tool workdirs to choose the command directory
    - **IF** in a git worktree, create a `feat/<name>` branch
    - **ALWAYS** let the IDE soft-wrap lines
