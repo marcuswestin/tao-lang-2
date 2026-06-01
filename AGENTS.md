@@ -90,3 +90,4 @@ You will do all your work with Ro, the project lead and language designer. They 
   - Do not stage changes unless instructed
   - Commit message format `<Summary line>\n\n<Newline-separated bullet list of changes>`
   - Always squash-merge into main with message `<Summary line>\n\n<Newline-separated bullet list of changes>\n\n<Git's default squash-merge list of commits and messages>`
+  - When merged into main, rename branch to `merged/...`, and sync that with origin
