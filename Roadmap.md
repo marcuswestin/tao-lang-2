@@ -21,7 +21,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [x] Export `parseTaoFile`, `parseTaoSource`, `parser`, and `parserASTExport`
   - [x] Support current syntax: `app`, `ui`, text parameters, `render`, view calls, optional empty blocks, and `inject` TS fences
   - [x] Keep `Render` named `Render`
-  - [x] Keep statements unified through `Statement`; use aliases such as `AppStatement` and `ViewStatement` only for generated `AST.is*` helpers
+  - [x] Use context-specific statements: top-level declarations, app-root `ui`, and view-block `render`
   - [x] Skip validator and grammar mechanics tests
   - [x] Add parser tests for Kitchen Sink and source strings
   - [ ] Ro review
