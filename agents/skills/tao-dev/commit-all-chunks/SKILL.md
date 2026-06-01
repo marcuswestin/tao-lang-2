@@ -1,0 +1,22 @@
+---
+name: commit-all-chunks
+description: >-
+  Commit all uncommitted changes in small, self-contained pieces with an appropriate message each. Commits only (no code edits without approval).
+---
+
+# Commit all chunks
+
+Commit all uncommitted changes in small, self-contained pieces, with an appropriate commit message for each piece.
+
+Make no further changes to the codebase—only commits. If you need a code change, ask first.
+
+Prefer the smallest self-contained commits first.
+
+## Proccess:
+
+First run `prep-commit`, then:
+
+1. Determine the smallest next chunk to commit
+2. Stage it
+3. Commit it
+4. Repeat until done
