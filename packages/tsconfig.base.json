@@ -26,6 +26,12 @@
       ],
       "@shared/*": [
         "./shared/shared-src/*"
+      ],
+      "@tao/parser": [
+        "./parser/parser-src/parser.ts"
+      ],
+      "@tao/parser/*": [
+        "./parser/parser-src/*"
       ]
     }
   },

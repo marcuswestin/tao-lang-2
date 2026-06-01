@@ -1,4 +1,7 @@
 {
+  // Use the workspace TypeScript version so Langium generated code typechecks consistently.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
   /////////////
   // Formatting
   "editor.defaultFormatter": "dprint.dprint",

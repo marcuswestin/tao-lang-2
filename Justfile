@@ -1,28 +1,28 @@
 set quiet := true
 
-_DEV_PACKAGE := "packages/dev"
-_SHARED_PACKAGE := "packages/shared"
-
 # Print available recipes
 help:
   just --list
 
 # Run all tests
-test:
-  bun test {{ _SHARED_PACKAGE }}/shared-tests/*.test.ts
+test: build
+  bun test packages/*/*-tests/*.test.ts
 
 # Format code
 fmt:
   dprint fmt --config config/dprint.jsonc --incremental=false
 
 # Check all code
-check: _install-deps
+check: _install_deps
   dprint check --config config/dprint.jsonc --incremental=false
-  cd {{ _DEV_PACKAGE }} && bunx tsc --noEmit -p tsconfig.json
-  cd {{ _SHARED_PACKAGE }} && bunx tsc --noEmit -p tsconfig.json
+  bunx tsc --build packages/*/tsconfig.json
 
 # Build everything
-build: _install-deps
+build: _install_deps
+
+# Generate parser artifacts
+parser-gen: build
+  cd packages/parser && bunx langium-cli generate
 
 # Clean run dependencies and build artifacts
 clean:
@@ -38,6 +38,5 @@ prep-commit: check test fix
 # Private
 #########
 
-_install-deps:
-  cd {{ _DEV_PACKAGE }} && bun install
-  cd {{ _SHARED_PACKAGE }} && bun install
+_install_deps:
+  bun install

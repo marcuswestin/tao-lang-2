@@ -73,6 +73,10 @@ in
     description = "just prep-commit";
   };
   scripts.c = {
+    exec = ''just check "$@"'';
+    description = "just check";
+  };
+  scripts.cl = {
     exec = ''just clean "$@"'';
     description = "just clean";
   };

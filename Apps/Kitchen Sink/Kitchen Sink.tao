@@ -1,0 +1,14 @@
+app KitchenSink {
+    ui MainView
+}
+
+ui MainView {
+    render Text "Hello, World!" { }
+}
+
+ui Text Value text {
+    render inject ```ts
+        const text = _ViewProps.Value.evaluate();
+        <RN.Text>{text}</RN.Text>
+    ```
+}

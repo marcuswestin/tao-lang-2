@@ -1,0 +1,24 @@
+{
+  "name": "@tao/parser",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "module": "parser-src/parser.ts",
+  "exports": {
+    ".": "./parser-src/parser.ts",
+    "./parser": "./parser-src/parser.ts",
+    "./parserASTExport": "./parser-src/parserASTExport.ts"
+  },
+  "dependencies": {
+    "langium": "~4.2.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "latest",
+    "langium-cli": "^4.2.0",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
