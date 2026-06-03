@@ -13,6 +13,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - Always run `./agent help` at the start of a session
    - **ALWAYS** use `./agent <cmd> ...` for executable shell commands; use normal `cd` or tool workdirs to choose the command directory
    - **IF** in a git worktree, create a `feat/<name>` branch
+   - Multiple agents may work in this repo in parallel; treat changes you did not make as expected peer work, and do not overwrite or revert them without explicit direction
    - **ALWAYS** let the IDE soft-wrap lines
    - **ALWAYS** remove stale instructions and code
 
@@ -22,7 +23,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - We use `nix` and `direnv` + `devenv` for dev environment automation
    - Use `bun` over `node` (except with `expo`)
    - Manage agent skills with `bunx skills`
-   - Favor `packages/dev` TypeScript over shell scripts
+   - Run `packages/dev` automation through `./dev <command>`, or through `agent-dev` when it belongs to `./agent`; avoid standalone Bun script entrypoints
    - Keep this guide to durable agent instructions; omit transient implementation mechanics
 
 ## Priorities:
@@ -35,8 +36,10 @@ You will do all your work with Ro, the project lead and language designer. They 
    - Prefer self-documenting names and small functions over comments
    - Add comments only for intent, invariants, edge cases, or surprising constraints
    - Do not comment obvious mechanics
-   - Keep exported helper/type JSDoc short and contract-focused
+   - **ALWAYS** document exported functions and types with short, contract-focused JSDoc in the `<decl> <verb>s <description>` style
+   - When touching existing exported code, add or update missing export docs as part of the same change
    - Remove or update stale comments whenever code changes
+   - **ALWAYS** remove unused code and stale exports unless there is a specific documented reason to keep them
 
 3. Repo Dev Environment Efficiency and Efficacy
    - **ALWAYS** prioritize FAST, EFFICIENT, and EFFECTIVE automation of all development workflows
