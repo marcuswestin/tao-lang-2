@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { lexTaoSource } from '../parser-src/parser'
+import { type LexResult, Parser } from '../parser-src/parser'
 
 describe('minimal Tao lexer', () => {
   test('lexes identifiers', () => {
@@ -40,14 +40,14 @@ describe('minimal Tao lexer', () => {
   })
 })
 
-function expectLexes(source: string): ReturnType<typeof lexTaoSource> {
-  const result = lexTaoSource(source)
+function expectLexes(source: string): LexResult {
+  const result = Parser.lexCode(source)
   expect(result.errors).toEqual([])
   return result
 }
 
-function expectLexErrors(source: string, ...unexpectedCharacters: string[]): ReturnType<typeof lexTaoSource> {
-  const result = lexTaoSource(source)
+function expectLexErrors(source: string, ...unexpectedCharacters: string[]): LexResult {
+  const result = Parser.lexCode(source)
   expect(result.errors.length).toBeGreaterThan(0)
 
   for (const unexpectedCharacter of unexpectedCharacters) {
@@ -66,10 +66,10 @@ function errorTouches(error: { offset?: number; message?: string }, source: stri
   )
 }
 
-function tokenImages(result: ReturnType<typeof lexTaoSource>): string[] {
+function tokenImages(result: LexResult): string[] {
   return result.tokens.map(token => token.image)
 }
 
-function tokenNames(result: ReturnType<typeof lexTaoSource>): string[] {
+function tokenNames(result: LexResult): string[] {
   return result.tokens.map(token => token.tokenType.name)
 }

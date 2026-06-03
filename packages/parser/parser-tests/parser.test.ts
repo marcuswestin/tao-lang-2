@@ -2,14 +2,14 @@ import { describe, expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { AST, parseTaoFile, parseTaoSource } from '../parser-src/parser'
+import { AST, Parser } from '../parser-src/parser'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const kitchenSinkPath = resolve(repoRoot, 'Apps/Kitchen Sink/Kitchen Sink.tao')
 
 describe('minimal Tao parser', () => {
   test('parses the current Kitchen Sink app', async () => {
-    const parsed = await parseTaoFile(kitchenSinkPath)
+    const parsed = await Parser.parseFile(kitchenSinkPath)
 
     expect(parsed.diagnostics).toEqual([])
 
@@ -23,7 +23,7 @@ describe('minimal Tao parser', () => {
     }
 
     expect(app.name).toBe('KitchenSink')
-    const appRoot = app.statements[0]
+    const appRoot = app.block.statements[0]
     expect(AST.isAppUi(appRoot)).toBe(true)
     if (!AST.isAppUi(appRoot)) {
       throw new Error('KitchenSink should declare a root ui.')
@@ -54,7 +54,7 @@ describe('minimal Tao parser', () => {
 
   test('parses Tao source strings', async () => {
     const source = await readFile(kitchenSinkPath, 'utf8')
-    const parsed = await parseTaoSource(source)
+    const parsed = await Parser.parseCode(source)
 
     expect(parsed.diagnostics).toEqual([])
     expect(parsed.ast.statements).toHaveLength(3)

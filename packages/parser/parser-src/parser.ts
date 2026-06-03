@@ -1,64 +1,67 @@
-import * as LGM from 'langium'
-import { NodeFileSystem } from 'langium/node'
+import { Langium } from './langium-exports'
 import * as AST from './parserASTExport'
 
-export * as LGM from 'langium'
-export * as LGMGenerate from 'langium/generate'
-export * as LGMNode from 'langium/node'
-export { AST }
+export { AST, Langium }
 
-export type TaoParserServices = {
-  shared: LGM.LangiumSharedCoreServices
-  TaoLang: LGM.LangiumCoreServices
+type Services = {
+  shared: Langium.LangiumSharedCoreServices
+  language: Langium.LangiumCoreServices
 }
 
-export type LexTaoResult = ReturnType<TaoParserServices['TaoLang']['parser']['Lexer']['tokenize']>
+/** LexResult declares the raw Langium lexer result for Tao source text. */
+export type LexResult = ReturnType<Services['language']['parser']['Lexer']['tokenize']>
 
-export type ParseTaoOptions = {
-  uri?: LGM.URI
+/** ParseOptions declares optional source metadata for parsing code strings. */
+export type ParseOptions = {
+  uri?: Langium.URI
 }
 
-export type ParseTaoResult = {
+/** ParseResult declares the parsed AST, diagnostics, and underlying Langium document. */
+export type ParseResult = {
   ast: AST.TaoFile
   diagnostics: readonly AST.ParseDiagnostic[]
   document: AST.Document
 }
 
-export function createTaoParserServices(
-  context: LGM.DefaultSharedCoreModuleContext = NodeFileSystem,
-): TaoParserServices {
-  const shared = LGM.inject(
-    LGM.createDefaultSharedCoreModule(context),
+/** Parser exposes lexing and parsing functions for Tao source files and source strings. */
+export const Parser = {
+  /** lexCode lexes Tao source code and returns Langium tokens, hidden tokens, and lexer errors. */
+  lexCode(code: string): LexResult {
+    const services = createServices()
+    return services.language.parser.Lexer.tokenize(code)
+  },
+
+  /** parseFile parses the Tao file at `path` into a Langium AST document. */
+  async parseFile(path: string): Promise<ParseResult> {
+    const services = createServices()
+    const document = await services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(Langium.URI.file(path))
+    return await buildDocument(services, document)
+  },
+
+  /** parseCode parses Tao source code into a Langium AST document. */
+  async parseCode(code: string, opts: ParseOptions = {}): Promise<ParseResult> {
+    const services = createServices()
+    const uri = opts.uri ?? Langium.URI.file('/__tao__/source.tao')
+    const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(code, uri)
+    return await buildDocument(services, document)
+  },
+}
+
+function createServices(context: Langium.DefaultSharedCoreModuleContext = Langium.NodeFileSystem): Services {
+  const shared = Langium.inject(
+    Langium.createDefaultSharedCoreModule(context),
     AST.GeneratedSharedModule,
   )
-  const TaoLang = LGM.inject(
-    LGM.createDefaultCoreModule({ shared }),
+  const language = Langium.inject(
+    Langium.createDefaultCoreModule({ shared }),
     AST.GeneratedModule,
   )
-  shared.ServiceRegistry.register(TaoLang)
+  shared.ServiceRegistry.register(language)
 
-  return { shared, TaoLang }
+  return { shared, language }
 }
 
-export function lexTaoSource(source: string): LexTaoResult {
-  const services = createTaoParserServices()
-  return services.TaoLang.parser.Lexer.tokenize(source)
-}
-
-export async function parseTaoFile(path: string): Promise<ParseTaoResult> {
-  const services = createTaoParserServices()
-  const document = await services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(LGM.URI.file(path))
-  return await buildDocument(services, document)
-}
-
-export async function parseTaoSource(source: string, opts: ParseTaoOptions = {}): Promise<ParseTaoResult> {
-  const services = createTaoParserServices()
-  const uri = opts.uri ?? LGM.URI.file('/__tao__/source.tao')
-  const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
-  return await buildDocument(services, document)
-}
-
-async function buildDocument(services: TaoParserServices, document: AST.Document): Promise<ParseTaoResult> {
+async function buildDocument(services: Services, document: AST.Document): Promise<ParseResult> {
   services.shared.workspace.LangiumDocuments.addDocument(document)
   await services.shared.workspace.DocumentBuilder.build([document], {
     eagerLinking: true,

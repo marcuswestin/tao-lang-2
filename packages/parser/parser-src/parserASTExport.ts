@@ -1,20 +1,17 @@
-import * as LGM from 'langium'
-import * as ASTGen from './_gen-tao-parser/ast'
-import { TaoLangGeneratedModule, TaoLangGeneratedSharedModule } from './_gen-tao-parser/module'
+import type { AstNode, LangiumDocument } from 'langium'
+import * as ASTGen from './_gen_tao-parser/ast'
+import { TaoLangGeneratedModule, TaoLangGeneratedSharedModule } from './_gen_tao-parser/module'
 
-export * from './_gen-tao-parser/ast'
+export * from './_gen_tao-parser/ast'
 
-export type Document = LGM.LangiumDocument<ASTGen.TaoFile>
-export type Node = LGM.AstNode
+/** Document declares a Langium document whose root is a Tao file AST. */
+export type Document = LangiumDocument<ASTGen.TaoFile>
+/** Node declares any Langium AST node in the Tao parser output. */
+export type Node = AstNode
+/** ParseDiagnostic declares a diagnostic produced while parsing a Tao document. */
 export type ParseDiagnostic = NonNullable<Document['diagnostics']>[number]
-
-export const isNode = LGM.isAstNode
 
 export {
   TaoLangGeneratedModule as GeneratedModule,
   TaoLangGeneratedSharedModule as GeneratedSharedModule,
-}
-
-export const Utils = {
-  ...LGM.AstUtils,
 }

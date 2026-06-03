@@ -1,6 +1,6 @@
 {
   "projectName": "TaoLang",
-  "out": "./parser-src/_gen-tao-parser",
+  "out": "./parser-src/_gen_tao-parser",
   "languages": [{
     "id": "tao-lang",
     "grammar": "./parser-grammar/tao-grammar.langium",

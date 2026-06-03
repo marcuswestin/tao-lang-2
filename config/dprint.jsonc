@@ -7,8 +7,7 @@
   "excludes": [
     "**/node_modules",
     "**/*-lock.json",
-    "**/_gen-*",
-    "**/_gen/**",
+    "**/_gen_*/**",
     ".*",
     "packages/old-*",
     "packages/old-*/**",

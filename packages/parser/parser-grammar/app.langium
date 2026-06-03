@@ -7,9 +7,7 @@ entry AppGrammarEntrypoint:
     AppDeclaration;
 
 AppDeclaration:
-    'app' name=ID '{' statements+=Statement* '}';
-
-type AppStatement = AppUi;
+    'app' name=ID block=Block;
 
 AppUi:
     'ui' ui=[ViewDeclaration:ID];
