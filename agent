@@ -17,15 +17,16 @@ export TAO_REPO_ROOT="$SCRIPT_DIR"
 mkdir -p "$BUILD_DIR"
 
 function needs_install() {
-  [[ ! -d "$DEV_PACKAGE_DIR/node_modules" ]] && return 0
+  [[ ! -d "$SCRIPT_DIR/node_modules" ]] && return 0
   [[ ! -f "$INSTALL_STAMP" ]] && return 0
+  [[ "$SCRIPT_DIR/package.json" -nt "$INSTALL_STAMP" ]] && return 0
+  [[ "$SCRIPT_DIR/bun.lock" -nt "$INSTALL_STAMP" ]] && return 0
   [[ "$DEV_PACKAGE_DIR/package.json" -nt "$INSTALL_STAMP" ]] && return 0
-  [[ "$DEV_PACKAGE_DIR/bun.lock" -nt "$INSTALL_STAMP" ]] && return 0
   return 1
 }
 
 function install_dev_deps() {
-  if ! install_output="$(bun install --cwd "$DEV_PACKAGE_DIR" 2>&1)"; then
+  if ! install_output="$(bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
     echo "$install_output" >&2
     exit 1
   fi
@@ -64,10 +65,10 @@ function needs_build() {
   for source_path in \
     "$DEV_PACKAGE_DIR"/dev-src/**/*.ts(N) \
     "$SHARED_PACKAGE_DIR"/shared-src/**/*.ts(N) \
+    "$SCRIPT_DIR"/package.json \
+    "$SCRIPT_DIR"/bun.lock \
     "$DEV_PACKAGE_DIR"/package.json \
-    "$DEV_PACKAGE_DIR"/bun.lock \
-    "$SHARED_PACKAGE_DIR"/package.json \
-    "$SHARED_PACKAGE_DIR"/bun.lock
+    "$SHARED_PACKAGE_DIR"/package.json
   do
     [[ "$source_path" -nt "$BUILD_STAMP" ]] && return 0
   done
@@ -76,7 +77,7 @@ function needs_build() {
 }
 
 function build_agent() {
-  if ! build_output="$(bun build --cwd "$DEV_PACKAGE_DIR" dev-src/dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
+  if ! build_output="$(bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
     echo "$build_output" >&2
     exit 1
   fi
