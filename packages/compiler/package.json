@@ -1,0 +1,12 @@
+{
+  "name": "@tao/compiler",
+  "private": true,
+  "type": "module",
+  "module": "compiler-src/compiler.ts",
+  "exports": {
+    ".": "./compiler-src/compiler.ts"
+  },
+  "dependencies": {
+    "@tao/parser": "workspace:*"
+  }
+}
