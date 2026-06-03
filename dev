@@ -1,7 +1,7 @@
 #!/bin/zsh
 
 SCRIPT_DIR="${0:A:h}"
-export TAO_AGENT_CWD="$PWD"
+export TAO_AGENT_CWD="${TAO_AGENT_CWD:-$PWD}"
 export TAO_REPO_ROOT="$SCRIPT_DIR"
 
 exec bun run "$SCRIPT_DIR/packages/dev/dev-src/dev.ts" "$@"
