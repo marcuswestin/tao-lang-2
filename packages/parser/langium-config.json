@@ -4,6 +4,9 @@
   "languages": [{
     "id": "tao-lang",
     "grammar": "./parser-grammar/tao-grammar.langium",
-    "fileExtensions": ["tao"]
+    "fileExtensions": ["tao"],
+    "textMate": {
+      "out": "../ide-extension/ide-extension-syntaxes/_gen-syntaxes/tao-lang.tmLanguage.json"
+    }
   }]
 }

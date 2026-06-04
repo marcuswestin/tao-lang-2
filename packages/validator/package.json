@@ -4,7 +4,8 @@
   "type": "module",
   "module": "validator-src/validator.ts",
   "exports": {
-    ".": "./validator-src/validator.ts"
+    ".": "./validator-src/validator.ts",
+    "./langium-services": "./validator-src/langium-services.ts"
   },
   "dependencies": {
     "tao-parser": "workspace:*",

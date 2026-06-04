@@ -11,5 +11,6 @@ local.properties
 
 .artifacts
 _gen_*
+_gen-*
 
 .expo

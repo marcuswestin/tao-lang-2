@@ -27,7 +27,7 @@ fix:
   dprint fmt --incremental=false
 
 # Check all code
-check: _compile-kitchen-sink-app
+check: _compile-kitchen-sink-app _ide-extension-build
   dprint check --incremental=false
   bunx tsc --build packages/*/tsconfig.json
 
@@ -61,6 +61,9 @@ prep-commit: fix check test
 
 _compile-kitchen-sink-app: _parser-gen
   ./dev compile-app "{{KITCHEN_SINK_APP}}"
+
+_ide-extension-build:
+  cd packages/ide-extension && bun esbuild.config.ts
 
 _android-emulator:
   ./dev android-emulator

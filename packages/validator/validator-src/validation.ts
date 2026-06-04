@@ -1,4 +1,4 @@
-import { AST } from '@parser'
+import { AST, Langium } from '@parser'
 import { type TaoDiagnostic, validatorError } from './diagnostics'
 
 /** ValidationContext collects Tao validator diagnostics. */
@@ -14,6 +14,19 @@ export function createValidationContext(): ValidationContext {
     diagnostics,
     error(message: string, node?: AST.Node) {
       diagnostics.push(validatorError(message, node))
+    },
+  }
+}
+
+/** createLangiumValidationContext creates a validator context backed by Langium diagnostics. */
+export function createLangiumValidationContext(
+  accept: Langium.ValidationAcceptor,
+  fallback: AST.Node,
+): ValidationContext {
+  return {
+    diagnostics: [],
+    error(message: string, node?: AST.Node) {
+      accept('error', message, { node: node ?? fallback })
     },
   }
 }

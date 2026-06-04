@@ -8,6 +8,7 @@
     "**/node_modules",
     "**/*-lock.json",
     "**/_gen_*/**",
+    "**/_gen-*/**",
     ".*",
     "packages/old-*",
     "packages/old-*/**",

@@ -1,11 +1,19 @@
 import { AST, Langium, type ParseOptions, type ParseResult } from '@parser'
 import { TaoValueScopeProvider } from '@parser/value-scope'
 import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typir-langium'
+import { registerTaoValidationChecks } from './langium-validation'
 import { type TaoSpecifics, TaoTypeSystem, type TaoTypirServices } from './type-system'
 
 type Services = {
   shared: Langium.LangiumSharedCoreServices
   language: Langium.LangiumDefaultCoreServices
+  typir: TaoTypirServices
+}
+
+/** ValidatorLspServices declares validator-owned services used by the Tao language server. */
+export type ValidatorLspServices = {
+  shared: Langium.LangiumSharedServices
+  language: Langium.LangiumServices
   typir: TaoTypirServices
 }
 
@@ -55,6 +63,36 @@ export function createValidatorServices(): Services {
     },
   )
   shared.ServiceRegistry.register(language)
+  registerTaoValidationChecks(language)
+  initializeLangiumTypirServices(language, typir)
+
+  return { shared, language, typir }
+}
+
+/** createValidatorLspServices creates Langium LSP services with Tao Typir services initialized. */
+export function createValidatorLspServices(
+  context: Langium.DefaultSharedModuleContext = Langium.NodeFileSystem,
+): ValidatorLspServices {
+  const shared = Langium.inject(
+    Langium.createDefaultSharedModule(context),
+    AST.GeneratedSharedModule,
+  )
+  const typir = createTypirLangiumServices<TaoSpecifics>(
+    shared,
+    AST.reflection,
+    new TaoTypeSystem(),
+  )
+  const language = Langium.inject(
+    Langium.createDefaultModule({ shared }),
+    AST.GeneratedModule,
+    {
+      references: {
+        ScopeProvider: (services) => new TaoValueScopeProvider(services),
+      },
+    },
+  )
+  shared.ServiceRegistry.register(language)
+  registerTaoValidationChecks(language)
   initializeLangiumTypirServices(language, typir)
 
   return { shared, language, typir }
