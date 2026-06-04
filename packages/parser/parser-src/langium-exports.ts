@@ -20,6 +20,8 @@ export namespace Langium {
   export type GeneratorNode = langiumGenerate.GeneratorNode
   /** LangiumCoreServices declares language-specific Langium services. */
   export type LangiumCoreServices = langium.LangiumCoreServices
+  /** LangiumDefaultCoreServices declares default language-specific Langium services. */
+  export type LangiumDefaultCoreServices = langium.LangiumDefaultCoreServices
   /** LangiumDocument declares a parsed Langium document with an AST root. */
   export type LangiumDocument<T extends AstNode = AstNode> = langium.LangiumDocument<T>
   /** LangiumSharedCoreServices declares Langium services shared by all registered languages. */

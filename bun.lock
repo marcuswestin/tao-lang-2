@@ -61,6 +61,14 @@
     "packages/shared": {
       "name": "tao-shared",
     },
+    "packages/validator": {
+      "name": "tao-validator",
+      "dependencies": {
+        "tao-parser": "workspace:*",
+        "typir": "~0.3.3",
+        "typir-langium": "~0.3.3",
+      },
+    },
   },
   "packages": {
     "@0no-co/graphql.web": ["@0no-co/graphql.web@1.2.0", "", { "peerDependencies": { "graphql": "^14.0.0 || ^15.0.0 || ^16.0.0" }, "optionalPeers": ["graphql"] }, "sha512-/1iHy9TTr63gE1YcR5idjx8UREz1s0kFhydf3bBLCXyqjhkIc6igAzTOx3zPifCwFR87tsh/4Pa9cNts6d2otw=="],
@@ -1323,6 +1331,8 @@
 
     "tao-shared": ["tao-shared@workspace:packages/shared"],
 
+    "tao-validator": ["tao-validator@workspace:packages/validator"],
+
     "tar": ["tar@7.5.15", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, "sha512-dzGK0boVlC4W5QFuQN1EFSl3bIDYsk7Tj40U6eIBnK2k/8ml7TZ5agbI5j5+qnoVcAA+rNtBml8SEiLxZpNqRQ=="],
 
     "terminal-link": ["terminal-link@2.1.1", "", { "dependencies": { "ansi-escapes": "^4.2.1", "supports-hyperlinks": "^2.0.0" } }, "sha512-un0FmiRUQNr5PJqy9kP7c40F5BOfpGlYTrxonDChEZB7pzZxRNp/bt+ymiy9/npwXya9KH99nJ/GXFIiUkYGFQ=="],
@@ -1356,6 +1366,10 @@
     "type-fest": ["type-fest@0.7.1", "", {}, "sha512-Ne2YiiGN8bmrmJJEuTWTLJR32nh/JdL1+PSicowtNb0WFpn59GK8/lfD61bVtzguz7b3PBt74nxpv/Pw5po5Rg=="],
 
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
+    "typir": ["typir@0.3.3", "", {}, "sha512-L4qze3Rk+LsS4+3K0j0AJbFCYQZNl8y8U/+tO4uPGzsbahRgwsj0QPQ0J8I5GeCHu8/taIjNMuSrzW7wVz52/A=="],
+
+    "typir-langium": ["typir-langium@0.3.3", "", { "dependencies": { "langium": "~4.2.0", "typir": "~0.3.3" } }, "sha512-lNc45VmS/r7XAkLp3FE6NNkifyj0q8TJl018nPU4OAKQtnQHUOfDw4ofUwj1kAC8RFG+58HllfPiUzkIaEIgMw=="],
 
     "ua-parser-js": ["ua-parser-js@1.0.41", "", { "bin": { "ua-parser-js": "script/cli.js" } }, "sha512-LbBDqdIC5s8iROCUjMbW1f5dJQTEFB1+KO9ogbvlb3nm9n4YHa5p4KTvFPWvh2Hs8gZMBuiB1/8+pdfe/tDPug=="],
 
