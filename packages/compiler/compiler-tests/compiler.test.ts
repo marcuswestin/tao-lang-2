@@ -1,6 +1,6 @@
 import Compiler from '@compiler'
 import { AST } from '@parser'
-import { Errors } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import { describe, expect, test } from 'bun:test'
 import { testParseCode, testParseCodeWithParserErrors } from '../../parser/parser-tests/test-parse'
 import { Compile } from '../compiler-src/codegen/app/runtime-gen'
@@ -9,6 +9,9 @@ import { wrap } from './test-utils/AST-Wrapper'
 
 const tsFence = '```ts'
 const fence = '```'
+const repoRoot = await Repo.getRoot()
+const targetKitchenSinkPath = FS.resolvePath(repoRoot, 'Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
+const typeSystemTestsPath = FS.resolvePath(repoRoot, 'Apps/Test Apps/Type System Tests/Type System Tests.tao')
 
 describe('minimal Tao compiler', () => {
   test('reports parser syntax errors once', async () => {
@@ -78,7 +81,7 @@ describe('minimal Tao compiler', () => {
         render MainView
       }
       ui MainView { }
-    `)).rejects.toThrow('Unsupported app block syntax')
+    `)).rejects.toThrow('Only root ui declarations are allowed')
   })
 
   test('rejects inject in multi-statement view blocks explicitly', async () => {
@@ -90,6 +93,24 @@ describe('minimal Tao compiler', () => {
         ${fence}
         render MainView
       }
-    `)).rejects.toThrow('Only view renders are supported in multi-statement blocks')
+    `)).rejects.toThrow('`render inject` must be the only statement in a ui body')
+  })
+
+  test('compiles the target Kitchen Sink app', async () => {
+    await testCompileCode(await FS.readText(targetKitchenSinkPath))
+  })
+
+  test('compiles the Type System Tests app', async () => {
+    await testCompileCode(await FS.readText(typeSystemTestsPath))
+  })
+
+  test('rejects validator type errors before codegen', async () => {
+    await expect(testCompileCode(`
+      app MyApp { ui MainView }
+      ui MainView {
+        render Tile "Open", "not a count"
+      }
+      ui Tile Title text, Count number { }
+    `)).rejects.toThrow("Argument for parameter 'Count' expects number, got text.")
   })
 })

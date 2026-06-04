@@ -1,6 +1,9 @@
 import { AST, Langium } from '@parser'
 import { Switch } from '@shared'
+import { type RenderInvocation, resolveRenderInvocation } from '@validator/invocations-validator'
 import { type Compiled, gen, genList, genNoop, refResolved } from '../codegen-util'
+import { compileAliasDeclaration } from './aliases-compiler'
+import { compileExpression } from './expressions-compiler'
 
 /** compileFile compiles a parsed Tao file into Expo-compatible TSX source. */
 export function compileFile(taoFile: AST.TaoFile): string {
@@ -11,22 +14,19 @@ export function compileFile(taoFile: AST.TaoFile): string {
 export const Compile = {
   /** TaoFile compiles a parsed Tao file into a default React component module. */
   TaoFile(taoFile: AST.TaoFile): Compiled {
-    const declarations = taoFile.statements.filter(AST.isDeclaration)
-    if (declarations.length !== taoFile.statements.length) {
-      throw new Error('Unsupported top-level syntax. Only app and ui declarations can be compiled.')
-    }
-
-    const app = Compile.App(declarations)
+    const app = Compile.App(taoFile.statements.filter(AST.isAppDeclaration))
     const root = Compile.AppRoot(app)
     const rootView = refResolved(root.ui, `App ${app.name} root ui`)
-    const views = declarations.filter(AST.isViewDeclaration)
+    const aliases = taoFile.statements.filter(AST.isAliasDeclaration)
+    const views = taoFile.statements.filter(AST.isViewDeclaration)
 
     return gen`
       import React from 'react'
       import * as RN from 'react-native'
 
-      ${Compile.TaoTextValue()}
+      ${Compile.TaoValue()}
 
+      ${genList(aliases, Compile.AliasDeclaration)}
       ${genList(views, Compile.ViewDeclaration, { newLines: 2 })}
       export default function TaoApp() {
         return <${rootView.name} />
@@ -35,8 +35,7 @@ export const Compile = {
   },
 
   /** App returns the file's single app declaration. */
-  App(declarations: readonly AST.Declaration[]): AST.AppDeclaration {
-    const apps = declarations.filter(AST.isAppDeclaration)
+  App(apps: readonly AST.AppDeclaration[]): AST.AppDeclaration {
     if (apps.length !== 1) {
       throw new Error(`Expected exactly one app declaration, found ${apps.length}.`)
     }
@@ -57,15 +56,17 @@ export const Compile = {
     return roots[0]!
   },
 
-  /** TaoTextValue compiles the temporary text runtime helper. */
-  TaoTextValue(): Compiled {
+  /** TaoValue compiles the temporary Tao value runtime helper. */
+  TaoValue(): Compiled {
     return gen`
-      type TaoTextValue = {
-        jsValue: string
-        evaluate(): TaoTextValue
+      type TaoValue<T> = {
+        jsValue: T
+        evaluate(): TaoValue<T>
       }
+      type TaoTextValue = TaoValue<string>
+      type TaoNumberValue = TaoValue<number>
 
-      function taoText(jsValue: string): TaoTextValue {
+      function taoValue<T>(jsValue: T): TaoValue<T> {
         return {
           jsValue,
           evaluate() {
@@ -75,6 +76,9 @@ export const Compile = {
       }
     `
   },
+
+  /** AliasDeclaration compiles a Tao alias into a generated Tao value binding. */
+  AliasDeclaration: compileAliasDeclaration,
 
   /** ViewDeclaration compiles a Tao ui declaration into a React function component. */
   ViewDeclaration(view: AST.ViewDeclaration): Compiled {
@@ -92,13 +96,16 @@ export const Compile = {
       return '{ children?: React.ReactNode }'
     }
 
-    const entries = params.map((param) => {
-      if (param.type !== 'text') {
-        throw new Error(`Unsupported parameter type '${param.type}' on ${view.name}.${param.name}.`)
-      }
-      return `${param.name}: TaoTextValue`
-    })
+    const entries = params.map(param => `${param.name}: ${Compile.ParameterType(param)}`)
     return `{ children?: React.ReactNode; ${entries.join('; ')} }`
+  },
+
+  /** ParameterType returns the generated TypeScript Tao value type for a Tao parameter. */
+  ParameterType(param: AST.ParameterDeclaration): string {
+    return Switch.value(param.type, {
+      number: () => 'TaoNumberValue',
+      text: () => 'TaoTextValue',
+    })
   },
 
   /** ViewBlock compiles a Tao ui block into a component return body. */
@@ -114,10 +121,24 @@ export const Compile = {
       return Compile.Injection(statements[0].injection)
     }
 
+    const aliases = statements.filter(AST.isAliasDeclaration)
+    const renders = statements.filter(AST.isRender)
+    const unsupported = statements.filter(statement => !AST.isAliasDeclaration(statement) && !AST.isRender(statement))
+    if (unsupported.length > 0) {
+      throw new Error(`Unsupported view statement '${unsupported[0]!.$type}'.`)
+    }
+    if (renders.length === 0) {
+      return gen`
+        ${genList(aliases, Compile.AliasDeclaration)}
+        return _ViewProps.children ?? null
+      `
+    }
+
     return gen`
+      ${genList(aliases, Compile.AliasDeclaration)}
       return (
         <>
-          ${genList(statements, Compile.ViewStatement)}
+          ${genList(renders, Compile.ViewStatement)}
         </>
       )
     `
@@ -135,12 +156,13 @@ export const Compile = {
 
   /** Render compiles a Tao render statement into JSX. */
   Render(render: AST.Render): Compiled {
-    if (render.view === undefined) {
+    const invocation = resolveRenderInvocation(render)
+    const view = invocation.view
+    if (view === undefined) {
       throw new Error('Render statement must target a view or inject TSX.')
     }
 
-    const view = refResolved(render.view, 'render target')
-    const props = Compile.RenderProps(render, view)
+    const props = Compile.RenderProps(invocation)
     const children = render.block?.statements ?? []
     if (children.length === 0) {
       return gen`
@@ -156,48 +178,24 @@ export const Compile = {
   },
 
   /** RenderProps compiles render arguments into JSX props. */
-  RenderProps(render: AST.Render, view: AST.ViewDeclaration): Compiled {
-    const params = view.parameterList?.parameters ?? []
-    const args = render.argumentList?.arguments ?? []
-    if (args.length !== params.length) {
-      throw new Error(`Render of ${view.name} expected ${params.length} argument(s), found ${args.length}.`)
-    }
-    if (params.length === 0) {
+  RenderProps(invocation: RenderInvocation): Compiled {
+    if (invocation.pairs.length === 0) {
       return genNoop()
     }
 
     return Langium.joinToNode(
-      params,
-      (param, index) => gen` ${param.name}={${Compile.Argument(args[index]!, param)}}`,
+      invocation.pairs,
+      pair => gen` ${pair.parameter.name}={${Compile.Argument(pair.argument)}}`,
     )!
   },
 
   /** Argument compiles a Tao render argument into a runtime value expression. */
-  Argument(argument: AST.Argument, param: AST.ParameterDeclaration): Compiled {
-    if (param.type !== 'text') {
-      throw new Error(`Unsupported argument type '${param.type}' for ${param.name}.`)
-    }
+  Argument(argument: AST.Argument): Compiled {
     return Compile.Expression(argument.value)
   },
 
   /** Expression compiles a Tao expression into a runtime value expression. */
-  Expression(expression: AST.Expression): Compiled {
-    return Switch.type(expression, {
-      NumberLiteral: Compile.UnsupportedExpression,
-      StringLiteral: Compile.StringLiteral,
-      ValueReference: Compile.UnsupportedExpression,
-    })
-  },
-
-  /** StringLiteral compiles a Tao string literal into a temporary text runtime value. */
-  StringLiteral(str: AST.StringLiteral): Compiled {
-    return gen`taoText(${JSON.stringify(str.value)})`
-  },
-
-  /** UnsupportedExpression rejects parser syntax not yet supported by compiler codegen. */
-  UnsupportedExpression(expression: Exclude<AST.Expression, AST.StringLiteral>): never {
-    throw new Error(`Unsupported expression syntax '${expression.$type}'.`)
-  },
+  Expression: compileExpression,
 
   /** Injection compiles a supported inject block into component body statements. */
   Injection(injection: AST.Injection): Compiled {

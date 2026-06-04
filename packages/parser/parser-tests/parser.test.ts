@@ -14,12 +14,22 @@ describe('minimal Tao parser', () => {
 
     expect(parsed.diagnostics).toEqual([])
 
-    const [app, mainView, textView] = parsed.ast.statements
+    const [app, greetingAlias, launchCountAlias, mainView, textView, statTileView] = parsed.ast.statements
     expect(AST.isAppDeclaration(app)).toBe(true)
+    expect(AST.isAliasDeclaration(greetingAlias)).toBe(true)
+    expect(AST.isAliasDeclaration(launchCountAlias)).toBe(true)
     expect(AST.isViewDeclaration(mainView)).toBe(true)
     expect(AST.isViewDeclaration(textView)).toBe(true)
+    expect(AST.isViewDeclaration(statTileView)).toBe(true)
 
-    if (!AST.isAppDeclaration(app) || !AST.isViewDeclaration(mainView) || !AST.isViewDeclaration(textView)) {
+    if (
+      !AST.isAppDeclaration(app)
+      || !AST.isAliasDeclaration(greetingAlias)
+      || !AST.isAliasDeclaration(launchCountAlias)
+      || !AST.isViewDeclaration(mainView)
+      || !AST.isViewDeclaration(textView)
+      || !AST.isViewDeclaration(statTileView)
+    ) {
       throw new Error('Unexpected Kitchen Sink AST shape.')
     }
 
@@ -31,20 +41,28 @@ describe('minimal Tao parser', () => {
     }
     expect(appRoot.ui.ref?.name).toBe('MainView')
 
+    expect(greetingAlias.name).toBe('Greeting')
+    expect(AST.isStringLiteral(greetingAlias.value)).toBe(true)
+    expect(launchCountAlias.name).toBe('LaunchCount')
+    expect(AST.isNumberLiteral(launchCountAlias.value)).toBe(true)
+
     expect(mainView.name).toBe('MainView')
-    const mainRender = mainView.block.statements[0]
+    const [mainRender, statRender] = mainView.block.statements
     expect(AST.isRender(mainRender)).toBe(true)
-    if (!AST.isRender(mainRender)) {
-      throw new Error('MainView should render Text.')
+    expect(AST.isRender(statRender)).toBe(true)
+    if (!AST.isRender(mainRender) || !AST.isRender(statRender)) {
+      throw new Error('MainView should render Text and StatTile.')
     }
     expect(mainRender.view?.ref?.name).toBe('Text')
     const mainRenderArgument = mainRender.argumentList?.arguments[0]?.value
-    expect(AST.isStringLiteral(mainRenderArgument)).toBe(true)
-    if (!AST.isStringLiteral(mainRenderArgument)) {
-      throw new Error('MainView should pass a string literal to Text.')
+    expect(AST.isValueReference(mainRenderArgument)).toBe(true)
+    if (!AST.isValueReference(mainRenderArgument)) {
+      throw new Error('MainView should pass Greeting to Text.')
     }
-    expect(mainRenderArgument.value).toBe('Hello, World!')
+    expect(mainRenderArgument.target.ref?.name).toBe('Greeting')
     expect(mainRender.block?.statements).toEqual([])
+    expect(statRender.view?.ref?.name).toBe('StatTile')
+    expect(statRender.argumentList?.arguments).toHaveLength(2)
 
     expect(textView.name).toBe('Text')
     expect(textView.parameterList?.parameters[0]?.name).toBe('Value')
@@ -56,6 +74,9 @@ describe('minimal Tao parser', () => {
       throw new Error('Text should render an injection.')
     }
     expect(textRender.injection?.tsCodeBlock).toContain('_ViewProps.Value.evaluate')
+
+    expect(statTileView.name).toBe('StatTile')
+    expect(statTileView.parameterList?.parameters.map(param => param.type)).toEqual(['text', 'number'])
   })
 
   test('parses raw inject declarations', async () => {
@@ -162,7 +183,7 @@ describe('minimal Tao parser', () => {
     const source = await FS.readText(kitchenSinkPath)
     const parsed = await testParseCode(source)
 
-    expect(parsed.ast.statements).toHaveLength(3)
+    expect(parsed.ast.statements).toHaveLength(6)
     expect(AST.isAppDeclaration(parsed.ast.statements[0])).toBe(true)
   })
 })

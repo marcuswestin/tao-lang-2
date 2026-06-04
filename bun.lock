@@ -15,6 +15,7 @@
       "dependencies": {
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
+        "tao-validator": "workspace:*",
       },
     },
     "packages/dev": {

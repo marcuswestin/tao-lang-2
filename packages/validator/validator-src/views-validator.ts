@@ -18,7 +18,7 @@ export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {
 
 function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationContext): void {
   validateDuplicateParameters(view, ctx)
-  validateViewBlock(view.block, ctx)
+  validateViewBlock(view.block, ctx, true)
 }
 
 function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationContext): void {
@@ -32,15 +32,15 @@ function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationC
   }
 }
 
-function validateViewBlock(block: AST.Block, ctx: ValidationContext): void {
+function validateViewBlock(block: AST.Block, ctx: ValidationContext, allowAliases: boolean): void {
   for (const statement of block.statements) {
-    if (AST.isAliasDeclaration(statement)) {
+    if (allowAliases && AST.isAliasDeclaration(statement)) {
       continue
     }
     if (AST.isRender(statement)) {
       validateRender(statement, block, ctx)
       if (statement.block) {
-        validateViewBlock(statement.block, ctx)
+        validateViewBlock(statement.block, ctx, false)
       }
       continue
     }
