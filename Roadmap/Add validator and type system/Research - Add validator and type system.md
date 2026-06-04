@@ -205,7 +205,7 @@ check((node, ctx) => {
 - Add validator tests for each semantic rule moved out of compiler.
 - Add type-checking tests for generic invocation argument count and text/number compatibility.
 - Add alias tests for inferred text/number alias types, alias references as invocation arguments, duplicate aliases, and alias cycles.
-- Add `Apps/Test Apps/Type System Tiles/Type System Tiles.tao` as a valid Tao app that demonstrates alias-based text and number values passed into tile views.
+- Add `Apps/Test Apps/Type System Tests/Type System Tests.tao` as a valid Tao app that demonstrates alias-based text and number values passed into tile views.
 - Add IDE extension smoke coverage for bundled syntax/server entrypoints and editor diagnostics wiring where practical.
 - Update compiler tests to assert compiler rejects validation failures without testing generated TypeScript structure.
 - Keep tests functional and diagnostic-oriented; avoid trivial package export tests.
