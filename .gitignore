@@ -7,7 +7,6 @@ node_modules
 .claude/settings.local.json
 
 .android
-.artifacts
 local.properties
 
 .artifacts
