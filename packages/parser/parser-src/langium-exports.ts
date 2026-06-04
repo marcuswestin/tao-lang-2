@@ -14,14 +14,18 @@ export namespace Langium {
   export type AstNode = langium.AstNode
   /** DefaultSharedCoreModuleContext declares the host services needed to create Langium shared services. */
   export type DefaultSharedCoreModuleContext = langium.DefaultSharedCoreModuleContext
+  /** Generated declares one Langium generator contribution. */
+  export type Generated = langiumGenerate.Generated
+  /** GeneratorNode declares a structured Langium generator node. */
+  export type GeneratorNode = langiumGenerate.GeneratorNode
   /** LangiumCoreServices declares language-specific Langium services. */
   export type LangiumCoreServices = langium.LangiumCoreServices
   /** LangiumDocument declares a parsed Langium document with an AST root. */
-  export type LangiumDocument<T extends langium.AstNode = langium.AstNode> = langium.LangiumDocument<T>
+  export type LangiumDocument<T extends AstNode = AstNode> = langium.LangiumDocument<T>
   /** LangiumSharedCoreServices declares Langium services shared by all registered languages. */
   export type LangiumSharedCoreServices = langium.LangiumSharedCoreServices
   /** Reference declares a Langium cross-reference to an AST node. */
-  export type Reference<T extends langium.AstNode = langium.AstNode> = langium.Reference<T>
+  export type Reference<T extends AstNode = AstNode> = langium.Reference<T>
   /** URI declares a Langium URI value. */
   export type URI = langium.URI
 }

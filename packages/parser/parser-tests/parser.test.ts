@@ -1,11 +1,10 @@
+import { FS, Repo } from '@shared'
 import { describe, expect, test } from 'bun:test'
-import { readFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { AST, Parser } from '../parser-src/parser'
+import { testParseCode } from './test-parse'
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-const kitchenSinkPath = resolve(repoRoot, 'Apps/Kitchen Sink/Kitchen Sink.tao')
+const repoRoot = await Repo.getRoot()
+const kitchenSinkPath = FS.resolvePath(repoRoot, 'Apps/Kitchen Sink/Kitchen Sink.tao')
 
 describe('minimal Tao parser', () => {
   test('parses the current Kitchen Sink app', async () => {
@@ -52,11 +51,27 @@ describe('minimal Tao parser', () => {
     expect(textRender.injection?.tsCodeBlock).toContain('_ViewProps.Value.evaluate')
   })
 
-  test('parses Tao source strings', async () => {
-    const source = await readFile(kitchenSinkPath, 'utf8')
-    const parsed = await Parser.parseCode(source)
+  test('parses raw inject declarations', async () => {
+    const parsed = await testParseCode('ui Native { render inject raw ```ts\nreturn null\n``` }')
+    const view = parsed.ast.statements[0]
 
-    expect(parsed.diagnostics).toEqual([])
+    expect(AST.isViewDeclaration(view)).toBe(true)
+    if (!AST.isViewDeclaration(view)) {
+      throw new Error('Expected a view declaration.')
+    }
+
+    const render = view.block.statements[0]
+    expect(AST.isRender(render)).toBe(true)
+    if (!AST.isRender(render)) {
+      throw new Error('Expected render inject.')
+    }
+    expect(render.injection?.type).toBe('raw')
+  })
+
+  test('parses Tao source strings', async () => {
+    const source = await FS.readText(kitchenSinkPath)
+    const parsed = await testParseCode(source)
+
     expect(parsed.ast.statements).toHaveLength(3)
     expect(AST.isAppDeclaration(parsed.ast.statements[0])).toBe(true)
   })

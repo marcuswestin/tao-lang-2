@@ -14,4 +14,4 @@ Render:
     'render' (injection=Injection | view=[ViewDeclaration:ID] argumentList=ArgumentList? block=Block?);
 
 Injection:
-    'inject' tsCodeBlock=TS_CODE_BLOCK;
+    'inject' type='raw'? tsCodeBlock=TS_CODE_BLOCK;
