@@ -12,7 +12,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - On a fresh worktree, run `direnv allow`
    - Always run `./agent help` at the start of a session
    - **ALWAYS** use `./agent <cmd> ...` for executable shell commands; use normal `cd` or tool workdirs to choose the command directory
-   - **IF** in a git worktree, create a `feat/<name>` branch
+   - Create a `feat/<name>` branch only for project-sized work that needs review and merge; small edits, instruction updates, and one-off commits should stay on the current branch unless Ro asks otherwise
    - Multiple agents may work in this repo in parallel; treat changes you did not make as expected peer work, and do not overwrite or revert them without explicit direction
    - **ALWAYS** let the IDE soft-wrap lines
    - **ALWAYS** remove stale instructions and code
@@ -92,7 +92,7 @@ You will do all your work with Ro, the project lead and language designer. They 
 ## Git workflow
 
 - Instructions
-  - Create a `feat/<feature>` branch _if in a worktree_
+  - Create a `feat/<feature>` branch for project-sized work that needs review and merge; do not switch branches for small edits, instruction updates, or one-off commits unless Ro asks
   - Do not stage or stash changes unless instructed. If a task requires it, ask first
   - Always run `prep-commit` before making commits
   - Commit message format `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`
