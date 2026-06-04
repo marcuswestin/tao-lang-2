@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "check-workspace",
+      "type": "shell",
+      "command": "./agent just check",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "zsh",
+          "args": ["-c"]
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

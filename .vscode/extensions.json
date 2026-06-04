@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "dprint.dprint",
+    "langium.langium-vscode",
+    "nefrob.vscode-just-syntax",
+    "ryuta46.multi-command"
+  ]
+}
