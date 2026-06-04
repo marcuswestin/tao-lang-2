@@ -50,6 +50,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - Use `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` during research and planning when target syntax or functionality should change
    - As functionality is implemented, copy the relevant implemented target code into `Apps/Kitchen Sink/Kitchen Sink.tao`; that app is the executable Kitchen Sink used for testing
    - **ALWAYS** ensure that `Apps/Test Apps/*` and `packages/<package>/tests/*` address all implemented functionality and encountered edge cases
+   - Each test app lives in `Apps/Test Apps/<App Name>/`, has one primary `<App Name>.tao`, and includes `Purpose.md` describing the app's purpose, what belongs there, when to edit it, and any planned behavior-test metadata
    - Prefer behavior tests over API-shape tests; avoid trivial tests
    - Test compiler behavior through Tao AST and runtime behavior, not generated TypeScript structure or string matches
 

@@ -10,12 +10,14 @@ Implement the reviewed plan in controlled slices.
 
 ## Rules
 
+- First switch to PLAN mode
 - Read `AGENTS.md`, `Roadmap.md`, the task folder, plan, research notes, and current git state.
 - Read relevant previous repo code and docs under `~/code/tao-lang` before implementing comparable behavior; use it to understand proven approaches, then adapt only the parts that fit this repo.
 - Do not copy previous repo code wholesale unless it is already perfectly written for this repo's current design.
 - Work on a `feat/<Task>` branch when starting a new project branch.
 - Use `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` only when implementation discovers the target syntax or functionality should change.
 - As each target slice becomes implemented, copy the relevant Tao code into `Apps/Kitchen Sink/Kitchen Sink.tao`; keep only implemented, testable functionality in the executable app.
+- Keep each test app in `Apps/Test Apps/<App Name>/` with a primary `<App Name>.tao` file and a `Purpose.md`; update `Purpose.md` whenever the app's scope, edit triggers, or behavior-test notes change.
 - Validate copied Kitchen Sink functionality through the relevant package tests and runtime/app checks.
 - Implement one numbered plan step at a time.
 - Split large steps into coherent commit units while preserving the plan's validation boundary.

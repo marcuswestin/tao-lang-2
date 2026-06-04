@@ -14,8 +14,9 @@ Turn a selected roadmap task into enough settled context to plan.
 - Read relevant previous repo code and docs under `~/code/tao-lang` for comparable implemented behavior; treat it as reference material for what worked, not source to copy wholesale.
 - Carry over only relevant working ideas from the previous repo, adapted to this repo's current shape and bias toward succinct implementation.
 - Ensure `Roadmap/<Task>/` exists.
-- Keep research in the existing task doc when that is enough; create `Roadmap/<Task>/<Task>-Research.md` only when separate notes are useful.
+- Keep research in the existing task doc when that is enough; create `Roadmap/<Task>/Research - <Task>.md` only when separate notes are useful.
 - If research determines target syntax or functionality should change, write the intended Tao code in `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao`.
+- When research identifies a new test-app surface, define or update `Apps/Test Apps/<App Name>/Purpose.md` with the app's purpose, appropriate functionality scope, edit triggers, and any planned behavior-test notes.
 - Do not copy target code into `Apps/Kitchen Sink/Kitchen Sink.tao` during research; the executable Kitchen Sink changes only when functionality is implemented.
 - Ask Ro one focused question at a time when local repo context cannot answer it.
 - Use web search when relevant.
