@@ -11,8 +11,10 @@ Use this skill when adding or changing repo automation: `packages/dev` TypeScrip
 ## Where automation goes
 
 - Treat `Justfile` as the main command runner.
+- Treat `Justfile` as the workflow manager: declare prerequisites and cross-step orchestration there.
 - Put simple command recipes directly in `Justfile`.
 - Put durable TypeScript automation in `packages/dev/dev-src/dev.ts` only when it would otherwise make sense to create a separate bash script.
+- Keep `./dev <command>` as a script runner for focused actions; do not put workflow dependencies or prerequisite orchestration in `./dev`.
 - Put `./agent` behavior, allowlisted executable commands, help text, and command dispatch in `packages/dev/dev-src/agent-dev.ts`.
 - Prefer `packages/dev` TypeScript over complex shell for durable logic; keep shell entrypoints thin. Avoid standalone Bun script entrypoints—expose script-like automation through `dev.ts` or `agent-dev`.
 - Keep commands small, typed, and covered by relevant package tests or repo checks.

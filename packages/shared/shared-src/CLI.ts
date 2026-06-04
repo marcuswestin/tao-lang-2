@@ -8,7 +8,7 @@ export type CommandSpec = {
   cwd?: string
   env?: ProcessEnv
   stdin?: string | Uint8Array
-  stdio?: 'pipe' | 'inherit'
+  stdio?: 'pipe' | 'inherit' | 'stream'
 }
 
 /** CommandResult records a completed process invocation. */
@@ -28,18 +28,32 @@ export async function run(spec: CommandSpec): Promise<CommandResult> {
   const args = [...(spec.args ?? [])]
   const stdoutChunks: Buffer[] = []
   const stderrChunks: Buffer[] = []
+  const inheritOutput = spec.stdio === 'inherit'
+  const streamOutput = spec.stdio === 'stream'
   const child = nodeSpawn(spec.command, args, {
     cwd: spec.cwd,
     env: { ...runtimeProcess.env, ...spec.env },
     stdio: [
       spec.stdin === undefined ? 'ignore' : 'pipe',
-      spec.stdio === 'inherit' ? 'inherit' : 'pipe',
-      spec.stdio === 'inherit' ? 'inherit' : 'pipe',
+      inheritOutput ? 'inherit' : 'pipe',
+      inheritOutput ? 'inherit' : 'pipe',
     ],
   })
 
-  child.stdout?.on('data', chunk => stdoutChunks.push(Buffer.from(chunk)))
-  child.stderr?.on('data', chunk => stderrChunks.push(Buffer.from(chunk)))
+  child.stdout?.on('data', chunk => {
+    const buffer = Buffer.from(chunk)
+    stdoutChunks.push(buffer)
+    if (streamOutput) {
+      runtimeProcess.stdout.write(buffer)
+    }
+  })
+  child.stderr?.on('data', chunk => {
+    const buffer = Buffer.from(chunk)
+    stderrChunks.push(buffer)
+    if (streamOutput) {
+      runtimeProcess.stderr.write(buffer)
+    }
+  })
 
   if (spec.stdin !== undefined) {
     child.stdin?.end(spec.stdin)

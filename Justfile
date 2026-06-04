@@ -40,6 +40,10 @@ compile-app app_path: _parser-gen
 run: _compile-kitchen-sink-app
   cd packages/runtime && EXPO_NO_TELEMETRY=1 OPEN_MATCH_HOST_ONLY=true bunx expo start --localhost
 
+# Compile Kitchen Sink, launch an Android emulator, and start the Expo runtime on Android.
+android: _compile-kitchen-sink-app _android-emulator _android-expo-go
+  ./dev expo-android
+
 # Clean run dependencies and build artifacts
 clean:
   rm -rf .artifacts/build
@@ -57,6 +61,12 @@ prep-commit: fix check test
 
 _compile-kitchen-sink-app: _parser-gen
   ./dev compile-app "{{KITCHEN_SINK_APP}}"
+
+_android-emulator:
+  ./dev android-emulator
+
+_android-expo-go:
+  ./dev android-expo-go
 
 _parser-gen:
   cd packages/parser && bunx langium generate

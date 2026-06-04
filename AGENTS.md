@@ -22,7 +22,8 @@ You will do all your work with Ro, the project lead and language designer. They 
 1. Info:
    - We use `nix` and `direnv` + `devenv` for dev environment automation
    - Use `bun` over `node` (except with `expo` and Jest)
-   - Treat `just` as the main command runner; use `./dev <command>` only for script-like TypeScript automation that would otherwise deserve a separate bash script
+   - Treat `just` as the workflow manager and main command runner
+   - Use `./dev <command>` only as a script runner for focused TypeScript automation that would otherwise deserve a separate bash script; do not put workflow dependencies or prerequisite orchestration in `./dev`
    - Always use shared wrappers for platform invocations (`@shared` CLI/FS/HCI/Platform, etc.) instead of direct Bun or Node platform APIs
    - Keep this guide to durable agent instructions; omit transient implementation mechanics
 

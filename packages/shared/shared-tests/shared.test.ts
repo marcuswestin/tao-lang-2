@@ -166,6 +166,41 @@ describe('CLI', () => {
     expect(result.stdout).toBe('')
     expect(result.stderr).toBe('')
   })
+
+  test('streams output while preserving captured output', async () => {
+    const stdout = runtimeProcess.stdout
+    const stderr = runtimeProcess.stderr
+    let streamedStdout = ''
+    let streamedStderr = ''
+    runtimeProcess.stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        streamedStdout += chunk.toString()
+        callback()
+      },
+    }) as typeof runtimeProcess.stdout
+    runtimeProcess.stderr = new Writable({
+      write(chunk, _encoding, callback) {
+        streamedStderr += chunk.toString()
+        callback()
+      },
+    }) as typeof runtimeProcess.stderr
+
+    try {
+      const result = await CLI.run({
+        command: runtimeProcess.execPath,
+        args: ['-e', 'console.log(`out`); console.error(`err`)'],
+        stdio: 'stream',
+      })
+
+      expect(result.stdout.trim()).toBe('out')
+      expect(result.stderr.trim()).toBe('err')
+      expect(streamedStdout.trim()).toBe('out')
+      expect(streamedStderr.trim()).toBe('err')
+    } finally {
+      runtimeProcess.stdout = stdout
+      runtimeProcess.stderr = stderr
+    }
+  })
 })
 
 describe('Repo', () => {
