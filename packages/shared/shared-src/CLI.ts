@@ -1,6 +1,7 @@
-import { CommandExecutionError, UnexpectedBehaviorError } from './Errors'
-import { nodeSpawn, type ProcessEnv, type ProcessSignal, runtimeProcess } from './Runtime'
+import { CommandExecutionError } from './Errors'
+import { nodeSpawn, type ProcessEnv, type ProcessSignal, runtimeProcess } from './Platform'
 
+/** CommandSpec describes a process invocation for shared CLI helpers. */
 export type CommandSpec = {
   command: string
   args?: readonly string[]
@@ -10,6 +11,7 @@ export type CommandSpec = {
   stdio?: 'pipe' | 'inherit'
 }
 
+/** CommandResult records a completed process invocation. */
 export type CommandResult = {
   command: string
   args: string[]
@@ -21,6 +23,7 @@ export type CommandResult = {
   error?: Error
 }
 
+/** run starts a command and returns its captured completion result. */
 export async function run(spec: CommandSpec): Promise<CommandResult> {
   const args = [...(spec.args ?? [])]
   const stdoutChunks: Buffer[] = []
@@ -63,7 +66,8 @@ export async function run(spec: CommandSpec): Promise<CommandResult> {
   })
 }
 
-export async function runChecked(spec: CommandSpec): Promise<CommandResult> {
+/** mustRun runs a command and throws when it does not exit successfully. */
+export async function mustRun(spec: CommandSpec): Promise<CommandResult> {
   const result = await run(spec)
 
   if (result.error || result.exitCode !== 0) {
@@ -72,20 +76,11 @@ export async function runChecked(spec: CommandSpec): Promise<CommandResult> {
   return result
 }
 
+/** formatCommand formats a command for logs and error messages. */
 export function formatCommand(spec: CommandSpec): string {
   return [spec.command, ...(spec.args ?? [])].map(formatCommandPart).join(' ')
 }
 
-export const CLI = {
-  run,
-  runChecked,
-  formatCommand,
-}
-
 function formatCommandPart(value: string): string {
   return /^[\w./:=@+-]+$/.test(value) ? value : JSON.stringify(value)
-}
-
-export function unexpectedCommandError(error: unknown): UnexpectedBehaviorError {
-  return new UnexpectedBehaviorError('Command failed unexpectedly.', { cause: error })
 }

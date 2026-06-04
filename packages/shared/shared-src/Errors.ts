@@ -1,10 +1,12 @@
-import type { ProcessSignal } from './Runtime'
+import type { ProcessSignal } from './Platform'
 
+/** TaoError declares errors expected by Tao command and library code. */
 export type TaoError =
   | UserInputError
   | UnexpectedBehaviorError
   | CommandExecutionError
 
+/** ErrorDetails declares structured context attached to Tao errors. */
 export type ErrorDetails = Record<string, unknown>
 
 type CommandErrorResult = {
@@ -32,6 +34,7 @@ class BaseTaoError extends Error {
   }
 }
 
+/** UserInputError reports invalid input or expected user-correctable failures. */
 export class UserInputError extends BaseTaoError {
   override readonly name = 'UserInputError'
 
@@ -40,6 +43,7 @@ export class UserInputError extends BaseTaoError {
   }
 }
 
+/** UnexpectedBehaviorError reports internal failures that should not happen in normal use. */
 export class UnexpectedBehaviorError extends BaseTaoError {
   override readonly name = 'UnexpectedBehaviorError'
 
@@ -48,6 +52,7 @@ export class UnexpectedBehaviorError extends BaseTaoError {
   }
 }
 
+/** CommandExecutionError reports a failed child process invocation. */
 export class CommandExecutionError extends BaseTaoError {
   override readonly name = 'CommandExecutionError'
   readonly result: CommandErrorResult
@@ -67,12 +72,14 @@ export class CommandExecutionError extends BaseTaoError {
   }
 }
 
+/** isTaoError checks whether a value is one of Tao's structured errors. */
 export function isTaoError(error: unknown): error is TaoError {
   return error instanceof UserInputError
     || error instanceof UnexpectedBehaviorError
     || error instanceof CommandExecutionError
 }
 
+/** fromUnknown normalizes an unknown thrown value into a Tao error. */
 export function fromUnknown(error: unknown, details?: ErrorDetails): TaoError {
   if (isTaoError(error)) {
     return error
@@ -80,18 +87,22 @@ export function fromUnknown(error: unknown, details?: ErrorDetails): TaoError {
   return new UnexpectedBehaviorError('Something went wrong.', { cause: error, details })
 }
 
+/** throwUserInput throws a user-correctable Tao error. */
 export function throwUserInput(messageForUser: string, details?: ErrorDetails): never {
   throw new UserInputError(messageForUser, details)
 }
 
+/** throwUnexpected throws an internal Tao error. */
 export function throwUnexpected(messageForUser: string, opts?: { cause?: unknown; details?: ErrorDetails }): never {
   throw new UnexpectedBehaviorError(messageForUser, opts)
 }
 
+/** formatForUser renders an error message suitable for terminal users. */
 export function formatForUser(error: unknown): string {
   return isTaoError(error) ? error.messageForUser : 'Something went wrong.'
 }
 
+/** formatForLog renders an error message with diagnostic details. */
 export function formatForLog(error: unknown): string {
   const taoError = fromUnknown(error)
   const parts = [`${taoError.name}: ${taoError.message}`]
@@ -108,20 +119,6 @@ export function formatForLog(error: unknown): string {
 
   return parts.join('\n')
 }
-
-const Errors = {
-  UserInputError,
-  UnexpectedBehaviorError,
-  CommandExecutionError,
-  isTaoError,
-  fromUnknown,
-  throwUserInput,
-  throwUnexpected,
-  formatForUser,
-  formatForLog,
-}
-
-export default Errors
 
 function formatCause(cause: unknown): string {
   return cause instanceof Error ? cause.stack ?? cause.message : safeJson(cause)
