@@ -25,8 +25,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - Copy/fill spec
 - Apps
   - Kitchen Sink
-    - Target
-    - Current
+    - Target: intended Tao syntax/functionality written during research and planning when the target should change
+    - Current: executable Tao app used by tests; copy in target slices only after that functionality is implemented
 
 ## Minimal Port: Kitchen Sink Current
 

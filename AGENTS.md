@@ -47,7 +47,8 @@ You will do all your work with Ro, the project lead and language designer. They 
 
 4. Clear Goals and Process
    - **ALWAYS** FIRST write intended functioning demo tao code and/or unit tests, and THEN implement the intended functionality in the tao compiler/cli/etc
-   - **ALWAYS** ensure that ALL implementation plans are expressed in `Apps/Kitchen Sink` code that demonstrates the intended functionality
+   - Use `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` during research and planning when target syntax or functionality should change
+   - As functionality is implemented, copy the relevant implemented target code into `Apps/Kitchen Sink/Kitchen Sink.tao`; that app is the executable Kitchen Sink used for testing
    - **ALWAYS** ensure that `Apps/Test Apps/*` and `packages/<package>/tests/*` address all implemented functionality and encountered edge cases
    - Prefer behavior tests over API-shape tests; avoid trivial tests
    - Test compiler behavior through Tao AST and runtime behavior, not generated TypeScript structure or string matches
