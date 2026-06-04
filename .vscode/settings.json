@@ -6,6 +6,7 @@
   // Formatting
   "editor.defaultFormatter": "dprint.dprint",
   "editor.formatOnSave": true,
+  "dprint.experimentalLsp": true,
   "dprint.path": ".devenv/profile/bin/dprint",
   "[tao]": {
     "editor.defaultFormatter": "tao.tao-ide-extension"
@@ -20,11 +21,12 @@
     ".direnv": true,
     ".android": true,
     ".codex": true,
+    ".claude": true,
     ".dprint.jsonc": true,
     "**/.DS_Store": true,
     "**/node_modules": true,
     "**/bun.lock": true,
-    "**/_gen_*": true,
+    // "**/_gen_*": true,
     "devenv.lock": true,
     "devenv.yaml": true,
     "**/tsconfig.tsbuildinfo": true,

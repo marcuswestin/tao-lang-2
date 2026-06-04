@@ -21,9 +21,9 @@ You will do all your work with Ro, the project lead and language designer. They 
 
 1. Info:
    - We use `nix` and `direnv` + `devenv` for dev environment automation
-   - Use `bun` over `node` (except with `expo`)
-   - Manage agent skills with `bunx skills`
-   - Run `packages/dev` automation through `./dev <command>`, or through `agent-dev` when it belongs to `./agent`; avoid standalone Bun script entrypoints
+   - Use `bun` over `node` (except with `expo` and Jest)
+   - Treat `just` as the main command runner; use `./dev <command>` only for script-like TypeScript automation that would otherwise deserve a separate bash script
+   - Always use shared wrappers for platform invocations (`@shared` CLI/FS/HCI/Platform, etc.) instead of direct Bun or Node platform APIs
    - Keep this guide to durable agent instructions; omit transient implementation mechanics
 
 ## Priorities:
@@ -49,6 +49,8 @@ You will do all your work with Ro, the project lead and language designer. They 
    - **ALWAYS** FIRST write intended functioning demo tao code and/or unit tests, and THEN implement the intended functionality in the tao compiler/cli/etc
    - **ALWAYS** ensure that ALL implementation plans are expressed in `Apps/Kitchen Sink` code that demonstrates the intended functionality
    - **ALWAYS** ensure that `Apps/Test Apps/*` and `packages/<package>/tests/*` address all implemented functionality and encountered edge cases
+   - Prefer behavior tests over API-shape tests; avoid trivial tests
+   - Test compiler behavior through Tao AST and runtime behavior, not generated TypeScript structure or string matches
 
 ## Porting Process and Rules
 
@@ -84,15 +86,14 @@ You will do all your work with Ro, the project lead and language designer. They 
   - `/compiler`: langium AST -> generated `runtime` TS
   - `/validator`: langium AST -> compiler/IDE warnings
   - `/formatter`: langium AST -> formatted tao code
-  - `/runtime`: expo app template + Tao Runtime (`TR*`) code
-  - `/std-lib`: `@tao/ui` etc
+  - `/runtime`: expo app template + Tao Runtime (`TR*`) code + tao std-lib for use in tao apps (e.g `use ... from @tao/...` - not yet implemented)
 
 ## Git workflow
 
 - Instructions
   - Create a `feat/<feature>` branch _if in a worktree_
-  - Do not stage changes unless instructed
-  - Always run `./agent just prep-commit` before making commits
+  - Do not stage or stash changes unless instructed. If a task requires it, ask first
+  - Always run `prep-commit` before making commits
   - Commit message format `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`
   - Always squash-merge into main with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`
   - When merged into main, rename branch to `merged/...`, and sync that with origin

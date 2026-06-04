@@ -4,6 +4,7 @@ node_modules
 
 .devenv
 .direnv
+.claude/settings.local.json
 
 .android
 .artifacts
