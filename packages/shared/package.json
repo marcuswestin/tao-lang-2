@@ -1,5 +1,5 @@
 {
-  "name": "@tao/shared",
+  "name": "tao-shared",
   "private": true,
   "type": "module",
   "module": "shared-src/shared.ts",

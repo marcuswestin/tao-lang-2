@@ -1,5 +1,5 @@
 {
-  "name": "@tao/runtime",
+  "name": "tao-runtime",
   "private": true,
   "type": "module",
   "main": "index.ts",
@@ -8,8 +8,8 @@
     ".": "./runtime-src/runtime.ts"
   },
   "dependencies": {
-    "@tao/compiler": "workspace:*",
-    "@tao/shared": "workspace:*",
+    "tao-compiler": "workspace:*",
+    "tao-shared": "workspace:*",
     "expo": "~54.0.33",
     "react": "19.1.0",
     "react-dom": "19.1.0",

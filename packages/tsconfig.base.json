@@ -27,22 +27,22 @@
       "@shared/*": [
         "./shared/shared-src/*"
       ],
-      "@tao/parser": [
+      "@parser": [
         "./parser/parser-src/parser.ts"
       ],
-      "@tao/parser/*": [
+      "@parser/*": [
         "./parser/parser-src/*"
       ],
-      "@tao/compiler": [
+      "@compiler": [
         "./compiler/compiler-src/compiler.ts"
       ],
-      "@tao/compiler/*": [
+      "@compiler/*": [
         "./compiler/compiler-src/*"
       ],
-      "@tao/runtime": [
+      "@runtime": [
         "./runtime/runtime-src/runtime.ts"
       ],
-      "@tao/runtime/*": [
+      "@runtime/*": [
         "./runtime/runtime-src/*"
       ]
     }

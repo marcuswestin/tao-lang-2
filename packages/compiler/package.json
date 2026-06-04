@@ -1,5 +1,5 @@
 {
-  "name": "@tao/compiler",
+  "name": "tao-compiler",
   "private": true,
   "type": "module",
   "module": "compiler-src/compiler.ts",
@@ -7,6 +7,7 @@
     ".": "./compiler-src/compiler.ts"
   },
   "dependencies": {
-    "@tao/parser": "workspace:*"
+    "tao-parser": "workspace:*",
+    "tao-shared": "workspace:*"
   }
 }

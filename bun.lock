@@ -11,38 +11,40 @@
       },
     },
     "packages/compiler": {
-      "name": "@tao/compiler",
+      "name": "tao-compiler",
       "dependencies": {
-        "@tao/parser": "workspace:*",
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
       },
     },
     "packages/dev": {
-      "name": "@tao/dev",
+      "name": "tao-dev",
       "dependencies": {
         "@commander-js/extra-typings": "^14.0.0",
-        "@tao/runtime": "workspace:*",
         "commander": "^14.0.0",
+        "tao-runtime": "workspace:*",
       },
     },
     "packages/parser": {
-      "name": "@tao/parser",
+      "name": "tao-parser",
       "dependencies": {
         "langium": "~4.2.2",
+        "tao-shared": "workspace:*",
       },
       "devDependencies": {
         "langium-cli": "^4.2.0",
       },
     },
     "packages/runtime": {
-      "name": "@tao/runtime",
+      "name": "tao-runtime",
       "dependencies": {
-        "@tao/compiler": "workspace:*",
-        "@tao/shared": "workspace:*",
         "expo": "~54.0.33",
         "react": "19.1.0",
         "react-dom": "19.1.0",
         "react-native": "0.81.5",
         "react-native-web": "~0.21.0",
+        "tao-compiler": "workspace:*",
+        "tao-shared": "workspace:*",
       },
       "devDependencies": {
         "@babel/runtime": "^7.28.4",
@@ -57,7 +59,7 @@
       },
     },
     "packages/shared": {
-      "name": "@tao/shared",
+      "name": "tao-shared",
     },
   },
   "packages": {
@@ -394,16 +396,6 @@
     "@sinonjs/commons": ["@sinonjs/commons@3.0.1", "", { "dependencies": { "type-detect": "4.0.8" } }, "sha512-K3mCHKQ9sVh8o1C9cxkwxaOmXoAMlDxC1mYyHrjqOWEcBjYr76t96zL2zlj5dUGZ3HSw240X1qgH3Mjf1yJWpQ=="],
 
     "@sinonjs/fake-timers": ["@sinonjs/fake-timers@10.3.0", "", { "dependencies": { "@sinonjs/commons": "^3.0.0" } }, "sha512-V4BG07kuYSUkTCSBHG8G8TNhM+F19jXFWnQtzj+we8DrkpSBCee9Z3Ms8yiGer/dlmhe35/Xdgyo3/0rQKg7YA=="],
-
-    "@tao/compiler": ["@tao/compiler@workspace:packages/compiler"],
-
-    "@tao/dev": ["@tao/dev@workspace:packages/dev"],
-
-    "@tao/parser": ["@tao/parser@workspace:packages/parser"],
-
-    "@tao/runtime": ["@tao/runtime@workspace:packages/runtime"],
-
-    "@tao/shared": ["@tao/shared@workspace:packages/shared"],
 
     "@testing-library/react-native": ["@testing-library/react-native@13.3.3", "", { "dependencies": { "jest-matcher-utils": "^30.0.5", "picocolors": "^1.1.1", "pretty-format": "^30.0.5", "redent": "^3.0.0" }, "peerDependencies": { "jest": ">=29.0.0", "react": ">=18.2.0", "react-native": ">=0.71", "react-test-renderer": ">=18.2.0" }, "optionalPeers": ["jest"] }, "sha512-k6Mjsd9dbZgvY4Bl7P1NIpePQNi+dfYtlJ5voi9KQlynxSyQkfOgJmYGCYmw/aSgH/rUcFvG8u5gd4npzgRDyg=="],
 
@@ -1320,6 +1312,16 @@
     "supports-preserve-symlinks-flag": ["supports-preserve-symlinks-flag@1.0.0", "", {}, "sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w=="],
 
     "symbol-tree": ["symbol-tree@3.2.4", "", {}, "sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw=="],
+
+    "tao-compiler": ["tao-compiler@workspace:packages/compiler"],
+
+    "tao-dev": ["tao-dev@workspace:packages/dev"],
+
+    "tao-parser": ["tao-parser@workspace:packages/parser"],
+
+    "tao-runtime": ["tao-runtime@workspace:packages/runtime"],
+
+    "tao-shared": ["tao-shared@workspace:packages/shared"],
 
     "tar": ["tar@7.5.15", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, "sha512-dzGK0boVlC4W5QFuQN1EFSl3bIDYsk7Tj40U6eIBnK2k/8ml7TZ5agbI5j5+qnoVcAA+rNtBml8SEiLxZpNqRQ=="],
 
