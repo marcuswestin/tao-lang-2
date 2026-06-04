@@ -33,6 +33,12 @@
       "@parser/*": [
         "./parser/parser-src/*"
       ],
+      "@validator": [
+        "./validator/validator-src/validator.ts"
+      ],
+      "@validator/*": [
+        "./validator/validator-src/*"
+      ],
       "@compiler": [
         "./compiler/compiler-src/compiler.ts"
       ],

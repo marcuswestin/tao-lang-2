@@ -1,0 +1,12 @@
+{
+  "name": "tao-validator",
+  "private": true,
+  "type": "module",
+  "module": "validator-src/validator.ts",
+  "exports": {
+    ".": "./validator-src/validator.ts"
+  },
+  "dependencies": {
+    "tao-parser": "workspace:*"
+  }
+}
