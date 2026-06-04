@@ -41,7 +41,7 @@ describe('minimal Tao compiler', () => {
     Compile.TaoFile(taoFile.unwrap())
     const mainView = taoFile.statements.second.as_ViewDeclaration
     const render = mainView.block.statements.only.as_Render
-    const literal = render.argumentList.arguments.only.value
+    const literal = render.argumentList.arguments.only.value.as_StringLiteral
     Compile.Expression(literal.unwrap())
 
     taoFile.statements.match([

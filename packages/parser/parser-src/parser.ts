@@ -1,5 +1,6 @@
 import { Langium } from './langium-exports'
 import * as AST from './parserASTExport'
+import { TaoValueScopeProvider } from './value-scope'
 
 export { AST, Langium }
 
@@ -55,6 +56,11 @@ function createServices(context: Langium.DefaultSharedCoreModuleContext = Langiu
   const language = Langium.inject(
     Langium.createDefaultCoreModule({ shared }),
     AST.GeneratedModule,
+    {
+      references: {
+        ScopeProvider: (services) => new TaoValueScopeProvider(services),
+      },
+    },
   )
   shared.ServiceRegistry.register(language)
 

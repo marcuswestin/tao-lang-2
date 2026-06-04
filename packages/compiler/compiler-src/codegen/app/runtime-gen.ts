@@ -181,15 +181,22 @@ export const Compile = {
   },
 
   /** Expression compiles a Tao expression into a runtime value expression. */
-  Expression(expression: AST.StringLiteral): Compiled {
+  Expression(expression: AST.Expression): Compiled {
     return Switch.type(expression, {
+      NumberLiteral: Compile.UnsupportedExpression,
       StringLiteral: Compile.StringLiteral,
+      ValueReference: Compile.UnsupportedExpression,
     })
   },
 
   /** StringLiteral compiles a Tao string literal into a temporary text runtime value. */
   StringLiteral(str: AST.StringLiteral): Compiled {
     return gen`taoText(${JSON.stringify(str.value)})`
+  },
+
+  /** UnsupportedExpression rejects parser syntax not yet supported by compiler codegen. */
+  UnsupportedExpression(expression: Exclude<AST.Expression, AST.StringLiteral>): never {
+    throw new Error(`Unsupported expression syntax '${expression.$type}'.`)
   },
 
   /** Injection compiles a supported inject block into component body statements. */

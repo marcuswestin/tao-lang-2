@@ -26,6 +26,10 @@ export namespace Langium {
   export type LangiumSharedCoreServices = langium.LangiumSharedCoreServices
   /** Reference declares a Langium cross-reference to an AST node. */
   export type Reference<T extends AstNode = AstNode> = langium.Reference<T>
+  /** ReferenceInfo declares a Langium cross-reference lookup context. */
+  export type ReferenceInfo = langium.ReferenceInfo
+  /** Scope declares the visible symbols for one Langium cross-reference lookup. */
+  export type Scope = langium.Scope
   /** URI declares a Langium URI value. */
   export type URI = langium.URI
 }
