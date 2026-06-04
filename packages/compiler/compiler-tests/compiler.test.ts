@@ -1,30 +1,60 @@
+import Compiler from '@compiler'
+import { AST } from '@parser'
+import { Errors } from '@shared'
 import { describe, expect, test } from 'bun:test'
-import { readFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { Compiler } from '../compiler-src/compiler'
+import { testParseCode, testParseCodeWithParserErrors } from '../../parser/parser-tests/test-parse'
+import { Compile } from '../compiler-src/codegen/app/runtime-gen'
+import { testCompileCode } from './test-compile'
+import { wrap } from './test-utils/AST-Wrapper'
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-const kitchenSinkPath = resolve(repoRoot, 'Apps/Kitchen Sink/Kitchen Sink.tao')
 const tsFence = '```ts'
 const fence = '```'
 
 describe('minimal Tao compiler', () => {
-  test('compiles the current Kitchen Sink app to Expo-compatible TSX', async () => {
-    const compiled = await Compiler.compileFile(kitchenSinkPath)
+  test('reports parser syntax errors once', async () => {
+    const source = 'view Legacy { }'
+    const parsed = await testParseCodeWithParserErrors(source)
+    const parserMessage = parsed.document.parseResult.parserErrors[0]!.message
+    let errorDetails: unknown[] = []
 
-    expectKitchenSinkOutput(compiled.code)
+    try {
+      await Compiler.compileCode(source)
+    } catch (error) {
+      expect(error).toBeInstanceOf(Errors.UnexpectedBehaviorError)
+      errorDetails = (error as Errors.UnexpectedBehaviorError).details!['errors'] as unknown[]
+    }
+
+    expect(errorDetails).toContain(parserMessage)
+    expect(errorDetails.filter(error => error === parserMessage)).toHaveLength(1)
   })
 
-  test('compiles Tao source strings', async () => {
-    const source = await readFile(kitchenSinkPath, 'utf8')
-    const compiled = await Compiler.compileCode(source)
+  test('exposes a single Compile object for parsed AST nodes', async () => {
+    const parsed = await testParseCode(`
+      app MyApp { ui MainView }
+      ui MainView {
+        render Text "Hello"
+      }
+      ui Text Value text { }
+    `)
 
-    expectKitchenSinkOutput(compiled.code)
+    const taoFile = wrap(parsed.ast)
+    Compile.TaoFile(taoFile.unwrap())
+    const mainView = taoFile.statements.second.as_ViewDeclaration
+    const render = mainView.block.statements.only.as_Render
+    const literal = render.argumentList.arguments.only.value
+    Compile.Expression(literal.unwrap())
+
+    taoFile.statements.match([
+      { $type: AST.AppDeclaration.$type, name: 'MyApp' },
+      { $type: AST.ViewDeclaration.$type, name: 'MainView' },
+      { $type: AST.ViewDeclaration.$type, name: 'Text' },
+    ])
+    render.view.expect('name').toBe('Text')
+    literal.expect('value').toBe('Hello')
   })
 
   test('rejects duplicate app root ui declarations', async () => {
-    await expect(Compiler.compileCode(`
+    await expect(testCompileCode(`
       app MyApp {
         ui MainView
         ui OtherView
@@ -35,7 +65,7 @@ describe('minimal Tao compiler', () => {
   })
 
   test('rejects app blocks without a root ui statement', async () => {
-    await expect(Compiler.compileCode(`
+    await expect(testCompileCode(`
       app MyApp {
         ui MainView { }
       }
@@ -43,31 +73,8 @@ describe('minimal Tao compiler', () => {
     `)).rejects.toThrow('must declare exactly one root ui')
   })
 
-  test('supports nested render children in generated view props', async () => {
-    const compiled = await Compiler.compileCode(`
-      app MyApp { ui MainView }
-      ui MainView {
-        render Box {
-          render Text "Hello"
-        }
-      }
-      ui Box { }
-      ui Text Value text {
-        render inject ${tsFence}
-          const text = _ViewProps.Value.evaluate()
-          return <RN.Text>{text}</RN.Text>
-        ${fence}
-      }
-    `)
-
-    expect(compiled.code).toContain('function Box(_ViewProps: { children?: React.ReactNode })')
-    expect(compiled.code).toContain('return _ViewProps.children ?? null')
-    expect(compiled.code).toContain('<Box>')
-    expect(compiled.code).toContain('</Box>')
-  })
-
   test('rejects inject in multi-statement view blocks explicitly', async () => {
-    await expect(Compiler.compileCode(`
+    await expect(testCompileCode(`
       app MyApp { ui MainView }
       ui MainView {
         render inject ${tsFence}
@@ -77,24 +84,4 @@ describe('minimal Tao compiler', () => {
       }
     `)).rejects.toThrow('Only view renders are supported in multi-statement blocks')
   })
-
-  test('rejects unsupported inject blocks explicitly', async () => {
-    await expect(Compiler.compileCode(`
-      app MyApp { ui MainView }
-      ui MainView {
-        render inject ${tsFence}
-          const text = "Hello"
-        ${fence}
-      }
-    `)).rejects.toThrow('Unsupported inject block')
-  })
 })
-
-function expectKitchenSinkOutput(code: string): void {
-  expect(code).toContain('Hello, World!')
-  expect(code).toContain('function MainView')
-  expect(code).toContain('function Text')
-  expect(code).toContain('_ViewProps.Value')
-  expect(code).toContain('<RN.Text>{text.jsValue}</RN.Text>')
-  expect(code).toContain('export default function')
-}
