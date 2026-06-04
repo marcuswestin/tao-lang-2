@@ -66,11 +66,19 @@ describe('minimal Tao compiler', () => {
 
   test('rejects app blocks without a root ui statement', async () => {
     await expect(testCompileCode(`
-      app MyApp {
-        ui MainView { }
-      }
+      app MyApp { }
       ui MainView { }
     `)).rejects.toThrow('must declare exactly one root ui')
+  })
+
+  test('rejects unsupported app block statements', async () => {
+    await expect(testCompileCode(`
+      app MyApp {
+        ui MainView
+        render MainView
+      }
+      ui MainView { }
+    `)).rejects.toThrow('Unsupported app block syntax')
   })
 
   test('rejects inject in multi-statement view blocks explicitly', async () => {

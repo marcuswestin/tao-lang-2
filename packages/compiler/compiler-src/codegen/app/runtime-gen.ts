@@ -45,6 +45,11 @@ export const Compile = {
 
   /** AppRoot returns the app's single root ui declaration. */
   AppRoot(app: AST.AppDeclaration): AST.AppUi {
+    const unsupported = app.block.statements.filter(statement => !AST.isAppUi(statement))
+    if (unsupported.length > 0) {
+      throw new Error(`Unsupported app block syntax. Only root ui declarations can be compiled in app ${app.name}.`)
+    }
+
     const roots = app.block.statements.filter(AST.isAppUi)
     if (roots.length !== 1) {
       throw new Error(`App ${app.name} must declare exactly one root ui, found ${roots.length}.`)
