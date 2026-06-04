@@ -14,10 +14,6 @@ Use this skill when creating or editing project agent skills in this repo.
 - `.codex/skills` is a symlink to `../agents/skills`, so tools discover the same files through `.codex/skills/...`. Always edit the real `agents/skills` source; never treat the symlinked path as a separate copy.
 - The skill directory name MUST match the `name:` field in its frontmatter.
 
-## External skills
-
-- Third-party skills are pulled via `bunx skills` and pinned in `skills-lock.json` (github sources). Do not hand-edit installed external skills; change `skills-lock.json` and re-sync instead.
-
 ## Authoring conventions
 
 - Frontmatter needs `name` (kebab-case, matches dir) and a third-person `description` covering WHAT it does and WHEN to use it, with trigger terms.
