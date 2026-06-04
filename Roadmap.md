@@ -30,7 +30,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Minimal Port: Kitchen Sink Current
 
-- [ ] Parser
+- [x] Parser
   - [x] Add `Apps/Kitchen Sink/Kitchen Sink.tao`
   - [x] Add `packages/parser` as `@parser`
   - [x] Split grammar under `packages/parser/parser-grammar`
@@ -41,9 +41,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [x] Parse general statements and leave context-specific placement checks for the validator
   - [x] Cover parser grammar mechanics without adding validator behavior
   - [x] Add parser tests for Kitchen Sink and source strings
-  - [ ] Ro review
-  - [ ] Commit: `Add minimal Tao parser`
-- [ ] Compiler
+  - [x] Ro review
+- [x] Compiler
   - [x] Write compiler tests before implementation
   - [x] Add `packages/compiler` as `@compiler`
   - [x] Export compiler entrypoints
@@ -51,19 +50,13 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [x] Generate a default exported React component
   - [x] Include `Hello, World!`, `MainView`, `Text`, and `_ViewProps.Value` in generated output
   - [x] Fix Kitchen Sink `Text` injection to return `<RN.Text>{text.jsValue}</RN.Text>`
-  - [ ] Ro review
-  - [ ] Commit: `Add minimal Tao compiler`
-- [ ] Runtime
+  - [x] Ro review
+- [x] Runtime
   - [x] Write runtime e2e test before implementation
   - [x] Add `packages/runtime` as `@runtime`
   - [x] Add minimal Expo web host files
   - [x] Compile app into ignored `packages/runtime/_gen_tao-app`
   - [x] Add `just run` to compile Kitchen Sink and start Expo web
   - [x] E2E render verifies `Hello, World!`
-  - [ ] Verify `./agent just run` starts Expo web
-  - [ ] Ro review
-  - [ ] Commit: `Add minimal Expo web runtime`
-
-## Dev Environment
-
-- [ ] ...
+  - [x] Verify `./agent just run` starts Expo web
+  - [x] Ro review
