@@ -1,7 +1,16 @@
 module.exports = {
   preset: 'jest-expo',
   testMatch: ['<rootDir>/runtime-tests/*.jest-test.ts?(x)'],
+  globalSetup: '<rootDir>/runtime-tests/setup-generated-app.cjs',
   moduleNameMapper: {
+    '^@compiler$': '<rootDir>/../compiler/compiler-src/compiler.ts',
+    '^@compiler/(.*)$': '<rootDir>/../compiler/compiler-src/$1',
+    '^@parser$': '<rootDir>/../parser/parser-src/parser.ts',
+    '^@parser/(.*)$': '<rootDir>/../parser/parser-src/$1',
+    '^@runtime$': '<rootDir>/runtime-src/runtime.ts',
+    '^@runtime/(.*)$': '<rootDir>/runtime-src/$1',
+    '^@shared$': '<rootDir>/../shared/shared-src/shared.ts',
+    '^@shared/(.*)$': '<rootDir>/../shared/shared-src/$1',
     '^@babel/runtime/(.*)$': '<rootDir>/node_modules/@babel/runtime/$1',
     '^react$': '<rootDir>/node_modules/react',
     '^react/jsx-dev-runtime$': '<rootDir>/node_modules/react/jsx-dev-runtime',

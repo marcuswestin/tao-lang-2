@@ -1,68 +1,63 @@
-import { Compiler } from '@tao/compiler'
-import { FS } from '@tao/shared'
+import Compiler from '@compiler'
+import { FS, Platform, Repo } from '@shared'
 
-const rootPackageName = 'tao-lang'
+type GenerateAppOptions = {
+  repoRoot?: string
+  runtimePackageRoot?: string
+  sourceBaseDir?: string
+}
 
-/** Runtime exposes helpers for the Expo web host package. */
-export namespace Runtime {
-  /** CompileAppOptions declares path overrides for tests and tooling. */
-  export type CompileAppOptions = {
-    repoRoot?: string
-    runtimePackageRoot?: string
-    sourceBaseDir?: string
-  }
+type GeneratedApp = {
+  sourcePath: string
+  outputDir: string
+  outputPath: string
+  code: string
+}
 
-  /** CompiledApp declares the source app path and generated TSX runtime output. */
-  export type CompiledApp = {
-    sourcePath: string
-    outputDir: string
-    outputPath: string
-    code: string
-  }
+/** generateApp generates the runtime app module from a Tao app file. */
+async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Promise<GeneratedApp> {
+  const runtimePackageRoot = opts.runtimePackageRoot ?? await defaultRuntimePackageRoot(opts.repoRoot)
+  const sourcePath = FS.resolvePath(opts.sourceBaseDir ?? Platform.runtimeProcess.cwd(), appPath)
+  const generatedAppDir = FS.resolvePath(runtimePackageRoot, '_gen_tao-app')
+  const generatedAppPath = FS.resolvePath(generatedAppDir, 'App.tsx')
+  const compiled = await Compiler.compileFile(sourcePath)
 
-  /** compileApp compiles a Tao app file into the runtime generated app module. */
-  export async function compileApp(appPath: string, opts: CompileAppOptions = {}): Promise<CompiledApp> {
-    const repoRoot = opts.repoRoot ?? await findRepoRoot()
-    const runtimePackageRoot = opts.runtimePackageRoot ?? FS.resolvePath(repoRoot, 'packages/runtime')
-    const sourcePath = FS.resolvePath(opts.sourceBaseDir ?? process.cwd(), appPath)
-    const generatedAppDir = FS.resolvePath(runtimePackageRoot, '_gen_tao-app')
-    const generatedAppPath = FS.resolvePath(generatedAppDir, 'App.tsx')
-    const compiled = await Compiler.compileFile(sourcePath)
+  await writeGeneratedApp(generatedAppPath, compiled.code)
 
-    await writeGeneratedApp(generatedAppPath, compiled.code)
-
-    return {
-      sourcePath,
-      outputDir: generatedAppDir,
-      outputPath: generatedAppPath,
-      code: compiled.code,
-    }
+  return {
+    sourcePath,
+    outputDir: generatedAppDir,
+    outputPath: generatedAppPath,
+    code: compiled.code,
   }
 }
 
+/** Runtime exposes Expo runtime app generation functions. */
+const Runtime = {
+  generateApp,
+}
+
+export default Runtime
+
+async function defaultRuntimePackageRoot(repoRootOverride?: string): Promise<string> {
+  const repoRoot = repoRootOverride ?? await Repo.getRoot()
+  return FS.resolvePath(repoRoot, 'packages/runtime')
+}
+
 async function writeGeneratedApp(path: string, code: string): Promise<void> {
-  if (await FS.exists(path) && await FS.readText(path) === code) {
-    return
+  try {
+    if (await FS.readText(path) === code) {
+      return
+    }
+  } catch (error) {
+    if (!isMissingPathError(error)) {
+      throw error
+    }
   }
   await FS.writeText(path, code)
 }
 
-async function findRepoRoot(): Promise<string> {
-  let dir = FS.resolvePath(process.cwd())
-
-  while (true) {
-    const packageJsonPath = FS.resolvePath(dir, 'package.json')
-    if (await FS.isFile(packageJsonPath)) {
-      const packageJson = await FS.readJson<{ name?: string }>(packageJsonPath)
-      if (packageJson.name === rootPackageName) {
-        return dir
-      }
-    }
-
-    const parent = FS.dirname(dir)
-    if (parent === dir) {
-      throw new Error(`Could not find ${rootPackageName} repo root from ${process.cwd()}.`)
-    }
-    dir = parent
-  }
+function isMissingPathError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error
+    && (error as { code?: unknown }).code === 'ENOENT'
 }
