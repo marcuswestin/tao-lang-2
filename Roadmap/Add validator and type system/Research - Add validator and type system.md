@@ -35,12 +35,12 @@ This is not about TypeScript type checking or `just check`; package `tsconfig` f
 Useful prior patterns from `~/code/tao-lang`:
 
 - `packages/compiler/compiler-src/validation/tao-lang-validator.ts` grouped validation message constants with node-specific checks.
-- `ValidationReporter.ts` wrapped Langium's acceptor into a small reporting helper with optional node/property locations and related information.
-- `tao-services.ts` registered validation checks in the Langium service graph.
-- `typing/tao-argument-bindings.ts` kept argument matching logic shared between validation and codegen.
-- `typing/tao-type-system.ts` used Typir for broader primitives, nominal types, operators, call-site checks, and interpolation checks.
-- `typing/tao-type-system.ts` also showed the important Typir mechanics for this repo: define Tao-specific `TypirLangiumServices`, create primitives and inference rules in `LangiumTypeSystemDefinition.onInitialize`, register validation rules through `typir.validation.Collector.addValidationRulesForAstNodes`, use `ensureNodeIsAssignable` for argument compatibility, and guard inference with a `safeInferType` helper because Typir-Langium caches require AST nodes to be linked into a document.
-- `tao-services.ts` created Typir services with `createTypirLangiumServices(...)`, registered the Tao language module, then called `initializeLangiumTypirServices(...)`.
+- `packages/compiler/compiler-src/validation/ValidationReporter.ts` wrapped Langium's acceptor into a small reporting helper with optional node/property locations and related information.
+- `packages/compiler/compiler-src/langium/tao-services.ts` registered validation checks in the Langium service graph.
+- `packages/compiler/compiler-src/typing/tao-argument-bindings.ts` kept argument matching logic shared between validation and codegen.
+- `packages/compiler/compiler-src/typing/tao-type-system.ts` used Typir for broader primitives, nominal types, operators, call-site checks, and interpolation checks.
+- `packages/compiler/compiler-src/typing/tao-type-system.ts` also showed the important Typir mechanics for this repo: define Tao-specific `TypirLangiumServices`, create primitives and inference rules in `LangiumTypeSystemDefinition.onInitialize`, register validation rules through `typir.validation.Collector.addValidationRulesForAstNodes`, use `ensureNodeIsAssignable` for argument compatibility, and guard inference with a `safeInferType` helper because Typir-Langium caches require AST nodes to be linked into a document.
+- `packages/compiler/compiler-src/langium/tao-services.ts` created Typir services with `createTypirLangiumServices(...)`, registered the Tao language module, then called `initializeLangiumTypirServices(...)`.
 - `packages/ide-extension` wired VS Code/Cursor through a `vscode-languageclient` IPC client and a bundled Langium language-server entry.
 - `compiler-src/langium/langium-lsp.ts` re-exported Langium LSP/node APIs through local package wrappers so downstream packages used one dependency surface.
 - `packages/parser/langium-config.json` generated TextMate syntax output into the IDE extension package.
@@ -86,7 +86,7 @@ Deferred from the spec:
   - `text`
   - `number`
 - Use the old repo's Typir service mechanics, but shrink the rules to this slice. Register only the primitives and inference/validation checks needed for string literals, number literals, aliases, parameters, and render arguments.
-- Do not add an `unknown` Tao type in the public Tao model. If Typir integration needs an internal unresolved sentinel for unreliable parser/linking nodes, keep it internal and do not surface it as a Tao type.
+- Do not add an `unknown` Tao type, Typir primitive, or Typir sentinel. The previous repo did not need one; Typir inference misses used `undefined` / `InferenceRuleNotApplicable`. Internal `unresolved` helper variants are acceptable only where the previous repo needed that shape for non-Typir structural helpers, such as broken type-shape or argument-fingerprint resolution, and must never surface as a Tao type.
 - Implement expression inference for current expressions:
   - `StringLiteral` -> `text`
   - `NumberLiteral` -> `number`
@@ -152,7 +152,7 @@ Validator:
 - `validator-src/aliases-validator.ts`: alias placement, duplicate alias names, alias cycles.
 - `validator-src/invocations-validator.ts`: generic invocation argument checking for render now and actions/functions later.
 - `validator-src/type-system.ts`: Tao type representation, type equality/assignability, and future custom type declaration hooks.
-- `validator-src/expressions-type.ts`: expression type inference.
+- `validator-src/expressions-validator.ts`: expression-specific checks and helper calls into Typir inference.
 
 Compiler:
 
@@ -206,6 +206,7 @@ check((node, ctx) => {
 
 - Add validator tests for valid current Kitchen Sink code.
 - Add validator tests for each semantic rule moved out of compiler.
+- Add validator tests for scope rules: file-level alias visibility, view-local alias and parameter visibility inside the owning view, cross-view non-visibility, duplicate visible names, and rejected local alias/parameter shadowing.
 - Add type-checking tests for generic invocation argument count and text/number compatibility.
 - Add alias tests for inferred text/number alias types, alias references as invocation arguments, duplicate aliases, and alias cycles.
 - Add `Apps/Test Apps/Type System Tests/Type System Tests.tao` as a valid Tao app that demonstrates alias-based text and number values passed into tile views.

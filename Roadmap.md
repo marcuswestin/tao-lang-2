@@ -6,7 +6,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 - [x] Compiler: Create plain codegen wrapper and start using that
 - [x] INSTRUCT: How to separate parts of the language into different files
-- [ ] Add validator and type system
+- [ ] Add validator, type system, and IDE diagnostics
   - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
 - [ ] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
