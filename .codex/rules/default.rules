@@ -1,0 +1,5 @@
+prefix_rule(
+    pattern = ["./agent"],
+    decision = "allow",
+    justification = "Tao agents must use the repo-owned ./agent wrapper for executable commands.",
+)
