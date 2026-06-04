@@ -4,13 +4,12 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
-- [ ] Compiler: Create langium codegen wrapper and start using that
-- [ ] INSTRUCT: How to separate parts of the language into different files
-  - Codegen, validator, formatting, etc
-- [ ] Implement proper inject statement
+- [x] Compiler: Create plain codegen wrapper and start using that
+- [x] INSTRUCT: How to separate parts of the language into different files
 - [ ] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
-- [ ] Remove hard-coded kitchen sink stuff
+- [x] Implement proper inject statement
+- [x] Remove hard-coded kitchen sink stuff
   - [ ] Add generic compiled-add test declarations
     - Should this map to test writing for the actual apps?
 - [ ] Add validator and type system
@@ -18,6 +17,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - Add followups for later:
   - Add `import ./path/to/DateUtils.ts as DateUtils`
   - Think through how to do app testing, and how to use that for our repo test apps tests
+  - Compiler: Add codegen tracing/source maps when needed
 
 ## Language
 
@@ -32,7 +32,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 - [ ] Parser
   - [x] Add `Apps/Kitchen Sink/Kitchen Sink.tao`
-  - [x] Add `packages/parser` as `@tao/parser`
+  - [x] Add `packages/parser` as `@parser`
   - [x] Split grammar under `packages/parser/parser-grammar`
   - [x] Generate Langium parser artifacts under `parser-src/_gen_tao-parser`
   - [x] Export `AST`, `Langium`, and the `Parser` object API
@@ -45,7 +45,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [ ] Commit: `Add minimal Tao parser`
 - [ ] Compiler
   - [x] Write compiler tests before implementation
-  - [x] Add `packages/compiler` as `@tao/compiler`
+  - [x] Add `packages/compiler` as `@compiler`
   - [x] Export compiler entrypoints
   - [x] Emit Expo-compatible TSX for the supported AST only
   - [x] Generate a default exported React component
@@ -55,7 +55,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [ ] Commit: `Add minimal Tao compiler`
 - [ ] Runtime
   - [x] Write runtime e2e test before implementation
-  - [x] Add `packages/runtime` as `@tao/runtime`
+  - [x] Add `packages/runtime` as `@runtime`
   - [x] Add minimal Expo web host files
   - [x] Compile app into ignored `packages/runtime/_gen_tao-app`
   - [x] Add `just run` to compile Kitchen Sink and start Expo web

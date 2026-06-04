@@ -9,6 +9,6 @@ ui MainView {
 ui Text Value text {
     render inject ```ts
         const text = _ViewProps.Value.evaluate();
-        <RN.Text>{text}</RN.Text>
+        return <RN.Text>{text.jsValue}</RN.Text>
     ```
 }
