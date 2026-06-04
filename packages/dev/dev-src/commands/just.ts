@@ -2,6 +2,8 @@ import type { Command } from '@commander-js/extra-typings'
 import { FS, Platform, Repo } from '@shared'
 import { runQuietly, runWithInheritedOutput } from './commands-util'
 
+const STREAMED_JUST_RECIPES = new Set(['run'])
+
 /** registerJustCommand registers the repo-root Just command passthrough. */
 export function registerJustCommand(commands: Command): void {
   commands
@@ -29,6 +31,7 @@ async function runJust(args: readonly string[]): Promise<number> {
 
 /** shouldStreamJustOutput returns whether a Just invocation needs inherited output. */
 export function shouldStreamJustOutput(args: readonly string[]): boolean {
-  return args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')
+  return args.length === 0 || args[0] === 'help' || STREAMED_JUST_RECIPES.has(args[0] ?? '')
+    || args.includes('--help') || args.includes('-h')
     || args.includes('--list') || args.includes('-l')
 }
