@@ -39,6 +39,8 @@ Useful prior patterns from `~/code/tao-lang`:
 - `tao-services.ts` registered validation checks in the Langium service graph.
 - `typing/tao-argument-bindings.ts` kept argument matching logic shared between validation and codegen.
 - `typing/tao-type-system.ts` used Typir for broader primitives, nominal types, operators, call-site checks, and interpolation checks.
+- `typing/tao-type-system.ts` also showed the important Typir mechanics for this repo: define Tao-specific `TypirLangiumServices`, create primitives and inference rules in `LangiumTypeSystemDefinition.onInitialize`, register validation rules through `typir.validation.Collector.addValidationRulesForAstNodes`, use `ensureNodeIsAssignable` for argument compatibility, and guard inference with a `safeInferType` helper because Typir-Langium caches require AST nodes to be linked into a document.
+- `tao-services.ts` created Typir services with `createTypirLangiumServices(...)`, registered the Tao language module, then called `initializeLangiumTypirServices(...)`.
 - `packages/ide-extension` wired VS Code/Cursor through a `vscode-languageclient` IPC client and a bundled Langium language-server entry.
 - `compiler-src/langium/langium-lsp.ts` re-exported Langium LSP/node APIs through local package wrappers so downstream packages used one dependency surface.
 - `packages/parser/langium-config.json` generated TextMate syntax output into the IDE extension package.
@@ -47,7 +49,7 @@ Useful prior patterns from `~/code/tao-lang`:
 What not to carry over yet:
 
 - Do not port the old validator wholesale. It is tied to the old compiler package, broader grammar, navigation, data, layout, actions, functions, and old service wiring.
-- Do not introduce Typir in the first slice unless the implementation plan proves the small type model is insufficient. This slice needs `text` and `number` literals, aliases, parameter references, and invocation argument compatibility.
+- Use Typir in the first slice. Keep the Typir integration small and focused on `text`, `number`, aliases, parameter references, and invocation argument compatibility.
 - Do not copy the old IDE extension wholesale. Keep its architecture and edge-case lessons, but adapt package names, workspace aliases, stdlib absence, build commands, generated paths, and this repo's leaner package layout.
 
 ## Type system input
@@ -80,10 +82,11 @@ Deferred from the spec:
 - Add a new `packages/ide-extension` package named `tao-ide-extension`.
 - Export a single default `Validator` object, matching the current public package API pattern.
 - Keep Tao type checking inside the validator package for now; do not create a separate type-system package.
-- Start with a minimal internal type model:
+- Wire Typir through the validator package with an initially minimal type model:
   - `text`
   - `number`
-- Do not add an `unknown` Tao type. Type inference should return no type when parser/linking diagnostics already make a node unreliable. If implementation proves a first-class unknown type is required, stop and ask Ro before deciding.
+- Use the old repo's Typir service mechanics, but shrink the rules to this slice. Register only the primitives and inference/validation checks needed for string literals, number literals, aliases, parameters, and render arguments.
+- Do not add an `unknown` Tao type in the public Tao model. If Typir integration needs an internal unresolved sentinel for unreliable parser/linking nodes, keep it internal and do not surface it as a Tao type.
 - Implement expression inference for current expressions:
   - `StringLiteral` -> `text`
   - `NumberLiteral` -> `number`

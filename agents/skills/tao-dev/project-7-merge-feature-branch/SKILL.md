@@ -14,6 +14,7 @@ Land a completed feature branch into `main`.
 - If the feature branch has uncommitted work, stop and use `commit-all-chunks` first.
 - Do not rename or remove the feature branch until the squash commit is pushed to `main`.
 - Preserve Git's generated squash appendix in the final commit message.
+- Move completed roadmap task folders from `Roadmap/<Task>/` to `Roadmap/Archive/<Task>/` before the squash commit. Archive whole task folders, not individual plan files, and leave active or planned task folders in place.
 
 ## Workflow
 
@@ -59,7 +60,16 @@ Land a completed feature branch into `main`.
 
    If `main` advanced after step 3, return to step 3 before squashing.
 
-5. Build the squash commit message from `.git/SQUASH_MSG`:
+5. Archive completed roadmap task folders included in the landed feature:
+
+   ```sh
+   ./agent ls Roadmap
+   ./agent git mv "Roadmap/<Completed Task>" "Roadmap/Archive/<Completed Task>"
+   ```
+
+   Archive only task folders whose project is complete after this merge. If no roadmap task folder applies, note that in the final output.
+
+6. Build the squash commit message from `.git/SQUASH_MSG`:
 
    ```sh
    ./agent cat .git/SQUASH_MSG
@@ -81,7 +91,7 @@ Land a completed feature branch into `main`.
    The summary and bullets should describe the landed feature. Keep the generated squash details intact below them.
    Write the final content to a message file, for example `.artifacts/skills/project-7-merge-feature-branch/<feature-slug>-squash-message.txt`, and use that path as `<message-file>` below.
 
-6. Validate, commit, validate again, and push `main`:
+7. Validate, commit, validate again, and push `main`:
 
    ```sh
    ./agent just prep-commit
@@ -92,7 +102,7 @@ Land a completed feature branch into `main`.
 
    If validation changes files, review and stage only intentional changes, then rerun validation before committing.
 
-7. Rename the feature branch to `merged/...` and sync the rename with origin.
+8. Rename the feature branch to `merged/...` and sync the rename with origin.
 
    If the feature branch is checked out in its own worktree, run this from that worktree:
 
@@ -114,4 +124,4 @@ Land a completed feature branch into `main`.
 
 ## Output
 
-Report the landed feature branch, squash commit hash, validation results, `main` push status, `merged/...` branch name, remote sync status, and any conflict work left unresolved.
+Report the landed feature branch, archived roadmap folders or why none applied, squash commit hash, validation results, `main` push status, `merged/...` branch name, remote sync status, and any conflict work left unresolved.
