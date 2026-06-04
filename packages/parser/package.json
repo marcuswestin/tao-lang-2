@@ -1,0 +1,16 @@
+{
+  "name": "tao-parser",
+  "private": true,
+  "type": "module",
+  "module": "parser-src/parser.ts",
+  "exports": {
+    ".": "./parser-src/parser.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*",
+    "langium": "~4.2.2"
+  },
+  "devDependencies": {
+    "langium-cli": "^4.2.0"
+  }
+}

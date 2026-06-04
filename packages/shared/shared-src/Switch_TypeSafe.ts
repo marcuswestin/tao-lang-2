@@ -1,10 +1,13 @@
 import { UnexpectedBehaviorError } from './Errors'
 
-type ValueHandlers<ValueT extends PropertyKey, ResultT> = {
-  [KeyT in ValueT]: (value: KeyT) => ResultT
-}
+type SwitchKey = string | number | symbol
+type SwitchValue = SwitchKey | undefined
 
-type TypeHandlers<ItemT extends { $type: PropertyKey }, ResultT> = {
+type ValueHandlers<ValueT extends SwitchValue, ResultT> =
+  & { [KeyT in Exclude<ValueT, undefined> & SwitchKey]: (value: KeyT) => ResultT }
+  & (undefined extends ValueT ? { undefined: (value: undefined) => ResultT } : {})
+
+type TypeHandlers<ItemT extends { $type: SwitchKey }, ResultT> = {
   [KeyT in ItemT['$type']]: (item: Extract<ItemT, { $type: KeyT }>) => ResultT
 }
 
@@ -12,23 +15,26 @@ type PropertyValue<ItemT, PropertyT extends keyof ItemT> = ItemT[PropertyT]
 
 type PropertyHandlers<ItemT, PropertyT extends keyof ItemT, ResultT> = PropertyValue<ItemT, PropertyT> extends
   infer ValueT ?
-    & { [KeyT in Exclude<ValueT, undefined> & PropertyKey]: (value: KeyT) => ResultT }
+    & { [KeyT in Exclude<ValueT, undefined> & SwitchKey]: (value: KeyT) => ResultT }
     & (undefined extends ValueT ? { undefined: (value: undefined) => ResultT } : {})
   : never
 
-export function value<ValueT extends PropertyKey, ResultT>(
+/** value dispatches exhaustively on a literal value. */
+export function value<ValueT extends SwitchValue, ResultT>(
   input: ValueT,
   handlers: ValueHandlers<ValueT, ResultT>,
 ): ResultT {
-  const handler = handlers[input]
+  const key = input === undefined ? 'undefined' : input
+  const handler = handlers[key as keyof ValueHandlers<ValueT, ResultT>]
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled switch value: ${String(input)}`)
   }
-  return handler(input)
+  return (handler as (value: ValueT) => ResultT)(input)
 }
 
-export function type<ItemT extends { $type: PropertyKey }, ResultT>(
+/** type dispatches exhaustively on an AST-style `$type` discriminator. */
+export function type<ItemT extends { $type: SwitchKey }, ResultT>(
   item: ItemT,
   handlers: TypeHandlers<ItemT, ResultT>,
 ): ResultT {
@@ -38,9 +44,10 @@ export function type<ItemT extends { $type: PropertyKey }, ResultT>(
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled item type: ${String(key)}`)
   }
-  return handler(item as Extract<ItemT, { $type: typeof key }>)
+  return (handler as (item: ItemT) => ResultT)(item)
 }
 
+/** property dispatches exhaustively on one property value. */
 export function property<ItemT extends object, PropertyT extends keyof ItemT, ResultT>(
   item: ItemT,
   propertyName: PropertyT,
@@ -55,11 +62,3 @@ export function property<ItemT extends object, PropertyT extends keyof ItemT, Re
   }
   return (handler as (value: PropertyValue<ItemT, PropertyT>) => ResultT)(propertyValue)
 }
-
-const Switch = {
-  value,
-  type,
-  property,
-}
-
-export default Switch

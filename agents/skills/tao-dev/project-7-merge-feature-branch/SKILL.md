@@ -1,0 +1,117 @@
+---
+name: project-7-merge-feature-branch
+description: >-
+  Merges a completed Tao feature branch into main with validation, a squash commit, branch rename, and remote sync.
+---
+
+# Merge Feature Branch
+
+Land a completed feature branch into `main`.
+
+## Rules
+
+- Do not merge from `main`, `merged/...`, a detached HEAD, or a dirty worktree.
+- If the feature branch has uncommitted work, stop and use `commit-all-chunks` first.
+- Do not rename or remove the feature branch until the squash commit is pushed to `main`.
+- Preserve Git's generated squash appendix in the final commit message.
+
+## Workflow
+
+1. Capture the branch and state:
+
+   ```sh
+   ./agent git status --short --branch
+   ./agent git branch --show-current
+   ./agent git worktree list --porcelain
+   ```
+
+   Stop if the branch is not a clean feature branch.
+
+2. Validate and push the feature branch:
+
+   ```sh
+   ./agent just prep-commit
+   ./agent git push -u origin HEAD
+   ```
+
+3. Refresh `main`, merge it into the feature branch, then validate again:
+
+   ```sh
+   ./agent git checkout main
+   ./agent git fetch origin main
+   ./agent git merge --ff-only origin/main
+   ./agent git checkout <feature-branch>
+   ./agent git merge --no-edit main
+   ./agent just prep-commit
+   ./agent git push -u origin HEAD
+   ```
+
+   If there are merge conflicts, stop and report them unless the user explicitly asked for conflict resolution.
+
+4. Squash the feature branch into refreshed `main`:
+
+   ```sh
+   ./agent git checkout main
+   ./agent git fetch origin main
+   ./agent git merge --ff-only origin/main
+   ./agent git merge --squash <feature-branch>
+   ```
+
+   If `main` advanced after step 3, return to step 3 before squashing.
+
+5. Build the squash commit message from `.git/SQUASH_MSG`:
+
+   ```sh
+   ./agent cat .git/SQUASH_MSG
+   ```
+
+   Use this shape:
+
+   ```text
+   <Summary line>
+
+   - Main change one
+   - Main change two
+
+   Squashed commit of the following:
+
+   <Git-generated commit details>
+   ```
+
+   The summary and bullets should describe the landed feature. Keep the generated squash details intact below them.
+   Write the final content to a message file, for example `.artifacts/skills/project-7-merge-feature-branch/<feature-slug>-squash-message.txt`, and use that path as `<message-file>` below.
+
+6. Validate, commit, validate again, and push `main`:
+
+   ```sh
+   ./agent just prep-commit
+   ./agent git commit -F <message-file>
+   ./agent just prep-commit
+   ./agent git push origin main
+   ```
+
+   If validation changes files, review and stage only intentional changes, then rerun validation before committing.
+
+7. Rename the feature branch to `merged/...` and sync the rename with origin.
+
+   If the feature branch is checked out in its own worktree, run this from that worktree:
+
+   ```sh
+   ./agent git branch -m merged/<feature-branch>
+   ./agent git push -u origin HEAD
+   ./agent git ls-remote --heads origin merged/<feature-branch>
+   ./agent git push origin --delete <feature-branch>
+   ```
+
+   If the feature branch is not checked out anywhere, run this from `main`:
+
+   ```sh
+   ./agent git branch -m <feature-branch> merged/<feature-branch>
+   ./agent git push -u origin merged/<feature-branch>
+   ./agent git ls-remote --heads origin merged/<feature-branch>
+   ./agent git push origin --delete <feature-branch>
+   ```
+
+## Output
+
+Report the landed feature branch, squash commit hash, validation results, `main` push status, `merged/...` branch name, remote sync status, and any conflict work left unresolved.

@@ -64,6 +64,10 @@ in
     exec = ''just test "$@"'';
     description = "just test";
   };
+  scripts.f = {
+    exec = ''just fix "$@"'';
+    description = "just fix";
+  };
   scripts.b = {
     exec = ''just build "$@"'';
     description = "just build";
@@ -73,6 +77,10 @@ in
     description = "just prep-commit";
   };
   scripts.c = {
+    exec = ''just check "$@"'';
+    description = "just check";
+  };
+  scripts.cl = {
     exec = ''just clean "$@"'';
     description = "just clean";
   };

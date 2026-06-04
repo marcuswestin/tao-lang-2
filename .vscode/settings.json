@@ -1,26 +1,35 @@
 {
-  // Dprint formatting
+  // Use the workspace TypeScript version so Langium generated code typechecks consistently.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  /////////////
+  // Formatting
   "editor.defaultFormatter": "dprint.dprint",
   "editor.formatOnSave": true,
+  "dprint.experimentalLsp": true,
   "dprint.path": ".devenv/profile/bin/dprint",
-  //
+  "[tao]": {
+    "editor.defaultFormatter": "tao.tao-ide-extension"
+  },
+  /////////////////////////////
   // File and search exclusions
+  "search.exclude": {
+    "**/bun.lock": true
+  },
   "files.exclude": {
     ".devenv": true,
     ".direnv": true,
     ".android": true,
-    ".artifacts": true,
     ".codex": true,
+    ".claude": true,
+    ".dprint.jsonc": true,
     "**/.DS_Store": true,
     "**/node_modules": true,
     "**/bun.lock": true,
+    // "**/_gen_*": true,
     "devenv.lock": true,
     "devenv.yaml": true,
     "**/tsconfig.tsbuildinfo": true,
     "local.properties": true,
-    "skills-lock.json": true
-  },
-  "search.exclude": {
-    "**/bun.lock": true
   }
 }

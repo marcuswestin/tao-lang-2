@@ -1,4 +1,4 @@
-import { Assert, CLI, Errors, FS, HCI, Log, Switch } from '../shared-src/shared'
+import { Assert, CLI, Errors, FS, HCI, Log, Repo, Switch } from '../shared-src/shared'
 import { afterEach, describe, expect, PassThrough, runtimeProcess, test, Writable } from './TestRuntime'
 
 const cleanupPaths: string[] = []
@@ -151,7 +151,7 @@ describe('CLI', () => {
 
     expect(result.exitCode).toBe(7)
     expect(result.stderr.trim()).toBe('bad')
-    await expect(CLI.runChecked(command)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
+    await expect(CLI.mustRun(command)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
   })
 
   test('formats commands and supports inherited stdio', async () => {
@@ -168,23 +168,76 @@ describe('CLI', () => {
   })
 })
 
+describe('Repo', () => {
+  test('finds the current git worktree root from a nested cwd', async () => {
+    const cwd = runtimeProcess.cwd()
+    const root = await Repo.getRoot()
+
+    try {
+      runtimeProcess.chdir(FS.joinPath(root, 'packages', 'shared'))
+      expect(await Repo.getRoot()).toBe(root)
+    } finally {
+      runtimeProcess.chdir(cwd)
+    }
+  })
+
+  test('finds a nested git repo root without using an outer root', async () => {
+    const cwd = runtimeProcess.cwd()
+    const outerRoot = await tmpDir()
+    const taoRoot = FS.joinPath(outerRoot, 'workspace', 'tao')
+    const nestedDir = FS.joinPath(taoRoot, 'packages', 'shared')
+
+    await FS.mkdir(nestedDir)
+    await CLI.mustRun({ command: 'git', args: ['init'], cwd: taoRoot })
+    const expectedRoot = await Repo.getRoot(taoRoot)
+
+    try {
+      runtimeProcess.chdir(nestedDir)
+      expect(await Repo.getRoot()).toBe(expectedRoot)
+    } finally {
+      runtimeProcess.chdir(cwd)
+    }
+  })
+
+  test('rejects outside a git worktree', async () => {
+    const cwd = runtimeProcess.cwd()
+    const outsideRepo = await tmpDir()
+
+    try {
+      runtimeProcess.chdir(outsideRepo)
+      await expect(Repo.getRoot()).rejects.toBeInstanceOf(Errors.CommandExecutionError)
+    } finally {
+      runtimeProcess.chdir(cwd)
+    }
+  })
+})
+
 describe('Log', () => {
   test('uses swappable transports', () => {
     const calls: string[] = []
 
     Log.setTransport({
+      debug: message => calls.push(`debug:${message}`),
       info: message => calls.push(`info:${message}`),
+      warn: message => calls.push(`warn:${message}`),
       error: (message, ...details) => calls.push(`error:${message}:${details.join(',')}`),
       success: message => calls.push(`success:${message}`),
+      user: message => calls.push(`user:${message}`),
     })
+    Log.debug('debug')
     Log.info('hello')
+    Log.warn('heads up')
     Log.error('failed', new Error('boom'))
     Log.success('done')
+    Log.user('shown')
     Log.setTransport({})
 
-    expect(calls[0]).toBe('info:hello')
-    expect(calls[1]).toContain('error:failed:Error: boom')
-    expect(calls[2]).toBe('success:done')
+    expect(calls[0]).toBe('debug:debug')
+    expect(calls[1]).toBe('info:hello')
+    expect(calls[2]).toBe('warn:heads up')
+    expect(calls[3]).toContain('error:failed:Error: boom')
+    expect(calls[4]).toBe('success:done')
+    expect(calls[5]).toBe('user:shown')
     expect('trace' in Log).toBe(false)
     expect('withTransport' in Log).toBe(false)
   })
@@ -218,18 +271,27 @@ describe('Errors, Assert, and Switch', () => {
 
     const item: Item = { $type: 'text', value: 'hello', state: 'ready' }
 
-    expect(Switch.value('a' as 'a' | 'b', {
+    const selectedValue = Switch.value<'a' | 'b', number>('a', {
       a: () => 1,
       b: () => 2,
-    })).toBe(1)
-    expect(Switch.type(item, {
+    })
+    const selectedOptionalValue = Switch.value<'raw' | undefined, string>(undefined, {
+      raw: () => 'raw',
+      undefined: () => 'normal',
+    })
+    const selectedType = Switch.type<Item, string>(item, {
       text: text => text.value,
       count: count => count.value.toString(),
-    })).toBe('hello')
-    expect(Switch.property(item, 'state', {
+    })
+    const selectedProperty = Switch.property<Item, 'state', string>(item, 'state', {
       ready: () => 'Ready',
       empty: () => 'Empty',
-    })).toBe('Ready')
+    })
+
+    expect(selectedValue).toBe(1)
+    expect(selectedOptionalValue).toBe('normal')
+    expect(selectedType).toBe('hello')
+    expect(selectedProperty).toBe('Ready')
   })
 })
 

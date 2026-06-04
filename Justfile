@@ -1,43 +1,62 @@
 set quiet := true
 
-_DEV_PACKAGE := "packages/dev"
-_SHARED_PACKAGE := "packages/shared"
+KITCHEN_SINK_APP := justfile_directory() + "/Apps/Kitchen Sink/Kitchen Sink.tao"
 
 # Print available recipes
 help:
   just --list
 
+# Setup the development environment
+setup: deps
+
+# Install development dependencies
+deps:
+  bun install
+
 # Run all tests
-test:
-  bun test {{ _SHARED_PACKAGE }}/shared-tests/*.test.ts
+test: _compile-kitchen-sink-app
+  bun test packages/*/*-tests/*.test.ts
+  cd packages/runtime && node node_modules/jest/bin/jest.js --runInBand --watchman=false
 
 # Format code
 fmt:
-  dprint fmt --config config/dprint.jsonc --incremental=false
+  dprint fmt
+
+# Fix and format all code
+fix:
+  dprint fmt --incremental=false
 
 # Check all code
-check: _install-deps
-  dprint check --config config/dprint.jsonc --incremental=false
-  cd {{ _DEV_PACKAGE }} && bunx tsc --noEmit -p tsconfig.json
-  cd {{ _SHARED_PACKAGE }} && bunx tsc --noEmit -p tsconfig.json
+check: _compile-kitchen-sink-app
+  dprint check --incremental=false
+  bunx tsc --build packages/*/tsconfig.json
 
-# Build everything
-build: _install-deps
+
+# Compile a Tao app path relative to the invocation directory into the local runtime package
+compile-app app_path: _parser-gen
+  ./dev compile-app "{{app_path}}"
+
+# Compile Kitchen Sink and start the Expo runtime. OPEN_MATCH_HOST_ONLY to reuse the currently running browser tab instead of opening a new one.
+run: _compile-kitchen-sink-app
+  cd packages/runtime && EXPO_NO_TELEMETRY=1 OPEN_MATCH_HOST_ONLY=true bunx expo start --localhost
 
 # Clean run dependencies and build artifacts
 clean:
-  rm -rf .artifacts
+  rm -rf .artifacts/build
   find . -name node_modules -type d -prune -exec rm -rf {} +
 
-# Fix and format all code
-fix: fmt
+# Run clean + clean ALL artifacts
+clean-all: clean
+  rm -rf .artifacts
 
 # Check, test, and fix all code
-prep-commit: check test fix
+prep-commit: fix check test
 
 # Private
 #########
 
-_install-deps:
-  cd {{ _DEV_PACKAGE }} && bun install
-  cd {{ _SHARED_PACKAGE }} && bun install
+_compile-kitchen-sink-app: _parser-gen
+  ./dev compile-app "{{KITCHEN_SINK_APP}}"
+
+_parser-gen:
+  cd packages/parser && bunx langium generate

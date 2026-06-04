@@ -1,4 +1,4 @@
-import { runtimeConsole } from './Runtime'
+import { runtimeConsole } from './Platform'
 
 type LogTransport = {
   debug: (message: string, ...details: unknown[]) => void
@@ -20,45 +20,40 @@ const defaultTransport: LogTransport = {
 
 let activeTransport = defaultTransport
 
+/** setTransport replaces selected log transport methods. */
 export function setTransport(nextTransport: Partial<LogTransport>): void {
   activeTransport = { ...defaultTransport, ...nextTransport }
 }
 
+/** debug writes a debug-level message. */
 export function debug(message: string, ...details: unknown[]): void {
   activeTransport.debug(message, ...details)
 }
 
+/** info writes an informational message. */
 export function info(message: string, ...details: unknown[]): void {
   activeTransport.info(message, ...details)
 }
 
+/** warn writes a warning message. */
 export function warn(message: string, ...details: unknown[]): void {
   activeTransport.warn(message, ...details)
 }
 
+/** error writes an error message. */
 export function error(message: string, ...details: unknown[]): void {
   activeTransport.error(message, ...details.map(formatDetail))
 }
 
+/** success writes a successful operation message. */
 export function success(message: string, ...details: unknown[]): void {
   activeTransport.success(message, ...details)
 }
 
+/** user writes a message intended directly for the terminal user. */
 export function user(message: string, ...details: unknown[]): void {
   activeTransport.user(message, ...details)
 }
-
-const Log = {
-  setTransport,
-  debug,
-  info,
-  warn,
-  error,
-  success,
-  user,
-}
-
-export default Log
 
 function formatDetail(detail: unknown): unknown {
   return detail instanceof Error ? detail.stack ?? detail.toString() : detail

@@ -26,6 +26,24 @@
       ],
       "@shared/*": [
         "./shared/shared-src/*"
+      ],
+      "@parser": [
+        "./parser/parser-src/parser.ts"
+      ],
+      "@parser/*": [
+        "./parser/parser-src/*"
+      ],
+      "@compiler": [
+        "./compiler/compiler-src/compiler.ts"
+      ],
+      "@compiler/*": [
+        "./compiler/compiler-src/*"
+      ],
+      "@runtime": [
+        "./runtime/runtime-src/runtime.ts"
+      ],
+      "@runtime/*": [
+        "./runtime/runtime-src/*"
       ]
     }
   },

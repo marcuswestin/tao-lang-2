@@ -1,3 +1,62 @@
 # Tao Reimplement Roadmap
 
-TBD
+Track the clean, stepwise Tao reimplementation. Keep this current as each slice is ready for Ro review and commit.
+
+## Ro's STACK
+
+- [x] Compiler: Create plain codegen wrapper and start using that
+- [x] INSTRUCT: How to separate parts of the language into different files
+- [ ] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
+- [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
+- [x] Implement proper inject statement
+- [x] Remove hard-coded kitchen sink stuff
+  - [ ] Add generic compiled-add test declarations
+    - Should this map to test writing for the actual apps?
+- [ ] Add validator and type system
+
+- Add followups for later:
+  - Add `import ./path/to/DateUtils.ts as DateUtils`
+  - Think through how to do app testing, and how to use that for our repo test apps tests
+  - Compiler: Add codegen tracing/source maps when needed
+
+## Language
+
+- Spec
+  - Copy/fill spec
+- Apps
+  - Kitchen Sink
+    - Target: intended Tao syntax/functionality written during research and planning when the target should change
+    - Current: executable Tao app used by tests; copy in target slices only after that functionality is implemented
+
+## Minimal Port: Kitchen Sink Current
+
+- [x] Parser
+  - [x] Add `Apps/Kitchen Sink/Kitchen Sink.tao`
+  - [x] Add `packages/parser` as `@parser`
+  - [x] Split grammar under `packages/parser/parser-grammar`
+  - [x] Generate Langium parser artifacts under `parser-src/_gen_tao-parser`
+  - [x] Export `AST`, `Langium`, and the `Parser` object API
+  - [x] Support current syntax: `app`, `ui`, text parameters, `render`, view calls, optional empty blocks, and `inject` TS fences
+  - [x] Keep `Render` named `Render`
+  - [x] Parse general statements and leave context-specific placement checks for the validator
+  - [x] Cover parser grammar mechanics without adding validator behavior
+  - [x] Add parser tests for Kitchen Sink and source strings
+  - [x] Ro review
+- [x] Compiler
+  - [x] Write compiler tests before implementation
+  - [x] Add `packages/compiler` as `@compiler`
+  - [x] Export compiler entrypoints
+  - [x] Emit Expo-compatible TSX for the supported AST only
+  - [x] Generate a default exported React component
+  - [x] Include `Hello, World!`, `MainView`, `Text`, and `_ViewProps.Value` in generated output
+  - [x] Fix Kitchen Sink `Text` injection to return `<RN.Text>{text.jsValue}</RN.Text>`
+  - [x] Ro review
+- [x] Runtime
+  - [x] Write runtime e2e test before implementation
+  - [x] Add `packages/runtime` as `@runtime`
+  - [x] Add minimal Expo web host files
+  - [x] Compile app into ignored `packages/runtime/_gen_tao-app`
+  - [x] Add `just run` to compile Kitchen Sink and start Expo web
+  - [x] E2E render verifies `Hello, World!`
+  - [x] Verify `./agent just run` starts Expo web
+  - [x] Ro review

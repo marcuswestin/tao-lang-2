@@ -1,35 +1,23 @@
 ---
 name: subagents-review
 description: >-
-  Review uncommitted repo changes with the codex and claude CLIs, reconcile their findings, apply warranted fixes, and run tests. Use when the user asks to review current changes with subagents/reviewers before commit or PR.
+  Review current changes with codex and claude, fix confirmed issues, and verify.
 ---
 
 # Subagents review
 
-Run two independent reviewers (`codex` + `claude`) over the current changes, act on their findings, and verify. Run the reviewers at most twice.
+Run independent `codex` and `claude` reviews over the requested changes, then fix only confirmed issues. Do not commit.
 
 ## Process
 
-1. Confirm there are changes: `git status --short`. If clean, stop and say so.
-2. Run both reviewers in parallel (same prompt, independent passes):
-
-```bash
-codex review --uncommitted
-```
-
-The current Codex CLI rejects a custom prompt when `--uncommitted` is used. If that changes in a future CLI, use: `Review all uncommitted changes for bugs, regressions, missing tests, and unclear code. Lead with findings, ordered by severity, with file:line references.`
-
-```bash
-claude -p --permission-mode plan "Review all uncommitted changes in this repo (git diff HEAD plus untracked files) for bugs, regressions, missing tests, and unclear code. Do not edit files. Lead with findings, ordered by severity, with file:line references."
-```
-
-3. Reconcile findings into: confirmed issues, false positives, and open questions. Treat reviewer output as evidence, not truth — verify each finding against the code before acting.
-4. Apply only warranted fixes. Keep them scoped and minimal; preserve unrelated changes. Add/update tests when behavior changes. Ask before scope-expanding or destructive edits.
-5. Run `just test` (or the narrowest relevant check, then broader if risk warrants).
-6. Re-run the reviewers a second time only if the fixes were substantial or risky enough to need fresh eyes. This is the final pass — never run them more than twice.
-7. Summarize: confirmed issues fixed, findings intentionally skipped (and why), validation results, remaining risks.
-
-## Notes
-
-- If a CLI is missing or unauthenticated, note it and continue with the other reviewer.
-- Make no commits; this skill reviews and fixes only.
+1. If there are no scoped changes, stop.
+2. Create `.artifacts/skills/subagents-review/<YYYYMMDD-HHMMSS>-<slug>/prompt.md` with only the scope and reviewer instructions. Use the compact sortable local timestamp prefix so review folders appear in chronological order. Do not embed status, stats, name-status, or diffs; reviewers should inspect repo state themselves. Tell reviewers: "Review these changes for bugs, regressions, missing tests, and unclear code. Do not edit files. Do not run `./agent just prep-commit`, tests, checks, formatters, or validation commands; only inspect and report findings. Lead with findings, ordered by severity, with file:line references. When searching for text containing backticks, single-quote the shell argument or escape the backticks."
+3. Run both reviewers against that prompt and save stdout/stderr under `pass-1/`:
+   - `codex exec -C "$PWD" --sandbox read-only --ephemeral - < "$PROMPT_FILE"`
+   - `claude -p --permission-mode plan < "$PROMPT_FILE"`
+4. Reconcile findings into `reconciliation.md`. Verify each finding before acting; reviewer output is evidence, not truth.
+5. Apply only minimal warranted fixes. Preserve unrelated changes and ask before expanding scope.
+6. Run `./agent just prep-commit` unless a broader requested workflow applies.
+7. Run one second reviewer pass only if fixes were substantial. Never run more than two passes.
+8. Write `summary.md` and report the artifact path, fixes, skipped findings, validation, and remaining risks.
+9. Stop for Ro review before staging or committing any fixes. Do not hand off to a commit workflow until Ro explicitly approves the changes.

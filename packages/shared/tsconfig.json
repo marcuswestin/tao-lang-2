@@ -2,7 +2,7 @@
   "extends": "../tsconfig.base.json",
   "include": [
     "shared-src/**/*",
-    "shared-tests/typecheck.ts"
+    "shared-tests/**/*"
   ],
   "compilerOptions": {
     "composite": false,

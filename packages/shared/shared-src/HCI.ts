@@ -1,5 +1,5 @@
 import { UserInputError } from './Errors'
-import { createNodeReadlineInterface, type Readable, runtimeProcess, type Writable } from './Runtime'
+import { createNodeReadlineInterface, type Readable, runtimeProcess, type Writable } from './Platform'
 
 type TerminalStreams = {
   input?: Readable
@@ -7,29 +7,33 @@ type TerminalStreams = {
   interactive?: boolean
 }
 
+/** TextPromptOptions declares options for text prompts. */
 export type TextPromptOptions = TerminalStreams & {
   message: string
   defaultValue?: string
   validate?: (value: string) => string | undefined
 }
 
+/** ConfirmPromptOptions declares options for yes/no prompts. */
 export type ConfirmPromptOptions = TerminalStreams & {
   message: string
   defaultValue?: boolean
 }
 
+/** Choice declares one selectable prompt value. */
 export type Choice<ValueT extends string> = {
   value: ValueT
   label?: string
 }
 
+/** ChoicePromptOptions declares options for choice prompts. */
 export type ChoicePromptOptions<ValueT extends string> = TerminalStreams & {
   message: string
   choices: readonly Choice<ValueT>[]
   defaultValue?: ValueT
 }
 
-export function isInteractive(options: TerminalStreams = {}): boolean {
+function isInteractive(options: TerminalStreams = {}): boolean {
   if (options.interactive !== undefined) {
     return options.interactive
   }
@@ -40,6 +44,7 @@ export function isInteractive(options: TerminalStreams = {}): boolean {
   return hasTruthyIsTTY(input) && hasTruthyIsTTY(output)
 }
 
+/** askText prompts for a text response. */
 export async function askText(options: TextPromptOptions): Promise<string> {
   if (!isInteractive(options)) {
     return getNonInteractiveDefault(options.message, options.defaultValue)
@@ -59,6 +64,7 @@ export async function askText(options: TextPromptOptions): Promise<string> {
   })
 }
 
+/** askConfirm prompts for a yes/no response. */
 export async function askConfirm(options: ConfirmPromptOptions): Promise<boolean> {
   if (!isInteractive(options)) {
     return getNonInteractiveDefault(options.message, options.defaultValue)
@@ -82,6 +88,7 @@ export async function askConfirm(options: ConfirmPromptOptions): Promise<boolean
   })
 }
 
+/** askChoice prompts for one value from a fixed choice list. */
 export async function askChoice<ValueT extends string>(options: ChoicePromptOptions<ValueT>): Promise<ValueT> {
   assertChoices(options)
 

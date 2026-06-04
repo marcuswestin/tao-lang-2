@@ -1,13 +1,9 @@
 {
-  "name": "@tao/shared",
-  "license": "AGPL-3.0-only",
+  "name": "tao-shared",
+  "private": true,
   "type": "module",
-  "dependencies": {},
-  "devDependencies": {
-    "@types/node": "latest",
-    "typescript": "5.9.3"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+  "module": "shared-src/shared.ts",
+  "exports": {
+    ".": "./shared-src/shared.ts"
   }
 }

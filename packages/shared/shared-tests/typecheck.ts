@@ -43,6 +43,13 @@ const mode: string = Switch.property(item, 'mode', {
 })
 void mode
 
+declare const optionalMode: 'raw' | undefined
+const optionalModeName: string = Switch.value(optionalMode, {
+  raw: () => 'raw',
+  undefined: () => 'normal',
+})
+void optionalModeName
+
 function isNumber(value: unknown): value is number {
   return typeof value === 'number'
 }

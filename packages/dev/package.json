@@ -1,14 +1,11 @@
 {
-  "name": "@tao/dev",
+  "name": "tao-dev",
+  "private": true,
   "type": "module",
   "module": "dev-src/dev.ts",
   "dependencies": {
     "@commander-js/extra-typings": "^14.0.0",
+    "tao-runtime": "workspace:*",
     "commander": "^14.0.0"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/node": "latest",
-    "typescript": "5.9.3"
   }
 }
