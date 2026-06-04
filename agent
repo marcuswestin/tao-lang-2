@@ -11,8 +11,6 @@ INSTALL_STAMP="$BUILD_DIR/dev-deps.stamp"
 INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"
 BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
 BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
-export TAO_AGENT_CWD="$PWD"
-export TAO_REPO_ROOT="$SCRIPT_DIR"
 
 mkdir -p "$BUILD_DIR"
 

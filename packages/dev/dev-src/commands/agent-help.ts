@@ -1,40 +1,39 @@
 import type { Command } from '@commander-js/extra-typings'
-import { CLI } from '@shared'
-import { REPO_ROOT } from './commands-util'
-import { MAIN_JUSTFILE } from './just'
+import { CLI, FS, Platform, Repo } from '@shared'
 
 /** AgentHelpOptions declares the command names printed by agent help. */
-export type AgentHelpOptions = {
+type AgentHelpOptions = {
   allowlistedCommands: readonly string[]
 }
 
 /** registerAgentHelpCommand registers `./agent help`. */
 export function registerAgentHelpCommand(commands: Command, opts: AgentHelpOptions): void {
   commands.action(async () => {
-    process.exitCode = await printAgentHelp(opts.allowlistedCommands)
+    Platform.runtimeProcess.setExitCode(await printAgentHelp(opts.allowlistedCommands))
   })
   commands
     .command('help')
     .description('Print available recipes and allowlisted commands.')
     .action(async () => {
-      process.exitCode = await printAgentHelp(opts.allowlistedCommands)
+      Platform.runtimeProcess.setExitCode(await printAgentHelp(opts.allowlistedCommands))
     })
 }
 
 async function printAgentHelp(allowlistedCommands: readonly string[]): Promise<number> {
+  const repoRoot = await Repo.getRoot()
   const justList = await CLI.run({
     command: 'just',
-    args: ['--justfile', MAIN_JUSTFILE, '--list'],
-    cwd: REPO_ROOT,
+    args: ['--justfile', FS.joinPath(repoRoot, 'Justfile'), '--list'],
+    cwd: repoRoot,
   })
 
   if (justList.exitCode !== 0) {
-    process.stdout.write(justList.stdout)
-    process.stderr.write(justList.stderr)
+    Platform.runtimeProcess.stdout.write(justList.stdout)
+    Platform.runtimeProcess.stderr.write(justList.stderr)
     return justList.exitCode ?? 1
   }
 
-  process.stdout.write(`
+  Platform.runtimeProcess.stdout.write(`
 Usage:
   ./agent help
   ./agent just <recipe> [args...]
@@ -50,7 +49,7 @@ Behavior:
 Examples:
   ./agent just check
   ./agent just test
-  ./agent rg -n "pattern" packages
+  ./agent rg -n 'pattern' packages
 
 Just recipes:
 ${indent(justList.stdout.trimEnd())}
@@ -59,7 +58,7 @@ Allowlisted shell commands:
 `)
 
   for (const command of allowlistedCommands) {
-    process.stdout.write(`    ${command}\n`)
+    Platform.runtimeProcess.stdout.write(`    ${command}\n`)
   }
 
   return 0

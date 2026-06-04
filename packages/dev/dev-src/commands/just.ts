@@ -1,8 +1,6 @@
 import type { Command } from '@commander-js/extra-typings'
-import { FS } from '@shared'
-import { REPO_ROOT, runQuietly, runWithInheritedOutput } from './commands-util'
-
-export const MAIN_JUSTFILE = FS.joinPath(REPO_ROOT, 'Justfile')
+import { FS, Platform, Repo } from '@shared'
+import { runQuietly, runWithInheritedOutput } from './commands-util'
 
 /** registerJustCommand registers the repo-root Just command passthrough. */
 export function registerJustCommand(commands: Command): void {
@@ -13,19 +11,20 @@ export function registerJustCommand(commands: Command): void {
     .passThroughOptions()
     .description('Run a Just recipe from the repo root.')
     .action(async (args: string[] = []) => {
-      process.exitCode = await runJust(args)
+      Platform.runtimeProcess.setExitCode(await runJust(args))
     })
 }
 
 /** runJust runs Just from the repo root with output filtering for successful commands. */
-export async function runJust(args: readonly string[]): Promise<number> {
-  const commandArgs = ['--justfile', MAIN_JUSTFILE, ...args]
+async function runJust(args: readonly string[]): Promise<number> {
+  const repoRoot = await Repo.getRoot()
+  const commandArgs = ['--justfile', FS.joinPath(repoRoot, 'Justfile'), ...args]
 
   if (shouldShowJustOutput(args)) {
-    return await runWithInheritedOutput('just', commandArgs, REPO_ROOT)
+    return await runWithInheritedOutput('just', commandArgs, repoRoot)
   }
 
-  return await runQuietly('just', commandArgs, REPO_ROOT)
+  return await runQuietly('just', commandArgs, repoRoot)
 }
 
 function shouldShowJustOutput(args: readonly string[]): boolean {
