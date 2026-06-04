@@ -45,6 +45,10 @@ clean:
   rm -rf .artifacts/build
   find . -name node_modules -type d -prune -exec rm -rf {} +
 
+# Run clean + clean ALL artifacts
+clean-all: clean
+  rm -rf .artifacts
+
 # Check, test, and fix all code
 prep-commit: fix check test
 
