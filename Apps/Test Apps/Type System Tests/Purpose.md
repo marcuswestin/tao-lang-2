@@ -26,5 +26,5 @@ Exercise Tao type-system behavior through a small tile UI that passes typed valu
 ## Behavior Test Notes
 
 - Behavior automation is not wired yet.
-- Expected visible output after this app is implemented: `Open: 1` and `Done: 2`.
+- Expected visible output: `Open: 1` and `Done: 2`.
 - Future behavior metadata can live in this section without changing the app layout.

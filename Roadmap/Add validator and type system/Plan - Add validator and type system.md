@@ -292,3 +292,12 @@ Exit criteria:
 - By-type argument binding and named arguments beyond the current positional render syntax.
 - IDE formatter, go-to-definition, stdlib bundling, package/install commands, and full extension host automation.
 - Codegen tracing/source maps.
+
+## Implementation notes
+
+- Implemented on branch `feat/add-validator-type-system` in five code commits: parser value syntax, structural validator package, Typir-backed checks, compiler integration, and minimal IDE/Langium diagnostics.
+- The executable Kitchen Sink now matches the planned alias/number target slice, and `Apps/Test Apps/Type System Tests/Type System Tests.tao` compiles as a focused type-system app.
+- Typir integration uses `undefined` / `InferenceRuleNotApplicable` for unresolved inference paths and did not introduce an `unknown` Tao type, Typir primitive, or public sentinel.
+- Langium LSP diagnostics use the same structural validator functions through `validator-src/validation.ts` plus Typir-Langium's validation collector. Typir-Langium wraps custom messages with node context in LSP diagnostics, so tests assert the stable message substring.
+- The IDE extension build emits ignored `_gen-ide-extension` output, and parser generation emits ignored TextMate syntax under `packages/ide-extension/ide-extension-syntaxes/_gen-syntaxes/`.
+- Next step: run `project-6-review-implementation` before review/merge.

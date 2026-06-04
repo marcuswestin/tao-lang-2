@@ -8,6 +8,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] INSTRUCT: How to separate parts of the language into different files
 - [ ] Add validator, type system, and IDE diagnostics
   - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
+  - Implementation complete on `feat/add-validator-type-system`; next run `project-6-review-implementation` before merge.
 - [ ] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
