@@ -11,6 +11,8 @@ Convert settled research into implementation slices.
 ## Rules
 
 - Read `Roadmap.md`, the task folder, research notes, linked local docs, and relevant source.
+- Include relevant previous repo code and docs under `~/code/tao-lang` when comparable behavior already worked there.
+- Plan what to adopt, simplify, or reject from the previous repo; do not plan wholesale copying unless the old code is already perfectly suited to this repo.
 - Keep the top-level task in `Roadmap.md`, and move or delete other captured details into `Roadmap/<Task>/<Task>-Plan.md`.
 - Include goals, non-goals, assumptions, numbered implementation steps, validation, and deferrals.
 - Make each numbered step a meaningful implementation slice, not a tiny checklist item and not the whole project.
