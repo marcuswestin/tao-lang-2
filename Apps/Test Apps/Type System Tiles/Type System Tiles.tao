@@ -1,0 +1,21 @@
+app TypeSystemTiles {
+    ui TileBoard
+}
+
+alias FirstTitle = "Open"
+alias FirstCount = 1
+alias SecondTitle = "Done"
+alias SecondCount = 2
+
+ui TileBoard {
+    render Tile FirstTitle, FirstCount { }
+    render Tile SecondTitle, SecondCount { }
+}
+
+ui Tile Title text, Count number {
+    render inject ```ts
+        const title = _ViewProps.Title.evaluate();
+        const count = _ViewProps.Count.evaluate();
+        return <RN.Text>{title.jsValue}: {count.jsValue}</RN.Text>
+    ```
+}

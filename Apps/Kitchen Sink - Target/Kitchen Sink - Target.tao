@@ -2,13 +2,25 @@ app KitchenSink {
     ui MainView
 }
 
+alias Greeting = "Hello, World!"
+alias LaunchCount = 3
+
 ui MainView {
-    render Text "Hello, World!" { }
+    render Text Greeting { }
+    render StatTile "Launch count", LaunchCount { }
 }
 
 ui Text Value text {
     render inject ```ts
         const text = _ViewProps.Value.evaluate();
         return <RN.Text>{text.jsValue}</RN.Text>
+    ```
+}
+
+ui StatTile Label text, Count number {
+    render inject ```ts
+        const label = _ViewProps.Label.evaluate();
+        const count = _ViewProps.Count.evaluate();
+        return <RN.Text>{label.jsValue}: {count.jsValue}</RN.Text>
     ```
 }

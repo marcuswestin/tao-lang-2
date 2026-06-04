@@ -6,13 +6,14 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 - [x] Compiler: Create plain codegen wrapper and start using that
 - [x] INSTRUCT: How to separate parts of the language into different files
+- [ ] Add validator and type system
 - [ ] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
+- [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
 - [x] Implement proper inject statement
 - [x] Remove hard-coded kitchen sink stuff
   - [ ] Add generic compiled-add test declarations
     - Should this map to test writing for the actual apps?
-- [ ] Add validator and type system
 
 - Add followups for later:
   - Add `import ./path/to/DateUtils.ts as DateUtils`
