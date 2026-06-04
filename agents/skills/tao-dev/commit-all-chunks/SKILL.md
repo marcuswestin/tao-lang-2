@@ -13,7 +13,7 @@ Make no further changes to the codebase—only commits. If you need a code chang
 Prefer the smallest self-contained commits first.
 Commit message bullet lists must use one bullet per line with no blank lines between bullets.
 
-## Proccess:
+## Process:
 
 First run `prep-commit`, then:
 
@@ -21,3 +21,5 @@ First run `prep-commit`, then:
 2. Stage it
 3. Commit it
 4. Repeat until done
+
+Do not run `prep-commit` again between chunk commits when no files have changed since the initial validation. If any command or workflow step changes files before the next commit, run `prep-commit` again before committing those changed files.
