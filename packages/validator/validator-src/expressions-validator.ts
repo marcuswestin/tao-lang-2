@@ -1,4 +1,5 @@
-import { AST, Langium } from '@parser'
+import ASTUtils from '@ast-utils'
+import { AST } from '@parser'
 import type { ValidationProblem } from 'typir'
 import { safeInferType, type TaoTypirServices } from './type-system'
 import type { ValidationContext } from './validation'
@@ -11,7 +12,7 @@ export function inferExpressionType(expression: AST.Expression, typir: TaoTypirS
 /** validateTypirProblems reports Typir validation problems as Tao validator diagnostics. */
 export function validateTypirProblems(file: AST.TaoFile, typir: TaoTypirServices, ctx: ValidationContext): void {
   for (const problem of collectTypirProblems(file, typir)) {
-    const node = Langium.isAstNode(problem.languageNode) ? problem.languageNode : undefined
+    const node = ASTUtils.isNode(problem.languageNode) ? problem.languageNode : undefined
     ctx.error(problem.message, node)
   }
 }
@@ -22,7 +23,7 @@ function collectTypirProblems(
 ): ValidationProblem<TaoSpecificsForProblems>[] {
   return [
     ...typir.validation.Collector.validateBefore(file),
-    ...Langium.AstUtils.streamAllContents(file).flatMap(node => typir.validation.Collector.validate(node)).toArray(),
+    ...ASTUtils.streamAllContents(file).flatMap(node => typir.validation.Collector.validate(node)),
     ...typir.validation.Collector.validateAfter(file),
   ]
 }

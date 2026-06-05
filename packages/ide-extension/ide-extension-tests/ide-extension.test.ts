@@ -6,9 +6,9 @@ import { createValidatorLspServices } from 'tao-validator/langium-services'
 describe('Tao IDE extension smoke', () => {
   test('declares extension and language server entrypoint build inputs', async () => {
     const packageJson = await FS.readJson<IdeExtensionPackageJson>(
-      FS.resolvePath(import.meta.dir, '../package.json'),
+      FS.resolvePath('../package.json', { cwd: import.meta.dir }),
     )
-    expect(packageJson.main).toBe('_gen-ide-extension/extension/main.cjs')
+    expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
 
     const entrypoints = [
       '../ide-extension-src/extension/main.ts',
@@ -17,14 +17,14 @@ describe('Tao IDE extension smoke', () => {
       '../language-configuration.json',
     ]
     for (const entrypoint of entrypoints) {
-      expect(await FS.isFile(FS.resolvePath(import.meta.dir, entrypoint))).toBe(true)
+      expect(await FS.isFile(FS.resolvePath(entrypoint, { cwd: import.meta.dir }))).toBe(true)
     }
   })
 
   test('generates the TextMate grammar for VS Code', async () => {
     const grammarPath = FS.resolvePath(
-      import.meta.dir,
-      '../ide-extension-syntaxes/_gen-syntaxes/tao-lang.tmLanguage.json',
+      '../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+      { cwd: import.meta.dir },
     )
     expect(await FS.isFile(grammarPath)).toBe(true)
   })
@@ -39,8 +39,8 @@ describe('Tao IDE extension smoke', () => {
         render Text Count
       }
       ui Text Value text {
-        render inject raw \`\`\`ts
-          export const View = () => null
+        render inject \`\`\`ts
+          return null
         \`\`\`
       }
     `)
@@ -49,6 +49,22 @@ describe('Tao IDE extension smoke', () => {
     expect(
       diagnostics.some(diagnostic => diagnostic.includes("Argument for parameter 'Value' expects text, got number.")),
     ).toBe(true)
+  })
+
+  test('reports alias declaration-order diagnostics through Langium services', async () => {
+    const diagnostics = await validateWithLanguageServerServices(`
+      app Demo {
+        ui MainView
+      }
+      alias First = Second
+      alias Second = First
+      ui MainView {
+        render Text First
+      }
+      ui Text Value text { }
+    `)
+
+    expect(diagnostics).toContain("Name 'Second' is used before it is declared.")
   })
 })
 

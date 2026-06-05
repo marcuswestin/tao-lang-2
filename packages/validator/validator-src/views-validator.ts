@@ -1,9 +1,11 @@
-import { AST, Langium } from '@parser'
+import ASTUtils from '@ast-utils'
+import { AST } from '@parser'
 import type { ValidationContext } from './validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao ui bodies. */
 export const viewValidationMessages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this ui.`,
+  renderCount: (name: string) => `ui '${name}' must declare exactly one render statement.`,
   viewBody: 'Only alias and render statements are allowed in ui bodies.',
   renderTarget: '`render` must target a ui or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a ui body.',
@@ -11,13 +13,14 @@ export const viewValidationMessages = {
 
 /** validateViews validates ui declarations and ui-body structure. */
 export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const view of Langium.AstUtils.streamAllContents(file).filter(AST.isViewDeclaration)) {
+  for (const view of ASTUtils.streamAllContents(file).filter(AST.isViewDeclaration)) {
     validateViewDeclaration(view, ctx)
   }
 }
 
 function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationContext): void {
   validateDuplicateParameters(view, ctx)
+  validateRenderCount(view, ctx)
   validateViewBlock(view.block, ctx, true)
 }
 
@@ -29,6 +32,13 @@ function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationC
       continue
     }
     seen.add(parameter.name)
+  }
+}
+
+function validateRenderCount(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  const renderCount = view.block.statements.filter(AST.isRender).length
+  if (renderCount !== 1) {
+    ctx.error(viewValidationMessages.renderCount(view.name), view)
   }
 }
 

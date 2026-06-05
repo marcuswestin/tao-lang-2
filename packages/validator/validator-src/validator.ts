@@ -54,7 +54,9 @@ async function validateCleanOrReportParserDiagnostics(
   validateViews(validationParsed.ast, ctx)
   validateAliases(validationParsed.ast, ctx)
   validateInvocations(validationParsed.ast, ctx)
-  validateTypirProblems(validationParsed.ast, validationParsed.typir, ctx)
+  if (!hasError(ctx.diagnostics)) {
+    validateTypirProblems(validationParsed.ast, validationParsed.typir, ctx)
+  }
 
   return {
     parsed: validationParsed,

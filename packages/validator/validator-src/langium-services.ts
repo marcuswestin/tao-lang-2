@@ -10,8 +10,7 @@ type Services = {
   typir: TaoTypirServices
 }
 
-/** ValidatorLspServices declares validator-owned services used by the Tao language server. */
-export type ValidatorLspServices = {
+type ValidatorLspServices = {
   shared: Langium.LangiumSharedServices
   language: Langium.LangiumServices
   typir: TaoTypirServices
@@ -43,7 +42,7 @@ export async function rebuildForValidation(parsed: ParseResult): Promise<Validat
 }
 
 /** createValidatorServices creates Langium services with Tao Typir services initialized. */
-export function createValidatorServices(): Services {
+function createValidatorServices(): Services {
   const shared = Langium.inject(
     Langium.createDefaultSharedCoreModule(Langium.NodeFileSystem),
     AST.GeneratedSharedModule,

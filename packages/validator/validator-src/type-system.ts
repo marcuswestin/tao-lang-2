@@ -1,7 +1,8 @@
-import { AST, Langium } from '@parser'
+import ASTUtils from '@ast-utils'
+import { AST } from '@parser'
 import { InferenceRuleNotApplicable, isType, type Type } from 'typir'
 import type { LangiumTypeSystemDefinition, TypirLangiumServices, TypirLangiumSpecifics } from 'typir-langium'
-import { invocationValidationMessages, resolveRenderInvocation } from './invocations-validator'
+import { invocationValidationMessages } from './invocations-validator'
 
 /** TaoSpecifics binds Tao AST types to Typir-Langium services. */
 export interface TaoSpecifics extends TypirLangiumSpecifics {
@@ -13,7 +14,9 @@ export interface TaoSpecifics extends TypirLangiumSpecifics {
 export type TaoTypirServices = TypirLangiumServices<TaoSpecifics>
 
 /** NO_DOCUMENT_ERROR is the Typir-Langium cache error for unlinked AST nodes. */
-export const NO_DOCUMENT_ERROR = 'AST node has no document'
+const NO_DOCUMENT_ERROR = 'AST node has no document'
+
+const activeInferenceNodes = new WeakSet<AST.Node>()
 
 /** TaoTypeSystem registers Tao primitive types, expression inference, and invocation type checks. */
 export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> {
@@ -42,7 +45,7 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
 
     typir.validation.Collector.addValidationRulesForAstNodes({
       Render: (render, accept, services) => {
-        const invocation = resolveRenderInvocation(render)
+        const invocation = ASTUtils.resolveRenderInvocation(render)
         for (const pair of invocation.pairs) {
           const expected = taoPrimitiveType(pair.parameter.type, services as TaoTypirServices)
           services.validation.Constraints.ensureNodeIsAssignable(pair.argument.value, expected, accept, (actual) => ({
@@ -59,17 +62,17 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
 }
 
 /** taoPrimitiveType returns the Typir primitive for a Tao primitive type. */
-export function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): Type | undefined {
+function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): Type | undefined {
   return typir.factory.Primitives.get({ primitiveName: type })
 }
 
 /** astNodeHasDocument returns true when Typir can safely cache inference for `node`. */
-export function astNodeHasDocument(node: AST.Node | undefined): node is AST.Node {
+function astNodeHasDocument(node: AST.Node | undefined): node is AST.Node {
   if (!node) {
     return false
   }
   try {
-    Langium.AstUtils.getDocument(node)
+    ASTUtils.getDocument(node)
     return true
   } catch {
     return false
@@ -81,6 +84,11 @@ export function safeInferType(typir: TaoTypirServices, node: AST.Node | undefine
   if (!astNodeHasDocument(node)) {
     return undefined
   }
+  if (activeInferenceNodes.has(node)) {
+    return undefined
+  }
+
+  activeInferenceNodes.add(node)
   let inferred: unknown
   try {
     inferred = typir.Inference.inferType(node)
@@ -89,6 +97,8 @@ export function safeInferType(typir: TaoTypirServices, node: AST.Node | undefine
       return undefined
     }
     throw error
+  } finally {
+    activeInferenceNodes.delete(node)
   }
   return isType(inferred) ? inferred : undefined
 }

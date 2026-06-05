@@ -7,6 +7,8 @@ export const appValidationMessages = {
   appCount: (count: number) => `Tao file must declare exactly one app, found ${count}.`,
   appBlock: (name: string) => `Only root ui declarations are allowed in app ${name}.`,
   appRootCount: (name: string, count: number) => `App ${name} must declare exactly one root ui, found ${count}.`,
+  rootUiParameters: (appName: string, uiName: string) =>
+    `App ${appName} root ui ${uiName} must not declare parameters.`,
 } as const
 
 /** validateApp validates file-level and app-block structure. */
@@ -43,5 +45,18 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
   const roots = app.block.statements.filter(AST.isAppUi)
   if (roots.length !== 1) {
     ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
+  }
+  for (const root of roots) {
+    validateRootUi(app, root, ctx)
+  }
+}
+
+function validateRootUi(app: AST.AppDeclaration, root: AST.AppUi, ctx: ValidationContext): void {
+  const ui = root.ui.ref
+  if (!ui) {
+    return
+  }
+  if ((ui.parameterList?.parameters.length ?? 0) > 0) {
+    ctx.error(appValidationMessages.rootUiParameters(app.name, ui.name), root)
   }
 }

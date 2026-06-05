@@ -1,10 +1,22 @@
 import { AST, type ParseResult } from '@parser'
 
 /** DiagnosticSeverity declares the normalized severity for Tao diagnostics. */
-export type DiagnosticSeverity = 'error' | 'warning' | 'info'
+type DiagnosticSeverity = 'error' | 'warning' | 'info'
 
 /** DiagnosticSource declares which pipeline stage produced a Tao diagnostic. */
-export type DiagnosticSource = 'parser' | 'validator'
+type DiagnosticSource = 'parser' | 'validator'
+
+/** TaoDiagnosticRange declares a source span for a Tao diagnostic. */
+export type TaoDiagnosticRange = {
+  start: {
+    line: number
+    character: number
+  }
+  end: {
+    line: number
+    character: number
+  }
+}
 
 /** TaoDiagnostic declares one parser or validator diagnostic as data. */
 export type TaoDiagnostic = {
@@ -12,14 +24,15 @@ export type TaoDiagnostic = {
   severity: DiagnosticSeverity
   source: DiagnosticSource
   nodeType?: string
+  range?: TaoDiagnosticRange
 }
 
 /** parserDiagnostics returns normalized parser, linker, and lexer diagnostics. */
 export function parserDiagnostics(parsed: ParseResult): TaoDiagnostic[] {
   return uniqueDiagnostics([
+    ...parsed.diagnostics.map(langiumDiagnostic),
     ...parsed.document.parseResult.lexerErrors.map(error => parserError(error.message)),
     ...parsed.document.parseResult.parserErrors.map(error => parserError(error.message)),
-    ...parsed.diagnostics.map(langiumDiagnostic),
   ])
 }
 
@@ -40,6 +53,7 @@ export function validatorError(message: string, node?: AST.Node): TaoDiagnostic 
     severity: 'error',
     source: 'validator',
     nodeType: node?.$type,
+    range: node?.$cstNode?.range,
   }
 }
 
@@ -56,6 +70,7 @@ function langiumDiagnostic(diagnostic: AST.ParseDiagnostic): TaoDiagnostic {
     message: diagnostic.message,
     severity: severityFromLangium(diagnostic.severity),
     source: 'parser',
+    range: diagnostic.range,
   }
 }
 
@@ -72,13 +87,25 @@ function severityFromLangium(severity: number | undefined): DiagnosticSeverity {
 }
 
 function uniqueDiagnostics(diagnostics: readonly TaoDiagnostic[]): TaoDiagnostic[] {
-  const seen = new Set<string>()
+  const seenMessages = new Set<string>()
+  const seenRanges = new Set<string>()
   return diagnostics.filter((diagnostic) => {
-    const key = `${diagnostic.source}:${diagnostic.severity}:${diagnostic.message}`
-    if (seen.has(key)) {
+    const messageKey = `${diagnostic.source}:${diagnostic.severity}:${diagnostic.message}`
+    if (diagnostic.range === undefined) {
+      if (seenMessages.has(messageKey)) {
+        return false
+      }
+      seenMessages.add(messageKey)
+      return true
+    }
+
+    const rangeKey =
+      `${messageKey}:${diagnostic.range.start.line}:${diagnostic.range.start.character}:${diagnostic.range.end.line}:${diagnostic.range.end.character}`
+    if (seenRanges.has(rangeKey)) {
       return false
     }
-    seen.add(key)
+    seenRanges.add(rangeKey)
+    seenMessages.add(messageKey)
     return true
   })
 }
