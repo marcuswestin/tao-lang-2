@@ -1,3 +1,4 @@
+import { FS } from '@shared'
 import { context } from 'esbuild'
 
 const watch = process.argv.includes('--watch')
@@ -5,10 +6,10 @@ const minify = process.argv.includes('--minify')
 
 const ctx = await context({
   entryPoints: [
-    'ide-extension-src/extension/main.ts',
-    'ide-extension-src/language/main.ts',
+    FS.joinPath('ide-extension-src/extension/main.ts'),
+    FS.joinPath('ide-extension-src/language/main.ts'),
   ],
-  outdir: '_gen-ide-extension',
+  outdir: '_gen_ide-extension',
   bundle: true,
   target: 'ES2022',
   format: 'cjs',

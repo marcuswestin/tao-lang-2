@@ -4,14 +4,15 @@
   "version": "0.0.1",
   "private": true,
   "description": "Tao Lang VS Code extension",
+  "publisher": "tao",
   "categories": [
     "Programming Languages"
   ],
   "type": "module",
-  "main": "_gen-ide-extension/extension/main.cjs",
+  "main": "_gen_ide-extension/extension/main.cjs",
   "files": [
-    "_gen-ide-extension/",
-    "ide-extension-syntaxes/_gen-syntaxes/tao-lang.tmLanguage.json",
+    "_gen_ide-extension/",
+    "ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json",
     "language-configuration.json",
     "package.json"
   ],
@@ -20,7 +21,7 @@
       {
         "language": "tao",
         "scopeName": "source.tao-lang",
-        "path": "./ide-extension-syntaxes/_gen-syntaxes/tao-lang.tmLanguage.json"
+        "path": "./ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json"
       }
     ],
     "languages": [
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.104.0",
+    "@vscode/vsce": "^3.7.1",
     "esbuild": "~0.25.5"
   },
   "engines": {

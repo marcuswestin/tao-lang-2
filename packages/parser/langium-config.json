@@ -6,7 +6,7 @@
     "grammar": "./parser-grammar/tao-grammar.langium",
     "fileExtensions": ["tao"],
     "textMate": {
-      "out": "../ide-extension/ide-extension-syntaxes/_gen-syntaxes/tao-lang.tmLanguage.json"
+      "out": "../ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json"
     }
   }]
 }

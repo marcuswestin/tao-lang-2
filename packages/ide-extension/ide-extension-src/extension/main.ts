@@ -1,3 +1,4 @@
+import { FS } from '@shared'
 import * as vscode from 'vscode'
 import type { LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node'
 import { LanguageClient, TransportKind } from 'vscode-languageclient/node'
@@ -21,7 +22,7 @@ export function deactivate(): Thenable<void> | undefined {
 }
 
 function serverOptions(context: vscode.ExtensionContext): ServerOptions {
-  const module = context.asAbsolutePath('_gen-ide-extension/language/main.cjs')
+  const module = context.asAbsolutePath(FS.joinPath('_gen_ide-extension/language/main.cjs'))
   return {
     run: { module, transport: TransportKind.ipc },
     debug: { module, transport: TransportKind.ipc },

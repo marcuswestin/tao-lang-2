@@ -1,6 +1,6 @@
-import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, Platform, Text } from '@shared'
 
-const RUNTIME_PACKAGE_PATH = FS.joinPath('packages', 'runtime')
+const RUNTIME_PACKAGE_PATH = FS.joinPath('packages/runtime')
 const EXPO_ANDROID_ENV = {
   EXPO_NO_TELEMETRY: '1',
   OPEN_MATCH_HOST_ONLY: 'true',
@@ -12,12 +12,16 @@ const EXPO_GO_SDK_VERSION = '54.0.0'
 const EXPO_GO_URL = `exp://127.0.0.1:${EXPO_GO_METRO_PORT}`
 const EXPO_METRO_STATUS_URL = `http://127.0.0.1:${EXPO_GO_METRO_PORT}/status`
 const EXPO_VERSIONS_URL = 'https://api.expo.dev/v2/versions/latest'
-const EXPO_GO_APK_CACHE_DIR = FS.joinPath('.artifacts', 'android', 'expo-go')
+const EXPO_GO_APK_CACHE_DIR = FS.joinPath('.artifacts/android/expo-go')
 const EXPO_ADB_USER = '0'
 const ANDROID_AVD_NAME = 'Tao_Pixel_API_36'
 const ANDROID_AVD_DEVICE = 'pixel'
-const ANDROID_SYSTEM_IMAGE = 'system-images;android-36;google_apis_playstore;arm64-v8a'
-const ANDROID_SDK_PACKAGES = [ANDROID_SYSTEM_IMAGE]
+const ANDROID_EMULATOR_MEMORY_MB = 2_048
+const ANDROID_SYSTEM_IMAGE = 'system-images;android-36;google_apis;arm64-v8a'
+const ANDROID_AVD_CONFIG = {
+  'hw.keyboard': 'yes',
+  'hw.ramSize': `${ANDROID_EMULATOR_MEMORY_MB}M`,
+}
 const EMULATOR_BOOT_TIMEOUT_MS = 180_000
 const EMULATOR_BOOT_POLL_MS = 2_000
 const METRO_START_TIMEOUT_MS = 60_000
@@ -34,14 +38,14 @@ export async function ensureAndroidEmulator(): Promise<void> {
     'Android avdmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
   )
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
-  await requireCommand(
-    'sdkmanager',
-    'Android sdkmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
-  )
-  await ensureAndroidSdkPackages()
 
   let avds = await listAvds()
   if (avds.length === 0) {
+    await requireCommand(
+      'sdkmanager',
+      'Android sdkmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
+    )
+    await requireAndroidSdkPackage(ANDROID_SYSTEM_IMAGE)
     Platform.runtimeConsole.info(`No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
     await CLI.mustRun({
       command: 'avdmanager',
@@ -64,7 +68,10 @@ export async function ensureAndroidEmulator(): Promise<void> {
   }
 
   const avdName = preferredAvdName(avds)
-  const logPath = FS.joinPath(FS.tmpdir(), 'tao-android-emulator.log')
+  if (avdName === ANDROID_AVD_NAME) {
+    await ensureAvdConfig(avdName)
+  }
+  const logPath = FS.resolvePath('tao-android-emulator.log', { cwd: FS.tmpdir() })
   const runningSerial = await findRunningEmulator()
   if (runningSerial) {
     if (await isEmulatorBooted(runningSerial)) {
@@ -99,8 +106,7 @@ export async function ensureAndroidExpoGo(): Promise<void> {
 
 /** startExpoAndroid starts Expo and opens it on the booted Android emulator. */
 export async function startExpoAndroid(): Promise<void> {
-  const repoRoot = await Repo.getRoot()
-  const runtimePackageRoot = FS.resolvePath(repoRoot, RUNTIME_PACKAGE_PATH)
+  const runtimePackageRoot = await FS.resolveRepoPath(RUNTIME_PACKAGE_PATH)
   void openExpoGoWhenMetroIsReady().catch(error => Platform.runtimeConsole.error(Errors.formatForUser(error)))
   const result = await CLI.run({
     command: 'bunx',
@@ -115,41 +121,56 @@ export async function startExpoAndroid(): Promise<void> {
 }
 
 async function requireCommand(command: string, missingMessage: string): Promise<void> {
-  const result = await CLI.run({ command: 'sh', args: ['-c', `command -v ${command}`] })
-  if (result.error || result.exitCode !== 0) {
+  try {
+    await CLI.mustRun({ command: 'sh', args: ['-c', `command -v ${command}`] })
+  } catch (error) {
+    if (!(error instanceof Errors.CommandExecutionError)) {
+      throw error
+    }
     Errors.throwUserInput(missingMessage)
   }
 }
 
-async function ensureAndroidSdkPackages(): Promise<void> {
+async function requireAndroidSdkPackage(sdkPackage: string): Promise<void> {
   const installed = await CLI.mustRun({ command: 'sdkmanager', args: ['--list_installed'] })
-  for (const sdkPackage of ANDROID_SDK_PACKAGES) {
-    if (installed.stdout.includes(sdkPackage)) {
-      continue
-    }
-    Platform.runtimeConsole.info(`Installing Android SDK package ${sdkPackage}.`)
-    await CLI.mustRun({
-      command: 'sdkmanager',
-      args: [sdkPackage],
-      stdin: 'y\n',
-      stdio: 'inherit',
-    })
+  if (installed.stdout.includes(sdkPackage)) {
+    return
   }
+
+  Errors.throwUserInput(Text.stripIndent(`
+    Android SDK package ${sdkPackage} is not available in this devenv shell.
+    Run \`direnv allow\` so Nix rebuilds the Android SDK from devenv.nix, then retry \`just android\`.
+  `))
 }
 
 async function ensureAvdConfig(avdName: string): Promise<void> {
-  const configPath = FS.joinPath(Platform.nodeOs.homedir(), '.android', 'avd', `${avdName}.avd`, 'config.ini')
+  const configPath = FS.resolvePath(`${avdName}.avd/config.ini`, { cwd: androidAvdHome() })
   if (!await FS.exists(configPath)) {
     return
   }
 
   const config = await FS.readText(configPath)
-  const nextConfig = config.match(/^hw\.keyboard\s*=/m)
-    ? config.replace(/^hw\.keyboard\s*=.*$/m, 'hw.keyboard = yes')
-    : `${config.trimEnd()}\nhw.keyboard = yes\n`
+  let nextConfig = config
+  for (const [key, value] of Object.entries(ANDROID_AVD_CONFIG)) {
+    nextConfig = upsertAvdConfigValue(nextConfig, key, value)
+  }
   if (nextConfig !== config) {
     await FS.writeText(configPath, nextConfig)
   }
+}
+
+function androidAvdHome(): string {
+  const androidUserHome = Platform.runtimeProcess.env['ANDROID_USER_HOME']
+    ?? FS.resolvePath('.android', { cwd: FS.homeDir() })
+  return Platform.runtimeProcess.env['ANDROID_AVD_HOME'] ?? FS.resolvePath('avd', { cwd: androidUserHome })
+}
+
+function upsertAvdConfigValue(config: string, key: string, value: string): string {
+  const line = `${key} = ${value}`
+  const keyPattern = Text.escapeRegExp(key)
+  return config.match(new RegExp(`^${keyPattern}\\s*=`, 'm'))
+    ? config.replace(new RegExp(`^${keyPattern}\\s*=.*$`, 'm'), line)
+    : `${config.trimEnd()}\n${line}\n`
 }
 
 async function listAvds(): Promise<string[]> {
@@ -181,9 +202,10 @@ async function isEmulatorBooted(serial: string): Promise<boolean> {
 
 async function startEmulator(avdName: string, logPath: string): Promise<void> {
   Platform.runtimeConsole.info(`Starting Android emulator ${avdName}.`)
-  const logFile = await Platform.nodeFs.open(logPath, 'a')
+  const logFile = await FS.openAppend(logPath)
   try {
-    const emulator = Platform.nodeSpawn('emulator', ['-avd', avdName, '-netdelay', 'none', '-netspeed', 'full'], {
+    const emulator = Platform.spawn('emulator', {
+      args: ['-avd', avdName, '-memory', String(ANDROID_EMULATOR_MEMORY_MB), '-netdelay', 'none', '-netspeed', 'full'],
       detached: true,
       stdio: ['ignore', logFile.fd, logFile.fd],
     })
@@ -232,10 +254,10 @@ async function isPackageInstalled(serial: string, appId: string): Promise<boolea
 }
 
 async function downloadExpoGoApk(): Promise<string> {
-  const repoRoot = await Repo.getRoot()
   const url = await getExpoGoApkUrl()
   const filename = FS.basename(new URL(url).pathname)
-  const outputPath = FS.resolvePath(repoRoot, EXPO_GO_APK_CACHE_DIR, filename)
+  const outputDir = await FS.resolveRepoPath(EXPO_GO_APK_CACHE_DIR)
+  const outputPath = FS.resolvePath(filename, { cwd: outputDir })
   if (await FS.exists(outputPath)) {
     return outputPath
   }
@@ -246,7 +268,7 @@ async function downloadExpoGoApk(): Promise<string> {
   if (!response.ok) {
     Errors.throwUserInput(`Failed to download Expo Go APK: ${response.status} ${response.statusText}`)
   }
-  await Platform.nodeFs.writeFile(outputPath, Buffer.from(await response.arrayBuffer()))
+  await FS.writeFile(outputPath, Buffer.from(await response.arrayBuffer()))
   return outputPath
 }
 
