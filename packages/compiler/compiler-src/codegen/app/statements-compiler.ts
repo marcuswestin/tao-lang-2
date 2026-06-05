@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type Compiled } from '../codegen-util'
-import { Compile } from './Compile'
+import { Compile } from '../Compile'
 
 export default {
   /** CompileStatement compiles one Tao statement. */

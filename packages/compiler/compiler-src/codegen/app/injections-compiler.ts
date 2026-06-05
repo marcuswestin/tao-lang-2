@@ -7,7 +7,7 @@ export default {
   CompileInjection(injection: AST.Injection): Compiled {
     const code = stripTsFence(injection.tsCodeBlock)
     return gen`
-      (function injection() {
+      (function __injection__() {
         ${genTextLines(code)}
       })()
     `

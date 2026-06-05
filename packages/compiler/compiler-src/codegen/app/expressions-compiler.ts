@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type Compiled, gen, genName, resolveRef } from '../codegen-util'
-import { Compile } from './Compile'
+import { Compile } from '../Compile'
 
 export default {
   /** CompileExpression compiles a Tao expression into a runtime value expression. */
@@ -25,7 +25,7 @@ export default {
 
   /** CompileValueReference compiles an alias or parameter reference into a Tao value expression. */
   CompileValueReference(reference: AST.ValueReference): Compiled {
-    const target = resolveRef(reference.target, 'value reference')
+    const target = resolveRef(reference.target)
     return Switch.type(target, {
       AliasDeclaration: alias => gen`${genName(alias)}.evaluate()`,
       ParameterDeclaration: parameter => gen`_ViewProps.${genName(parameter)}.evaluate()`,

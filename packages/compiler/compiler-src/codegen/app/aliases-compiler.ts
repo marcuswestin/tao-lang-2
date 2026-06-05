@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { type Compiled, gen, genName } from '../codegen-util'
-import { Compile } from './Compile'
+import { Compile } from '../Compile'
 
 export default {
   /** CompileAliasDeclaration compiles a Tao alias into a generated Tao value binding. */

@@ -1,11 +1,11 @@
-import AliasesCompiler from './aliases-compiler'
-import AppCompiler from './app-compiler'
-import ExpressionsCompiler from './expressions-compiler'
-import FilesCompiler from './files-compiler'
-import InjectionsCompiler from './injections-compiler'
-import InvocationsCompiler from './invocations-compiler'
-import StatementsCompiler from './statements-compiler'
-import ViewsCompiler from './views-compiler'
+import AliasesCompiler from './app/aliases-compiler'
+import AppCompiler from './app/app-compiler'
+import ExpressionsCompiler from './app/expressions-compiler'
+import FilesCompiler from './app/files-compiler'
+import InjectionsCompiler from './app/injections-compiler'
+import InvocationsCompiler from './app/invocations-compiler'
+import StatementsCompiler from './app/statements-compiler'
+import ViewsCompiler from './app/views-compiler'
 
 /** Compile compiles parsed Tao AST nodes into Expo-compatible TSX source. */
 export const Compile = {
@@ -16,6 +16,7 @@ export const Compile = {
   AliasDeclaration: AliasesCompiler.CompileAliasDeclaration,
   UiDeclaration: ViewsCompiler.CompileUiDeclaration,
   ViewParameterList: ViewsCompiler.CompileViewParameterList,
+  ParameterDeclaration: ViewsCompiler.CompileParameterDeclaration,
   ParameterType: ViewsCompiler.CompileParameterType,
   ViewBlock: ViewsCompiler.CompileViewBlock,
   ViewStatement: ViewsCompiler.CompileViewStatement,

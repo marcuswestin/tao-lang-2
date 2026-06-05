@@ -2,7 +2,7 @@ import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, genJoin, genList, genName } from '../codegen-util'
-import { Compile } from './Compile'
+import { Compile } from '../Compile'
 
 export default {
   /** CompileRender compiles a Tao render statement into a runtime render call. */
@@ -36,8 +36,8 @@ export default {
 
   /** CompileRenderProps compiles render arguments into runtime render props. */
   CompileRenderProps(invocation: ASTUtils.RenderInvocation): Compiled {
-    const props = genJoin(invocation.pairs, Compile.InvocationPair, { prefix: ' ', suffix: ' ' })
-    return gen`TR.RenderProps({${props}})`
+    const props = genJoin(invocation.pairs, Compile.InvocationPair)
+    return gen`TR.RenderProps({ ${props} })`
   },
 
   /** CompileInvocationPair compiles one render argument-to-parameter prop entry. */

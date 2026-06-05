@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type Compiled, gen, genJoin, genList, genName, genNameLiteral } from '../codegen-util'
-import { Compile } from './Compile'
+import { Compile } from '../Compile'
 
 export default {
   /** CompileUiDeclaration compiles a Tao ui declaration into a runtime ui component. */
@@ -20,11 +20,12 @@ export default {
   /** CompileViewParameterList compiles Tao ui parameters into runtime parameter metadata. */
   CompileViewParameterList(ui: AST.UiDeclaration): Compiled {
     const parameters = ui.parameterList?.parameters ?? []
-    const parameterEntries = genJoin(parameters, param => gen`${genName(param)}: ${Compile.ParameterType(param)}`, {
-      prefix: ' ',
-      suffix: ' ',
-    })
-    return gen`TR.ViewParameterList({${parameterEntries}})`
+    const parameterEntries = genJoin(parameters, Compile.ParameterDeclaration)
+    return gen`TR.ViewParameterList({ ${parameterEntries} })`
+  },
+
+  CompileParameterDeclaration(param: AST.ParameterDeclaration): Compiled {
+    return gen`${genName(param)}: ${Compile.ParameterType(param)}`
   },
 
   /** CompileParameterType returns the generated Tao primitive type name for a Tao parameter. */

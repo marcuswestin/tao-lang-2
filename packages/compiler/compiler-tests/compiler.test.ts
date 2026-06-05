@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import { Errors, FS } from '@shared'
 import { describe, expect, test } from 'bun:test'
 import { testParseCode, testParseCodeWithParserErrors } from '../../parser/parser-tests/test-parse'
-import { Compile } from '../compiler-src/codegen/app/Compile'
+import { Compile } from '../compiler-src/codegen/Compile'
 import { testCompileCode } from './test-compile'
 import { wrap } from './test-utils/AST-Wrapper'
 

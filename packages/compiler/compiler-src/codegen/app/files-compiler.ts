@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { type Compiled, gen, genList } from '../codegen-util'
-import { Compile } from './Compile'
+import { Compile } from '../Compile'
 
 export default {
   /** CompileTaoFile compiles a parsed Tao file into a default React component module. */

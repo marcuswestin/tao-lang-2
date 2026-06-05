@@ -1,7 +1,7 @@
 import { AST, Langium } from '@parser'
-import { Compile } from './Compile'
+import { Compile } from '../Compile'
 
-export { Compile } from './Compile'
+export { Compile } from '../Compile'
 
 export default {
   /** CompileTaoFile compiles a parsed Tao file into Expo-compatible TSX source. */

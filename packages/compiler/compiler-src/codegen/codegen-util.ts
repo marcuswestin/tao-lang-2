@@ -14,9 +14,7 @@ type GenListOptions = {
 
 /** GenJoinOptions declares short separator and non-empty wrapper options. */
 type GenJoinOptions = {
-  prefix?: string
   separator?: string
-  suffix?: string
 }
 
 /** NamedNode declares an AST node or semantic value with a source-level name. */
@@ -60,16 +58,11 @@ export function genJoin<ItemT>(
   options: GenJoinOptions = {},
 ): GenValue {
   const itemList = Array.from(items)
-  if (itemList.length === 0) {
-    return genNoop()
-  }
-
-  const joined = Langium.joinToNode(
+  return Langium.joinToNode(
     itemList,
     item => gen`${compileItem(item)}`,
     { separator: options.separator ?? ', ' },
   )
-  return gen`${options.prefix ?? ''}${joined}${options.suffix ?? ''}`
 }
 
 /** genList compiles item lists into a generator node with non-empty items separated by new lines. */
@@ -86,8 +79,8 @@ export function genList<ItemT>(
 }
 
 /** resolveRef returns a linked cross-reference target from a validated AST. */
-export function resolveRef<T extends AST.Node>(ref: Langium.Reference<T>, label: string): T {
+export function resolveRef<T extends AST.Node>(ref: Langium.Reference<T>): T {
   const target = ref.ref
-  Assert.defined(target, `validated ${label} is resolved`, { refText: ref.$refText })
+  Assert.defined(target, 'validated reference is resolved', { refText: ref.$refText })
   return target
 }
