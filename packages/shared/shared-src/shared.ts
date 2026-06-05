@@ -7,5 +7,6 @@ import * as Log from './Log'
 import * as Platform from './Platform'
 import * as Repo from './Repo'
 import * as Switch from './Switch_TypeSafe'
+import * as Text from './Text'
 
-export { Assert, CLI, Errors, FS, HCI, Log, Platform, Repo, Switch }
+export { Assert, CLI, Errors, FS, HCI, Log, Platform, Repo, Switch, Text }

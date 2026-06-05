@@ -1,15 +1,22 @@
-import { spawn as nodeSpawn } from 'node:child_process'
-import * as nodeFs from 'node:fs/promises'
-import * as nodeOs from 'node:os'
-import * as nodePath from 'node:path'
-import { createInterface as createNodeReadlineInterface } from 'node:readline/promises'
-import { PassThrough, type Readable, Writable } from 'node:stream'
-import * as nodeUrl from 'node:url'
+import { type ChildProcess, spawn as spawnProcess, type SpawnOptions as NodeSpawnOptions } from 'node:child_process'
 
-export { createNodeReadlineInterface, nodeFs, nodeOs, nodePath, nodeSpawn, nodeUrl, PassThrough, Writable }
-export type { Readable }
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
+
+/** SpawnOptions declares options for starting a child process. */
+export type SpawnOptions = Omit<NodeSpawnOptions, 'env'> & {
+  args?: readonly string[]
+  env?: ProcessEnv
+}
+
+/** spawn starts a child process. */
+export function spawn(command: string, options: SpawnOptions = {}): ChildProcess {
+  const { args = [], env, ...spawnOptions } = options
+  return spawnProcess(command, [...args], {
+    ...spawnOptions,
+    env: env === undefined ? undefined : { ...process.env, ...env },
+  })
+}
 
 /** runtimeConsole exposes console output through the shared runtime boundary. */
 export const runtimeConsole = {

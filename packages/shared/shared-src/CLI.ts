@@ -1,5 +1,5 @@
 import { CommandExecutionError } from './Errors'
-import { nodeSpawn, type ProcessEnv, type ProcessSignal, runtimeProcess } from './Platform'
+import { type ProcessEnv, type ProcessSignal, runtimeProcess, spawn as platformSpawn } from './Platform'
 
 /** CommandSpec describes a process invocation for shared CLI helpers. */
 export type CommandSpec = {
@@ -30,9 +30,10 @@ export async function run(spec: CommandSpec): Promise<CommandResult> {
   const stderrChunks: Buffer[] = []
   const inheritOutput = spec.stdio === 'inherit'
   const streamOutput = spec.stdio === 'stream'
-  const child = nodeSpawn(spec.command, args, {
+  const child = platformSpawn(spec.command, {
+    args,
     cwd: spec.cwd,
-    env: { ...runtimeProcess.env, ...spec.env },
+    env: spec.env,
     stdio: [
       spec.stdin === undefined ? 'ignore' : 'pipe',
       inheritOutput ? 'inherit' : 'pipe',
