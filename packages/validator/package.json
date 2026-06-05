@@ -5,6 +5,7 @@
   "module": "validator-src/validator.ts",
   "exports": {
     ".": "./validator-src/validator.ts",
+    "./diagnostics": "./validator-src/diagnostics.ts",
     "./langium-services": "./validator-src/langium-services.ts"
   },
   "dependencies": {

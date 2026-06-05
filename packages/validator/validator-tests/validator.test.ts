@@ -275,7 +275,9 @@ describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.usedBeforeDeclaration('Later'))
+    expect(validationErrorMessages(result)).toContain(
+      aliasValidationMessages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
+    )
   })
 
   test('rejects local alias references to later values', async () => {
@@ -287,7 +289,9 @@ describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.usedBeforeDeclaration('Later'))
+    expect(validationErrorMessages(result)).toContain(
+      aliasValidationMessages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
+    )
   })
 
   test('rejects local render arguments that reference later aliases', async () => {
@@ -391,7 +395,9 @@ describe('Tao validator structural diagnostics', () => {
       ui MainView { }
     `)
 
-    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.usedBeforeDeclaration('First'))
+    expect(validationErrorMessages(result)).toContain(
+      aliasValidationMessages.aliasUsedBeforeDeclaration('First', 'First'),
+    )
   })
 
   test('rejects mutually recursive aliases through declaration order', async () => {
@@ -402,7 +408,9 @@ describe('Tao validator structural diagnostics', () => {
       ui MainView { }
     `)
 
-    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.usedBeforeDeclaration('Second'))
+    expect(validationErrorMessages(result)).toContain(
+      aliasValidationMessages.aliasUsedBeforeDeclaration('First', 'Second'),
+    )
   })
 
   test('returns alias declaration-order diagnostics when invalid aliases are used as render arguments', async () => {
@@ -420,7 +428,9 @@ describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.usedBeforeDeclaration('Second'))
+    expect(validationErrorMessages(result)).toContain(
+      aliasValidationMessages.aliasUsedBeforeDeclaration('First', 'Second'),
+    )
   })
 
   test('rejects render invocation arity errors', async () => {
@@ -470,6 +480,23 @@ describe('Tao validator structural diagnostics', () => {
     `)
 
     expect(validationErrorMessages(result)).toContain("Argument for parameter 'Count' expects number, got text.")
+  })
+
+  test('reports type diagnostics alongside structural invocation errors', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      ui MainView {
+        render Tile 42, "extra"
+      }
+      ui Tile Title text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(invocationValidationMessages.extraArguments('Tile', 1, 2))
+    expect(validationErrorMessages(result)).toContain("Argument for parameter 'Title' expects text, got number.")
   })
 
   test('keeps cross-view values out of scope through parser diagnostics', async () => {

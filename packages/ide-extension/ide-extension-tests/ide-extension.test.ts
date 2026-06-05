@@ -64,7 +64,9 @@ describe('Tao IDE extension smoke', () => {
       ui Text Value text { }
     `)
 
-    expect(diagnostics).toContain("Name 'Second' is used before it is declared.")
+    expect(diagnostics).toContain(
+      "Alias 'First' cannot reference 'Second' because it is not declared before the alias.",
+    )
   })
 })
 

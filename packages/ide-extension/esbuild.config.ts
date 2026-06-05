@@ -1,8 +1,8 @@
-import { FS } from '@shared'
+import { FS, Platform } from '@shared'
 import { context } from 'esbuild'
 
-const watch = process.argv.includes('--watch')
-const minify = process.argv.includes('--minify')
+const watch = Platform.runtimeProcess.argv.includes('--watch')
+const minify = Platform.runtimeProcess.argv.includes('--minify')
 
 const ctx = await context({
   entryPoints: [

@@ -1,5 +1,7 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
+import type { Type } from 'typir'
+import type { TaoTypirServices } from './type-system'
 import type { ValidationContext } from './validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
@@ -17,6 +19,22 @@ export function validateInvocations(file: AST.TaoFile, ctx: ValidationContext): 
   for (const render of ASTUtils.streamAllContents(file).filter(AST.isRender)) {
     reportArity(render, ctx)
   }
+}
+
+/** registerInvocationTypeValidation registers Typir checks for render argument compatibility. */
+export function registerInvocationTypeValidation(typir: TaoTypirServices): void {
+  typir.validation.Collector.addValidationRulesForAstNodes({
+    Render: (render, accept, services) => {
+      const invocation = ASTUtils.resolveRenderInvocation(render)
+      for (const pair of invocation.pairs) {
+        const expected = taoPrimitiveType(pair.parameter.type, services as TaoTypirServices)
+        services.validation.Constraints.ensureNodeIsAssignable(pair.argument.value, expected, accept, (actual) => ({
+          languageNode: pair.argument.value,
+          message: invocationValidationMessages.typeMismatch(pair.parameter, actual.name),
+        }))
+      }
+    },
+  })
 }
 
 function reportArity(render: AST.Render, ctx: ValidationContext): void {
@@ -41,4 +59,8 @@ function reportArity(render: AST.Render, ctx: ValidationContext): void {
       args[parameters.length],
     )
   }
+}
+
+function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): Type | undefined {
+  return typir.factory.Primitives.get({ primitiveName: type })
 }

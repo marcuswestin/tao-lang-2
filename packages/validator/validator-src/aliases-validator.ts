@@ -5,6 +5,8 @@ import type { ValidationContext } from './validation'
 /** aliasValidationMessages declares name and alias-reference diagnostics. */
 export const aliasValidationMessages = {
   duplicateName: (name: string) => `Duplicate name '${name}'.`,
+  aliasUsedBeforeDeclaration: (alias: string, value: string) =>
+    `Alias '${alias}' cannot reference '${value}' because it is not declared before the alias.`,
   usedBeforeDeclaration: (name: string) => `Name '${name}' is used before it is declared.`,
 } as const
 
@@ -66,7 +68,7 @@ function reportAliasReferenceOrder(aliases: readonly AST.AliasDeclaration[], ctx
     for (const reference of aliasValueReferences(alias)) {
       const target = reference.target.ref
       if (target && !isDeclaredBefore(target, alias)) {
-        ctx.error(aliasValidationMessages.usedBeforeDeclaration(target.name), reference)
+        ctx.error(aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, target.name), reference)
       }
     }
   }

@@ -2,7 +2,7 @@ import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { InferenceRuleNotApplicable, isType, type Type } from 'typir'
 import type { LangiumTypeSystemDefinition, TypirLangiumServices, TypirLangiumSpecifics } from 'typir-langium'
-import { invocationValidationMessages } from './invocations-validator'
+import { registerInvocationTypeValidation } from './invocations-validator'
 
 /** TaoSpecifics binds Tao AST types to Typir-Langium services. */
 export interface TaoSpecifics extends TypirLangiumSpecifics {
@@ -18,7 +18,7 @@ const NO_DOCUMENT_ERROR = 'AST node has no document'
 
 const activeInferenceNodes = new WeakSet<AST.Node>()
 
-/** TaoTypeSystem registers Tao primitive types, expression inference, and invocation type checks. */
+/** TaoTypeSystem registers Tao primitive types, expression inference, and Typir validation hooks. */
 export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> {
   /** onInitialize registers static Tao type rules. */
   onInitialize(typir: TaoTypirServices): void {
@@ -43,18 +43,7 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
       },
     })
 
-    typir.validation.Collector.addValidationRulesForAstNodes({
-      Render: (render, accept, services) => {
-        const invocation = ASTUtils.resolveRenderInvocation(render)
-        for (const pair of invocation.pairs) {
-          const expected = taoPrimitiveType(pair.parameter.type, services as TaoTypirServices)
-          services.validation.Constraints.ensureNodeIsAssignable(pair.argument.value, expected, accept, (actual) => ({
-            languageNode: pair.argument.value,
-            message: invocationValidationMessages.typeMismatch(pair.parameter, actual.name),
-          }))
-        }
-      },
-    })
+    registerInvocationTypeValidation(typir)
   }
 
   /** onNewAstNode handles AST-instance-specific type creation. */
