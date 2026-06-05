@@ -40,7 +40,7 @@ compile-app app_path: _parser-gen
 
 # Compile Kitchen Sink and start the Expo runtime. OPEN_MATCH_HOST_ONLY to reuse the currently running browser tab instead of opening a new one.
 run: _compile-kitchen-sink-app
-  cd packages/runtime && EXPO_NO_TELEMETRY=1 OPEN_MATCH_HOST_ONLY=true bunx expo start --localhost
+  cd packages/runtime && EXPO_NO_TELEMETRY=1 OPEN_MATCH_HOST_ONLY=true bunx expo start --localhost --ios --web --android
 
 # Build and install the IDE extension into local editor apps
 install-ide-extension: _ide-extension-package
