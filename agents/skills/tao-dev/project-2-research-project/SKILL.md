@@ -11,8 +11,7 @@ Turn a selected roadmap task into enough settled context to plan.
 ## Rules
 
 - Read `Roadmap.md`, the task folder under `Roadmap/<Task>/`, linked local docs, and relevant source before asking questions.
-- Read relevant previous repo code and docs under `~/code/tao-lang` for comparable implemented behavior; treat it as reference material for what worked, not source to copy wholesale.
-- Carry over only relevant working ideas from the previous repo, adapted to this repo's current shape and bias toward succinct implementation.
+- Use the `old-repo-porting` skill when checking comparable behavior under `~/code/tao-lang`.
 - Ensure `Roadmap/<Task>/` exists.
 - Keep research in the existing task doc when that is enough; create `Roadmap/<Task>/Research - <Task>.md` only when separate notes are useful.
 - If research determines target syntax or functionality should change, write the intended Tao code in `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao`.

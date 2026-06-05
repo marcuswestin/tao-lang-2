@@ -11,7 +11,7 @@ Review the plan before implementation starts.
 ## Rules
 
 - Read the plan, research notes, `Roadmap.md`, linked local docs, and relevant source before launching reviewers.
-- Check relevant previous repo code and docs under `~/code/tao-lang` so the review can catch useful working behavior the plan missed, while still rejecting cruft and wholesale copying.
+- Use the `old-repo-porting` skill when checking comparable behavior under `~/code/tao-lang`.
 - Use `subagents-review` skill with appropriate instructions.
 - Ask reviewers to focus on invalid assumptions, poor decisions, stale docs, bad sequencing, unclear acceptance criteria, scope creep, and missing details.
 - When target syntax/functionality changes, verify the plan uses `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` for intended code and schedules implemented slices to move into `Apps/Kitchen Sink/Kitchen Sink.tao` for tests.

@@ -2,7 +2,7 @@
 
 Tao is a programming language for UI apps and nothing else. It compiles to TSX that runs in Expo/React Native.
 
-This is a clean and stepwise port of `~/code/tao-lang`. Treat the old repo as a reference, with months of excellent work intermixed with cruft and poor choices. The goal is to identify, learn from, and incorporate the good parts, and establish a tight, succinct, efficient implementation of the language. Do NOT just copy and paste existing repo code (EXCEPT if perfectly written as-is).
+This is a clean and stepwise port of `~/code/tao-lang`. Treat the old repo as reference material, not source to copy. Use the `old-repo-porting` skill for durable porting gotchas.
 
 You will do all your work with Ro, the project lead and language designer. They have 30 years of developer experience, and a clear vision for Tao. They are the authoritative voice on all decisions.
 
@@ -14,6 +14,8 @@ You will do all your work with Ro, the project lead and language designer. They 
    - **ALWAYS** use `./agent <cmd> ...` for executable shell commands; use normal `cd` or tool workdirs to choose the command directory
    - Create a `feat/<name>` branch only for project-sized work that needs review and merge; small edits, instruction updates, and one-off commits should stay on the current branch unless Ro asks otherwise
    - Multiple agents may work in this repo in parallel; treat changes you did not make as expected peer work, and do not overwrite or revert them without explicit direction
+   - Do not modify the Git index unless Ro explicitly asks; never stage, unstage, or reset staged files as cleanup
+   - Use the `agent-instructions` skill when Ro asks to add or update durable instructions
    - **ALWAYS** let the IDE soft-wrap lines
    - **ALWAYS** remove stale instructions and code
 
@@ -21,10 +23,14 @@ You will do all your work with Ro, the project lead and language designer. They 
 
 1. Info:
    - We use `nix` and `direnv` + `devenv` for dev environment automation
+   - Treat the direnv/devenv developer environment as a working fundamental; do not add defensive availability/version checks for its expected tools unless Ro explicitly asks for diagnostics
    - Use `bun` over `node` (except with `expo` and Jest)
    - Treat `just` as the workflow manager and main command runner
    - Use `./dev <command>` only as a script runner for focused TypeScript automation that would otherwise deserve a separate bash script; do not put workflow dependencies or prerequisite orchestration in `./dev`
    - Always use shared wrappers for platform invocations (`@shared` CLI/FS/HCI/Platform, etc.) instead of direct Bun or Node platform APIs
+   - Plain JS/CJS config and bootstrap files that cannot safely load `@shared` are the exception; keep direct `node:*` imports narrow, prefer slash-separated path strings where possible, and explain the loader constraint locally
+   - Prefer `FS.resolvePath('foo/bar', { cwd })` for concrete filesystem locations. Use one slash-separated string with interpolation; omit `{ cwd }` when the intended base is the current process cwd; use `FS.joinPath('foo/bar')` only for ungrounded relative path fragments.
+   - Never export raw `Platform.node*` APIs. Import `node:*` modules only inside the shared wrapper file that owns that capability, and use `FS` for filesystem access instead of `Platform`.
    - Keep this guide to durable agent instructions; omit transient implementation mechanics
 
 ## Priorities:
@@ -32,6 +38,8 @@ You will do all your work with Ro, the project lead and language designer. They 
 1. Succinct, Comprehensible, Effective, Minimal
    - **ALWAYS** prioritize writing the MINIMAL code that is MAXIMALLY readable and comprehensible
    - **ALWAYS** prioritize well-organized DRY code
+   - Generated Tao TS should be minimal and use runtime wrappers from default `TR` imported via `@runtime/TR` wherever practical; use the `runtime-codegen` skill for generated-code runtime work
+   - Use multiline template strings for multiline text; do not build static multiline strings with arrays joined by `\n`. Use `Text.stripIndent` from `@shared` when indentation should be removed.
 
 2. Code Comments
    - Prefer self-documenting names and small functions over comments
@@ -39,6 +47,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - Do not comment obvious mechanics
    - **ALWAYS** document exported functions and types with short, contract-focused JSDoc in the `<decl> <verb>s <description>` style
    - When touching existing exported code, add or update missing export docs as part of the same change
+   - Export only real cross-file or package-boundary APIs; do not export helpers for convenience or tests
    - Remove or update stale comments whenever code changes
    - **ALWAYS** remove unused code and stale exports unless there is a specific documented reason to keep them
 
@@ -52,6 +61,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - As functionality is implemented, copy the relevant implemented target code into `Apps/Kitchen Sink/Kitchen Sink.tao`; that app is the executable Kitchen Sink used for testing
    - **ALWAYS** ensure that `Apps/Test Apps/*` and `packages/<package>/tests/*` address all implemented functionality and encountered edge cases
    - Each test app lives in `Apps/Test Apps/<App Name>/`, has one primary `<App Name>.tao`, and includes `Purpose.md` describing the app's purpose, what belongs there, when to edit it, and any planned behavior-test metadata
+   - Test apps must be valid, positive functionality examples; put error and diagnostic cases in package unit tests
    - Prefer behavior tests over API-shape tests; avoid trivial tests
    - Test compiler behavior through Tao AST and runtime behavior, not generated TypeScript structure or string matches
 
@@ -61,7 +71,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - When in doubt, ask
 1. Prep:
    - If your task is on `Roadmap.md`, identify it and ensure `Roadmap/<Task>/*` exists. Update it whenever relevant
-   - Identify all relevant code in the previous repo for reference
+   - Use the `old-repo-porting` skill when comparable previous-repo behavior exists
 2. Execute:
    - Write demo tao code and automated tests
    - Implement functionality in logical chunks and steps
@@ -82,6 +92,7 @@ You will do all your work with Ro, the project lead and language designer. They 
 - `Apps/*`: apps built in tao for demo and testing
 - `packages/`:
   - `/shared`: shared TS and scripts
+  - `/ast-utils`: Tao AST semantic helpers shared across parser consumers
   - `/dev`: TypeScript dev tooling and the `./agent` implementation
   - `/tao-cli`: tao cli (e.g. `tao run ...` `tao fmt ...` etc)
   - `/ide-extension`: VSCode extension for tao
@@ -89,13 +100,13 @@ You will do all your work with Ro, the project lead and language designer. They 
   - `/compiler`: langium AST -> generated `runtime` TS
   - `/validator`: langium AST -> compiler/IDE warnings
   - `/formatter`: langium AST -> formatted tao code
-  - `/runtime`: expo app template + Tao Runtime (`TR*`) code + tao std-lib for use in tao apps (e.g `use ... from @tao/...` - not yet implemented)
+  - `/runtime`: expo app template, runtime app generation, the `TR` generated-code runtime API, and tao std-lib for use in tao apps (e.g `use ... from @tao/...` - not yet implemented)
 
 ## Git workflow
 
 - Instructions
   - Create a `feat/<feature>` branch for project-sized work that needs review and merge; do not switch branches for small edits, instruction updates, or one-off commits unless Ro asks
-  - Do not stage or stash changes unless instructed. If a task requires it, ask first
+  - Do not stage, unstage, reset staged files, or stash changes unless instructed. If a task requires it, ask first
   - Always run `prep-commit` before making commits
   - Commit message format `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`
   - Always squash-merge into main with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`
