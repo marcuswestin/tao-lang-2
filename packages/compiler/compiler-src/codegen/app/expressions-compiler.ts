@@ -1,31 +1,34 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled, gen, refResolved } from '../codegen-util'
+import { type Compiled, gen, genName, resolveRef } from '../codegen-util'
+import { Compile } from './Compile'
 
-/** compileExpression compiles a Tao expression into a runtime value expression. */
-export function compileExpression(expression: AST.Expression): Compiled {
-  return Switch.type(expression, {
-    NumberLiteral: compileNumberLiteral,
-    StringLiteral: compileStringLiteral,
-    ValueReference: compileValueReference,
-  })
-}
+export default {
+  /** CompileExpression compiles a Tao expression into a runtime value expression. */
+  CompileExpression(expression: AST.Expression): Compiled {
+    return Switch.type(expression, {
+      NumberLiteral: Compile.NumberLiteral,
+      StringLiteral: Compile.StringLiteral,
+      ValueReference: Compile.ValueReference,
+    })
+  },
 
-/** compileStringLiteral compiles a Tao string literal into a Tao text value. */
-export function compileStringLiteral(str: AST.StringLiteral): Compiled {
-  return gen`taoValue(${JSON.stringify(str.value)})`
-}
+  /** CompileStringLiteral compiles a Tao string literal into a Tao text value. */
+  CompileStringLiteral(str: AST.StringLiteral): Compiled {
+    return gen`new TR.Value(${JSON.stringify(str.value)})`
+  },
 
-/** compileNumberLiteral compiles a Tao number literal into a Tao number value. */
-export function compileNumberLiteral(num: AST.NumberLiteral): Compiled {
-  return gen`taoValue(${num.value})`
-}
+  /** CompileNumberLiteral compiles a Tao number literal into a Tao number value. */
+  CompileNumberLiteral(num: AST.NumberLiteral): Compiled {
+    return gen`new TR.Value(${JSON.stringify(num.value)})`
+  },
 
-/** compileValueReference compiles an alias or parameter reference into a Tao value expression. */
-export function compileValueReference(reference: AST.ValueReference): Compiled {
-  const target = refResolved(reference.target, 'value reference')
-  if (AST.isAliasDeclaration(target)) {
-    return gen`${target.name}.evaluate()`
-  }
-  return gen`_ViewProps.${target.name}.evaluate()`
-}
+  /** CompileValueReference compiles an alias or parameter reference into a Tao value expression. */
+  CompileValueReference(reference: AST.ValueReference): Compiled {
+    const target = resolveRef(reference.target, 'value reference')
+    return Switch.type(target, {
+      AliasDeclaration: alias => gen`${genName(alias)}.evaluate()`,
+      ParameterDeclaration: parameter => gen`_ViewProps.${genName(parameter)}.evaluate()`,
+    })
+  },
+} as const

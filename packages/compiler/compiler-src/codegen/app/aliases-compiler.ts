@@ -1,8 +1,10 @@
 import { AST } from '@parser'
-import { type Compiled, gen } from '../codegen-util'
-import { compileExpression } from './expressions-compiler'
+import { type Compiled, gen, genName } from '../codegen-util'
+import { Compile } from './Compile'
 
-/** compileAliasDeclaration compiles a Tao alias into a generated Tao value binding. */
-export function compileAliasDeclaration(alias: AST.AliasDeclaration): Compiled {
-  return gen`const ${alias.name} = ${compileExpression(alias.value)}`
-}
+export default {
+  /** CompileAliasDeclaration compiles a Tao alias into a generated Tao value binding. */
+  CompileAliasDeclaration(alias: AST.AliasDeclaration): Compiled {
+    return gen`const ${genName(alias)} = TR.Alias(${Compile.Expression(alias.value)})`
+  },
+} as const
