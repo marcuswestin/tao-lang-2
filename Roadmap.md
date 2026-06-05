@@ -5,15 +5,17 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 ## Ro's STACK
 
 - [x] Compiler: Create plain codegen wrapper and start using that
-- [x] INSTRUCT: How to separate parts of the language into different files
-- [ ] Add validator, type system, and IDE diagnostics
-  - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
-  - Implementation complete on `feat/add-validator-type-system`; next run `project-6-review-implementation` before merge.
-- [ ] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
-- [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
-- [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
+- [x] INSTRUCT: How to to separate parts of the language into different files
 - [x] Implement proper inject statement
 - [x] Remove hard-coded kitchen sink stuff
+- [x] Add validator, type system, and IDE diagnostics
+  - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
+- [x] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
+- [ ] Port over scope functionality
+  - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
+- [ ] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g "inject Value, Name UserName `ts alert(Value + " " + Name)`
+- [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
+- [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
   - [ ] Add generic compiled-add test declarations
     - Should this map to test writing for the actual apps?
 

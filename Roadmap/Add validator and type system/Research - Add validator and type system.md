@@ -37,7 +37,7 @@ Useful prior patterns from `~/code/tao-lang`:
 - `packages/compiler/compiler-src/validation/tao-lang-validator.ts` grouped validation message constants with node-specific checks.
 - `packages/compiler/compiler-src/validation/ValidationReporter.ts` wrapped Langium's acceptor into a small reporting helper with optional node/property locations and related information.
 - `packages/compiler/compiler-src/langium/tao-services.ts` registered validation checks in the Langium service graph.
-- `packages/compiler/compiler-src/typing/tao-argument-bindings.ts` kept argument matching logic shared between validation and codegen.
+- `packages/ast-utils/ast-utils-src/invocations.ts` keeps argument matching logic shared between validation and codegen.
 - `packages/compiler/compiler-src/typing/tao-type-system.ts` used Typir for broader primitives, nominal types, operators, call-site checks, and interpolation checks.
 - `packages/compiler/compiler-src/typing/tao-type-system.ts` also showed the important Typir mechanics for this repo: define Tao-specific `TypirLangiumServices`, create primitives and inference rules in `LangiumTypeSystemDefinition.onInitialize`, register validation rules through `typir.validation.Collector.addValidationRulesForAstNodes`, use `ensureNodeIsAssignable` for argument compatibility, and guard inference with a `safeInferType` helper because Typir-Langium caches require AST nodes to be linked into a document.
 - `packages/compiler/compiler-src/langium/tao-services.ts` created Typir services with `createTypirLangiumServices(...)`, registered the Tao language module, then called `initializeLangiumTypirServices(...)`.
@@ -95,7 +95,7 @@ Deferred from the spec:
 - Implement `alias Name = Expression`:
   - allow aliases at file level and inside `ui` blocks
   - reject duplicate names in the same scope
-  - detect simple alias reference cycles
+  - reject alias references to values not declared before the alias; this rejects cycles by construction
   - compile aliases to local/generated bindings only after validation proves their expressions are type-safe
 - Implement invocation checking against resolved target parameters:
   - argument count
@@ -149,7 +149,7 @@ Validator:
 - `validator-src/validation.ts`: small validation helper API.
 - `validator-src/app-validator.ts`: app declarations, app root rules, and file-level app count.
 - `validator-src/views-validator.ts`: `ui` declarations, view body placement, parameter declarations, render injection placement.
-- `validator-src/aliases-validator.ts`: alias placement, duplicate alias names, alias cycles.
+- `validator-src/aliases-validator.ts`: alias placement, duplicate alias names, alias declaration-order checks.
 - `validator-src/invocations-validator.ts`: generic invocation argument checking for render now and actions/functions later.
 - `validator-src/type-system.ts`: Tao type representation, type equality/assignability, and future custom type declaration hooks.
 - `validator-src/expressions-validator.ts`: expression-specific checks and helper calls into Typir inference.
@@ -208,7 +208,7 @@ check((node, ctx) => {
 - Add validator tests for each semantic rule moved out of compiler.
 - Add validator tests for scope rules: file-level alias visibility, view-local alias and parameter visibility inside the owning view, cross-view non-visibility, duplicate visible names, and rejected local alias/parameter shadowing.
 - Add type-checking tests for generic invocation argument count and text/number compatibility.
-- Add alias tests for inferred text/number alias types, alias references as invocation arguments, duplicate aliases, and alias cycles.
+- Add alias tests for inferred text/number alias types, alias references as invocation arguments, duplicate aliases, and alias declaration-order errors.
 - Add `Apps/Test Apps/Type System Tests/Type System Tests.tao` as a valid Tao app that demonstrates alias-based text and number values passed into tile views.
 - Add IDE extension smoke coverage for bundled syntax/server entrypoints and editor diagnostics wiring where practical.
 - Update compiler tests to assert compiler rejects validation failures without testing generated TypeScript structure.
