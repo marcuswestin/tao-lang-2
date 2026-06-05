@@ -1,4 +1,5 @@
 import { AST, Langium } from '@parser'
+import { Assert } from '@shared'
 
 /** Compiled declares a structured generated source node. */
 export type Compiled = Langium.GeneratorNode
@@ -11,6 +12,16 @@ type GenListOptions = {
   newLines?: true | 1 | 2 | 3 | 4 | 5 | 6
 }
 
+/** GenJoinOptions declares short separator and non-empty wrapper options. */
+type GenJoinOptions = {
+  separator?: string
+}
+
+/** NamedNode declares an AST node or semantic value with a source-level name. */
+type NamedNode = {
+  name: string
+}
+
 /** gen expands a source template into a structured generator node. */
 export function gen(staticParts: TemplateStringsArray, ...substitutions: GenValue[]): Compiled {
   return Langium.expandToNode(staticParts, ...substitutions)
@@ -21,24 +32,55 @@ export function genNoop(): Compiled {
   return new Langium.CompositeGeneratorNode()
 }
 
-/** genList compiles AST node lists into a generator node with non-empty items separated by new lines. */
-export function genList<NodeT extends AST.Node>(
-  nodes: Iterable<NodeT>,
-  compileItem: (node: NodeT) => GenValue,
+/** genName compiles a named node's name as a generated code name token. */
+export function genName(node: NamedNode): Compiled {
+  return gen`${node.name}`
+}
+
+/** genNameLiteral compiles a named node's name as a JavaScript string literal. */
+export function genNameLiteral(node: NamedNode): Compiled {
+  return gen`${JSON.stringify(node.name)}`
+}
+
+/** genTextLines expands raw multiline text as structured generator lines. */
+export function genTextLines(text: string): GenValue {
+  return Langium.joinToNode(
+    text.split('\n'),
+    line => gen`${line}`,
+    { appendNewLineIfNotEmpty: true },
+  )
+}
+
+/** genJoin compiles item lists into a generator node separated by a short separator. */
+export function genJoin<ItemT>(
+  items: Iterable<ItemT>,
+  compileItem: (item: ItemT) => GenValue,
+  options: GenJoinOptions = {},
+): GenValue {
+  const itemList = Array.from(items)
+  return Langium.joinToNode(
+    itemList,
+    item => gen`${compileItem(item)}`,
+    { separator: options.separator ?? ', ' },
+  )
+}
+
+/** genList compiles item lists into a generator node with non-empty items separated by new lines. */
+export function genList<ItemT>(
+  items: Iterable<ItemT>,
+  compileItem: (item: ItemT) => GenValue,
   options: GenListOptions = {},
 ): GenValue {
   return Langium.joinToNode(
-    nodes,
-    node => gen`${compileItem(node)}`,
+    items,
+    item => gen`${compileItem(item)}`,
     { appendNewLineIfNotEmpty: options.newLines ?? true },
   )
 }
 
-/** refResolved returns a linked cross-reference target or throws a compiler error. */
-export function refResolved<T extends AST.Node>(ref: Langium.Reference<T>, label: string): T {
+/** resolveRef returns a linked cross-reference target from a validated AST. */
+export function resolveRef<T extends AST.Node>(ref: Langium.Reference<T>): T {
   const target = ref.ref
-  if (target === undefined) {
-    throw new Error(`Could not resolve ${label}: ${ref.$refText}.`)
-  }
+  Assert.defined(target, 'validated reference is resolved', { refText: ref.$refText })
   return target
 }

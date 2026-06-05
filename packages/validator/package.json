@@ -1,0 +1,17 @@
+{
+  "name": "tao-validator",
+  "private": true,
+  "type": "module",
+  "module": "validator-src/validator.ts",
+  "exports": {
+    ".": "./validator-src/validator.ts",
+    "./diagnostics": "./validator-src/diagnostics.ts",
+    "./langium-services": "./validator-src/langium-services.ts"
+  },
+  "dependencies": {
+    "tao-ast-utils": "workspace:*",
+    "tao-parser": "workspace:*",
+    "typir": "~0.3.3",
+    "typir-langium": "~0.3.3"
+  }
+}

@@ -20,7 +20,7 @@ export function registerJustCommand(commands: Command): void {
 /** runJust runs Just from the repo root with output filtering for successful commands. */
 async function runJust(args: readonly string[]): Promise<number> {
   const repoRoot = await Repo.getRoot()
-  const commandArgs = ['--justfile', FS.joinPath(repoRoot, 'Justfile'), ...args]
+  const commandArgs = ['--justfile', await FS.resolveRepoPath('Justfile'), ...args]
 
   if (shouldStreamJustOutput(args)) {
     return await runWithInheritedOutput('just', commandArgs, repoRoot)

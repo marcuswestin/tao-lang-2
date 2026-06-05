@@ -1,7 +1,7 @@
 import { CLI, Platform } from '@shared'
 
 /** runWithInheritedOutput runs a command while inheriting stdio and returns its exit code. */
-export async function runWithInheritedOutput(command: string, args: readonly string[], cwd: string): Promise<number> {
+export async function runWithInheritedOutput(command: string, args: readonly string[], cwd?: string): Promise<number> {
   const result = await CLI.run({
     command,
     args,

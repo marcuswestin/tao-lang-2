@@ -128,7 +128,7 @@ function safeJson(value: unknown): string {
   try {
     return JSON.stringify(value)
   } catch {
-    return '<unserializable>'
+    return '<safeJson: unserializable>'
   }
 }
 

@@ -11,7 +11,7 @@ The implementation should support the current executable Kitchen Sink plus the t
 - Do not add a separate type-system package.
 - Do not implement custom type declarations, boolean/item/list/view/action values, operators, interpolation, state, actions, functions, `when`, imports, formatter behavior, or runtime stdlib behavior.
 - Do not copy the old validator, compiler Langium workspace, or IDE extension wholesale.
-- Do not replace defensive compiler assertions for parsed AST entrypoints; validation should prevent normal source compiles from reaching those assertions, but they remain useful implementation guards.
+- Keep expected Tao semantic/source-shape errors in validation. Compiler/codegen should assume validated AST and use assertions only for internal type contractions or invariant checks after validation.
 
 ## Assumptions
 
@@ -32,7 +32,7 @@ Adopt these ideas from `~/code/tao-lang`:
 - `packages/compiler/compiler-src/validation/ValidationReporter.ts`: short diagnostic calls with explicit node/property locations and related information.
 - `packages/compiler/compiler-src/validation/tao-lang-validator.ts`: feature-specific validation functions with message constants near the checks.
 - `packages/compiler/compiler-src/langium/tao-services.ts`: a Langium service graph that registers validation checks for language-server diagnostics.
-- `packages/compiler/compiler-src/typing/tao-argument-bindings.ts`: one shared invocation-checking surface used by validation and codegen.
+- `packages/ast-utils/ast-utils-src/invocations.ts`: one shared invocation-checking surface used by validation and codegen.
 - `packages/compiler/compiler-src/typing/tao-type-system.ts`: Typir-Langium service types, primitive registration, inference rules, validation collector rules, `safeInferType`, and `ensureNodeIsAssignable` call-site diagnostics.
 - `packages/ide-extension`: VS Code/Cursor client and language-server split, IPC transport, generated TextMate grammar wiring, package metadata, and smoke-test shape.
 - `packages/compiler/compiler-src/langium/langium-lsp.ts`: re-export LSP/node APIs through local package wrappers so downstream packages use one dependency surface.
@@ -60,7 +60,7 @@ The old repo's Typir implementation was reviewed before writing this plan. Use t
   - alias reference -> inferred type of the referenced alias value
   - parameter reference -> Typir type for the parameter's declared primitive
 - Add a `safeInferType` helper that checks the AST node is attached to a Langium document before calling `typir.Inference.inferType(...)`, catches only Typir-Langium's "AST node has no document" cache error, and rethrows all other errors.
-- For broken links, cycles, or paths that cannot resolve to a type, return `undefined` or `InferenceRuleNotApplicable` from Typir-facing code. Use an internal `unresolved` union member only in non-Typir structural helpers when it matches the old repo's `ResolvedTypeKind` / `TypeFingerprint` pattern, and never expose it as a Tao type.
+- For broken links or paths that cannot resolve to a type, return `undefined` or `InferenceRuleNotApplicable` from Typir-facing code. Use an internal `unresolved` union member only in non-Typir structural helpers when it matches the old repo's `ResolvedTypeKind` / `TypeFingerprint` pattern, and never expose it as a Tao type.
 - Add call-site validation through `typir.validation.Collector.addValidationRulesForAstNodes`, not a second hand-written assignability engine.
 - Resolve the render target and argument-to-parameter pairings once in `invocations-validator.ts`, then call `typir.validation.Constraints.ensureNodeIsAssignable(argument, expectedType, accept, ...)` for each pair.
 - Keep structural invocation diagnostics, such as missing or extra arguments, in the shared invocation checker; keep type compatibility diagnostics in Typir assignability.
@@ -73,14 +73,14 @@ Follow `packages/AGENTS.md`: each language surface should have one focused file 
 
 Use this project split:
 
-- `app`: existing parser `app.langium`; validator `app-validator.ts`; compiler app/module assembly in `app-compiler.ts` or the current app compiler file until a rename lowers complexity.
+- `app`: existing parser `app.langium`; validator `app-validator.ts`; compiler app/module assembly in `app-compiler.ts`.
 - `views`: parser `views.langium`; validator `views-validator.ts`; compiler `views-compiler.ts`.
 - `aliases`: parser `aliases.langium` imported by the block/entry grammar; validator `aliases-validator.ts`; compiler `aliases-compiler.ts`.
 - `expressions`: parser `expressions.langium`; expression-specific validation/helpers in `expressions-validator.ts`; compiler `expressions-compiler.ts`. Typir inference registration still lives in `type-system.ts`.
-- `invocations`: parser argument-list rules can stay with expressions unless they grow enough to deserve `invocations.langium`; validator `invocations-validator.ts`; compiler render-prop binding should call the same invocation resolver rather than duplicating matching logic.
-- `injections`: parser injection grammar may stay in `views.langium` for this slice unless touched heavily; compiler injection handling belongs in `injections-compiler.ts` once the current monolith is split.
+- `invocations`: parser argument-list rules can stay with expressions unless they grow enough to deserve `invocations.langium`; validator `invocations-validator.ts`; compiler render-prop binding in `invocations-compiler.ts` should call `ASTUtils.resolveRenderInvocation` rather than duplicating matching logic.
+- `injections`: parser injection grammar may stay in `views.langium` for this slice unless touched heavily; compiler injection handling belongs in `injections-compiler.ts`.
 - `type-system`: Typir service wiring and primitive/type helpers live in `type-system.ts`; do not hide feature-specific validators there when a matching feature file exists.
-- Runtime: this project may keep the temporary Tao value helper generated in compiler output. Do not add runtime `TR-*` files in this slice; moving helper behavior into `packages/runtime` belongs to the later runtime TR roadmap task.
+- Runtime: this project uses the runtime-owned `TR` wrapper in `packages/runtime/TaoRuntime-src/TR.ts`. Generated Tao TS should stay minimal, import default `TR` from `@runtime/TR`, and move reusable runtime behavior into runtime wrappers instead of emitting helper implementations.
 
 If implementation needs a cross-cutting helper, keep it small and name it for the shared mechanism, such as `diagnostics.ts`, `validation.ts`, or `codegen-util.ts`; do not create a catch-all feature file.
 
@@ -164,15 +164,15 @@ Concrete work:
   - number literal -> `number`
   - alias reference -> referenced alias expression type
   - parameter reference -> parameter declared type
-- Add `validator-src/aliases-validator.ts` for alias placement, visible-name duplicate checks, and simple alias cycle detection.
-- Add `validator-src/invocations-validator.ts` as the shared render invocation resolver:
+- Add `validator-src/aliases-validator.ts` for alias placement, visible-name duplicate checks, and declaration-order reference checks. Aliases may reference only values declared before the alias; this makes alias cycles invalid by construction.
+- Add `packages/ast-utils/ast-utils-src/invocations.ts` as the shared render invocation resolver:
   - resolve the target view
   - report structural arity diagnostics
   - return positional argument/parameter pairs for valid positions
   - let Typir validation call `ensureNodeIsAssignable` for each returned pair
   - report duplicate parameter names through the same feature area
 - Keep this invocation API general enough for future actions/functions, but do not build those call hosts now.
-- Add validator tests for valid alias inference, number/text literal inference, alias references as arguments, parameter references in view-local expressions, duplicate aliases, duplicate parameters, alias cycles, arity errors, text/number mismatch errors, file-level alias visibility, cross-view non-visibility, duplicate visible names, and rejected local alias/parameter shadowing.
+- Add validator tests for valid alias inference, number/text literal inference, alias references as arguments, parameter references in view-local expressions, duplicate aliases, duplicate parameters, alias declaration-order errors, arity errors, text/number mismatch errors, file-level alias visibility, cross-view non-visibility, duplicate visible names, and rejected local alias/parameter shadowing.
 
 Likely commit unit:
 
@@ -197,8 +197,8 @@ Concrete work:
 - Add `tao-validator` as a compiler dependency and route `Compiler.compileCode` and `Compiler.compileFile` through `Validator`.
 - Convert validator errors into the compiler's existing structured compile failure path, de-duplicating parser errors the way the current compiler already does.
 - Keep codegen defensive assertions in place but stop relying on them for normal source-level semantic failures.
-- Split codegen for new surfaces into the feature files named above: `aliases-compiler.ts` and `expressions-compiler.ts`. Keep shared helpers in `compiler-src/codegen/codegen-util.ts`; app/module assembly may stay in the current app compiler file until a rename lowers complexity.
-- Replace the temporary generated text-only helper with a generated minimal Tao value helper that supports `text` and `number`, for example `TaoValue<T>`, `TaoTextValue`, `TaoNumberValue`, and `taoValue`. This is an intentional temporary generated helper; moving it into runtime `TR-*` files is deferred to the runtime TR project. Keep the injection contract unchanged: `_ViewProps.<Param>.evaluate().jsValue`.
+- Split codegen for new surfaces into the feature files named above, with `Compile.ts` as the single `Compile.<ASTNode>` object assembly. Keep shared helpers in `compiler-src/codegen/codegen-util.ts`.
+- Replace the temporary generated text-only helper with a minimal runtime-owned Tao value constructor that supports `text` and `number`, exposed as `TR.Value<T>` / `new TR.Value(...)` from `packages/runtime/TaoRuntime-src/TR.ts`. Keep generated Tao TS minimal and keep the injection contract unchanged: `_ViewProps.<Param>.evaluate().jsValue`.
 - Compile string literals, number literals, alias references, and parameter references.
 - Compile file-level aliases as generated bindings before views.
 - Compile view-local aliases as local bindings before the view return expression.
@@ -292,3 +292,14 @@ Exit criteria:
 - By-type argument binding and named arguments beyond the current positional render syntax.
 - IDE formatter, go-to-definition, stdlib bundling, package/install commands, and full extension host automation.
 - Codegen tracing/source maps.
+
+## Implementation notes
+
+- Implemented on branch `feat/add-validator-type-system` in five code commits: parser value syntax, structural validator package, Typir-backed checks, compiler integration, and minimal IDE/Langium diagnostics.
+- The executable Kitchen Sink now matches the planned alias/number target slice, and `Apps/Test Apps/Type System Tests/Type System Tests.tao` compiles as a focused type-system app.
+- Tao value and alias wrappers live in runtime-owned `TaoRuntime-src/TR.ts`; generated apps import default `TR` from `@runtime/TR` and use `TR.Value` / `TR.Alias` rather than emitting reusable value logic.
+- Parser-dependent semantic helpers shared across validator/compiler live in `packages/ast-utils`; render invocation resolution moved there so compiler does not import validator feature internals.
+- Typir integration uses `undefined` / `InferenceRuleNotApplicable` for unresolved inference paths and did not introduce an `unknown` Tao type, Typir primitive, or public sentinel.
+- Langium LSP diagnostics use the same structural validator functions through `validator-src/validation.ts` plus Typir-Langium's validation collector. Typir-Langium wraps custom messages with node context in LSP diagnostics, so tests assert the stable message substring.
+- The IDE extension build emits ignored `_gen_ide-extension` output, and parser generation emits ignored TextMate syntax under `packages/ide-extension/ide-extension-syntaxes/_gen_syntaxes/`.
+- Next step: run `project-6-review-implementation` before review/merge.

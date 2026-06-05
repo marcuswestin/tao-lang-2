@@ -2,7 +2,7 @@
   // Use the workspace TypeScript version so Langium generated code typechecks consistently.
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
-  // Build the workspace and restart the extension host (requires extension ryuta46.multi-command).
+  // Build and install the IDE extension, then restart the extension host (requires extension ryuta46.multi-command).
   "tao.workspaceKeybinding.buildAndRestart": true,
   "multiCommand.commands": [
     {

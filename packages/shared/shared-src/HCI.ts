@@ -1,5 +1,7 @@
+import { createInterface as createNodeReadlineInterface } from 'node:readline/promises'
+import type { Readable, Writable } from 'node:stream'
 import { UserInputError } from './Errors'
-import { createNodeReadlineInterface, type Readable, runtimeProcess, type Writable } from './Platform'
+import { runtimeProcess } from './Platform'
 
 type TerminalStreams = {
   input?: Readable

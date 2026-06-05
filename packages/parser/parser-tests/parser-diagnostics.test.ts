@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { Parser } from '../parser-src/parser'
 import { testParseCode, testParseCodeWithLexerErrors, testParseCodeWithParserErrors } from './test-parse'
 
 describe('minimal Tao parser diagnostics', () => {
@@ -32,6 +33,47 @@ describe('minimal Tao parser diagnostics', () => {
     const parsed = await testParseCode('app MyApp { ui MyView } ui MyView { ui Nested { } }')
 
     expect(parsed.ast.statements).toHaveLength(2)
+  })
+
+  test('parses aliases in app blocks for later validator checks', async () => {
+    const parsed = await testParseCode('app MyApp { alias Greeting = "hello" ui MyView } ui MyView { }')
+
+    expect(parsed.ast.statements).toHaveLength(2)
+  })
+
+  test('parses top-level renders for later validator checks', async () => {
+    const parsed = await testParseCode('render Text "hello" ui Text Value text { }')
+
+    expect(parsed.ast.statements).toHaveLength(2)
+  })
+
+  test('parses number-typed parameters in semantically invalid positions', async () => {
+    const parsed = await testParseCode(`
+      app MyApp { ui MyView }
+      ui MyView Count number {
+        render Text Count { }
+      }
+      ui Text Value text { }
+    `)
+
+    expect(parsed.ast.statements).toHaveLength(3)
+  })
+
+  test('reports linker diagnostics for values outside their owning view', async () => {
+    const parsed = await Parser.parseCode(`
+      ui Text Value text { }
+      ui Source Secret text {
+        alias Local = Secret
+      }
+      ui Target {
+        render Text Secret { }
+        render Text Local { }
+      }
+    `)
+
+    expect(parsed.document.parseResult.lexerErrors).toEqual([])
+    expect(parsed.document.parseResult.parserErrors).toEqual([])
+    expect(parsed.diagnostics).toHaveLength(2)
   })
 
   test('reports lexer errors separately from parser errors', async () => {

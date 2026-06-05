@@ -8,6 +8,7 @@ module.exports = {
     '^@parser$': '<rootDir>/../parser/parser-src/parser.ts',
     '^@parser/(.*)$': '<rootDir>/../parser/parser-src/$1',
     '^@runtime$': '<rootDir>/runtime-src/runtime.ts',
+    '^@runtime/TR$': '<rootDir>/TaoRuntime-src/TR.ts',
     '^@runtime/(.*)$': '<rootDir>/runtime-src/$1',
     '^@shared$': '<rootDir>/../shared/shared-src/shared.ts',
     '^@shared/(.*)$': '<rootDir>/../shared/shared-src/$1',

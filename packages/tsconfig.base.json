@@ -33,6 +33,15 @@
       "@parser/*": [
         "./parser/parser-src/*"
       ],
+      "@ast-utils": [
+        "./ast-utils/ast-utils-src/ast-utils.ts"
+      ],
+      "@validator": [
+        "./validator/validator-src/validator.ts"
+      ],
+      "@validator/*": [
+        "./validator/validator-src/*"
+      ],
       "@compiler": [
         "./compiler/compiler-src/compiler.ts"
       ],
@@ -41,6 +50,9 @@
       ],
       "@runtime": [
         "./runtime/runtime-src/runtime.ts"
+      ],
+      "@runtime/TR": [
+        "./runtime/TaoRuntime-src/TR.ts"
       ],
       "@runtime/*": [
         "./runtime/runtime-src/*"

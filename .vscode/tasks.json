@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "check-workspace",
+      "label": "install-ide-extension",
       "type": "shell",
-      "command": "./agent just check",
+      "command": "./agent just install-ide-extension",
       "options": {
         "cwd": "${workspaceFolder}",
         "shell": {

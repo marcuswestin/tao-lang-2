@@ -1,4 +1,4 @@
-import { Assert, CLI, Errors, FS, HCI, Log, Repo, Switch } from '../shared-src/shared'
+import { Assert, CLI, Errors, FS, HCI, Log, Repo, Switch, Text } from '../shared-src/shared'
 import { afterEach, describe, expect, PassThrough, runtimeProcess, test, Writable } from './TestRuntime'
 
 const cleanupPaths: string[] = []
@@ -10,25 +10,55 @@ afterEach(async () => {
 })
 
 describe('FS', () => {
+  test('joins and resolves slash-separated parts as host paths', async () => {
+    const root = await tmpDir()
+    const val = 'alpha'
+    const file = 'screen.tao'
+    const relativePath = FS.joinPath(`foo/${val}/cat/wat/mat/${file}`)
+
+    const fullPath = FS.resolvePath(`foo/${val}/cat/wat/mat/${file}`, { cwd: root })
+
+    expect(FS.resolvePath(relativePath, { cwd: root })).toBe(fullPath)
+    expect(FS.resolvePath(fullPath, { cwd: FS.resolvePath('ignored', { cwd: root }) })).toBe(
+      fullPath,
+    )
+  })
+
+  test('resolves repo-relative paths from the Git root', async () => {
+    const repoRoot = await Repo.getRoot()
+    const sharedPath = FS.resolvePath(`${repoRoot}/packages/shared`)
+
+    await expect(FS.resolveRepoPath('packages/shared')).resolves.toBe(sharedPath)
+  })
+
   test('writes and reads text and json files', async () => {
     const root = await tmpDir()
-    const textPath = FS.joinPath(root, 'nested', 'hello.txt')
-    const jsonPath = FS.joinPath(root, 'nested', 'data.json')
+    const textPath = FS.resolvePath('nested/hello.txt', { cwd: root })
+    const jsonPath = FS.resolvePath('nested/data.json', { cwd: root })
+    const bytesPath = FS.resolvePath('nested/bytes.txt', { cwd: root })
 
     await FS.writeText(textPath, 'hello')
     await FS.writeJson(jsonPath, { answer: 42 })
+    await FS.writeFile(bytesPath, Buffer.from('bytes'))
+    const appendHandle = await FS.openAppend(bytesPath)
+    try {
+      await appendHandle.writeFile(' appended')
+    } finally {
+      await appendHandle.close()
+    }
 
     expect(await FS.readText(textPath)).toBe('hello')
     expect(await FS.readJson<{ answer: number }>(jsonPath)).toEqual({ answer: 42 })
+    expect(await FS.readText(bytesPath)).toBe('bytes appended')
     expect(await FS.isFile(textPath)).toBe(true)
     expect(await FS.isDirectory(FS.dirname(textPath))).toBe(true)
   })
 
   test('copies, moves, lists, and removes paths', async () => {
     const root = await tmpDir()
-    const sourcePath = FS.joinPath(root, 'source.txt')
-    const copyPath = FS.joinPath(root, 'copies', 'copy.txt')
-    const movedPath = FS.joinPath(root, 'moved', 'copy.txt')
+    const sourcePath = FS.resolvePath('source.txt', { cwd: root })
+    const copyPath = FS.resolvePath('copies/copy.txt', { cwd: root })
+    const movedPath = FS.resolvePath('moved/copy.txt', { cwd: root })
 
     await FS.writeText(sourcePath, 'copy me')
     await FS.copyFile(sourcePath, copyPath)
@@ -44,13 +74,13 @@ describe('FS', () => {
 
   test('copies directories and walks files with filters', async () => {
     const root = await tmpDir()
-    const sourceDir = FS.joinPath(root, 'src')
-    const copyDir = FS.joinPath(root, 'copy')
+    const sourceDir = FS.resolvePath('src', { cwd: root })
+    const copyDir = FS.resolvePath('copy', { cwd: root })
 
-    await FS.writeText(FS.joinPath(sourceDir, 'a.ts'), 'a')
-    await FS.writeText(FS.joinPath(sourceDir, 'b.txt'), 'b')
-    await FS.writeText(FS.joinPath(sourceDir, '.hidden.ts'), 'hidden')
-    await FS.writeText(FS.joinPath(sourceDir, 'nested', 'c.ts'), 'c')
+    await FS.writeText(FS.resolvePath('a.ts', { cwd: sourceDir }), 'a')
+    await FS.writeText(FS.resolvePath('b.txt', { cwd: sourceDir }), 'b')
+    await FS.writeText(FS.resolvePath('.hidden.ts', { cwd: sourceDir }), 'hidden')
+    await FS.writeText(FS.resolvePath('nested/c.ts', { cwd: sourceDir }), 'c')
     await FS.copyDirectory(sourceDir, copyDir)
 
     const walked: string[] = []
@@ -59,16 +89,16 @@ describe('FS', () => {
     }
 
     expect(walked.sort()).toEqual([
-      FS.joinPath(copyDir, 'a.ts'),
-      FS.joinPath(copyDir, 'nested', 'c.ts'),
+      FS.resolvePath('a.ts', { cwd: copyDir }),
+      FS.resolvePath('nested/c.ts', { cwd: copyDir }),
     ])
   })
 
   test('does not swallow read or list errors', async () => {
     const root = await tmpDir()
 
-    await expect(FS.readText(FS.joinPath(root, 'missing.txt'))).rejects.toThrow()
-    await expect(FS.listDir(FS.joinPath(root, 'missing'))).rejects.toThrow()
+    await expect(FS.readText(FS.resolvePath('missing.txt', { cwd: root }))).rejects.toThrow()
+    await expect(FS.listDir(FS.resolvePath('missing', { cwd: root }))).rejects.toThrow()
   })
 })
 
@@ -209,7 +239,7 @@ describe('Repo', () => {
     const root = await Repo.getRoot()
 
     try {
-      runtimeProcess.chdir(FS.joinPath(root, 'packages', 'shared'))
+      runtimeProcess.chdir(FS.resolvePath('packages/shared', { cwd: root }))
       expect(await Repo.getRoot()).toBe(root)
     } finally {
       runtimeProcess.chdir(cwd)
@@ -219,8 +249,8 @@ describe('Repo', () => {
   test('finds a nested git repo root without using an outer root', async () => {
     const cwd = runtimeProcess.cwd()
     const outerRoot = await tmpDir()
-    const taoRoot = FS.joinPath(outerRoot, 'workspace', 'tao')
-    const nestedDir = FS.joinPath(taoRoot, 'packages', 'shared')
+    const taoRoot = FS.resolvePath('workspace/tao', { cwd: outerRoot })
+    const nestedDir = FS.resolvePath('packages/shared', { cwd: taoRoot })
 
     await FS.mkdir(nestedDir)
     await CLI.mustRun({ command: 'git', args: ['init'], cwd: taoRoot })
@@ -330,8 +360,38 @@ describe('Errors, Assert, and Switch', () => {
   })
 })
 
+describe('Text', () => {
+  test('strips shared indentation from multiline strings', () => {
+    expect(Text.stripIndent(`
+      first
+        second
+      third
+    `)).toBe('first\n  second\nthird')
+  })
+
+  test('preserves relative indentation and blank interior lines', () => {
+    expect(Text.stripIndent(`
+        first
+
+          second
+    `)).toBe('first\n\n  second')
+  })
+
+  test('indents selected lines', () => {
+    expect(Text.indentLines('first\n\nsecond', 2)).toBe('  first\n  \n  second')
+    expect(Text.indentLines('first\n\nsecond', 2, { skipBlankLines: true, skipFirstLine: true })).toBe(
+      'first\n\n  second',
+    )
+  })
+
+  test('escapes regexp metacharacters', () => {
+    const literal = 'a+b?.[x]'
+    expect(new RegExp(Text.escapeRegExp(literal)).test(literal)).toBe(true)
+  })
+})
+
 async function tmpDir() {
-  const dir = await FS.mkTmpDir(FS.joinPath(FS.tmpdir(), 'tao-shared-test-'))
+  const dir = await FS.mkTmpDir(FS.resolvePath('tao-shared-test-', { cwd: FS.tmpdir() }))
   cleanupPaths.push(dir)
   return dir
 }

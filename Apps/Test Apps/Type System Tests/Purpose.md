@@ -3,6 +3,7 @@
 ## Purpose
 
 Exercise Tao type-system behavior through a small tile UI that passes typed values into views.
+This app must stay valid Tao; invalid type and validation cases belong in validator unit tests.
 
 ## Belongs Here
 
@@ -16,6 +17,7 @@ Exercise Tao type-system behavior through a small tile UI that passes typed valu
 - Parser-only grammar edge cases without type-system meaning.
 - Layout, styling, navigation, data, or action behavior unless it directly supports type-system coverage.
 - Runtime standard-library coverage that is better exercised by Kitchen Sink or a dedicated runtime app.
+- Invalid or intentionally failing validation cases.
 
 ## Edit When
 
@@ -26,5 +28,5 @@ Exercise Tao type-system behavior through a small tile UI that passes typed valu
 ## Behavior Test Notes
 
 - Behavior automation is not wired yet.
-- Expected visible output after this app is implemented: `Open: 1` and `Done: 2`.
+- Expected visible output: `Open: 1` and `Done: 2`.
 - Future behavior metadata can live in this section without changing the app layout.

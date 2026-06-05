@@ -1,32 +1,27 @@
 import Compiler from '@compiler'
-import { FS, Platform, Repo } from '@shared'
+import { FS } from '@shared'
 
 type GenerateAppOptions = {
-  repoRoot?: string
   runtimePackageRoot?: string
-  sourceBaseDir?: string
 }
 
 type GeneratedApp = {
   sourcePath: string
-  outputDir: string
   outputPath: string
   code: string
 }
 
 /** generateApp generates the runtime app module from a Tao app file. */
 async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Promise<GeneratedApp> {
-  const runtimePackageRoot = opts.runtimePackageRoot ?? await defaultRuntimePackageRoot(opts.repoRoot)
-  const sourcePath = FS.resolvePath(opts.sourceBaseDir ?? Platform.runtimeProcess.cwd(), appPath)
-  const generatedAppDir = FS.resolvePath(runtimePackageRoot, '_gen_tao-app')
-  const generatedAppPath = FS.resolvePath(generatedAppDir, 'App.tsx')
+  const runtimePackageRoot = opts.runtimePackageRoot ?? await defaultRuntimePackageRoot()
+  const sourcePath = FS.resolvePath(appPath)
+  const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
   const compiled = await Compiler.compileFile(sourcePath)
 
   await writeGeneratedApp(generatedAppPath, compiled.code)
 
   return {
     sourcePath,
-    outputDir: generatedAppDir,
     outputPath: generatedAppPath,
     code: compiled.code,
   }
@@ -39,9 +34,8 @@ const Runtime = {
 
 export default Runtime
 
-async function defaultRuntimePackageRoot(repoRootOverride?: string): Promise<string> {
-  const repoRoot = repoRootOverride ?? await Repo.getRoot()
-  return FS.resolvePath(repoRoot, 'packages/runtime')
+async function defaultRuntimePackageRoot(): Promise<string> {
+  return await FS.resolveRepoPath('packages/runtime')
 }
 
 async function writeGeneratedApp(path: string, code: string): Promise<void> {

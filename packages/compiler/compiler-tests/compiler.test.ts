@@ -1,14 +1,16 @@
 import Compiler from '@compiler'
 import { AST } from '@parser'
-import { Errors } from '@shared'
+import { Errors, FS } from '@shared'
 import { describe, expect, test } from 'bun:test'
 import { testParseCode, testParseCodeWithParserErrors } from '../../parser/parser-tests/test-parse'
-import { Compile } from '../compiler-src/codegen/app/runtime-gen'
+import { Compile } from '../compiler-src/codegen/Compile'
 import { testCompileCode } from './test-compile'
 import { wrap } from './test-utils/AST-Wrapper'
 
 const tsFence = '```ts'
 const fence = '```'
+const targetKitchenSinkPath = await FS.resolveRepoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
+const typeSystemTestsPath = await FS.resolveRepoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 
 describe('minimal Tao compiler', () => {
   test('reports parser syntax errors once', async () => {
@@ -39,15 +41,15 @@ describe('minimal Tao compiler', () => {
 
     const taoFile = wrap(parsed.ast)
     Compile.TaoFile(taoFile.unwrap())
-    const mainView = taoFile.statements.second.as_ViewDeclaration
+    const mainView = taoFile.statements.second.as_UiDeclaration
     const render = mainView.block.statements.only.as_Render
-    const literal = render.argumentList.arguments.only.value
+    const literal = render.argumentList.arguments.only.value.as_StringLiteral
     Compile.Expression(literal.unwrap())
 
     taoFile.statements.match([
       { $type: AST.AppDeclaration.$type, name: 'MyApp' },
-      { $type: AST.ViewDeclaration.$type, name: 'MainView' },
-      { $type: AST.ViewDeclaration.$type, name: 'Text' },
+      { $type: AST.UiDeclaration.$type, name: 'MainView' },
+      { $type: AST.UiDeclaration.$type, name: 'Text' },
     ])
     render.view.expect('name').toBe('Text')
     literal.expect('value').toBe('Hello')
@@ -78,7 +80,7 @@ describe('minimal Tao compiler', () => {
         render MainView
       }
       ui MainView { }
-    `)).rejects.toThrow('Unsupported app block syntax')
+    `)).rejects.toThrow('Only root ui declarations are allowed')
   })
 
   test('rejects inject in multi-statement view blocks explicitly', async () => {
@@ -90,6 +92,28 @@ describe('minimal Tao compiler', () => {
         ${fence}
         render MainView
       }
-    `)).rejects.toThrow('Only view renders are supported in multi-statement blocks')
+    `)).rejects.toThrow('`render inject` must be the only statement in a ui body')
+  })
+
+  test('compiles the target Kitchen Sink app', async () => {
+    await testCompileCode(await FS.readText(targetKitchenSinkPath))
+  })
+
+  test('compiles the Type System Tests app', async () => {
+    await testCompileCode(await FS.readText(typeSystemTestsPath))
+  })
+
+  test('rejects validator type errors before codegen', async () => {
+    await expect(testCompileCode(`
+      app MyApp { ui MainView }
+      ui MainView {
+        render Tile "Open", "not a count"
+      }
+      ui Tile Title text, Count number {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)).rejects.toThrow("Argument for parameter 'Count' expects number, got text.")
   })
 })

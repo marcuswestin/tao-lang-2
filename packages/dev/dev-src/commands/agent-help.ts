@@ -1,5 +1,5 @@
 import type { Command } from '@commander-js/extra-typings'
-import { CLI, FS, Platform, Repo } from '@shared'
+import { CLI, FS, Platform, Repo, Text } from '@shared'
 
 /** AgentHelpOptions declares the command names printed by agent help. */
 type AgentHelpOptions = {
@@ -23,7 +23,7 @@ async function printAgentHelp(allowlistedCommands: readonly string[]): Promise<n
   const repoRoot = await Repo.getRoot()
   const justList = await CLI.run({
     command: 'just',
-    args: ['--justfile', FS.joinPath(repoRoot, 'Justfile'), '--list'],
+    args: ['--justfile', await FS.resolveRepoPath('Justfile'), '--list'],
     cwd: repoRoot,
   })
 
@@ -52,7 +52,7 @@ Examples:
   ./agent rg -n 'pattern' packages
 
 Just recipes:
-${indent(justList.stdout.trimEnd())}
+${Text.indentLines(justList.stdout.trimEnd(), 2)}
 
 Allowlisted shell commands:
 `)
@@ -62,8 +62,4 @@ Allowlisted shell commands:
   }
 
   return 0
-}
-
-function indent(text: string): string {
-  return text.split('\n').map(line => `  ${line}`).join('\n')
 }

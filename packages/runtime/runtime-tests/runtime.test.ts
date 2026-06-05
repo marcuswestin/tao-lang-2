@@ -1,9 +1,8 @@
 import Runtime from '@runtime'
-import { FS, Platform, Repo } from '@shared'
+import { FS, Platform } from '@shared'
 import { afterEach, describe, expect, test } from 'bun:test'
 
-const repoRoot = await Repo.getRoot()
-const kitchenSinkDir = FS.resolvePath(repoRoot, 'Apps/Kitchen Sink')
+const kitchenSinkDir = await FS.resolveRepoPath('Apps/Kitchen Sink')
 const runtimeRoots: string[] = []
 
 afterEach(async () => {
@@ -13,44 +12,43 @@ afterEach(async () => {
 })
 
 describe('Tao runtime app generation', () => {
-  test('generates app paths relative to the source base directory', async () => {
-    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath(FS.tmpdir(), 'tao-runtime-test-'))
+  test('generates app paths from the supplied app path', async () => {
+    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('tao-runtime-test-', { cwd: FS.tmpdir() }))
     runtimeRoots.push(runtimePackageRoot)
+    const appPath = FS.resolvePath('Kitchen Sink.tao', { cwd: kitchenSinkDir })
 
-    const generated = await Runtime.generateApp('Kitchen Sink.tao', {
+    const generated = await Runtime.generateApp(appPath, {
       runtimePackageRoot,
-      sourceBaseDir: kitchenSinkDir,
     })
 
-    expect(generated.sourcePath).toBe(FS.resolvePath(kitchenSinkDir, 'Kitchen Sink.tao'))
-    expect(generated.outputPath).toBe(FS.resolvePath(runtimePackageRoot, '_gen_tao-app/App.tsx'))
+    expect(generated.sourcePath).toBe(appPath)
+    expect(generated.outputPath).toBe(FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot }))
     expect(await FS.readText(generated.outputPath)).toBe(generated.code)
 
     const firstWrite = await FS.modifiedTimeMs(generated.outputPath)
-    const generatedAgain = await Runtime.generateApp('Kitchen Sink.tao', {
+    const generatedAgain = await Runtime.generateApp(appPath, {
       runtimePackageRoot,
-      sourceBaseDir: kitchenSinkDir,
     })
 
     expect(generatedAgain.outputPath).toBe(generated.outputPath)
     expect(await FS.modifiedTimeMs(generated.outputPath)).toBe(firstWrite)
   })
 
-  test('uses supplied paths without resolving the repo root', async () => {
-    const outsideRoot = await FS.mkTmpDir(FS.resolvePath(FS.tmpdir(), 'tao-runtime-test-'))
+  test('resolves relative app paths from the current working directory by default', async () => {
+    const outsideRoot = await FS.mkTmpDir(FS.resolvePath('tao-runtime-test-', { cwd: FS.tmpdir() }))
     runtimeRoots.push(outsideRoot)
 
     const cwd = Platform.runtimeProcess.cwd()
-    const runtimePackageRoot = FS.joinPath(outsideRoot, 'runtime')
+    const runtimePackageRoot = FS.resolvePath('runtime', { cwd: outsideRoot })
 
     try {
-      Platform.runtimeProcess.chdir(outsideRoot)
+      Platform.runtimeProcess.chdir(kitchenSinkDir)
       const generated = await Runtime.generateApp('Kitchen Sink.tao', {
         runtimePackageRoot,
-        sourceBaseDir: kitchenSinkDir,
       })
 
-      expect(generated.outputPath).toBe(FS.resolvePath(runtimePackageRoot, '_gen_tao-app/App.tsx'))
+      expect(generated.sourcePath).toBe(FS.resolvePath('Kitchen Sink.tao', { cwd: kitchenSinkDir }))
+      expect(generated.outputPath).toBe(FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot }))
       expect(await FS.readText(generated.outputPath)).toBe(generated.code)
     } finally {
       Platform.runtimeProcess.chdir(cwd)

@@ -5,11 +5,10 @@ import { runWithInheritedOutput } from './commands/commands-util'
 import { registerJustCommand } from './commands/just'
 
 const AGENT_SHELL_COMMANDS: readonly string[] = ['ls', 'rg', 'cat', 'sed', 'git', 'cp', 'mv', 'rm']
-const invocationCwd = Platform.runtimeProcess.cwd()
 const command = Platform.runtimeProcess.argv[2]
 
 if (command && AGENT_SHELL_COMMANDS.includes(command)) {
-  const exitCode = await runWithInheritedOutput(command, Platform.runtimeProcess.argv.slice(3), invocationCwd)
+  const exitCode = await runWithInheritedOutput(command, Platform.runtimeProcess.argv.slice(3))
   Platform.runtimeProcess.exit(exitCode)
 }
 

@@ -2,6 +2,8 @@
   "extends": "../tsconfig.base.json",
   "include": [
     "index.ts",
+    "TaoRuntime-src/**/*",
+    "TR-tests/**/*",
     "runtime-src/**/*",
     "runtime-tests/**/*",
     "_gen_tao-app/**/*"

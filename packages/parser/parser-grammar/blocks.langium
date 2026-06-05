@@ -2,6 +2,7 @@ grammar TaoBlocks
 
 import "./app"
 import "./views"
+import "./aliases"
 import "./terminals"
 
 entry BlocksGrammarEntrypoint:
@@ -11,10 +12,10 @@ Statement:
     Declaration | AppUi | Injection | Render;
 
 Declaration:
-    AppDeclaration | ViewDeclaration;
+    AppDeclaration | UiDeclaration | AliasDeclaration;
 
 type TopLevelStatement = Declaration;
-type ViewStatement = Render;
+type ViewStatement = AliasDeclaration | Render;
 
 Block:
     '{' statements+=Statement* '}';
@@ -26,4 +27,4 @@ ParameterDeclaration:
     name=ID type=PrimitiveType;
 
 PrimitiveType returns string:
-    'text';
+    'text' | 'number';

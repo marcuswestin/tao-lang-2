@@ -10,4 +10,4 @@ AppDeclaration:
     'app' name=ID block=Block;
 
 AppUi:
-    'ui' ui=[ViewDeclaration:ID];
+    'ui' ui=[UiDeclaration:ID];

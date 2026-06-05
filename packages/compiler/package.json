@@ -7,7 +7,9 @@
     ".": "./compiler-src/compiler.ts"
   },
   "dependencies": {
+    "tao-ast-utils": "workspace:*",
     "tao-parser": "workspace:*",
-    "tao-shared": "workspace:*"
+    "tao-shared": "workspace:*",
+    "tao-validator": "workspace:*"
   }
 }

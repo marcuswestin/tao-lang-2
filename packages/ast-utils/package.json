@@ -1,0 +1,12 @@
+{
+  "name": "tao-ast-utils",
+  "private": true,
+  "type": "module",
+  "module": "ast-utils-src/ast-utils.ts",
+  "exports": {
+    ".": "./ast-utils-src/ast-utils.ts"
+  },
+  "dependencies": {
+    "tao-parser": "workspace:*"
+  }
+}

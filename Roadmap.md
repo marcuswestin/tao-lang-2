@@ -4,17 +4,29 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
-- [x] Compiler: Create plain codegen wrapper and start using that
-- [x] INSTRUCT: How to separate parts of the language into different files
-- [ ] Add validator, type system, and IDE diagnostics
-  - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
-- [ ] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
+- [ ] Port over scope functionality
+  - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
+- [ ] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g "inject Value, Name UserName `ts alert(Value + " " + Name)`
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
-- [x] Implement proper inject statement
-- [x] Remove hard-coded kitchen sink stuff
-  - [ ] Add generic compiled-add test declarations
-    - Should this map to test writing for the actual apps?
+- [ ] Have `./dev <path/to/tao/app>` without command start a dev TUI, which:
+  - compiles the tao app
+  - launches the app in an expo runtime, opening android/web/ios and device when available
+  - watches the tao app file and its used dependencies and recompiles on changes
+  - watches the compiler/runtime/etc and its dependencies and recompiles on changes
+  - accepts input with
+    - 'r' to quit and reload
+    - 't' to run all tests
+    - 'q' to quit
+    - 'x' to build and install the ide extension
+    - 's' to switch app (shows list of all Apps/*)
+    - 'c' to clean
+    - 'a' to launch android emulator + app
+    - 'd' to install on iPhone device
+    - 'p' to run prep-commit
+- [ ] Add generic compiled-add test declarations
+  - Should this map to test writing for the actual apps?
+- [ ] Enable over-the-network dev app running for ios device
 
 - Add followups for later:
   - Add `import ./path/to/DateUtils.ts as DateUtils`
@@ -32,33 +44,42 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Minimal Port: Kitchen Sink Current
 
-- [x] Parser
-  - [x] Add `Apps/Kitchen Sink/Kitchen Sink.tao`
-  - [x] Add `packages/parser` as `@parser`
-  - [x] Split grammar under `packages/parser/parser-grammar`
-  - [x] Generate Langium parser artifacts under `parser-src/_gen_tao-parser`
-  - [x] Export `AST`, `Langium`, and the `Parser` object API
-  - [x] Support current syntax: `app`, `ui`, text parameters, `render`, view calls, optional empty blocks, and `inject` TS fences
-  - [x] Keep `Render` named `Render`
-  - [x] Parse general statements and leave context-specific placement checks for the validator
-  - [x] Cover parser grammar mechanics without adding validator behavior
-  - [x] Add parser tests for Kitchen Sink and source strings
-  - [x] Ro review
-- [x] Compiler
-  - [x] Write compiler tests before implementation
-  - [x] Add `packages/compiler` as `@compiler`
-  - [x] Export compiler entrypoints
-  - [x] Emit Expo-compatible TSX for the supported AST only
-  - [x] Generate a default exported React component
-  - [x] Include `Hello, World!`, `MainView`, `Text`, and `_ViewProps.Value` in generated output
-  - [x] Fix Kitchen Sink `Text` injection to return `<RN.Text>{text.jsValue}</RN.Text>`
-  - [x] Ro review
-- [x] Runtime
-  - [x] Write runtime e2e test before implementation
-  - [x] Add `packages/runtime` as `@runtime`
-  - [x] Add minimal Expo web host files
-  - [x] Compile app into ignored `packages/runtime/_gen_tao-app`
-  - [x] Add `just run` to compile Kitchen Sink and start Expo web
-  - [x] E2E render verifies `Hello, World!`
-  - [x] Verify `./agent just run` starts Expo web
-  - [x] Ro review
+- 26-05-xx
+  - [x] Parser
+    - [x] Add `Apps/Kitchen Sink/Kitchen Sink.tao`
+    - [x] Add `packages/parser` as `@parser`
+    - [x] Split grammar under `packages/parser/parser-grammar`
+    - [x] Generate Langium parser artifacts under `parser-src/_gen_tao-parser`
+    - [x] Export `AST`, `Langium`, and the `Parser` object API
+    - [x] Support current syntax: `app`, `ui`, text parameters, `render`, view calls, optional empty blocks, and `inject` TS fences
+    - [x] Keep `Render` named `Render`
+    - [x] Parse general statements and leave context-specific placement checks for the validator
+    - [x] Cover parser grammar mechanics without adding validator behavior
+    - [x] Add parser tests for Kitchen Sink and source strings
+    - [x] Ro review
+  - [x] Compiler
+    - [x] Write compiler tests before implementation
+    - [x] Add `packages/compiler` as `@compiler`
+    - [x] Export compiler entrypoints
+    - [x] Emit Expo-compatible TSX for the supported AST only
+    - [x] Generate a default exported React component
+    - [x] Include `Hello, World!`, `MainView`, `Text`, and `_ViewProps.Value` in generated output
+    - [x] Fix Kitchen Sink `Text` injection to return `<RN.Text>{text.jsValue}</RN.Text>`
+    - [x] Ro review
+  - [x] Runtime
+    - [x] Write runtime e2e test before implementation
+    - [x] Add `packages/runtime` as `@runtime`
+    - [x] Add minimal Expo web host files
+    - [x] Compile app into ignored `packages/runtime/_gen_tao-app`
+    - [x] Add `just run` to compile Kitchen Sink and start Expo web
+    - [x] E2E render verifies `Hello, World!`
+    - [x] Verify `./agent just run` starts Expo web
+    - [x] Ro review
+- 26-06-05
+  - [x] Compiler: Create plain codegen wrapper and start using that
+  - [x] INSTRUCT: How to to separate parts of the language into different files
+  - [x] Implement proper inject statement
+  - [x] Remove hard-coded kitchen sink stuff
+  - [x] Add validator, type system, and IDE diagnostics
+    - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
+  - [x] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
