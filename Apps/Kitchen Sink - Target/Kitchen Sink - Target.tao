@@ -6,8 +6,16 @@ alias Greeting = "Hello, World!"
 alias LaunchCount = 3
 
 ui MainView {
-    render Text Greeting { }
-    render StatTile "Launch count", LaunchCount { }
+    render Stack {
+        render Text Greeting { }
+        render StatTile "Launch count", LaunchCount { }
+    }
+}
+
+ui Stack {
+    render inject ```ts
+        return <>{_ViewProps.children}</>
+    ```
 }
 
 ui Text Value text {
