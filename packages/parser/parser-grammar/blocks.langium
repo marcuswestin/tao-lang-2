@@ -9,12 +9,12 @@ entry BlocksGrammarEntrypoint:
     Block;
 
 Statement:
-    Declaration | AliasDeclaration | AppUi | Injection | Render;
+    Declaration | AppUi | Injection | Render;
 
 Declaration:
-    AppDeclaration | ViewDeclaration;
+    AppDeclaration | UiDeclaration | AliasDeclaration;
 
-type TopLevelStatement = Declaration | AliasDeclaration;
+type TopLevelStatement = Declaration;
 type ViewStatement = AliasDeclaration | Render;
 
 Block:

@@ -13,8 +13,7 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
 }
 
 function visibleValueDeclarations(reference: AST.ValueReference): AST.ValueDeclaration[] {
-  const document = Langium.AstUtils.getDocument(reference)
-  const root = document.parseResult.value
+  const root = findRoot(reference)
   if (!AST.isTaoFile(root)) {
     return []
   }
@@ -29,10 +28,7 @@ function visibleValueDeclarations(reference: AST.ValueReference): AST.ValueDecla
 }
 
 function aliasesOwnedByView(view: AST.ViewDeclaration): AST.AliasDeclaration[] {
-  return Langium.AstUtils.streamAllContents(view.block)
-    .filter(AST.isAliasDeclaration)
-    .filter(alias => findOwningView(alias) === view)
-    .toArray()
+  return collectAliases(view.block)
 }
 
 function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
@@ -44,4 +40,31 @@ function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
     current = current.$container
   }
   return undefined
+}
+
+function findRoot(node: AST.Node): AST.Node {
+  let current = node
+  while (current.$container) {
+    current = current.$container
+  }
+  return current
+}
+
+function collectAliases(node: AST.Node): AST.AliasDeclaration[] {
+  if (AST.isAliasDeclaration(node)) {
+    return [node]
+  }
+  if (AST.isViewDeclaration(node)) {
+    return []
+  }
+  if (AST.isRender(node)) {
+    return node.block?.statements.flatMap(collectAliases) ?? []
+  }
+  if (AST.isAppDeclaration(node)) {
+    return node.block.statements.flatMap(collectAliases)
+  }
+  if (AST.isBlock(node)) {
+    return node.statements.flatMap(collectAliases)
+  }
+  return []
 }
