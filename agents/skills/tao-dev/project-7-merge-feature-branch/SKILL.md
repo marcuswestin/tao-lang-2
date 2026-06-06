@@ -31,7 +31,7 @@ Land a completed feature branch into `main`.
 2. Validate and push the feature branch:
 
    ```sh
-   ./agent just prep-commit
+   ./agent just prep
    ./agent git push -u origin HEAD
    ```
 
@@ -43,7 +43,7 @@ Land a completed feature branch into `main`.
    ./agent git merge --ff-only origin/main
    ./agent git checkout <feature-branch>
    ./agent git merge --no-edit main
-   ./agent just prep-commit
+   ./agent just prep
    ./agent git push -u origin HEAD
    ```
 
@@ -94,9 +94,9 @@ Land a completed feature branch into `main`.
 7. Validate, commit, validate again, and push `main`:
 
    ```sh
-   ./agent just prep-commit
+   ./agent just prep
    ./agent git commit -F <message-file>
-   ./agent just prep-commit
+   ./agent just prep
    ./agent git push origin main
    ```
 

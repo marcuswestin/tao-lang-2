@@ -21,7 +21,7 @@ Review implemented work before merge preparation.
 - Fix only confirmed issues. Preserve unrelated work and ask before expanding scope.
 - Record valid deferred work in the task doc and `Roadmap.md`.
 - Ignore weak, duplicate, out-of-scope, or speculative findings.
-- Run relevant validation after fixes, then `./agent just prep-commit` before final handoff or review-fix commits.
+- Run relevant validation after fixes, then `./agent just prep` before final handoff or review-fix commits.
 - Run another review pass only when accepted fixes have been applied and only if the previous pass found meaningful issues.
 
 ## Output

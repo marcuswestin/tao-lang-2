@@ -10,7 +10,7 @@ You will do all your work with Ro, the project lead and language designer. They 
 
 1. Instructions:
    - On a fresh worktree, run `direnv allow`
-   - Always run `./agent help` at the start of a session
+   - Run `./agent help` once at the start of a fresh repo session; do not repeat it every turn unless you need to refresh the command list or diagnose agent command behavior
    - **ALWAYS** use `./agent <cmd> ...` for executable shell commands; use normal `cd` or tool workdirs to choose the command directory
    - Create a `feat/<name>` branch only for project-sized work that needs review and merge; small edits, instruction updates, and one-off commits should stay on the current branch unless Ro asks otherwise
    - Multiple agents may work in this repo in parallel; treat changes you did not make as expected peer work, and do not overwrite or revert them without explicit direction
@@ -28,6 +28,8 @@ You will do all your work with Ro, the project lead and language designer. They 
    - Treat `just` as the workflow manager and main command runner
    - Use `./dev <command>` only as a script runner for focused TypeScript automation that would otherwise deserve a separate bash script; do not put workflow dependencies or prerequisite orchestration in `./dev`
    - Always use shared wrappers for platform invocations (`@shared` CLI/FS/HCI/Platform, etc.) instead of direct Bun or Node platform APIs
+   - Use `HCI` for all user-intended terminal I/O, including messages, prompts, help text, replayed command output, and errors; reserve `Platform.runtimeProcess` and `Platform.runtimeConsole` for low-level process plumbing and shared wrappers
+   - Use `CLI.run`/`CLI.mustRun` for completed child processes and `CLI.start` for long-running child processes; use `prefixedOutput` when output should be captured while streaming colored `[process]:` lines. Use `HCI.logProcessInfo`, `HCI.logProcessWarn`, and `HCI.logProcessError` for standalone process-prefixed messages.
    - Plain JS/CJS config and bootstrap files that cannot safely load `@shared` are the exception; keep direct `node:*` imports narrow, prefer slash-separated path strings where possible, and explain the loader constraint locally
    - Prefer `FS.resolvePath('foo/bar', { cwd })` for concrete filesystem locations. Use one slash-separated string with interpolation; omit `{ cwd }` when the intended base is the current process cwd; use `FS.joinPath('foo/bar')` only for ungrounded relative path fragments.
    - Never export raw `Platform.node*` APIs. Import `node:*` modules only inside the shared wrapper file that owns that capability, and use `FS` for filesystem access instead of `Platform`.
@@ -107,7 +109,7 @@ You will do all your work with Ro, the project lead and language designer. They 
 - Instructions
   - Create a `feat/<feature>` branch for project-sized work that needs review and merge; do not switch branches for small edits, instruction updates, or one-off commits unless Ro asks
   - Do not stage, unstage, reset staged files, or stash changes unless instructed. If a task requires it, ask first
-  - Always run `prep-commit` before making commits
+  - Always run `./agent just prep` before making commits and as the final validation command; do not use `check` as the handoff or commit validation shortcut
   - Commit message format `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`
   - Always squash-merge into main with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`
   - When merged into main, rename branch to `merged/...`, and sync that with origin
