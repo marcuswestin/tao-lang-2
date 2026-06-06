@@ -37,6 +37,11 @@ export function genName(node: NamedNode): Compiled {
   return gen`${node.name}`
 }
 
+/** genScopeName compiles a named value declaration as a generated scope property. */
+export function genScopeName(node: NamedNode): Compiled {
+  return gen`_Scope.${genName(node)}`
+}
+
 /** genNameLiteral compiles a named node's name as a JavaScript string literal. */
 export function genNameLiteral(node: NamedNode): Compiled {
   return gen`${JSON.stringify(node.name)}`
@@ -56,13 +61,13 @@ export function genJoin<ItemT>(
   items: Iterable<ItemT>,
   compileItem: (item: ItemT) => GenValue,
   options: GenJoinOptions = {},
-): GenValue {
+): Compiled {
   const itemList = Array.from(items)
   return Langium.joinToNode(
     itemList,
     item => gen`${compileItem(item)}`,
     { separator: options.separator ?? ', ' },
-  )
+  ) ?? genNoop()
 }
 
 /** genList compiles item lists into a generator node with non-empty items separated by new lines. */
@@ -70,12 +75,12 @@ export function genList<ItemT>(
   items: Iterable<ItemT>,
   compileItem: (item: ItemT) => GenValue,
   options: GenListOptions = {},
-): GenValue {
+): Compiled {
   return Langium.joinToNode(
     items,
     item => gen`${compileItem(item)}`,
     { appendNewLineIfNotEmpty: options.newLines ?? true },
-  )
+  ) ?? genNoop()
 }
 
 /** resolveRef returns a linked cross-reference target from a validated AST. */

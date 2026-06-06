@@ -6,15 +6,15 @@ export type RenderInvocationPair = {
   parameter: AST.ParameterDeclaration
 }
 
-/** RenderInvocation declares the semantic shape of a render invocation. */
-export type RenderInvocation = {
+/** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
+export type ResolvedRenderInvocation = {
   render: AST.Render
   view?: AST.ViewDeclaration
   pairs: RenderInvocationPair[]
 }
 
 /** resolveRenderInvocation resolves a render target and positional argument bindings. */
-export function resolveRenderInvocation(render: AST.Render): RenderInvocation {
+export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvocation {
   const view = render.view?.ref
   if (!view) {
     return {

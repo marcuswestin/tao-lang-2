@@ -1,70 +1,65 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled, gen, genJoin, genList, genName, genNameLiteral } from '../codegen-util'
+import { type Compiled, gen, genList, genName, genScopeName } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
-  /** CompileUiDeclaration compiles a Tao ui declaration into a runtime ui component. */
-  CompileUiDeclaration(ui: AST.UiDeclaration): Compiled {
-    return gen`
-      const ${genName(ui)} = TR.UiDeclaration(
-        ${genNameLiteral(ui)},
-        ${Compile.ViewParameterList(ui)},
-        _ViewProps => {
-          ${Compile.ViewBlock(ui.block)}
-        },
-      )
-    `
-  },
+  /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
+  ViewDeclaration,
 
-  /** CompileViewParameterList compiles Tao ui parameters into runtime parameter metadata. */
-  CompileViewParameterList(ui: AST.UiDeclaration): Compiled {
+  /** UiDeclaration compiles a Tao ui declaration into a runtime component. */
+  UiDeclaration: ViewDeclaration,
+
+  /** LayoutDeclaration compiles a Tao layout declaration into a runtime component. */
+  LayoutDeclaration: ViewDeclaration,
+
+  /** ViewParameterList compiles Tao view parameters into generated React props. */
+  ViewParameterList(ui: AST.ViewDeclaration): Compiled {
     const parameters = ui.parameterList?.parameters ?? []
-    const parameterEntries = genJoin(parameters, Compile.ParameterDeclaration)
-    return gen`TR.ViewParameterList({ ${parameterEntries} })`
+    return gen`{
+      ${genList(parameters, Compile.ParameterDeclaration)}
+      children?: React.ReactNode
+    }`
   },
 
-  CompileParameterDeclaration(param: AST.ParameterDeclaration): Compiled {
+  /** ParameterDeclaration compiles one Tao parameter into a generated React prop. */
+  ParameterDeclaration(param: AST.ParameterDeclaration): Compiled {
     return gen`${genName(param)}: ${Compile.ParameterType(param)}`
   },
 
-  /** CompileParameterType returns the generated Tao primitive type name for a Tao parameter. */
-  CompileParameterType(param: AST.ParameterDeclaration): Compiled {
+  /** ParameterType returns the generated runtime value type for a Tao parameter. */
+  ParameterType(param: AST.ParameterDeclaration): Compiled {
     return Switch.value(param.type, {
-      number: () => gen`'number'`,
-      text: () => gen`'text'`,
+      number: () => gen`TR.Value<number>`,
+      text: () => gen`TR.Value<string>`,
     })
   },
 
-  /** CompileViewBlock compiles a Tao ui block into a runtime view block. */
-  CompileViewBlock(block: AST.Block): Compiled {
+  /** RenderBlockBody compiles render child setup statements followed by JSX children. */
+  RenderBlockBody(block: AST.Block): Compiled {
+    const setupStatements = block.statements.filter(AST.isAliasDeclaration)
+    const renders = block.statements.filter(AST.isRender)
     return gen`
-      return TR.ViewBlock(_ViewProps, () => {
-        const _ViewElements: React.ReactNode[] = []
-        ${genList(block.statements, Compile.ViewStatement)}
-        return _ViewElements
-      })
+      ${genList(setupStatements, Compile.Statement)}
+      return <>
+        ${genList(renders, Compile.Render)}
+      </>
     `
   },
 
-  /** CompileViewStatement compiles one statement inside a ui block. */
-  CompileViewStatement(statement: AST.Statement): Compiled {
-    return Switch.type(statement, {
-      AliasDeclaration: Compile.AliasDeclaration,
-      AppDeclaration: Compile.App,
-      AppUi: Compile.AppUi,
-      Injection: Compile.Injection,
-      Render: render => {
-        if ((render.block?.statements.length ?? 0) === 0) {
-          return gen`_ViewElements.push(${Compile.Render(render)})`
-        }
-        return gen`
-          _ViewElements.push(
-            ${Compile.Render(render)},
-          )
-        `
-      },
-      UiDeclaration: Compile.UiDeclaration,
-    })
+  /** ViewParameterBinding compiles one view parameter into the current generated scope. */
+  ViewParameterBinding(parameter: AST.ParameterDeclaration): Compiled {
+    return gen`${genScopeName(parameter)} = _ViewProps.${genName(parameter)}`
   },
 } as const
+
+function ViewDeclaration(ui: AST.ViewDeclaration): Compiled {
+  return gen`
+    ${genScopeName(ui)} = function ${genName(ui)}(_ViewProps: ${Compile.ViewParameterList(ui)}) {
+      return TR.BlockScope(_Scope, _Scope => {
+        ${genList(ui.parameterList?.parameters ?? [], Compile.ViewParameterBinding)}
+        ${genList(ui.block.statements, Compile.Statement)}
+      })
+    }
+  `
+}

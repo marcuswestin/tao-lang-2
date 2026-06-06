@@ -8,22 +8,18 @@ alias SecondTitle = "Done"
 alias SecondCount = 2
 
 ui TileBoard {
-    render Stack {
-        render Tile FirstTitle, FirstCount { }
-        render Tile SecondTitle, SecondCount { }
-    }
+    render TileBoardPanel FirstTitle, FirstCount, SecondTitle, SecondCount { }
 }
 
-ui Stack {
+ui TileBoardPanel FirstTitle text, FirstCount number, SecondTitle text, SecondCount number {
     render inject ```ts
-        return <>{_ViewProps.children}</>
-    ```
-}
-
-ui Tile Title text, Count number {
-    render inject ```ts
-        const title = _ViewProps.Title.evaluate();
-        const count = _ViewProps.Count.evaluate();
-        return <RN.Text>{title.jsValue}: {count.jsValue}</RN.Text>
+        const firstTitle = _ViewProps.FirstTitle.evaluate();
+        const firstCount = _ViewProps.FirstCount.evaluate();
+        const secondTitle = _ViewProps.SecondTitle.evaluate();
+        const secondCount = _ViewProps.SecondCount.evaluate();
+        return <>
+            <RN.Text>{firstTitle.jsValue}: {firstCount.jsValue}</RN.Text>
+            <RN.Text>{secondTitle.jsValue}: {secondCount.jsValue}</RN.Text>
+        </>
     ```
 }

@@ -6,29 +6,30 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
     if (context.property === 'target' && AST.isValueReference(context.container)) {
-      return this.createScopeForNodes(visibleValueDeclarations(context.container))
+      return this.createValueScope(context.container)
     }
     return super.getScope(context)
   }
-}
 
-function visibleValueDeclarations(reference: AST.ValueReference): AST.ValueDeclaration[] {
-  const root = findRoot(reference)
-  if (!AST.isTaoFile(root)) {
-    return []
+  private createValueScope(reference: AST.ValueReference): Langium.Scope {
+    const root = findRoot(reference)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isAliasDeclaration))
+
+    const owningView = findOwningView(reference)
+    if (owningView) {
+      scope = this.createScopeForNodes(owningView.parameterList?.parameters ?? [], scope)
+    }
+
+    for (const block of ancestorBlocks(reference).reverse()) {
+      scope = this.createScopeForNodes(aliasesOwnedByBlock(block), scope)
+    }
+
+    return scope
   }
-
-  const owningView = findOwningView(reference)
-  const declarations: AST.ValueDeclaration[] = [...root.statements.filter(AST.isAliasDeclaration)]
-  if (owningView) {
-    declarations.push(...owningView.parameterList?.parameters ?? [])
-    declarations.push(...aliasesOwnedByView(owningView))
-  }
-  return declarations
-}
-
-function aliasesOwnedByView(view: AST.ViewDeclaration): AST.AliasDeclaration[] {
-  return collectAliases(view.block)
 }
 
 function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
@@ -50,21 +51,18 @@ function findRoot(node: AST.Node): AST.Node {
   return current
 }
 
-function collectAliases(node: AST.Node): AST.AliasDeclaration[] {
-  if (AST.isAliasDeclaration(node)) {
-    return [node]
+function ancestorBlocks(node: AST.Node): AST.Block[] {
+  const blocks: AST.Block[] = []
+  let current = node.$container
+  while (current) {
+    if (AST.isBlock(current)) {
+      blocks.push(current)
+    }
+    current = current.$container
   }
-  if (AST.isViewDeclaration(node)) {
-    return []
-  }
-  if (AST.isRender(node)) {
-    return node.block?.statements.flatMap(collectAliases) ?? []
-  }
-  if (AST.isAppDeclaration(node)) {
-    return node.block.statements.flatMap(collectAliases)
-  }
-  if (AST.isBlock(node)) {
-    return node.statements.flatMap(collectAliases)
-  }
-  return []
+  return blocks
+}
+
+function aliasesOwnedByBlock(block: AST.Block): AST.AliasDeclaration[] {
+  return block.statements.filter(AST.isAliasDeclaration)
 }

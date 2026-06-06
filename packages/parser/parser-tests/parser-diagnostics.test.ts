@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Parser } from '../parser-src/parser'
+import { AST, Parser } from '../parser-src/parser'
 import { testParseCode, testParseCodeWithLexerErrors, testParseCodeWithParserErrors } from './test-parse'
 
 describe('minimal Tao parser diagnostics', () => {
@@ -9,10 +9,11 @@ describe('minimal Tao parser diagnostics', () => {
     expect(parsed.ast.statements).toHaveLength(2)
   })
 
-  test('reports parser errors for unknown declaration keywords', async () => {
-    const parsed = await testParseCodeWithParserErrors('view Legacy { }')
+  test('parses unknown leading identifiers for later validator checks', async () => {
+    const parsed = await Parser.parseCode('view Legacy { }')
 
-    expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    expect(parsed.document.parseResult.parserErrors).toEqual([])
+    expect(AST.isViewRender(parsed.ast.statements[0])).toBe(true)
     expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
 

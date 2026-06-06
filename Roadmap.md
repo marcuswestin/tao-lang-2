@@ -4,12 +4,13 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
-- [ ] Port over scope functionality
+- [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [ ] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g "inject Value, Name UserName `ts alert(Value + " " + Name)`
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
 - [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
+- [ ] Update target kitchen sink to have lots of intended parts featured
 - [x] Have `./dev [path/to/tao/app]` without command start a dev TUI, which:
   - defaults to Kitchen Sink when no app path is supplied
   - compiles the tao app
