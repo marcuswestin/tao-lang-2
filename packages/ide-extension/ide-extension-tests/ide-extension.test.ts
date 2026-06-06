@@ -1,14 +1,14 @@
 import { FS } from '@shared'
-import { describe, expect, test } from 'bun:test'
+import { Describe, Expect, Test } from '@shared/test'
 import { AST, Langium } from 'tao-parser'
 import { createValidatorLspServices } from 'tao-validator/langium-services'
 
-describe('Tao IDE extension smoke', () => {
-  test('declares extension and language server entrypoint build inputs', async () => {
+Describe('Tao IDE extension smoke', () => {
+  Test('declares extension and language server entrypoint build inputs', async () => {
     const packageJson = await FS.readJson<IdeExtensionPackageJson>(
       FS.resolvePath('../package.json', { cwd: import.meta.dir }),
     )
-    expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
+    Expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
 
     const entrypoints = [
       '../ide-extension-src/extension/main.ts',
@@ -17,19 +17,19 @@ describe('Tao IDE extension smoke', () => {
       '../language-configuration.json',
     ]
     for (const entrypoint of entrypoints) {
-      expect(await FS.isFile(FS.resolvePath(entrypoint, { cwd: import.meta.dir }))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath(entrypoint, { cwd: import.meta.dir }))).toBe(true)
     }
   })
 
-  test('generates the TextMate grammar for VS Code', async () => {
+  Test('generates the TextMate grammar for VS Code', async () => {
     const grammarPath = FS.resolvePath(
       '../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
       { cwd: import.meta.dir },
     )
-    expect(await FS.isFile(grammarPath)).toBe(true)
+    Expect(await FS.isFile(grammarPath)).toBe(true)
   })
 
-  test('reports structural and Typir diagnostics through Langium services', async () => {
+  Test('reports structural and Typir diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
       alias Greeting = "Hello"
       app Demo {
@@ -45,13 +45,13 @@ describe('Tao IDE extension smoke', () => {
       }
     `)
 
-    expect(diagnostics).toContain('Only root ui declarations are allowed in app Demo.')
-    expect(
+    Expect(diagnostics).toContain('Only root ui declarations are allowed in app Demo.')
+    Expect(
       diagnostics.some(diagnostic => diagnostic.includes("Argument for parameter 'Value' expects text, got number.")),
     ).toBe(true)
   })
 
-  test('reports alias declaration-order diagnostics through Langium services', async () => {
+  Test('reports alias declaration-order diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
       app Demo {
         ui MainView
@@ -64,7 +64,7 @@ describe('Tao IDE extension smoke', () => {
       ui Text Value text { }
     `)
 
-    expect(diagnostics).toContain(
+    Expect(diagnostics).toContain(
       "Alias 'First' cannot reference 'Second' because it is not declared before the alias.",
     )
   })

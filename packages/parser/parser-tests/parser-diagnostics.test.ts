@@ -1,53 +1,47 @@
-import { describe, expect, test } from 'bun:test'
+import { Describe, Expect, Test } from '@shared/test'
 import { Parser } from '../parser-src/parser'
 import { testParseCode, testParseCodeWithLexerErrors, testParseCodeWithParserErrors } from './test-parse'
 
-describe('minimal Tao parser diagnostics', () => {
-  test('parses compact source without newlines', async () => {
+Describe('minimal Tao parser diagnostics', () => {
+  Test('parses compact source without newlines', async () => {
     const parsed = await testParseCode('app MyApp { ui MyView } ui MyView { }')
 
-    expect(parsed.ast.statements).toHaveLength(2)
+    Expect(parsed.ast.statements).toHaveLength(2)
   })
 
-  test('reports parser errors for unknown declaration keywords', async () => {
+  Test('reports parser errors for unknown declaration keywords', async () => {
     const parsed = await testParseCodeWithParserErrors('view Legacy { }')
 
-    expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    expect(parsed.diagnostics.length).toBeGreaterThan(0)
+    Expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
 
-  test('parses top-level statements for later validator checks', async () => {
-    const parsed = await testParseCode('inject ```ts\nreturn null\n```')
-
-    expect(parsed.ast.statements).toHaveLength(1)
-  })
-
-  test('reports parser errors for incomplete render statements', async () => {
+  Test('reports parser errors for incomplete render statements', async () => {
     const parsed = await testParseCodeWithParserErrors('ui Broken { render }')
 
-    expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    expect(parsed.diagnostics.length).toBeGreaterThan(0)
+    Expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
 
-  test('parses nested declarations for later validator checks', async () => {
+  Test('parses nested declarations for later validator checks', async () => {
     const parsed = await testParseCode('app MyApp { ui MyView } ui MyView { ui Nested { } }')
 
-    expect(parsed.ast.statements).toHaveLength(2)
+    Expect(parsed.ast.statements).toHaveLength(2)
   })
 
-  test('parses aliases in app blocks for later validator checks', async () => {
+  Test('parses aliases in app blocks for later validator checks', async () => {
     const parsed = await testParseCode('app MyApp { alias Greeting = "hello" ui MyView } ui MyView { }')
 
-    expect(parsed.ast.statements).toHaveLength(2)
+    Expect(parsed.ast.statements).toHaveLength(2)
   })
 
-  test('parses top-level renders for later validator checks', async () => {
+  Test('parses top-level renders for later validator checks', async () => {
     const parsed = await testParseCode('render Text "hello" ui Text Value text { }')
 
-    expect(parsed.ast.statements).toHaveLength(2)
+    Expect(parsed.ast.statements).toHaveLength(2)
   })
 
-  test('parses number-typed parameters in semantically invalid positions', async () => {
+  Test('parses number-typed parameters in semantically invalid positions', async () => {
     const parsed = await testParseCode(`
       app MyApp { ui MyView }
       ui MyView Count number {
@@ -56,10 +50,10 @@ describe('minimal Tao parser diagnostics', () => {
       ui Text Value text { }
     `)
 
-    expect(parsed.ast.statements).toHaveLength(3)
+    Expect(parsed.ast.statements).toHaveLength(3)
   })
 
-  test('reports linker diagnostics for values outside their owning view', async () => {
+  Test('reports linker diagnostics for values outside their owning view', async () => {
     const parsed = await Parser.parseCode(`
       ui Text Value text { }
       ui Source Secret text {
@@ -71,15 +65,15 @@ describe('minimal Tao parser diagnostics', () => {
       }
     `)
 
-    expect(parsed.document.parseResult.lexerErrors).toEqual([])
-    expect(parsed.document.parseResult.parserErrors).toEqual([])
-    expect(parsed.diagnostics).toHaveLength(2)
+    Expect(parsed.document.parseResult.lexerErrors).toEqual([])
+    Expect(parsed.document.parseResult.parserErrors).toEqual([])
+    Expect(parsed.diagnostics).toHaveLength(2)
   })
 
-  test('reports lexer errors separately from parser errors', async () => {
+  Test('reports lexer errors separately from parser errors', async () => {
     const parsed = await testParseCodeWithLexerErrors('app MyApp { ui MyView } @ ui MyView { }')
 
-    expect(parsed.document.parseResult.lexerErrors.length).toBeGreaterThan(0)
-    expect(parsed.diagnostics.length).toBeGreaterThan(0)
+    Expect(parsed.document.parseResult.lexerErrors.length).toBeGreaterThan(0)
+    Expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
 })

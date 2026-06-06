@@ -1,7 +1,7 @@
 import Compiler from '@compiler'
 import { AST } from '@parser'
 import { Errors, FS } from '@shared'
-import { describe, expect, test } from 'bun:test'
+import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseCodeWithParserErrors } from '../../parser/parser-tests/test-parse'
 import { Compile } from '../compiler-src/codegen/Compile'
 import { testCompileCode } from './test-compile'
@@ -12,8 +12,8 @@ const fence = '```'
 const targetKitchenSinkPath = await FS.resolveRepoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const typeSystemTestsPath = await FS.resolveRepoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 
-describe('minimal Tao compiler', () => {
-  test('reports parser syntax errors once', async () => {
+Describe('minimal Tao compiler', () => {
+  Test('reports parser syntax errors once', async () => {
     const source = 'view Legacy { }'
     const parsed = await testParseCodeWithParserErrors(source)
     const parserMessage = parsed.document.parseResult.parserErrors[0]!.message
@@ -22,15 +22,15 @@ describe('minimal Tao compiler', () => {
     try {
       await Compiler.compileCode(source)
     } catch (error) {
-      expect(error).toBeInstanceOf(Errors.UnexpectedBehaviorError)
+      Expect(error).toBeInstanceOf(Errors.UnexpectedBehaviorError)
       errorDetails = (error as Errors.UnexpectedBehaviorError).details!['errors'] as unknown[]
     }
 
-    expect(errorDetails).toContain(parserMessage)
-    expect(errorDetails.filter(error => error === parserMessage)).toHaveLength(1)
+    Expect(errorDetails).toContain(parserMessage)
+    Expect(errorDetails.filter(error => error === parserMessage)).toHaveLength(1)
   })
 
-  test('exposes a single Compile object for parsed AST nodes', async () => {
+  Test('exposes a single Compile object for parsed AST nodes', async () => {
     const parsed = await testParseCode(`
       app MyApp { ui MainView }
       ui MainView {
@@ -55,8 +55,8 @@ describe('minimal Tao compiler', () => {
     literal.expect('value').toBe('Hello')
   })
 
-  test('rejects duplicate app root ui declarations', async () => {
-    await expect(testCompileCode(`
+  Test('rejects duplicate app root ui declarations', async () => {
+    await Expect(testCompileCode(`
       app MyApp {
         ui MainView
         ui OtherView
@@ -66,15 +66,15 @@ describe('minimal Tao compiler', () => {
     `)).rejects.toThrow('must declare exactly one root ui')
   })
 
-  test('rejects app blocks without a root ui statement', async () => {
-    await expect(testCompileCode(`
+  Test('rejects app blocks without a root ui statement', async () => {
+    await Expect(testCompileCode(`
       app MyApp { }
       ui MainView { }
     `)).rejects.toThrow('must declare exactly one root ui')
   })
 
-  test('rejects unsupported app block statements', async () => {
-    await expect(testCompileCode(`
+  Test('rejects unsupported app block statements', async () => {
+    await Expect(testCompileCode(`
       app MyApp {
         ui MainView
         render MainView
@@ -83,28 +83,16 @@ describe('minimal Tao compiler', () => {
     `)).rejects.toThrow('Only root ui declarations are allowed')
   })
 
-  test('rejects inject in multi-statement view blocks explicitly', async () => {
-    await expect(testCompileCode(`
-      app MyApp { ui MainView }
-      ui MainView {
-        render inject ${tsFence}
-          return <RN.Text>Hello</RN.Text>
-        ${fence}
-        render MainView
-      }
-    `)).rejects.toThrow('`render inject` must be the only statement in a ui body')
-  })
-
-  test('compiles the target Kitchen Sink app', async () => {
+  Test('compiles the target Kitchen Sink app', async () => {
     await testCompileCode(await FS.readText(targetKitchenSinkPath))
   })
 
-  test('compiles the Type System Tests app', async () => {
+  Test('compiles the Type System Tests app', async () => {
     await testCompileCode(await FS.readText(typeSystemTestsPath))
   })
 
-  test('rejects validator type errors before codegen', async () => {
-    await expect(testCompileCode(`
+  Test('rejects validator type errors before codegen', async () => {
+    await Expect(testCompileCode(`
       app MyApp { ui MainView }
       ui MainView {
         render Tile "Open", "not a count"

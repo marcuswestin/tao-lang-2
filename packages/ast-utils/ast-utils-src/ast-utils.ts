@@ -1,3 +1,4 @@
+import { injectionArgumentName } from './injections'
 import {
   type RenderInvocation as RenderInvocationData,
   type RenderInvocationPair as RenderInvocationPairData,
@@ -8,6 +9,7 @@ import { getDocument, isNode, streamAllContents } from './traversal'
 /** ASTUtils exposes shared semantic helpers for Tao AST consumers. */
 const ASTUtils = {
   getDocument,
+  injectionArgumentName,
   isNode,
   resolveRenderInvocation,
   streamAllContents,

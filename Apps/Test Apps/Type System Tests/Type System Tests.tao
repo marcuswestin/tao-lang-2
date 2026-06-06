@@ -21,9 +21,7 @@ ui Stack {
 }
 
 ui Tile Title text, Count number {
-    render inject ```ts
-        const title = _ViewProps.Title.evaluate();
-        const count = _ViewProps.Count.evaluate();
-        return <RN.Text>{title.jsValue}: {count.jsValue}</RN.Text>
+    render inject Title, Count ```ts
+        return <RN.Text>{Title}: {Count}</RN.Text>
     ```
 }

@@ -1,57 +1,57 @@
-import { describe, expect, test } from 'bun:test'
+import { Describe, Expect, Test } from '@shared/test'
 import { type LexResult, Parser } from '../parser-src/parser'
 
-describe('minimal Tao lexer', () => {
-  test('lexes identifiers', () => {
+Describe('minimal Tao lexer', () => {
+  Test('lexes identifiers', () => {
     const result = expectLexes('_foo bar123 _under_score')
 
-    expect(tokenImages(result)).toEqual(['_foo', 'bar123', '_under_score'])
+    Expect(tokenImages(result)).toEqual(['_foo', 'bar123', '_under_score'])
   })
 
-  test('lexes double-quoted strings', () => {
+  Test('lexes double-quoted strings', () => {
     const result = expectLexes('"hello world" "hello \\"world\\""')
 
-    expect(tokenNames(result)).toEqual(['STRING', 'STRING'])
-    expect(tokenImages(result)).toEqual(['"hello world"', '"hello \\"world\\""'])
+    Expect(tokenNames(result)).toEqual(['STRING', 'STRING'])
+    Expect(tokenImages(result)).toEqual(['"hello world"', '"hello \\"world\\""'])
   })
 
-  test('ignores line and block comments', () => {
+  Test('ignores line and block comments', () => {
     const result = expectLexes('ui // comment\nMainView /* block */')
 
-    expect(tokenImages(result)).toEqual(['ui', 'MainView'])
-    expect(result.hidden.map(token => token.image)).toEqual(['// comment', '/* block */'])
+    Expect(tokenImages(result)).toEqual(['ui', 'MainView'])
+    Expect(result.hidden.map(token => token.image)).toEqual(['// comment', '/* block */'])
   })
 
-  test('lexes ts code blocks', () => {
+  Test('lexes ts code blocks', () => {
     const result = expectLexes('```ts\nconst x = 1\n```')
 
-    expect(tokenNames(result)).toEqual(['TS_CODE_BLOCK'])
-    expect(tokenImages(result)).toEqual(['```ts\nconst x = 1\n```'])
+    Expect(tokenNames(result)).toEqual(['TS_CODE_BLOCK'])
+    Expect(tokenImages(result)).toEqual(['```ts\nconst x = 1\n```'])
   })
 
-  test('rejects unknown characters', () => {
+  Test('rejects unknown characters', () => {
     expectLexErrors('@', '@')
     expectLexErrors('#', '#')
     expectLexErrors('$', '$')
   })
 
-  test('rejects unclosed ts code blocks', () => {
+  Test('rejects unclosed ts code blocks', () => {
     expectLexErrors('```ts\nconst x = 1', '`')
   })
 })
 
 function expectLexes(source: string): LexResult {
   const result = Parser.lexCode(source)
-  expect(result.errors).toEqual([])
+  Expect(result.errors).toEqual([])
   return result
 }
 
 function expectLexErrors(source: string, ...unexpectedCharacters: string[]): LexResult {
   const result = Parser.lexCode(source)
-  expect(result.errors.length).toBeGreaterThan(0)
+  Expect(result.errors.length).toBeGreaterThan(0)
 
   for (const unexpectedCharacter of unexpectedCharacters) {
-    expect(
+    Expect(
       result.errors.some(error => errorTouches(error, source, unexpectedCharacter)),
     ).toBe(true)
   }

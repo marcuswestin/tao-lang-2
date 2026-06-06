@@ -6,7 +6,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 - [ ] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
-- [ ] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g "inject Value, Name UserName `ts alert(Value + " " + Name)`
+- [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
 - [ ] Have `./dev <path/to/tao/app>` without command start a dev TUI, which:
@@ -63,8 +63,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
     - [x] Export compiler entrypoints
     - [x] Emit Expo-compatible TSX for the supported AST only
     - [x] Generate a default exported React component
-    - [x] Include `Hello, World!`, `MainView`, `Text`, and `_ViewProps.Value` in generated output
-    - [x] Fix Kitchen Sink `Text` injection to return `<RN.Text>{text.jsValue}</RN.Text>`
+    - [x] Include `Hello, World!`, `MainView`, `Text`, and view props in generated output
+    - [x] Fix Kitchen Sink `Text` injection to return evaluated text in `<RN.Text>`
     - [x] Ro review
   - [x] Runtime
     - [x] Write runtime e2e test before implementation

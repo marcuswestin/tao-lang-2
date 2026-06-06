@@ -19,16 +19,13 @@ ui Stack {
 }
 
 ui Text Value text {
-    render inject ```ts
-        const text = _ViewProps.Value.evaluate();
-        return <RN.Text>{text.jsValue}</RN.Text>
+    render inject Value ```ts
+        return <RN.Text>{Value}</RN.Text>
     ```
 }
 
 ui StatTile Label text, Count number {
-    render inject ```ts
-        const label = _ViewProps.Label.evaluate();
-        const count = _ViewProps.Count.evaluate();
-        return <RN.Text>{label.jsValue}: {count.jsValue}</RN.Text>
+    render inject Label, Count ```ts
+        return <RN.Text>{Label}: {Count}</RN.Text>
     ```
 }

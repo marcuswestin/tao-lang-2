@@ -1,23 +1,21 @@
-import { afterEach, describe, expect, jest, test } from '@jest/globals'
-import { CLI, FS, Repo, Text } from '@shared'
-import { cleanup, render } from '@testing-library/react-native'
-import { type ComponentType, createElement } from 'react'
+import { FS, Repo } from '@shared'
+import { AfterEach, Describe, Expect, Test } from '@shared/test'
+import { cleanup } from '@testing-library/react-native'
+import { compileAndRenderApp, testCompileApp } from './test-compile-app'
 
-afterEach(() => cleanup())
+AfterEach(() => cleanup())
 
-describe('Expo runtime', () => {
-  test('compiles and renders Kitchen Sink text and number aliases', async () => {
-    const generatedAppPath = await FS.resolveRepoPath('packages/runtime/_gen_tao-app/App.tsx')
+Describe('Expo runtime', () => {
+  Test('compiles and renders Kitchen Sink text and number aliases', async () => {
+    const repoRoot = await Repo.getRoot()
+    const kitchenSinkPath = await FS.resolveRepoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
+    const screen = await compileAndRenderApp(repoRoot, kitchenSinkPath)
 
-    jest.resetModules()
-    const appModule = require(generatedAppPath) as { default: ComponentType }
-    const screen = render(createElement(appModule.default))
-
-    expect(screen.getByText('Hello, World!')).toBeDefined()
-    expect(screen.getByText('Launch count: 3')).toBeDefined()
+    Expect(screen.getByText('Hello, World!')).toBeDefined()
+    Expect(screen.getByText('Launch count: 3')).toBeDefined()
   })
 
-  test('renders alias references to earlier aliases', async () => {
+  Test('renders alias references to earlier aliases', async () => {
     const repoRoot = await Repo.getRoot()
     const appDir = await FS.mkTmpDir(FS.resolvePath('tao-runtime-e2e-', { cwd: FS.tmpdir() }))
     const appPath = FS.resolvePath('Ordered Alias.tao', { cwd: appDir })
@@ -45,36 +43,8 @@ describe('Expo runtime', () => {
         }
       `,
       screen => {
-        expect(screen.getByText('Ordered output')).toBeDefined()
+        Expect(screen.getByText('Ordered output')).toBeDefined()
       },
     )
   })
 })
-
-async function testCompileApp(
-  repoRoot: string,
-  appPath: string,
-  source: string,
-  testsFunction: (screen: ReturnType<typeof render>) => void,
-): Promise<void> {
-  const appDir = FS.dirname(appPath)
-  const runtimePackageRoot = await FS.resolveRepoPath('packages/runtime')
-  const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
-
-  try {
-    await FS.writeText(appPath, Text.stripIndent(source))
-    await CLI.mustRun({
-      command: await FS.resolveRepoPath('dev'),
-      args: ['compile-app', appPath],
-      cwd: repoRoot,
-    })
-
-    jest.resetModules()
-    const appModule = require(generatedAppPath) as { default: ComponentType }
-    const screen = render(createElement(appModule.default))
-
-    testsFunction(screen)
-  } finally {
-    await FS.remove(appDir)
-  }
-}

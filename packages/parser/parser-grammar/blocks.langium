@@ -3,6 +3,7 @@ grammar TaoBlocks
 import "./app"
 import "./views"
 import "./aliases"
+import "./injections"
 import "./terminals"
 
 entry BlocksGrammarEntrypoint:
