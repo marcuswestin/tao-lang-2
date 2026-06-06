@@ -15,7 +15,7 @@ Commit message bullet lists must use one bullet per line with no blank lines bet
 
 ## Process:
 
-First run `prep-commit`, then:
+First run `prep-commit`, then unstage any staged changes, and:
 
 1. Determine the smallest next chunk to commit
 2. Stage it

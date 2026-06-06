@@ -22,3 +22,4 @@ Add or edit the feature's file in each relevant package source dir (`<package>/<
 - Use `@ast-utils` for shared Tao AST traversal and node/document helpers; do not call `Langium.AstUtils` or `Langium.isAstNode` directly from package consumers.
 - In compiler codegen, keep `compiler-src/codegen/app/Compile.ts` as the single `Compile` object assembly. Feature compiler files export `Compile<ASTNode>` functions and call recursive codegen through `Compile.<ASTNode>`.
 - Keep generated Tao TS minimal. Prefer reusable runtime functionality on default `TR` from `@runtime/TR` (`packages/runtime/TaoRuntime-src/TR.ts`) over emitting helper implementations in generated app files.
+- Do not special-case empty iterables before `genJoin` or `genList`; those helpers already emit empty output. Branch only when empty input needs different generated syntax or runtime behavior.
