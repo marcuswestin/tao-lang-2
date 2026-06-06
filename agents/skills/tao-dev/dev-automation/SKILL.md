@@ -19,6 +19,14 @@ Use this skill when adding or changing repo automation: `packages/dev` TypeScrip
 - Prefer `packages/dev` TypeScript over complex shell for durable logic; keep shell entrypoints thin. Avoid standalone Bun script entrypoints—expose script-like automation through `dev.ts` or `agent-dev`.
 - Keep commands small, typed, and covered by relevant package tests or repo checks.
 
+## Command output
+
+- Default successful automation to concise output: command or recipe name, elapsed time, and parsed counts when useful.
+- Emit full logs on failure, but write large stdout/stderr to `.artifacts/logs/agent/<timestamp>/...` and print only the command, exit code, focused excerpt, and log path.
+- Replay full failure output only when it is small enough to be useful in agent context.
+- Prefer machine-readable summaries for audit/preflight commands when another agent or tool will consume the result.
+- Keep intentionally interactive or long-running commands streamed, such as app servers and device workflows.
+
 ## Justfile recipes
 
 - Recipes can contain straightforward shell command lines. Delegate to `./dev <command>` only for script-like automation that is clearer in TypeScript.
