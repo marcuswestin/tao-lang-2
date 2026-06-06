@@ -25,10 +25,10 @@ describe('FS', () => {
   })
 
   test('resolves repo-relative paths from the Git root', async () => {
-    const repoRoot = await Repo.getRoot()
+    const repoRoot = Repo.getRoot()
     const sharedPath = FS.resolvePath(`${repoRoot}/packages/shared`)
 
-    await expect(FS.resolveRepoPath('packages/shared')).resolves.toBe(sharedPath)
+    expect(FS.repoPath('packages/shared')).toBe(sharedPath)
   })
 
   test('writes and reads text and json files', async () => {
@@ -103,6 +103,46 @@ describe('FS', () => {
 })
 
 describe('HCI', () => {
+  test('writes messages to selected output streams', () => {
+    const stdout = fakeTerminal('')
+    const stderr = fakeTerminal('')
+
+    HCI.write('out', { output: stdout.output })
+    HCI.writeLine(' line', { output: stdout.output })
+    HCI.writeError('err', { output: stderr.output })
+    HCI.writeErrorLine(' line', { output: stderr.output })
+    HCI.writeSuccess(' success', { output: stdout.output })
+
+    expect(stripAnsi(stdout.outputText())).toBe('out line\n success')
+    expect(stripAnsi(stderr.outputText())).toBe('err line\n')
+    expect(stdout.outputText()).toContain('\u001b[32m')
+    expect(stderr.outputText()).toContain('\u001b[31m')
+  })
+
+  test('colors process log message bodies by severity', () => {
+    const stdout = runtimeProcess.stdout
+    const stderr = runtimeProcess.stderr
+    const info = fakeTerminal('')
+    const errors = fakeTerminal('')
+    runtimeProcess.stdout = info.output as typeof runtimeProcess.stdout
+    runtimeProcess.stderr = errors.output as typeof runtimeProcess.stderr
+
+    try {
+      HCI.logProcessInfo('dev', 'info body')
+      HCI.logProcessWarn('dev', 'warn body')
+      HCI.logProcessError('dev', 'error body')
+
+      expect(stripAnsi(info.outputText())).toBe('[dev]: info body\n')
+      expect(stripAnsi(errors.outputText())).toBe('[dev]: warn body\n[dev]: error body\n')
+      expect(info.outputText()).toContain('\u001b[2minfo body\u001b[0m')
+      expect(errors.outputText()).toContain('\u001b[33mwarn body\u001b[0m')
+      expect(errors.outputText()).toContain('\u001b[31merror body\u001b[0m')
+    } finally {
+      runtimeProcess.stdout = stdout
+      runtimeProcess.stderr = stderr
+    }
+  })
+
   test('asks for text with validation', async () => {
     const streams = fakeTerminal(' \nRo\n')
 
@@ -149,8 +189,7 @@ describe('HCI', () => {
 describe('CLI', () => {
   test('runs commands and captures output', async () => {
     const root = await tmpDir()
-    const result = await CLI.run({
-      command: runtimeProcess.execPath,
+    const result = await CLI.run(runtimeProcess.execPath, {
       args: ['-e', 'console.log(process.cwd()); console.error(process.env.TAO_CLI_TEST)'],
       cwd: root,
       env: { TAO_CLI_TEST: 'ok' },
@@ -162,8 +201,7 @@ describe('CLI', () => {
   })
 
   test('passes stdin to commands', async () => {
-    const result = await CLI.run({
-      command: runtimeProcess.execPath,
+    const result = await CLI.run(runtimeProcess.execPath, {
       args: ['-e', 'for await (const chunk of process.stdin) process.stdout.write(chunk.toString().toUpperCase())'],
       stdin: 'abc',
     })
@@ -172,23 +210,25 @@ describe('CLI', () => {
   })
 
   test('returns unchecked failures and throws checked failures', async () => {
-    const command = {
-      command: runtimeProcess.execPath,
+    const commandSpec = {
       args: ['-e', 'console.error("bad"); process.exit(7)'],
     }
 
-    const result = await CLI.run(command)
+    const result = await CLI.run(runtimeProcess.execPath, commandSpec)
+    const syncResult = CLI.runSync(runtimeProcess.execPath, commandSpec)
 
     expect(result.exitCode).toBe(7)
     expect(result.stderr.trim()).toBe('bad')
-    await expect(CLI.mustRun(command)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
+    expect(syncResult.exitCode).toBe(7)
+    expect(syncResult.stderr.trim()).toBe('bad')
+    await expect(CLI.mustRun(runtimeProcess.execPath, commandSpec)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
+    expect(() => CLI.mustRunSync(runtimeProcess.execPath, commandSpec)).toThrow(Errors.CommandExecutionError)
   })
 
   test('formats commands and supports inherited stdio', async () => {
-    expect(CLI.formatCommand({ command: 'tao', args: ['run', 'Hello World.tao'] })).toBe('tao run "Hello World.tao"')
+    expect(CLI.formatCommand('tao', { args: ['run', 'Hello World.tao'] })).toBe('tao run "Hello World.tao"')
 
-    const result = await CLI.run({
-      command: runtimeProcess.execPath,
+    const result = await CLI.run(runtimeProcess.execPath, {
       args: ['-e', 'process.exit(0)'],
       stdio: 'inherit',
     })
@@ -216,8 +256,7 @@ describe('CLI', () => {
     }) as typeof runtimeProcess.stderr
 
     try {
-      const result = await CLI.run({
-        command: runtimeProcess.execPath,
+      const result = await CLI.run(runtimeProcess.execPath, {
         args: ['-e', 'console.log(`out`); console.error(`err`)'],
         stdio: 'stream',
       })
@@ -225,10 +264,73 @@ describe('CLI', () => {
       expect(result.stdout.trim()).toBe('out')
       expect(result.stderr.trim()).toBe('err')
       expect(streamedStdout.trim()).toBe('out')
-      expect(streamedStderr.trim()).toBe('err')
+      expect(stripAnsi(streamedStderr).trim()).toBe('err')
     } finally {
       runtimeProcess.stdout = stdout
       runtimeProcess.stderr = stderr
+    }
+  })
+
+  test('streams prefixed output while preserving captured output', async () => {
+    const stdout = runtimeProcess.stdout
+    const stderr = runtimeProcess.stderr
+    let streamedStdout = ''
+    let streamedStderr = ''
+    runtimeProcess.stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        streamedStdout += chunk.toString()
+        callback()
+      },
+    }) as typeof runtimeProcess.stdout
+    runtimeProcess.stderr = new Writable({
+      write(chunk, _encoding, callback) {
+        streamedStderr += chunk.toString()
+        callback()
+      },
+    }) as typeof runtimeProcess.stderr
+
+    try {
+      const result = await CLI.run(runtimeProcess.execPath, {
+        args: ['-e', 'console.log(`out`); console.error(`err`)'],
+        prefixedOutput: { processName: 'test' },
+      })
+
+      expect(result.stdout.trim()).toBe('out')
+      expect(result.stderr.trim()).toBe('err')
+      expect(streamedStdout).toContain('[test]')
+      expect(streamedStdout).toContain('out')
+      expect(streamedStderr).toContain('[test]')
+      expect(streamedStderr).toContain('err')
+    } finally {
+      runtimeProcess.stdout = stdout
+      runtimeProcess.stderr = stderr
+    }
+  })
+
+  test('starts commands and streams prefixed output', async () => {
+    const stdout = runtimeProcess.stdout
+    let streamedStdout = ''
+    runtimeProcess.stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        streamedStdout += chunk.toString()
+        callback()
+      },
+    }) as typeof runtimeProcess.stdout
+
+    try {
+      const command = CLI.start(runtimeProcess.execPath, {
+        args: ['-e', 'console.log(`ready`)'],
+        prefixedOutput: { processName: 'dev' },
+      })
+      const close = await command.waitForClose()
+      await command.closeOutput()
+
+      expect(close.exitCode).toBe(0)
+      expect(command.exitCode).toBe(0)
+      expect(streamedStdout).toContain('[dev]')
+      expect(streamedStdout).toContain('ready')
+    } finally {
+      runtimeProcess.stdout = stdout
     }
   })
 })
@@ -236,11 +338,11 @@ describe('CLI', () => {
 describe('Repo', () => {
   test('finds the current git worktree root from a nested cwd', async () => {
     const cwd = runtimeProcess.cwd()
-    const root = await Repo.getRoot()
+    const root = Repo.getRoot()
 
     try {
       runtimeProcess.chdir(FS.resolvePath('packages/shared', { cwd: root }))
-      expect(await Repo.getRoot()).toBe(root)
+      expect(Repo.getRoot()).toBe(root)
     } finally {
       runtimeProcess.chdir(cwd)
     }
@@ -253,12 +355,12 @@ describe('Repo', () => {
     const nestedDir = FS.resolvePath('packages/shared', { cwd: taoRoot })
 
     await FS.mkdir(nestedDir)
-    await CLI.mustRun({ command: 'git', args: ['init'], cwd: taoRoot })
-    const expectedRoot = await Repo.getRoot(taoRoot)
+    await CLI.mustRun('git', { args: ['init'], cwd: taoRoot })
+    const expectedRoot = Repo.getRoot(taoRoot)
 
     try {
       runtimeProcess.chdir(nestedDir)
-      expect(await Repo.getRoot()).toBe(expectedRoot)
+      expect(Repo.getRoot()).toBe(expectedRoot)
     } finally {
       runtimeProcess.chdir(cwd)
     }
@@ -270,7 +372,7 @@ describe('Repo', () => {
 
     try {
       runtimeProcess.chdir(outsideRepo)
-      await expect(Repo.getRoot()).rejects.toBeInstanceOf(Errors.CommandExecutionError)
+      expect(() => Repo.getRoot()).toThrow(Errors.CommandExecutionError)
     } finally {
       runtimeProcess.chdir(cwd)
     }
@@ -419,6 +521,10 @@ function fakeTerminal(inputText: string) {
     interactive: true,
     outputText: () => Buffer.concat(outputChunks).toString('utf8'),
   }
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]+m/g, '')
 }
 
 function isString(value: unknown): value is string {

@@ -1,10 +1,23 @@
-import { type ChildProcess, spawn as spawnProcess, type SpawnOptions as NodeSpawnOptions } from 'node:child_process'
+import {
+  type ChildProcess,
+  spawn as spawnProcess,
+  type SpawnOptions as NodeSpawnOptions,
+  spawnSync as spawnProcessSync,
+  type SpawnSyncOptions as NodeSpawnSyncOptions,
+  type SpawnSyncReturns,
+} from 'node:child_process'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
 
 /** SpawnOptions declares options for starting a child process. */
 export type SpawnOptions = Omit<NodeSpawnOptions, 'env'> & {
+  args?: readonly string[]
+  env?: ProcessEnv
+}
+
+/** SpawnSyncOptions declares options for running a child process synchronously. */
+export type SpawnSyncOptions = Omit<NodeSpawnSyncOptions, 'encoding' | 'env'> & {
   args?: readonly string[]
   env?: ProcessEnv
 }
@@ -16,6 +29,32 @@ export function spawn(command: string, options: SpawnOptions = {}): ChildProcess
     ...spawnOptions,
     env: env === undefined ? undefined : { ...process.env, ...env },
   })
+}
+
+/** spawnSync runs a child process synchronously. */
+export function spawnSync(command: string, options: SpawnSyncOptions = {}): SpawnSyncReturns<Buffer> {
+  const { args = [], env, ...spawnOptions } = options
+  return spawnProcessSync(command, [...args], {
+    ...spawnOptions,
+    encoding: 'buffer',
+    env: env === undefined ? undefined : { ...process.env, ...env },
+  })
+}
+
+/** onProcessSignal registers a process signal listener and returns an unsubscribe function. */
+export function onProcessSignal(signal: ProcessSignal, listener: () => void): () => void {
+  process.on(signal, listener)
+  return () => process.off(signal, listener)
+}
+
+/** setStdinRawMode toggles raw stdin mode when the process has an interactive TTY. */
+export function setStdinRawMode(rawMode: boolean): boolean {
+  const stdin = process.stdin
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') {
+    return false
+  }
+  stdin.setRawMode(rawMode)
+  return true
 }
 
 /** runtimeConsole exposes console output through the shared runtime boundary. */

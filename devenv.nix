@@ -73,8 +73,8 @@ in
     description = "just build";
   };
   scripts.p = {
-    exec = ''just prep-commit "$@"'';
-    description = "just prep-commit";
+    exec = ''just prep "$@"'';
+    description = "just prep";
   };
   scripts.c = {
     exec = ''just check "$@"'';

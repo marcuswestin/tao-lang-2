@@ -3,9 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import { AST, Parser } from '../parser-src/parser'
 import { testParseCode } from './test-parse'
 
-const kitchenSinkPath = await FS.resolveRepoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const targetKitchenSinkPath = await FS.resolveRepoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
-const typeSystemTestsPath = await FS.resolveRepoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
+const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
+const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 
 function expectIs<T>(value: unknown, guard: (value: unknown) => value is T): asserts value is T {
   expect(guard(value)).toBe(true)

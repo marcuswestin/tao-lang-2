@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, Text } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Text } from '@shared'
 
 const RUNTIME_PACKAGE_PATH = FS.joinPath('packages/runtime')
 const EXPO_ANDROID_ENV = {
@@ -46,9 +46,8 @@ export async function ensureAndroidEmulator(): Promise<void> {
       'Android sdkmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
     )
     await requireAndroidSdkPackage(ANDROID_SYSTEM_IMAGE)
-    Platform.runtimeConsole.info(`No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
-    await CLI.mustRun({
-      command: 'avdmanager',
+    HCI.writeLine(`No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
+    await CLI.mustRun('avdmanager', {
       args: [
         'create',
         'avd',
@@ -75,10 +74,10 @@ export async function ensureAndroidEmulator(): Promise<void> {
   const runningSerial = await findRunningEmulator()
   if (runningSerial) {
     if (await isEmulatorBooted(runningSerial)) {
-      Platform.runtimeConsole.info(`Android emulator ${runningSerial} is already booted.`)
+      HCI.writeLine(`Android emulator ${runningSerial} is already booted.`)
       return
     }
-    Platform.runtimeConsole.info(`Android emulator ${runningSerial} is starting.`)
+    HCI.writeLine(`Android emulator ${runningSerial} is starting.`)
     await waitForBootedEmulator(logPath)
   } else {
     await startEmulator(avdName, logPath)
@@ -91,25 +90,47 @@ export async function ensureAndroidExpoGo(): Promise<void> {
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
   const serial = await requireBootedEmulator()
   if (await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
-    Platform.runtimeConsole.info(`Expo Go is already installed on ${serial}.`)
+    HCI.writeLine(`Expo Go is already installed on ${serial}.`)
     return
   }
 
   const apkPath = await downloadExpoGoApk()
-  Platform.runtimeConsole.info(`Installing Expo Go on ${serial}.`)
-  await CLI.mustRun({
-    command: 'adb',
+  HCI.writeLine(`Installing Expo Go on ${serial}.`)
+  await CLI.mustRun('adb', {
     args: ['-s', serial, 'install', '-r', '-d', '--user', EXPO_ADB_USER, apkPath],
     stdio: 'inherit',
   })
 }
 
+/** prepareAvailableAndroidExpoGo prepares an already-booted emulator with Expo Go for Metro. */
+export async function prepareAvailableAndroidExpoGo(): Promise<boolean> {
+  await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
+  const serial = await findRunningEmulator()
+  if (!serial || !await isEmulatorBooted(serial)) {
+    HCI.logProcessInfo('dev', 'No booted Android emulator found; skipping Android launch.')
+    return false
+  }
+  if (!await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
+    HCI.logProcessInfo(
+      'dev',
+      `Expo Go is not installed on ${serial}; run ./dev android-expo-go before opening Android.`,
+    )
+    return false
+  }
+  await reverseMetroPort(serial)
+  return true
+}
+
+/** openExpoAndroid opens an Expo URL directly on the booted Android emulator. */
+export async function openExpoAndroid(url = EXPO_GO_URL): Promise<void> {
+  await openExpoGoWhenMetroIsReady(url)
+}
+
 /** startExpoAndroid starts Expo and opens it on the booted Android emulator. */
 export async function startExpoAndroid(): Promise<void> {
-  const runtimePackageRoot = await FS.resolveRepoPath(RUNTIME_PACKAGE_PATH)
-  void openExpoGoWhenMetroIsReady().catch(error => Platform.runtimeConsole.error(Errors.formatForUser(error)))
-  const result = await CLI.run({
-    command: 'bunx',
+  const runtimePackageRoot = FS.repoPath(RUNTIME_PACKAGE_PATH)
+  void openExpoAndroid().catch(error => HCI.writeErrorLine(Errors.formatForUser(error)))
+  const result = await CLI.run('bunx', {
     args: EXPO_START_ARGS,
     cwd: runtimePackageRoot,
     env: EXPO_ANDROID_ENV,
@@ -122,7 +143,7 @@ export async function startExpoAndroid(): Promise<void> {
 
 async function requireCommand(command: string, missingMessage: string): Promise<void> {
   try {
-    await CLI.mustRun({ command: 'sh', args: ['-c', `command -v ${command}`] })
+    await CLI.mustRun('sh', { args: ['-c', `command -v ${command}`] })
   } catch (error) {
     if (!(error instanceof Errors.CommandExecutionError)) {
       throw error
@@ -132,7 +153,7 @@ async function requireCommand(command: string, missingMessage: string): Promise<
 }
 
 async function requireAndroidSdkPackage(sdkPackage: string): Promise<void> {
-  const installed = await CLI.mustRun({ command: 'sdkmanager', args: ['--list_installed'] })
+  const installed = await CLI.mustRun('sdkmanager', { args: ['--list_installed'] })
   if (installed.stdout.includes(sdkPackage)) {
     return
   }
@@ -174,7 +195,7 @@ function upsertAvdConfigValue(config: string, key: string, value: string): strin
 }
 
 async function listAvds(): Promise<string[]> {
-  const result = await CLI.mustRun({ command: 'emulator', args: ['-list-avds'] })
+  const result = await CLI.mustRun('emulator', { args: ['-list-avds'] })
   return result.stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
 }
 
@@ -187,7 +208,7 @@ function preferredAvdName(avds: readonly string[]): string {
 }
 
 async function findRunningEmulator(): Promise<string | undefined> {
-  const result = await CLI.mustRun({ command: 'adb', args: ['devices'] })
+  const result = await CLI.mustRun('adb', { args: ['devices'] })
   return result.stdout
     .split(/\r?\n/)
     .map(line => line.trim().split(/\s+/))
@@ -196,21 +217,21 @@ async function findRunningEmulator(): Promise<string | undefined> {
 }
 
 async function isEmulatorBooted(serial: string): Promise<boolean> {
-  const result = await CLI.run({ command: 'adb', args: ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'] })
+  const result = await CLI.run('adb', { args: ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'] })
   return !result.error && result.exitCode === 0 && result.stdout.trim() === '1'
 }
 
 async function startEmulator(avdName: string, logPath: string): Promise<void> {
-  Platform.runtimeConsole.info(`Starting Android emulator ${avdName}.`)
+  HCI.writeLine(`Starting Android emulator ${avdName}.`)
   const logFile = await FS.openAppend(logPath)
   try {
-    const emulator = Platform.spawn('emulator', {
+    const emulator = CLI.start('emulator', {
       args: ['-avd', avdName, '-memory', String(ANDROID_EMULATOR_MEMORY_MB), '-netdelay', 'none', '-netspeed', 'full'],
       detached: true,
       stdio: ['ignore', logFile.fd, logFile.fd],
+      unref: true,
     })
-    emulator.on('error', error => Platform.runtimeConsole.error(`Failed to start Android emulator: ${error.message}`))
-    emulator.unref()
+    emulator.onceError(error => HCI.writeErrorLine(`Failed to start Android emulator: ${error.message}`))
   } finally {
     await logFile.close()
   }
@@ -221,7 +242,7 @@ async function waitForBootedEmulator(logPath: string): Promise<void> {
   while (Date.now() < deadline) {
     const serial = await findRunningEmulator()
     if (serial && await isEmulatorBooted(serial)) {
-      Platform.runtimeConsole.info(`Android emulator ${serial} is booted.`)
+      HCI.writeLine(`Android emulator ${serial} is booted.`)
       return
     }
     await sleep(EMULATOR_BOOT_POLL_MS)
@@ -245,8 +266,7 @@ async function requireBootedEmulator(): Promise<string> {
 }
 
 async function isPackageInstalled(serial: string, appId: string): Promise<boolean> {
-  const result = await CLI.run({
-    command: 'adb',
+  const result = await CLI.run('adb', {
     args: ['-s', serial, 'shell', 'pm', 'list', 'packages', '--user', EXPO_ADB_USER, appId],
   })
   return !result.error && result.exitCode === 0
@@ -256,14 +276,14 @@ async function isPackageInstalled(serial: string, appId: string): Promise<boolea
 async function downloadExpoGoApk(): Promise<string> {
   const url = await getExpoGoApkUrl()
   const filename = FS.basename(new URL(url).pathname)
-  const outputDir = await FS.resolveRepoPath(EXPO_GO_APK_CACHE_DIR)
+  const outputDir = FS.repoPath(EXPO_GO_APK_CACHE_DIR)
   const outputPath = FS.resolvePath(filename, { cwd: outputDir })
   if (await FS.exists(outputPath)) {
     return outputPath
   }
 
   await FS.mkdir(FS.dirname(outputPath))
-  Platform.runtimeConsole.info(`Downloading Expo Go for SDK ${EXPO_GO_SDK_VERSION}.`)
+  HCI.writeLine(`Downloading Expo Go for SDK ${EXPO_GO_SDK_VERSION}.`)
   const response = await fetch(url)
   if (!response.ok) {
     Errors.throwUserInput(`Failed to download Expo Go APK: ${response.status} ${response.statusText}`)
@@ -291,13 +311,12 @@ async function getExpoGoApkUrl(): Promise<string> {
   return url
 }
 
-async function openExpoGoWhenMetroIsReady(): Promise<void> {
+async function openExpoGoWhenMetroIsReady(url = EXPO_GO_URL): Promise<void> {
   await waitForMetro()
   const serial = await requireBootedEmulator()
   await reverseMetroPort(serial)
-  Platform.runtimeConsole.info(`Opening ${EXPO_GO_URL} on ${serial}.`)
-  await CLI.mustRun({
-    command: 'adb',
+  HCI.writeLine(`Opening ${url} on ${serial}.`)
+  await CLI.mustRun('adb', {
     args: [
       '-s',
       serial,
@@ -307,7 +326,7 @@ async function openExpoGoWhenMetroIsReady(): Promise<void> {
       '-a',
       'android.intent.action.VIEW',
       '-d',
-      EXPO_GO_URL,
+      url,
       '-p',
       EXPO_GO_APP_ID,
     ],
@@ -316,8 +335,7 @@ async function openExpoGoWhenMetroIsReady(): Promise<void> {
 }
 
 async function reverseMetroPort(serial: string): Promise<void> {
-  await CLI.mustRun({
-    command: 'adb',
+  await CLI.mustRun('adb', {
     args: ['-s', serial, 'reverse', `tcp:${EXPO_GO_METRO_PORT}`, `tcp:${EXPO_GO_METRO_PORT}`],
   })
 }

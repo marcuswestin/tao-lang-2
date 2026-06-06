@@ -9,8 +9,8 @@ import { wrap } from './test-utils/AST-Wrapper'
 
 const tsFence = '```ts'
 const fence = '```'
-const targetKitchenSinkPath = await FS.resolveRepoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
-const typeSystemTestsPath = await FS.resolveRepoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
+const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
+const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 
 describe('minimal Tao compiler', () => {
   test('reports parser syntax errors once', async () => {
