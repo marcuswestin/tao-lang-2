@@ -7,7 +7,7 @@ AfterEach(() => cleanup())
 
 Describe('Tao injection runtime', () => {
   Test('renders inject arguments as direct TS values', async () => {
-    const repoRoot = await Repo.getRoot()
+    const repoRoot = Repo.getRoot()
     const appDir = await FS.mkTmpDir(FS.resolvePath('tao-runtime-e2e-', { cwd: FS.tmpdir() }))
     const appPath = FS.resolvePath('Inject Args.tao', { cwd: appDir })
 

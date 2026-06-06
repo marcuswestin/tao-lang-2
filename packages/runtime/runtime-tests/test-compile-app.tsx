@@ -7,11 +7,10 @@ type RuntimeScreen = ReturnType<typeof render>
 
 /** compileAndRenderApp compiles a Tao app path, renders it, and returns the test screen. */
 export async function compileAndRenderApp(repoRoot: string, appPath: string): Promise<RuntimeScreen> {
-  const runtimePackageRoot = await FS.resolveRepoPath('packages/runtime')
+  const runtimePackageRoot = FS.repoPath('packages/runtime')
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
 
-  await CLI.mustRun({
-    command: await FS.resolveRepoPath('dev'),
+  await CLI.mustRun(FS.repoPath('dev'), {
     args: ['compile-app', appPath],
     cwd: repoRoot,
   })

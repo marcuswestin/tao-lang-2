@@ -13,7 +13,7 @@ type GeneratedApp = {
 
 /** generateApp generates the runtime app module from a Tao app file. */
 async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Promise<GeneratedApp> {
-  const runtimePackageRoot = opts.runtimePackageRoot ?? await defaultRuntimePackageRoot()
+  const runtimePackageRoot = opts.runtimePackageRoot ?? defaultRuntimePackageRoot()
   const sourcePath = FS.resolvePath(appPath)
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
   const compiled = await Compiler.compileFile(sourcePath)
@@ -34,8 +34,8 @@ const Runtime = {
 
 export default Runtime
 
-async function defaultRuntimePackageRoot(): Promise<string> {
-  return await FS.resolveRepoPath('packages/runtime')
+function defaultRuntimePackageRoot(): string {
+  return FS.repoPath('packages/runtime')
 }
 
 async function writeGeneratedApp(path: string, code: string): Promise<void> {

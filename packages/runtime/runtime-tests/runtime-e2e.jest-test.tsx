@@ -7,8 +7,8 @@ AfterEach(() => cleanup())
 
 Describe('Expo runtime', () => {
   Test('compiles and renders Kitchen Sink text and number aliases', async () => {
-    const repoRoot = await Repo.getRoot()
-    const kitchenSinkPath = await FS.resolveRepoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
+    const repoRoot = Repo.getRoot()
+    const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
     const screen = await compileAndRenderApp(repoRoot, kitchenSinkPath)
 
     Expect(screen.getByText('Hello, World!')).toBeDefined()
@@ -16,7 +16,7 @@ Describe('Expo runtime', () => {
   })
 
   Test('renders alias references to earlier aliases', async () => {
-    const repoRoot = await Repo.getRoot()
+    const repoRoot = Repo.getRoot()
     const appDir = await FS.mkTmpDir(FS.resolvePath('tao-runtime-e2e-', { cwd: FS.tmpdir() }))
     const appPath = FS.resolvePath('Ordered Alias.tao', { cwd: appDir })
 

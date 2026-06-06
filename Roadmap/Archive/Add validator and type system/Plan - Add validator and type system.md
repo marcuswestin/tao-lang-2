@@ -270,12 +270,12 @@ Likely commit unit:
 
 Validation:
 
-- Run `./agent just prep-commit` as the final repo gate.
+- Run `./agent just prep` as the final repo gate.
 
 Exit criteria:
 
 - The plan's implemented scope is reflected in Roadmap, app Purpose docs, tests, and package wiring.
-- The repo passes `prep-commit`.
+- The repo passes `prep`.
 - Remaining out-of-scope type-system and IDE work is listed as deferrals rather than left as stale active instructions.
 
 ## Validation summary
@@ -283,7 +283,7 @@ Exit criteria:
 - Parser and validator work should be tested through AST/diagnostic behavior, not generated TypeScript string matching.
 - Compiler behavior should be tested through source compilation success/failure and runtime app compilation.
 - App behavior should include current Kitchen Sink and Type System Tests once syntax is implemented.
-- Final validation is `./agent just prep-commit`.
+- Final validation is `./agent just prep`.
 
 ## Deferrals
 

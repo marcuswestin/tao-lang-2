@@ -8,6 +8,12 @@ type TerminalStreams = {
   output?: Writable
   interactive?: boolean
 }
+type ProcessColor = (value: string) => string
+
+/** OutputOptions declares the target stream for human-readable output. */
+export type OutputOptions = {
+  output?: Writable
+}
 
 /** TextPromptOptions declares options for text prompts. */
 export type TextPromptOptions = TerminalStreams & {
@@ -35,6 +41,20 @@ export type ChoicePromptOptions<ValueT extends string> = TerminalStreams & {
   defaultValue?: ValueT
 }
 
+const PROCESS_COLORS: Record<string, ProcessColor> = {
+  clean: red,
+  compile: green,
+  deps: blue,
+  dev: cyan,
+  expo: magenta,
+  extension: white,
+  fix: yellow,
+  just: yellow,
+  parser: green,
+  prep: blue,
+  test: green,
+}
+
 function isInteractive(options: TerminalStreams = {}): boolean {
   if (options.interactive !== undefined) {
     return options.interactive
@@ -44,6 +64,77 @@ function isInteractive(options: TerminalStreams = {}): boolean {
   const output = options.output ?? runtimeProcess.stdout
 
   return hasTruthyIsTTY(input) && hasTruthyIsTTY(output)
+}
+
+/** write writes human-readable output to stdout or the provided output stream. */
+export function write(message: string | Uint8Array, options: OutputOptions = {}): void {
+  ;(options.output ?? runtimeProcess.stdout).write(message)
+}
+
+/** writeLine writes human-readable text plus a newline to stdout or the provided output stream. */
+export function writeLine(message = '', options: OutputOptions = {}): void {
+  write(`${message}\n`, options)
+}
+
+/** writeError writes human-readable error output to stderr or the provided output stream. */
+export function writeError(message: string | Uint8Array, options: OutputOptions = {}): void {
+  ;(options.output ?? runtimeProcess.stderr).write(red(formatOutputMessage(message)))
+}
+
+/** writeErrorLine writes human-readable error text plus a newline to stderr or the provided output stream. */
+export function writeErrorLine(message = '', options: OutputOptions = {}): void {
+  writeError(`${message}\n`, options)
+}
+
+/** writeSuccess writes human-readable success output to stdout or the provided output stream. */
+export function writeSuccess(message: string | Uint8Array, options: OutputOptions = {}): void {
+  write(green(formatOutputMessage(message)), options)
+}
+
+/** logProcessInfo writes a prefixed informational process line. */
+export function logProcessInfo(processName: string, message: string): void {
+  writeLine(`${formatProcessPrefix(processName)} ${dim(message)}`)
+}
+
+/** logProcessOutput writes a prefixed process output line. */
+export function logProcessOutput(processName: string, message: string, options: { stderr?: boolean } = {}): void {
+  const line = `${formatProcessPrefix(processName)} ${dim(message)}\n`
+  if (options.stderr) {
+    writeErrorRaw(line)
+  } else {
+    write(line)
+  }
+}
+
+/** logProcessWarn writes a prefixed warning process line. */
+export function logProcessWarn(processName: string, message: string): void {
+  writeErrorRaw(`${formatProcessPrefix(processName)} ${yellow(message)}\n`)
+}
+
+/** logProcessError writes a prefixed error process line. */
+export function logProcessError(processName: string, message: string): void {
+  writeErrorRaw(`${formatProcessPrefix(processName)} ${red(message)}\n`)
+}
+
+/** formatProcessPrefix returns a colored process prefix. */
+export function formatProcessPrefix(processName: string): string {
+  const color = PROCESS_COLORS[processName] ?? blue
+  return `${color(`[${processName}]`)}${dim(':')}`
+}
+
+/** bold returns ANSI bold text. */
+export function bold(value: string): string {
+  return color(1, value)
+}
+
+/** dim returns ANSI dim text. */
+export function dim(value: string): string {
+  return color(2, value)
+}
+
+/** white returns ANSI white text. */
+export function white(value: string): string {
+  return color(37, value)
 }
 
 /** askText prompts for a text response. */
@@ -137,21 +228,24 @@ function getNonInteractiveDefault<T>(message: string, defaultValue: T | undefine
 
 function formatTextQuestion(options: TextPromptOptions): string {
   const suffix = options.defaultValue === undefined ? '' : ` [${options.defaultValue}]`
-  return `${options.message}${suffix}: `
+  return `${bold(white(`${options.message}${suffix}`))}: `
 }
 
 function formatConfirmQuestion(options: ConfirmPromptOptions): string {
   const suffix = options.defaultValue === true ? ' [Y/n]' : options.defaultValue === false ? ' [y/N]' : ' [y/n]'
-  return `${options.message}${suffix}: `
+  return `${bold(white(`${options.message}${suffix}`))}: `
 }
 
 function formatChoiceQuestion<ValueT extends string>(options: ChoicePromptOptions<ValueT>): string {
   const choices = options.choices
     .map((choice, index) => `${index + 1}) ${choice.label ?? choice.value}`)
-    .join(' ')
-  const suffix = options.defaultValue === undefined ? '' : ` [${options.defaultValue}]`
+    .join('\n')
+  const defaultChoice = options.defaultValue === undefined
+    ? undefined
+    : findChoice(options.choices, options.defaultValue)
+  const suffix = defaultChoice === undefined ? '' : ` [${defaultChoice.label ?? defaultChoice.value}]`
 
-  return `${options.message}${suffix} ${choices}: `
+  return `${bold(white(`${options.message}${suffix}`))}\n${choices}\n${bold(white('Choose'))}: `
 }
 
 function parseChoice<ValueT extends string>(
@@ -185,6 +279,42 @@ function writeOutput(options: TerminalStreams, message: string): void {
   ;(options.output ?? runtimeProcess.stdout).write(message)
 }
 
+function writeErrorRaw(message: string | Uint8Array, options: OutputOptions = {}): void {
+  ;(options.output ?? runtimeProcess.stderr).write(message)
+}
+
+function formatOutputMessage(message: string | Uint8Array): string {
+  return typeof message === 'string' ? message : Buffer.from(message).toString('utf8')
+}
+
 function hasTruthyIsTTY(stream: Readable | Writable): boolean {
   return (stream as { isTTY?: boolean }).isTTY === true
+}
+
+function blue(value: string): string {
+  return color(34, value)
+}
+
+function cyan(value: string): string {
+  return color(36, value)
+}
+
+function green(value: string): string {
+  return color(32, value)
+}
+
+function magenta(value: string): string {
+  return color(35, value)
+}
+
+function red(value: string): string {
+  return color(31, value)
+}
+
+function yellow(value: string): string {
+  return color(33, value)
+}
+
+function color(code: number, value: string): string {
+  return `\u001b[${code}m${value}\u001b[0m`
 }

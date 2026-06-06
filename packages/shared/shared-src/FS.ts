@@ -26,10 +26,10 @@ export function resolvePath(inputPath: string, options?: { cwd?: string }): stri
 }
 
 /**
- * resolveRepoPath resolves a slash-separated path from the Git repo root by default.
+ * repoPath resolves a slash-separated path from the Git repo root by default.
  */
-export async function resolveRepoPath(inputPath: string): Promise<string> {
-  return resolvePath(inputPath, { cwd: await Repo.getRoot() })
+export function repoPath(inputPath: string): string {
+  return resolvePath(inputPath, { cwd: Repo.getRoot() })
 }
 
 /**
