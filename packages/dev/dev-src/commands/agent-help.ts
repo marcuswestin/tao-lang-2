@@ -36,24 +36,29 @@ async function printAgentHelp(allowlistedCommands: readonly string[]): Promise<n
 Usage:
   ./agent help
   ./agent just <recipe> [args...]
+  ./agent audit-instructions [--strict] [--json]
+  ./agent merge-feature-preflight [--json]
   ./agent <allowlisted-command> [args...]
 
 Behavior:
   - just recipes run from the repo root.
-  - successful just recipe output is hidden to save tokens.
-  - failed just recipes replay captured stdout/stderr.
+  - successful quiet just recipes print one concise summary line.
+  - failed quiet just recipes save full logs under .artifacts/logs/agent.
   - shell commands run from the directory where ./agent was invoked.
   - use shell cd or tool workdir before invoking ./agent when you need another cwd.
 
 Examples:
   ./agent just prep
   ./agent just test
+  ./agent audit-instructions
+  ./agent merge-feature-preflight
+  ./agent codex exec -C . --sandbox read-only --ephemeral -
   ./agent rg -n 'pattern' packages
 
 Just recipes:
 ${Text.indentLines(justList.stdout.trimEnd(), 2)}
 
-Allowlisted shell commands:
+Allowlisted commands:
 `)
 
   for (const command of allowlistedCommands) {

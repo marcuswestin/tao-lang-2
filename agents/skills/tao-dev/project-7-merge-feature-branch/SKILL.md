@@ -10,6 +10,7 @@ Land a completed feature branch into `main`.
 
 ## Rules
 
+- Run `./agent merge-feature-preflight` before mutating merge state and resolve or report any blockers it finds.
 - Do not merge from `main`, `merged/...`, a detached HEAD, or a dirty worktree.
 - If the feature branch has uncommitted work, stop and use `commit-all-chunks` first.
 - Do not rename, remove, or clean up the feature branch until the squash commit is pushed to `main`.
@@ -22,6 +23,7 @@ Land a completed feature branch into `main`.
 1. Capture the branch and state:
 
    ```sh
+   ./agent merge-feature-preflight
    ./agent git status --short --branch
    ./agent git branch --show-current
    ./agent git worktree list --porcelain
