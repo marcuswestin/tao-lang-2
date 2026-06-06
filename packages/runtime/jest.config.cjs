@@ -11,7 +11,7 @@ module.exports = {
     '^@runtime/TR$': '<rootDir>/TaoRuntime-src/TR.ts',
     '^@runtime/(.*)$': '<rootDir>/runtime-src/$1',
     '^@shared$': '<rootDir>/../shared/shared-src/shared.ts',
-    '^@shared/test$': '<rootDir>/../shared/shared-src/test-jest.ts',
+    '^@shared/test$': '<rootDir>/../shared/shared-src/Test-Jest.ts',
     '^@shared/(.*)$': '<rootDir>/../shared/shared-src/$1',
     '^@jest/globals$': '<rootDir>/node_modules/@jest/globals',
     '^@babel/runtime/(.*)$': '<rootDir>/node_modules/@babel/runtime/$1',
