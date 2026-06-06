@@ -3,8 +3,8 @@ import { Text } from '@shared'
 import { type Compiled, gen, genTextLines } from '../codegen-util'
 
 export default {
-  /** CompileInjection generates a self-invoced block of the injected TS code. */
-  CompileInjection(injection: AST.Injection): Compiled {
+  /** Injection generates a self-invoked block of the injected TS code. */
+  Injection(injection: AST.Injection): Compiled {
     const code = stripTsFence(injection.tsCodeBlock)
     return gen`
       (function __injection__() {

@@ -23,5 +23,5 @@ export default {
 function compileValidated(result: ValidationResult): CompileResult {
   const errors = errorMessages(result.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, { errors })
-  return { code: RuntimeGen.CompileTaoFile(result.parsed.ast) }
+  return { code: RuntimeGen.TaoFile(result.parsed.ast) }
 }

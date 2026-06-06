@@ -50,7 +50,7 @@ describe('Tao validator structural diagnostics', () => {
   })
 
   test('returns parser diagnostics without running structural checks on syntax errors', async () => {
-    const result = await Validator.validateCode('view Legacy { }')
+    const result = await Validator.validateCode('ui Broken { render }')
 
     expect(result.diagnostics.some(diagnostic => diagnostic.source === 'parser')).toBe(true)
     expect(result.validatorDiagnostics).toEqual([])
@@ -148,6 +148,22 @@ describe('Tao validator structural diagnostics', () => {
     expect(validationErrorMessages(result)).toContain(viewValidationMessages.viewBody)
   })
 
+  test('rejects bare child invocations directly in view bodies', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      ui MainView {
+        Text "Hello"
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(viewValidationMessages.viewBody)
+  })
+
   test('rejects duplicate ui parameters', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { ui Text }
@@ -180,6 +196,23 @@ describe('Tao validator structural diagnostics', () => {
 
     expect(validationErrorMessages(missing)).toContain(viewValidationMessages.renderCount('MainView'))
     expect(validationErrorMessages(extra)).toContain(viewValidationMessages.renderCount('MainView'))
+  })
+
+  test('requires render to be the last ui body statement', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      ui MainView {
+        render Text "Hello"
+        alias Greeting = "Again"
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(viewValidationMessages.renderLast)
   })
 
   test('allows render inject as the only ui body statement', async () => {
@@ -237,7 +270,7 @@ describe('Tao validator structural diagnostics', () => {
     await testValidateCode(`
       app MyApp { ui MainView }
       alias Greeting = "Hello"
-      ui Stack {
+      layout Stack {
         render inject ${tsFence}
           return <>{_ViewProps.children}</>
         ${fence}
@@ -253,11 +286,143 @@ describe('Tao validator structural diagnostics', () => {
       ui MainView {
         alias Local = "Local"
         render Stack {
-          render Text Greeting
-          render ParameterEcho Local
+          Text Greeting
+          ParameterEcho Local
         }
       }
     `)
+  })
+
+  test('allows block-local aliases inside render child blocks', async () => {
+    await testValidateCode(`
+      app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui MainView {
+        alias Local = "Outer"
+        render Stack {
+          alias Local = "First"
+          Text Local
+          Stack {
+            alias Local = "Nested"
+            Text Local
+          }
+        }
+      }
+    `)
+  })
+
+  test('allows the same alias name in separate render child blocks', async () => {
+    await testValidateCode(`
+      app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui MainView {
+        render Stack {
+          Stack {
+            alias Local = "First"
+            Text Local
+          }
+          Stack {
+            alias Local = "Second"
+            Text Local
+          }
+        }
+      }
+    `)
+  })
+
+  test('rejects duplicate aliases in the same render child block', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui MainView {
+        render Stack {
+          alias Local = "First"
+          alias Local = "Second"
+          Text Local
+        }
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.duplicateName('Local'))
+  })
+
+  test('rejects duplicate aliases in nested child invocation blocks', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui MainView {
+        render Stack {
+          Stack {
+            alias Local = "First"
+            alias Local = "Second"
+            Text Local
+          }
+        }
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.duplicateName('Local'))
+  })
+
+  test('rejects nested child invocation aliases that shadow visible declarations', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui MainView {
+        render Stack {
+          Stack {
+            alias Text = "shadow"
+          }
+        }
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(aliasValidationMessages.duplicateName('Text'))
   })
 
   test('rejects alias references to later values', async () => {
@@ -297,14 +462,21 @@ describe('Tao validator structural diagnostics', () => {
   test('rejects local render arguments that reference later aliases', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
       ui Text Value text {
         render inject ${tsFence}
           return null
         ${fence}
       }
       ui MainView {
-        render Text Local
-        alias Local = "Hello"
+        render Stack {
+          Text Local
+          alias Local = "Hello"
+        }
       }
     `)
 
@@ -350,23 +522,58 @@ describe('Tao validator structural diagnostics', () => {
     expect(validationErrorMessages(viewAfterApp)).toContain(aliasValidationMessages.duplicateName('MyApp'))
   })
 
-  test('rejects local aliases that collide with visible declaration names', async () => {
-    const localViewName = await testValidateCodeWithErrors(`
+  test('rejects local aliases that shadow view declarations', async () => {
+    const aliasShadow = await testValidateCodeWithErrors(`
       app MyApp { ui MainView }
       ui MainView {
         alias Text = "Hello"
+        render Text Text
       }
-      ui Text Value text { }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
     `)
-    const localAppName = await testValidateCodeWithErrors(`
+    const parameterShadow = await testValidateCodeWithErrors(`
       app MyApp { ui MainView }
-      ui MainView {
-        alias MyApp = "Hello"
+      ui MainView Text text {
+        render Text Text
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
       }
     `)
 
-    expect(validationErrorMessages(localViewName)).toContain(aliasValidationMessages.duplicateName('Text'))
-    expect(validationErrorMessages(localAppName)).toContain(aliasValidationMessages.duplicateName('MyApp'))
+    expect(validationErrorMessages(aliasShadow)).toContain(aliasValidationMessages.duplicateName('Text'))
+    expect(validationErrorMessages(parameterShadow)).toContain(aliasValidationMessages.duplicateName('Text'))
+  })
+
+  test('allows local aliases that shadow file-level aliases', async () => {
+    await testValidateCode(`
+      app MyApp { ui MainView }
+      alias Greeting = "Outer"
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui MainView {
+        alias OuterGreeting = Greeting
+        render Stack {
+          alias Greeting = "Inner"
+          Text Greeting
+          Text OuterGreeting
+        }
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
   })
 
   test('rejects local aliases that shadow visible values', async () => {
@@ -376,16 +583,8 @@ describe('Tao validator structural diagnostics', () => {
         alias Label = "shadow"
       }
     `)
-    const fileAliasShadow = await testValidateCodeWithErrors(`
-      app MyApp { ui MainView }
-      alias Greeting = "Hello"
-      ui MainView {
-        alias Greeting = "shadow"
-      }
-    `)
 
     expect(validationErrorMessages(parameterShadow)).toContain(aliasValidationMessages.duplicateName('Label'))
-    expect(validationErrorMessages(fileAliasShadow)).toContain(aliasValidationMessages.duplicateName('Greeting'))
   })
 
   test('rejects alias self references as undeclared-before references', async () => {
@@ -462,8 +661,32 @@ describe('Tao validator structural diagnostics', () => {
       missing.diagnostics.find(diagnostic =>
         diagnostic.message === invocationValidationMessages.missingArgument('Tile', 'Count')
       )?.nodeType,
-    ).toBe(AST.Render.$type)
+    ).toBe(AST.RenderStatement.$type)
     expect(validationErrorMessages(extra)).toContain(invocationValidationMessages.extraArguments('Text', 1, 2))
+  })
+
+  test('rejects child view invocation arity and type errors', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui MainView {
+        render Stack {
+          Tile 42
+        }
+      }
+      ui Tile Title text, Count number {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(invocationValidationMessages.missingArgument('Tile', 'Count'))
+    expect(validationErrorMessages(result)).toContain("Argument for parameter 'Title' expects text, got number.")
   })
 
   test('rejects text and number argument mismatches through Typir', async () => {

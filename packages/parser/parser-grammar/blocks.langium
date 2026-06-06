@@ -9,13 +9,14 @@ entry BlocksGrammarEntrypoint:
     Block;
 
 Statement:
-    Declaration | AppUi | Injection | Render;
+    Declaration | AppUi | Injection | RenderStatement | ViewRender;
 
 Declaration:
-    AppDeclaration | UiDeclaration | AliasDeclaration;
+    AppDeclaration | UiDeclaration | LayoutDeclaration | AliasDeclaration;
 
 type TopLevelStatement = Declaration;
 type ViewStatement = AliasDeclaration | Render;
+type NamedDeclaration = Declaration | ParameterDeclaration;
 
 Block:
     '{' statements+=Statement* '}';

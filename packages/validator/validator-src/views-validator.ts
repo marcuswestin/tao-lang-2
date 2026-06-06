@@ -2,16 +2,18 @@ import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from './validation'
 
-/** viewValidationMessages declares structural diagnostics for Tao ui bodies. */
+/** viewValidationMessages declares structural diagnostics for Tao view bodies. */
 export const viewValidationMessages = {
-  duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this ui.`,
-  renderCount: (name: string) => `ui '${name}' must declare exactly one render statement.`,
-  viewBody: 'Only alias and render statements are allowed in ui bodies.',
-  renderTarget: '`render` must target a ui or inject block.',
-  renderInjectPlacement: '`render inject` must be the only statement in a ui body.',
+  duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this view.`,
+  renderCount: (name: string) => `view '${name}' must declare exactly one render statement.`,
+  renderLast: '`render` must be the last statement in a view body.',
+  viewBody: 'Only alias and render statements are allowed in view bodies.',
+  renderBlock: 'Only alias, render, and view invocation statements are allowed in render blocks.',
+  renderTarget: '`render` must target a view or inject block.',
+  renderInjectPlacement: '`render inject` must be the only statement in a view body.',
 } as const
 
-/** validateViews validates ui declarations and ui-body structure. */
+/** validateViews validates view declarations and view-body structure. */
 export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const view of ASTUtils.streamAllContents(file).filter(AST.isViewDeclaration)) {
     validateViewDeclaration(view, ctx)
@@ -21,7 +23,8 @@ export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {
 function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationContext): void {
   validateDuplicateParameters(view, ctx)
   validateRenderCount(view, ctx)
-  validateViewBlock(view.block, ctx, true)
+  validateRenderLast(view, ctx)
+  validateViewBodyBlock(view.block, ctx)
 }
 
 function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationContext): void {
@@ -36,21 +39,28 @@ function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationC
 }
 
 function validateRenderCount(view: AST.ViewDeclaration, ctx: ValidationContext): void {
-  const renderCount = view.block.statements.filter(AST.isRender).length
+  const renderCount = view.block.statements.filter(AST.isRenderStatement).length
   if (renderCount !== 1) {
     ctx.error(viewValidationMessages.renderCount(view.name), view)
   }
 }
 
-function validateViewBlock(block: AST.Block, ctx: ValidationContext, allowAliases: boolean): void {
+function validateRenderLast(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  const renderIndex = view.block.statements.findIndex(AST.isRenderStatement)
+  if (renderIndex >= 0 && renderIndex !== view.block.statements.length - 1) {
+    ctx.error(viewValidationMessages.renderLast, view.block.statements[renderIndex]!)
+  }
+}
+
+function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
   for (const statement of block.statements) {
-    if (allowAliases && AST.isAliasDeclaration(statement)) {
+    if (AST.isAliasDeclaration(statement)) {
       continue
     }
-    if (AST.isRender(statement)) {
+    if (AST.isRenderStatement(statement)) {
       validateRender(statement, block, ctx)
       if (statement.block) {
-        validateViewBlock(statement.block, ctx, false)
+        validateRenderBlock(statement.block, ctx)
       }
       continue
     }
@@ -58,7 +68,25 @@ function validateViewBlock(block: AST.Block, ctx: ValidationContext, allowAliase
   }
 }
 
-function validateRender(render: AST.Render, owningBlock: AST.Block, ctx: ValidationContext): void {
+function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
+  for (const statement of block.statements) {
+    if (AST.isAliasDeclaration(statement)) {
+      continue
+    }
+    if (AST.isRender(statement)) {
+      if (AST.isRenderStatement(statement)) {
+        validateRender(statement, block, ctx)
+      }
+      if (statement.block) {
+        validateRenderBlock(statement.block, ctx)
+      }
+      continue
+    }
+    ctx.error(viewValidationMessages.renderBlock, statement)
+  }
+}
+
+function validateRender(render: AST.RenderStatement, owningBlock: AST.Block, ctx: ValidationContext): void {
   if (render.view === undefined && render.injection === undefined) {
     ctx.error(viewValidationMessages.renderTarget, render)
   }

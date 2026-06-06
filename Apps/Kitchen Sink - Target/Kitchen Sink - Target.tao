@@ -6,15 +6,23 @@ alias Greeting = "Hello, World!"
 alias LaunchCount = 3
 
 ui MainView {
+    alias LocalText = "Text from a local alias"
+    alias OuterGreeting = Greeting
     render Stack {
-        render Text Greeting { }
-        render StatTile "Launch count", LaunchCount { }
+        alias Greeting = "Nested scope greeting"
+        Text OuterGreeting { }
+        Text LocalText
+        Text Greeting
+        Text "Hello World"
+        CountText LaunchCount
     }
 }
 
-ui Stack {
+layout Stack {
     render inject ```ts
-        return <>{_ViewProps.children}</>
+        return <>
+            {_ViewProps.children}
+        </>
     ```
 }
 
@@ -25,10 +33,9 @@ ui Text Value text {
     ```
 }
 
-ui StatTile Label text, Count number {
+ui CountText Count number {
     render inject ```ts
-        const label = _ViewProps.Label.evaluate();
         const count = _ViewProps.Count.evaluate();
-        return <RN.Text>{label.jsValue}: {count.jsValue}</RN.Text>
+        return <RN.Text>Launch count: {count.jsValue}</RN.Text>
     ```
 }

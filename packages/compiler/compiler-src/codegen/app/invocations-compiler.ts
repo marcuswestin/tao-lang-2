@@ -1,52 +1,59 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type Compiled, gen, genJoin, genList, genName } from '../codegen-util'
+import { type Compiled, gen, genJoin, genName, genScopeName } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
-  /** CompileRender compiles a Tao render statement into a runtime render call. */
-  CompileRender(render: AST.Render): Compiled {
+  /** RenderStatement compiles a Tao render statement into a JSX fragment. */
+  RenderStatement(render: AST.RenderStatement): Compiled {
     if (render.injection) {
       return Compile.Injection(render.injection)
     }
 
+    return Compile.Render(render)
+  },
+
+  /** ViewRender compiles a Tao child view invocation into a JSX fragment. */
+  ViewRender(render: AST.ViewRender): Compiled {
+    return Compile.Render(render)
+  },
+
+  /** Render compiles a Tao view invocation into a JSX fragment. */
+  Render(render: AST.Render): Compiled {
     const invocation = ASTUtils.resolveRenderInvocation(render)
     const view = invocation.view
-    Assert.defined(view, 'validated render targets a ui declaration', { render: render.view?.$refText })
+    Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
 
-    const props = Compile.RenderProps(invocation)
-    const children = render.block?.statements ?? []
+    const renderArguments = Compile.RenderArguments(invocation)
+    const block = render.block
+    const children = block?.statements ?? []
     if (children.length === 0) {
-      return gen`TR.Render(${genName(view)}, ${props})`
+      return gen`<${genScopeName(view)}${renderArguments} />`
     }
+    Assert.defined(block, 'render with child statements has a block')
 
     return gen`
-      TR.Render(
-        ${genName(view)},
-        ${props},
-        TR.RenderChildren(() => {
-          const _ViewElements: React.ReactNode[] = []
-          ${genList(children, Compile.ViewStatement)}
-          return _ViewElements
-        }),
-      )
+      <${genScopeName(view)}${renderArguments}>
+        {TR.BlockScope(_Scope, _Scope => {
+          ${Compile.RenderBlockBody(block)}
+        })}
+      </${genScopeName(view)}>
     `
   },
 
-  /** CompileRenderProps compiles render arguments into runtime render props. */
-  CompileRenderProps(invocation: ASTUtils.RenderInvocation): Compiled {
-    const props = genJoin(invocation.pairs, Compile.InvocationPair)
-    return gen`TR.RenderProps({ ${props} })`
+  /** RenderArguments compiles render invocation arguments into JSX props. */
+  RenderArguments(invocation: ASTUtils.ResolvedRenderInvocation): Compiled {
+    return genJoin(invocation.pairs, Compile.InvocationArgument, { separator: '' })
   },
 
-  /** CompileInvocationPair compiles one render argument-to-parameter prop entry. */
-  CompileInvocationPair(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen`${genName(pair.parameter)}: ${Compile.Argument(pair.argument)}`
+  /** InvocationArgument compiles one render invocation argument into a JSX prop. */
+  InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
+    return gen` ${genName(pair.parameter)}={${Compile.Argument(pair.argument)}}`
   },
 
-  /** CompileArgument compiles a Tao render argument into a runtime value expression. */
-  CompileArgument(argument: AST.Argument): Compiled {
+  /** Argument compiles a Tao render argument into a runtime value expression. */
+  Argument(argument: AST.Argument): Compiled {
     return Compile.Expression(argument.value)
   },
 } as const

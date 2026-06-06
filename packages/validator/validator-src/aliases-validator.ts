@@ -17,37 +17,20 @@ export function validateAliases(file: AST.TaoFile, ctx: ValidationContext): void
   reportAliasReferenceOrder(allAliases(file), ctx)
   reportLocalValueReferenceOrder(file, ctx)
 
+  const fileViews = file.statements.filter(AST.isViewDeclaration)
   for (const view of ASTUtils.streamAllContents(file).filter(AST.isViewDeclaration)) {
-    const visible = new Map(fileDeclarations.map(declaration => [declaration.name, declaration] as const))
-    reportNameCollisions(view.parameterList?.parameters ?? [], visible, ctx)
-    addVisibleNames(view.parameterList?.parameters ?? [], visible)
-    reportDuplicateNames(aliasesOwnedByView(view), visible, ctx)
-  }
-}
-
-function reportNameCollisions(
-  declarations: readonly NamedDeclaration[],
-  visible: Map<string, NamedDeclaration>,
-  ctx: ValidationContext,
-): void {
-  for (const declaration of declarations) {
-    if (visible.has(declaration.name)) {
-      ctx.error(aliasValidationMessages.duplicateName(declaration.name), declaration)
-    }
-  }
-}
-
-function addVisibleNames(declarations: readonly NamedDeclaration[], visible: Map<string, NamedDeclaration>): void {
-  for (const declaration of declarations) {
-    if (!visible.has(declaration.name)) {
-      visible.set(declaration.name, declaration)
+    const parameters = view.parameterList?.parameters ?? []
+    reportNameConflicts(parameters, visibleDeclarations(fileViews), ctx)
+    for (const block of blocksOwnedByView(view)) {
+      const blockNames = visibleDeclarations([...fileViews, ...parameters])
+      reportDuplicateNames(aliasesOwnedByBlock(block), blockNames, ctx)
     }
   }
 }
 
 function reportDuplicateNames(
-  declarations: readonly NamedDeclaration[],
-  visible: Map<string, NamedDeclaration>,
+  declarations: readonly AST.NamedDeclaration[],
+  visible: Map<string, AST.NamedDeclaration>,
   ctx: ValidationContext,
 ): void {
   for (const declaration of declarations) {
@@ -57,6 +40,22 @@ function reportDuplicateNames(
     }
     visible.set(declaration.name, declaration)
   }
+}
+
+function reportNameConflicts(
+  declarations: readonly AST.NamedDeclaration[],
+  visible: Map<string, AST.NamedDeclaration>,
+  ctx: ValidationContext,
+): void {
+  for (const declaration of declarations) {
+    if (visible.has(declaration.name)) {
+      ctx.error(aliasValidationMessages.duplicateName(declaration.name), declaration)
+    }
+  }
+}
+
+function visibleDeclarations(declarations: readonly AST.NamedDeclaration[]): Map<string, AST.NamedDeclaration> {
+  return new Map(declarations.map(declaration => [declaration.name, declaration] as const))
 }
 
 function allAliases(file: AST.TaoFile): AST.AliasDeclaration[] {
@@ -99,10 +98,23 @@ function isDeclaredBefore(declaration: AST.ValueDeclaration, use: AST.Node): boo
   return declarationOffset !== undefined && useOffset !== undefined && declarationOffset < useOffset
 }
 
-function aliasesOwnedByView(view: AST.ViewDeclaration): AST.AliasDeclaration[] {
-  return ASTUtils.streamAllContents(view.block)
-    .filter(AST.isAliasDeclaration)
-    .filter(alias => findOwningView(alias) === view)
+function blocksOwnedByView(view: AST.ViewDeclaration): AST.Block[] {
+  const blocks: AST.Block[] = []
+  collectRenderBlocks(view.block, blocks)
+  return blocks
+}
+
+function collectRenderBlocks(block: AST.Block, blocks: AST.Block[]): void {
+  blocks.push(block)
+  for (const statement of block.statements) {
+    if (AST.isRender(statement) && statement.block) {
+      collectRenderBlocks(statement.block, blocks)
+    }
+  }
+}
+
+function aliasesOwnedByBlock(block: AST.Block): AST.AliasDeclaration[] {
+  return block.statements.filter(AST.isAliasDeclaration)
 }
 
 function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
@@ -126,5 +138,3 @@ function findOwningAlias(node: AST.Node): AST.AliasDeclaration | undefined {
   }
   return undefined
 }
-
-type NamedDeclaration = AST.Declaration | AST.ValueDeclaration

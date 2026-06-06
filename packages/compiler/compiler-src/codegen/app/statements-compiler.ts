@@ -1,18 +1,24 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled } from '../codegen-util'
+import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
-  /** CompileStatement compiles one Tao statement. */
-  CompileStatement(statement: AST.Statement): Compiled {
+  /** Statement compiles one Tao statement. */
+  Statement(statement: AST.Statement): Compiled {
     return Switch.type(statement, {
       AliasDeclaration: Compile.AliasDeclaration,
       AppDeclaration: Compile.App,
       AppUi: Compile.AppUi,
       Injection: Compile.Injection,
-      Render: Compile.Render,
+      LayoutDeclaration: Compile.LayoutDeclaration,
+      RenderStatement: compileRenderStatement,
       UiDeclaration: Compile.UiDeclaration,
+      ViewRender: Compile.ViewRender,
     })
   },
 } as const
+
+function compileRenderStatement(render: AST.RenderStatement): Compiled {
+  return gen`return ${Compile.RenderStatement(render)}`
+}
