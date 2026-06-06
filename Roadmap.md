@@ -7,7 +7,12 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
-- [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
+- [ ] Add runtime stdlib, module imports, and `inject file ./path/to/file.ts`
+  - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough `share`/visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
+- [ ] Add layout/style arguments and default app-shell UI baseline
+  - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `_taoLayout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
+- [ ] Add state/actions/control mini slice
+  - Import `state`, `action`, action parameters/values, inline `action {}`, `set`, `do`, `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
 - [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
 - [ ] Update target kitchen sink to have lots of intended parts featured
@@ -35,7 +40,6 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Enable over-the-network dev app running for ios device
 
 - Add followups for later:
-  - Add `import ./path/to/DateUtils.ts as DateUtils`
   - Think through how to do app testing, and how to use that for our repo test apps tests
   - Compiler: Add codegen tracing/source maps when needed
 
