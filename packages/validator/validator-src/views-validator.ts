@@ -5,13 +5,17 @@ import type { ValidationContext } from './validation'
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
 export const viewValidationMessages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this view.`,
+  reservedParameter: (name: string) => `Parameter name '${name}' is reserved for generated view props.`,
   renderCount: (name: string) => `view '${name}' must declare exactly one render statement.`,
   renderLast: '`render` must be the last statement in a view body.',
   viewBody: 'Only alias and render statements are allowed in view bodies.',
   renderBlock: 'Only alias, render, and view invocation statements are allowed in render blocks.',
+  renderBlockAliasPlacement: 'Aliases in render blocks must be declared before child view invocations.',
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
 } as const
+
+const reservedParameterNames = new Set(['children', 'key', 'ref'])
 
 /** validateViews validates view declarations and view-body structure. */
 export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {
@@ -30,6 +34,9 @@ function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationConte
 function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationContext): void {
   const seen = new Set<string>()
   for (const parameter of view.parameterList?.parameters ?? []) {
+    if (reservedParameterNames.has(parameter.name)) {
+      ctx.error(viewValidationMessages.reservedParameter(parameter.name), parameter)
+    }
     if (seen.has(parameter.name)) {
       ctx.error(viewValidationMessages.duplicateParameter(parameter.name), parameter)
       continue
@@ -69,11 +76,16 @@ function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
 }
 
 function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
+  let hasChildInvocation = false
   for (const statement of block.statements) {
     if (AST.isAliasDeclaration(statement)) {
+      if (hasChildInvocation) {
+        ctx.error(viewValidationMessages.renderBlockAliasPlacement, statement)
+      }
       continue
     }
     if (AST.isRender(statement)) {
+      hasChildInvocation = true
       if (AST.isRenderStatement(statement)) {
         validateRender(statement, block, ctx)
       }

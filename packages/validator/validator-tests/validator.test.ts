@@ -174,6 +174,31 @@ describe('Tao validator structural diagnostics', () => {
     expect(validationErrorMessages(result)).not.toContain(aliasValidationMessages.duplicateName('Value'))
   })
 
+  test('rejects generated view prop names as parameter names', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui ChildrenView }
+      ui ChildrenView children text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui KeyView key text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui RefView ref text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(viewValidationMessages.reservedParameter('children'))
+    expect(validationErrorMessages(result)).toContain(viewValidationMessages.reservedParameter('key'))
+    expect(validationErrorMessages(result)).toContain(viewValidationMessages.reservedParameter('ref'))
+  })
+
   test('requires exactly one render statement in ui bodies', async () => {
     const missing = await testValidateCodeWithErrors(`
       app MyApp { ui MainView }
@@ -318,6 +343,31 @@ describe('Tao validator structural diagnostics', () => {
         }
       }
     `)
+  })
+
+  test('requires render block aliases before child view invocations', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { ui MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      ui MainView {
+        render Stack {
+          Text "First"
+          alias Later = "Second"
+          Text Later
+        }
+      }
+    `)
+
+    expect(validationErrorMessages(result)).toContain(viewValidationMessages.renderBlockAliasPlacement)
   })
 
   test('allows the same alias name in separate render child blocks', async () => {
