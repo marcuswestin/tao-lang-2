@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { describe, expect, test } from 'bun:test'
+import { Describe, Expect, Test } from '@shared/test'
 import { AST, Parser } from '../parser-src/parser'
 import { testParseCode } from './test-parse'
 
@@ -7,62 +7,59 @@ const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
 const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 
-function expectIs<T>(value: unknown, guard: (value: unknown) => value is T): asserts value is T {
-  expect(guard(value)).toBe(true)
-}
-
-describe('minimal Tao parser', () => {
-  test('parses the current Kitchen Sink app', async () => {
+Describe('minimal Tao parser', () => {
+  Test('parses the current Kitchen Sink app', async () => {
     const parsed = await Parser.parseFile(kitchenSinkPath)
 
-    expect(parsed.diagnostics).toEqual([])
+    Expect(parsed.diagnostics).toEqual([])
 
     const [app, greetingAlias, launchCountAlias, mainView, stackView, textView, countTextView] = parsed.ast.statements
-    expectIs(app, AST.isAppDeclaration)
-    expectIs(greetingAlias, AST.isAliasDeclaration)
-    expectIs(launchCountAlias, AST.isAliasDeclaration)
-    expectIs(mainView, AST.isUiDeclaration)
-    expectIs(stackView, AST.isLayoutDeclaration)
-    expectIs(textView, AST.isUiDeclaration)
-    expectIs(countTextView, AST.isUiDeclaration)
+    Expect.Is(app, AST.isAppDeclaration)
+    Expect.Is(greetingAlias, AST.isAliasDeclaration)
+    Expect.Is(launchCountAlias, AST.isAliasDeclaration)
+    Expect.Is(mainView, AST.isUiDeclaration)
+    Expect.Is(stackView, AST.isLayoutDeclaration)
+    Expect.Is(textView, AST.isUiDeclaration)
+    Expect.Is(countTextView, AST.isUiDeclaration)
 
-    expect(app.name).toBe('KitchenSink')
+    Expect(app.name).toBe('KitchenSink')
     const appRoot = app.block.statements[0]
-    expectIs(appRoot, AST.isAppUi)
-    expect(appRoot.ui.ref?.name).toBe('MainView')
+    Expect.Is(appRoot, AST.isAppUi)
+    Expect(appRoot.ui.ref?.name).toBe('MainView')
 
-    expect(greetingAlias.name).toBe('Greeting')
-    expectIs(greetingAlias.value, AST.isStringLiteral)
-    expect(launchCountAlias.name).toBe('LaunchCount')
-    expectIs(launchCountAlias.value, AST.isNumberLiteral)
+    Expect(greetingAlias.name).toBe('Greeting')
+    Expect.Is(greetingAlias.value, AST.isStringLiteral)
+    Expect(launchCountAlias.name).toBe('LaunchCount')
+    Expect.Is(launchCountAlias.value, AST.isNumberLiteral)
 
-    expect(mainView.name).toBe('MainView')
+    Expect(mainView.name).toBe('MainView')
     const [localTextAlias, outerGreetingAlias, mainRender] = mainView.block.statements
-    expectIs(localTextAlias, AST.isAliasDeclaration)
-    expectIs(outerGreetingAlias, AST.isAliasDeclaration)
-    expectIs(mainRender, AST.isRenderStatement)
-    expect(mainRender.view?.ref?.name).toBe('Stack')
-    expect(localTextAlias.name).toBe('LocalText')
-    expect(outerGreetingAlias.name).toBe('OuterGreeting')
-    expectIs(outerGreetingAlias.value, AST.isValueReference)
-    expect(outerGreetingAlias.value.target.ref?.name).toBe('Greeting')
+    Expect.Is(localTextAlias, AST.isAliasDeclaration)
+    Expect.Is(outerGreetingAlias, AST.isAliasDeclaration)
+    Expect.Is(mainRender, AST.isRenderStatement)
+    Expect(mainRender.view?.ref?.name).toBe('Stack')
+    Expect(localTextAlias.name).toBe('LocalText')
+    Expect(outerGreetingAlias.name).toBe('OuterGreeting')
+    Expect.Is(outerGreetingAlias.value, AST.isValueReference)
+    Expect(outerGreetingAlias.value.target.ref?.name).toBe('Greeting')
 
     const [blockGreetingAlias] = mainRender.block?.statements ?? []
-    expectIs(blockGreetingAlias, AST.isAliasDeclaration)
-    expect(blockGreetingAlias.name).toBe('Greeting')
+    Expect.Is(blockGreetingAlias, AST.isAliasDeclaration)
+    Expect(blockGreetingAlias.name).toBe('Greeting')
     const childInvocations = mainRender.block?.statements.filter(AST.isViewRender) ?? []
-    expect(childInvocations).toHaveLength(5)
+    Expect(childInvocations).toHaveLength(5)
     const [outerText, shadowedText, nestedText, literalText, countText] = childInvocations
-    expectIs(outerText, AST.isViewRender)
-    expectIs(shadowedText, AST.isViewRender)
-    expectIs(nestedText, AST.isViewRender)
-    expectIs(literalText, AST.isViewRender)
-    expectIs(countText, AST.isViewRender)
-    expect(outerText.view.ref?.name).toBe('Text')
-    expect(shadowedText.view.ref?.name).toBe('Text')
-    expect(nestedText.view.ref?.name).toBe('Text')
-    expect(literalText.view.ref?.name).toBe('Text')
-    expect(countText.view.ref?.name).toBe('CountText')
+    Expect.Is(outerText, AST.isViewRender)
+    Expect.Is(shadowedText, AST.isViewRender)
+    Expect.Is(nestedText, AST.isViewRender)
+    Expect.Is(literalText, AST.isViewRender)
+    Expect.Is(countText, AST.isViewRender)
+    Expect(outerText.view.ref?.name).toBe('Text')
+    Expect(shadowedText.view.ref?.name).toBe('Text')
+    Expect(nestedText.view.ref?.name).toBe('Text')
+    Expect(literalText.view.ref?.name).toBe('Text')
+    Expect(countText.view.ref?.name).toBe('CountText')
+
     const [greetingArg, shadowArg, nestedArg, literalArg, countArg] = [
       outerText.argumentList?.arguments[0]?.value,
       shadowedText.argumentList?.arguments[0]?.value,
@@ -70,49 +67,50 @@ describe('minimal Tao parser', () => {
       literalText.argumentList?.arguments[0]?.value,
       countText.argumentList?.arguments[0]?.value,
     ]
-    expectIs(greetingArg, AST.isValueReference)
-    expectIs(shadowArg, AST.isValueReference)
-    expectIs(nestedArg, AST.isValueReference)
-    expectIs(literalArg, AST.isStringLiteral)
-    expectIs(countArg, AST.isValueReference)
-    expect(greetingArg.target.ref?.name).toBe('OuterGreeting')
-    expect(shadowArg.target.ref?.name).toBe('LocalText')
-    expect(nestedArg.target.ref?.name).toBe('Greeting')
-    expect(literalArg.value).toBe('Hello World')
-    expect(countArg.target.ref?.name).toBe('LaunchCount')
+    Expect.Is(greetingArg, AST.isValueReference)
+    Expect.Is(shadowArg, AST.isValueReference)
+    Expect.Is(nestedArg, AST.isValueReference)
+    Expect.Is(literalArg, AST.isStringLiteral)
+    Expect.Is(countArg, AST.isValueReference)
+    Expect(greetingArg.target.ref?.name).toBe('OuterGreeting')
+    Expect(shadowArg.target.ref?.name).toBe('LocalText')
+    Expect(nestedArg.target.ref?.name).toBe('Greeting')
+    Expect(literalArg.value).toBe('Hello World')
+    Expect(countArg.target.ref?.name).toBe('LaunchCount')
 
-    expect(stackView.name).toBe('Stack')
-    expect(stackView.parameterList).toBeUndefined()
-
+    Expect(stackView.name).toBe('Stack')
+    Expect(stackView.parameterList).toBeUndefined()
     const stackRender = stackView.block.statements[0]
-    expectIs(stackRender, AST.isRenderStatement)
-    expect(stackRender.injection?.tsCodeBlock).toContain('_ViewProps.children')
+    Expect.Is(stackRender, AST.isRenderStatement)
+    Expect(stackRender.injection?.tsCodeBlock).toContain('_ViewProps.children')
 
-    expect(textView.name).toBe('Text')
-    expect(textView.parameterList?.parameters[0]?.name).toBe('Value')
-    expect(textView.parameterList?.parameters[0]?.type).toBe('text')
-
+    Expect(textView.name).toBe('Text')
+    Expect(textView.parameterList?.parameters[0]?.name).toBe('Value')
+    Expect(textView.parameterList?.parameters[0]?.type).toBe('text')
     const textRender = textView.block.statements[0]
-    expectIs(textRender, AST.isRenderStatement)
-    expect(textRender.injection?.tsCodeBlock).toContain('_ViewProps.Value.evaluate')
+    Expect.Is(textRender, AST.isRenderStatement)
+    Expect(textRender.injection?.argumentList?.arguments).toHaveLength(1)
 
-    expect(countTextView.name).toBe('CountText')
-    expect(countTextView.parameterList?.parameters[0]?.name).toBe('Count')
-    expect(countTextView.parameterList?.parameters[0]?.type).toBe('number')
+    Expect(countTextView.name).toBe('CountText')
+    Expect(countTextView.parameterList?.parameters[0]?.name).toBe('Count')
+    Expect(countTextView.parameterList?.parameters[0]?.type).toBe('number')
+    const countRender = countTextView.block.statements[0]
+    Expect.Is(countRender, AST.isRenderStatement)
+    Expect(countRender.injection?.argumentList?.arguments).toHaveLength(1)
   })
 
-  test('parses inject render declarations', async () => {
+  Test('parses inject render declarations', async () => {
     const parsed = await testParseCode('ui Native { render inject ```ts\nreturn null\n``` }')
     const view = parsed.ast.statements[0]
 
-    expectIs(view, AST.isUiDeclaration)
+    Expect.Is(view, AST.isUiDeclaration)
 
     const render = view.block.statements[0]
-    expectIs(render, AST.isRenderStatement)
-    expect(render.injection?.tsCodeBlock).toContain('return null')
+    Expect.Is(render, AST.isRenderStatement)
+    Expect(render.injection?.tsCodeBlock).toContain('return null')
   })
 
-  test('parses layout declarations and child view invocations', async () => {
+  Test('parses layout declarations and child view invocations', async () => {
     const parsed = await testParseCode(`
       app MyApp { ui MainView }
       ui MainView {
@@ -134,21 +132,21 @@ describe('minimal Tao parser', () => {
       }
     `)
     const layout = parsed.ast.statements.find(statement => AST.isLayoutDeclaration(statement))
-    expectIs(layout, AST.isLayoutDeclaration)
+    Expect.Is(layout, AST.isLayoutDeclaration)
     const mainView = parsed.ast.statements.find(statement =>
       AST.isUiDeclaration(statement) && statement.name === 'MainView'
     )
-    expectIs(mainView, AST.isUiDeclaration)
+    Expect.Is(mainView, AST.isUiDeclaration)
     const render = mainView.block.statements[0]
-    expectIs(render, AST.isRenderStatement)
+    Expect.Is(render, AST.isRenderStatement)
     const [_localAlias, firstChild, secondChild] = render.block?.statements ?? []
-    expectIs(firstChild, AST.isViewRender)
-    expectIs(secondChild, AST.isViewRender)
-    expect(firstChild.view.ref?.name).toBe('Text')
-    expect(secondChild.view.ref?.name).toBe('Text')
+    Expect.Is(firstChild, AST.isViewRender)
+    Expect.Is(secondChild, AST.isViewRender)
+    Expect(firstChild.view.ref?.name).toBe('Text')
+    Expect(secondChild.view.ref?.name).toBe('Text')
   })
 
-  test('parses aliases, number literals, and value references', async () => {
+  Test('parses aliases, number literals, and value references', async () => {
     const parsed = await testParseCode(`
       alias Greeting = "Hello"
       alias LaunchCount = 3
@@ -164,37 +162,37 @@ describe('minimal Tao parser', () => {
 
     const [greetingAlias, launchCountAlias, _textView, _statTileView, mainView] = parsed.ast.statements
 
-    expectIs(greetingAlias, AST.isAliasDeclaration)
-    expectIs(launchCountAlias, AST.isAliasDeclaration)
-    expectIs(mainView, AST.isUiDeclaration)
+    Expect.Is(greetingAlias, AST.isAliasDeclaration)
+    Expect.Is(launchCountAlias, AST.isAliasDeclaration)
+    Expect.Is(mainView, AST.isUiDeclaration)
 
-    expectIs(greetingAlias.value, AST.isStringLiteral)
-    expectIs(launchCountAlias.value, AST.isNumberLiteral)
-    expect(launchCountAlias.value.value).toBe(3)
-    expect(mainView.parameterList?.parameters[0]?.type).toBe('text')
+    Expect.Is(greetingAlias.value, AST.isStringLiteral)
+    Expect.Is(launchCountAlias.value, AST.isNumberLiteral)
+    Expect(launchCountAlias.value.value).toBe(3)
+    Expect(mainView.parameterList?.parameters[0]?.type).toBe('text')
 
     const [localAlias, textRender, statRender] = mainView.block.statements
-    expectIs(localAlias, AST.isAliasDeclaration)
-    expectIs(textRender, AST.isRenderStatement)
-    expectIs(statRender, AST.isRenderStatement)
+    Expect.Is(localAlias, AST.isAliasDeclaration)
+    Expect.Is(textRender, AST.isRenderStatement)
+    Expect.Is(statRender, AST.isRenderStatement)
 
-    expectIs(localAlias.value, AST.isValueReference)
-    expect(localAlias.value.target.ref?.name).toBe('Label')
+    Expect.Is(localAlias.value, AST.isValueReference)
+    Expect(localAlias.value.target.ref?.name).toBe('Label')
 
     const textArg = textRender.argumentList?.arguments[0]?.value
-    expectIs(textArg, AST.isValueReference)
-    expect(textArg.target.ref?.name).toBe('LocalLabel')
+    Expect.Is(textArg, AST.isValueReference)
+    Expect(textArg.target.ref?.name).toBe('LocalLabel')
 
     const statArgs = statRender.argumentList?.arguments.map(argument => argument.value)
-    expect(statArgs?.map(argument => AST.isValueReference(argument))).toEqual([true, true])
+    Expect(statArgs?.map(argument => AST.isValueReference(argument))).toEqual([true, true])
     const [labelArg, countArg] = statArgs ?? []
-    expectIs(labelArg, AST.isValueReference)
-    expectIs(countArg, AST.isValueReference)
-    expect(labelArg.target.ref?.name).toBe('Greeting')
-    expect(countArg.target.ref?.name).toBe('LaunchCount')
+    Expect.Is(labelArg, AST.isValueReference)
+    Expect.Is(countArg, AST.isValueReference)
+    Expect(labelArg.target.ref?.name).toBe('Greeting')
+    Expect(countArg.target.ref?.name).toBe('LaunchCount')
   })
 
-  test('resolves value references through nested scope shadowing', async () => {
+  Test('resolves value references through nested scope shadowing', async () => {
     const parsed = await testParseCode(`
       alias Greeting = "File"
 
@@ -224,65 +222,65 @@ describe('minimal Tao parser', () => {
     `)
 
     const [fileGreetingAlias, _stackView, _textView, mainView] = parsed.ast.statements
-    expectIs(fileGreetingAlias, AST.isAliasDeclaration)
-    expectIs(mainView, AST.isUiDeclaration)
+    Expect.Is(fileGreetingAlias, AST.isAliasDeclaration)
+    Expect.Is(mainView, AST.isUiDeclaration)
 
     const labelParameter = mainView.parameterList?.parameters[0]
-    expectIs(labelParameter, AST.isParameterDeclaration)
+    Expect.Is(labelParameter, AST.isParameterDeclaration)
 
     const [viewGreetingAlias, labelAlias, render] = mainView.block.statements
-    expectIs(viewGreetingAlias, AST.isAliasDeclaration)
-    expectIs(labelAlias, AST.isAliasDeclaration)
-    expectIs(render, AST.isRenderStatement)
-    expectIs(labelAlias.value, AST.isValueReference)
-    expect(labelAlias.value.target.ref).toBe(labelParameter)
+    Expect.Is(viewGreetingAlias, AST.isAliasDeclaration)
+    Expect.Is(labelAlias, AST.isAliasDeclaration)
+    Expect.Is(render, AST.isRenderStatement)
+    Expect.Is(labelAlias.value, AST.isValueReference)
+    Expect(labelAlias.value.target.ref).toBe(labelParameter)
 
     const [blockGreetingAlias, blockText, nestedStack, labelText] = render.block?.statements ?? []
-    expectIs(blockGreetingAlias, AST.isAliasDeclaration)
-    expectIs(blockText, AST.isViewRender)
-    expectIs(nestedStack, AST.isViewRender)
-    expectIs(labelText, AST.isViewRender)
+    Expect.Is(blockGreetingAlias, AST.isAliasDeclaration)
+    Expect.Is(blockText, AST.isViewRender)
+    Expect.Is(nestedStack, AST.isViewRender)
+    Expect.Is(labelText, AST.isViewRender)
 
     const blockTextValue = blockText.argumentList?.arguments[0]?.value
-    expectIs(blockTextValue, AST.isValueReference)
-    expect(blockTextValue.target.ref).toBe(blockGreetingAlias)
+    Expect.Is(blockTextValue, AST.isValueReference)
+    Expect(blockTextValue.target.ref).toBe(blockGreetingAlias)
 
     const [nestedGreetingAlias, nestedText] = nestedStack.block?.statements ?? []
-    expectIs(nestedGreetingAlias, AST.isAliasDeclaration)
-    expectIs(nestedText, AST.isViewRender)
+    Expect.Is(nestedGreetingAlias, AST.isAliasDeclaration)
+    Expect.Is(nestedText, AST.isViewRender)
 
     const nestedTextValue = nestedText.argumentList?.arguments[0]?.value
-    expectIs(nestedTextValue, AST.isValueReference)
-    expect(nestedTextValue.target.ref).toBe(nestedGreetingAlias)
+    Expect.Is(nestedTextValue, AST.isValueReference)
+    Expect(nestedTextValue.target.ref).toBe(nestedGreetingAlias)
 
     const labelTextValue = labelText.argumentList?.arguments[0]?.value
-    expectIs(labelTextValue, AST.isValueReference)
-    expect(labelTextValue.target.ref).toBe(labelAlias)
-    expect(labelTextValue.target.ref).not.toBe(fileGreetingAlias)
+    Expect.Is(labelTextValue, AST.isValueReference)
+    Expect(labelTextValue.target.ref).toBe(labelAlias)
+    Expect(labelTextValue.target.ref).not.toBe(fileGreetingAlias)
   })
 
-  test('parses the target Kitchen Sink app', async () => {
+  Test('parses the target Kitchen Sink app', async () => {
     const parsed = await Parser.parseFile(targetKitchenSinkPath)
 
-    expect(parsed.diagnostics).toEqual([])
-    expect(parsed.ast.statements.filter(AST.isAliasDeclaration).map(alias => alias.name)).toEqual([
+    Expect(parsed.diagnostics).toEqual([])
+    Expect(parsed.ast.statements.filter(AST.isAliasDeclaration).map(alias => alias.name)).toEqual([
       'Greeting',
       'LaunchCount',
     ])
   })
 
-  test('parses the Type System Tests app', async () => {
+  Test('parses the Type System Tests app', async () => {
     const parsed = await Parser.parseFile(typeSystemTestsPath)
 
-    expect(parsed.diagnostics).toEqual([])
-    expect(parsed.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(4)
+    Expect(parsed.diagnostics).toEqual([])
+    Expect(parsed.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(4)
   })
 
-  test('parses Tao source strings', async () => {
+  Test('parses Tao source strings', async () => {
     const source = await FS.readText(kitchenSinkPath)
     const parsed = await testParseCode(source)
 
-    expect(parsed.ast.statements).toHaveLength(7)
-    expectIs(parsed.ast.statements[0], AST.isAppDeclaration)
+    Expect(parsed.ast.statements).toHaveLength(7)
+    Expect.Is(parsed.ast.statements[0], AST.isAppDeclaration)
   })
 })

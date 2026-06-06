@@ -24,6 +24,9 @@
       "@shared": [
         "./shared/shared-src/shared.ts"
       ],
+      "@shared/test": [
+        "./shared/shared-src/Test-Bun.ts"
+      ],
       "@shared/*": [
         "./shared/shared-src/*"
       ],

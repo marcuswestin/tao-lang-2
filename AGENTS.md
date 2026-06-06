@@ -14,7 +14,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - **ALWAYS** use `./agent <cmd> ...` for executable shell commands; use normal `cd` or tool workdirs to choose the command directory
    - Create a `feat/<name>` branch only for project-sized work that needs review and merge; small edits, instruction updates, and one-off commits should stay on the current branch unless Ro asks otherwise
    - Multiple agents may work in this repo in parallel; treat changes you did not make as expected peer work, and do not overwrite or revert them without explicit direction
-   - Do not modify the Git index unless Ro explicitly asks; never stage, unstage, or reset staged files as cleanup
+   - Do not modify the Git index or stash state unless Ro explicitly asks; never stage, unstage, reset staged files, stash, pop, apply, drop, or otherwise affect staged or stashed work as cleanup. If a task appears to require touching staged or stashed work, ask Ro first.
    - Use the `agent-instructions` skill when Ro asks to add or update durable instructions
    - **ALWAYS** let the IDE soft-wrap lines
    - **ALWAYS** remove stale instructions and code
@@ -72,7 +72,8 @@ You will do all your work with Ro, the project lead and language designer. They 
 0. ALWAYS ask Ro questions until you have what you need to proceed
    - When in doubt, ask
 1. Prep:
-   - If your task is on `Roadmap.md`, identify it and ensure `Roadmap/<Task>/*` exists. Update it whenever relevant
+   - If your task is on `Roadmap.md`, identify it before implementation. Use an existing `Roadmap/<Task>/` folder when research or plan docs are already part of that project, but do not create roadmap folders or implementation notes just to summarize completed work.
+   - Keep `Roadmap.md` to current tasks and status; put implementation details in tests, app purpose docs, code docs, commit messages, or PR summaries unless Ro asks for a roadmap research/plan document.
    - Use the `old-repo-porting` skill when comparable previous-repo behavior exists
 2. Execute:
    - Write demo tao code and automated tests
@@ -108,8 +109,8 @@ You will do all your work with Ro, the project lead and language designer. They 
 
 - Instructions
   - Create a `feat/<feature>` branch for project-sized work that needs review and merge; do not switch branches for small edits, instruction updates, or one-off commits unless Ro asks
-  - Do not stage, unstage, reset staged files, or stash changes unless instructed. If a task requires it, ask first
   - Always run `./agent just prep` before making commits and as the final validation command; do not use `check` as the handoff or commit validation shortcut
+  - Do not stage, unstage, reset staged files, stash, pop, apply, drop, or otherwise affect staged or stashed work unless instructed. If a task requires it, ask first.
   - Commit message format `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`
   - Always squash-merge into main with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`
   - When merged into main, rename branch to `merged/...`, and sync that with origin

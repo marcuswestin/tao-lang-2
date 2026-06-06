@@ -1,11 +1,11 @@
-import { expect } from 'bun:test'
+import { Expect } from '@shared/test'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 
 /** testValidateCode validates Tao source and asserts it has no error diagnostics. */
 export async function testValidateCode(source: string): Promise<ValidationResult> {
   const result = await Validator.validateCode(source)
 
-  expect(validationErrorMessages(result)).toEqual([])
+  Expect(validationErrorMessages(result)).toEqual([])
   return result
 }
 
@@ -13,7 +13,7 @@ export async function testValidateCode(source: string): Promise<ValidationResult
 export async function testValidateCodeWithErrors(source: string): Promise<ValidationResult> {
   const result = await Validator.validateCode(source)
 
-  expect(validationErrorMessages(result).length).toBeGreaterThan(0)
+  Expect(validationErrorMessages(result).length).toBeGreaterThan(0)
   return result
 }
 

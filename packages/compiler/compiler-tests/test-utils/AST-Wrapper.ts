@@ -1,15 +1,15 @@
 import { AST, Langium } from '@parser'
-import { expect } from 'bun:test'
+import { Expect } from '@shared/test'
 
 /** wrap returns a proxy-based wrapper enabling type-safe AST traversal for test assertions. */
 export function wrap<T extends AST.Node>(node: T): Wrapped<T> {
   const methods = {
     expect(key: string) {
-      return expect((node as Record<string, unknown>)[key])
+      return Expect((node as Record<string, unknown>)[key])
     },
     /** match asserts `node` satisfies `shape` via deep partial `toMatchObject` semantics. */
     match(shape: unknown) {
-      expect(node).toMatchObject(shape as Record<string, unknown>)
+      Expect(node).toMatchObject(shape as Record<string, unknown>)
     },
     unwrap() {
       return node
@@ -28,7 +28,7 @@ export function wrap<T extends AST.Node>(node: T): Wrapped<T> {
       }
 
       if (typeof prop === 'string' && prop.startsWith('as_')) {
-        expect(node.$type).toBe(prop.slice(3))
+        Expect(node.$type).toBe(prop.slice(3))
         return wrap(node)
       }
 
@@ -38,7 +38,7 @@ export function wrap<T extends AST.Node>(node: T): Wrapped<T> {
         return undefined
       }
 
-      expect(child, `Property '${String(prop)}' is undefined`).toBeDefined()
+      Expect(child, `Property '${String(prop)}' is undefined`).toBeDefined()
 
       if (child !== null && typeof child === 'object' && '$type' in child) {
         return wrap(child as AST.Node)
@@ -46,7 +46,7 @@ export function wrap<T extends AST.Node>(node: T): Wrapped<T> {
 
       if (child !== null && typeof child === 'object' && 'ref' in child) {
         const ref = child as Langium.Reference<AST.Node>
-        expect(ref.ref, `Reference '${String(prop)}' is unresolved`).toBeDefined()
+        Expect(ref.ref, `Reference '${String(prop)}' is unresolved`).toBeDefined()
         return wrap(ref.ref!)
       }
 
@@ -68,20 +68,20 @@ function wrapArray<T>(array: unknown[]): WrappedArray<T> {
     get(target, prop) {
       switch (prop) {
         case 'first':
-          expect(target[0], `Array is empty, cannot get .first`).toBeDefined()
+          Expect(target[0], `Array is empty, cannot get .first`).toBeDefined()
           return wrapElement(target[0])
         case 'second':
-          expect(target[1], `Array has less than 2 elements, cannot get .second`).toBeDefined()
+          Expect(target[1], `Array has less than 2 elements, cannot get .second`).toBeDefined()
           return wrapElement(target[1])
         case 'last':
-          expect(target.length > 0, `Array is empty, cannot get .last`).toBe(true)
+          Expect(target.length > 0, `Array is empty, cannot get .last`).toBe(true)
           return wrapElement(target[target.length - 1])
         case 'only':
-          expect(target, `Array expected exactly 1 element, got ${target.length}`).toHaveLength(1)
+          Expect(target, `Array expected exactly 1 element, got ${target.length}`).toHaveLength(1)
           return wrapElement(target[0])
         case 'match':
           return (shape: unknown[]) => {
-            expect(target).toMatchObject(shape)
+            Expect(target).toMatchObject(shape)
           }
         default: {
           const index = typeof prop === 'string' ? Number(prop) : NaN
@@ -123,7 +123,7 @@ type AsGetters<T extends AST.Node> = {
   readonly [TypeName in TypeNames<T> as `as_${TypeName}`]: Wrapped<ExtractByType<T, TypeName>>
 }
 
-type Expectation<T> = ReturnType<typeof expect<T>>
+type Expectation<T> = ReturnType<typeof Expect<T>>
 
 export type Wrapped<T extends AST.Node> =
   & (IsSingleType<T> extends true ? {

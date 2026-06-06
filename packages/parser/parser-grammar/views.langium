@@ -2,6 +2,7 @@ grammar TaoViews
 
 import "./blocks"
 import "./expressions"
+import "./injections"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
@@ -22,6 +23,3 @@ ViewRender:
     view=[ViewDeclaration:ID] argumentList=ArgumentList? block=Block?;
 
 type Render = RenderStatement | ViewRender;
-
-Injection:
-    'inject' tsCodeBlock=TS_CODE_BLOCK;

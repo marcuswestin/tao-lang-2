@@ -3,6 +3,7 @@ import { validateAliases } from './aliases-validator'
 import { validateApp } from './app-validator'
 import { hasError, parserDiagnostics, type TaoDiagnostic } from './diagnostics'
 import { validateTypirProblems } from './expressions-validator'
+import { validateInjections } from './injections-validator'
 import { validateInvocations } from './invocations-validator'
 import { parseCodeForValidation, parseFileForValidation, rebuildForValidation } from './langium-services'
 import { createValidationContext } from './validation'
@@ -53,6 +54,7 @@ async function validateCleanOrReportParserDiagnostics(
   validateApp(validationParsed.ast, ctx)
   validateViews(validationParsed.ast, ctx)
   validateAliases(validationParsed.ast, ctx)
+  validateInjections(validationParsed.ast, ctx)
   validateInvocations(validationParsed.ast, ctx)
   validateTypirProblems(validationParsed.ast, validationParsed.typir, ctx)
 

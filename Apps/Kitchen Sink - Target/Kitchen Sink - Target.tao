@@ -27,15 +27,13 @@ layout Stack {
 }
 
 ui Text Value text {
-    render inject ```ts
-        const text = _ViewProps.Value.evaluate();
-        return <RN.Text>{text.jsValue}</RN.Text>
+    render inject Value ```ts
+        return <RN.Text>{Value}</RN.Text>
     ```
 }
 
 ui CountText Count number {
-    render inject ```ts
-        const count = _ViewProps.Count.evaluate();
-        return <RN.Text>Launch count: {count.jsValue}</RN.Text>
+    render inject Count ```ts
+        return <RN.Text>Launch count: {Count}</RN.Text>
     ```
 }

@@ -10,6 +10,7 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 - Text and number literals.
 - Aliases whose inferred types are used as view arguments.
 - Invocation argument compatibility for view calls.
+- Inject arguments that expose typed view values inside injected TS.
 - Future custom type declaration examples when they are used to distinguish otherwise similar tile arguments.
 
 ## Does Not Belong Here

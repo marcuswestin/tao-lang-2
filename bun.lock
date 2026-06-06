@@ -14,6 +14,7 @@
       "name": "tao-ast-utils",
       "dependencies": {
         "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
       },
     },
     "packages/compiler": {

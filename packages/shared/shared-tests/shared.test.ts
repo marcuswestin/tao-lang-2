@@ -1,16 +1,17 @@
+import { AfterEach, Describe, Expect, Test } from '@shared/test'
 import { Assert, CLI, Errors, FS, HCI, Log, Repo, Switch, Text } from '../shared-src/shared'
-import { afterEach, describe, expect, PassThrough, runtimeProcess, test, Writable } from './TestRuntime'
+import { PassThrough, runtimeProcess, Writable } from './TestRuntime'
 
 const cleanupPaths: string[] = []
 
-afterEach(async () => {
+AfterEach(async () => {
   for (const path of cleanupPaths.splice(0).reverse()) {
     await FS.remove(path)
   }
 })
 
-describe('FS', () => {
-  test('joins and resolves slash-separated parts as host paths', async () => {
+Describe('FS', () => {
+  Test('joins and resolves slash-separated parts as host paths', async () => {
     const root = await tmpDir()
     const val = 'alpha'
     const file = 'screen.tao'
@@ -18,20 +19,20 @@ describe('FS', () => {
 
     const fullPath = FS.resolvePath(`foo/${val}/cat/wat/mat/${file}`, { cwd: root })
 
-    expect(FS.resolvePath(relativePath, { cwd: root })).toBe(fullPath)
-    expect(FS.resolvePath(fullPath, { cwd: FS.resolvePath('ignored', { cwd: root }) })).toBe(
+    Expect(FS.resolvePath(relativePath, { cwd: root })).toBe(fullPath)
+    Expect(FS.resolvePath(fullPath, { cwd: FS.resolvePath('ignored', { cwd: root }) })).toBe(
       fullPath,
     )
   })
 
-  test('resolves repo-relative paths from the Git root', async () => {
+  Test('resolves repo-relative paths from the Git root', async () => {
     const repoRoot = Repo.getRoot()
     const sharedPath = FS.resolvePath(`${repoRoot}/packages/shared`)
 
-    expect(FS.repoPath('packages/shared')).toBe(sharedPath)
+    Expect(FS.repoPath('packages/shared')).toBe(sharedPath)
   })
 
-  test('writes and reads text and json files', async () => {
+  Test('writes and reads text and json files', async () => {
     const root = await tmpDir()
     const textPath = FS.resolvePath('nested/hello.txt', { cwd: root })
     const jsonPath = FS.resolvePath('nested/data.json', { cwd: root })
@@ -47,14 +48,14 @@ describe('FS', () => {
       await appendHandle.close()
     }
 
-    expect(await FS.readText(textPath)).toBe('hello')
-    expect(await FS.readJson<{ answer: number }>(jsonPath)).toEqual({ answer: 42 })
-    expect(await FS.readText(bytesPath)).toBe('bytes appended')
-    expect(await FS.isFile(textPath)).toBe(true)
-    expect(await FS.isDirectory(FS.dirname(textPath))).toBe(true)
+    Expect(await FS.readText(textPath)).toBe('hello')
+    Expect(await FS.readJson<{ answer: number }>(jsonPath)).toEqual({ answer: 42 })
+    Expect(await FS.readText(bytesPath)).toBe('bytes appended')
+    Expect(await FS.isFile(textPath)).toBe(true)
+    Expect(await FS.isDirectory(FS.dirname(textPath))).toBe(true)
   })
 
-  test('copies, moves, lists, and removes paths', async () => {
+  Test('copies, moves, lists, and removes paths', async () => {
     const root = await tmpDir()
     const sourcePath = FS.resolvePath('source.txt', { cwd: root })
     const copyPath = FS.resolvePath('copies/copy.txt', { cwd: root })
@@ -64,15 +65,15 @@ describe('FS', () => {
     await FS.copyFile(sourcePath, copyPath)
     await FS.move(copyPath, movedPath)
 
-    expect(await FS.readText(movedPath)).toBe('copy me')
-    expect(await FS.exists(copyPath)).toBe(false)
-    expect(await FS.listDir(FS.dirname(movedPath))).toEqual(['copy.txt'])
+    Expect(await FS.readText(movedPath)).toBe('copy me')
+    Expect(await FS.exists(copyPath)).toBe(false)
+    Expect(await FS.listDir(FS.dirname(movedPath))).toEqual(['copy.txt'])
 
     await FS.remove(FS.dirname(movedPath))
-    expect(await FS.exists(movedPath)).toBe(false)
+    Expect(await FS.exists(movedPath)).toBe(false)
   })
 
-  test('copies directories and walks files with filters', async () => {
+  Test('copies directories and walks files with filters', async () => {
     const root = await tmpDir()
     const sourceDir = FS.resolvePath('src', { cwd: root })
     const copyDir = FS.resolvePath('copy', { cwd: root })
@@ -88,22 +89,22 @@ describe('FS', () => {
       walked.push(path)
     }
 
-    expect(walked.sort()).toEqual([
+    Expect(walked.sort()).toEqual([
       FS.resolvePath('a.ts', { cwd: copyDir }),
       FS.resolvePath('nested/c.ts', { cwd: copyDir }),
     ])
   })
 
-  test('does not swallow read or list errors', async () => {
+  Test('does not swallow read or list errors', async () => {
     const root = await tmpDir()
 
-    await expect(FS.readText(FS.resolvePath('missing.txt', { cwd: root }))).rejects.toThrow()
-    await expect(FS.listDir(FS.resolvePath('missing', { cwd: root }))).rejects.toThrow()
+    await Expect(FS.readText(FS.resolvePath('missing.txt', { cwd: root }))).rejects.toThrow()
+    await Expect(FS.listDir(FS.resolvePath('missing', { cwd: root }))).rejects.toThrow()
   })
 })
 
-describe('HCI', () => {
-  test('writes messages to selected output streams', () => {
+Describe('HCI', () => {
+  Test('writes messages to selected output streams', () => {
     const stdout = fakeTerminal('')
     const stderr = fakeTerminal('')
 
@@ -113,13 +114,13 @@ describe('HCI', () => {
     HCI.writeErrorLine(' line', { output: stderr.output })
     HCI.writeSuccess(' success', { output: stdout.output })
 
-    expect(stripAnsi(stdout.outputText())).toBe('out line\n success')
-    expect(stripAnsi(stderr.outputText())).toBe('err line\n')
-    expect(stdout.outputText()).toContain('\u001b[32m')
-    expect(stderr.outputText()).toContain('\u001b[31m')
+    Expect(stripAnsi(stdout.outputText())).toBe('out line\n success')
+    Expect(stripAnsi(stderr.outputText())).toBe('err line\n')
+    Expect(stdout.outputText()).toContain('\u001b[32m')
+    Expect(stderr.outputText()).toContain('\u001b[31m')
   })
 
-  test('colors process log message bodies by severity', () => {
+  Test('colors process log message bodies by severity', () => {
     const stdout = runtimeProcess.stdout
     const stderr = runtimeProcess.stderr
     const info = fakeTerminal('')
@@ -132,18 +133,18 @@ describe('HCI', () => {
       HCI.logProcessWarn('dev', 'warn body')
       HCI.logProcessError('dev', 'error body')
 
-      expect(stripAnsi(info.outputText())).toBe('[dev]: info body\n')
-      expect(stripAnsi(errors.outputText())).toBe('[dev]: warn body\n[dev]: error body\n')
-      expect(info.outputText()).toContain('\u001b[2minfo body\u001b[0m')
-      expect(errors.outputText()).toContain('\u001b[33mwarn body\u001b[0m')
-      expect(errors.outputText()).toContain('\u001b[31merror body\u001b[0m')
+      Expect(stripAnsi(info.outputText())).toBe('[dev]: info body\n')
+      Expect(stripAnsi(errors.outputText())).toBe('[dev]: warn body\n[dev]: error body\n')
+      Expect(info.outputText()).toContain('\u001b[2minfo body\u001b[0m')
+      Expect(errors.outputText()).toContain('\u001b[33mwarn body\u001b[0m')
+      Expect(errors.outputText()).toContain('\u001b[31merror body\u001b[0m')
     } finally {
       runtimeProcess.stdout = stdout
       runtimeProcess.stderr = stderr
     }
   })
 
-  test('asks for text with validation', async () => {
+  Test('asks for text with validation', async () => {
     const streams = fakeTerminal(' \nRo\n')
 
     const value = await HCI.askText({
@@ -152,11 +153,11 @@ describe('HCI', () => {
       ...streams,
     })
 
-    expect(value).toBe('Ro')
-    expect(streams.outputText()).toContain('Required')
+    Expect(value).toBe('Ro')
+    Expect(streams.outputText()).toContain('Required')
   })
 
-  test('asks for confirmations and choices', async () => {
+  Test('asks for confirmations and choices', async () => {
     const confirm = await HCI.askConfirm({ message: 'Continue', ...fakeTerminal('\n'), defaultValue: true })
     const choice = await HCI.askChoice({
       message: 'Pick',
@@ -167,14 +168,14 @@ describe('HCI', () => {
       ...fakeTerminal('2\n'),
     })
 
-    expect(confirm).toBe(true)
-    expect(choice).toBe('two')
+    Expect(confirm).toBe(true)
+    Expect(choice).toBe('two')
   })
 
-  test('uses defaults or rejects in non-interactive mode', async () => {
-    await expect(HCI.askText({ message: 'Name', interactive: false, defaultValue: 'Ro' })).resolves.toBe('Ro')
-    await expect(HCI.askConfirm({ message: 'Continue', interactive: false, defaultValue: false })).resolves.toBe(false)
-    await expect(
+  Test('uses defaults or rejects in non-interactive mode', async () => {
+    await Expect(HCI.askText({ message: 'Name', interactive: false, defaultValue: 'Ro' })).resolves.toBe('Ro')
+    await Expect(HCI.askConfirm({ message: 'Continue', interactive: false, defaultValue: false })).resolves.toBe(false)
+    await Expect(
       HCI.askChoice({
         message: 'Pick',
         choices: [{ value: 'one' }],
@@ -182,12 +183,12 @@ describe('HCI', () => {
         defaultValue: 'one',
       }),
     ).resolves.toBe('one')
-    await expect(HCI.askText({ message: 'Name', interactive: false })).rejects.toBeInstanceOf(Errors.UserInputError)
+    await Expect(HCI.askText({ message: 'Name', interactive: false })).rejects.toBeInstanceOf(Errors.UserInputError)
   })
 })
 
-describe('CLI', () => {
-  test('runs commands and captures output', async () => {
+Describe('CLI', () => {
+  Test('runs commands and captures output', async () => {
     const root = await tmpDir()
     const result = await CLI.run(runtimeProcess.execPath, {
       args: ['-e', 'console.log(process.cwd()); console.error(process.env.TAO_CLI_TEST)'],
@@ -195,21 +196,21 @@ describe('CLI', () => {
       env: { TAO_CLI_TEST: 'ok' },
     })
 
-    expect(result.exitCode).toBe(0)
-    expect(FS.basename(result.stdout.trim())).toBe(FS.basename(root))
-    expect(result.stderr.trim()).toBe('ok')
+    Expect(result.exitCode).toBe(0)
+    Expect(FS.basename(result.stdout.trim())).toBe(FS.basename(root))
+    Expect(result.stderr.trim()).toBe('ok')
   })
 
-  test('passes stdin to commands', async () => {
+  Test('passes stdin to commands', async () => {
     const result = await CLI.run(runtimeProcess.execPath, {
       args: ['-e', 'for await (const chunk of process.stdin) process.stdout.write(chunk.toString().toUpperCase())'],
       stdin: 'abc',
     })
 
-    expect(result.stdout).toBe('ABC')
+    Expect(result.stdout).toBe('ABC')
   })
 
-  test('returns unchecked failures and throws checked failures', async () => {
+  Test('returns unchecked failures and throws checked failures', async () => {
     const commandSpec = {
       args: ['-e', 'console.error("bad"); process.exit(7)'],
     }
@@ -217,27 +218,27 @@ describe('CLI', () => {
     const result = await CLI.run(runtimeProcess.execPath, commandSpec)
     const syncResult = CLI.runSync(runtimeProcess.execPath, commandSpec)
 
-    expect(result.exitCode).toBe(7)
-    expect(result.stderr.trim()).toBe('bad')
-    expect(syncResult.exitCode).toBe(7)
-    expect(syncResult.stderr.trim()).toBe('bad')
-    await expect(CLI.mustRun(runtimeProcess.execPath, commandSpec)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
-    expect(() => CLI.mustRunSync(runtimeProcess.execPath, commandSpec)).toThrow(Errors.CommandExecutionError)
+    Expect(result.exitCode).toBe(7)
+    Expect(result.stderr.trim()).toBe('bad')
+    Expect(syncResult.exitCode).toBe(7)
+    Expect(syncResult.stderr.trim()).toBe('bad')
+    await Expect(CLI.mustRun(runtimeProcess.execPath, commandSpec)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
+    Expect(() => CLI.mustRunSync(runtimeProcess.execPath, commandSpec)).toThrow(Errors.CommandExecutionError)
   })
 
-  test('formats commands and supports inherited stdio', async () => {
-    expect(CLI.formatCommand('tao', { args: ['run', 'Hello World.tao'] })).toBe('tao run "Hello World.tao"')
+  Test('formats commands and supports inherited stdio', async () => {
+    Expect(CLI.formatCommand('tao', { args: ['run', 'Hello World.tao'] })).toBe('tao run "Hello World.tao"')
 
     const result = await CLI.run(runtimeProcess.execPath, {
       args: ['-e', 'process.exit(0)'],
       stdio: 'inherit',
     })
 
-    expect(result.stdout).toBe('')
-    expect(result.stderr).toBe('')
+    Expect(result.stdout).toBe('')
+    Expect(result.stderr).toBe('')
   })
 
-  test('streams output while preserving captured output', async () => {
+  Test('streams output while preserving captured output', async () => {
     const stdout = runtimeProcess.stdout
     const stderr = runtimeProcess.stderr
     let streamedStdout = ''
@@ -261,17 +262,17 @@ describe('CLI', () => {
         stdio: 'stream',
       })
 
-      expect(result.stdout.trim()).toBe('out')
-      expect(result.stderr.trim()).toBe('err')
-      expect(streamedStdout.trim()).toBe('out')
-      expect(stripAnsi(streamedStderr).trim()).toBe('err')
+      Expect(result.stdout.trim()).toBe('out')
+      Expect(result.stderr.trim()).toBe('err')
+      Expect(streamedStdout.trim()).toBe('out')
+      Expect(stripAnsi(streamedStderr).trim()).toBe('err')
     } finally {
       runtimeProcess.stdout = stdout
       runtimeProcess.stderr = stderr
     }
   })
 
-  test('streams prefixed output while preserving captured output', async () => {
+  Test('streams prefixed output while preserving captured output', async () => {
     const stdout = runtimeProcess.stdout
     const stderr = runtimeProcess.stderr
     let streamedStdout = ''
@@ -295,19 +296,19 @@ describe('CLI', () => {
         prefixedOutput: { processName: 'test' },
       })
 
-      expect(result.stdout.trim()).toBe('out')
-      expect(result.stderr.trim()).toBe('err')
-      expect(streamedStdout).toContain('[test]')
-      expect(streamedStdout).toContain('out')
-      expect(streamedStderr).toContain('[test]')
-      expect(streamedStderr).toContain('err')
+      Expect(result.stdout.trim()).toBe('out')
+      Expect(result.stderr.trim()).toBe('err')
+      Expect(streamedStdout).toContain('[test]')
+      Expect(streamedStdout).toContain('out')
+      Expect(streamedStderr).toContain('[test]')
+      Expect(streamedStderr).toContain('err')
     } finally {
       runtimeProcess.stdout = stdout
       runtimeProcess.stderr = stderr
     }
   })
 
-  test('starts commands and streams prefixed output', async () => {
+  Test('starts commands and streams prefixed output', async () => {
     const stdout = runtimeProcess.stdout
     let streamedStdout = ''
     runtimeProcess.stdout = new Writable({
@@ -325,30 +326,30 @@ describe('CLI', () => {
       const close = await command.waitForClose()
       await command.closeOutput()
 
-      expect(close.exitCode).toBe(0)
-      expect(command.exitCode).toBe(0)
-      expect(streamedStdout).toContain('[dev]')
-      expect(streamedStdout).toContain('ready')
+      Expect(close.exitCode).toBe(0)
+      Expect(command.exitCode).toBe(0)
+      Expect(streamedStdout).toContain('[dev]')
+      Expect(streamedStdout).toContain('ready')
     } finally {
       runtimeProcess.stdout = stdout
     }
   })
 })
 
-describe('Repo', () => {
-  test('finds the current git worktree root from a nested cwd', async () => {
+Describe('Repo', () => {
+  Test('finds the current git worktree root from a nested cwd', async () => {
     const cwd = runtimeProcess.cwd()
     const root = Repo.getRoot()
 
     try {
       runtimeProcess.chdir(FS.resolvePath('packages/shared', { cwd: root }))
-      expect(Repo.getRoot()).toBe(root)
+      Expect(Repo.getRoot()).toBe(root)
     } finally {
       runtimeProcess.chdir(cwd)
     }
   })
 
-  test('finds a nested git repo root without using an outer root', async () => {
+  Test('finds a nested git repo root without using an outer root', async () => {
     const cwd = runtimeProcess.cwd()
     const outerRoot = await tmpDir()
     const taoRoot = FS.resolvePath('workspace/tao', { cwd: outerRoot })
@@ -360,27 +361,27 @@ describe('Repo', () => {
 
     try {
       runtimeProcess.chdir(nestedDir)
-      expect(Repo.getRoot()).toBe(expectedRoot)
+      Expect(Repo.getRoot()).toBe(expectedRoot)
     } finally {
       runtimeProcess.chdir(cwd)
     }
   })
 
-  test('rejects outside a git worktree', async () => {
+  Test('rejects outside a git worktree', async () => {
     const cwd = runtimeProcess.cwd()
     const outsideRepo = await tmpDir()
 
     try {
       runtimeProcess.chdir(outsideRepo)
-      expect(() => Repo.getRoot()).toThrow(Errors.CommandExecutionError)
+      Expect(() => Repo.getRoot()).toThrow(Errors.CommandExecutionError)
     } finally {
       runtimeProcess.chdir(cwd)
     }
   })
 })
 
-describe('Log', () => {
-  test('uses swappable transports', () => {
+Describe('Log', () => {
+  Test('uses swappable transports', () => {
     const calls: string[] = []
 
     Log.setTransport({
@@ -399,39 +400,39 @@ describe('Log', () => {
     Log.user('shown')
     Log.setTransport({})
 
-    expect(calls[0]).toBe('debug:debug')
-    expect(calls[1]).toBe('info:hello')
-    expect(calls[2]).toBe('warn:heads up')
-    expect(calls[3]).toContain('error:failed:Error: boom')
-    expect(calls[4]).toBe('success:done')
-    expect(calls[5]).toBe('user:shown')
-    expect('trace' in Log).toBe(false)
-    expect('withTransport' in Log).toBe(false)
+    Expect(calls[0]).toBe('debug:debug')
+    Expect(calls[1]).toBe('info:hello')
+    Expect(calls[2]).toBe('warn:heads up')
+    Expect(calls[3]).toContain('error:failed:Error: boom')
+    Expect(calls[4]).toBe('success:done')
+    Expect(calls[5]).toBe('user:shown')
+    Expect('trace' in Log).toBe(false)
+    Expect('withTransport' in Log).toBe(false)
   })
 })
 
-describe('Errors, Assert, and Switch', () => {
-  test('formats Tao errors for users and logs', () => {
+Describe('Errors, Assert, and Switch', () => {
+  Test('formats Tao errors for users and logs', () => {
     const userError = new Errors.UserInputError('No file selected')
     const unexpected = Errors.fromUnknown('surprise', { while: 'testing' })
 
-    expect(Errors.isTaoError(userError)).toBe(true)
-    expect(Errors.formatForUser(userError)).toBe('No file selected')
-    expect(Errors.formatForLog(unexpected)).toContain('UnexpectedBehaviorError')
-    expect(Errors.formatForLog(unexpected)).toContain('surprise')
+    Expect(Errors.isTaoError(userError)).toBe(true)
+    Expect(Errors.formatForUser(userError)).toBe('No file selected')
+    Expect(Errors.formatForLog(unexpected)).toContain('UnexpectedBehaviorError')
+    Expect(Errors.formatForLog(unexpected)).toContain('surprise')
   })
 
-  test('asserts conditions and narrows values', () => {
+  Test('asserts conditions and narrows values', () => {
     const value: string | undefined = 'tao'
 
     Assert(value, 'value exists')
     Assert.defined(value, 'value is defined')
     Assert.is(value, isString, 'value is a string')
-    expect(value.toUpperCase()).toBe('TAO')
-    expect(() => Assert(false, 'truthy')).toThrow(Errors.UnexpectedBehaviorError)
+    Expect(value.toUpperCase()).toBe('TAO')
+    Expect(() => Assert(false, 'truthy')).toThrow(Errors.UnexpectedBehaviorError)
   })
 
-  test('switches exhaustively by value, type, and property', () => {
+  Test('switches exhaustively by value, type, and property', () => {
     type Item =
       | { $type: 'text'; value: string; state: 'ready' }
       | { $type: 'count'; value: number; state: 'empty' }
@@ -455,40 +456,40 @@ describe('Errors, Assert, and Switch', () => {
       empty: () => 'Empty',
     })
 
-    expect(selectedValue).toBe(1)
-    expect(selectedOptionalValue).toBe('normal')
-    expect(selectedType).toBe('hello')
-    expect(selectedProperty).toBe('Ready')
+    Expect(selectedValue).toBe(1)
+    Expect(selectedOptionalValue).toBe('normal')
+    Expect(selectedType).toBe('hello')
+    Expect(selectedProperty).toBe('Ready')
   })
 })
 
-describe('Text', () => {
-  test('strips shared indentation from multiline strings', () => {
-    expect(Text.stripIndent(`
+Describe('Text', () => {
+  Test('strips shared indentation from multiline strings', () => {
+    Expect(Text.stripIndent(`
       first
         second
       third
     `)).toBe('first\n  second\nthird')
   })
 
-  test('preserves relative indentation and blank interior lines', () => {
-    expect(Text.stripIndent(`
+  Test('preserves relative indentation and blank interior lines', () => {
+    Expect(Text.stripIndent(`
         first
 
           second
     `)).toBe('first\n\n  second')
   })
 
-  test('indents selected lines', () => {
-    expect(Text.indentLines('first\n\nsecond', 2)).toBe('  first\n  \n  second')
-    expect(Text.indentLines('first\n\nsecond', 2, { skipBlankLines: true, skipFirstLine: true })).toBe(
+  Test('indents selected lines', () => {
+    Expect(Text.indentLines('first\n\nsecond', 2)).toBe('  first\n  \n  second')
+    Expect(Text.indentLines('first\n\nsecond', 2, { skipBlankLines: true, skipFirstLine: true })).toBe(
       'first\n\n  second',
     )
   })
 
-  test('escapes regexp metacharacters', () => {
+  Test('escapes regexp metacharacters', () => {
     const literal = 'a+b?.[x]'
-    expect(new RegExp(Text.escapeRegExp(literal)).test(literal)).toBe(true)
+    Expect(new RegExp(Text.escapeRegExp(literal)).test(literal)).toBe(true)
   })
 })
 

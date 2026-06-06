@@ -1,6 +1,7 @@
 import { AST, Langium } from '@parser'
 import { validateAliases } from './aliases-validator'
 import { validateApp } from './app-validator'
+import { validateInjections } from './injections-validator'
 import { validateInvocations } from './invocations-validator'
 import { createLangiumValidationContext } from './validation'
 import { validateViews } from './views-validator'
@@ -16,6 +17,7 @@ export function registerTaoValidationChecks(
       validateApp(file, ctx)
       validateViews(file, ctx)
       validateAliases(file, ctx)
+      validateInjections(file, ctx)
       validateInvocations(file, ctx)
     },
   }
