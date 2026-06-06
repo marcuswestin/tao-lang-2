@@ -23,9 +23,6 @@ Use this when a task compares against, ports from, or cites `~/code/tao-lang`.
 - Do not add an `unknown` Tao type, Typir primitive, or public unresolved sentinel unless the old repo proves that exact shape is needed. The validator/type-system slice used `undefined` / `InferenceRuleNotApplicable` for unresolved Typir paths.
 - Keep language surfaces feature-sliced across parser, validator, compiler, formatter, and runtime files. Avoid catch-all files when a matching feature file can own the behavior.
 - Put parser-dependent semantic helpers shared by validator/compiler/formatter/IDE in `packages/ast-utils`, not in generic `shared`.
-- Generated Tao code should be minimal and use runtime functionality wrappers from default `TR` imported via `@runtime/TR` (`packages/runtime/TaoRuntime-src/TR.ts`) as much as possible.
-- Runtime behavior belongs in runtime `TR-*` files once it is shared or reusable. Do not emit reusable helper implementations into generated app files.
-- Import the generated-code runtime API as default `TR` from `@runtime/TR` and use `TR.*`; do not use named imports from `@runtime/TR`.
-- Test apps should be valid, positive examples of implemented functionality. Parser/compiler/validator error cases belong in package unit tests.
+- Use the `runtime-codegen` skill for generated Tao TS, `TR`, `@runtime/TR`, and shared runtime behavior details.
 - Old IDE extension code is useful for architecture and edge cases, but omit stdlib bundling, formatter registration, install commands, navigation providers, and packaging breadth until this repo has those features in scope.
 - Before finalizing, search changed exports and old-repo-derived paths/names. Remove private exports and stale old conventions rather than preserving them for convenience.
