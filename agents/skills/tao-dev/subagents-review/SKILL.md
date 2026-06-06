@@ -19,6 +19,7 @@ Run independent `codex` and `claude` reviews over the requested changes, then fi
    - `codex exec -C "$PWD" --sandbox read-only --ephemeral - < "$CODEX_PROMPT_FILE"`
    - `claude -p --effort high --permission-mode plan < "$CLAUDE_PROMPT_FILE"`
    - Keep review findings on stdout for both reviewers. Do not add Claude debug/verbose flags just to create stderr noise; the current Claude CLI has no confirmed option for printing reasoning/thinking to stderr. If the CLI later exposes a real stderr reasoning stream, enable it while keeping final findings on stdout.
+   - Create output directories as directories only. Do not add `.keep` or other placeholder files just to force review artifact directories to exist; if the available tooling cannot create an empty directory without a placeholder file, ask Ro before proceeding.
 5. Read saved stdout files before reconciling. Do not read saved stderr by default; stderr may contain verbose reasoning/debug streams and should be treated as diagnostic output. Read stderr only when stdout is empty, a reviewer command fails or hangs, or you need to determine whether review text was redirected there. If a reviewer produced empty stdout, report that explicitly; do not count silence as a clean review.
 6. Reconcile findings in your working context. Verify each finding before acting; reviewer output is evidence, not truth. Do not create a separate reconciliation file unless Ro explicitly asks for one.
 7. Apply only minimal warranted fixes. Preserve unrelated changes and ask before expanding scope.
