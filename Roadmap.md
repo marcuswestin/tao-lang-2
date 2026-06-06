@@ -25,6 +25,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
     - 'a' to open Expo Android
     - 't' to run all tests
     - 'q' to quit
+    - 's' to switch app
     - 'e' to build and install the ide extension
     - 'f' to fix
     - 'c' to clean, reinstall deps, quit, and reload

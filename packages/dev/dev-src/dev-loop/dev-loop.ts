@@ -108,7 +108,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
     if (!keyInput.start()) {
       HCI.logProcessInfo('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
-    await Expo.openStartupTargets(shouldStop)
+    void Expo.openStartupTargets(shouldStop)
     return await done
   } finally {
     removeSigint()

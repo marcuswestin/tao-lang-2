@@ -147,10 +147,13 @@ async function openWeb(): Promise<boolean> {
 }
 
 /** openIosSimulator asks Expo to open the current app on iOS, launching a simulator when Expo can. */
-async function openIosSimulator(): Promise<boolean> {
+async function openIosSimulator(shouldStop: () => boolean = () => false): Promise<boolean> {
   const link = endpointUrl(await expoOpenEndpoint('ios')) ?? await expoLink('ios') ?? EXPO_GO_URL
-  const simulator = await ensureIosSimulator()
+  const simulator = await ensureIosSimulator(shouldStop)
   if (!simulator) {
+    return false
+  }
+  if (shouldStop()) {
     return false
   }
   const result = await CLI.run('xcrun', { args: ['simctl', 'openurl', simulator.udid, link] })
@@ -165,37 +168,13 @@ async function openIosSimulator(): Promise<boolean> {
   return false
 }
 
-/** openAvailableIosSimulator opens the current Expo app in an already-booted iOS Simulator. */
-async function openAvailableIosSimulator(): Promise<boolean> {
-  if (!await commandExists('xcrun')) {
-    HCI.logProcessInfo('dev', 'xcrun not found; skipping iOS Simulator launch.')
-    return false
-  }
-  const endpoint = await expoOpenEndpoint('ios')
-  const link = endpointUrl(endpoint) ?? await expoLink('ios')
-  if (!link) {
-    HCI.logProcessWarn('dev', 'Could not resolve Expo iOS link; skipping iOS Simulator launch.')
-    return false
-  }
-  const result = await CLI.run('xcrun', { args: ['simctl', 'openurl', 'booted', link] })
-  if (result.exitCode === 0 && result.error === undefined) {
-    HCI.logProcessInfo('dev', `opened iOS Simulator${formatOpenedRuntime(endpoint)}`)
-    return true
-  } else {
-    HCI.logProcessInfo('dev', 'No booted iOS Simulator accepted the Expo URL; skipping iOS launch.')
-    return false
-  }
-}
-
-/** openStartupTargets opens default targets without cold-launching native simulators. */
+/** openStartupTargets opens startup targets while keeping Android limited to already-available devices. */
 async function openStartupTargets(shouldStop: () => boolean = () => false): Promise<void> {
-  for (
-    const [label, open] of [
-      ['web', openWeb],
-      ['iOS', openAvailableIosSimulator],
-      ['Android', openAvailableAndroid],
-    ] as const
-  ) {
+  await Promise.all(([
+    ['web', openWeb],
+    ['iOS', () => openIosSimulator(shouldStop)],
+    ['Android', openAvailableAndroid],
+  ] as const).map(async ([label, open]) => {
     if (shouldStop()) {
       return
     }
@@ -204,7 +183,7 @@ async function openStartupTargets(shouldStop: () => boolean = () => false): Prom
     } catch (error) {
       HCI.logProcessWarn('dev', `skipped ${label} launch: ${Errors.formatForUser(error)}`)
     }
-  }
+  }))
 }
 
 /** reloadExpoApps asks Metro to reload connected Expo runtimes. */
@@ -335,9 +314,12 @@ type SimctlDevicesJson = {
   devices?: Record<string, IosSimulator[]>
 }
 
-async function ensureIosSimulator(): Promise<IosSimulator | undefined> {
+async function ensureIosSimulator(shouldStop: () => boolean): Promise<IosSimulator | undefined> {
   if (!await commandExists('xcrun')) {
     HCI.logProcessInfo('dev', 'xcrun not found; skipping iOS Simulator launch.')
+    return undefined
+  }
+  if (shouldStop()) {
     return undefined
   }
   const simulator = await selectIosSimulator()
@@ -346,11 +328,16 @@ async function ensureIosSimulator(): Promise<IosSimulator | undefined> {
     return undefined
   }
   await openSimulatorApp(simulator.udid)
+  if (shouldStop()) {
+    return undefined
+  }
   if (simulator.state !== 'Booted' && !await bootIosSimulator(simulator.udid)) {
     return undefined
   }
-  if (!await waitForIosSimulatorBoot(simulator.udid)) {
-    HCI.logProcessWarn('dev', `iOS Simulator did not finish booting: ${simulator.name}`)
+  if (!await waitForIosSimulatorBoot(simulator.udid, shouldStop)) {
+    if (!shouldStop()) {
+      HCI.logProcessWarn('dev', `iOS Simulator did not finish booting: ${simulator.name}`)
+    }
     return undefined
   }
   return simulator
@@ -417,9 +404,9 @@ async function bootIosSimulator(udid: string): Promise<boolean> {
   return false
 }
 
-async function waitForIosSimulatorBoot(udid: string): Promise<boolean> {
+async function waitForIosSimulatorBoot(udid: string, shouldStop: () => boolean): Promise<boolean> {
   const deadline = Date.now() + IOS_BOOT_TIMEOUT_MS
-  while (Date.now() < deadline) {
+  while (!shouldStop() && Date.now() < deadline) {
     const booted = (await listIosSimulators()).find(simulator =>
       simulator.udid === udid && simulator.state === 'Booted'
     )

@@ -1,7 +1,7 @@
 ---
 name: project-7-merge-feature-branch
 description: >-
-  Merges a completed Tao feature branch into main with validation, a squash commit, branch rename, and remote sync.
+  Merges a completed Tao feature branch into main with validation, a squash commit, remote branch archival, and local branch/worktree cleanup.
 ---
 
 # Merge Feature Branch
@@ -12,9 +12,10 @@ Land a completed feature branch into `main`.
 
 - Do not merge from `main`, `merged/...`, a detached HEAD, or a dirty worktree.
 - If the feature branch has uncommitted work, stop and use `commit-all-chunks` first.
-- Do not rename or remove the feature branch until the squash commit is pushed to `main`.
+- Do not rename, remove, or clean up the feature branch until the squash commit is pushed to `main`.
 - Preserve Git's generated squash appendix in the final commit message.
 - Move completed roadmap task folders from `Roadmap/<Task>/` to `Roadmap/Archive/<Task>/` before the squash commit. Archive whole task folders, not individual plan files, and leave active or planned task folders in place.
+- Finish with a clean local state: `main` checked out, no local feature or `merged/...` branch left behind, and any temporary feature worktree removed.
 
 ## Workflow
 
@@ -102,7 +103,7 @@ Land a completed feature branch into `main`.
 
    If validation changes files, review and stage only intentional changes, then rerun validation before committing.
 
-8. Rename the feature branch to `merged/...` and sync the rename with origin.
+8. Rename the feature branch to `merged/...`, sync the rename with origin, then clean up local branches and worktrees.
 
    If the feature branch is checked out in its own worktree, run this from that worktree:
 
@@ -113,6 +114,14 @@ Land a completed feature branch into `main`.
    ./agent git push origin --delete <feature-branch>
    ```
 
+   Then return to the main worktree and remove the feature worktree and local merged branch:
+
+   ```sh
+   ./agent git worktree remove <feature-worktree-path>
+   ./agent git branch -D merged/<feature-branch>
+   ./agent git worktree prune
+   ```
+
    If the feature branch is not checked out anywhere, run this from `main`:
 
    ```sh
@@ -120,8 +129,20 @@ Land a completed feature branch into `main`.
    ./agent git push -u origin merged/<feature-branch>
    ./agent git ls-remote --heads origin merged/<feature-branch>
    ./agent git push origin --delete <feature-branch>
+   ./agent git branch -D merged/<feature-branch>
+   ./agent git worktree prune
    ```
+
+9. Verify local cleanup:
+
+   ```sh
+   ./agent git status --short --branch
+   ./agent git branch --list "<feature-branch>" "merged/<feature-branch>"
+   ./agent git worktree list --porcelain
+   ```
+
+   Stop and report any leftover dirty worktree, local feature branch, local `merged/...` branch, or unexpected extra worktree.
 
 ## Output
 
-Report the landed feature branch, archived roadmap folders or why none applied, squash commit hash, validation results, `main` push status, `merged/...` branch name, remote sync status, and any conflict work left unresolved.
+Report the landed feature branch, archived roadmap folders or why none applied, squash commit hash, validation results, `main` push status, `merged/...` remote branch name, remote sync status, local branch/worktree cleanup status, and any conflict work left unresolved.
