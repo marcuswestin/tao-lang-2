@@ -10,6 +10,10 @@ help:
 # Setup the development environment
 setup: deps
 
+# Run the dev loop
+dev app_path="":
+  ./dev "{{app_path}}"
+
 # Install development dependencies
 deps:
   bun install
@@ -38,10 +42,6 @@ check: _compile-kitchen-sink-app _ide-extension-build
 compile-app app_path: _parser-gen
   ./dev compile-app "{{app_path}}"
 
-# Compile Kitchen Sink and start the Expo runtime. OPEN_MATCH_HOST_ONLY to reuse the currently running browser tab instead of opening a new one.
-run: _compile-kitchen-sink-app
-  cd packages/runtime && EXPO_NO_TELEMETRY=1 OPEN_MATCH_HOST_ONLY=true bunx expo start --localhost --ios --web --android
-
 # Build and install the IDE extension into local editor apps
 install-ide-extension: _ide-extension-package
   if command -v cursor >/dev/null 2>&1; then cursor --install-extension "{{IDE_EXTENSION_VSIX}}" --force; fi
@@ -54,15 +54,15 @@ android: _compile-kitchen-sink-app _android-emulator _android-expo-go
 
 # Clean run dependencies and build artifacts
 clean:
-  rm -rf .artifacts/build
+  rm -rf .artifacts/build .artifacts/dev packages/runtime/.expo packages/runtime/_gen_tao-app
   find . -name node_modules -type d -prune -exec rm -rf {} +
 
 # Run clean + clean ALL artifacts
 clean-all: clean
-  rm -rf .artifacts
+  rm -rf .artifacts packages/runtime/ios packages/runtime/android
 
-# Check, test, and fix all code
-prep-commit: fix check
+# Prepare all code for commit
+prep: fix check
 
 # Private
 #########

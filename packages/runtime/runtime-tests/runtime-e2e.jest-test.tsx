@@ -7,7 +7,7 @@ afterEach(() => cleanup())
 
 describe('Expo runtime', () => {
   test('compiles and renders Kitchen Sink text and number aliases', async () => {
-    const generatedAppPath = await FS.resolveRepoPath('packages/runtime/_gen_tao-app/App.tsx')
+    const generatedAppPath = FS.repoPath('packages/runtime/_gen_tao-app/App.tsx')
 
     jest.resetModules()
     const appModule = require(generatedAppPath) as { default: ComponentType }
@@ -21,7 +21,7 @@ describe('Expo runtime', () => {
   })
 
   test('renders alias references to earlier aliases', async () => {
-    const repoRoot = await Repo.getRoot()
+    const repoRoot = Repo.getRoot()
     const appDir = await FS.mkTmpDir(FS.resolvePath('tao-runtime-e2e-', { cwd: FS.tmpdir() }))
     const appPath = FS.resolvePath('Ordered Alias.tao', { cwd: appDir })
 
@@ -54,7 +54,7 @@ describe('Expo runtime', () => {
   })
 
   test('renders block-local aliases that shadow file-level aliases', async () => {
-    const repoRoot = await Repo.getRoot()
+    const repoRoot = Repo.getRoot()
     const appDir = await FS.mkTmpDir(FS.resolvePath('tao-runtime-e2e-', { cwd: FS.tmpdir() }))
     const appPath = FS.resolvePath('Scoped Alias.tao', { cwd: appDir })
 
@@ -105,13 +105,12 @@ async function testCompileApp(
   testsFunction: (screen: ReturnType<typeof render>) => void,
 ): Promise<void> {
   const appDir = FS.dirname(appPath)
-  const runtimePackageRoot = await FS.resolveRepoPath('packages/runtime')
+  const runtimePackageRoot = FS.repoPath('packages/runtime')
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
 
   try {
     await FS.writeText(appPath, Text.stripIndent(source))
-    await CLI.mustRun({
-      command: await FS.resolveRepoPath('dev'),
+    await CLI.mustRun(FS.repoPath('dev'), {
       args: ['compile-app', appPath],
       cwd: repoRoot,
     })

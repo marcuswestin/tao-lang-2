@@ -2,7 +2,7 @@ import Runtime from '@runtime'
 import { FS, Platform } from '@shared'
 import { afterEach, describe, expect, test } from 'bun:test'
 
-const kitchenSinkDir = await FS.resolveRepoPath('Apps/Kitchen Sink')
+const kitchenSinkDir = FS.repoPath('Apps/Kitchen Sink')
 const runtimeRoots: string[] = []
 
 afterEach(async () => {

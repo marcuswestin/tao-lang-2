@@ -18,4 +18,4 @@ Use this skill when changing Tao name resolution, local value visibility, symbol
 - Build scope chains in explicit precedence order so closer symbols shadow outer symbols.
 - Keep visibility rules centralized in the existing parser/validator scoping helpers.
 - Add tests that build Langium documents and exercise reference resolution or diagnostics.
-- Run `./agent just prep-commit` for parser or cross-package scoping changes.
+- Run `./agent just prep` for parser or cross-package scoping changes.

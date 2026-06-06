@@ -1,8 +1,8 @@
 import type { Command } from '@commander-js/extra-typings'
 import { FS, Platform, Repo } from '@shared'
-import { runQuietly, runWithInheritedOutput } from './commands-util'
+import { runCommand } from './commands'
 
-const STREAMED_JUST_RECIPES = new Set(['run'])
+const STREAMED_JUST_RECIPES = new Set(['android', 'dev'])
 
 /** registerJustCommand registers the repo-root Just command passthrough. */
 export function registerJustCommand(commands: Command): void {
@@ -19,14 +19,12 @@ export function registerJustCommand(commands: Command): void {
 
 /** runJust runs Just from the repo root with output filtering for successful commands. */
 async function runJust(args: readonly string[]): Promise<number> {
-  const repoRoot = await Repo.getRoot()
-  const commandArgs = ['--justfile', await FS.resolveRepoPath('Justfile'), ...args]
-
-  if (shouldStreamJustOutput(args)) {
-    return await runWithInheritedOutput('just', commandArgs, repoRoot)
-  }
-
-  return await runQuietly('just', commandArgs, repoRoot)
+  const commandArgs = ['--justfile', FS.repoPath('Justfile'), ...args]
+  const repoRoot = Repo.getRoot()
+  return await runCommand('just', commandArgs, {
+    cwd: repoRoot,
+    runQuietly: !shouldStreamJustOutput(args),
+  })
 }
 
 /** shouldStreamJustOutput returns whether a Just invocation needs inherited output. */

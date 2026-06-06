@@ -5,7 +5,9 @@
   "module": "dev-src/dev.ts",
   "dependencies": {
     "@commander-js/extra-typings": "^14.0.0",
-    "tao-runtime": "workspace:*",
-    "commander": "^14.0.0"
+    "better-opn": "^3.0.2",
+    "chokidar": "^4.0.3",
+    "commander": "^14.0.0",
+    "tao-runtime": "workspace:*"
   }
 }
