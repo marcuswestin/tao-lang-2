@@ -4,8 +4,8 @@ import { Compile } from '../Compile'
 export { Compile } from '../Compile'
 
 export default {
-  /** CompileTaoFile compiles a parsed Tao file into Expo-compatible TSX source. */
-  CompileTaoFile(taoFile: AST.TaoFile): string {
+  /** TaoFile compiles a parsed Tao file into Expo-compatible TSX source. */
+  TaoFile(taoFile: AST.TaoFile): string {
     return Langium.toString(Compile.TaoFile(taoFile))
   },
 } as const

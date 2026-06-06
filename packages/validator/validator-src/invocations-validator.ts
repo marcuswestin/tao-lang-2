@@ -1,7 +1,8 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import type { Type } from 'typir'
-import type { TaoTypirServices } from './type-system'
+import type { ValidationProblemAcceptor } from 'typir'
+import type { TaoSpecifics, TaoTypirServices } from './type-system'
 import type { ValidationContext } from './validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
@@ -24,15 +25,11 @@ export function validateInvocations(file: AST.TaoFile, ctx: ValidationContext): 
 /** registerInvocationTypeValidation registers Typir checks for render argument compatibility. */
 export function registerInvocationTypeValidation(typir: TaoTypirServices): void {
   typir.validation.Collector.addValidationRulesForAstNodes({
-    Render: (render, accept, services) => {
-      const invocation = ASTUtils.resolveRenderInvocation(render)
-      for (const pair of invocation.pairs) {
-        const expected = taoPrimitiveType(pair.parameter.type, services as TaoTypirServices)
-        services.validation.Constraints.ensureNodeIsAssignable(pair.argument.value, expected, accept, (actual) => ({
-          languageNode: pair.argument.value,
-          message: invocationValidationMessages.typeMismatch(pair.parameter, actual.name),
-        }))
-      }
+    RenderStatement: (render, accept, services) => {
+      validateInvocationTypes(render, accept, services as TaoTypirServices)
+    },
+    ViewRender: (render, accept, services) => {
+      validateInvocationTypes(render, accept, services as TaoTypirServices)
     },
   })
 }
@@ -58,6 +55,21 @@ function reportArity(render: AST.Render, ctx: ValidationContext): void {
       ),
       args[parameters.length],
     )
+  }
+}
+
+function validateInvocationTypes(
+  render: AST.Render,
+  accept: ValidationProblemAcceptor<TaoSpecifics>,
+  services: TaoTypirServices,
+): void {
+  const invocation = ASTUtils.resolveRenderInvocation(render)
+  for (const pair of invocation.pairs) {
+    const expected = taoPrimitiveType(pair.parameter.type, services)
+    services.validation.Constraints.ensureNodeIsAssignable(pair.argument.value, expected, accept, (actual) => ({
+      languageNode: pair.argument.value,
+      message: invocationValidationMessages.typeMismatch(pair.parameter, actual.name),
+    }))
   }
 }
 

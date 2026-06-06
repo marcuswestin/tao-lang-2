@@ -20,7 +20,7 @@ Describe('Tao AST injection helpers', () => {
     Expect.Is(nativeView, AST.isUiDeclaration)
 
     const render = nativeView.block.statements[0]
-    Expect.Is(render, AST.isRender)
+    Expect.Is(render, AST.isRenderStatement)
 
     Expect(render.injection?.argumentList?.arguments.map(ASTUtils.injectionArgumentName)).toEqual(['Value', 'Name'])
   })

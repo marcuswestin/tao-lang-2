@@ -16,7 +16,7 @@ Describe('Tao injection parser', () => {
     Expect.Is(view, AST.isUiDeclaration)
 
     const render = view.block.statements[0]
-    Expect.Is(render, AST.isRender)
+    Expect.Is(render, AST.isRenderStatement)
     Expect(render.injection?.tsCodeBlock).toContain('return null')
   })
 
@@ -34,7 +34,7 @@ Describe('Tao injection parser', () => {
     Expect.Is(view, AST.isUiDeclaration)
 
     const render = view.block.statements[0]
-    Expect.Is(render, AST.isRender)
+    Expect.Is(render, AST.isRenderStatement)
 
     const args = render.injection?.argumentList?.arguments ?? []
     Expect(args).toHaveLength(4)

@@ -8,6 +8,8 @@ import Run from './Run'
 const DEV_RELOAD_EXIT_CODE = 42
 const NEXT_APP_PATH = '.artifacts/dev/next-app-path'
 
+type AppChoice = HCI.Choice<string> & { label: string }
+
 /** CommandKeyContext provides dependencies for a dev-loop key action. */
 export type CommandKeyContext = {
   appPath: string
@@ -22,13 +24,17 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
     return
   }
 
+  if (key === '\u0003') {
+    await context.finish(130)
+    return
+  }
+
   if (CommandRunner.isCommandRunning()) {
     HCI.logProcessInfo('dev', `Command already running; ignored ${formatCommandKey(key)}.`)
     return
   }
 
   await Switch.value(key, {
-    '\u0003': () => context.finish(130),
     q: () => context.finish(0),
     r: () => CommandRunner.runNonInteractiveCommand('reload Expo app', Expo.reloadExpoApps),
     d: () => context.finish(DEV_RELOAD_EXIT_CODE),
@@ -56,14 +62,15 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
   })
 }
 
-async function cleanInstallDepsAndReload(context: CommandKeyContext): Promise<void> {
+async function cleanInstallDepsAndReload(context: CommandKeyContext): Promise<boolean | void> {
   await context.stopServices()
   try {
     await Run.runJust(['clean'])
     await Run.runJust(['deps'])
   } catch (error) {
+    HCI.writeErrorLine(Errors.formatForLog(error))
     await context.finish(1)
-    throw error
+    return false
   }
   await context.finish(DEV_RELOAD_EXIT_CODE)
 }
@@ -102,23 +109,26 @@ async function askForAppPath(currentAppPath: string): Promise<string> {
 
 async function appChoices(): Promise<HCI.Choice<string>[]> {
   const appsRoot = FS.repoPath('Apps')
-  const entries = await FS.listDir(appsRoot)
-  const choices: HCI.Choice<string>[] = []
+  const choices: AppChoice[] = []
 
-  for (const entry of entries.sort()) {
-    const appPath = FS.resolvePath(`${entry}/${entry}.tao`, { cwd: appsRoot })
-    if (await FS.isFile(appPath)) {
-      choices.push({
-        label: entry,
-        value: appPath,
-      })
-    }
+  for await (const appPath of FS.walk(appsRoot, { extensions: ['.tao'] })) {
+    choices.push({
+      label: formatAppChoiceLabel(appsRoot, appPath),
+      value: appPath,
+    })
   }
 
   if (choices.length === 0) {
-    throw new Errors.UserInputError('No switchable apps found in Apps/*.')
+    throw new Errors.UserInputError('No switchable apps found in Apps/**/*.tao.')
   }
-  return choices
+  return choices.sort((a, b) => a.label.localeCompare(b.label))
+}
+
+function formatAppChoiceLabel(appsRoot: string, appPath: string): string {
+  return appPath
+    .slice(appsRoot.length + 1)
+    .replaceAll('\\', '/')
+    .replace(/\.tao$/, '')
 }
 
 function formatCommandKey(key: CommandKey): string {

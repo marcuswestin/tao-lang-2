@@ -1,7 +1,7 @@
 import { injectionArgumentName } from './injections'
 import {
-  type RenderInvocation as RenderInvocationData,
   type RenderInvocationPair as RenderInvocationPairData,
+  type ResolvedRenderInvocation as ResolvedRenderInvocationData,
   resolveRenderInvocation,
 } from './invocations'
 import { getDocument, isNode, streamAllContents } from './traversal'
@@ -19,8 +19,8 @@ namespace ASTUtils {
   /** RenderInvocationPair declares one positional render argument-to-parameter pairing. */
   export type RenderInvocationPair = RenderInvocationPairData
 
-  /** RenderInvocation declares the semantic shape of a render invocation. */
-  export type RenderInvocation = RenderInvocationData
+  /** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
+  export type ResolvedRenderInvocation = ResolvedRenderInvocationData
 }
 
 export default ASTUtils

@@ -14,7 +14,7 @@ const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type S
 
 Describe('minimal Tao compiler', () => {
   Test('reports parser syntax errors once', async () => {
-    const source = 'view Legacy { }'
+    const source = 'ui Broken { render }'
     const parsed = await testParseCodeWithParserErrors(source)
     const parserMessage = parsed.document.parseResult.parserErrors[0]!.message
     let errorDetails: unknown[] = []
@@ -36,22 +36,34 @@ Describe('minimal Tao compiler', () => {
       ui MainView {
         render Text "Hello"
       }
-      ui Text Value text { }
+      ui Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
     `)
 
     const taoFile = wrap(parsed.ast)
     Compile.TaoFile(taoFile.unwrap())
     const mainView = taoFile.statements.second.as_UiDeclaration
-    const render = mainView.block.statements.only.as_Render
+    const render = mainView.block.statements.only.as_RenderStatement
     const literal = render.argumentList.arguments.only.value.as_StringLiteral
     Compile.Expression(literal.unwrap())
+    const layout = taoFile.statements[3]!.as_LayoutDeclaration
+    Compile.LayoutDeclaration(layout.unwrap())
 
     taoFile.statements.match([
       { $type: AST.AppDeclaration.$type, name: 'MyApp' },
       { $type: AST.UiDeclaration.$type, name: 'MainView' },
       { $type: AST.UiDeclaration.$type, name: 'Text' },
+      { $type: AST.LayoutDeclaration.$type, name: 'Stack' },
     ])
-    render.view.expect('name').toBe('Text')
+    Expect(render.unwrap().view?.ref?.name).toBe('Text')
     literal.expect('value').toBe('Hello')
   })
 
@@ -81,6 +93,18 @@ Describe('minimal Tao compiler', () => {
       }
       ui MainView { }
     `)).rejects.toThrow('Only root ui declarations are allowed')
+  })
+
+  Test('rejects inject in multi-statement view blocks explicitly', async () => {
+    await Expect(testCompileCode(`
+      app MyApp { ui MainView }
+      ui MainView {
+        render inject ${tsFence}
+          return <RN.Text>Hello</RN.Text>
+        ${fence}
+        render MainView
+      }
+    `)).rejects.toThrow('`render inject` must be the only statement in a view body')
   })
 
   Test('compiles the target Kitchen Sink app', async () => {

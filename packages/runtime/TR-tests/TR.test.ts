@@ -1,6 +1,5 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
-import type { ReactElement } from 'react'
 
 Describe('TR.Value', () => {
   Test('wraps JavaScript values as evaluable Tao runtime values', () => {
@@ -21,25 +20,22 @@ Describe('TR.Alias', () => {
   })
 })
 
-Describe('TR views', () => {
-  Test('creates typed view components and render elements', () => {
-    const parameters = TR.ViewParameterList({ Label: 'text' })
-    const Label = TR.UiDeclaration(
-      'Label',
-      parameters,
-      _ViewProps => TR.ViewBlock(_ViewProps, () => _ViewProps.Label.evaluate().jsValue),
-    )
-    const label = new TR.Value('Hello')
+Describe('TR.BlockScope', () => {
+  Test('creates child scopes that can shadow parent declarations', () => {
+    const parent: TR.Scope = {
+      Name: TR.Alias(new TR.Value('parent')),
+    }
 
-    const element = TR.Render(Label, TR.RenderProps({ Label: label })) as ReactElement<{ Label: TR.Value<string> }>
+    const result = TR.BlockScope(parent, child => {
+      child['Name'] = TR.Alias(new TR.Value('child'))
+      return {
+        child,
+        value: child['Name'].evaluate().jsValue,
+      }
+    })
 
-    Expect(Label.displayName).toBe('Label')
-    Expect(element.type).toBe(Label)
-    Expect(element.props['Label']).toBe(label)
-  })
-
-  Test('uses children when a view block renders no elements', () => {
-    Expect(TR.ViewBlock({ children: 'Fallback' }, () => [])).toBe('Fallback')
-    Expect(TR.RenderChildren(() => [])).toBeNull()
+    Expect(result.value).toBe('child')
+    Expect(parent['Name'].evaluate().jsValue).toBe('parent')
+    Expect(Object.getPrototypeOf(result.child)).toBe(parent)
   })
 })

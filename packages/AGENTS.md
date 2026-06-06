@@ -22,5 +22,6 @@ Add or edit the feature's file in each relevant package source dir (`<package>/<
 - Use `@ast-utils` for shared Tao AST traversal and node/document helpers; do not call `Langium.AstUtils` or `Langium.isAstNode` directly from package consumers.
 - Use `Switch.type` for behavior that branches by AST node kind. Reserve `AST.is*` checks for tests, filters, and local assertions where no union dispatch is needed.
 - In TypeScript tests and test helpers, import test runner APIs from `@shared/test` (`Describe`, `Test`, `Expect`, `AfterEach`, `Jest`) instead of importing `bun:test` or `@jest/globals` directly. Runner-specific imports belong in the shared test wrappers or test-runner config.
-- In compiler codegen, keep `compiler-src/codegen/app/Compile.ts` as the single `Compile` object assembly. Feature compiler files export `Compile<ASTNode>` functions and call recursive codegen through `Compile.<ASTNode>`.
+- In compiler codegen, keep `compiler-src/codegen/app/Compile.ts` as the single `Compile` object assembly. Feature compiler files export AST-node-named functions and call recursive codegen through `Compile.<ASTNode>`.
 - Keep generated Tao TS minimal. Prefer reusable runtime functionality on default `TR` from `@runtime/TR` (`packages/runtime/TaoRuntime-src/TR.ts`) over emitting helper implementations in generated app files.
+- Do not special-case empty iterables before `genJoin` or `genList`; those helpers already emit empty output. Branch only when empty input needs different generated syntax or runtime behavior.

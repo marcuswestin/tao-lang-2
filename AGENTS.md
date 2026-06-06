@@ -65,7 +65,7 @@ You will do all your work with Ro, the project lead and language designer. They 
    - Each test app lives in `Apps/Test Apps/<App Name>/`, has one primary `<App Name>.tao`, and includes `Purpose.md` describing the app's purpose, what belongs there, when to edit it, and any planned behavior-test metadata
    - Test apps must be valid, positive functionality examples; put error and diagnostic cases in package unit tests
    - Prefer behavior tests over API-shape tests; avoid trivial tests
-   - Test compiler behavior through Tao AST and runtime behavior, not generated TypeScript structure or string matches
+   - Do not test generated compiled with TypeScript substring/regex assertions; test compiler behavior through Tao AST, validator diagnostics, runtime/e2e behavior, or compilation success for positive fixture coverage.
 
 ## Porting Process and Rules
 

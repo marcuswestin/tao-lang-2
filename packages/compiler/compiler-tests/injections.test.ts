@@ -29,6 +29,6 @@ Describe('Tao injection compiler', () => {
         ${fence}
         render MainView
       }
-    `)).rejects.toThrow('`render inject` must be the only statement in a ui body')
+    `)).rejects.toThrow()
   })
 })

@@ -9,12 +9,12 @@ alias SecondCount = 2
 
 ui TileBoard {
     render Stack {
-        render Tile FirstTitle, FirstCount { }
-        render Tile SecondTitle, SecondCount { }
+        Tile FirstTitle, FirstCount
+        Tile SecondTitle, SecondCount
     }
 }
 
-ui Stack {
+layout Stack {
     render inject ```ts
         return <>{_ViewProps.children}</>
     ```

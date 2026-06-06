@@ -5,8 +5,8 @@ import { type Compiled, gen, genJoin, genName, genTextLines, resolveRef } from '
 import { Compile } from '../Compile'
 
 export default {
-  /** CompileInjection generates a self-invoked block of the injected TS code. */
-  CompileInjection(injection: AST.Injection): Compiled {
+  /** Injection generates a self-invoked block of the injected TS code. */
+  Injection(injection: AST.Injection): Compiled {
     const code = stripTsFence(injection.tsCodeBlock)
     const argumentList = injection.argumentList?.arguments ?? []
     const parameters = genJoin(argumentList, CompileInjectionParameter)

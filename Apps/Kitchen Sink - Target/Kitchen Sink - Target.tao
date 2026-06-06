@@ -6,15 +6,23 @@ alias Greeting = "Hello, World!"
 alias LaunchCount = 3
 
 ui MainView {
+    alias LocalText = "Text from a local alias"
+    alias OuterGreeting = Greeting
     render Stack {
-        render Text Greeting { }
-        render StatTile "Launch count", LaunchCount { }
+        alias Greeting = "Nested scope greeting"
+        Text OuterGreeting { }
+        Text LocalText
+        Text Greeting
+        Text "Hello World"
+        CountText LaunchCount
     }
 }
 
-ui Stack {
+layout Stack {
     render inject ```ts
-        return <>{_ViewProps.children}</>
+        return <>
+            {_ViewProps.children}
+        </>
     ```
 }
 
@@ -24,8 +32,8 @@ ui Text Value text {
     ```
 }
 
-ui StatTile Label text, Count number {
-    render inject Label, Count ```ts
-        return <RN.Text>{Label}: {Count}</RN.Text>
+ui CountText Count number {
+    render inject Count ```ts
+        return <RN.Text>Launch count: {Count}</RN.Text>
     ```
 }
