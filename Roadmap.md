@@ -8,22 +8,26 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [ ] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g "inject Value, Name UserName `ts alert(Value + " " + Name)`
 - [ ] Add runtime stdlib, along with `inject file ./path/to/file.ts`
+- [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
-- [ ] Have `./dev <path/to/tao/app>` without command start a dev TUI, which:
+- [x] Have `./dev [path/to/tao/app]` without command start a dev TUI, which:
+  - defaults to Kitchen Sink when no app path is supplied
   - compiles the tao app
-  - launches the app in an expo runtime, opening android/web/ios and device when available
-  - watches the tao app file and its used dependencies and recompiles on changes
+  - launches the app in an expo runtime, opening web/ios and already-available android targets
+  - watches the tao app file and its used dependencies and recompiles on changes; used dependencies are currently the selected app file until Tao imports exist
   - watches the compiler/runtime/etc and its dependencies and recompiles on changes
   - accepts input with
-    - 'r' to quit and reload
+    - 'd' to quit and reload the dev process
+    - 'r' to reload the Expo app
+    - 'w' to open Expo web
+    - 'i' to open Expo iOS
+    - 'a' to open Expo Android
     - 't' to run all tests
     - 'q' to quit
-    - 'x' to build and install the ide extension
-    - 's' to switch app (shows list of all Apps/*)
-    - 'c' to clean
-    - 'a' to launch android emulator + app
-    - 'd' to install on iPhone device
-    - 'p' to run prep-commit
+    - 'e' to build and install the ide extension
+    - 'f' to fix
+    - 'c' to clean, reinstall deps, quit, and reload
+    - 'p' to run prep
 - [ ] Add generic compiled-add test declarations
   - Should this map to test writing for the actual apps?
 - [ ] Enable over-the-network dev app running for ios device
@@ -71,9 +75,9 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
     - [x] Add `packages/runtime` as `@runtime`
     - [x] Add minimal Expo web host files
     - [x] Compile app into ignored `packages/runtime/_gen_tao-app`
-    - [x] Add `just run` to compile Kitchen Sink and start Expo web
+    - [x] Add dev-loop Expo launch to compile Kitchen Sink and start Expo web
     - [x] E2E render verifies `Hello, World!`
-    - [x] Verify `./agent just run` starts Expo web
+    - [x] Verify `./agent just dev` starts Expo web
     - [x] Ro review
 - 26-06-05
   - [x] Compiler: Create plain codegen wrapper and start using that
