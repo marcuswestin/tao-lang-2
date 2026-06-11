@@ -8,11 +8,14 @@ import "./terminals"
 entry ViewsGrammarEntrypoint:
     UiDeclaration | LayoutDeclaration;
 
+DeclarationVisibility returns string:
+    'share' | 'hide';
+
 UiDeclaration:
-    'ui' name=ID parameterList=ParameterList? block=Block;
+    visibility=DeclarationVisibility? 'ui' name=ID parameterList=ParameterList? block=Block;
 
 LayoutDeclaration:
-    'layout' name=ID parameterList=ParameterList? block=Block;
+    visibility=DeclarationVisibility? 'layout' name=ID parameterList=ParameterList? block=Block;
 
 type ViewDeclaration = UiDeclaration | LayoutDeclaration;
 

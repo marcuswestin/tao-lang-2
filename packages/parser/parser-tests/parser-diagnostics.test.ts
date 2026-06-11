@@ -77,4 +77,11 @@ Describe('minimal Tao parser diagnostics', () => {
     Expect(parsed.document.parseResult.lexerErrors.length).toBeGreaterThan(0)
     Expect(parsed.diagnostics.length).toBeGreaterThan(0)
   })
+
+  Test('reports parser errors for malformed use statements', async () => {
+    const parsed = await testParseCodeWithParserErrors('use Text from')
+
+    Expect(parsed.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(parsed.diagnostics.length).toBeGreaterThan(0)
+  })
 })

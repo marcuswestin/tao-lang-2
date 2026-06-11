@@ -1,0 +1,25 @@
+app RuntimeStdlibTests {
+    ui MainView
+}
+
+use Text, Number, Button, Box, Stack, Col, Row, WrappingRow, TextLabel, MultiLineText from @tao/ui
+
+alias LaunchCount = 3
+
+ui MainView {
+    render Stack {
+        Text "Runtime stdlib smoke"
+        Number LaunchCount
+        Button "Tap me"
+        Box {
+            Col {
+                TextLabel "Label"
+            }
+        }
+        Row {
+            WrappingRow {
+                MultiLineText "Wrapped"
+            }
+        }
+    }
+}

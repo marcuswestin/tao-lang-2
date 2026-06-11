@@ -1,5 +1,7 @@
 import { AST, Langium, type ParseOptions, type ParseResult } from '@parser'
+import { loadEntryAndReachableDocuments, loadReachableDocuments } from '@parser/module-resolution'
 import { TaoValueScopeProvider } from '@parser/value-scope'
+import { FS } from '@shared'
 import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typir-langium'
 import { registerTaoValidationChecks } from './langium-validation'
 import { type TaoSpecifics, TaoTypeSystem, type TaoTypirServices } from './type-system'
@@ -19,6 +21,8 @@ type ValidatorLspServices = {
 /** ValidatorParseResult declares a parse result built by validator-owned services. */
 export type ValidatorParseResult = ParseResult & {
   typir: TaoTypirServices
+  workspaceFiles: AST.TaoFile[]
+  entryFilePath?: string
 }
 
 /** parseCodeForValidation parses Tao source with validator-owned Langium and Typir services. */
@@ -26,14 +30,20 @@ export async function parseCodeForValidation(code: string, opts: ParseOptions = 
   const services = createValidatorServices()
   const uri = opts.uri ?? Langium.URI.file('/__tao__/source.tao')
   const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(code, uri)
-  return await buildDocument(services, document)
+  const documents = await loadReachableDocuments(services, document)
+  return await buildDocuments(services, document, documents)
 }
 
 /** parseFileForValidation parses a Tao file with validator-owned Langium and Typir services. */
 export async function parseFileForValidation(path: string): Promise<ValidatorParseResult> {
   const services = createValidatorServices()
-  const document = await services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(Langium.URI.file(path))
-  return await buildDocument(services, document)
+  const entryPath = FS.resolvePath(path)
+  const documents = await loadEntryAndReachableDocuments(services, entryPath)
+  const entryDocument = documents.find(document => document.uri.path === entryPath)
+  if (!entryDocument) {
+    throw new Error(`Expected entry Tao document for ${entryPath}`)
+  }
+  return await buildDocuments(services, entryDocument, documents)
 }
 
 /** rebuildForValidation reparses a parser result with validator-owned services. */
@@ -97,17 +107,25 @@ export function createValidatorLspServices(
   return { shared, language, typir }
 }
 
-async function buildDocument(services: Services, document: AST.Document): Promise<ValidatorParseResult> {
-  services.shared.workspace.LangiumDocuments.addDocument(document)
-  await services.shared.workspace.DocumentBuilder.build([document], {
+async function buildDocuments(
+  services: Services,
+  entryDocument: AST.Document,
+  documents: AST.Document[],
+): Promise<ValidatorParseResult> {
+  for (const document of documents) {
+    services.shared.workspace.LangiumDocuments.addDocument(document)
+  }
+  await services.shared.workspace.DocumentBuilder.build(documents, {
     eagerLinking: true,
     validation: false,
   })
 
   return {
-    ast: document.parseResult.value,
-    diagnostics: document.diagnostics ?? [],
-    document,
+    ast: entryDocument.parseResult.value,
+    diagnostics: entryDocument.diagnostics ?? [],
+    document: entryDocument,
     typir: services.typir,
+    workspaceFiles: documents.map(document => document.parseResult.value),
+    entryFilePath: entryDocument.uri.scheme === 'file' ? entryDocument.uri.path : undefined,
   }
 }

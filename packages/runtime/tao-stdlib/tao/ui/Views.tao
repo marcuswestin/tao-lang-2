@@ -1,0 +1,59 @@
+share layout Box {
+  render inject ```ts
+    return TR.Views.Box(_ViewProps)
+  ```
+}
+
+share layout Stack {
+  render inject ```ts
+    return TR.Views.Stack(_ViewProps)
+  ```
+}
+
+share layout Col {
+  render inject ```ts
+    return TR.Views.Col(_ViewProps)
+  ```
+}
+
+share layout Row {
+  render inject ```ts
+    return TR.Views.Row(_ViewProps)
+  ```
+}
+
+share layout WrappingRow {
+  render inject ```ts
+    return TR.Views.WrappingRow(_ViewProps)
+  ```
+}
+
+share ui Text Value text {
+  render inject Value ```ts
+    return TR.Views.Text({ __tao: _ViewProps.__tao, children: [Value] })
+  ```
+}
+
+share ui TextLabel Value text {
+  render inject Value ```ts
+    return TR.Views.TextLabel({ __tao: _ViewProps.__tao, children: [Value] })
+  ```
+}
+
+share ui MultiLineText Value text {
+  render inject Value ```ts
+    return TR.Views.MultiLineText({ __tao: _ViewProps.__tao, children: [Value] })
+  ```
+}
+
+share ui Number Value number {
+  render inject Value ```ts
+    return TR.Views.Number({ __tao: _ViewProps.__tao, children: [String(Value)] })
+  ```
+}
+
+share ui Button Title text {
+  render inject Title ```ts
+    return TR.Views.Button({ __tao: _ViewProps.__tao, title: Title })
+  ```
+}

@@ -7,10 +7,10 @@ import { Compile } from '../Compile'
 export default {
   /** Injection generates a self-invoked block of the injected TS code. */
   Injection(injection: AST.Injection): Compiled {
-    const code = stripTsFence(injection.tsCodeBlock)
     const argumentList = injection.argumentList?.arguments ?? []
     const parameters = genJoin(argumentList, CompileInjectionParameter)
     const values = genJoin(argumentList, CompileInjectionValue)
+    const code = stripTsFence(injection.tsCodeBlock)
 
     return gen`
       Reflect.apply(

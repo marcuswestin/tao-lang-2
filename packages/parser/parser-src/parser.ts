@@ -1,4 +1,6 @@
+import { FS } from '@shared'
 import { Langium } from './langium-exports'
+import { loadEntryAndReachableDocuments, loadReachableDocuments } from './module-resolution'
 import * as AST from './parserASTExport'
 import { TaoValueScopeProvider } from './value-scope'
 
@@ -35,8 +37,13 @@ export const Parser = {
   /** parseFile parses the Tao file at `path` into a Langium AST document. */
   async parseFile(path: string): Promise<ParseResult> {
     const services = createServices()
-    const document = await services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(Langium.URI.file(path))
-    return await buildDocument(services, document)
+    const entryPath = FS.resolvePath(path)
+    const documents = await loadEntryAndReachableDocuments(services, entryPath)
+    const entryDocument = documents.find(document => document.uri.path === entryPath)
+    if (!entryDocument) {
+      throw new Error(`Expected entry Tao document for ${entryPath}`)
+    }
+    return await buildDocuments(services, entryDocument, documents)
   },
 
   /** parseCode parses Tao source code into a Langium AST document. */
@@ -44,7 +51,8 @@ export const Parser = {
     const services = createServices()
     const uri = opts.uri ?? Langium.URI.file('/__tao__/source.tao')
     const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(code, uri)
-    return await buildDocument(services, document)
+    const documents = await loadReachableDocuments(services, document)
+    return await buildDocuments(services, document, documents)
   },
 }
 
@@ -67,16 +75,22 @@ function createServices(context: Langium.DefaultSharedCoreModuleContext = Langiu
   return { shared, language }
 }
 
-async function buildDocument(services: Services, document: AST.Document): Promise<ParseResult> {
-  services.shared.workspace.LangiumDocuments.addDocument(document)
-  await services.shared.workspace.DocumentBuilder.build([document], {
+async function buildDocuments(
+  services: Services,
+  entryDocument: AST.Document,
+  documents: AST.Document[],
+): Promise<ParseResult> {
+  for (const document of documents) {
+    services.shared.workspace.LangiumDocuments.addDocument(document)
+  }
+  await services.shared.workspace.DocumentBuilder.build(documents, {
     eagerLinking: true,
     validation: true,
   })
 
   return {
-    ast: document.parseResult.value,
-    diagnostics: document.diagnostics ?? [],
-    document,
+    ast: entryDocument.parseResult.value,
+    diagnostics: documents.flatMap(document => document.diagnostics ?? []),
+    document: entryDocument,
   }
 }

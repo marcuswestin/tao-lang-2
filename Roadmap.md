@@ -7,10 +7,14 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
-- [ ] Add runtime stdlib, module imports, and `inject file ./path/to/file.ts`
+- [x] Add runtime stdlib and module imports
   - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough `share`/visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
+- [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
+- [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
+  - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
 - [ ] Add layout/style arguments and default app-shell UI baseline
   - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `_taoLayout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
+- [ ] Remove magical strings
 - [ ] Add state/actions/control mini slice
   - Import `state`, `action`, action parameters/values, inline `action {}`, `set`, `do`, `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
 - [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
@@ -20,7 +24,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - defaults to Kitchen Sink when no app path is supplied
   - compiles the tao app
   - launches the app in an expo runtime, opening web/ios and already-available android targets
-  - watches the tao app file and its used dependencies and recompiles on changes; used dependencies are currently the selected app file until Tao imports exist
+  - watches the tao app folder and recompiles on changes, including files not yet in the imported dependency tree
   - watches the compiler/runtime/etc and its dependencies and recompiles on changes
   - accepts input with
     - 'd' to quit and reload the dev process
@@ -42,6 +46,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - Add followups for later:
   - Think through how to do app testing, and how to use that for our repo test apps tests
   - Compiler: Add codegen tracing/source maps when needed
+  - Dev loop: watch resolved relative import roots outside the selected app folder.
 
 ## Language
 

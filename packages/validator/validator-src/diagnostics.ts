@@ -27,13 +27,30 @@ export type TaoDiagnostic = {
   range?: TaoDiagnosticRange
 }
 
-/** parserDiagnostics returns normalized parser, linker, and lexer diagnostics. */
-export function parserDiagnostics(parsed: ParseResult): TaoDiagnostic[] {
+/** parserDiagnostics returns normalized lexer and parser diagnostics for all parsed documents. */
+export function parserDiagnostics(parsed: ParseResult, documents?: readonly AST.Document[]): TaoDiagnostic[] {
+  const allDocuments = documents?.length ? documents : [parsed.document]
   return uniqueDiagnostics([
     ...parsed.diagnostics.map(langiumDiagnostic),
-    ...parsed.document.parseResult.lexerErrors.map(error => parserError(error.message)),
-    ...parsed.document.parseResult.parserErrors.map(error => parserError(error.message)),
+    ...allDocuments.flatMap(document => [
+      ...document.parseResult.lexerErrors.map(error => parserError(error.message)),
+      ...document.parseResult.parserErrors.map(error => parserError(error.message)),
+    ]),
   ])
+}
+
+/** linkerDiagnostics returns unresolved-reference diagnostics for all parsed documents. */
+export function linkerDiagnostics(documents: readonly AST.Document[]): TaoDiagnostic[] {
+  return uniqueDiagnostics(documents.flatMap(document =>
+    document.references
+      .filter(reference => reference.error !== undefined)
+      .map(reference => ({
+        message: reference.error!.message,
+        severity: 'error' as const,
+        source: 'parser' as const,
+        range: reference.$refNode?.range,
+      }))
+  ))
 }
 
 /** hasError returns true when diagnostics contain at least one error. */

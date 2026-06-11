@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled, gen } from '../codegen-util'
+import { type Compiled, gen, genNoop } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
@@ -13,6 +13,7 @@ export default {
       Injection: Compile.Injection,
       LayoutDeclaration: Compile.LayoutDeclaration,
       RenderStatement: compileRenderStatement,
+      UseStatement: () => genNoop(),
       UiDeclaration: Compile.UiDeclaration,
       ViewRender: Compile.ViewRender,
     })

@@ -66,6 +66,9 @@ function startDebouncedWatcher(
 }
 
 function watcherSpecs(appPath: string): DevWatcherSpec[] {
+  // Watching the whole app folder keeps recompiles working for project files outside the
+  // current dependency tree, e.g. newly created or not-yet-imported .tao files.
+  const appRoot = FS.dirname(appPath)
   // Separate watcher groups keep grammar generation unconditional for grammar edits and avoid path classification.
   return [
     {
@@ -79,7 +82,7 @@ function watcherSpecs(appPath: string): DevWatcherSpec[] {
     {
       label: 'compile',
       paths: [
-        appPath,
+        appRoot,
         FS.repoPath('Justfile'),
         FS.repoPath('packages/ast-utils'),
         FS.repoPath('packages/compiler'),
@@ -96,7 +99,7 @@ function watcherSpecs(appPath: string): DevWatcherSpec[] {
 }
 
 function shouldIgnoreWatchPath(path: string): boolean {
-  const normalized = path.replaceAll('\\', '/')
+  const normalized = FS.slashPath(path)
   return normalized.includes('/node_modules/')
     || normalized.endsWith('/node_modules')
     || normalized.includes('/.git/')

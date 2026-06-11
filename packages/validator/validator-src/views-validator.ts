@@ -15,7 +15,7 @@ export const viewValidationMessages = {
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
 } as const
 
-const reservedParameterNames = new Set(['children', 'key', 'ref'])
+const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao'])
 
 /** validateViews validates view declarations and view-body structure. */
 export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {

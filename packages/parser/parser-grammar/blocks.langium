@@ -4,20 +4,22 @@ import "./app"
 import "./views"
 import "./aliases"
 import "./injections"
+import "./imports"
 import "./terminals"
 
 entry BlocksGrammarEntrypoint:
     Block;
 
 Statement:
-    Declaration | AppUi | Injection | RenderStatement | ViewRender;
+    Declaration | UseStatement | AppUi | Injection | RenderStatement | ViewRender;
 
 Declaration:
     AppDeclaration | UiDeclaration | LayoutDeclaration | AliasDeclaration;
 
-type TopLevelStatement = Declaration;
+type TopLevelStatement = Declaration | UseStatement;
 type ViewStatement = AliasDeclaration | Render;
 type NamedDeclaration = Declaration | ParameterDeclaration;
+type ExportableDeclaration = AliasDeclaration | ViewDeclaration;
 
 Block:
     '{' statements+=Statement* '}';

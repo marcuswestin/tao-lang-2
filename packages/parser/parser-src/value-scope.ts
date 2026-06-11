@@ -1,12 +1,26 @@
 import { Langium } from './langium-exports'
+import { defaultStdLibRoot, moduleTargetMatchesFile, resolveModulePath } from './module-resolution'
 import * as AST from './parserASTExport'
 
 /** TaoValueScopeProvider resolves value references through Tao alias and parameter visibility. */
 export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
+  constructor(private readonly coreServices: Langium.LangiumCoreServices) {
+    super(coreServices)
+  }
+
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
     if (context.property === 'target' && AST.isValueReference(context.container)) {
       return this.createValueScope(context.container)
+    }
+    if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
+      return this.createUseImportScope(context.container)
+    }
+    if (context.property === 'view' && AST.isRender(context.container)) {
+      return this.createViewScope(context.container)
+    }
+    if (context.property === 'ui' && AST.isAppUi(context.container)) {
+      return this.createAppUiScope(context.container)
     }
     return super.getScope(context)
   }
@@ -18,6 +32,7 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     }
 
     let scope = this.createScopeForNodes(root.statements.filter(AST.isAliasDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isAliasDeclaration), scope)
 
     const owningView = findOwningView(reference)
     if (owningView) {
@@ -29,6 +44,72 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     }
 
     return scope
+  }
+
+  private createViewScope(render: AST.Render): Langium.Scope {
+    const root = findRoot(render)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isViewDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(render, AST.isViewDeclaration), scope)
+    return scope
+  }
+
+  private createAppUiScope(appUi: AST.AppUi): Langium.Scope {
+    const root = findRoot(appUi)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isUiDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(appUi, AST.isUiDeclaration), scope)
+    return scope
+  }
+
+  private createUseImportScope(useStatement: AST.UseStatement): Langium.Scope {
+    return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
+  }
+
+  private importedDeclarations<DeclarationT extends AST.Declaration>(
+    node: AST.Node,
+    isDeclaration: (node: AST.Node) => node is DeclarationT,
+  ): DeclarationT[] {
+    const root = findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return []
+    }
+    const document = Langium.AstUtils.getDocument(node)
+    const currentPath = document.uri.path
+
+    const declarations: DeclarationT[] = []
+    for (const useStatement of root.statements.filter(AST.isUseStatement)) {
+      const importedNames = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
+      for (const statement of this.collectTargetDeclarations(useStatement, currentPath)) {
+        if (AST.isDeclaration(statement) && isDeclaration(statement) && importedNames.has(statement.name)) {
+          declarations.push(statement)
+        }
+      }
+    }
+    return declarations
+  }
+
+  private collectTargetDeclarations(useStatement: AST.UseStatement, currentPath?: string): AST.Declaration[] {
+    const path = currentPath ?? Langium.AstUtils.getDocument(useStatement).uri.path
+    if (!useStatement.modulePath) {
+      return []
+    }
+    const resolution = resolveModulePath(useStatement.modulePath, path, defaultStdLibRoot())
+    if (!resolution) {
+      return []
+    }
+    const allFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
+      .map(document => document.parseResult.value)
+      .filter(AST.isTaoFile)
+    const targetFiles = allFiles.filter(file => {
+      const filePath = Langium.AstUtils.getDocument(file).uri.path
+      return moduleTargetMatchesFile(resolution.targetPath, filePath)
+    })
+    return targetFiles.flatMap(file => file.statements.filter(AST.isDeclaration))
   }
 }
 

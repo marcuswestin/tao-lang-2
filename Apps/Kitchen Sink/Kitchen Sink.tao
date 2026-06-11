@@ -1,3 +1,5 @@
+use Text, Stack from @tao/ui
+
 app KitchenSink {
     ui MainView
 }
@@ -16,20 +18,6 @@ ui MainView {
         Text "Hello World"
         CountText LaunchCount
     }
-}
-
-layout Stack {
-    render inject ```ts
-        return <RN.View style={{ flex: 1, flexDirection: 'column', gap: 8 }}>
-            {_ViewProps.children}
-        </RN.View>
-    ```
-}
-
-ui Text Value text {
-    render inject Value ```ts
-        return <RN.Text>{Value}</RN.Text>
-    ```
 }
 
 ui CountText Count number {

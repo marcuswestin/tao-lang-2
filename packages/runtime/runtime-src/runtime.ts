@@ -16,9 +16,10 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const runtimePackageRoot = opts.runtimePackageRoot ?? defaultRuntimePackageRoot()
   const sourcePath = FS.resolvePath(appPath)
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
+  const generatedAppRoot = FS.resolvePath('_gen_tao-app', { cwd: runtimePackageRoot })
   const compiled = await Compiler.compileFile(sourcePath)
 
-  await writeGeneratedApp(generatedAppPath, compiled.code)
+  await writeGeneratedFiles(generatedAppRoot, compiled.files)
 
   return {
     sourcePath,
@@ -36,6 +37,28 @@ export default Runtime
 
 function defaultRuntimePackageRoot(): string {
   return FS.repoPath('packages/runtime')
+}
+
+async function writeGeneratedFiles(
+  outputRoot: string,
+  files: Array<{ relativePath: string; code: string }>,
+): Promise<void> {
+  await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)))
+  for (const file of files) {
+    await writeGeneratedApp(FS.resolvePath(file.relativePath, { cwd: outputRoot }), file.code)
+  }
+}
+
+async function removeStaleGeneratedFiles(outputRoot: string, currentRelativePaths: ReadonlySet<string>): Promise<void> {
+  if (!await FS.exists(outputRoot)) {
+    return
+  }
+  for await (const path of FS.walk(outputRoot)) {
+    const relativePath = FS.relativePath(outputRoot, path)
+    if (!currentRelativePaths.has(relativePath)) {
+      await FS.remove(path)
+    }
+  }
 }
 
 async function writeGeneratedApp(path: string, code: string): Promise<void> {

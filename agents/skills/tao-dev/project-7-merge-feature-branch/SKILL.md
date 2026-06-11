@@ -13,6 +13,7 @@ Land a completed feature branch into `main`.
 - Run `./agent merge-feature-preflight` before mutating merge state and resolve or report any blockers it finds.
 - Do not merge from `main`, `merged/...`, a detached HEAD, or a dirty worktree.
 - If the feature branch has uncommitted work, stop and use `commit-all-chunks` first.
+- If a merge step reports conflicts, resolve the parts that are clear from repo truth, feature scope, and existing instructions. Ask Ro only for conflict parts that require language-design, roadmap-priority, product-behavior, or destructive-operation input.
 - Do not rename, remove, or clean up the feature branch until the squash commit is pushed to `main`.
 - Preserve Git's generated squash appendix in the final commit message.
 - Move completed roadmap task folders from `Roadmap/<Task>/` to `Roadmap/Archive/<Task>/` before the squash commit. Archive whole task folders, not individual plan files, and leave active or planned task folders in place.
@@ -50,7 +51,7 @@ Land a completed feature branch into `main`.
    ./agent git push -u origin HEAD
    ```
 
-   If there are merge conflicts, stop and report them unless the user explicitly asked for conflict resolution.
+   If there are merge conflicts, resolve the clear hunks, stage the resolved files, complete the merge commit, then run `./agent just prep` and push the feature branch. Ask Ro only if a conflict cannot be resolved safely from repo truth and the feature scope.
 
 4. Squash the feature branch into refreshed `main`:
 
@@ -61,7 +62,7 @@ Land a completed feature branch into `main`.
    ./agent git merge --squash <feature-branch>
    ```
 
-   If `main` advanced after step 3, return to step 3 before squashing.
+   If `main` advanced after step 3, return to step 3 before squashing. If squash conflicts occur, resolve the clear hunks and ask Ro only for conflict parts that cannot be resolved safely.
 
 5. Archive completed roadmap task folders included in the landed feature:
 

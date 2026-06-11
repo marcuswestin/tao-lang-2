@@ -6,6 +6,7 @@ import { testParseCode } from './test-parse'
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
 const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
+const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 
 Describe('minimal Tao parser', () => {
   Test('parses the current Kitchen Sink app', async () => {
@@ -13,14 +14,15 @@ Describe('minimal Tao parser', () => {
 
     Expect(parsed.diagnostics).toEqual([])
 
-    const [app, greetingAlias, launchCountAlias, mainView, stackView, textView, countTextView] = parsed.ast.statements
+    const [useStatement, app, greetingAlias, launchCountAlias, mainView, countTextView] = parsed.ast.statements
+    Expect.Is(useStatement, AST.isUseStatement)
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(greetingAlias, AST.isAliasDeclaration)
     Expect.Is(launchCountAlias, AST.isAliasDeclaration)
     Expect.Is(mainView, AST.isUiDeclaration)
-    Expect.Is(stackView, AST.isLayoutDeclaration)
-    Expect.Is(textView, AST.isUiDeclaration)
     Expect.Is(countTextView, AST.isUiDeclaration)
+    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text', 'Stack'])
+    Expect(useStatement.modulePath).toBe('@tao/ui')
 
     Expect(app.name).toBe('KitchenSink')
     const appRoot = app.block.statements[0]
@@ -78,24 +80,12 @@ Describe('minimal Tao parser', () => {
     Expect(literalArg.value).toBe('Hello World')
     Expect(countArg.target.ref?.name).toBe('LaunchCount')
 
-    Expect(stackView.name).toBe('Stack')
-    Expect(stackView.parameterList).toBeUndefined()
-    const stackRender = stackView.block.statements[0]
-    Expect.Is(stackRender, AST.isRenderStatement)
-    Expect(stackRender.injection?.tsCodeBlock).toContain('_ViewProps.children')
-
-    Expect(textView.name).toBe('Text')
-    Expect(textView.parameterList?.parameters[0]?.name).toBe('Value')
-    Expect(textView.parameterList?.parameters[0]?.type).toBe('text')
-    const textRender = textView.block.statements[0]
-    Expect.Is(textRender, AST.isRenderStatement)
-    Expect(textRender.injection?.argumentList?.arguments).toHaveLength(1)
-
     Expect(countTextView.name).toBe('CountText')
     Expect(countTextView.parameterList?.parameters[0]?.name).toBe('Count')
     Expect(countTextView.parameterList?.parameters[0]?.type).toBe('number')
     const countRender = countTextView.block.statements[0]
     Expect.Is(countRender, AST.isRenderStatement)
+    Expect(countRender.injection?.tsCodeBlock).toContain('Launch count:')
     Expect(countRender.injection?.argumentList?.arguments).toHaveLength(1)
   })
 
@@ -276,11 +266,58 @@ Describe('minimal Tao parser', () => {
     Expect(parsed.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(4)
   })
 
+  Test('parses the Runtime Stdlib Tests app', async () => {
+    const parsed = await Parser.parseFile(runtimeStdlibTestsPath)
+
+    Expect(parsed.diagnostics).toEqual([])
+    Expect(parsed.ast.statements.filter(AST.isUseStatement)).toHaveLength(1)
+  })
+
   Test('parses Tao source strings', async () => {
-    const source = await FS.readText(kitchenSinkPath)
+    const source = `
+      app InlineApp { ui MainView }
+      ui MainView {
+        render inject \`\`\`ts
+          return null
+        \`\`\`
+      }
+    `
     const parsed = await testParseCode(source)
 
-    Expect(parsed.ast.statements).toHaveLength(7)
+    Expect(parsed.ast.statements).toHaveLength(2)
     Expect.Is(parsed.ast.statements[0], AST.isAppDeclaration)
+  })
+
+  Test('parses use statements and shared declarations', async () => {
+    const parsed = await testParseCode(`
+      app MyApp { ui MainView }
+      use Text, Stack from ./
+      share alias Greeting = "Hello"
+      share ui MainView {
+        render Stack {
+          Text Greeting
+        }
+      }
+      share layout Stack {
+        render inject \`\`\`ts
+          return <>{_ViewProps.children}</>
+        \`\`\`
+      }
+      share ui Text Value text {
+        render inject Value \`\`\`ts
+          return <RN.Text>{Value}</RN.Text>
+        \`\`\`
+      }
+    `)
+
+    Expect(parsed.diagnostics).toEqual([])
+    const [, useStatement, sharedAlias, mainView] = parsed.ast.statements
+    Expect.Is(useStatement, AST.isUseStatement)
+    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text', 'Stack'])
+    Expect(useStatement.modulePath).toBe('./')
+    Expect.Is(sharedAlias, AST.isAliasDeclaration)
+    Expect(sharedAlias.visibility).toBe('share')
+    Expect.Is(mainView, AST.isUiDeclaration)
+    Expect(mainView.visibility).toBe('share')
   })
 })

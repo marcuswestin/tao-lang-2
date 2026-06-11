@@ -46,6 +46,11 @@ export const dirname = (inputPath: string) => nodePath.dirname(inputPath)
 export const basename = (inputPath: string, suffix?: string) => nodePath.basename(inputPath, suffix)
 /** extname returns the extension for a path. */
 export const extname = (inputPath: string) => nodePath.extname(inputPath)
+/** relativePath returns the slash-separated path from `fromPath` to `toPath`. */
+export const relativePath = (fromPath: string, toPath: string) => slashPath(nodePath.relative(fromPath, toPath))
+/** slashPath returns a path with host separators normalized to slashes. */
+export const slashPath = (inputPath: string) =>
+  nodePath.sep === '/' ? inputPath : inputPath.replaceAll(nodePath.sep, '/')
 /** tmpdir returns the host temporary directory. */
 export const tmpdir = () => nodeOs.tmpdir()
 /** homeDir returns the host user's home directory. */
@@ -154,9 +159,9 @@ export async function move(fromPath: string, toPath: string): Promise<void> {
   await nodeFs.rename(fromPath, toPath)
 }
 
-/** listDir lists direct child names for a directory. */
+/** listDir lists direct child names for a directory, sorted for platform-independent order. */
 export async function listDir(inputPath: string): Promise<string[]> {
-  return nodeFs.readdir(inputPath)
+  return (await nodeFs.readdir(inputPath)).sort()
 }
 
 /** walk yields files under a path according to the provided filters. */
