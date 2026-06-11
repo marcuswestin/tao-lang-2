@@ -26,5 +26,5 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 
 ## Behavior Test Notes
 
-- Behavior automation is not wired yet.
-- Expected visible output includes: `Runtime stdlib smoke`, `3`, `Tap me`, `Label`, and `Wrapped`.
+- `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx` renders this app and asserts the visible output.
+- Expected visible output: `Runtime stdlib smoke`, `3`, `Tap me`, `Label`, and `Wrapped`.

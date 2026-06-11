@@ -43,8 +43,21 @@ async function writeGeneratedFiles(
   outputRoot: string,
   files: Array<{ relativePath: string; code: string }>,
 ): Promise<void> {
+  await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)))
   for (const file of files) {
     await writeGeneratedApp(FS.resolvePath(file.relativePath, { cwd: outputRoot }), file.code)
+  }
+}
+
+async function removeStaleGeneratedFiles(outputRoot: string, currentRelativePaths: ReadonlySet<string>): Promise<void> {
+  if (!await FS.exists(outputRoot)) {
+    return
+  }
+  for await (const path of FS.walk(outputRoot)) {
+    const relativePath = FS.relativePath(outputRoot, path)
+    if (!currentRelativePaths.has(relativePath)) {
+      await FS.remove(path)
+    }
   }
 }
 

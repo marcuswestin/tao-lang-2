@@ -9,10 +9,13 @@ class RuntimeValue<T> {
 }
 
 class RuntimeAlias<T> {
-  constructor(private readonly value: TR.Value<T>) {}
+  private evaluatedValue?: TR.Value<T>
+
+  constructor(private readonly value: TR.Value<T> | (() => TR.Value<T>)) {}
 
   evaluate(): TR.Value<T> {
-    return this.value.evaluate()
+    this.evaluatedValue ??= (typeof this.value === 'function' ? this.value() : this.value).evaluate()
+    return this.evaluatedValue
   }
 }
 
@@ -23,8 +26,8 @@ class TR {
   /** Value creates runtime Tao values from JavaScript values. */
   static readonly Value = RuntimeValue
 
-  /** Alias creates runtime Tao aliases from Tao values. */
-  static Alias<T>(value: TR.Value<T>): TR.Alias<T> {
+  /** Alias creates runtime Tao aliases from eager or lazy Tao values. */
+  static Alias<T>(value: TR.Value<T> | (() => TR.Value<T>)): TR.Alias<T> {
     return new RuntimeAlias(value)
   }
 

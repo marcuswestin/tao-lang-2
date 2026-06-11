@@ -18,6 +18,19 @@ Describe('TR.Alias', () => {
     Expect(alias.evaluate()).toBe(value)
     Expect(alias.evaluate().jsValue).toBe(3)
   })
+
+  Test('evaluates lazy alias values once on first use', () => {
+    let evaluations = 0
+    const alias: TR.Alias<string> = TR.Alias(() => {
+      evaluations += 1
+      return new TR.Value('lazy')
+    })
+
+    Expect(evaluations).toBe(0)
+    Expect(alias.evaluate().jsValue).toBe('lazy')
+    Expect(alias.evaluate().jsValue).toBe('lazy')
+    Expect(evaluations).toBe(1)
+  })
 })
 
 Describe('TR.BlockScope', () => {
