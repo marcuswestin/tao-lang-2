@@ -18,6 +18,7 @@ export default {
     const parameters = ui.parameterList?.parameters ?? []
     return gen`{
       ${genList(parameters, Compile.ParameterDeclaration)}
+      __tao?: TR.TaoProps
       children?: React.ReactNode
     }`
   },
