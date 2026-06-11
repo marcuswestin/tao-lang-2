@@ -1,6 +1,6 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
-import { defaultStdLibRoot, resolveModulePath } from '@parser/module-resolution'
+import { defaultStdLibRoot, moduleTargetMatchesFile, resolveModulePath } from '@parser/module-resolution'
 import { Assert, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { errorMessages } from '@validator/diagnostics'
@@ -90,7 +90,7 @@ function compileWorkspace(result: ValidationResult): CompileResult {
     })
     const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
     const exportedNames = file.ast.statements
-      .filter((statement: AST.Statement): statement is AST.Declaration => AST.isDeclaration(statement))
+      .filter(AST.isExportableDeclaration)
       .filter((statement: AST.Declaration) => declarationVisibility(statement) !== 'hide')
       .map((statement: AST.Declaration) => statement.name)
 
@@ -144,7 +144,7 @@ function resolveImports(
       continue
     }
     const targets = [...sourceByPath.values()].filter(candidate =>
-      candidate.path === `${resolution.targetPath}.tao` || FS.dirname(candidate.path) === resolution.targetPath
+      moduleTargetMatchesFile(resolution.targetPath, candidate.path)
     )
     for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
       const target = targets.find(candidate =>

@@ -35,8 +35,13 @@ export function resolveModulePath(
   return {
     modulePath,
     targetPath,
-    sameModule: targetPath === fromDirectory,
+    sameModule: isSameModule(targetPath, fromDirectory),
   }
+}
+
+function isSameModule(targetPath: string, fromDirectory: string): boolean {
+  return targetPath === fromDirectory
+    || (FS.extname(targetPath) === '.tao' && FS.dirname(targetPath) === fromDirectory)
 }
 
 /** isTaoModuleImport returns true when `modulePath` references the Tao standard library namespace. */
@@ -67,33 +72,54 @@ export async function moduleCandidates(targetPath: string): Promise<string[]> {
     .map(name => FS.resolvePath(name, { cwd: targetPath }))
 }
 
+/** moduleTargetMatchesFile returns whether a resolved module target includes a Tao file path. */
+export function moduleTargetMatchesFile(targetPath: string, filePath: string): boolean {
+  return filePath === targetPath || filePath === `${targetPath}.tao` || FS.dirname(filePath) === targetPath
+}
+
 /** loadEntryAndReachableDocuments loads the entry Tao document and all documents reachable through use statements. */
 export async function loadEntryAndReachableDocuments(
   services: { shared: Langium.LangiumSharedCoreServices },
   entryPath: string,
 ): Promise<AST.Document[]> {
+  const entryDocument = await services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(
+    Langium.URI.file(entryPath),
+  )
+  return await loadReachableDocuments(services, entryDocument)
+}
+
+/** loadReachableDocuments loads an entry document and all documents reachable through use statements. */
+export async function loadReachableDocuments(
+  services: { shared: Langium.LangiumSharedCoreServices },
+  entryDocument: AST.Document,
+): Promise<AST.Document[]> {
   const documents = new Map<string, AST.Document>()
-  const queue: string[] = [entryPath]
+  const queue: AST.Document[] = [entryDocument]
   const stdLibRoot = defaultStdLibRoot()
 
   while (queue.length > 0) {
-    const currentPath = queue.shift()!
+    const document = queue.shift()!
+    const currentPath = document.uri.path
     if (documents.has(currentPath)) {
       continue
     }
-    const document = await services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(
-      Langium.URI.file(currentPath),
-    )
     documents.set(currentPath, document)
     const useStatements = document.parseResult.value.statements.filter(AST.isUseStatement)
     for (const useStatement of useStatements) {
+      if (!useStatement.modulePath) {
+        continue
+      }
       const resolution = resolveModulePath(useStatement.modulePath, currentPath, stdLibRoot)
       if (!resolution) {
         continue
       }
       for (const candidatePath of await moduleCandidates(resolution.targetPath)) {
         if (!documents.has(candidatePath)) {
-          queue.push(candidatePath)
+          queue.push(
+            await services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(
+              Langium.URI.file(candidatePath),
+            ),
+          )
         }
       }
     }

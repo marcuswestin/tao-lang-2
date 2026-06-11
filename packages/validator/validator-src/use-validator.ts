@@ -1,7 +1,6 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
-import { resolveModulePath } from '@parser/module-resolution'
-import { FS } from '@shared'
+import { moduleTargetMatchesFile, resolveModulePath } from '@parser/module-resolution'
 import type { ValidationContext } from './validation'
 
 /** useValidationMessages declares import diagnostics for Tao use statements. */
@@ -17,10 +16,12 @@ export const useValidationMessages = {
     `'${name}' is marked as 'hide' and cannot be imported from another file in this module.`,
   crossModuleMissing: (name: string, modulePath: string) => `'${name}' is not exported from '${modulePath}'.`,
   crossModuleNotShared: (name: string) => `'${name}' must be marked as 'share' to be imported from this module.`,
+  appImport: (name: string) => `App '${name}' cannot be imported.`,
 } as const
 
 type DeclarationRecord = {
   name: string
+  kind: AST.Declaration['$type']
   visibility?: AST.DeclarationVisibility
 }
 
@@ -63,7 +64,7 @@ function validateUseStatement(
 
   const targetFiles = options.workspaceFiles.filter(file => {
     const documentPath = ASTUtils.getDocument(file).uri.path
-    return documentPath === `${resolution.targetPath}.tao` || FS.dirname(documentPath) === resolution.targetPath
+    return moduleTargetMatchesFile(resolution.targetPath, documentPath)
   })
   if (targetFiles.length === 0) {
     ctx.error(useValidationMessages.unresolvedModule(useStatement.modulePath), useStatement)
@@ -92,6 +93,10 @@ function validateImportedName(
       return
     }
     ctx.error(useValidationMessages.crossModuleMissing(importedName, useStatement.modulePath), useStatement)
+    return
+  }
+  if (matches.some(declaration => declaration.kind === AST.AppDeclaration.$type)) {
+    ctx.error(useValidationMessages.appImport(importedName), useStatement)
     return
   }
 
@@ -151,6 +156,7 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
     .filter(AST.isDeclaration)
     .map((declaration) => ({
       name: declaration.name,
+      kind: declaration.$type,
       visibility: declarationVisibility(declaration),
     }))
 }

@@ -1,6 +1,6 @@
 import Compiler from '@compiler'
 import { AST } from '@parser'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseCodeWithParserErrors } from '../../parser/parser-tests/test-parse'
 import { Compile } from '../compiler-src/codegen/Compile'
@@ -12,6 +12,27 @@ const fence = '```'
 const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
+
+async function withTaoFiles(
+  prefix: string,
+  files: Record<string, string>,
+  testsFunction: (paths: Record<string, string>, rootDir: string) => Promise<void>,
+): Promise<void> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath(prefix, { cwd: FS.tmpdir() }))
+  const paths: Record<string, string> = {}
+
+  try {
+    for (const [relativePath, source] of Object.entries(files)) {
+      const path = FS.resolvePath(relativePath, { cwd: rootDir })
+      await FS.writeText(path, Text.stripIndent(source))
+      paths[relativePath] = path
+    }
+
+    await testsFunction(paths, rootDir)
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
 
 Describe('minimal Tao compiler', () => {
   Test('reports parser syntax errors once', async () => {
@@ -120,6 +141,16 @@ Describe('minimal Tao compiler', () => {
     await Compiler.compileFile(runtimeStdlibTestsPath)
   })
 
+  Test('compiles source strings that import the Tao stdlib', async () => {
+    await testCompileCode(`
+      use Text from @tao/ui
+      app MyApp { ui MainView }
+      ui MainView {
+        render Text "Hello"
+      }
+    `)
+  })
+
   Test('rejects validator type errors before codegen', async () => {
     await Expect(testCompileCode(`
       app MyApp { ui MainView }
@@ -135,71 +166,89 @@ Describe('minimal Tao compiler', () => {
   })
 
   Test('compiles multi-file Tao apps with use imports', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-compiler-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-compiler-use-',
+      {
+        'Main.tao': `
         app MultiFile { ui MainView }
         use Text from ./
         ui MainView {
           render Text "Hello from imports"
         }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'Views.tao': `
         ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
-      )
+      },
+      async paths => {
+        const mainPath = paths['Main.tao']!
+        const viewsPath = paths['Views.tao']!
 
-      const compiled = await Compiler.compileFile(mainPath)
-      const entryOutput = compiled.files.find(file => file.sourcePath === mainPath)
-      const viewsOutput = compiled.files.find(file => file.sourcePath === viewsPath)
+        const compiled = await Compiler.compileFile(mainPath)
+        const entryOutput = compiled.files.find(file => file.sourcePath === mainPath)
+        const viewsOutput = compiled.files.find(file => file.sourcePath === viewsPath)
 
-      Expect(compiled.files.length).toBeGreaterThan(1)
-      Expect(entryOutput?.relativePath).toBe('App.tsx')
-      Expect(viewsOutput).toBeDefined()
-      Expect(compiled.files.every(file => !file.relativePath.includes('..'))).toBe(true)
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(compiled.files.length).toBeGreaterThan(1)
+        Expect(entryOutput?.relativePath).toBe('App.tsx')
+        Expect(viewsOutput).toBeDefined()
+        Expect(compiled.files.every(file => !file.relativePath.includes('..'))).toBe(true)
+      },
+    )
+  })
+
+  Test('compiles explicit Tao file imports', async () => {
+    await withTaoFiles(
+      'tao-compiler-use-',
+      {
+        'Main.tao': `
+        app MultiFile { ui MainView }
+        use Text from ./Views.tao
+        ui MainView {
+          render Text "Hello from file import"
+        }
+      `,
+        'Views.tao': `
+        ui Text Value text {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+      },
+      async paths => {
+        const mainPath = paths['Main.tao']!
+        const viewsPath = paths['Views.tao']!
+
+        const compiled = await Compiler.compileFile(mainPath)
+
+        Expect(compiled.files.map(file => file.sourcePath).sort()).toEqual([mainPath, viewsPath].sort())
+      },
+    )
   })
 
   Test('compiles circular use imports between sibling module files', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-compiler-cycle-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-compiler-cycle-',
+      {
+        'Main.tao': `
         app CircularApp { ui MainView }
         use AView from ./
         ui MainView {
           render AView
         }
       `,
-      )
-      await FS.writeText(
-        FS.resolvePath('A.tao', { cwd: appDir }),
-        `
+        'A.tao': `
         use BView from ./
         alias SharedTitle = "Cycle"
         ui AView {
           render BView
         }
       `,
-      )
-      await FS.writeText(
-        FS.resolvePath('B.tao', { cwd: appDir }),
-        `
+        'B.tao': `
         use SharedTitle from ./
         ui BView {
           render Leaf SharedTitle
@@ -210,29 +259,29 @@ Describe('minimal Tao compiler', () => {
           ${fence}
         }
       `,
-      )
+      },
+      async paths => {
+        const mainPath = paths['Main.tao']!
 
-      const compiled = await Compiler.compileFile(mainPath)
+        const compiled = await Compiler.compileFile(mainPath)
 
-      Expect(compiled.files).toHaveLength(3)
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(compiled.files).toHaveLength(3)
+      },
+    )
   })
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
-    const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-compiler-collision-', { cwd: FS.tmpdir() }))
-    const appDir = FS.resolvePath('app', { cwd: rootDir })
-    const libADir = FS.resolvePath('liba', { cwd: rootDir })
-    const libBDir = FS.resolvePath('libb', { cwd: rootDir })
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    try {
-      await FS.mkdir(appDir)
-      await FS.mkdir(libADir)
-      await FS.mkdir(libBDir)
-      await FS.writeText(
-        mainPath,
-        `
+    const sharedViewSource = (name: string) => `
+      share ui ${name} Value text {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+    `
+    await withTaoFiles(
+      'tao-compiler-collision-',
+      {
+        'app/Main.tao': `
         app CollisionApp { ui MainView }
         use AText from ../liba
         use BText from ../libb
@@ -240,25 +289,19 @@ Describe('minimal Tao compiler', () => {
           render AText "Hello"
         }
       `,
-      )
-      const sharedViewSource = (name: string) => `
-        share ui ${name} Value text {
-          render inject Value ${tsFence}
-            return null
-          ${fence}
-        }
-      `
-      await FS.writeText(FS.resolvePath('Views.tao', { cwd: libADir }), sharedViewSource('AText'))
-      await FS.writeText(FS.resolvePath('Views.tao', { cwd: libBDir }), sharedViewSource('BText'))
+        'liba/Views.tao': sharedViewSource('AText'),
+        'libb/Views.tao': sharedViewSource('BText'),
+      },
+      async paths => {
+        const mainPath = paths['app/Main.tao']!
 
-      const compiled = await Compiler.compileFile(mainPath)
-      const relativePaths = compiled.files.map(file => file.relativePath)
+        const compiled = await Compiler.compileFile(mainPath)
+        const relativePaths = compiled.files.map(file => file.relativePath)
 
-      Expect(compiled.files).toHaveLength(3)
-      Expect(new Set(relativePaths).size).toBe(relativePaths.length)
-    } finally {
-      await FS.remove(rootDir)
-    }
+        Expect(compiled.files).toHaveLength(3)
+        Expect(new Set(relativePaths).size).toBe(relativePaths.length)
+      },
+    )
   })
 
   Test('rejects entry files without an app declaration', async () => {

@@ -1,6 +1,5 @@
-import { FS } from '@shared'
 import { Langium } from './langium-exports'
-import { defaultStdLibRoot, resolveModulePath } from './module-resolution'
+import { defaultStdLibRoot, moduleTargetMatchesFile, resolveModulePath } from './module-resolution'
 import * as AST from './parserASTExport'
 
 /** TaoValueScopeProvider resolves value references through Tao alias and parameter visibility. */
@@ -108,7 +107,7 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
       .filter(AST.isTaoFile)
     const targetFiles = allFiles.filter(file => {
       const filePath = Langium.AstUtils.getDocument(file).uri.path
-      return filePath === `${resolution.targetPath}.tao` || FS.dirname(filePath) === resolution.targetPath
+      return moduleTargetMatchesFile(resolution.targetPath, filePath)
     })
     return targetFiles.flatMap(file => file.statements.filter(AST.isDeclaration))
   }

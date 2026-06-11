@@ -1,5 +1,5 @@
 import { AST, Langium, type ParseOptions, type ParseResult } from '@parser'
-import { loadEntryAndReachableDocuments } from '@parser/module-resolution'
+import { loadEntryAndReachableDocuments, loadReachableDocuments } from '@parser/module-resolution'
 import { TaoValueScopeProvider } from '@parser/value-scope'
 import { FS } from '@shared'
 import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typir-langium'
@@ -30,7 +30,8 @@ export async function parseCodeForValidation(code: string, opts: ParseOptions = 
   const services = createValidatorServices()
   const uri = opts.uri ?? Langium.URI.file('/__tao__/source.tao')
   const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(code, uri)
-  return await buildDocuments(services, document, [document])
+  const documents = await loadReachableDocuments(services, document)
+  return await buildDocuments(services, document, documents)
 }
 
 /** parseFileForValidation parses a Tao file with validator-owned Langium and Typir services. */

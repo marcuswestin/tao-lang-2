@@ -19,6 +19,7 @@ Declaration:
 type TopLevelStatement = Declaration | UseStatement;
 type ViewStatement = AliasDeclaration | Render;
 type NamedDeclaration = Declaration | ParameterDeclaration;
+type ExportableDeclaration = AliasDeclaration | ViewDeclaration;
 
 Block:
     '{' statements+=Statement* '}';

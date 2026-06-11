@@ -1,6 +1,6 @@
 import { FS } from '@shared'
 import { Langium } from './langium-exports'
-import { loadEntryAndReachableDocuments } from './module-resolution'
+import { loadEntryAndReachableDocuments, loadReachableDocuments } from './module-resolution'
 import * as AST from './parserASTExport'
 import { TaoValueScopeProvider } from './value-scope'
 
@@ -51,7 +51,8 @@ export const Parser = {
     const services = createServices()
     const uri = opts.uri ?? Langium.URI.file('/__tao__/source.tao')
     const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(code, uri)
-    return await buildDocuments(services, document, [document])
+    const documents = await loadReachableDocuments(services, document)
+    return await buildDocuments(services, document, documents)
   },
 }
 

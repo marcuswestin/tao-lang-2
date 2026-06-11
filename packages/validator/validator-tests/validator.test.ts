@@ -1,5 +1,5 @@
 import { AST, Parser } from '@parser'
-import { FS } from '@shared'
+import { FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { aliasValidationMessages } from '../validator-src/aliases-validator'
 import { appValidationMessages } from '../validator-src/app-validator'
@@ -18,6 +18,27 @@ const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type S
 const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 const tsFence = '```ts'
 const fence = '```'
+
+async function withTaoFiles(
+  prefix: string,
+  files: Record<string, string>,
+  testsFunction: (paths: Record<string, string>, rootDir: string) => Promise<void>,
+): Promise<void> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath(prefix, { cwd: FS.tmpdir() }))
+  const paths: Record<string, string> = {}
+
+  try {
+    for (const [relativePath, source] of Object.entries(files)) {
+      const path = FS.resolvePath(relativePath, { cwd: rootDir })
+      await FS.writeText(path, Text.stripIndent(source))
+      paths[relativePath] = path
+    }
+
+    await testsFunction(paths, rootDir)
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
 
 Describe('Tao validator structural diagnostics', () => {
   Test('validates the current Kitchen Sink app', async () => {
@@ -807,205 +828,204 @@ Describe('Tao validator structural diagnostics', () => {
   })
 
   Test('validates same-module use imports across sibling files', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./
         ui MainView {
           render Text "Hello"
         }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'Views.tao': `
         ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
-      )
-      const result = await Validator.validateFile(mainPath)
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(validationErrorMessages(result)).toEqual([])
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('validates explicit Tao file use imports', async () => {
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
+        app MyApp { ui MainView }
+        use Text from ./Views.tao
+        ui MainView {
+          render Text "Hello"
+        }
+      `,
+        'Views.tao': `
+        ui Text Value text {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
+
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('validates source strings that import the Tao stdlib', async () => {
+    await testValidateCode(`
+      use Text from @tao/ui
+      app MyApp { ui MainView }
+      ui MainView {
+        render Text "Hello"
+      }
+    `)
   })
 
   Test('rejects hide imports from another file in the same module', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./
         ui MainView {
           render Text "Hello"
         }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'Views.tao': `
         hide ui Text Value text {
           render inject ${tsFence}
             return null
           ${fence}
         }
       `,
-      )
-      const result = await Validator.validateFile(mainPath)
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(validationErrorMessages(result)).toContain(useValidationMessages.sameModuleHidden('Text'))
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.sameModuleHidden('Text'))
+      },
+    )
   })
 
   Test('rejects cross-module imports for declarations that are not shared', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const uiDir = FS.resolvePath('ui', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: uiDir })
-    try {
-      await FS.mkdir(uiDir)
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./ui
         ui MainView { }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'ui/Views.tao': `
         ui Text Value text {
           render inject ${tsFence}
             return null
           ${fence}
         }
       `,
-      )
-      const result = await Validator.validateFile(mainPath)
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(validationErrorMessages(result)).toContain(useValidationMessages.crossModuleNotShared('Text'))
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.crossModuleNotShared('Text'))
+      },
+    )
   })
 
   Test('reports validator errors inside imported module files', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./
         ui MainView {
           render Text "Hello"
         }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'Views.tao': `
         ui Text Value text {
           render inject Value, Value ${tsFence}
             return null
           ${fence}
         }
       `,
-      )
-      const result = await Validator.validateFile(mainPath)
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(validationErrorMessages(result)).toContain(injectionValidationMessages.duplicateArgument('Value'))
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(validationErrorMessages(result)).toContain(injectionValidationMessages.duplicateArgument('Value'))
+      },
+    )
   })
 
   Test('reports parser errors inside imported module files', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./
         ui MainView {
           render Text "Hello"
         }
       `,
-      )
-      await FS.writeText(viewsPath, 'ui Text Value text {')
-      const result = await Validator.validateFile(mainPath)
+        'Views.tao': 'ui Text Value text {',
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(result.diagnostics.some(diagnostic => diagnostic.source === 'parser')).toBe(true)
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(result.diagnostics.some(diagnostic => diagnostic.source === 'parser')).toBe(true)
+      },
+    )
   })
 
   Test('reports unresolved references inside imported module files', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./
         ui MainView {
           render Text "Hello"
         }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'Views.tao': `
         ui Text Value text {
           render MissingView
         }
       `,
-      )
-      const result = await Validator.validateFile(mainPath)
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(
-        result.diagnostics.some(diagnostic =>
-          diagnostic.source === 'parser' && diagnostic.severity === 'error'
-          && diagnostic.message.includes('MissingView')
-        ),
-      ).toBe(true)
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(
+          result.diagnostics.some(diagnostic =>
+            diagnostic.source === 'parser' && diagnostic.severity === 'error'
+            && diagnostic.message.includes('MissingView')
+          ),
+        ).toBe(true)
+      },
+    )
   })
 
   Test('rejects names imported by more than one use statement', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./
         use Text from ./
@@ -1013,23 +1033,20 @@ Describe('Tao validator structural diagnostics', () => {
           render Text "Hello"
         }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'Views.tao': `
         ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
-      )
-      const result = await Validator.validateFile(mainPath)
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(validationErrorMessages(result)).toContain(useValidationMessages.repeatedImport('Text'))
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.repeatedImport('Text'))
+      },
+    )
   })
 
   Test('rejects imports that collide with declarations in the importing file', async () => {
@@ -1049,10 +1066,37 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(result)).toContain(useValidationMessages.localDeclarationCollision('Text'))
   })
 
+  Test('rejects app imports', async () => {
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
+        app MyApp { ui MainView }
+        use OtherApp from ./Other.tao
+        ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'Other.tao': `
+        app OtherApp { ui OtherView }
+        ui OtherView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
+
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.appImport('OtherApp'))
+      },
+    )
+  })
+
   Test('rejects imports that match multiple visible declarations in a module', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const uiDir = FS.resolvePath('ui', { cwd: appDir })
     const sharedTextSource = `
       share ui Text Value text {
         render inject ${tsFence}
@@ -1060,36 +1104,32 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
     `
-    try {
-      await FS.mkdir(uiDir)
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Text from ./ui
         ui MainView {
           render Text "Hello"
         }
       `,
-      )
-      await FS.writeText(FS.resolvePath('Views.tao', { cwd: uiDir }), sharedTextSource)
-      await FS.writeText(FS.resolvePath('MoreViews.tao', { cwd: uiDir }), sharedTextSource)
-      const result = await Validator.validateFile(mainPath)
+        'ui/Views.tao': sharedTextSource,
+        'ui/MoreViews.tao': sharedTextSource,
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(validationErrorMessages(result)).toContain(useValidationMessages.ambiguousImport('Text', './ui'))
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.ambiguousImport('Text', './ui'))
+      },
+    )
   })
 
   Test('allows file-level aliases that reference imported aliases', async () => {
-    const appDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-use-', { cwd: FS.tmpdir() }))
-    const mainPath = FS.resolvePath('Main.tao', { cwd: appDir })
-    const viewsPath = FS.resolvePath('Views.tao', { cwd: appDir })
-    try {
-      await FS.writeText(
-        mainPath,
-        `
+    await withTaoFiles(
+      'tao-validator-use-',
+      {
+        'Main.tao': `
         app MyApp { ui MainView }
         use Greeting from ./
         alias Local = Greeting
@@ -1102,22 +1142,19 @@ Describe('Tao validator structural diagnostics', () => {
           render Text Local
         }
       `,
-      )
-      await FS.writeText(
-        viewsPath,
-        `
+        'Views.tao': `
         // Padding comments keep this declaration at a larger source offset than the
         // importing file's references, which used to trip the declaration-order check.
         // More padding.
         // More padding.
         alias Greeting = "Hello"
       `,
-      )
-      const result = await Validator.validateFile(mainPath)
+      },
+      async paths => {
+        const result = await Validator.validateFile(paths['Main.tao']!)
 
-      Expect(validationErrorMessages(result)).toEqual([])
-    } finally {
-      await FS.remove(appDir)
-    }
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
   })
 })
