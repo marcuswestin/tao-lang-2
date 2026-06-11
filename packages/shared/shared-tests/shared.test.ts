@@ -67,7 +67,8 @@ Describe('FS', () => {
 
     Expect(await FS.readText(movedPath)).toBe('copy me')
     Expect(await FS.exists(copyPath)).toBe(false)
-    Expect(await FS.listDir(FS.dirname(movedPath))).toEqual(['copy.txt'])
+    await FS.writeText(FS.resolvePath('added.txt', { cwd: FS.dirname(movedPath) }), 'added later')
+    Expect(await FS.listDir(FS.dirname(movedPath))).toEqual(['added.txt', 'copy.txt'])
 
     await FS.remove(FS.dirname(movedPath))
     Expect(await FS.exists(movedPath)).toBe(false)
