@@ -16,9 +16,10 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const runtimePackageRoot = opts.runtimePackageRoot ?? defaultRuntimePackageRoot()
   const sourcePath = FS.resolvePath(appPath)
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
+  const generatedAppRoot = FS.resolvePath('_gen_tao-app', { cwd: runtimePackageRoot })
   const compiled = await Compiler.compileFile(sourcePath)
 
-  await writeGeneratedApp(generatedAppPath, compiled.code)
+  await writeGeneratedFiles(generatedAppRoot, compiled.files)
 
   return {
     sourcePath,
@@ -36,6 +37,15 @@ export default Runtime
 
 function defaultRuntimePackageRoot(): string {
   return FS.repoPath('packages/runtime')
+}
+
+async function writeGeneratedFiles(
+  outputRoot: string,
+  files: Array<{ relativePath: string; code: string }>,
+): Promise<void> {
+  for (const file of files) {
+    await writeGeneratedApp(FS.resolvePath(file.relativePath, { cwd: outputRoot }), file.code)
+  }
 }
 
 async function writeGeneratedApp(path: string, code: string): Promise<void> {

@@ -39,3 +39,50 @@ Describe('TR.BlockScope', () => {
     Expect(Object.getPrototypeOf(result.child)).toBe(parent)
   })
 })
+
+Describe('TR.Use', () => {
+  Test('binds imported declarations lazily so cyclic modules resolve after initialization', () => {
+    const scope: TR.Scope = {}
+    let imported: TR.Alias<string> | undefined
+    TR.Use(scope, 'Greeting', () => imported)
+
+    imported = TR.Alias(new TR.Value('Hello'))
+
+    Expect(scope['Greeting']).toBe(imported)
+    Expect(scope['Greeting'].evaluate().jsValue).toBe('Hello')
+  })
+
+  Test('reflects live updates of the imported binding', () => {
+    const scope: TR.Scope = {}
+    let imported = TR.Alias(new TR.Value('first'))
+    TR.Use(scope, 'Name', () => imported)
+
+    Expect(scope['Name'].evaluate().jsValue).toBe('first')
+    imported = TR.Alias(new TR.Value('second'))
+    Expect(scope['Name'].evaluate().jsValue).toBe('second')
+  })
+
+  Test('lets child scopes shadow imported bindings', () => {
+    const scope: TR.Scope = {}
+    TR.Use(scope, 'Name', () => TR.Alias(new TR.Value('imported')))
+
+    const shadowed = TR.BlockScope(scope, child => {
+      child['Name'] = TR.Alias(new TR.Value('local'))
+      return child['Name'].evaluate().jsValue
+    })
+
+    Expect(shadowed).toBe('local')
+    Expect(scope['Name'].evaluate().jsValue).toBe('imported')
+  })
+})
+
+Describe('TR.Views', () => {
+  Test('exposes runtime-backed stdlib primitive views', () => {
+    Expect(typeof TR.Views.Text).toBe('function')
+    Expect(typeof TR.Views.Number).toBe('function')
+    Expect(typeof TR.Views.Button).toBe('function')
+    Expect(typeof TR.Views.Box).toBe('function')
+    Expect(typeof TR.Views.Stack).toBe('function')
+    Expect(typeof TR.Views.WrappingRow).toBe('function')
+  })
+})
