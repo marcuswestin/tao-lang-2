@@ -24,7 +24,7 @@ const JUST_LABELS: Record<string, string> = {
   test: 'test',
 }
 
-/** compileApp runs parser generation when needed and compiles the selected Tao app. */
+/** compileApp runs parser generation when needed and compiles the selected Tao app, returning success. */
 async function compileApp(
   repoRoot: string,
   appPath: string,
@@ -36,7 +36,6 @@ async function compileApp(
     return true
   }
 
-  let success = true
   try {
     HCI.logProcessInfo('dev', `compiling (${reason})`)
     try {
@@ -48,19 +47,18 @@ async function compileApp(
         prefixedOutput: { processName: 'compile' },
         cwd: repoRoot,
       })
-      if (result.exitCode === 0 && result.error === undefined) {
-        if (!result.stdout.trim()) {
-          HCI.logProcessInfo('compile', 'compiled')
-        }
-      } else {
+      if (result.exitCode !== 0 || result.error !== undefined) {
         HCI.logProcessError('compile', `compile failed for ${appPath}`)
-        success = false
+        return false
       }
+      if (!result.stdout.trim()) {
+        HCI.logProcessInfo('compile', 'compiled')
+      }
+      return true
     } catch (error) {
       HCI.writeErrorLine(Errors.formatForLog(error))
-      success = false
+      return false
     }
-    return success
   } finally {
     CommandRunner.endCommand()
   }
