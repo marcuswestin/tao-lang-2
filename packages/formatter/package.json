@@ -1,0 +1,13 @@
+{
+  "name": "tao-formatter",
+  "private": true,
+  "type": "module",
+  "module": "formatter-src/formatter.ts",
+  "exports": {
+    ".": "./formatter-src/formatter.ts"
+  },
+  "dependencies": {
+    "tao-parser": "workspace:*",
+    "tao-shared": "workspace:*"
+  }
+}

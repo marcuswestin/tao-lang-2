@@ -36,12 +36,18 @@ export namespace Langium {
   export type LangiumServices = langiumLsp.LangiumServices
   /** LangiumSharedServices declares shared Langium core and LSP services. */
   export type LangiumSharedServices = langiumLsp.LangiumSharedServices
+  /** NodeFormatter declares the Langium per-node formatting region API. */
+  export type NodeFormatter<T extends AstNode> = langiumLsp.NodeFormatter<T>
+  /** Properties declares the assignable property names of one AST node type. */
+  export type Properties<T extends AstNode> = langium.Properties<T>
   /** Reference declares a Langium cross-reference to an AST node. */
   export type Reference<T extends AstNode = AstNode> = langium.Reference<T>
   /** ReferenceInfo declares a Langium cross-reference lookup context. */
   export type ReferenceInfo = langium.ReferenceInfo
   /** Scope declares the visible symbols for one Langium cross-reference lookup. */
   export type Scope = langium.Scope
+  /** TextEdit declares one LSP text replacement. */
+  export type TextEdit = vscodeLanguageserver.TextEdit
   /** URI declares a Langium URI value. */
   export type URI = langium.URI
   /** ValidationAcceptor declares a Langium validation diagnostic callback. */

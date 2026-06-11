@@ -36,6 +36,13 @@
         "tao-runtime": "workspace:*",
       },
     },
+    "packages/formatter": {
+      "name": "tao-formatter",
+      "dependencies": {
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+      },
+    },
     "packages/ide-extension": {
       "name": "tao-ide-extension",
       "version": "0.0.1",
@@ -1719,6 +1726,8 @@
     "tao-compiler": ["tao-compiler@workspace:packages/compiler"],
 
     "tao-dev": ["tao-dev@workspace:packages/dev"],
+
+    "tao-formatter": ["tao-formatter@workspace:packages/formatter"],
 
     "tao-ide-extension": ["tao-ide-extension@workspace:packages/ide-extension"],
 

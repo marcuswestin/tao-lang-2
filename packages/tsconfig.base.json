@@ -50,6 +50,12 @@
       "@compiler/*": [
         "./compiler/compiler-src/*"
       ],
+      "@formatter": [
+        "./formatter/formatter-src/formatter.ts"
+      ],
+      "@formatter/*": [
+        "./formatter/formatter-src/*"
+      ],
       "@runtime": [
         "./runtime/runtime-src/runtime.ts"
       ],

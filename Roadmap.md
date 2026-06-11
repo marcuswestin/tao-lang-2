@@ -9,6 +9,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
 - [x] Add runtime stdlib and module imports
   - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough `share`/visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
+- [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
 - [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
@@ -44,6 +45,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Enable over-the-network dev app running for ios device
 
 - Add followups for later:
+  - Formatter: wire into the IDE extension LSP services and a Tao `fmt` workflow command
+  - Formatter: keep standalone comments attached to the following top-level declaration when separating with blank lines
   - Think through how to do app testing, and how to use that for our repo test apps tests
   - Compiler: Add codegen tracing/source maps when needed
   - Dev loop: watch resolved relative import roots outside the selected app folder.
