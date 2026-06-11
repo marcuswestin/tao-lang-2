@@ -1,10 +1,11 @@
 grammar TaoAliases
 
 import "./expressions"
+import "./views"
 import "./terminals"
 
 entry AliasesGrammarEntrypoint:
     AliasDeclaration;
 
 AliasDeclaration:
-    'alias' name=ID '=' value=Expression;
+    visibility=DeclarationVisibility? 'alias' name=ID '=' value=Expression;
