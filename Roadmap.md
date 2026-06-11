@@ -13,7 +13,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
 - [ ] Add layout/style arguments and default app-shell UI baseline
-  - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `__tao` layout forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
+  - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `_taoLayout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
 - [ ] Remove magical strings
 - [ ] Add state/actions/control mini slice
   - Import `state`, `action`, action parameters/values, inline `action {}`, `set`, `do`, `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
