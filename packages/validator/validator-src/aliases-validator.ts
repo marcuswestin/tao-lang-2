@@ -93,6 +93,11 @@ function aliasValueReferences(alias: AST.AliasDeclaration): AST.ValueReference[]
 }
 
 function isDeclaredBefore(declaration: AST.ValueDeclaration, use: AST.Node): boolean {
+  // Imported declarations initialize with their own module before this file's body runs,
+  // so source-order rules only apply within one document.
+  if (ASTUtils.getDocument(declaration) !== ASTUtils.getDocument(use)) {
+    return true
+  }
   const declarationOffset = declaration.$cstNode?.offset
   const useOffset = use.$cstNode?.offset
   return declarationOffset !== undefined && useOffset !== undefined && declarationOffset < useOffset

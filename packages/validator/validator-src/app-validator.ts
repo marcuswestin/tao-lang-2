@@ -3,8 +3,8 @@ import type { ValidationContext } from './validation'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement. */
 export const appValidationMessages = {
-  topLevel: 'Only app, ui, layout, and alias declarations are allowed at file level.',
-  appCount: (count: number) => `Tao file must declare exactly one app, found ${count}.`,
+  topLevel: 'Only app, ui, layout, alias declarations, and use statements are allowed at file level.',
+  appCount: (count: number) => `Tao file must declare at most one app, found ${count}.`,
   appBlock: (name: string) => `Only root ui declarations are allowed in app ${name}.`,
   appRootCount: (name: string, count: number) => `App ${name} must declare exactly one root ui, found ${count}.`,
   rootUiParameters: (appName: string, uiName: string) =>
@@ -16,7 +16,7 @@ export function validateApp(file: AST.TaoFile, ctx: ValidationContext): void {
   validateTopLevelStatements(file, ctx)
 
   const apps = file.statements.filter(AST.isAppDeclaration)
-  if (apps.length !== 1) {
+  if (apps.length > 1) {
     ctx.error(appValidationMessages.appCount(apps.length), file)
   }
 

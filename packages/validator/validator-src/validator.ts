@@ -1,66 +1,89 @@
+import ASTUtils from '@ast-utils'
 import { Parser, type ParseResult } from '@parser'
+import { defaultStdLibRoot } from '@parser/module-resolution'
 import { validateAliases } from './aliases-validator'
 import { validateApp } from './app-validator'
-import { hasError, parserDiagnostics, type TaoDiagnostic } from './diagnostics'
+import { hasError, linkerDiagnostics, parserDiagnostics, type TaoDiagnostic } from './diagnostics'
 import { validateTypirProblems } from './expressions-validator'
 import { validateInjections } from './injections-validator'
 import { validateInvocations } from './invocations-validator'
 import { parseCodeForValidation, parseFileForValidation, rebuildForValidation } from './langium-services'
+import { validateUseStatements } from './use-validator'
 import { createValidationContext } from './validation'
 import { validateViews } from './views-validator'
 
 /** ValidationResult declares the parsed source and Tao diagnostics. */
 export type ValidationResult = {
-  parsed: ParseResult
+  parsed: ParseResult & {
+    workspaceFiles?: import('@parser').AST.TaoFile[]
+    entryFilePath?: string
+  }
   diagnostics: readonly TaoDiagnostic[]
   validatorDiagnostics: readonly TaoDiagnostic[]
 }
 
 /** validateFile validates the Tao file at `path`. */
 async function validateFile(path: string): Promise<ValidationResult> {
-  const parsed = await Parser.parseFile(path)
-  return await validateCleanOrReportParserDiagnostics(parsed, () => parseFileForValidation(path))
+  return await validateValidationParseResult(await parseFileForValidation(path))
 }
 
 /** validateCode validates Tao source code. */
 async function validateCode(code: string): Promise<ValidationResult> {
   const parsed = await Parser.parseCode(code)
-  return await validateCleanOrReportParserDiagnostics(parsed, () =>
-    parseCodeForValidation(code, {
+  return await validateValidationParseResult(
+    await parseCodeForValidation(code, {
       uri: parsed.document.uri,
-    }))
+    }),
+  )
 }
 
 /** validateParsed validates an existing parser result. */
 async function validateParsed(parsed: ParseResult): Promise<ValidationResult> {
-  return await validateCleanOrReportParserDiagnostics(parsed, () => rebuildForValidation(parsed))
+  return await validateValidationParseResult(await rebuildForValidation(parsed))
 }
 
-async function validateCleanOrReportParserDiagnostics(
-  parsed: ParseResult,
-  parseForValidation: () => Promise<ParseResult & { typir: import('./type-system').TaoTypirServices }>,
+async function validateValidationParseResult(
+  validationParsed: ParseResult & {
+    typir: import('./type-system').TaoTypirServices
+    workspaceFiles?: import('@parser').AST.TaoFile[]
+    entryFilePath?: string
+  },
 ): Promise<ValidationResult> {
-  const parserMessages = parserDiagnostics(parsed)
+  const workspaceFiles = validationParsed.workspaceFiles ?? [validationParsed.ast]
+  const workspaceDocuments = workspaceFiles.map(file => ASTUtils.getDocument(file))
+  const parserMessages = parserDiagnostics(validationParsed, workspaceDocuments)
   if (hasError(parserMessages)) {
     return {
-      parsed,
+      parsed: validationParsed,
       diagnostics: parserMessages,
       validatorDiagnostics: [],
     }
   }
 
-  const validationParsed = await parseForValidation()
+  // Linker errors don't gate structural validation: the AST shape is intact and
+  // validators tolerate unresolved references.
+  const linkerMessages = linkerDiagnostics(workspaceDocuments)
   const ctx = createValidationContext()
-  validateApp(validationParsed.ast, ctx)
-  validateViews(validationParsed.ast, ctx)
-  validateAliases(validationParsed.ast, ctx)
-  validateInjections(validationParsed.ast, ctx)
-  validateInvocations(validationParsed.ast, ctx)
-  validateTypirProblems(validationParsed.ast, validationParsed.typir, ctx)
+  for (const file of workspaceFiles) {
+    validateApp(file, ctx)
+    validateViews(file, ctx)
+    validateAliases(file, ctx)
+    validateInjections(file, ctx)
+    validateInvocations(file, ctx)
+    const document = ASTUtils.getDocument(file)
+    if (document.uri.scheme === 'file') {
+      validateUseStatements(file, ctx, {
+        workspaceFiles,
+        filePath: document.uri.path,
+        stdLibRoot: defaultStdLibRoot(),
+      })
+    }
+    validateTypirProblems(file, validationParsed.typir, ctx)
+  }
 
   return {
     parsed: validationParsed,
-    diagnostics: [...parserMessages, ...ctx.diagnostics],
+    diagnostics: [...parserMessages, ...linkerMessages, ...ctx.diagnostics],
     validatorDiagnostics: ctx.diagnostics,
   }
 }
