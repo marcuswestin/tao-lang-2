@@ -80,11 +80,11 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
 
   try {
     HCI.logProcessInfo('dev', `Tao dev app: ${appPath}`)
-    const initialCompileOk = await Run.compileApp(repoRoot, appPath, 'initial compile', true)
+    const initialCompileSucceeded = await Run.compileApp(repoRoot, appPath, 'initial compile', true)
     if (shouldStop()) {
       return await done
     }
-    if (!initialCompileOk) {
+    if (!initialCompileSucceeded) {
       return 1
     }
     watcher = new DevFileWatcher(appPath, shouldRunParserGen => {

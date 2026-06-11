@@ -125,10 +125,7 @@ async function appChoices(): Promise<HCI.Choice<string>[]> {
 }
 
 function formatAppChoiceLabel(appsRoot: string, appPath: string): string {
-  return appPath
-    .slice(appsRoot.length + 1)
-    .replaceAll('\\', '/')
-    .replace(/\.tao$/, '')
+  return FS.slashPath(appPath.slice(appsRoot.length + 1)).replace(/\.tao$/, '')
 }
 
 function formatCommandKey(key: CommandKey): string {
