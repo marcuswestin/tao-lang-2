@@ -83,6 +83,21 @@ export function createNodeFormat<NodeT extends AST.Node>(
   }
 }
 
+/** isInjectionFenceOpenLine returns true when a line opens a multiline inject TS fence. */
+export function isInjectionFenceOpenLine(line: string): boolean {
+  return /^[ \t]*.*\binject\b.*```ts$/.test(line)
+}
+
+/** findInjectionFenceCloseIndex returns the index of the line closing the fence opened above `openIndex`, or -1. */
+export function findInjectionFenceCloseIndex(lines: readonly string[], openIndex: number): number {
+  return lines.findIndex((line, index) => index > openIndex && line.includes('```'))
+}
+
+/** finalizeFormattedText drops leading whitespace and trailing line spaces, and ends with exactly one newline. */
+export function finalizeFormattedText(text: string): string {
+  return `${text.replace(/^\s+/, '').replace(/[ \t]+$/gm, '').replace(/\s+$/, '')}\n`
+}
+
 /** applyTextEdits applies non-overlapping LSP text edits to the document's source text. */
 export function applyTextEdits(document: AST.Document, edits: readonly Langium.TextEdit[]): string {
   const textDocument = document.textDocument

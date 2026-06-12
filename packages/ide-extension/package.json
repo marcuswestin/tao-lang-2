@@ -17,6 +17,12 @@
     "package.json"
   ],
   "contributes": {
+    "configurationDefaults": {
+      "[tao]": {
+        "editor.tabSize": 3,
+        "editor.insertSpaces": true
+      }
+    },
     "grammars": [
       {
         "language": "tao",

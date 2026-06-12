@@ -29,7 +29,7 @@ Describe('Tao formatter top-level statements', () => {
       `,
       `
         app MyApp {
-            ui MainView
+           ui MainView
         }
 
         alias Greeting = "Hello"
@@ -69,7 +69,7 @@ Describe('Tao formatter top-level statements', () => {
         use Stack from @tao/ui
 
         ui MainView {
-            render Text "hi"
+           render Text "hi"
         }
       `,
     )
@@ -98,16 +98,44 @@ Describe('Tao formatter use statements', () => {
 })
 
 Describe('Tao formatter views and blocks', () => {
-  Test('indents nested render blocks', async () => {
+  Test('indents nested render blocks and collapses closing braces', async () => {
     await testFormatCode(
       `ui MainView{render Stack{Text "a"\nText "b"}}`,
       `
         ui MainView {
-            render Stack {
-                Text "a"
-                Text "b"
-            }
-        }
+           render Stack {
+              Text "a"
+              Text "b"
+        }  }
+      `,
+    )
+  })
+
+  Test('collapses deep closing brace runs onto one line at the outermost indentation', async () => {
+    await testFormatCode(
+      `ui MainView{render Stack{Text "a"{Text "b"{Text "c"}}}}`,
+      `
+        ui MainView {
+           render Stack {
+              Text "a" {
+                 Text "b" {
+                    Text "c"
+        }  }  }  }
+      `,
+    )
+  })
+
+  Test('keeps a closing brace on its own line when statements follow it', async () => {
+    await testFormatCode(
+      `ui MainView{render Stack{Text "a"{Text "b"}\nText "c"}}`,
+      `
+        ui MainView {
+           render Stack {
+              Text "a" {
+                 Text "b"
+              }
+              Text "c"
+        }  }
       `,
     )
   })
@@ -117,10 +145,9 @@ Describe('Tao formatter views and blocks', () => {
       `ui MainView {render Stack{Text "a"{   }}}`,
       `
         ui MainView {
-            render Stack {
-                Text "a" { }
-            }
-        }
+           render Stack {
+              Text "a" { }
+        }  }
       `,
     )
   })
@@ -130,7 +157,7 @@ Describe('Tao formatter views and blocks', () => {
       `share ui CountText Count   number,Label    text { render Text Label }`,
       `
         share ui CountText Count number, Label text {
-            render Text Label
+           render Text Label
         }
       `,
     )
@@ -141,13 +168,12 @@ Describe('Tao formatter views and blocks', () => {
       `ui MainView { render Stack { CountText 3,"label" } }\nui CountText Count number, Label text { render Text Label }`,
       `
         ui MainView {
-            render Stack {
-                CountText 3, "label"
-            }
-        }
+           render Stack {
+              CountText 3, "label"
+        }  }
 
         ui CountText Count number, Label text {
-            render Text Label
+           render Text Label
         }
       `,
     )
@@ -179,15 +205,15 @@ Describe('Tao formatter injections', () => {
       `,
       `
         ui CountText Count number {
-            render inject Count ${tsFence}
-                return <RN.Text>{Count}</RN.Text>
-            ${fence}
+           render inject Count ${tsFence}
+              return <RN.Text>{Count}</RN.Text>
+           ${fence}
         }
       `,
     )
   })
 
-  Test('preserves relative indentation inside fence bodies', async () => {
+  Test('preserves relative indentation and brace lines inside fence bodies', async () => {
     await testFormatCode(
       `
         ui MainView {
@@ -201,12 +227,12 @@ Describe('Tao formatter injections', () => {
       `,
       `
         ui MainView {
-            render inject ${tsFence}
-                function label() {
-                    return 'hi'
-                }
-                return <RN.Text>{label()}</RN.Text>
-            ${fence}
+           render inject ${tsFence}
+              function label() {
+                  return 'hi'
+              }
+              return <RN.Text>{label()}</RN.Text>
+           ${fence}
         }
       `,
     )
@@ -226,9 +252,9 @@ Describe('Tao formatter injections', () => {
         alias UserName = "Ro"
 
         ui MainView {
-            render inject Name UserName, UserName ${tsFence}
-                return <RN.Text>{Name}</RN.Text>
-            ${fence}
+           render inject Name UserName, UserName ${tsFence}
+              return <RN.Text>{Name}</RN.Text>
+           ${fence}
         }
       `,
     )
@@ -247,9 +273,9 @@ Describe('Tao formatter comments', () => {
       `,
       `
         ui MainView {
-            // local greeting
-            alias G = "hi"
-            render Text G
+           // local greeting
+           alias G = "hi"
+           render Text G
         }
       `,
     )

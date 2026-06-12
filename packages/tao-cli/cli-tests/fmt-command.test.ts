@@ -45,7 +45,7 @@ Describe('tao fmt', () => {
       const results = await runFmt(path)
 
       Expect(results.map(result => result.status)).toEqual(['formatted'])
-      Expect(await FS.readText(path)).toBe('app MyApp {\n    ui MainView\n}\n\nui MainView { }\n')
+      Expect(await FS.readText(path)).toBe('app MyApp {\n   ui MainView\n}\n\nui MainView { }\n')
     })
   })
 })

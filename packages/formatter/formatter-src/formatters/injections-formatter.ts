@@ -1,4 +1,4 @@
-import type { FormatHandlers } from '../formatting'
+import { findInjectionFenceCloseIndex, type FormatHandlers, isInjectionFenceOpenLine } from '../formatting'
 
 export default {
   /** Injection formats `inject arguments` spacing up to the TS fence. */
@@ -32,18 +32,17 @@ export function reindentInjectionFences(text: string, tab: string): string {
   let index = 0
   while (index < lines.length) {
     const line = lines[index]!
-    const openMatch = line.match(/^([ \t]*).*\binject\b.*```ts$/)
-    if (!openMatch) {
+    if (!isInjectionFenceOpenLine(line)) {
       result.push(line)
       index++
       continue
     }
-    const closeIndex = lines.findIndex((candidate, j) => j > index && candidate.includes('```'))
+    const closeIndex = findInjectionFenceCloseIndex(lines, index)
     if (closeIndex === -1) {
       result.push(...lines.slice(index))
       break
     }
-    const baseIndent = openMatch[1]!
+    const baseIndent = line.match(/^[ \t]*/)![0]
     const closeLine = lines[closeIndex]!
     const fenceOffset = closeLine.indexOf('```')
     const beforeFence = closeLine.slice(0, fenceOffset)

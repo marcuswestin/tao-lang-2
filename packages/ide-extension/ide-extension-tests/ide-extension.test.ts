@@ -89,10 +89,10 @@ Describe('Tao IDE extension smoke', () => {
     Expect(formatter).toBeInstanceOf(TaoFormatter)
     const edits = await formatter!.formatDocument(document, {
       textDocument: { uri: document.textDocument.uri },
-      options: { tabSize: 4, insertSpaces: true },
+      options: { tabSize: 3, insertSpaces: true },
     })
 
-    Expect(applyEdits(document, edits)).toBe('ui MainView { }')
+    Expect(applyEdits(document, edits)).toBe('ui MainView { }\n')
   })
 })
 
