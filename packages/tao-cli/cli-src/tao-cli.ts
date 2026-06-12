@@ -1,11 +1,21 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings'
 import { FS, HCI, Platform } from '@shared'
+import { runCompile } from './compile-command'
 import { runFmt } from './fmt-command'
 
 const commands = new Command()
   .name('tao')
   .description('Tao language CLI.')
+
+commands
+  .command('compile')
+  .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
+  .description('Compile a Tao app into the local runtime package.')
+  .action(async (appPath: string) => {
+    const compiled = await runCompile(appPath)
+    HCI.writeLine(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}`)
+  })
 
 commands
   .command('fmt')

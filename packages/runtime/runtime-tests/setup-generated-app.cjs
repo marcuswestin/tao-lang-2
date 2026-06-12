@@ -6,7 +6,7 @@ module.exports = async () => {
   const repoRoot = nodePath.resolve(__dirname, '../../..')
   const appPath = nodePath.resolve(repoRoot, 'Apps/Kitchen Sink/Kitchen Sink.tao')
 
-  execFileSync(nodePath.resolve(repoRoot, 'dev'), ['compile-app', appPath], {
+  execFileSync(nodePath.resolve(repoRoot, 'tao'), ['compile', appPath], {
     cwd: repoRoot,
     stdio: 'inherit',
   })

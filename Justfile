@@ -42,7 +42,7 @@ check: _compile-kitchen-sink-app _ide-extension-build
 
 # Compile a Tao app path relative to the invocation directory into the local runtime package
 compile-app app_path: _parser-gen
-  ./dev compile-app "{{app_path}}"
+  ./tao compile "{{app_path}}"
 
 # Build and install the IDE extension into local editor apps
 install-ide-extension: _ide-extension-package
@@ -70,7 +70,7 @@ prep: fix check
 #########
 
 _compile-kitchen-sink-app: _parser-gen
-  ./dev compile-app "{{KITCHEN_SINK_APP}}"
+  ./tao compile "{{KITCHEN_SINK_APP}}"
 
 _ide-extension-build: _parser-gen
   cd packages/ide-extension && bun esbuild.config.ts

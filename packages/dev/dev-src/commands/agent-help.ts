@@ -54,6 +54,7 @@ Examples:
   ./agent merge-feature-preflight
   ./agent codex exec -C . --sandbox read-only --ephemeral -
   ./agent rg -n 'pattern' packages
+  ./agent tao fmt Apps
 
 Just recipes:
 ${Text.indentLines(justList.stdout.trimEnd(), 2)}
