@@ -11,6 +11,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - On a fresh worktree, run `direnv allow`.
 - Run `./agent help` once at the start of a fresh repo session; rerun it only to refresh command lists or diagnose agent command behavior.
 - Always use `./agent <cmd> ...` for executable shell commands. Use tool workdirs or normal `cd` to choose the command directory.
+- Run Tao CLI commands directly with `./tao` (e.g. `./tao fmt Apps`, `./tao compile <app path>`), not through `./agent`.
 - Use `./agent just <recipe>` for repo workflows; `just` is the workflow manager.
 - Use `bun` over `node` except with Expo and Jest.
 - Treat nix + direnv + devenv as the expected developer environment; do not add defensive availability/version checks for expected tools unless Ro asks for diagnostics.

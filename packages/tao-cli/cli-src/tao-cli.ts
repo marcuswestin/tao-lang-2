@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings'
-import { FS, HCI, Platform } from '@shared'
+import { Errors, FS, HCI, Platform } from '@shared'
 import { runCompile } from './compile-command'
 import { runFmt } from './fmt-command'
 
@@ -13,8 +13,13 @@ commands
   .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
   .description('Compile a Tao app into the local runtime package.')
   .action(async (appPath: string) => {
-    const compiled = await runCompile(appPath)
-    HCI.writeLine(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}`)
+    try {
+      const compiled = await runCompile(appPath)
+      HCI.writeSuccess(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}\n`)
+    } catch (error) {
+      HCI.writeErrorLine(Errors.formatForUser(error))
+      Platform.runtimeProcess.exit(1)
+    }
   })
 
 commands
@@ -28,7 +33,7 @@ commands
     const errored = results.filter(result => result.status === 'error')
 
     for (const result of formatted) {
-      HCI.writeLine(`Formatted ${displayPath(result.path)}`)
+      HCI.writeSuccess(`Formatted ${displayPath(result.path)}\n`)
     }
     for (const result of errored) {
       HCI.writeErrorLine(`Failed to format ${displayPath(result.path)}: ${result.error}`)
@@ -39,11 +44,12 @@ commands
     }
 
     const unchangedCount = results.length - formatted.length - errored.length
-    const failedSummary = errored.length > 0 ? `, ${errored.length} failed` : ''
-    HCI.writeLine(`${formatted.length} formatted, ${unchangedCount} unchanged${failedSummary}`)
+    const summary = `${formatted.length} formatted, ${unchangedCount} unchanged`
     if (errored.length > 0) {
+      HCI.writeErrorLine(`${summary}, ${errored.length} failed`)
       Platform.runtimeProcess.exit(1)
     }
+    HCI.writeSuccess(`${summary}\n`)
   })
 
 await commands.parseAsync(Platform.runtimeProcess.argv, { from: 'node' })
