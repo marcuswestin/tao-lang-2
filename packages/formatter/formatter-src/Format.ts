@@ -1,12 +1,12 @@
-import AliasesFormatter from './aliases-formatter'
-import AppFormatter from './app-formatter'
-import ExpressionsFormatter from './expressions-formatter'
-import FilesFormatter from './files-formatter'
+import AliasesFormatter from './formatters/aliases-formatter'
+import AppFormatter from './formatters/app-formatter'
+import ExpressionsFormatter from './formatters/expressions-formatter'
+import FilesFormatter from './formatters/files-formatter'
+import InjectionsFormatter from './formatters/injections-formatter'
+import StatementsFormatter from './formatters/statements-formatter'
+import UseFormatter from './formatters/use-formatter'
+import ViewsFormatter from './formatters/views-formatter'
 import type { FormatHandlers } from './formatting'
-import InjectionsFormatter from './injections-formatter'
-import StatementsFormatter from './statements-formatter'
-import UseFormatter from './use-formatter'
-import ViewsFormatter from './views-formatter'
 
 /** Format formats parsed Tao AST nodes via per-feature formatting handlers keyed by node type. */
 export const Format = {

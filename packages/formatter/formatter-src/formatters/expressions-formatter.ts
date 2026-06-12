@@ -1,4 +1,4 @@
-import type { FormatHandlers } from './formatting'
+import type { FormatHandlers } from '../formatting'
 
 export default {
   /** ArgumentList formats comma-separated invocation arguments. */

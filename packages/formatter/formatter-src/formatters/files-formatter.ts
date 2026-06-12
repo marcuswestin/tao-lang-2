@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import type { FormatHandlers } from './formatting'
+import type { FormatHandlers } from '../formatting'
 
 export default {
   /** TaoFile formats top-level statements one blank line apart, keeping use and alias groups adjacent. */

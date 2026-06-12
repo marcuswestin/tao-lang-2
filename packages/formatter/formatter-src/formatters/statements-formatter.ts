@@ -1,4 +1,4 @@
-import type { FormatHandlers } from './formatting'
+import type { FormatHandlers } from '../formatting'
 
 export default {
   /** Block formats `{ }` bodies with one indented statement per line. */

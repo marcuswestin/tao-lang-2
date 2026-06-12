@@ -1,4 +1,4 @@
-import type { FormatHandlers } from './formatting'
+import type { FormatHandlers } from '../formatting'
 
 export default {
   /** Injection formats `inject arguments` spacing up to the TS fence. */

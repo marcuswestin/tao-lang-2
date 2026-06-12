@@ -1,4 +1,4 @@
-import type { FormatHandlers } from './formatting'
+import type { FormatHandlers } from '../formatting'
 
 export default {
   /** UseStatement formats `use Name, Name from path` spacing. */

@@ -1,7 +1,7 @@
 import { Parser, type ParseResult } from '@parser'
 import { Assert } from '@shared'
+import { reindentInjectionFences } from './formatters/injections-formatter'
 import { applyTextEdits } from './formatting'
-import { reindentInjectionFences } from './injections-formatter'
 import { TaoFormatter } from './langium-formatting'
 
 export { TaoFormatter } from './langium-formatting'

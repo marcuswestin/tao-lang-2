@@ -1,4 +1,4 @@
-import type { FormatHandlers } from './formatting'
+import type { FormatHandlers } from '../formatting'
 
 export default {
   /** AppDeclaration formats the `app Name` header; the app body is formatted as a Block. */

@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import type { FormatHandlers, NodeFormat } from './formatting'
+import type { FormatHandlers, NodeFormat } from '../formatting'
 
 export default {
   /** UiDeclaration formats a `ui Name parameters` view header. */
