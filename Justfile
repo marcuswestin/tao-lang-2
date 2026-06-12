@@ -26,12 +26,12 @@ test: _compile-kitchen-sink-app
 # Format code
 fmt:
   dprint fmt
-  bunx tao fmt Apps
+  ./tao fmt Apps
 
 # Fix and format all code
 fix:
   dprint fmt --incremental=false
-  bunx tao fmt Apps
+  ./tao fmt Apps
 
 # Check and test all code
 check: _compile-kitchen-sink-app _ide-extension-build

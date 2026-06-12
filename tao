@@ -1,0 +1,8 @@
+#!/bin/zsh
+
+set -e
+
+# Resolve the wrapper location so ./tao works from any invocation directory.
+SCRIPT_DIR="${0:A:h}"
+
+exec bun "$SCRIPT_DIR/packages/tao-cli/cli-src/tao-cli.ts" "$@"

@@ -1,7 +1,7 @@
 ---
 name: dev-automation
 description: >-
-  Write or modify Tao repository automation: packages/dev commands, ./agent dispatcher behavior, and Justfile recipes/variables run via `./agent just <recipe>`. Use when changing dev automation, adding just recipes or variables, or avoiding standalone Bun script entrypoints.
+  Write or modify Tao repository automation: packages/dev commands, ./agent dispatcher behavior, the ./dev and ./tao wrappers, and Justfile recipes/variables run via `./agent just <recipe>`. Use when changing dev automation, adding just recipes or variables, or avoiding standalone Bun script entrypoints.
 ---
 
 # Dev automation
@@ -15,6 +15,7 @@ Use this skill when adding or changing repo automation: `packages/dev` TypeScrip
 - Put simple command recipes directly in `Justfile`.
 - Put durable TypeScript automation in `packages/dev/dev-src/dev.ts` only when it would otherwise make sense to create a separate bash script.
 - Keep `./dev <command>` as a script runner for focused actions; do not put workflow dependencies or prerequisite orchestration in `./dev`.
+- Keep `./tao` as a thin wrapper that forwards all arguments to the Tao CLI (`packages/tao-cli`); put Tao CLI commands in `cli-src`, not in the wrapper.
 - Put `./agent` behavior, allowlisted executable commands, help text, and command dispatch in `packages/dev/dev-src/agent-dev.ts`.
 - Prefer `packages/dev` TypeScript over complex shell for durable logic; keep shell entrypoints thin. Avoid standalone Bun script entrypoints—expose script-like automation through `dev.ts` or `agent-dev`.
 - Keep commands small, typed, and covered by relevant package tests or repo checks.

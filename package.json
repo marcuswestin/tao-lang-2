@@ -5,9 +5,6 @@
   "workspaces": [
     "packages/*"
   ],
-  "dependencies": {
-    "tao-cli": "workspace:*"
-  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",

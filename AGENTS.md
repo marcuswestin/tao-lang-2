@@ -32,7 +32,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - Use the project lifecycle skills for roadmap selection, research, planning, implementation, review, and merge workflows.
 - Use `runtime-codegen` for generated-code runtime API, generated TS, `TR`, `@runtime/TR`, and `packages/runtime/TaoRuntime-src` work.
 - Use `old-repo-porting` when comparable behavior exists in `~/code/tao-lang`.
-- Use `dev-automation` for `packages/dev`, `./agent`, `./dev`, and `Justfile` changes.
+- Use `dev-automation` for `packages/dev`, `./agent`, `./dev`, `./tao`, and `Justfile` changes.
 - Use `subagents-review` or `dual-agent-review-fix` for multi-agent review work.
 - Use `stale-repo-check` after renames, removals, workflow changes, roadmap updates, or instruction edits.
 - Treat generic Superpowers skills under `.agents/skills` as supplemental. Do not vendor or symlink generic skill bundles into `agents/skills` unless Ro explicitly asks; when workflows overlap, root/nested `AGENTS.md`, git safety, validation, and Tao lifecycle skills own the workflow.
