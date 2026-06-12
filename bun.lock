@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "tao-lang",
+      "dependencies": {
+        "tao-cli": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "latest",
         "@types/node": "latest",
@@ -47,6 +50,7 @@
       "name": "tao-ide-extension",
       "version": "0.0.1",
       "dependencies": {
+        "tao-formatter": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-validator": "workspace:*",
         "vscode-languageclient": "~9.0.1",
@@ -93,6 +97,18 @@
     },
     "packages/shared": {
       "name": "tao-shared",
+    },
+    "packages/tao-cli": {
+      "name": "tao-cli",
+      "bin": {
+        "tao": "cli-src/tao-cli.ts",
+      },
+      "dependencies": {
+        "@commander-js/extra-typings": "^14.0.0",
+        "commander": "^14.0.0",
+        "tao-formatter": "workspace:*",
+        "tao-shared": "workspace:*",
+      },
     },
     "packages/validator": {
       "name": "tao-validator",
@@ -1722,6 +1738,8 @@
     "table": ["table@6.9.0", "", { "dependencies": { "ajv": "^8.0.1", "lodash.truncate": "^4.4.2", "slice-ansi": "^4.0.0", "string-width": "^4.2.3", "strip-ansi": "^6.0.1" } }, "sha512-9kY+CygyYM6j02t5YFHbNz2FN5QmYGv9zAjVp4lCDjlCw7amdckXlEt/bjMhUIfj4ThGRE4gCUH5+yGnNuPo5A=="],
 
     "tao-ast-utils": ["tao-ast-utils@workspace:packages/ast-utils"],
+
+    "tao-cli": ["tao-cli@workspace:packages/tao-cli"],
 
     "tao-compiler": ["tao-compiler@workspace:packages/compiler"],
 

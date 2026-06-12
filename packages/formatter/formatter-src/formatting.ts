@@ -23,11 +23,21 @@ export type NodeFormat<NodeT extends AST.Node> = {
   ): void
 }
 
-/** FormatHandlers declares optional per-node-type formatting functions keyed by AST node type. */
+// Concrete node types are the map entries whose `$type` equals their key; union aliases such as
+// `Statement` carry the union of their members' `$type`s and never appear as a node's `$type`.
+type ConcreteNodeType = {
+  [TypeT in keyof AST.TaoLangAstType]: AST.TaoLangAstType[TypeT] extends { $type: TypeT } ? TypeT : never
+}[keyof AST.TaoLangAstType]
+
+/**
+ * FormattedNodeType declares every AST node type the formatter must handle: all concrete node
+ * types except per-grammar-file entrypoint wrappers, which never occur in parsed Tao files.
+ */
+export type FormattedNodeType = Exclude<ConcreteNodeType, `${string}GrammarEntrypoint`>
+
+/** FormatHandlers declares one formatting function for every formatted AST node type. */
 export type FormatHandlers = {
-  [TypeT in keyof AST.TaoLangAstType]?: AST.TaoLangAstType[TypeT] extends AST.Node
-    ? (f: NodeFormat<AST.TaoLangAstType[TypeT]>) => void
-    : never
+  [TypeT in FormattedNodeType]: (f: NodeFormat<AST.TaoLangAstType[TypeT]>) => void
 }
 
 /** createNodeFormat wraps a Langium node formatter in the Tao formatting verbs. */

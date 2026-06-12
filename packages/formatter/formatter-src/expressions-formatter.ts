@@ -5,4 +5,16 @@ export default {
   ArgumentList(f) {
     f.commaSpacedList()
   },
-} satisfies FormatHandlers
+
+  /** Argument is a single expression; its spacing is owned by ArgumentList commas. */
+  Argument() {},
+
+  /** StringLiteral is a single token with no interior formatting. */
+  StringLiteral() {},
+
+  /** NumberLiteral is a single token with no interior formatting. */
+  NumberLiteral() {},
+
+  /** ValueReference is a single identifier with no interior formatting. */
+  ValueReference() {},
+} satisfies Partial<FormatHandlers>

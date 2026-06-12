@@ -10,4 +10,4 @@ export default {
   AppUi(f) {
     f.oneSpaceAfter('ui')
   },
-} satisfies FormatHandlers
+} satisfies Partial<FormatHandlers>

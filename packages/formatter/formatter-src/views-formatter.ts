@@ -18,7 +18,7 @@ export default {
   ViewRender(f) {
     f.oneSpaceBeforeProperty('argumentList')
   },
-} satisfies FormatHandlers
+} satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.oneSpaceAfter('share', 'hide', 'ui', 'layout')

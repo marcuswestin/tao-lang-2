@@ -258,6 +258,8 @@ Describe('Tao formatter comments', () => {
 
 Describe('Tao formatter error handling', () => {
   Test('throws on Tao source with syntax errors', async () => {
-    await Expect(Formatter.formatCode('ui Broken {')).rejects.toThrow('Cannot format Tao source with syntax errors')
+    await Expect(Formatter.formatCode('ui Broken {')).rejects.toThrow(
+      'Tao source without syntax errors when formatting',
+    )
   })
 })

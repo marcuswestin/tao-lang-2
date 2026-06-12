@@ -1,4 +1,5 @@
 import { Parser, type ParseResult } from '@parser'
+import { Assert } from '@shared'
 import { applyTextEdits } from './formatting'
 import { reindentInjectionFences } from './injections-formatter'
 import { TaoFormatter } from './langium-formatting'
@@ -37,9 +38,7 @@ async function formatParsed(parsed: ParseResult, opts: FormatOptions = {}): Prom
 function assertFormattable(parsed: ParseResult): void {
   const { lexerErrors, parserErrors } = parsed.document.parseResult
   const firstError = lexerErrors[0]?.message ?? parserErrors[0]?.message
-  if (firstError !== undefined) {
-    throw new Error(`Cannot format Tao source with syntax errors: ${firstError}`)
-  }
+  Assert(firstError === undefined, 'Tao source without syntax errors when formatting', { firstError })
 }
 
 function finalizeFormattedText(text: string): string {

@@ -6,7 +6,7 @@ export default {
   TaoFile(f) {
     f.separateLines(f.node.statements, (previous, next) => isGroupedPair(previous, next) ? 1 : 2)
   },
-} satisfies FormatHandlers
+} satisfies Partial<FormatHandlers>
 
 function isGroupedPair(previous: AST.Statement, next: AST.Statement): boolean {
   return (AST.isUseStatement(previous) && AST.isUseStatement(next))

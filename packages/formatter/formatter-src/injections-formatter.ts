@@ -16,7 +16,10 @@ export default {
   NamedInjectionArgument(f) {
     f.oneSpaceBeforeProperty('value')
   },
-} satisfies FormatHandlers
+
+  /** ShorthandInjectionArgument is a single value reference; spacing is owned by InjectionArgumentList commas. */
+  ShorthandInjectionArgument() {},
+} satisfies Partial<FormatHandlers>
 
 /**
  * reindentInjectionFences re-indents multiline inject fence bodies one tab below the line that opens

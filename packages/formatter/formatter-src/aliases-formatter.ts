@@ -6,4 +6,4 @@ export default {
     f.oneSpaceAfter('share', 'hide', 'alias')
     f.oneSpaceAround('=')
   },
-} satisfies FormatHandlers
+} satisfies Partial<FormatHandlers>

@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { TaoFormatter } from 'tao-formatter'
 import { AST, Langium } from 'tao-parser'
 import { createValidatorLspServices } from 'tao-validator/langium-services'
 
@@ -68,7 +69,46 @@ Describe('Tao IDE extension smoke', () => {
       "Alias 'First' cannot reference 'Second' because it is not declared before the alias.",
     )
   })
+
+  Test('formats documents through the language server formatter service', async () => {
+    const services = createValidatorLspServices(Langium.NodeFileSystem, {
+      lspFormatter: () => new TaoFormatter(),
+    })
+    const uri = Langium.URI.file('/__tao__/ide-format.tao')
+    const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+      'ui   MainView    {   }',
+      uri,
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(document)
+    await services.shared.workspace.DocumentBuilder.build([document], {
+      eagerLinking: true,
+      validation: false,
+    })
+
+    const formatter = services.language.lsp.Formatter
+    Expect(formatter).toBeInstanceOf(TaoFormatter)
+    const edits = await formatter!.formatDocument(document, {
+      textDocument: { uri: document.textDocument.uri },
+      options: { tabSize: 4, insertSpaces: true },
+    })
+
+    Expect(applyEdits(document, edits)).toBe('ui MainView { }')
+  })
 })
+
+function applyEdits(document: AST.Document, edits: readonly Langium.TextEdit[]): string {
+  const textDocument = document.textDocument
+  const sorted = [...edits].sort(
+    (a, b) => textDocument.offsetAt(b.range.start) - textDocument.offsetAt(a.range.start),
+  )
+  let text = textDocument.getText()
+  for (const edit of sorted) {
+    text = text.slice(0, textDocument.offsetAt(edit.range.start))
+      + edit.newText
+      + text.slice(textDocument.offsetAt(edit.range.end))
+  }
+  return text
+}
 
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
   const services = createValidatorLspServices()

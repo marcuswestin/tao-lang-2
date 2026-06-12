@@ -78,9 +78,15 @@ function createValidatorServices(): Services {
   return { shared, language, typir }
 }
 
+/** ValidatorLspServicesOptions declares LSP services contributed by the composing host. */
+export type ValidatorLspServicesOptions = {
+  lspFormatter?: () => Langium.Formatter
+}
+
 /** createValidatorLspServices creates Langium LSP services with Tao Typir services initialized. */
 export function createValidatorLspServices(
   context: Langium.DefaultSharedModuleContext = Langium.NodeFileSystem,
+  opts: ValidatorLspServicesOptions = {},
 ): ValidatorLspServices {
   const shared = Langium.inject(
     Langium.createDefaultSharedModule(context),
@@ -98,6 +104,7 @@ export function createValidatorLspServices(
       references: {
         ScopeProvider: (services) => new TaoValueScopeProvider(services),
       },
+      ...(opts.lspFormatter ? { lsp: { Formatter: opts.lspFormatter } } : {}),
     },
   )
   shared.ServiceRegistry.register(language)

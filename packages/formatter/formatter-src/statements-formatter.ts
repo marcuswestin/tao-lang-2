@@ -16,4 +16,4 @@ export default {
   ParameterDeclaration(f) {
     f.oneSpaceBeforeProperty('type')
   },
-} satisfies FormatHandlers
+} satisfies Partial<FormatHandlers>

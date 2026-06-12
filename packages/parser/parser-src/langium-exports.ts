@@ -20,6 +20,8 @@ export namespace Langium {
   export type DefaultSharedCoreModuleContext = langium.DefaultSharedCoreModuleContext
   /** DefaultSharedModuleContext declares the host services needed to create Langium LSP shared services. */
   export type DefaultSharedModuleContext = langiumLsp.DefaultSharedModuleContext
+  /** Formatter declares the Langium LSP document formatting service. */
+  export type Formatter = langiumLsp.Formatter
   /** Generated declares one Langium generator contribution. */
   export type Generated = langiumGenerate.Generated
   /** GeneratorNode declares a structured Langium generator node. */

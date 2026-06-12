@@ -7,4 +7,4 @@ export default {
     f.oneSpaceAround('from')
     f.commaSpacedList()
   },
-} satisfies FormatHandlers
+} satisfies Partial<FormatHandlers>

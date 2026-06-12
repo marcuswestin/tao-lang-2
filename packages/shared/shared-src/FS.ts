@@ -8,6 +8,7 @@ export type WalkOptions = {
   includeDirectories?: boolean
   includeHidden?: boolean
   extensions?: readonly string[]
+  excludeDirectoryNames?: readonly string[]
 }
 
 /** FileHandle declares an opened filesystem handle. */
@@ -194,6 +195,9 @@ async function* walkDirectory(directoryPath: string, options: WalkOptions): Asyn
 }
 
 function shouldWalkDirectory(name: string, options: WalkOptions): boolean {
+  if (options.excludeDirectoryNames?.includes(name)) {
+    return false
+  }
   return options.includeHidden === true || !name.startsWith('.')
 }
 
