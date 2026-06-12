@@ -1,4 +1,4 @@
-use Text, Stack from @tao/ui
+use Stack, Text from @tao/ui
 
 app KitchenSink {
    ui MainView

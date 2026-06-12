@@ -5,7 +5,7 @@ import { validateAliases } from './aliases-validator'
 import { validateApp } from './app-validator'
 import { validateInjections } from './injections-validator'
 import { validateInvocations } from './invocations-validator'
-import { validateUseStatements } from './use-validator'
+import { validateUseOrganization, validateUseStatements } from './use-validator'
 import { createLangiumValidationContext } from './validation'
 import { validateViews } from './views-validator'
 
@@ -22,6 +22,7 @@ export function registerTaoValidationChecks(
       validateAliases(file, ctx)
       validateInjections(file, ctx)
       validateInvocations(file, ctx)
+      validateUseOrganization(file, ctx)
       const document = ASTUtils.getDocument(file)
       if (document.uri.scheme === 'file') {
         const workspaceFiles = Array.from(services.shared.workspace.LangiumDocuments.all)

@@ -8,7 +8,7 @@ import { validateTypirProblems } from './expressions-validator'
 import { validateInjections } from './injections-validator'
 import { validateInvocations } from './invocations-validator'
 import { parseCodeForValidation, parseFileForValidation, rebuildForValidation } from './langium-services'
-import { validateUseStatements } from './use-validator'
+import { validateUseOrganization, validateUseStatements } from './use-validator'
 import { createValidationContext } from './validation'
 import { validateViews } from './views-validator'
 
@@ -70,6 +70,7 @@ async function validateValidationParseResult(
     validateAliases(file, ctx)
     validateInjections(file, ctx)
     validateInvocations(file, ctx)
+    validateUseOrganization(file, ctx)
     const document = ASTUtils.getDocument(file)
     if (document.uri.scheme === 'file') {
       validateUseStatements(file, ctx, {

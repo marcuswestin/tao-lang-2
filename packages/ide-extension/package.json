@@ -48,6 +48,7 @@
   "dependencies": {
     "tao-formatter": "workspace:*",
     "tao-parser": "workspace:*",
+    "tao-source-actions": "workspace:*",
     "tao-validator": "workspace:*",
     "vscode-languageclient": "~9.0.1"
   },

@@ -2,6 +2,7 @@ import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { TaoFormatter } from 'tao-formatter'
 import { AST, Langium } from 'tao-parser'
+import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
 import { createValidatorLspServices } from 'tao-validator/langium-services'
 
 Describe('Tao IDE extension smoke', () => {
@@ -94,7 +95,71 @@ Describe('Tao IDE extension smoke', () => {
 
     Expect(applyEdits(document, edits)).toBe('ui MainView {\n   render Stack { }\n}\n')
   })
+
+  Test('serves the organize use statements source action through the language server', async () => {
+    const { provider, document } = await buildCodeActionFixture(
+      'app MyApp { ui MainView }\nuse Text from @tao/ui\nui MainView { render Text "hi" }\n',
+    )
+    const actions = await provider.getCodeActions(document, {
+      textDocument: { uri: document.textDocument.uri },
+      range: fullRange(document),
+      context: { diagnostics: [], only: ['source.organizeImports'] },
+    })
+    const organize = actions?.find(action => 'title' in action && action.title === 'tao: Organize Use Statements')
+
+    Expect(organize && 'kind' in organize ? organize.kind : undefined).toBe('source.organizeImports')
+    const edits = organize && 'edit' in organize ? organize.edit?.changes?.[document.textDocument.uri] : undefined
+    Expect(edits?.[0]?.newText).toBe(
+      'use Text from @tao/ui\n\napp MyApp {\n   ui MainView\n}\n\nui MainView {\n   render Text "hi"\n}\n',
+    )
+  })
+
+  Test('serves the move-render quick fix for render-not-last diagnostics', async () => {
+    const { provider, document } = await buildCodeActionFixture(
+      'ui MainView {\n   render Text Greeting\n   alias Greeting = "hi"\n}\n',
+    )
+    const actions = await provider.getCodeActions(document, {
+      textDocument: { uri: document.textDocument.uri },
+      range: fullRange(document),
+      context: {
+        diagnostics: [{ range: fullRange(document), message: 'render', code: 'tao-render-not-last' }],
+        only: ['quickfix'],
+      },
+    })
+    const moveRender = actions?.find(action => 'title' in action && action.title === 'tao: Move render to end')
+
+    const edits = moveRender && 'edit' in moveRender ? moveRender.edit?.changes?.[document.textDocument.uri] : undefined
+    Expect(edits?.[0]?.newText).toBe('ui MainView {\n   alias Greeting = "hi"\n   render Text Greeting\n}\n')
+  })
 })
+
+async function buildCodeActionFixture(source: string): Promise<{
+  provider: Langium.CodeActionProvider
+  document: AST.Document
+}> {
+  const services = createValidatorLspServices(Langium.NodeFileSystem, {
+    lspCodeActionProvider: () => new TaoCodeActionProvider(),
+  })
+  const uri = Langium.URI.file(`/__tao__/ide-actions-${++codeActionFixtureId}.tao`)
+  const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
+  services.shared.workspace.LangiumDocuments.addDocument(document)
+  await services.shared.workspace.DocumentBuilder.build([document], {
+    eagerLinking: true,
+    validation: false,
+  })
+  const provider = services.language.lsp.CodeActionProvider
+  Expect(provider).toBeInstanceOf(TaoCodeActionProvider)
+  return { provider: provider!, document }
+}
+
+let codeActionFixtureId = 0
+
+function fullRange(document: AST.Document): { start: Langium.Position; end: Langium.Position } {
+  return {
+    start: { line: 0, character: 0 },
+    end: document.textDocument.positionAt(document.textDocument.getText().length),
+  }
+}
 
 function applyEdits(document: AST.Document, edits: readonly Langium.TextEdit[]): string {
   const textDocument = document.textDocument

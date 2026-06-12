@@ -1,8 +1,8 @@
+use Stack, Text from @tao/ui
+
 app KitchenSink {
    ui MainView
 }
-
-use Text, Stack from @tao/ui
 
 alias Greeting = "Hello, World!"
 alias LaunchCount = 3

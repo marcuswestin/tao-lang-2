@@ -21,7 +21,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(launchCountAlias, AST.isAliasDeclaration)
     Expect.Is(mainView, AST.isUiDeclaration)
     Expect.Is(countTextView, AST.isUiDeclaration)
-    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text', 'Stack'])
+    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Stack', 'Text'])
     Expect(useStatement.modulePath).toBe('@tao/ui')
 
     Expect(app.name).toBe('KitchenSink')

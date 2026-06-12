@@ -8,6 +8,8 @@ export const useValidationMessages = {
   unresolvedModule: (modulePath: string) => `Cannot resolve module path '${modulePath}'.`,
   duplicateImport: (name: string) => `Imported name '${name}' is declared more than once in this use statement.`,
   repeatedImport: (name: string) => `Imported name '${name}' is already imported by an earlier use statement.`,
+  unusedImport: (name: string) => `Imported name '${name}' is not used in this file.`,
+  useOutOfSection: '`use` statements belong in the import section before other top-level statements.',
   localDeclarationCollision: (name: string) => `Imported name '${name}' collides with a declaration in this file.`,
   ambiguousImport: (name: string, modulePath: string) =>
     `'${name}' matches multiple visible declarations in '${modulePath}'.`,
@@ -19,10 +21,34 @@ export const useValidationMessages = {
   appImport: (name: string) => `App '${name}' cannot be imported.`,
 } as const
 
+/** useValidationCodes declares quick-fixable diagnostic codes for Tao use statements. */
+export const useValidationCodes = {
+  duplicateImport: 'tao-duplicate-import',
+  repeatedImport: 'tao-repeated-import',
+  unusedImport: 'tao-unused-import',
+  useOutOfSection: 'tao-use-out-of-section',
+} as const
+
 type DeclarationRecord = {
   name: string
   kind: AST.Declaration['$type']
   visibility?: AST.DeclarationVisibility
+}
+
+/** validateUseOrganization validates import organization rules that need no module resolution. */
+export function validateUseOrganization(file: AST.TaoFile, ctx: ValidationContext): void {
+  const useStatements = file.statements.filter(AST.isUseStatement)
+  const localDeclarationNames = new Set(
+    file.statements.filter(AST.isDeclaration).map(declaration => declaration.name),
+  )
+  const referencedNames = ASTUtils.referencedNames(file)
+  const previouslyImportedNames = new Set<string>()
+  for (const useStatement of useStatements) {
+    reportDuplicateImports(useStatement, ctx)
+    reportRepeatedAndCollidingImports(useStatement, ctx, localDeclarationNames, previouslyImportedNames)
+    reportUnusedImports(useStatement, ctx, referencedNames)
+  }
+  reportUseStatementsOutOfSection(file, ctx)
 }
 
 /** validateUseStatements validates module path resolution and import visibility rules. */
@@ -35,14 +61,7 @@ export function validateUseStatements(
     stdLibRoot?: string
   },
 ): void {
-  const useStatements = file.statements.filter(AST.isUseStatement)
-  const localDeclarationNames = new Set(
-    file.statements.filter(AST.isDeclaration).map(declaration => declaration.name),
-  )
-  const previouslyImportedNames = new Set<string>()
-  for (const useStatement of useStatements) {
-    reportDuplicateImports(useStatement, ctx)
-    reportRepeatedAndCollidingImports(useStatement, ctx, localDeclarationNames, previouslyImportedNames)
+  for (const useStatement of file.statements.filter(AST.isUseStatement)) {
     validateUseStatement(useStatement, ctx, options)
   }
 }
@@ -126,7 +145,9 @@ function reportDuplicateImports(useStatement: AST.UseStatement, ctx: ValidationC
   const seen = new Set<string>()
   for (const name of useStatement.importedDeclarations.map(reference => reference.$refText)) {
     if (seen.has(name)) {
-      ctx.error(useValidationMessages.duplicateImport(name), useStatement)
+      ctx.error(useValidationMessages.duplicateImport(name), useStatement, {
+        code: useValidationCodes.duplicateImport,
+      })
       continue
     }
     seen.add(name)
@@ -141,12 +162,42 @@ function reportRepeatedAndCollidingImports(
 ): void {
   for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
     if (previouslyImportedNames.has(name)) {
-      ctx.error(useValidationMessages.repeatedImport(name), useStatement)
+      ctx.error(useValidationMessages.repeatedImport(name), useStatement, {
+        code: useValidationCodes.repeatedImport,
+      })
     } else {
       previouslyImportedNames.add(name)
     }
     if (localDeclarationNames.has(name)) {
       ctx.error(useValidationMessages.localDeclarationCollision(name), useStatement)
+    }
+  }
+}
+
+function reportUnusedImports(
+  useStatement: AST.UseStatement,
+  ctx: ValidationContext,
+  referencedNames: ReadonlySet<string>,
+): void {
+  for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
+    if (!referencedNames.has(name)) {
+      ctx.warning(useValidationMessages.unusedImport(name), useStatement, {
+        code: useValidationCodes.unusedImport,
+      })
+    }
+  }
+}
+
+function reportUseStatementsOutOfSection(file: AST.TaoFile, ctx: ValidationContext): void {
+  const firstNonUseIndex = file.statements.findIndex(statement => !AST.isUseStatement(statement))
+  if (firstNonUseIndex === -1) {
+    return
+  }
+  for (const statement of file.statements.slice(firstNonUseIndex)) {
+    if (AST.isUseStatement(statement)) {
+      ctx.warning(useValidationMessages.useOutOfSection, statement, {
+        code: useValidationCodes.useOutOfSection,
+      })
     }
   }
 }

@@ -23,6 +23,7 @@ export type TaoDiagnostic = {
   message: string
   severity: DiagnosticSeverity
   source: DiagnosticSource
+  code?: string
   nodeType?: string
   range?: TaoDiagnosticRange
 }
@@ -64,11 +65,26 @@ export function errorMessages(diagnostics: readonly TaoDiagnostic[]): string[] {
 }
 
 /** validatorError creates a validator error diagnostic. */
-export function validatorError(message: string, node?: AST.Node): TaoDiagnostic {
+export function validatorError(message: string, node?: AST.Node, opts: { code?: string } = {}): TaoDiagnostic {
+  return validatorDiagnostic('error', message, node, opts)
+}
+
+/** validatorWarning creates a validator warning diagnostic. */
+export function validatorWarning(message: string, node?: AST.Node, opts: { code?: string } = {}): TaoDiagnostic {
+  return validatorDiagnostic('warning', message, node, opts)
+}
+
+function validatorDiagnostic(
+  severity: DiagnosticSeverity,
+  message: string,
+  node?: AST.Node,
+  opts: { code?: string } = {},
+): TaoDiagnostic {
   return {
     message,
-    severity: 'error',
+    severity,
     source: 'validator',
+    code: opts.code,
     nodeType: node?.$type,
     range: node?.$cstNode?.range,
   }

@@ -13,7 +13,9 @@
     "@commander-js/extra-typings": "^14.0.0",
     "commander": "^14.0.0",
     "tao-formatter": "workspace:*",
+    "tao-parser": "workspace:*",
     "tao-runtime": "workspace:*",
-    "tao-shared": "workspace:*"
+    "tao-shared": "workspace:*",
+    "tao-source-actions": "workspace:*"
   }
 }

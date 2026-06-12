@@ -81,6 +81,7 @@ function createValidatorServices(): Services {
 /** ValidatorLspServicesOptions declares LSP services contributed by the composing host. */
 export type ValidatorLspServicesOptions = {
   lspFormatter?: () => Langium.Formatter
+  lspCodeActionProvider?: () => Langium.CodeActionProvider
 }
 
 /** createValidatorLspServices creates Langium LSP services with Tao Typir services initialized. */
@@ -104,7 +105,7 @@ export function createValidatorLspServices(
       references: {
         ScopeProvider: (services) => new TaoValueScopeProvider(services),
       },
-      ...(opts.lspFormatter ? { lsp: { Formatter: opts.lspFormatter } } : {}),
+      ...lspModule(opts),
     },
   )
   shared.ServiceRegistry.register(language)
@@ -112,6 +113,14 @@ export function createValidatorLspServices(
   initializeLangiumTypirServices(language, typir)
 
   return { shared, language, typir }
+}
+
+function lspModule(opts: ValidatorLspServicesOptions): { lsp?: object } {
+  const lsp = {
+    ...(opts.lspFormatter ? { Formatter: opts.lspFormatter } : {}),
+    ...(opts.lspCodeActionProvider ? { CodeActionProvider: opts.lspCodeActionProvider } : {}),
+  }
+  return Object.keys(lsp).length > 0 ? { lsp } : {}
 }
 
 async function buildDocuments(

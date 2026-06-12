@@ -56,6 +56,12 @@
       "@formatter/*": [
         "./formatter/formatter-src/*"
       ],
+      "@source-actions": [
+        "./source-actions/source-actions-src/source-actions.ts"
+      ],
+      "@source-actions/*": [
+        "./source-actions/source-actions-src/*"
+      ],
       "@runtime": [
         "./runtime/runtime-src/runtime.ts"
       ],

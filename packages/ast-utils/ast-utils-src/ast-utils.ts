@@ -4,6 +4,7 @@ import {
   type ResolvedRenderInvocation as ResolvedRenderInvocationData,
   resolveRenderInvocation,
 } from './invocations'
+import { referencedNames } from './references'
 import { getDocument, isNode, streamAllContents } from './traversal'
 
 /** ASTUtils exposes shared semantic helpers for Tao AST consumers. */
@@ -11,6 +12,7 @@ const ASTUtils = {
   getDocument,
   injectionArgumentName,
   isNode,
+  referencedNames,
   resolveRenderInvocation,
   streamAllContents,
 }

@@ -46,12 +46,13 @@ export function reindentInjectionFences(text: string, tab: string): string {
     const closeLine = lines[closeIndex]!
     const fenceOffset = closeLine.indexOf('```')
     const beforeFence = closeLine.slice(0, fenceOffset)
-    const bodyLines = lines.slice(index + 1, closeIndex)
-    if (beforeFence.trim() !== '') {
-      bodyLines.push(beforeFence)
-    }
+    const bodyIndent = baseIndent + tab
     result.push(line)
-    result.push(...reindentLines(bodyLines, baseIndent + tab))
+    result.push(...reindentLines(lines.slice(index + 1, closeIndex), bodyIndent))
+    if (beforeFence.trim() !== '') {
+      // Body content sharing the close line moves onto its own line at the body indentation.
+      result.push(bodyIndent + beforeFence.trim())
+    }
     result.push(baseIndent + closeLine.slice(fenceOffset))
     index = closeIndex + 1
   }

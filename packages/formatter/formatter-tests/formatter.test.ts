@@ -283,6 +283,97 @@ Describe('Tao formatter injections', () => {
     )
   })
 
+  Test('detects fences with trailing whitespace after the opener and leaves their bodies untouched', async () => {
+    await testFormatCode(
+      `
+        ui MainView {
+        render inject ${tsFence}${' '}
+        function wrap() {
+           if (true) {
+           }
+        }
+        return <RN.Text>hi</RN.Text>
+        ${fence}
+        }
+      `,
+      `
+        ui MainView {
+           render inject ${tsFence}
+              function wrap() {
+                 if (true) {
+                 }
+              }
+              return <RN.Text>hi</RN.Text>
+           ${fence}
+        }
+      `,
+    )
+  })
+
+  Test('ignores comment lines that mention inject fences', async () => {
+    await testFormatCode(
+      `
+        ui MainView {
+        // inject some TS via ${tsFence}
+        render inject ${tsFence}
+        return null
+        ${fence}
+        }
+      `,
+      `
+        ui MainView {
+           // inject some TS via ${tsFence}
+           render inject ${tsFence}
+              return null
+           ${fence}
+        }
+      `,
+    )
+  })
+
+  Test('preserves trailing whitespace inside fence bodies', async () => {
+    await testFormatCode(
+      `
+        ui MainView {
+        render inject ${tsFence}
+        const s = \`abc${'   '}
+        def\`
+        return <RN.Text>{s}</RN.Text>
+        ${fence}
+        }
+      `,
+      `
+        ui MainView {
+           render inject ${tsFence}
+              const s = \`abc${'   '}
+              def\`
+              return <RN.Text>{s}</RN.Text>
+           ${fence}
+        }
+      `,
+    )
+  })
+
+  Test('moves body content sharing the close-fence line onto its own body line', async () => {
+    await testFormatCode(
+      `
+        ui MainView {
+        render inject ${tsFence}
+        const value = 1
+        return value${fence}
+        }
+      `,
+      `
+        ui MainView {
+           render inject ${tsFence}
+              const value = 1
+              return value
+           ${fence}
+        }
+      `,
+    )
+  })
+
   Test('normalizes injection argument spacing', async () => {
     await testFormatCode(
       `
@@ -307,6 +398,25 @@ Describe('Tao formatter injections', () => {
 })
 
 Describe('Tao formatter comments', () => {
+  Test('keeps top-level comments attached below the blank-line separation', async () => {
+    await testFormatCode(
+      `
+        alias Greeting = "hi"
+
+        // the main view
+        ui MainView { render Text Greeting }
+      `,
+      `
+        alias Greeting = "hi"
+
+        // the main view
+        ui MainView {
+           render Text Greeting
+        }
+      `,
+    )
+  })
+
   Test('preserves and indents comments inside blocks', async () => {
     await testFormatCode(
       `

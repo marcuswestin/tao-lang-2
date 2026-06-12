@@ -15,6 +15,11 @@ export const viewValidationMessages = {
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
 } as const
 
+/** viewValidationCodes declares quick-fixable diagnostic codes for Tao view bodies. */
+export const viewValidationCodes = {
+  renderNotLast: 'tao-render-not-last',
+} as const
+
 const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao'])
 
 /** validateViews validates view declarations and view-body structure. */
@@ -55,7 +60,9 @@ function validateRenderCount(view: AST.ViewDeclaration, ctx: ValidationContext):
 function validateRenderLast(view: AST.ViewDeclaration, ctx: ValidationContext): void {
   const renderIndex = view.block.statements.findIndex(AST.isRenderStatement)
   if (renderIndex >= 0 && renderIndex !== view.block.statements.length - 1) {
-    ctx.error(viewValidationMessages.renderLast, view.block.statements[renderIndex]!)
+    ctx.error(viewValidationMessages.renderLast, view.block.statements[renderIndex]!, {
+      code: viewValidationCodes.renderNotLast,
+    })
   }
 }
 

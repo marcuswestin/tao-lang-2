@@ -16,6 +16,14 @@ export const Langium = {
 export namespace Langium {
   /** AstNode declares any Langium AST node. */
   export type AstNode = langium.AstNode
+  /** CodeAction declares one LSP code action with its workspace edit. */
+  export type CodeAction = vscodeLanguageserver.CodeAction
+  /** CodeActionParams declares an LSP code action request. */
+  export type CodeActionParams = vscodeLanguageserver.CodeActionParams
+  /** CodeActionProvider declares the Langium LSP code action service. */
+  export type CodeActionProvider = langiumLsp.CodeActionProvider
+  /** CstNode declares one Langium concrete-syntax-tree node. */
+  export type CstNode = langium.CstNode
   /** DefaultSharedCoreModuleContext declares the host services needed to create Langium shared services. */
   export type DefaultSharedCoreModuleContext = langium.DefaultSharedCoreModuleContext
   /** DefaultSharedModuleContext declares the host services needed to create Langium LSP shared services. */
@@ -44,6 +52,8 @@ export namespace Langium {
   export type LangiumSharedServices = langiumLsp.LangiumSharedServices
   /** NodeFormatter declares the Langium per-node formatting region API. */
   export type NodeFormatter<T extends AstNode> = langiumLsp.NodeFormatter<T>
+  /** Position declares one LSP line and character position. */
+  export type Position = vscodeLanguageserver.Position
   /** Properties declares the assignable property names of one AST node type. */
   export type Properties<T extends AstNode> = langium.Properties<T>
   /** Reference declares a Langium cross-reference to an AST node. */

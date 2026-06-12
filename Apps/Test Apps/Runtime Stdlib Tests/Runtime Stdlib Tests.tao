@@ -1,8 +1,8 @@
+use Box, Button, Col, MultiLineText, Number, Row, Stack, Text, TextLabel, WrappingRow from @tao/ui
+
 app RuntimeStdlibTests {
    ui MainView
 }
-
-use Text, Number, Button, Box, Stack, Col, Row, WrappingRow, TextLabel, MultiLineText from @tao/ui
 
 alias LaunchCount = 3
 

@@ -80,13 +80,46 @@ export function createNodeFormat<NodeT extends AST.Node>(
       }
     },
     separateLines(items, linesBetween) {
+      if (items.length < 2) {
+        return
+      }
+      const leaves = Langium.CstUtils.flattenCst(items[0]!.$cstNode!.root).toArray()
       for (let index = 1; index < items.length; index++) {
         const previous = items[index - 1]!
         const next = items[index]!
-        formatter.node(next).prepend(newLinesAction(linesBetween(previous, next)))
+        const separation = newLinesAction(linesBetween(previous, next))
+        // The separation goes above the item's leading comments so they stay attached below it.
+        const comments = leadingCommentLeaves(next, leaves)
+        if (comments.length === 0) {
+          formatter.node(next).prepend(separation)
+          continue
+        }
+        formatter.cst([comments[0]!]).prepend(separation)
+        formatter.cst(comments.slice(1)).prepend(Langium.Formatting.newLines(1))
+        formatter.node(next).prepend(Langium.Formatting.newLines(1))
       }
     },
   }
+}
+
+// A leading comment owns its line; a comment trailing earlier source on the same line stays there.
+function leadingCommentLeaves(item: AST.Node, leaves: readonly Langium.CstNode[]): Langium.CstNode[] {
+  const itemOffset = item.$cstNode!.offset
+  let index = leaves.findIndex(leaf => leaf.offset === itemOffset)
+  const comments: Langium.CstNode[] = []
+  while (index > 0) {
+    const candidate = leaves[index - 1]!
+    if (!candidate.hidden) {
+      break
+    }
+    const beforeCandidate = leaves[index - 2]
+    if (beforeCandidate && beforeCandidate.range.end.line === candidate.range.start.line) {
+      break
+    }
+    comments.unshift(candidate)
+    index--
+  }
+  return comments
 }
 
 // A min/max range fits the existing newline count when it is within the range and clamps it otherwise.
@@ -100,7 +133,9 @@ function newLinesAction(separation: LineSeparation): Langium.FormattingAction {
 
 /** isInjectionFenceOpenLine returns true when a line opens a multiline inject TS fence. */
 export function isInjectionFenceOpenLine(line: string): boolean {
-  return /^[ \t]*.*\binject\b.*```ts$/.test(line)
+  // Anchored to the `inject`/`render inject` statement start so comment lines never match.
+  // Trailing whitespace after the opener is part of the fence token and only trimmed at finalization.
+  return /^[ \t]*(render\b[ \t]+)?inject\b.*```ts[ \t]*$/.test(line)
 }
 
 /** findInjectionFenceCloseIndex returns the index of the line closing the fence opened above `openIndex`, or -1. */
@@ -108,9 +143,32 @@ export function findInjectionFenceCloseIndex(lines: readonly string[], openIndex
   return lines.findIndex((line, index) => index > openIndex && line.includes('```'))
 }
 
-/** finalizeFormattedText drops leading whitespace and trailing line spaces, and ends with exactly one newline. */
+/**
+ * finalizeFormattedText drops leading whitespace and trailing line spaces outside inject fence
+ * bodies, and ends the text with exactly one newline. Fence body lines keep their trailing
+ * whitespace because they are user TypeScript.
+ */
 export function finalizeFormattedText(text: string): string {
-  return `${text.replace(/^\s+/, '').replace(/[ \t]+$/gm, '').replace(/\s+$/, '')}\n`
+  const lines = text.replace(/^\s+/, '').split('\n')
+  const result: string[] = []
+  let index = 0
+  while (index < lines.length) {
+    const line = lines[index]!
+    if (isInjectionFenceOpenLine(line)) {
+      const closeIndex = findInjectionFenceCloseIndex(lines, index)
+      const fenceEnd = closeIndex === -1 ? lines.length - 1 : closeIndex
+      result.push(line.replace(/[ \t]+$/, ''))
+      result.push(...lines.slice(index + 1, fenceEnd + 1))
+      index = fenceEnd + 1
+      continue
+    }
+    result.push(line.replace(/[ \t]+$/, ''))
+    index++
+  }
+  while (result.length > 0 && result[result.length - 1] === '') {
+    result.pop()
+  }
+  return `${result.join('\n')}\n`
 }
 
 /** applyTextEdits applies non-overlapping LSP text edits to the document's source text. */

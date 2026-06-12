@@ -49,6 +49,7 @@
       "dependencies": {
         "tao-formatter": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-source-actions": "workspace:*",
         "tao-validator": "workspace:*",
         "vscode-languageclient": "~9.0.1",
       },
@@ -95,6 +96,16 @@
     "packages/shared": {
       "name": "tao-shared",
     },
+    "packages/source-actions": {
+      "name": "tao-source-actions",
+      "dependencies": {
+        "tao-ast-utils": "workspace:*",
+        "tao-formatter": "workspace:*",
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+        "tao-validator": "workspace:*",
+      },
+    },
     "packages/tao-cli": {
       "name": "tao-cli",
       "bin": {
@@ -104,8 +115,10 @@
         "@commander-js/extra-typings": "^14.0.0",
         "commander": "^14.0.0",
         "tao-formatter": "workspace:*",
+        "tao-parser": "workspace:*",
         "tao-runtime": "workspace:*",
         "tao-shared": "workspace:*",
+        "tao-source-actions": "workspace:*",
       },
     },
     "packages/validator": {
@@ -1752,6 +1765,8 @@
     "tao-runtime": ["tao-runtime@workspace:packages/runtime"],
 
     "tao-shared": ["tao-shared@workspace:packages/shared"],
+
+    "tao-source-actions": ["tao-source-actions@workspace:packages/source-actions"],
 
     "tao-validator": ["tao-validator@workspace:packages/validator"],
 

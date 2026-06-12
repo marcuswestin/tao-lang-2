@@ -26,12 +26,12 @@ test: _compile-kitchen-sink-app
 # Format code
 fmt:
   dprint fmt
-  ./tao fmt Apps
+  ./tao fmt Apps packages/runtime/tao-stdlib
 
 # Fix and format all code
 fix:
   dprint fmt --incremental=false
-  ./tao fmt Apps
+  ./tao fix Apps packages/runtime/tao-stdlib
 
 # Check and test all code
 check: _compile-kitchen-sink-app _ide-extension-build

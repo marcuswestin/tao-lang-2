@@ -1,0 +1,17 @@
+{
+  "name": "tao-source-actions",
+  "private": true,
+  "type": "module",
+  "module": "source-actions-src/source-actions.ts",
+  "exports": {
+    ".": "./source-actions-src/source-actions.ts",
+    "./langium-code-actions": "./source-actions-src/langium-code-actions.ts"
+  },
+  "dependencies": {
+    "tao-ast-utils": "workspace:*",
+    "tao-formatter": "workspace:*",
+    "tao-parser": "workspace:*",
+    "tao-shared": "workspace:*",
+    "tao-validator": "workspace:*"
+  }
+}

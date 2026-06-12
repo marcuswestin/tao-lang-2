@@ -70,6 +70,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - `packages/compiler`: Tao AST to generated runtime TypeScript.
 - `packages/validator`: Tao AST diagnostics for compiler and IDE.
 - `packages/formatter`: Tao AST to formatted Tao source.
+- `packages/source-actions`: Tao source canonicalization transforms and LSP code actions.
 - `packages/runtime`: Expo app template, runtime app generation, `TR`, and Tao std-lib work.
 
 ## Git And Validation
