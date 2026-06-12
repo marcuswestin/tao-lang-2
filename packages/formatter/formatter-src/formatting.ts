@@ -1,5 +1,8 @@
 import { AST, Langium } from '@parser'
 
+/** taoTabSize declares the canonical Tao indentation width in spaces; Tao formatting is not configurable. */
+export const taoTabSize = 3
+
 /** LineSeparation declares an exact newline count, or an inclusive range fitted to the existing newlines. */
 export type LineSeparation = number | { min: number; max: number }
 

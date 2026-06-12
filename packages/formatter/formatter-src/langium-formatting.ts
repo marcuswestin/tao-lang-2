@@ -3,18 +3,28 @@ import { Assert } from '@shared'
 import { Format } from './Format'
 import { reindentInjectionFences } from './formatters/injections-formatter'
 import { collapseClosingBraces } from './formatters/statements-formatter'
-import { applyTextEdits, createNodeFormat, finalizeFormattedText, type FormattedNodeType } from './formatting'
+import {
+  applyTextEdits,
+  createNodeFormat,
+  finalizeFormattedText,
+  type FormattedNodeType,
+  taoTabSize,
+} from './formatting'
 
 /** TaoFormatter formats Tao documents by dispatching per-node Format handlers. */
 export class TaoFormatter extends Langium.AbstractFormatter {
-  /** formatDocument chains Langium edits with the Tao text post-passes so every host formats identically. */
+  /**
+   * formatDocument chains Langium edits with the Tao text post-passes so every host formats
+   * identically. The host's requested tab size is ignored: Tao is always indented with `taoTabSize`.
+   */
   override async formatDocument(
     document: Langium.LangiumDocument,
     params: Langium.DocumentFormattingParams,
   ): Promise<Langium.TextEdit[]> {
-    const edits = await super.formatDocument(document, params)
+    const taoParams = { ...params, options: { ...params.options, tabSize: taoTabSize, insertSpaces: true } }
+    const edits = await super.formatDocument(document, taoParams)
     const formatted = applyTextEdits(document as AST.Document, edits)
-    const tab = ' '.repeat(params.options.tabSize)
+    const tab = ' '.repeat(taoTabSize)
     const finalText = finalizeFormattedText(collapseClosingBraces(reindentInjectionFences(formatted, tab)))
     if (finalText === formatted) {
       return edits

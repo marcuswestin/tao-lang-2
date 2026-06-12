@@ -1,33 +1,26 @@
 import { Parser, type ParseResult } from '@parser'
 import { Assert } from '@shared'
-import { applyTextEdits } from './formatting'
+import { applyTextEdits, taoTabSize } from './formatting'
 import { TaoFormatter } from './langium-formatting'
 
 export { TaoFormatter } from './langium-formatting'
 
-/** FormatOptions declares Tao source formatting options. */
-export type FormatOptions = {
-  tabSize?: number
-}
-
-const defaultTabSize = 3
-
 /** formatCode formats Tao source code and returns the formatted text. */
-async function formatCode(code: string, opts: FormatOptions = {}): Promise<string> {
-  return await formatParsed(await Parser.parseCode(code), opts)
+async function formatCode(code: string): Promise<string> {
+  return await formatParsed(await Parser.parseCode(code))
 }
 
 /** formatFile formats the Tao file at `path` and returns the formatted text without writing it. */
-async function formatFile(path: string, opts: FormatOptions = {}): Promise<string> {
-  return await formatParsed(await Parser.parseFile(path), opts)
+async function formatFile(path: string): Promise<string> {
+  return await formatParsed(await Parser.parseFile(path))
 }
 
 /** formatParsed formats an existing parser result and returns the formatted text. */
-async function formatParsed(parsed: ParseResult, opts: FormatOptions = {}): Promise<string> {
+async function formatParsed(parsed: ParseResult): Promise<string> {
   assertFormattable(parsed)
   const edits = await new TaoFormatter().formatDocument(parsed.document, {
     textDocument: { uri: parsed.document.textDocument.uri },
-    options: { tabSize: opts.tabSize ?? defaultTabSize, insertSpaces: true },
+    options: { tabSize: taoTabSize, insertSpaces: true },
   })
   return applyTextEdits(parsed.document, edits)
 }

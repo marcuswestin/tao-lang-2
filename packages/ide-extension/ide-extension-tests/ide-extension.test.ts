@@ -70,13 +70,13 @@ Describe('Tao IDE extension smoke', () => {
     )
   })
 
-  Test('formats documents through the language server formatter service', async () => {
+  Test('formats documents with canonical Tao indentation regardless of editor tab size', async () => {
     const services = createValidatorLspServices(Langium.NodeFileSystem, {
       lspFormatter: () => new TaoFormatter(),
     })
     const uri = Langium.URI.file('/__tao__/ide-format.tao')
     const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'ui   MainView    {   }',
+      'ui   MainView {  render  Stack {   } }',
       uri,
     )
     services.shared.workspace.LangiumDocuments.addDocument(document)
@@ -89,10 +89,10 @@ Describe('Tao IDE extension smoke', () => {
     Expect(formatter).toBeInstanceOf(TaoFormatter)
     const edits = await formatter!.formatDocument(document, {
       textDocument: { uri: document.textDocument.uri },
-      options: { tabSize: 3, insertSpaces: true },
+      options: { tabSize: 4, insertSpaces: true },
     })
 
-    Expect(applyEdits(document, edits)).toBe('ui MainView { }\n')
+    Expect(applyEdits(document, edits)).toBe('ui MainView {\n   render Stack { }\n}\n')
   })
 })
 
