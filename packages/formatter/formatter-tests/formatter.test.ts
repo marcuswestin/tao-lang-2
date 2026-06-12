@@ -75,6 +75,51 @@ Describe('Tao formatter top-level statements', () => {
     )
   })
 
+  Test('preserves a single existing blank line between consecutive aliases and use statements', async () => {
+    await testFormatCode(
+      `
+        use Text from @tao/ui
+
+        use Stack from @tao/ui
+        alias Greeting = "a"
+
+        alias Count = 3
+        ui MainView { }
+      `,
+      `
+        use Text from @tao/ui
+
+        use Stack from @tao/ui
+
+        alias Greeting = "a"
+
+        alias Count = 3
+
+        ui MainView { }
+      `,
+    )
+  })
+
+  Test('collapses multiple blank lines between consecutive aliases to one', async () => {
+    await testFormatCode(
+      `
+        alias Greeting = "a"
+
+
+
+        alias Count = 3
+        ui MainView { }
+      `,
+      `
+        alias Greeting = "a"
+
+        alias Count = 3
+
+        ui MainView { }
+      `,
+    )
+  })
+
   Test('removes leading blank lines', async () => {
     Expect(await Formatter.formatCode('\n\n   ui MainView { }')).toBe('ui MainView { }\n')
   })

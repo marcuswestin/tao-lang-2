@@ -1,5 +1,8 @@
 import { AST, Langium } from '@parser'
 
+/** LineSeparation declares an exact newline count, or an inclusive range fitted to the existing newlines. */
+export type LineSeparation = number | { min: number; max: number }
+
 /** NodeFormat exposes succinct formatting verbs scoped to one AST node. */
 export type NodeFormat<NodeT extends AST.Node> = {
   /** node holds the AST node being formatted. */
@@ -19,7 +22,7 @@ export type NodeFormat<NodeT extends AST.Node> = {
   /** separateLines puts each item after the first on its own line, `linesBetween` newlines below the previous item. */
   separateLines<ItemT extends AST.Node>(
     items: readonly ItemT[],
-    linesBetween: (previous: ItemT, next: ItemT) => number,
+    linesBetween: (previous: ItemT, next: ItemT) => LineSeparation,
   ): void
 }
 
@@ -77,10 +80,19 @@ export function createNodeFormat<NodeT extends AST.Node>(
       for (let index = 1; index < items.length; index++) {
         const previous = items[index - 1]!
         const next = items[index]!
-        formatter.node(next).prepend(Langium.Formatting.newLines(linesBetween(previous, next)))
+        formatter.node(next).prepend(newLinesAction(linesBetween(previous, next)))
       }
     },
   }
+}
+
+// A min/max range fits the existing newline count when it is within the range and clamps it otherwise.
+function newLinesAction(separation: LineSeparation): Langium.FormattingAction {
+  if (typeof separation === 'number') {
+    return Langium.Formatting.newLines(separation)
+  }
+  const counts = Array.from({ length: separation.max - separation.min + 1 }, (_, step) => separation.min + step)
+  return Langium.Formatting.fit(...counts.map(count => Langium.Formatting.newLines(count)))
 }
 
 /** isInjectionFenceOpenLine returns true when a line opens a multiline inject TS fence. */

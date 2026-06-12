@@ -24,6 +24,8 @@ export namespace Langium {
   export type DocumentFormattingParams = vscodeLanguageserver.DocumentFormattingParams
   /** Formatter declares the Langium LSP document formatting service. */
   export type Formatter = langiumLsp.Formatter
+  /** FormattingAction declares one Langium formatting whitespace instruction. */
+  export type FormattingAction = langiumLsp.FormattingAction
   /** Generated declares one Langium generator contribution. */
   export type Generated = langiumGenerate.Generated
   /** GeneratorNode declares a structured Langium generator node. */
