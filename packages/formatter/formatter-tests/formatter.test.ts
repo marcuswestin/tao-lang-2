@@ -185,6 +185,32 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('does not collapse close-looking lines inside block comments', async () => {
+    await testFormatCode(
+      `
+        ui MainView {
+        render Stack {
+        /*
+        }
+        }
+        */
+        Text "a"
+        }
+        }
+      `,
+      `
+        ui MainView {
+           render Stack {
+              /*
+              }
+              }
+              */
+              Text "a"
+        }  }
+      `,
+    )
+  })
+
   Test('formats empty blocks as braces with one interior space', async () => {
     await testFormatCode(
       `ui MainView {render Stack{Text "a"{   }}}`,

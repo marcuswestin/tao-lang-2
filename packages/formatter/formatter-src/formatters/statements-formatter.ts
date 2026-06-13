@@ -21,13 +21,14 @@ export default {
 /**
  * collapseClosingBraces merges runs of consecutive closing-brace-only lines onto one line at the
  * outermost (last) brace's indentation, with two spaces between braces, per `Spec/Tao Packages.md`.
- * Lines inside inject TS fences are left untouched. Runs as a text post-pass because each Block
- * formats its own `}` and Langium indentation is always block-local.
+ * Lines inside inject TS fences and block comments are left untouched. Runs as a text post-pass
+ * because each Block formats its own `}` and Langium indentation is always block-local.
  */
 export function collapseClosingBraces(text: string): string {
   const lines = text.split('\n')
   const result: string[] = []
   let index = 0
+  let inBlockComment = false
   while (index < lines.length) {
     const line = lines[index]!
     if (isInjectionFenceOpenLine(line)) {
@@ -35,6 +36,14 @@ export function collapseClosingBraces(text: string): string {
       const fenceEnd = closeIndex === -1 ? lines.length - 1 : closeIndex
       result.push(...lines.slice(index, fenceEnd + 1))
       index = fenceEnd + 1
+      continue
+    }
+    const startsInBlockComment = inBlockComment
+    const startsBlockComment = !inBlockComment && line.includes('/*')
+    if (startsInBlockComment || startsBlockComment) {
+      result.push(line)
+      inBlockComment = nextBlockCommentState(line, inBlockComment)
+      index++
       continue
     }
     let runEnd = index
@@ -55,4 +64,28 @@ export function collapseClosingBraces(text: string): string {
 
 function isClosingBraceLine(line: string): boolean {
   return /^[ \t]*\}$/.test(line)
+}
+
+function nextBlockCommentState(line: string, inBlockComment: boolean): boolean {
+  let inside = inBlockComment
+  let index = 0
+  while (index < line.length) {
+    if (inside) {
+      const end = line.indexOf('*/', index)
+      if (end === -1) {
+        return true
+      }
+      inside = false
+      index = end + 2
+      continue
+    }
+
+    const start = line.indexOf('/*', index)
+    if (start === -1) {
+      return false
+    }
+    inside = true
+    index = start + 2
+  }
+  return inside
 }
