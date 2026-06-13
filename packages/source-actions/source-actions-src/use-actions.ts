@@ -11,9 +11,9 @@ export function synthesizeImportSection(
   const namesByModule = new Map<string, Set<string>>()
   for (const slice of useSlices) {
     const names = namesByModule.get(slice.statement.modulePath) ?? new Set<string>()
-    for (const name of slice.statement.importedDeclarations.map(reference => reference.$refText)) {
-      if (usedNames.has(name)) {
-        names.add(name)
+    for (const reference of slice.statement.importedDeclarations) {
+      if (shouldKeepImportedReference(reference, usedNames)) {
+        names.add(reference.$refText)
       }
     }
     namesByModule.set(slice.statement.modulePath, names)
@@ -41,8 +41,12 @@ export function removeUnusedImportNames(
       continue
     }
     const names = [
-      ...new Set(slice.statement.importedDeclarations.map(reference => reference.$refText)),
-    ].filter(name => usedNames.has(name))
+      ...new Set(
+        slice.statement.importedDeclarations
+          .filter(reference => shouldKeepImportedReference(reference, usedNames))
+          .map(reference => reference.$refText),
+      ),
+    ]
     if (names.length === 0) {
       pieces.push({ text: slice.leading, blankBefore })
       continue
@@ -64,4 +68,11 @@ function compareModulePaths(a: string, b: string): number {
     return rankA - rankB
   }
   return a < b ? -1 : a > b ? 1 : 0
+}
+
+function shouldKeepImportedReference(
+  reference: AST.UseStatement['importedDeclarations'][number],
+  usedNames: Set<string>,
+): boolean {
+  return usedNames.has(reference.$refText) || reference.ref === undefined
 }

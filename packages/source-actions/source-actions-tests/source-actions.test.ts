@@ -119,6 +119,20 @@ Describe('organizeSource use statements', () => {
       `,
     )
   })
+
+  Test('keeps unresolved imports when organizing source', async () => {
+    await testOrganizeSource(
+      `
+        ui MainView { }
+        use Missing from ./missing
+      `,
+      `
+        use Missing from ./missing
+
+        ui MainView { }
+      `,
+    )
+  })
 })
 
 Describe('organizeSource canonical statement order', () => {
@@ -252,6 +266,23 @@ Describe('organizeSource canonical statement order', () => {
     )
   })
 
+  Test('splits same-line top-level statements safely when organizing', async () => {
+    await testOrganizeSource(
+      `app MyApp { ui MainView } use Text from @tao/ui ui MainView { render Text "hi" }`,
+      `
+        use Text from @tao/ui
+
+        app MyApp {
+           ui MainView
+        }
+
+        ui MainView {
+           render Text "hi"
+        }
+      `,
+    )
+  })
+
   Test('produces no edit for source with syntax errors', async () => {
     const document = await parseRawDocument('ui Broken {')
 
@@ -294,6 +325,16 @@ Describe('removeUnusedImports', () => {
 
     Expect(await SourceActions.removeUnusedImports(document)).toBeUndefined()
   })
+
+  Test('keeps unresolved imports even when they are not referenced', async () => {
+    const document = await parseDocument(`
+      use Missing from ./missing
+
+      ui MainView { }
+    `)
+
+    Expect(await SourceActions.removeUnusedImports(document)).toBeUndefined()
+  })
 })
 
 Describe('moveRendersLast', () => {
@@ -309,6 +350,41 @@ Describe('moveRendersLast', () => {
       Text.stripIndent(`
       ui MainView {
          alias Greeting = "hi"
+         render Text Greeting
+      }
+    `)
+    }\n`)
+  })
+
+  Test('splits same-line view statements safely when moving renders', async () => {
+    const document = await parseRawDocument('ui MainView { render Text Greeting alias Greeting = "hi" }')
+
+    Expect(await SourceActions.moveRendersLast(document)).toBe(`${
+      Text.stripIndent(`
+      ui MainView {
+         alias Greeting = "hi"
+         render Text Greeting
+      }
+    `)
+    }\n`)
+  })
+
+  Test('keeps comments attached when moving renders', async () => {
+    const document = await parseDocument(`
+      ui MainView {
+         // render comment
+         render Text Greeting
+         // alias comment
+         alias Greeting = "hi"
+      }
+    `)
+
+    Expect(await SourceActions.moveRendersLast(document)).toBe(`${
+      Text.stripIndent(`
+      ui MainView {
+         // alias comment
+         alias Greeting = "hi"
+         // render comment
          render Text Greeting
       }
     `)

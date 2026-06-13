@@ -18,6 +18,7 @@ export function statementSlices<StatementT extends AST.Node>(
   text: string,
   statements: readonly StatementT[],
   regionStart = 0,
+  regionEnd?: number,
 ): { slices: StatementSlice<StatementT>[]; end: number } {
   const slices: StatementSlice<StatementT>[] = []
   let sliceStart = regionStart
@@ -25,9 +26,7 @@ export function statementSlices<StatementT extends AST.Node>(
     const statement = statements[index]!
     const cstNode = statement.$cstNode!
     const nextStart = statements[index + 1]?.$cstNode!.offset
-    const bodyEnd = nextStart === undefined
-      ? endOfLine(text, cstNode.end)
-      : Math.min(endOfLine(text, cstNode.end), nextStart)
+    const bodyEnd = statementBodyEnd(text, cstNode.end, nextStart ?? regionEnd)
     slices.push({
       statement,
       leading: trimBlankLines(text.slice(sliceStart, cstNode.offset)),
@@ -70,4 +69,9 @@ export function trimBlankLines(text: string): string {
 function endOfLine(text: string, offset: number): number {
   const newlineIndex = text.indexOf('\n', offset)
   return newlineIndex === -1 ? text.length : newlineIndex
+}
+
+function statementBodyEnd(text: string, cstEnd: number, boundary: number | undefined): number {
+  const lineEnd = endOfLine(text, cstEnd)
+  return boundary === undefined ? lineEnd : Math.min(lineEnd, boundary)
 }

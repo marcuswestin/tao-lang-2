@@ -20,14 +20,31 @@ export function moveViewRendersLast(document: AST.Document): string | undefined 
   let text = document.textDocument.getText()
   for (const view of viewsToReorder) {
     const statements = view.block.statements
-    const regionStart = statements[0]!.$cstNode!.offset
-    const { slices, end } = statementSlices(text, statements, regionStart)
+    const regionStart = statementRegionStart(text, view.block, statements[0]!.$cstNode!.offset)
+    const { slices, end } = statementSlices(text, statements, regionStart, blockCloseBraceOffset(text, view.block))
     const renderSlices = slices.filter(slice => AST.isRenderStatement(slice.statement))
     const otherSlices = slices.filter(slice => !AST.isRenderStatement(slice.statement))
     const reordered = [...otherSlices, ...renderSlices].map(sliceText).join('\n')
     text = text.slice(0, regionStart) + reordered + text.slice(end)
   }
   return text
+}
+
+function statementRegionStart(text: string, block: AST.Block, firstStatementOffset: number): number {
+  const openOffset = text.lastIndexOf('{', firstStatementOffset)
+  const bodyStart = openOffset === -1 ? block.$cstNode!.offset : openOffset + 1
+  const leading = text.slice(bodyStart, firstStatementOffset)
+  const comment = /(?:^|\n)[ \t]*(?:\/\/|\/\*)/.exec(leading)
+  if (!comment) {
+    return firstStatementOffset
+  }
+  return bodyStart + comment.index + (leading[comment.index] === '\n' ? 1 : 0)
+}
+
+function blockCloseBraceOffset(text: string, block: AST.Block): number {
+  const blockEnd = block.$cstNode!.end
+  const closeOffset = text.lastIndexOf('}', blockEnd - 1)
+  return closeOffset === -1 ? blockEnd : closeOffset
 }
 
 function needsRenderMove(view: AST.ViewDeclaration): boolean {
