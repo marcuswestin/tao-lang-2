@@ -4,9 +4,30 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## MVP Roadmap
 
-Assuming current in-progress branches land first: formatter/`tao fmt`, `tao fix`/source actions, local package access/project metadata, and CLI workflow.
+- [ ] Add item/list/custom type MVP
+  - Item/object literals, list literals, typed item constructors, simple custom type declarations, and field/member validation.
 
-**V1/MVP Projects**
+- [ ] Add layout/style arguments and app-shell baseline
+  - `[gap 8, pad 12, width fill]`, runtime layout lowering, safe default app frame, safe area/keyboard basics, and deterministic cross-platform behavior.
+
+- [ ] Add state and action MVP
+  - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
+
+- [ ] Expand core expression/value language
+  - Booleans, string interpolation, arithmetic, comparison, basic boolean operators, member access, call expressions, and better diagnostics.
+
+- [ ] Add control flow and collection rendering MVP
+  - `if/else`, `when` if still preferred, pure functions/returns, `.Empty`, `for` over lists/query results, and formatter/compiler support.
+
+- [ ] Add datasource schema and query MVP
+  - `data`, entities/fields/relationships, `query`, `where`, ordering, `guard`, typed query rows, and Memory provider support.
+  - `create`, strict row-handle `update`, provider-neutral IR, local InstantDB support, local dev setup, and post-write UI consistency.
+
+- [ ] Add typed TS value injection expressions
+  - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
+
+- [ ] Add navigation and routing MVP
+  - `navigator`, stack/tabs, screen params, path metadata, `navigation push/pop/tab`, generated React Navigation runtime, and route tests.
 
 - [ ] Define canonical buildable app target and acceptance bar
   - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
@@ -17,41 +38,14 @@ Assuming current in-progress branches land first: formatter/`tao fmt`, `tao fix`
 - [ ] Add `tao test` and migrate Test Apps to Tao-authored behavior tests
   - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures.
 
-- [ ] Add typed TS value injection expressions
-  - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
-
-- [ ] Expand core expression/value language
-  - Booleans, string interpolation, arithmetic, comparison, basic boolean operators, member access, call expressions, and better diagnostics.
-
-- [ ] Add item/list/custom type MVP
-  - Item/object literals, list literals, typed item constructors, simple custom type declarations, and field/member validation.
-
-- [ ] Add state and action MVP
-  - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
-
-- [ ] Add control flow and collection rendering MVP
-  - `if/else`, `when` if still preferred, pure functions/returns, `.Empty`, `for` over lists/query results, and formatter/compiler support.
-
 - [ ] Add interaction event MVP
   - Press/change/submit/focus behavior for built-in controls, event-to-action binding, disabled/loading behavior, and testable event semantics.
-
-- [ ] Add layout/style arguments and app-shell baseline
-  - `[gap 8, pad 12, width fill]`, runtime layout lowering, safe default app frame, safe area/keyboard basics, and deterministic cross-platform behavior.
 
 - [ ] Add render IDs and minimal accessibility semantics
   - Stable test/accessibility identifiers, labels, roles for built-ins, useful TextInput/Button semantics, and validator guidance.
 
 - [ ] Add forms and inputs MVP
   - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
-
-- [ ] Add navigation and routing MVP
-  - `navigator`, stack/tabs, screen params, path metadata, `navigation push/pop/tab`, generated React Navigation runtime, and route tests.
-
-- [ ] Add datasource schema and query MVP
-  - `data`, entities/fields/relationships, `query`, `where`, ordering, `guard`, typed query rows, and Memory provider support.
-
-- [ ] Add data writes and provider runtime MVP
-  - `create`, strict row-handle `update`, provider-neutral IR, local InstantDB support, local dev setup, and post-write UI consistency.
 
 - [ ] Add loading, empty, and error-state MVP
   - Practical `guard`/boundary semantics, app-visible failure states, provider/runtime errors, and canonical patterns for first apps.
