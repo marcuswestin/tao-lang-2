@@ -1,5 +1,6 @@
 import { AST, Langium } from '@parser'
 import { Assert } from '@shared'
+import { type EmbeddedTsFormatter, ensureEmbeddedTsFormatter } from './embedded-ts'
 import { Format } from './Format'
 import { reindentInjectionFences } from './formatters/injections-formatter'
 import { collapseClosingBraces } from './formatters/statements-formatter'
@@ -25,7 +26,10 @@ export class TaoFormatter extends Langium.AbstractFormatter {
     const edits = await super.formatDocument(document, taoParams)
     const formatted = applyTextEdits(document as AST.Document, edits)
     const tab = ' '.repeat(taoTabSize)
-    const finalText = finalizeFormattedText(collapseClosingBraces(reindentInjectionFences(formatted, tab)))
+    const embeddedTsFormatter = await tryEnsureEmbeddedTsFormatter()
+    const finalText = finalizeFormattedText(
+      collapseClosingBraces(reindentInjectionFences(formatted, tab, embeddedTsFormatter)),
+    )
     if (finalText === formatted) {
       return edits
     }
@@ -37,6 +41,14 @@ export class TaoFormatter extends Langium.AbstractFormatter {
     Assert.defined(handler, `a Tao format handler for AST node type '${node.$type}'`)
     // Handlers are keyed by `$type`, so the node is the handler's concrete node type.
     handler(createNodeFormat(node, this.getNodeFormatter(node)) as never)
+  }
+}
+
+async function tryEnsureEmbeddedTsFormatter(): Promise<EmbeddedTsFormatter | undefined> {
+  try {
+    return await ensureEmbeddedTsFormatter()
+  } catch {
+    return undefined
   }
 }
 

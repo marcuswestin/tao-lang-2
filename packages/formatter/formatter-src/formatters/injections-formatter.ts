@@ -1,3 +1,4 @@
+import { type EmbeddedTsFormatter, formatEmbeddedTs } from '../embedded-ts'
 import { findInjectionFenceCloseIndex, type FormatHandlers, isInjectionFenceOpenLine } from '../formatting'
 
 export default {
@@ -26,7 +27,7 @@ export default {
  * the fence, with the closing fence at the opening line's indentation. The fence body is one lexer
  * token, so Langium formatting cannot reach inside it and this runs as a text post-pass.
  */
-export function reindentInjectionFences(text: string, tab: string): string {
+export function reindentInjectionFences(text: string, tab: string, formatter?: EmbeddedTsFormatter): string {
   const lines = text.split('\n')
   const result: string[] = []
   let index = 0
@@ -46,12 +47,20 @@ export function reindentInjectionFences(text: string, tab: string): string {
     const closeLine = lines[closeIndex]!
     const fenceOffset = closeLine.indexOf('```')
     const beforeFence = closeLine.slice(0, fenceOffset)
-    const bodyIndent = baseIndent + tab
-    result.push(line)
-    result.push(...reindentLines(lines.slice(index + 1, closeIndex), bodyIndent))
+    const bodyLines = lines.slice(index + 1, closeIndex)
     if (beforeFence.trim() !== '') {
       // Body content sharing the close line moves onto its own line at the body indentation.
-      result.push(bodyIndent + beforeFence.trim())
+      bodyLines.push(beforeFence.trim())
+    }
+    const formattedBody = formatter
+      ? formatEmbeddedTs(bodyLines.join('\n'), { baseIndent, tabSize: tab.length }, formatter)
+      : null
+
+    result.push(line)
+    if (formattedBody === null) {
+      result.push(...reindentLines(bodyLines, baseIndent + tab))
+    } else if (formattedBody !== '') {
+      result.push(...formattedBody.split('\n'))
     }
     result.push(baseIndent + closeLine.slice(fenceOffset))
     index = closeIndex + 1

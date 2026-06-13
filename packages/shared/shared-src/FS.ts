@@ -99,6 +99,11 @@ export async function readText(inputPath: string): Promise<string> {
   return nodeFs.readFile(inputPath, 'utf8')
 }
 
+/** readFile reads a file as bytes. */
+export async function readFile(inputPath: string): Promise<Uint8Array> {
+  return nodeFs.readFile(inputPath)
+}
+
 /** modifiedTimeMs reads the last modified timestamp for a path. */
 export async function modifiedTimeMs(inputPath: string): Promise<number> {
   return (await nodeFs.stat(inputPath)).mtimeMs

@@ -239,6 +239,27 @@ Describe('Tao formatter aliases', () => {
 })
 
 Describe('Tao formatter injections', () => {
+  Test('formats injection fence bodies with dprint TypeScript style', async () => {
+    await testFormatCode(
+      `
+        ui MainView {
+        render inject ${tsFence}
+        const message = "hi";
+        return <RN.Text accessibilityLabel='greeting'>{ message }</RN.Text>;
+        ${fence}
+        }
+      `,
+      `
+        ui MainView {
+           render inject ${tsFence}
+              const message = 'hi'
+              return <RN.Text accessibilityLabel="greeting">{message}</RN.Text>
+           ${fence}
+        }
+      `,
+    )
+  })
+
   Test('indents injection fence bodies one level below the inject line', async () => {
     await testFormatCode(
       `
@@ -274,7 +295,7 @@ Describe('Tao formatter injections', () => {
         ui MainView {
            render inject ${tsFence}
               function label() {
-                  return 'hi'
+                return 'hi'
               }
               return <RN.Text>{label()}</RN.Text>
            ${fence}
@@ -300,8 +321,8 @@ Describe('Tao formatter injections', () => {
         ui MainView {
            render inject ${tsFence}
               function wrap() {
-                 if (true) {
-                 }
+                if (true) {
+                }
               }
               return <RN.Text>hi</RN.Text>
            ${fence}
@@ -368,6 +389,27 @@ Describe('Tao formatter injections', () => {
            render inject ${tsFence}
               const value = 1
               return value
+           ${fence}
+        }
+      `,
+    )
+  })
+
+  Test('falls back to reindent-only for invalid embedded TypeScript', async () => {
+    await testFormatCode(
+      `
+        ui MainView {
+        render inject ${tsFence}
+        const =
+        return null
+        ${fence}
+        }
+      `,
+      `
+        ui MainView {
+           render inject ${tsFence}
+              const =
+              return null
            ${fence}
         }
       `,

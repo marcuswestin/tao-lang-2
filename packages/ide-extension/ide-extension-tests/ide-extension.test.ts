@@ -96,6 +96,38 @@ Describe('Tao IDE extension smoke', () => {
     Expect(applyEdits(document, edits)).toBe('ui MainView {\n   render Stack { }\n}\n')
   })
 
+  Test('formats embedded TypeScript fences through the language server', async () => {
+    const services = createValidatorLspServices(Langium.NodeFileSystem, {
+      lspFormatter: () => new TaoFormatter(),
+    })
+    const uri = Langium.URI.file('/__tao__/ide-format-inject.tao')
+    const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+      `ui MainView { render inject \`\`\`ts\nconst message = "hi";\nreturn <RN.Text accessibilityLabel='greeting'>{ message }</RN.Text>;\n\`\`\` }`,
+      uri,
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(document)
+    await services.shared.workspace.DocumentBuilder.build([document], {
+      eagerLinking: true,
+      validation: false,
+    })
+
+    const formatter = services.language.lsp.Formatter
+    Expect(formatter).toBeInstanceOf(TaoFormatter)
+    const edits = await formatter!.formatDocument(document, {
+      textDocument: { uri: document.textDocument.uri },
+      options: { tabSize: 4, insertSpaces: true },
+    })
+
+    Expect(applyEdits(document, edits)).toBe(
+      'ui MainView {\n'
+        + '   render inject ```ts\n'
+        + "      const message = 'hi'\n"
+        + '      return <RN.Text accessibilityLabel="greeting">{message}</RN.Text>\n'
+        + '   ```\n'
+        + '}\n',
+    )
+  })
+
   Test('serves the organize use statements source action through the language server', async () => {
     const { provider, document } = await buildCodeActionFixture(
       'app MyApp { ui MainView }\nuse Text from @tao/ui\nui MainView { render Text "hi" }\n',
