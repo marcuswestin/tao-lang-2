@@ -83,6 +83,24 @@ Describe('Tao IDE extension smoke', () => {
       diagnostics.some(diagnostic => diagnostic.includes("Visible declaration 'Shared' is declared more than once")),
     ).toBe(true)
   })
+
+  Test('resolves on-disk package imports through Langium services', async () => {
+    const diagnostics = await validateOnDiskFileWithLanguageServerServices('Main.tao', {
+      'Main.tao': `
+        app PackageApp { ui MainView }
+        use MainView from @bar/views
+      `,
+      'packages/@bar/views/Main.tao': `
+        project ui MainView {
+          render inject \`\`\`ts
+            return null
+          \`\`\`
+        }
+      `,
+    })
+
+    Expect(diagnostics).toEqual([])
+  })
 })
 
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
@@ -128,6 +146,33 @@ async function validateFilesWithLanguageServerServices(sources: Record<string, s
     })
 
     return documents.flatMap(document => (document.diagnostics ?? []).map(diagnostic => diagnostic.message))
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
+
+async function validateOnDiskFileWithLanguageServerServices(
+  entryFile: string,
+  sources: Record<string, string>,
+): Promise<string[]> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  try {
+    for (const [path, source] of Object.entries(sources)) {
+      await FS.writeText(FS.resolvePath(path, { cwd: rootDir }), source)
+    }
+    const workspace = await LSPWorkspace.open(rootDir)
+    const services = workspace.services
+    const entryPath = FS.resolvePath(entryFile, { cwd: rootDir })
+    const document = Array.from(services.shared.workspace.LangiumDocuments.all)
+      .find(document => document.uri.path === entryPath) as AST.Document | undefined
+
+    Expect(document).toBeDefined()
+    await services.shared.workspace.DocumentBuilder.build([document!], {
+      eagerLinking: true,
+      validation: true,
+    })
+
+    return (document!.diagnostics ?? []).map(diagnostic => diagnostic.message)
   } finally {
     await FS.remove(rootDir)
   }

@@ -95,10 +95,16 @@ Describe('FS', () => {
     await FS.writeText(FS.resolvePath('b.txt', { cwd: sourceDir }), 'b')
     await FS.writeText(FS.resolvePath('.hidden.ts', { cwd: sourceDir }), 'hidden')
     await FS.writeText(FS.resolvePath('nested/c.ts', { cwd: sourceDir }), 'c')
+    await FS.writeText(FS.resolvePath('ignored/d.ts', { cwd: sourceDir }), 'd')
     await FS.copyDirectory(sourceDir, copyDir)
 
     const walked: string[] = []
-    for await (const path of FS.walk(copyDir, { extensions: ['.ts'] })) {
+    for await (
+      const path of FS.walk(copyDir, {
+        extensions: ['.ts'],
+        excludeDirectory: name => name === 'ignored',
+      })
+    ) {
       walked.push(path)
     }
 
