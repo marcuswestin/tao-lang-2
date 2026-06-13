@@ -20,9 +20,7 @@ deps:
   bun install
 
 # Run all tests
-test: _compile-kitchen-sink-app
-  bun test packages/*/*-tests/*.test.ts
-  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false
+test: _compile-kitchen-sink-app _test
 
 # Format code
 fmt: _parser-gen
@@ -35,10 +33,7 @@ fix: _parser-gen
   ./tao fix
 
 # Check and test all code
-check: _compile-kitchen-sink-app _ide-extension-build _tao-check
-  dprint check --incremental=false
-  bunx tsc --build packages/*/tsconfig.json
-  just test
+check: _compile-kitchen-sink-app _ide-extension-build _tao-check _dprint-check _typecheck _test
 
 
 # Compile a Tao app path relative to the invocation directory into the local runtime package
@@ -82,6 +77,16 @@ _ide-extension-package: _ide-extension-build
 
 _tao-check: _parser-gen
   ./tao check
+
+_dprint-check:
+  dprint check --incremental=false
+
+_typecheck:
+  bunx tsc --build packages/*/tsconfig.json
+
+_test:
+  bun test packages/*/*-tests/*.test.ts
+  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false
 
 _android-emulator:
   ./dev android-emulator
