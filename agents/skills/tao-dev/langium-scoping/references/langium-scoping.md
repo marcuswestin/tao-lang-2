@@ -11,7 +11,7 @@ Do not resolve references inside scope computation. Reading `.ref` triggers link
 
 - Value reference scoping lives in `packages/parser/parser-src/value-scope.ts`.
 - Parser-owned services install the scope provider in `packages/parser/parser-src/parser.ts`.
-- Validator-owned services install the same provider in `packages/validator/validator-src/langium-services.ts`.
+- Workspace-owned services install the package-aware scope provider in `packages/workspace/workspace-src/langium-services.ts`.
 - Parser wrapper exports for Langium APIs live in `packages/parser/parser-src/langium-exports.ts`.
 
 ## Scope Precedence

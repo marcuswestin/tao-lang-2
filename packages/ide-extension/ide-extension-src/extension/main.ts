@@ -1,8 +1,9 @@
 import { FS } from '@shared'
-import { type AST, Langium, Parser } from 'tao-parser'
-import SourceActions from 'tao-source-actions'
+import { type AST, Langium } from 'tao-parser'
+import SourceActions, { type SourceActionOptions } from 'tao-source-actions'
+import Workspace from 'tao-workspace'
 import * as vscode from 'vscode'
-import type { LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node'
+import type { ExecutableOptions, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node'
 import { LanguageClient, TransportKind } from 'vscode-languageclient/node'
 
 let client: LanguageClient | undefined
@@ -26,9 +27,10 @@ export function deactivate(): Thenable<void> | undefined {
 
 function serverOptions(context: vscode.ExtensionContext): ServerOptions {
   const module = context.asAbsolutePath(FS.joinPath('_gen_ide-extension/language/main.cjs'))
+  const options = serverExecutableOptions()
   return {
-    run: { module, transport: TransportKind.ipc },
-    debug: { module, transport: TransportKind.ipc },
+    run: { module, transport: TransportKind.ipc, options },
+    debug: { module, transport: TransportKind.ipc, options },
   }
 }
 
@@ -40,14 +42,14 @@ function clientOptions(): LanguageClientOptions {
 
 type TaoSourceActionCommand = {
   command: string
-  run: (document: AST.Document) => Promise<string | undefined>
+  run: (document: AST.Document, options: SourceActionOptions) => Promise<string | undefined>
 }
 
 const taoSourceActionCommands: readonly TaoSourceActionCommand[] = [
   { command: 'tao.fixSource', run: SourceActions.fixSource },
-  { command: 'tao.organizeSource', run: SourceActions.organizeSource },
-  { command: 'tao.removeUnusedImports', run: SourceActions.removeUnusedImports },
-  { command: 'tao.moveRendersLast', run: SourceActions.moveRendersLast },
+  { command: 'tao.organizeSource', run: document => SourceActions.organizeSource(document) },
+  { command: 'tao.removeUnusedImports', run: document => SourceActions.removeUnusedImports(document) },
+  { command: 'tao.moveRendersLast', run: document => SourceActions.moveRendersLast(document) },
 ]
 
 function registerTaoSourceActionCommands(context: vscode.ExtensionContext): void {
@@ -69,10 +71,14 @@ async function runTaoSourceAction(command: TaoSourceActionCommand): Promise<void
 
   try {
     const currentText = editor.document.getText()
-    const parsed = await Parser.parseCode(currentText, {
-      uri: Langium.URI.parse(editor.document.uri.toString()),
+    const documentUri = Langium.URI.parse(editor.document.uri.toString())
+    const workspace = await Workspace.open(workspaceRootForDocument(editor.document))
+    const parsed = await workspace.parseSource(currentText, documentUri)
+    const nextText = await command.run(parsed.entry.document, {
+      parseUpdatedDocument: async (document, text) => {
+        return (await workspace.parseSource(text, document.uri)).entry.document
+      },
     })
-    const nextText = await command.run(parsed.document)
     if (nextText === undefined || nextText === currentText) {
       await vscode.window.showInformationMessage('No Tao source changes available.')
       return
@@ -92,4 +98,18 @@ function fullDocumentRange(document: vscode.TextDocument): vscode.Range {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function serverExecutableOptions(): ExecutableOptions {
+  return {
+    env: {
+      ...process.env,
+      TAO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+    },
+  }
+}
+
+function workspaceRootForDocument(document: vscode.TextDocument): string {
+  return vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath
+    ?? (document.uri.scheme === 'file' ? FS.dirname(document.uri.fsPath) : process.cwd())
 }

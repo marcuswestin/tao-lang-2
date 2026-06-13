@@ -238,9 +238,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view parameter spacing', async () => {
     await testFormatCode(
-      `share ui CountText Count   number,Label    text { render Text Label }`,
+      `publish ui CountText Count   number,Label    text { render Text Label }`,
       `
-        share ui CountText Count number, Label text {
+        publish ui CountText Count number, Label text {
            render Text Label
         }
       `,
@@ -267,11 +267,26 @@ Describe('Tao formatter views and blocks', () => {
 Describe('Tao formatter aliases', () => {
   Test('normalizes alias declaration spacing', async () => {
     await testFormatCode(
-      `share alias   Greeting="Hello"\nui MainView { }`,
+      `publish alias   Greeting="Hello"\nui MainView { }`,
       `
-        share alias Greeting = "Hello"
+        publish alias Greeting = "Hello"
 
         ui MainView { }
+      `,
+    )
+  })
+})
+
+Describe('Tao formatter project metadata', () => {
+  Test('formats project metadata blocks', async () => {
+    await testFormatCode(
+      `project{name "Package Access" remote   none license   MIT}`,
+      `
+        project {
+           name "Package Access"
+           remote none
+           license MIT
+        }
       `,
     )
   })

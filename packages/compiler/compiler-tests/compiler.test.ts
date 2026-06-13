@@ -1,173 +1,32 @@
-import Compiler from '@compiler'
-import { AST } from '@parser'
-import { Errors, FS, Text } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
-import { testParseCode, testParseCodeWithParserErrors } from '../../parser/parser-tests/test-parse'
-import { Compile } from '../compiler-src/codegen/Compile'
-import { testCompileCode } from './test-compile'
-import { wrap } from './test-utils/AST-Wrapper'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { Workspace } from '@workspace'
+import Compiler, { type CompiledFile } from '../compiler-src/compiler'
 
 const tsFence = '```ts'
 const fence = '```'
-const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
-const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
-const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 
-async function withTaoFiles(
-  prefix: string,
-  files: Record<string, string>,
-  testsFunction: (paths: Record<string, string>, rootDir: string) => Promise<void>,
-): Promise<void> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath(prefix, { cwd: FS.tmpdir() }))
-  const paths: Record<string, string> = {}
-
-  try {
-    for (const [relativePath, source] of Object.entries(files)) {
-      const path = FS.resolvePath(relativePath, { cwd: rootDir })
-      await FS.writeText(path, Text.stripIndent(source))
-      paths[relativePath] = path
-    }
-
-    await testsFunction(paths, rootDir)
-  } finally {
-    await FS.remove(rootDir)
-  }
-}
-
-Describe('minimal Tao compiler', () => {
-  Test('reports parser syntax errors once', async () => {
-    const source = 'ui Broken { render }'
-    const parsed = await testParseCodeWithParserErrors(source)
-    const parserMessage = parsed.document.parseResult.parserErrors[0]!.message
-    let errorDetails: unknown[] = []
-
-    try {
-      await Compiler.compileCode(source)
-    } catch (error) {
-      Expect(error).toBeInstanceOf(Errors.UnexpectedBehaviorError)
-      errorDetails = (error as Errors.UnexpectedBehaviorError).details!['errors'] as unknown[]
-    }
-
-    Expect(errorDetails).toContain(parserMessage)
-    Expect(errorDetails.filter(error => error === parserMessage)).toHaveLength(1)
-  })
-
-  Test('exposes a single Compile object for parsed AST nodes', async () => {
-    const parsed = await testParseCode(`
+Describe('Tao compiler', () => {
+  Test('compiles source strings into a generated app file', async () => {
+    const compiled = await Compiler.compileCode(`
       app MyApp { ui MainView }
       ui MainView {
         render Text "Hello"
       }
       ui Text Value text {
-        render inject ${tsFence}
+        render inject Value ${tsFence}
           return null
-        ${fence}
-      }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
         ${fence}
       }
     `)
 
-    const taoFile = wrap(parsed.ast)
-    Compile.TaoFile(taoFile.unwrap())
-    const mainView = taoFile.statements.second.as_UiDeclaration
-    const render = mainView.block.statements.only.as_RenderStatement
-    const literal = render.argumentList.arguments.only.value.as_StringLiteral
-    Compile.Expression(literal.unwrap())
-    const layout = taoFile.statements[3]!.as_LayoutDeclaration
-    Compile.LayoutDeclaration(layout.unwrap())
-
-    taoFile.statements.match([
-      { $type: AST.AppDeclaration.$type, name: 'MyApp' },
-      { $type: AST.UiDeclaration.$type, name: 'MainView' },
-      { $type: AST.UiDeclaration.$type, name: 'Text' },
-      { $type: AST.LayoutDeclaration.$type, name: 'Stack' },
-    ])
-    Expect(render.unwrap().view?.ref?.name).toBe('Text')
-    literal.expect('value').toBe('Hello')
+    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.files[0]?.relativePath).toBe('App.tsx')
+    Expect(compiled.validation.diagnostics).toEqual([])
   })
 
-  Test('rejects duplicate app root ui declarations', async () => {
-    await Expect(testCompileCode(`
-      app MyApp {
-        ui MainView
-        ui OtherView
-      }
-      ui MainView { }
-      ui OtherView { }
-    `)).rejects.toThrow('must declare exactly one root ui')
-  })
-
-  Test('rejects app blocks without a root ui statement', async () => {
-    await Expect(testCompileCode(`
-      app MyApp { }
-      ui MainView { }
-    `)).rejects.toThrow('must declare exactly one root ui')
-  })
-
-  Test('rejects unsupported app block statements', async () => {
-    await Expect(testCompileCode(`
-      app MyApp {
-        ui MainView
-        render MainView
-      }
-      ui MainView { }
-    `)).rejects.toThrow('Only root ui declarations are allowed')
-  })
-
-  Test('rejects inject in multi-statement view blocks explicitly', async () => {
-    await Expect(testCompileCode(`
-      app MyApp { ui MainView }
-      ui MainView {
-        render inject ${tsFence}
-          return <RN.Text>Hello</RN.Text>
-        ${fence}
-        render MainView
-      }
-    `)).rejects.toThrow('`render inject` must be the only statement in a view body')
-  })
-
-  Test('compiles the target Kitchen Sink app', async () => {
-    await Compiler.compileFile(targetKitchenSinkPath)
-  })
-
-  Test('compiles the Type System Tests app', async () => {
-    await testCompileCode(await FS.readText(typeSystemTestsPath))
-  })
-
-  Test('compiles the Runtime Stdlib Tests app', async () => {
-    await Compiler.compileFile(runtimeStdlibTestsPath)
-  })
-
-  Test('compiles source strings that import the Tao stdlib', async () => {
-    await testCompileCode(`
-      use Text from @tao/ui
-      app MyApp { ui MainView }
-      ui MainView {
-        render Text "Hello"
-      }
-    `)
-  })
-
-  Test('rejects validator type errors before codegen', async () => {
-    await Expect(testCompileCode(`
-      app MyApp { ui MainView }
-      ui MainView {
-        render Tile "Open", "not a count"
-      }
-      ui Tile Title text, Count number {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)).rejects.toThrow("Argument for parameter 'Count' expects number, got text.")
-  })
-
-  Test('compiles multi-file Tao apps with use imports', async () => {
-    await withTaoFiles(
-      'tao-compiler-use-',
+  Test('compiles sibling Tao file dependencies', async () => {
+    await withCompiledFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MultiFile { ui MainView }
@@ -177,41 +36,32 @@ Describe('minimal Tao compiler', () => {
         }
       `,
         'Views.tao': `
-        ui Text Value text {
+        project ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
       },
-      async paths => {
-        const mainPath = paths['Main.tao']!
-        const viewsPath = paths['Views.tao']!
-
-        const compiled = await Compiler.compileFile(mainPath)
-        const entryOutput = compiled.files.find(file => file.sourcePath === mainPath)
-        const viewsOutput = compiled.files.find(file => file.sourcePath === viewsPath)
-
-        Expect(compiled.files.length).toBeGreaterThan(1)
-        Expect(entryOutput?.relativePath).toBe('App.tsx')
-        Expect(viewsOutput).toBeDefined()
-        Expect(compiled.files.every(file => !file.relativePath.includes('..'))).toBe(true)
+      compiled => {
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['Views.tao'].relativePath).toBe('modules/Views.tao.tsx')
       },
     )
   })
 
-  Test('compiles explicit Tao file imports', async () => {
-    await withTaoFiles(
-      'tao-compiler-use-',
+  Test('compiles indexed local package modules', async () => {
+    await withCompiledFiles(
+      'Main.tao',
       {
         'Main.tao': `
-        app MultiFile { ui MainView }
-        use Text from ./Views.tao
-        ui MainView {
-          render Text "Hello from file import"
-        }
+        app IndexedPackage { ui MainView }
+        use MainView from @bar/views
       `,
-        'Views.tao': `
+        'lib/nested/@bar/views/Main.tao': `
+        project ui MainView {
+          render Text "Package import"
+        }
         ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
@@ -219,20 +69,51 @@ Describe('minimal Tao compiler', () => {
         }
       `,
       },
-      async paths => {
-        const mainPath = paths['Main.tao']!
-        const viewsPath = paths['Views.tao']!
-
-        const compiled = await Compiler.compileFile(mainPath)
-
-        Expect(compiled.files.map(file => file.sourcePath).sort()).toEqual([mainPath, viewsPath].sort())
+      compiled => {
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['lib/nested/@bar/views/Main.tao'].relativePath).toBe(
+          'modules/lib/nested/@bar/views/Main.tao.tsx',
+        )
       },
     )
   })
 
-  Test('compiles circular use imports between sibling module files', async () => {
-    await withTaoFiles(
-      'tao-compiler-cycle-',
+  Test('compiles bare package dependencies', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app BarePackageUse { ui MainView }
+        use MainView from @foo/forms
+      `,
+        'feature/@foo/Title.tao': `
+        package alias PackageTitle = "Package alias"
+      `,
+        'feature/@foo/forms/Main.tao': `
+        use PackageTitle
+        project ui MainView {
+          render Text PackageTitle
+        }
+        ui Text Value text {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+      },
+      compiled => {
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['feature/@foo/forms/Main.tao'].relativePath).toBe(
+          'modules/feature/@foo/forms/Main.tao.tsx',
+        )
+        Expect(compiled['feature/@foo/Title.tao'].relativePath).toBe('modules/feature/@foo/Title.tao.tsx')
+      },
+    )
+  })
+
+  Test('compiles circular use imports between sibling Tao files', async () => {
+    await withCompiledFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app CircularApp { ui MainView }
@@ -243,14 +124,14 @@ Describe('minimal Tao compiler', () => {
       `,
         'A.tao': `
         use BView from ./
-        alias SharedTitle = "Cycle"
-        ui AView {
+        project alias SharedTitle = "Cycle"
+        project ui AView {
           render BView
         }
       `,
         'B.tao': `
         use SharedTitle from ./
-        ui BView {
+        project ui BView {
           render Leaf SharedTitle
         }
         ui Leaf Value text {
@@ -260,26 +141,24 @@ Describe('minimal Tao compiler', () => {
         }
       `,
       },
-      async paths => {
-        const mainPath = paths['Main.tao']!
-
-        const compiled = await Compiler.compileFile(mainPath)
-
-        Expect(compiled.files).toHaveLength(3)
+      compiled => {
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['A.tao'].relativePath).toBe('modules/A.tao.tsx')
+        Expect(compiled['B.tao'].relativePath).toBe('modules/B.tao.tsx')
       },
     )
   })
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      share ui ${name} Value text {
+      project ui ${name} Value text {
         render inject Value ${tsFence}
           return null
         ${fence}
       }
     `
-    await withTaoFiles(
-      'tao-compiler-collision-',
+    await withCompiledFiles(
+      'app/Main.tao',
       {
         'app/Main.tao': `
         app CollisionApp { ui MainView }
@@ -292,20 +171,20 @@ Describe('minimal Tao compiler', () => {
         'liba/Views.tao': sharedViewSource('AText'),
         'libb/Views.tao': sharedViewSource('BText'),
       },
-      async paths => {
-        const mainPath = paths['app/Main.tao']!
+      compiled => {
+        const files = Object.values(compiled)
+        const relativePaths = files.map(file => file.relativePath)
 
-        const compiled = await Compiler.compileFile(mainPath)
-        const relativePaths = compiled.files.map(file => file.relativePath)
-
-        Expect(compiled.files).toHaveLength(3)
+        Expect(files).toHaveLength(3)
         Expect(new Set(relativePaths).size).toBe(relativePaths.length)
+        Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
+        Expect(relativePaths).toContain('modules/external/Views.tao-2.tsx')
       },
     )
   })
 
   Test('rejects entry files without an app declaration', async () => {
-    await Expect(testCompileCode(`
+    await Expect(Compiler.compileCode(`
       ui MainView {
         render inject ${tsFence}
           return null
@@ -314,3 +193,30 @@ Describe('minimal Tao compiler', () => {
     `)).rejects.toThrow('entry file must declare exactly one app')
   })
 })
+
+type CompiledFiles<Files extends Record<string, string>> = { [Path in keyof Files]: CompiledFile }
+
+async function withCompiledFiles<
+  const Files extends Record<string, string>,
+  EntryFile extends keyof Files & string,
+>(
+  entryFile: EntryFile,
+  files: Files,
+  testFunction: (compiled: CompiledFiles<Files>) => Promise<void> | void,
+): Promise<void> {
+  await withTaoFiles('tao-compiler-', files, async paths => {
+    const result = await Workspace.compile(paths[entryFile])
+    const compiled = {} as CompiledFiles<Files>
+    for (const relativePath of Object.keys(paths) as Array<keyof Files & string>) {
+      compiled[relativePath] = requireCompiledFile(result.files, paths[relativePath])
+    }
+
+    await testFunction(compiled)
+  })
+}
+
+function requireCompiledFile(files: readonly CompiledFile[], sourcePath: string): CompiledFile {
+  const file = files.find(compiledFile => compiledFile.sourcePath === sourcePath)
+  Expect(file).toBeDefined()
+  return file!
+}

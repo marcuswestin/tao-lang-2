@@ -7,6 +7,7 @@ import {
   formatWhenChanged,
   hasSyntaxErrors,
   parseSourceText,
+  type SourceActionOptions,
   sourceStatementContext,
 } from './source-actions-utils'
 import { removeUnusedImportNames } from './use-actions'
@@ -45,10 +46,10 @@ async function moveRendersLast(document: AST.Document): Promise<string | undefin
 }
 
 /** fixSource returns the fully canonical source: renders last, organized imports, formatted. */
-async function fixSource(document: AST.Document): Promise<string> {
+async function fixSource(document: AST.Document, options: SourceActionOptions = {}): Promise<string> {
   assertNoSyntaxErrors(document)
   const moved = moveViewRendersLast(document)
-  const movedDocument = moved === undefined ? document : await parseSourceText(document, moved)
+  const movedDocument = moved === undefined ? document : await parseSourceText(document, moved, options)
   return await Formatter.formatCode(canonicalizeTopLevel(movedDocument))
 }
 
@@ -59,5 +60,7 @@ const SourceActions = {
   organizeSource,
   removeUnusedImports,
 }
+
+export { type SourceActionOptions }
 
 export default SourceActions

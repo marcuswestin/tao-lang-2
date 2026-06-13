@@ -1,5 +1,17 @@
 import { AfterEach, Describe, Expect, Test } from '@shared/test'
-import { Assert, CLI, Errors, FS, HCI, Log, Repo, Switch, Text } from '../shared-src/shared'
+import {
+  Assert,
+  CLI,
+  type Diagnostic,
+  Diagnostics,
+  Errors,
+  FS,
+  HCI,
+  Log,
+  Repo,
+  Switch,
+  Text,
+} from '../shared-src/shared'
 import { PassThrough, runtimeProcess, Writable } from './TestRuntime'
 
 const cleanupPaths: string[] = []
@@ -83,10 +95,16 @@ Describe('FS', () => {
     await FS.writeText(FS.resolvePath('b.txt', { cwd: sourceDir }), 'b')
     await FS.writeText(FS.resolvePath('.hidden.ts', { cwd: sourceDir }), 'hidden')
     await FS.writeText(FS.resolvePath('nested/c.ts', { cwd: sourceDir }), 'c')
+    await FS.writeText(FS.resolvePath('ignored/d.ts', { cwd: sourceDir }), 'd')
     await FS.copyDirectory(sourceDir, copyDir)
 
     const walked: string[] = []
-    for await (const path of FS.walk(copyDir, { extensions: ['.ts'] })) {
+    for await (
+      const path of FS.walk(copyDir, {
+        extensions: ['.ts'],
+        excludeDirectory: name => name === 'ignored',
+      })
+    ) {
       walked.push(path)
     }
 
@@ -185,6 +203,52 @@ Describe('HCI', () => {
       }),
     ).resolves.toBe('one')
     await Expect(HCI.askText({ message: 'Name', interactive: false })).rejects.toBeInstanceOf(Errors.UserInputError)
+  })
+})
+
+Describe('Diagnostics', () => {
+  Test('filters and checks diagnostics by source, severity, and message', () => {
+    const diagnostics: Diagnostic[] = [
+      { message: 'bad token', severity: 'error', source: 'lexer' },
+      { message: 'missing view', severity: 'error', source: 'linker' },
+      { message: 'duplicate name', severity: 'warning', source: 'validator' },
+    ]
+
+    Expect(Diagnostics.messages(diagnostics, 'linker')).toEqual(['missing view'])
+    Expect(Diagnostics.messages(diagnostics, 'lexer', 'parser')).toEqual(['bad token'])
+    Expect(Diagnostics.hasError(diagnostics, 'lexer', 'parser')).toBe(true)
+    Expect(Diagnostics.hasSource(diagnostics, 'compiler')).toBe(false)
+    Expect(Diagnostics.allFromSource(diagnostics, 'lexer', 'linker', 'validator')).toBe(true)
+    Expect(Diagnostics.allWithSeverity(diagnostics, 'error', 'lexer', 'linker')).toBe(true)
+    Expect(Diagnostics.hasMessageContaining(diagnostics, 'missing', 'linker')).toBe(true)
+    Expect(Diagnostics.allMessagesContain(diagnostics, 'view', 'linker')).toBe(true)
+  })
+
+  Test('keeps diagnostics from different files distinct', () => {
+    const diagnostics: Diagnostic[] = [
+      { filePath: '/project/A.tao', message: 'Expected }', severity: 'error', source: 'parser' },
+      { filePath: '/project/B.tao', message: 'Expected }', severity: 'error', source: 'parser' },
+      { filePath: '/project/B.tao', message: 'Expected }', severity: 'error', source: 'parser' },
+      {
+        filePath: '/project/B.tao',
+        message: 'Expected }',
+        range: {
+          start: { line: 0, character: 1 },
+          end: { line: 0, character: 2 },
+        },
+        severity: 'error',
+        source: 'parser',
+      },
+      {
+        filePath: '/project/B.tao',
+        message: 'Expected }',
+        nodeType: 'View',
+        severity: 'error',
+        source: 'parser',
+      },
+    ]
+
+    Expect(Diagnostics.unique(diagnostics)).toHaveLength(4)
   })
 })
 

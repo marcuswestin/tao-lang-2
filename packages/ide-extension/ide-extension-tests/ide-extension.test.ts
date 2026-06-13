@@ -3,7 +3,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { TaoFormatter } from 'tao-formatter'
 import { AST, Langium } from 'tao-parser'
 import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
-import { createValidatorLspServices } from 'tao-validator/langium-services'
+import { LSPWorkspace } from 'tao-workspace'
 import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-grammar'
 
 Describe('Tao IDE extension smoke', () => {
@@ -106,107 +106,137 @@ Describe('Tao IDE extension smoke', () => {
   })
 
   Test('formats documents with canonical Tao indentation regardless of editor tab size', async () => {
-    const services = createValidatorLspServices(Langium.NodeFileSystem, {
-      lspFormatter: () => new TaoFormatter(),
-    })
-    const uri = Langium.URI.file('/__tao__/ide-format.tao')
-    const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'ui   MainView {  render  Stack {   } }',
-      uri,
-    )
-    services.shared.workspace.LangiumDocuments.addDocument(document)
-    await services.shared.workspace.DocumentBuilder.build([document], {
-      eagerLinking: true,
-      validation: false,
-    })
+    const { formatter, document, cleanup } = await buildFormatterFixture('ui   MainView {  render  Stack {   } }')
+    try {
+      Expect(formatter).toBeInstanceOf(TaoFormatter)
+      const edits = await formatter!.formatDocument(document, {
+        textDocument: { uri: document.textDocument.uri },
+        options: { tabSize: 4, insertSpaces: true },
+      })
 
-    const formatter = services.language.lsp.Formatter
-    Expect(formatter).toBeInstanceOf(TaoFormatter)
-    const edits = await formatter!.formatDocument(document, {
-      textDocument: { uri: document.textDocument.uri },
-      options: { tabSize: 4, insertSpaces: true },
-    })
-
-    Expect(applyEdits(document, edits)).toBe('ui MainView {\n   render Stack { }\n}\n')
+      Expect(applyEdits(document, edits)).toBe('ui MainView {\n   render Stack { }\n}\n')
+    } finally {
+      await cleanup()
+    }
   })
 
   Test('formats embedded TypeScript fences through the language server', async () => {
-    const services = createValidatorLspServices(Langium.NodeFileSystem, {
-      lspFormatter: () => new TaoFormatter(),
-    })
-    const uri = Langium.URI.file('/__tao__/ide-format-inject.tao')
-    const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+    const { formatter, document, cleanup } = await buildFormatterFixture(
       `ui MainView { render inject \`\`\`ts\nconst message = "hi";\nreturn <RN.Text accessibilityLabel='greeting'>{ message }</RN.Text>;\n\`\`\` }`,
-      uri,
     )
-    services.shared.workspace.LangiumDocuments.addDocument(document)
-    await services.shared.workspace.DocumentBuilder.build([document], {
-      eagerLinking: true,
-      validation: false,
-    })
+    try {
+      Expect(formatter).toBeInstanceOf(TaoFormatter)
+      const edits = await formatter!.formatDocument(document, {
+        textDocument: { uri: document.textDocument.uri },
+        options: { tabSize: 4, insertSpaces: true },
+      })
 
-    const formatter = services.language.lsp.Formatter
-    Expect(formatter).toBeInstanceOf(TaoFormatter)
-    const edits = await formatter!.formatDocument(document, {
-      textDocument: { uri: document.textDocument.uri },
-      options: { tabSize: 4, insertSpaces: true },
-    })
-
-    Expect(applyEdits(document, edits)).toBe(
-      'ui MainView {\n'
-        + '   render inject ```ts\n'
-        + "      const message = 'hi'\n"
-        + '      return <RN.Text accessibilityLabel="greeting">{message}</RN.Text>\n'
-        + '   ```\n'
-        + '}\n',
-    )
+      Expect(applyEdits(document, edits)).toBe(
+        'ui MainView {\n'
+          + '   render inject ```ts\n'
+          + "      const message = 'hi'\n"
+          + '      return <RN.Text accessibilityLabel="greeting">{message}</RN.Text>\n'
+          + '   ```\n'
+          + '}\n',
+      )
+    } finally {
+      await cleanup()
+    }
   })
 
   Test('serves the organize use statements source action through the language server', async () => {
-    const { provider, document } = await buildCodeActionFixture(
+    const fixture = await buildCodeActionFixture(
       'app MyApp { ui MainView }\nuse Text from @tao/ui\nui MainView { render Text "hi" }\n',
     )
-    const actions = await provider.getCodeActions(document, {
-      textDocument: { uri: document.textDocument.uri },
-      range: fullRange(document),
-      context: { diagnostics: [], only: ['source.organizeImports'] },
-    })
-    const organize = actions?.find(action => 'title' in action && action.title === 'Tao: Organize Use Statements')
+    try {
+      const { provider, document } = fixture
+      const actions = await provider.getCodeActions(document, {
+        textDocument: { uri: document.textDocument.uri },
+        range: fullRange(document),
+        context: { diagnostics: [], only: ['source.organizeImports'] },
+      })
+      const organize = actions?.find(action => 'title' in action && action.title === 'Tao: Organize Use Statements')
 
-    Expect(organize && 'kind' in organize ? organize.kind : undefined).toBe('source.organizeImports')
-    const edits = organize && 'edit' in organize ? organize.edit?.changes?.[document.textDocument.uri] : undefined
-    Expect(edits?.[0]?.newText).toBe(
-      'use Text from @tao/ui\n\napp MyApp {\n   ui MainView\n}\n\nui MainView {\n   render Text "hi"\n}\n',
-    )
+      Expect(organize && 'kind' in organize ? organize.kind : undefined).toBe('source.organizeImports')
+      const edits = organize && 'edit' in organize ? organize.edit?.changes?.[document.textDocument.uri] : undefined
+      Expect(edits?.[0]?.newText).toBe(
+        'use Text from @tao/ui\n\napp MyApp {\n   ui MainView\n}\n\nui MainView {\n   render Text "hi"\n}\n',
+      )
+    } finally {
+      await fixture.cleanup()
+    }
   })
 
   Test('serves the move-render quick fix for render-not-last diagnostics', async () => {
-    const { provider, document } = await buildCodeActionFixture(
+    const fixture = await buildCodeActionFixture(
       'ui MainView {\n   render Text Greeting\n   alias Greeting = "hi"\n}\n',
     )
-    const actions = await provider.getCodeActions(document, {
-      textDocument: { uri: document.textDocument.uri },
-      range: fullRange(document),
-      context: {
-        diagnostics: [{ range: fullRange(document), message: 'render', code: 'tao-render-not-last' }],
-        only: ['quickfix'],
-      },
-    })
-    const moveRender = actions?.find(action => 'title' in action && action.title === 'Tao: Move render to end')
+    try {
+      const { provider, document } = fixture
+      const actions = await provider.getCodeActions(document, {
+        textDocument: { uri: document.textDocument.uri },
+        range: fullRange(document),
+        context: {
+          diagnostics: [{ range: fullRange(document), message: 'render', code: 'tao-render-not-last' }],
+          only: ['quickfix'],
+        },
+      })
+      const moveRender = actions?.find(action => 'title' in action && action.title === 'Tao: Move render to end')
 
-    const edits = moveRender && 'edit' in moveRender ? moveRender.edit?.changes?.[document.textDocument.uri] : undefined
-    Expect(edits?.[0]?.newText).toBe('ui MainView {\n   alias Greeting = "hi"\n   render Text Greeting\n}\n')
+      const edits = moveRender && 'edit' in moveRender
+        ? moveRender.edit?.changes?.[document.textDocument.uri]
+        : undefined
+      Expect(edits?.[0]?.newText).toBe('ui MainView {\n   alias Greeting = "hi"\n   render Text Greeting\n}\n')
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  Test('reports duplicate visible declarations through Langium services', async () => {
+    const diagnostics = await validateFilesWithLanguageServerServices({
+      '/__tao__/First.tao': `
+        project alias Shared = "First"
+      `,
+      '/__tao__/Second.tao': `
+        package alias Shared = "Second"
+      `,
+    })
+
+    Expect(
+      diagnostics.some(diagnostic => diagnostic.includes("Visible declaration 'Shared' is declared more than once")),
+    ).toBe(true)
+  })
+
+  Test('resolves on-disk package imports through Langium services', async () => {
+    const diagnostics = await validateOnDiskFileWithLanguageServerServices('Main.tao', {
+      'Main.tao': `
+        use MainView from @bar/views
+        app PackageApp { ui MainView }
+      `,
+      'packages/@bar/views/Main.tao': `
+        project ui MainView {
+          render inject \`\`\`ts
+            return null
+          \`\`\`
+        }
+      `,
+    })
+
+    Expect(diagnostics).toEqual([])
   })
 })
 
 async function buildCodeActionFixture(source: string): Promise<{
   provider: Langium.CodeActionProvider
   document: AST.Document
+  cleanup: () => Promise<void>
 }> {
-  const services = createValidatorLspServices(Langium.NodeFileSystem, {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-actions-', { cwd: FS.tmpdir() }))
+  const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
     lspCodeActionProvider: () => new TaoCodeActionProvider(),
   })
-  const uri = Langium.URI.file(`/__tao__/ide-actions-${++codeActionFixtureId}.tao`)
+  const services = workspace.services
+  const uri = Langium.URI.file(FS.resolvePath(`ide-actions-${++codeActionFixtureId}.tao`, { cwd: rootDir }))
   const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
   services.shared.workspace.LangiumDocuments.addDocument(document)
   await services.shared.workspace.DocumentBuilder.build([document], {
@@ -215,7 +245,31 @@ async function buildCodeActionFixture(source: string): Promise<{
   })
   const provider = services.language.lsp.CodeActionProvider
   Expect(provider).toBeInstanceOf(TaoCodeActionProvider)
-  return { provider: provider!, document }
+  return { provider: provider!, document, cleanup: async () => await FS.remove(rootDir) }
+}
+
+async function buildFormatterFixture(source: string): Promise<{
+  formatter: Langium.Formatter | undefined
+  document: AST.Document
+  cleanup: () => Promise<void>
+}> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-format-', { cwd: FS.tmpdir() }))
+  const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
+    lspFormatter: () => new TaoFormatter(),
+  })
+  const services = workspace.services
+  const uri = Langium.URI.file(FS.resolvePath('ide-format.tao', { cwd: rootDir }))
+  const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
+  services.shared.workspace.LangiumDocuments.addDocument(document)
+  await services.shared.workspace.DocumentBuilder.build([document], {
+    eagerLinking: true,
+    validation: false,
+  })
+  return {
+    formatter: services.language.lsp.Formatter,
+    document,
+    cleanup: async () => await FS.remove(rootDir),
+  }
 }
 
 let codeActionFixtureId = 0
@@ -242,17 +296,78 @@ function applyEdits(document: AST.Document, edits: readonly Langium.TextEdit[]):
 }
 
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
-  const services = createValidatorLspServices()
-  const uri = Langium.URI.file('/__tao__/ide-smoke.tao')
-  const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
-  services.shared.workspace.LangiumDocuments.addDocument(document)
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  try {
+    const workspace = await LSPWorkspace.open(rootDir)
+    const services = workspace.services
+    const uri = Langium.URI.file(FS.resolvePath('ide-smoke.tao', { cwd: rootDir }))
+    const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
+    services.shared.workspace.LangiumDocuments.addDocument(document)
 
-  await services.shared.workspace.DocumentBuilder.build([document], {
-    eagerLinking: true,
-    validation: true,
-  })
+    await services.shared.workspace.DocumentBuilder.build([document], {
+      eagerLinking: true,
+      validation: true,
+    })
 
-  return (document.diagnostics ?? []).map(diagnostic => diagnostic.message)
+    return (document.diagnostics ?? []).map(diagnostic => diagnostic.message)
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
+
+async function validateFilesWithLanguageServerServices(sources: Record<string, string>): Promise<string[]> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  try {
+    const workspace = await LSPWorkspace.open(rootDir)
+    const services = workspace.services
+    const documents = Object.entries(sources).map(([path, source]) => {
+      const workspacePath = path.startsWith('/__tao__/')
+        ? FS.resolvePath(path.slice('/__tao__/'.length), { cwd: rootDir })
+        : FS.resolvePath(path, { cwd: rootDir })
+      const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+        source,
+        Langium.URI.file(workspacePath),
+      )
+      services.shared.workspace.LangiumDocuments.addDocument(document)
+      return document
+    })
+
+    await services.shared.workspace.DocumentBuilder.build(documents, {
+      eagerLinking: true,
+      validation: true,
+    })
+
+    return documents.flatMap(document => (document.diagnostics ?? []).map(diagnostic => diagnostic.message))
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
+
+async function validateOnDiskFileWithLanguageServerServices(
+  entryFile: string,
+  sources: Record<string, string>,
+): Promise<string[]> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  try {
+    for (const [path, source] of Object.entries(sources)) {
+      await FS.writeText(FS.resolvePath(path, { cwd: rootDir }), source)
+    }
+    const workspace = await LSPWorkspace.open(rootDir)
+    const services = workspace.services
+    const entryPath = FS.resolvePath(entryFile, { cwd: rootDir })
+    const document = Array.from(services.shared.workspace.LangiumDocuments.all)
+      .find(document => document.uri.path === entryPath) as AST.Document | undefined
+
+    Expect(document).toBeDefined()
+    await services.shared.workspace.DocumentBuilder.build([document!], {
+      eagerLinking: true,
+      validation: true,
+    })
+
+    return (document!.diagnostics ?? []).map(diagnostic => diagnostic.message)
+  } finally {
+    await FS.remove(rootDir)
+  }
 }
 
 type IdeExtensionPackageJson = {

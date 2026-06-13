@@ -5,6 +5,7 @@ import {
   parseDocument,
   parseRawDocument,
   parseRawDocumentAt,
+  sourceActionOptionsFor,
   testOrganizeSource,
   testOrganizeSourceUnchanged,
 } from './test-source-actions'
@@ -190,6 +191,38 @@ Describe('organizeSource canonical statement order', () => {
 
         ui MainView {
            render Text Greeting
+        }
+      `,
+    )
+  })
+
+  Test('moves project metadata after imports and before the app', async () => {
+    await testOrganizeSource(
+      `
+        app MyApp { ui MainView }
+        ui MainView { render Text "hi" }
+        use Text from @tao/ui
+        project {
+           name "My App"
+           remote none
+           license MIT
+        }
+      `,
+      `
+        use Text from @tao/ui
+
+        project {
+           name "My App"
+           remote none
+           license MIT
+        }
+
+        app MyApp {
+           ui MainView
+        }
+
+        ui MainView {
+           render Text "hi"
         }
       `,
     )
@@ -450,7 +483,7 @@ Describe('fixSource', () => {
          alias Greeting = "hi"
       }
     `)
-    const fixed = await SourceActions.fixSource(document)
+    const fixed = await SourceActions.fixSource(document, await sourceActionOptionsFor(document))
 
     Expect(fixed).toBe(`${
       Text.stripIndent(`
@@ -466,7 +499,8 @@ Describe('fixSource', () => {
       }
     `)
     }\n`)
-    Expect(await SourceActions.fixSource(await parseRawDocument(fixed))).toBe(fixed)
+    const fixedDocument = await parseRawDocument(fixed)
+    Expect(await SourceActions.fixSource(fixedDocument, await sourceActionOptionsFor(fixedDocument))).toBe(fixed)
   })
 
   Test('uses the source file URI when fixing files with relative imports after render moves', async () => {
@@ -474,7 +508,7 @@ Describe('fixSource', () => {
     try {
       await FS.writeText(
         FS.resolvePath('Local.tao', { cwd: tmpDir }),
-        'share ui LocalText Value text { }\n',
+        'publish ui LocalText Value text { }\n',
       )
       const document = await parseRawDocumentAt(
         `${
@@ -490,7 +524,7 @@ Describe('fixSource', () => {
         FS.resolvePath('Main.tao', { cwd: tmpDir }),
       )
 
-      Expect(await SourceActions.fixSource(document)).toBe(`${
+      Expect(await SourceActions.fixSource(document, await sourceActionOptionsFor(document))).toBe(`${
         Text.stripIndent(`
         use Text from @tao/ui
         use MissingLocal from ./Local

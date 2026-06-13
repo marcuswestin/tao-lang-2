@@ -1,4 +1,4 @@
-import { CLI, FS } from '@shared'
+import { CLI, FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runCheck } from '../cli-src/check-command'
 import { statusByFile, withTaoFixture } from './test-cli-files'
@@ -49,6 +49,23 @@ Describe('tao check', () => {
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'canonical.tao': 'unchanged' })
+    })
+  })
+
+  Test('uses package-aware workspace roots for explicit nested package files', async () => {
+    await withTaoFixture({
+      'Packages/@cards/screens/Main.tao': Text.stripIndent(`
+        use LocalText, Missing from @cards/widgets
+
+        ui MainView { }
+      `),
+      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+    }, async (rootDir) => {
+      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
+      const results = await runCheck(path)
+
+      Expect(statusByFile(results, rootDir)).toEqual({ 'Packages/@cards/screens/Main.tao': 'changed' })
+      Expect(await FS.readText(path)).toContain('LocalText, Missing')
     })
   })
 

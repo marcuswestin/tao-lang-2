@@ -21,6 +21,6 @@ export default {
 } satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
-  f.oneSpaceAfter('share', 'hide', 'ui', 'layout')
+  f.oneSpaceAfter('package', 'project', 'publish', 'ui', 'layout')
   f.oneSpaceBeforeProperty('parameterList')
 }

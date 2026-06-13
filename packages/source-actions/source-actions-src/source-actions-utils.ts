@@ -3,6 +3,11 @@ import { type AST, Parser } from '@parser'
 import { Assert } from '@shared'
 import { assemblePieces, type StatementSlice, statementSlices, type TextPiece, trimBlankLines } from './text-slices'
 
+/** SourceActionOptions configures source-action reparsing behavior. */
+export type SourceActionOptions = {
+  parseUpdatedDocument?: (document: AST.Document, text: string) => Promise<AST.Document>
+}
+
 /** SourceStatementContext declares a source document plus its top-level statement slices. */
 export type SourceStatementContext = {
   document: AST.Document
@@ -38,8 +43,15 @@ export async function formatWhenChanged(document: AST.Document, text: string): P
 }
 
 /** parseSourceText parses updated Tao source, preserving the original document URI. */
-export async function parseSourceText(document: AST.Document, text: string): Promise<AST.Document> {
-  return (await Parser.parseCode(text, { uri: document.uri })).document
+export async function parseSourceText(
+  document: AST.Document,
+  text: string,
+  options: SourceActionOptions = {},
+): Promise<AST.Document> {
+  if (options.parseUpdatedDocument) {
+    return await options.parseUpdatedDocument(document, text)
+  }
+  return (await Parser.parseCode(text, { uri: document.uri, validation: false })).entry.document
 }
 
 /** hasSyntaxErrors returns whether a document has lexer or parser errors. */

@@ -1,13 +1,16 @@
-import { AST, Parser } from '@parser'
-import { FS, Text } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { AST } from '@parser'
+import { Diagnostics, FS, Text } from '@shared'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { ValidationResult } from '@validator'
+import { Workspace } from '@workspace'
 import { aliasValidationMessages } from '../validator-src/aliases-validator'
 import { appValidationMessages } from '../validator-src/app-validator'
+import { useValidationCodes } from '../validator-src/diagnostic-codes'
 import { inferExpressionType } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
 import { invocationValidationMessages } from '../validator-src/invocations-validator'
-import { parseCodeForValidation } from '../validator-src/langium-services'
-import { useValidationCodes, useValidationMessages } from '../validator-src/use-validator'
+import { projectValidationMessages } from '../validator-src/project-validator'
+import { useValidationMessages } from '../validator-src/use-validator'
 import Validator from '../validator-src/validator'
 import { viewValidationMessages } from '../validator-src/views-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
@@ -19,84 +22,103 @@ const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/
 const tsFence = '```ts'
 const fence = '```'
 
-async function withTaoFiles(
-  prefix: string,
-  files: Record<string, string>,
-  testsFunction: (paths: Record<string, string>, rootDir: string) => Promise<void>,
-): Promise<void> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath(prefix, { cwd: FS.tmpdir() }))
-  const paths: Record<string, string> = {}
-
+async function withValidationParse<T>(
+  source: string,
+  testFunction: (fixture: {
+    result: ValidationResult
+    workspace: Workspace
+  }) => T | Promise<T>,
+): Promise<T> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-parse-', { cwd: FS.tmpdir() }))
   try {
-    for (const [relativePath, source] of Object.entries(files)) {
-      const path = FS.resolvePath(relativePath, { cwd: rootDir })
-      await FS.writeText(path, Text.stripIndent(source))
-      paths[relativePath] = path
-    }
-
-    await testsFunction(paths, rootDir)
+    const sourcePath = FS.resolvePath('Source.tao', { cwd: rootDir })
+    await FS.writeText(sourcePath, Text.stripIndent(source))
+    const workspace = await Workspace.open(rootDir)
+    const validated = await workspace.validate(sourcePath)
+    return await testFunction({ result: validated, workspace })
   } finally {
     await FS.remove(rootDir)
   }
 }
 
+type ValidatedFiles = Awaited<ReturnType<typeof Workspace.validate>>
+
+async function withValidatedFiles<
+  const Files extends Record<string, string>,
+  EntryFile extends keyof Files & string,
+>(
+  entryFile: EntryFile,
+  files: Files,
+  testFunction: (validated: ValidatedFiles) => Promise<void> | void,
+): Promise<void> {
+  await withTaoFiles('tao-validator-', files, async paths => {
+    await testFunction(await Workspace.validate(paths[entryFile]))
+  })
+}
+
 Describe('Tao validator structural diagnostics', () => {
   Test('validates the current Kitchen Sink app', async () => {
-    const result = await Validator.validateFile(kitchenSinkPath)
+    const result = await Workspace.validate(kitchenSinkPath)
 
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
   Test('validates the target Kitchen Sink app', async () => {
-    const result = await Validator.validateFile(targetKitchenSinkPath)
+    const result = await Workspace.validate(targetKitchenSinkPath)
 
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
   Test('validates the Type System Tests app', async () => {
-    const result = await Validator.validateFile(typeSystemTestsPath)
+    const result = await Workspace.validate(typeSystemTestsPath)
 
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
   Test('validates the Runtime Stdlib Tests app', async () => {
-    const result = await Validator.validateFile(runtimeStdlibTestsPath)
+    const result = await Workspace.validate(runtimeStdlibTestsPath)
 
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
   Test('validates an existing parser result', async () => {
-    const parsed = await Parser.parseCode(`
+    await withValidationParse(
+      `
       app MyApp { ui MainView }
       ui MainView {
         render inject ${tsFence}
           return null
         ${fence}
       }
-    `)
-    const result = await Validator.validateParsed(parsed)
-
-    Expect(validationErrorMessages(result)).toEqual([])
+    `,
+      ({ result }) => {
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
   })
 
   Test('returns parser diagnostics without running structural checks on syntax errors', async () => {
-    const result = await Validator.validateCode('ui Broken { render }')
+    const result = await testValidateCodeWithErrors('ui Broken { render }')
 
-    Expect(result.diagnostics.some(diagnostic => diagnostic.source === 'parser')).toBe(true)
-    Expect(result.validatorDiagnostics).toEqual([])
+    Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
+    Expect(Diagnostics.hasSource(result.diagnostics, 'validator')).toBe(false)
   })
 
   Test('exposes Typir services for primitive expression inference', async () => {
-    const parsed = await parseCodeForValidation(`
+    await withValidationParse(
+      `
       app MyApp { ui MainView }
       alias Greeting = "Hello"
       alias Count = 3
       ui MainView { }
-    `)
-    const aliases = parsed.ast.statements.filter(AST.isAliasDeclaration)
+    `,
+      ({ result, workspace }) => {
+        const aliases = result.entry.ast.statements.filter(AST.isAliasDeclaration)
 
-    Expect(inferExpressionType(aliases[0]!.value, parsed.typir)).toBe('text')
-    Expect(inferExpressionType(aliases[1]!.value, parsed.typir)).toBe('number')
+        Expect(inferExpressionType(aliases[0]!.value, workspace.typir)).toBe('text')
+        Expect(inferExpressionType(aliases[1]!.value, workspace.typir)).toBe('number')
+      },
+    )
   })
 
   Test('rejects unsupported top-level statements', async () => {
@@ -814,7 +836,7 @@ Describe('Tao validator structural diagnostics', () => {
   })
 
   Test('keeps cross-view values out of scope through validator diagnostics', async () => {
-    const result = await Validator.validateCode(`
+    const result = await testValidateCodeWithErrors(`
       app MyApp { ui Target }
       ui Text Value text { }
       ui Source Secret text { }
@@ -824,12 +846,12 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     Expect(validationErrorMessages(result).length).toBeGreaterThan(0)
-    Expect(result.validatorDiagnostics.length).toBeGreaterThan(0)
+    Expect(Diagnostics.hasSource(result.diagnostics, 'validator')).toBe(true)
   })
 
-  Test('validates same-module use imports across sibling files', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+  Test('validates relative use imports across sibling files', async () => {
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -839,24 +861,22 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        ui Text Value text {
+        project ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
+      async result => {
         Expect(validationErrorMessages(result)).toEqual([])
       },
     )
   })
 
   Test('validates explicit Tao file use imports', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -866,16 +886,14 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        ui Text Value text {
+        project ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
+      async result => {
         Expect(validationErrorMessages(result)).toEqual([])
       },
     )
@@ -891,9 +909,9 @@ Describe('Tao validator structural diagnostics', () => {
     `)
   })
 
-  Test('rejects hide imports from another file in the same module', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+  Test('rejects file-private imports from another file in the same directory', async () => {
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -903,24 +921,22 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        hide ui Text Value text {
+        ui Text Value text {
           render inject ${tsFence}
             return null
           ${fence}
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
-        Expect(validationErrorMessages(result)).toContain(useValidationMessages.sameModuleHidden('Text'))
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.notVisible('Text'))
       },
     )
   })
 
-  Test('rejects cross-module imports for declarations that are not shared', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+  Test('rejects cross-file imports for declarations that are not visible', async () => {
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -935,17 +951,15 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
-        Expect(validationErrorMessages(result)).toContain(useValidationMessages.crossModuleNotShared('Text'))
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.notVisible('Text'))
       },
     )
   })
 
-  Test('reports validator errors inside imported module files', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+  Test('reports validator errors inside imported Tao files', async () => {
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -955,24 +969,27 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        ui Text Value text {
+        project ui Text Value text {
           render inject Value, Value ${tsFence}
             return null
           ${fence}
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
+      async result => {
+        const diagnostic = result.diagnostics.find(diagnostic =>
+          diagnostic.message === injectionValidationMessages.duplicateArgument('Value')
+        )
 
         Expect(validationErrorMessages(result)).toContain(injectionValidationMessages.duplicateArgument('Value'))
+        Expect(diagnostic?.filePath?.endsWith('/Views.tao')).toBe(true)
       },
     )
   })
 
-  Test('reports parser errors inside imported module files', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+  Test('reports parser errors inside imported Tao files', async () => {
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -983,17 +1000,37 @@ Describe('Tao validator structural diagnostics', () => {
       `,
         'Views.tao': 'ui Text Value text {',
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
-        Expect(result.diagnostics.some(diagnostic => diagnostic.source === 'parser')).toBe(true)
+      async result => {
+        Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
       },
     )
   })
 
-  Test('reports unresolved references inside imported module files', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+  Test('keeps parser errors from different imported files distinct', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { ui MainView }
+        use BrokenOne from ./one
+        use BrokenTwo from ./two
+        ui MainView { }
+      `,
+        'one/BrokenOne.tao': 'ui BrokenOne {',
+        'two/BrokenTwo.tao': 'ui BrokenTwo {',
+      },
+      async result => {
+        const parserDiagnostics = Diagnostics.errors(result.diagnostics, 'parser')
+
+        Expect(parserDiagnostics).toHaveLength(2)
+        Expect(new Set(parserDiagnostics.map(diagnostic => diagnostic.filePath)).size).toBe(2)
+      },
+    )
+  })
+
+  Test('reports unresolved references inside imported Tao files', async () => {
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -1003,27 +1040,22 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        ui Text Value text {
+        project ui Text Value text {
           render MissingView
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
-        Expect(
-          result.diagnostics.some(diagnostic =>
-            diagnostic.source === 'parser' && diagnostic.severity === 'error'
-            && diagnostic.message.includes('MissingView')
-          ),
-        ).toBe(true)
+      async result => {
+        Expect(Diagnostics.hasMessageContaining(Diagnostics.errors(result.diagnostics, 'linker'), 'MissingView')).toBe(
+          true,
+        )
       },
     )
   })
 
   Test('rejects names imported by more than one use statement', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -1034,16 +1066,14 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        ui Text Value text {
+        project ui Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
+      async result => {
         Expect(validationErrorMessages(result)).toContain(useValidationMessages.repeatedImport('Text'))
       },
     )
@@ -1067,8 +1097,8 @@ Describe('Tao validator structural diagnostics', () => {
   })
 
   Test('rejects app imports', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -1088,24 +1118,71 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
+      async result => {
         Expect(validationErrorMessages(result)).toContain(useValidationMessages.appImport('OtherApp'))
       },
     )
   })
 
-  Test('rejects imports that match multiple visible declarations in a module', async () => {
+  Test('rejects app declarations outside the entry file', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { ui MainView }
+        use OtherView from ./Other.tao
+        ui MainView {
+          render OtherView
+        }
+      `,
+        'Other.tao': `
+        app OtherApp { ui OtherView }
+        project ui OtherView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(appValidationMessages.appEntryFile('OtherApp'))
+      },
+    )
+  })
+
+  Test('rejects app declarations inside packages', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { ui MainView }
+        use MainView from @bar
+      `,
+        'packages/@bar/Main.tao': `
+        app PackageApp { ui MainView }
+        project ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(appValidationMessages.appPackage('PackageApp'))
+      },
+    )
+  })
+
+  Test('rejects imports that match multiple visible declarations in an import target', async () => {
     const sharedTextSource = `
-      share ui Text Value text {
+      project ui Text Value text {
         render inject ${tsFence}
           return null
         ${fence}
       }
     `
-    await withTaoFiles(
-      'tao-validator-use-',
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -1117,17 +1194,15 @@ Describe('Tao validator structural diagnostics', () => {
         'ui/Views.tao': sharedTextSource,
         'ui/MoreViews.tao': sharedTextSource,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
+      async result => {
         Expect(validationErrorMessages(result)).toContain(useValidationMessages.ambiguousImport('Text', './ui'))
       },
     )
   })
 
   Test('allows file-level aliases that reference imported aliases', async () => {
-    await withTaoFiles(
-      'tao-validator-use-',
+    await withValidatedFiles(
+      'Main.tao',
       {
         'Main.tao': `
         app MyApp { ui MainView }
@@ -1147,15 +1222,298 @@ Describe('Tao validator structural diagnostics', () => {
         // importing file's references, which used to trip the declaration-order check.
         // More padding.
         // More padding.
-        alias Greeting = "Hello"
+        project alias Greeting = "Hello"
       `,
       },
-      async paths => {
-        const result = await Validator.validateFile(paths['Main.tao']!)
-
+      async result => {
         Expect(validationErrorMessages(result)).toEqual([])
       },
     )
+  })
+
+  Test('validates bare use imports across a whole package', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app PackageApp { ui MainView }
+        use MainView from @foo/forms
+      `,
+        'features/@foo/Title.tao': `
+        package alias PackageTitle = "Package title"
+      `,
+        'features/@foo/forms/Main.tao': `
+        use PackageTitle
+        project ui MainView {
+          render Text PackageTitle
+        }
+        ui Text Value text {
+          render inject Value ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('resolves package imports through the project package index', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app IndexedPackageApp { ui MainView }
+        use MainView from @bar/views
+      `,
+        'deep/packages/@bar/views/Main.tao': `
+        project ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('resolves package paths through folders instead of file basenames', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app FolderTargetApp { ui MainView }
+        use Chosen from @foo/Widget
+        use FileOnly from @foo/FileOnly
+        use ExplicitFile from @foo/ExplicitFile.tao
+        ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'features/@foo/Widget.tao': `
+        project alias Chosen = "Wrong file target"
+      `,
+        'features/@foo/Widget/Index.tao': `
+        project alias Chosen = "Folder target"
+      `,
+        'features/@foo/FileOnly.tao': `
+        project alias FileOnly = "File target"
+      `,
+        'features/@foo/ExplicitFile.tao': `
+        project alias ExplicitFile = "Explicit file target"
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.unresolvedImport('@foo/FileOnly'))
+        Expect(validationErrorMessages(result)).toContain(
+          useValidationMessages.unresolvedImport('@foo/ExplicitFile.tao'),
+        )
+      },
+    )
+  })
+
+  Test('rejects duplicate package names in the package index', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app DuplicatePackageApp { ui MainView }
+        use MainView from @bar
+      `,
+        'one/@bar/Main.tao': `
+        project ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'two/@bar/Main.tao': `
+        project ui OtherView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result).some(message => message.includes("Package '@bar' is ambiguous"))).toBe(
+          true,
+        )
+      },
+    )
+  })
+
+  Test('rejects relative imports that cross package boundaries', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app BoundaryApp { ui MainView }
+        use MainView from ./features/@bar
+      `,
+        'features/@bar/Main.tao': `
+        project ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.packageBoundary('./features/@bar'))
+      },
+    )
+  })
+
+  Test('keeps package-visible declarations out of cross-package imports', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app VisibilityApp { ui MainView }
+        use MainView from @bar
+      `,
+        'features/@bar/Main.tao': `
+        package ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.notVisible('MainView'))
+      },
+    )
+  })
+
+  Test('does not include nested package folders in bare package imports', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app NestedPackageApp { ui MainView }
+        use MainView from @outer
+        use InnerView from @inner
+      `,
+        'features/@outer/Main.tao': `
+        use NestedAlias
+        project ui MainView {
+          render Text NestedAlias
+        }
+        ui Text Value text {
+          render inject Value ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'features/@outer/@inner/Main.tao': `
+        package alias NestedAlias = "Nested"
+        project ui InnerView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(
+          useValidationMessages.missingImport('NestedAlias', 'current package'),
+        )
+      },
+    )
+  })
+
+  Test('does not load nested package files through bare package imports', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app NestedPackageApp { ui MainView }
+        use MainView from @outer
+      `,
+        'features/@outer/Main.tao': `
+        project ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'features/@outer/@inner/Broken.tao': 'ui Broken {',
+      },
+      async result => {
+        Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(false)
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('rejects duplicate visible declarations in sibling package files', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app DuplicateVisibleApp { ui MainView }
+        use MainView from @foo
+      `,
+        'features/@foo/Main.tao': `
+        project ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'features/@foo/First.tao': `
+        package alias Shared = "First"
+      `,
+        'features/@foo/Second.tao': `
+        publish alias Shared = "Second"
+      `,
+      },
+      async result => {
+        const duplicateMessages = validationErrorMessages(result).filter(message =>
+          message.startsWith("Visible declaration 'Shared' is declared more than once in folder ")
+        )
+
+        Expect(duplicateMessages).toHaveLength(2)
+      },
+    )
+  })
+
+  Test('validates local project metadata blocks', async () => {
+    const result = await testValidateCodeWithErrors(`
+      project {
+        name "One"
+        name "Two"
+        remote none
+        remote none
+        license MIT
+        license Apache
+        requires foo
+      }
+      project {
+        name "Duplicate"
+      }
+      app MetadataApp { ui MainView }
+      ui MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateProject())
+    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateName())
+    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateRemote())
+    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateLicense())
+    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.unsupportedRequires())
   })
 })
 

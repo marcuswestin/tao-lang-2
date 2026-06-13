@@ -5,12 +5,15 @@
   "module": "validator-src/validator.ts",
   "exports": {
     ".": "./validator-src/validator.ts",
-    "./diagnostics": "./validator-src/diagnostics.ts",
-    "./langium-services": "./validator-src/langium-services.ts"
+    "./diagnostic-codes": "./validator-src/diagnostic-codes.ts",
+    "./langium-validation": "./validator-src/langium-validation.ts",
+    "./type-system": "./validator-src/type-system.ts",
+    "./validation": "./validator-src/validation.ts"
   },
   "dependencies": {
     "tao-ast-utils": "workspace:*",
     "tao-parser": "workspace:*",
+    "tao-shared": "workspace:*",
     "typir": "~0.3.3",
     "typir-langium": "~0.3.3"
   }

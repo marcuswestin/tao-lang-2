@@ -1,6 +1,5 @@
 import type { AST, Langium } from '@parser'
-import { useValidationCodes } from '@validator/use-validator'
-import { viewValidationCodes } from '@validator/views-validator'
+import { useValidationCodes, viewValidationCodes } from '@validator/diagnostic-codes'
 import SourceActions from './source-actions'
 
 const organizeImportsKind = 'source.organizeImports'

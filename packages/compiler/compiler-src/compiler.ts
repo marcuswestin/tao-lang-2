@@ -1,75 +1,100 @@
-import ASTUtils from '@ast-utils'
-import { AST } from '@parser'
-import { defaultStdLibRoot, moduleTargetMatchesFile, resolveModulePath } from '@parser/module-resolution'
-import { Assert, FS } from '@shared'
+import { Packages } from '@ast-utils'
+import { AST, type ParsedFile } from '@parser'
+import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
-import { errorMessages } from '@validator/diagnostics'
 import RuntimeGen from './codegen/app/runtime-gen'
 
-type CompiledFile = {
+const codeProjectRoot = '/__tao__'
+
+/** CompiledFile declares one generated TypeScript output file. */
+export type CompiledFile = {
   sourcePath: string
   relativePath: string
   code: string
 }
 
-type CompileResult = {
+type ResolvedImports = {
+  bySource: Map<string, Set<string>>
+  importedNames: Set<string>
+}
+
+/** CompileResult declares generated output for a Tao app entry. */
+export type CompileResult = {
+  validation: ValidationResult
   code: string
   files: CompiledFile[]
 }
 
-/** Compiler exposes Tao source compilation functions. */
-export default {
-  /** compileFile compiles the Tao file at `path` into Expo-compatible TSX source. */
-  async compileFile(path: string): Promise<CompileResult> {
-    return compileValidated(await Validator.validateFile(path))
-  },
+/** CompilerContext declares shared compiler invocation state. */
+export type CompilerContext = {
+  packagesContext: Packages.Context
+  sourceRoot: string
+}
 
-  /** compileCode compiles Tao source code into Expo-compatible TSX source. */
-  async compileCode(code: string): Promise<CompileResult> {
-    return compileValidated(await Validator.validateCode(code))
-  },
-} as const
+/** createContext creates compiler invocation state. */
+function createContext(packagesContext: Packages.Context, sourceRoot: string): CompilerContext {
+  return { packagesContext, sourceRoot }
+}
 
-function compileValidated(result: ValidationResult): CompileResult {
-  const errors = errorMessages(result.diagnostics)
+/** compileCode compiles Tao source code using standalone parser and validator contexts. */
+async function compileCode(code: string): Promise<CompileResult> {
+  const packagesContext = await Packages.createContext(codeProjectRoot)
+  return compileValidated(await Validator.validateCode(code), createContext(packagesContext, codeProjectRoot))
+}
+
+/** compileValidated compiles an already validated Tao app into Expo-compatible TSX source. */
+function compileValidated(validationResult: ValidationResult, context: CompilerContext): CompileResult {
+  const errors = Diagnostics.errorMessages(validationResult.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, { errors })
-  const entryApps = result.parsed.ast.statements.filter(AST.isAppDeclaration)
+  const entryApps = validationResult.entry.ast.statements.filter(AST.isAppDeclaration)
   Assert(
     entryApps.length === 1,
     `Cannot compile app entry: entry file must declare exactly one app, found ${entryApps.length}.`,
     { entryApps: entryApps.length },
   )
-  if (result.parsed.entryFilePath) {
-    return compileWorkspace(result)
-  }
-  const code = RuntimeGen.TaoFile(result.parsed.ast)
-  return {
-    code,
-    files: [{
-      sourcePath: result.parsed.document.uri.path,
-      relativePath: 'App.tsx',
-      code,
-    }],
-  }
+  return compileValidatedInput(validationResult, context)
 }
 
-function compileWorkspace(result: ValidationResult): CompileResult {
-  const entryPath = result.parsed.entryFilePath!
-  const workspaceFiles = result.parsed.workspaceFiles ?? [result.parsed.ast]
-  const sourceFiles: Array<{ ast: AST.TaoFile; path: string }> = workspaceFiles.map((file: AST.TaoFile) => ({
-    ast: file,
-    path: ASTUtils.getDocument(file).uri.path,
-  }))
-  const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
-  const repoRoot = FS.repoPath('.')
-  const stdLibRoot = defaultStdLibRoot()
+/** Compiler exposes Tao source compilation functions. */
+const Compiler = {
+  createContext,
+  compileCode,
+  compileValidated,
+} as const
 
+namespace Compiler {
+  /** Context declares compiler invocation state. */
+  export type Context = CompilerContext
+}
+
+export default Compiler
+
+function compileValidatedInput(
+  validationResult: ValidationResult,
+  context: CompilerContext,
+): CompileResult {
+  const entryPath = validationResult.entry.path
+  const sourceFiles = validationResult.files
+  const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
+  const outputPathBySourcePath = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
+  const compiledFiles = sourceFiles.map(file =>
+    compileSourceFile(file, sourceByPath, outputPathBySourcePath, context.packagesContext)
+  )
+
+  return compileResultForEntry(validationResult, compiledFiles)
+}
+
+function planOutputPaths(
+  sourceFiles: readonly ParsedFile[],
+  entryPath: string,
+  sourceRoot: string,
+): Map<string, string> {
   // Basename buckets in moduleOutputPath can collide across distinct sources;
   // suffix deterministically instead of silently overwriting generated files.
   const outputPathBySourcePath = new Map<string, string>()
   const usedOutputPaths = new Set<string>()
   for (const file of sourceFiles) {
-    const preferredPath = file.path === entryPath ? 'App.tsx' : moduleOutputPath(file.path, entryPath, repoRoot)
+    const preferredPath = file.path === entryPath ? 'App.tsx' : moduleOutputPath(file.path, entryPath, sourceRoot)
     let outputPath = preferredPath
     for (let suffix = 2; usedOutputPaths.has(outputPath); suffix++) {
       outputPath = preferredPath.replace(/\.tsx$/, `-${suffix}.tsx`)
@@ -77,37 +102,59 @@ function compileWorkspace(result: ValidationResult): CompileResult {
     usedOutputPaths.add(outputPath)
     outputPathBySourcePath.set(file.path, outputPath)
   }
+  return outputPathBySourcePath
+}
 
-  const compiledFiles = sourceFiles.map((file): CompiledFile => {
-    const imports = resolveImports(file.path, file.ast, sourceByPath, stdLibRoot)
-    const currentOutputPath = outputPathBySourcePath.get(file.path)!
-    const importLines = [...imports.bySource.entries()].map(([sourcePath, names]) => {
-      const sourceOutputPath = outputPathBySourcePath.get(sourcePath)
-      Assert.defined(sourceOutputPath, 'compiled source output path exists', { sourcePath })
-      return `import { ${[...names].sort().join(', ')} } from '${
-        relativeImportPath(currentOutputPath, sourceOutputPath)
-      }'`
-    })
-    const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
-    const exportedNames = file.ast.statements
-      .filter(AST.isExportableDeclaration)
-      .filter((statement: AST.Declaration) => declarationVisibility(statement) !== 'hide')
-      .map((statement: AST.Declaration) => statement.name)
+function compileSourceFile(
+  file: ParsedFile,
+  sourceByPath: Map<string, ParsedFile>,
+  outputPathBySourcePath: ReadonlyMap<string, string>,
+  packagesContext: Packages.Context,
+): CompiledFile {
+  const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
+  const currentOutputPath = outputPathBySourcePath.get(file.path)
+  Assert.defined(currentOutputPath, 'compiled source output path exists', { sourcePath: file.path })
+  const importLines = importLinesForCompiledFile(imports, currentOutputPath, outputPathBySourcePath)
+  const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
+  const exportedNames = file.ast.statements
+    .filter(AST.isExportableDeclaration)
+    .filter(declarationVisibleOutsideFile)
+    .map((statement: AST.Declaration) => statement.name)
 
-    return {
-      sourcePath: file.path,
-      relativePath: currentOutputPath,
-      code: RuntimeGen.TaoFile(file.ast, {
-        importLines,
-        scopeBindings,
-        exportedNames: [...new Set(exportedNames)] as string[],
-      }),
-    }
+  return {
+    sourcePath: file.path,
+    relativePath: currentOutputPath,
+    code: RuntimeGen.TaoFile(file.ast, {
+      importLines,
+      scopeBindings,
+      exportedNames,
+    }),
+  }
+}
+
+function importLinesForCompiledFile(
+  imports: ResolvedImports,
+  currentOutputPath: string,
+  outputPathBySourcePath: ReadonlyMap<string, string>,
+): string[] {
+  return [...imports.bySource.entries()].map(([sourcePath, names]) => {
+    const sourceOutputPath = outputPathBySourcePath.get(sourcePath)
+    Assert.defined(sourceOutputPath, 'compiled source output path exists', { sourcePath })
+    return `import { ${[...names].sort().join(', ')} } from '${
+      relativeImportPath(currentOutputPath, sourceOutputPath)
+    }'`
   })
+}
 
+function compileResultForEntry(
+  validationResult: ValidationResult,
+  compiledFiles: CompiledFile[],
+): CompileResult {
+  const entryPath = validationResult.entry.path
   const entryCode = compiledFiles.find((compiledFile: CompiledFile) => compiledFile.sourcePath === entryPath)?.code
   Assert.defined(entryCode, 'entry compiled code exists', { entryPath })
   return {
+    validation: validationResult,
     code: entryCode,
     files: compiledFiles,
   }
@@ -115,10 +162,10 @@ function compileWorkspace(result: ValidationResult): CompileResult {
 
 // Module output paths must stay inside the generated app root, so out-of-root
 // sources fall back to entry-relative and basename buckets instead of `..` segments.
-function moduleOutputPath(filePath: string, entryPath: string, repoRoot: string): string {
-  const repoRelative = FS.relativePath(repoRoot, filePath)
-  if (!repoRelative.startsWith('..')) {
-    return `modules/${repoRelative}.tsx`
+function moduleOutputPath(filePath: string, entryPath: string, sourceRoot: string): string {
+  const sourceRelative = FS.relativePath(sourceRoot, filePath)
+  if (!sourceRelative.startsWith('..')) {
+    return `modules/${sourceRelative}.tsx`
   }
   const entryRelative = FS.relativePath(FS.dirname(entryPath), filePath)
   if (!entryRelative.startsWith('..')) {
@@ -130,30 +177,32 @@ function moduleOutputPath(filePath: string, entryPath: string, repoRoot: string)
 function resolveImports(
   filePath: string,
   file: AST.TaoFile,
-  sourceByPath: Map<string, { ast: AST.TaoFile; path: string }>,
-  stdLibRoot?: string,
-): {
-  bySource: Map<string, Set<string>>
-  importedNames: Set<string>
-} {
+  sourceByPath: Map<string, ParsedFile>,
+  packagesContext: Packages.Context,
+): ResolvedImports {
   const bySource = new Map<string, Set<string>>()
   const importedNames = new Set<string>()
+  const sourcePaths = new Set(sourceByPath.keys())
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
-    const resolution = resolveModulePath(useStatement.modulePath, filePath, stdLibRoot)
-    if (!resolution) {
+    const resolution = Packages.resolve(packagesContext, {
+      importPath: useStatement.importPath,
+      fromFilePath: filePath,
+    })
+    if (resolution.relation === 'invalid') {
       continue
     }
     const targets = [...sourceByPath.values()].filter(candidate =>
-      moduleTargetMatchesFile(resolution.targetPath, candidate.path)
+      Packages.targetMatches(resolution, {
+        filePath: candidate.path,
+        workspaceFilePaths: sourcePaths,
+      })
     )
     for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
       const target = targets.find(candidate =>
         candidate.ast.statements.some(statement =>
           AST.isDeclaration(statement)
           && statement.name === importedName
-          && (!resolution.sameModule
-            ? declarationVisibility(statement) === 'share'
-            : declarationVisibility(statement) !== 'hide')
+          && Packages.isVisible(Packages.visibilityOf(statement), resolution)
         )
       )
       if (!target) {
@@ -175,6 +224,6 @@ function relativeImportPath(fromOutputPath: string, toOutputPath: string): strin
   return withoutExtension.startsWith('.') ? withoutExtension : `./${withoutExtension}`
 }
 
-function declarationVisibility(declaration: AST.Declaration): AST.DeclarationVisibility | undefined {
-  return 'visibility' in declaration ? declaration.visibility : undefined
+function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {
+  return Packages.visibilityOf(declaration) !== undefined
 }

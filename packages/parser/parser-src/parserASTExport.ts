@@ -8,8 +8,6 @@ export * from './_gen_tao-parser/ast'
 export type Document = Langium.LangiumDocument<ASTGen.TaoFile>
 /** Node declares any Langium AST node in the Tao parser output. */
 export type Node = Langium.AstNode
-/** ParseDiagnostic declares a diagnostic produced while parsing a Tao document. */
-export type ParseDiagnostic = NonNullable<Document['diagnostics']>[number]
 
 export {
   TaoLangGeneratedModule as GeneratedModule,

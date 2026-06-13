@@ -16,6 +16,7 @@
     "tao-parser": "workspace:*",
     "tao-runtime": "workspace:*",
     "tao-shared": "workspace:*",
-    "tao-source-actions": "workspace:*"
+    "tao-source-actions": "workspace:*",
+    "tao-workspace": "workspace:*"
   }
 }

@@ -1,6 +1,6 @@
 @../AGENTS.md
 
-# Claude Code
+# Claude Code instructions
 
-- Refer to ../AGENTS.md for your instructions.
+- *CRITICAL*: ALWAYS refer to ../AGENTS.md for your instructions.
 - Use Claude-specific notes here only when they should not apply to Codex/Cursor/other agents.

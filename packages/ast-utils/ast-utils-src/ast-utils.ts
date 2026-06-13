@@ -4,6 +4,7 @@ import {
   type ResolvedRenderInvocation as ResolvedRenderInvocationData,
   resolveRenderInvocation,
 } from './invocations'
+import { Packages } from './Packages'
 import { referencedNames } from './references'
 import { getDocument, isNode, streamAllContents } from './traversal'
 
@@ -25,4 +26,5 @@ namespace ASTUtils {
   export type ResolvedRenderInvocation = ResolvedRenderInvocationData
 }
 
+export { Packages }
 export default ASTUtils

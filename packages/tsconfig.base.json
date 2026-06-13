@@ -62,6 +62,12 @@
       "@source-actions/*": [
         "./source-actions/source-actions-src/*"
       ],
+      "@workspace": [
+        "./workspace/workspace-src/index.ts"
+      ],
+      "@workspace/*": [
+        "./workspace/workspace-src/*"
+      ],
       "@runtime": [
         "./runtime/runtime-src/runtime.ts"
       ],

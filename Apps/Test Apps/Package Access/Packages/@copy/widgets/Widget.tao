@@ -1,0 +1,9 @@
+project ui ProjectWidget {
+   render Text "Project UI works"
+}
+
+ui Text Value text {
+   render inject Value ```ts
+      return <RN.Text>{Value}</RN.Text>
+   ```
+}

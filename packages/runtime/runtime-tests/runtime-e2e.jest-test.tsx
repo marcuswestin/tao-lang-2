@@ -28,6 +28,18 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Wrapped')
   })
 
+  Test('compiles and renders local package access', async () => {
+    const packageAccessPath = FS.repoPath('Apps/Test Apps/Package Access/Package Access.tao')
+    const screen = await compileAndRenderApp(packageAccessPath)
+
+    ExpectScreen(screen).toHaveText('Package access works')
+    ExpectScreen(screen).toHaveText('Package sibling file works')
+    ExpectScreen(screen).toHaveText('Package sibling folder works')
+    ExpectScreen(screen).toHaveText('Package child folder works')
+    ExpectScreen(screen).toHaveText('Project alias works')
+    ExpectScreen(screen).toHaveText('Project UI works')
+  })
+
   Test('renders imported alias references through circular module imports', async () => {
     await testCompileFiles(
       'Main.tao',
@@ -46,9 +58,9 @@ Describe('Expo runtime', () => {
         'A.tao': `
           use BView from ./
 
-          alias SharedTitle = "Circular alias"
+          project alias SharedTitle = "Circular alias"
 
-          ui AView {
+          project ui AView {
               render BView
           }
         `,
@@ -57,7 +69,7 @@ Describe('Expo runtime', () => {
 
           alias ImportedTitle = SharedTitle
 
-          ui BView {
+          project ui BView {
               render Text ImportedTitle
           }
 

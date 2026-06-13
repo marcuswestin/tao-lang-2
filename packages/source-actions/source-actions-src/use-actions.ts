@@ -10,19 +10,20 @@ export function synthesizeImportSection(
   const usedNames = ASTUtils.referencedNames(file)
   const namesByModule = new Map<string, Set<string>>()
   for (const slice of useSlices) {
-    const names = namesByModule.get(slice.statement.modulePath) ?? new Set<string>()
+    const source = importSource(slice.statement)
+    const names = namesByModule.get(source) ?? new Set<string>()
     for (const reference of slice.statement.importedDeclarations) {
       if (shouldKeepImportedReference(reference, usedNames)) {
         names.add(reference.$refText)
       }
     }
-    namesByModule.set(slice.statement.modulePath, names)
+    namesByModule.set(source, names)
   }
 
   const importLines = [...namesByModule.entries()]
     .filter(([, names]) => names.size > 0)
-    .sort(([a], [b]) => compareModulePaths(a, b))
-    .map(([modulePath, names]) => `use ${[...names].sort().join(', ')} from ${modulePath}`)
+    .sort(([a], [b]) => compareImportSources(a, b))
+    .map(([source, names]) => useStatementText([...names].sort(), source))
   const comments = useSlices.map(slice => slice.leading).filter(leading => leading !== '')
   return [...comments, ...importLines].join('\n')
 }
@@ -51,7 +52,7 @@ export function removeUnusedImportNames(
       pieces.push({ text: slice.leading, blankBefore })
       continue
     }
-    const statementText = `use ${names.join(', ')} from ${slice.statement.modulePath}`
+    const statementText = useStatementText(names, importSource(slice.statement))
     pieces.push({
       text: slice.leading === '' ? statementText : `${slice.leading}\n${statementText}`,
       blankBefore,
@@ -60,14 +61,30 @@ export function removeUnusedImportNames(
   return pieces
 }
 
-// Package sources (`@...`) sort before relative sources, alphabetically within each group.
-function compareModulePaths(a: string, b: string): number {
-  const rankA = a.startsWith('@') ? 0 : 1
-  const rankB = b.startsWith('@') ? 0 : 1
+// Bare and package sources sort before relative sources, alphabetically within each group.
+function compareImportSources(a: string, b: string): number {
+  const rankA = importSourceRank(a)
+  const rankB = importSourceRank(b)
   if (rankA !== rankB) {
     return rankA - rankB
   }
   return a < b ? -1 : a > b ? 1 : 0
+}
+
+function importSourceRank(source: string): number {
+  if (source === '') {
+    return 0
+  }
+  return source.startsWith('@') ? 1 : 2
+}
+
+function importSource(useStatement: AST.UseStatement): string {
+  return useStatement.importPath ?? ''
+}
+
+function useStatementText(names: readonly string[], source: string): string {
+  const namesText = names.join(', ')
+  return source === '' ? `use ${namesText}` : `use ${namesText} from ${source}`
 }
 
 function shouldKeepImportedReference(

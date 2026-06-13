@@ -1,5 +1,6 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
+import { viewValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
@@ -13,11 +14,6 @@ export const viewValidationMessages = {
   renderBlockAliasPlacement: 'Aliases in render blocks must be declared before child view invocations.',
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
-} as const
-
-/** viewValidationCodes declares quick-fixable diagnostic codes for Tao view bodies. */
-export const viewValidationCodes = {
-  renderNotLast: 'tao-render-not-last',
 } as const
 
 const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao'])

@@ -4,7 +4,7 @@ import { Describe, Expect, Test } from '@shared/test'
 
 Describe('Tao AST injection helpers', () => {
   Test('resolves inject argument local names', async () => {
-    const parsed = await Parser.parseCode(`
+    const parseResult = await Parser.parseCode(`
       alias UserName = "Ro"
       ui Native Value text {
         render inject Value, Name UserName \`\`\`ts
@@ -12,9 +12,9 @@ Describe('Tao AST injection helpers', () => {
         \`\`\`
       }
     `)
-    Expect(parsed.diagnostics.map(diagnostic => diagnostic.message)).toEqual([])
+    Expect(parseResult.diagnostics).toEqual([])
 
-    const nativeView = parsed.ast.statements.find(statement =>
+    const nativeView = parseResult.entry.ast.statements.find(statement =>
       AST.isUiDeclaration(statement) && statement.name === 'Native'
     )
     Expect.Is(nativeView, AST.isUiDeclaration)

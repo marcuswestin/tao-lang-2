@@ -1,5 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { type LexResult, Parser } from '../parser-src/parser'
+import type { LexResult } from '../parser-src/parser'
+import { lexCodeWithErrors, testLexCode } from './test-parse'
 
 Describe('minimal Tao lexer', () => {
   Test('lexes identifiers', () => {
@@ -41,14 +42,11 @@ Describe('minimal Tao lexer', () => {
 })
 
 function expectLexes(source: string): LexResult {
-  const result = Parser.lexCode(source)
-  Expect(result.errors).toEqual([])
-  return result
+  return testLexCode(source)
 }
 
 function expectLexErrors(source: string, ...unexpectedCharacters: string[]): LexResult {
-  const result = Parser.lexCode(source)
-  Expect(result.errors.length).toBeGreaterThan(0)
+  const result = lexCodeWithErrors(source)
 
   for (const unexpectedCharacter of unexpectedCharacters) {
     Expect(

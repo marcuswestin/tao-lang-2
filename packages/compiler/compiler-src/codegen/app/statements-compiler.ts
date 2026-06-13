@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled, gen, genNoop } from '../codegen-util'
+import { type Compiled } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
@@ -12,14 +12,11 @@ export default {
       AppUi: Compile.AppUi,
       Injection: Compile.Injection,
       LayoutDeclaration: Compile.LayoutDeclaration,
-      RenderStatement: compileRenderStatement,
-      UseStatement: () => genNoop(),
+      ProjectDeclaration: Compile.ProjectDeclaration,
+      RenderStatement: Compile.RenderStatement,
+      UseStatement: Compile.UseStatement,
       UiDeclaration: Compile.UiDeclaration,
       ViewRender: Compile.ViewRender,
     })
   },
 } as const
-
-function compileRenderStatement(render: AST.RenderStatement): Compiled {
-  return gen`return ${Compile.RenderStatement(render)}`
-}

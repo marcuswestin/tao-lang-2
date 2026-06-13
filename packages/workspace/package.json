@@ -1,0 +1,17 @@
+{
+  "name": "tao-workspace",
+  "private": true,
+  "type": "module",
+  "module": "workspace-src/index.ts",
+  "exports": {
+    ".": "./workspace-src/index.ts"
+  },
+  "dependencies": {
+    "tao-ast-utils": "workspace:*",
+    "tao-compiler": "workspace:*",
+    "tao-parser": "workspace:*",
+    "tao-shared": "workspace:*",
+    "tao-validator": "workspace:*",
+    "typir-langium": "~0.3.3"
+  }
+}

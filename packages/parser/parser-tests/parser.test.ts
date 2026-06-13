@@ -1,7 +1,9 @@
+import { Packages } from '@ast-utils'
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { AST, Parser } from '../parser-src/parser'
-import { testParseCode } from './test-parse'
+import { Workspace } from '@workspace'
+import { AST } from '../parser-src/parser'
+import { testParseCode, testParseSyntax } from './test-parse'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
 const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
@@ -10,11 +12,12 @@ const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/
 
 Describe('minimal Tao parser', () => {
   Test('parses the current Kitchen Sink app', async () => {
-    const parsed = await Parser.parseFile(kitchenSinkPath)
+    const parseResult = await Workspace.parse(kitchenSinkPath)
 
-    Expect(parsed.diagnostics).toEqual([])
+    Expect(parseResult.diagnostics).toEqual([])
 
-    const [useStatement, app, greetingAlias, launchCountAlias, mainView, countTextView] = parsed.ast.statements
+    const [useStatement, app, greetingAlias, launchCountAlias, mainView, countTextView] =
+      parseResult.entry.ast.statements
     Expect.Is(useStatement, AST.isUseStatement)
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(greetingAlias, AST.isAliasDeclaration)
@@ -22,7 +25,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(mainView, AST.isUiDeclaration)
     Expect.Is(countTextView, AST.isUiDeclaration)
     Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Stack', 'Text'])
-    Expect(useStatement.modulePath).toBe('@tao/ui')
+    Expect(useStatement.importPath).toBe('@tao/ui')
 
     Expect(app.name).toBe('KitchenSink')
     const appRoot = app.block.statements[0]
@@ -90,8 +93,8 @@ Describe('minimal Tao parser', () => {
   })
 
   Test('parses inject render declarations', async () => {
-    const parsed = await testParseCode('ui Native { render inject ```ts\nreturn null\n``` }')
-    const view = parsed.ast.statements[0]
+    const parseResult = await testParseCode('ui Native { render inject ```ts\nreturn null\n``` }')
+    const view = parseResult.entry.ast.statements[0]
 
     Expect.Is(view, AST.isUiDeclaration)
 
@@ -101,7 +104,7 @@ Describe('minimal Tao parser', () => {
   })
 
   Test('parses layout declarations and child view invocations', async () => {
-    const parsed = await testParseCode(`
+    const parseResult = await testParseCode(`
       app MyApp { ui MainView }
       ui MainView {
         render Stack {
@@ -121,9 +124,9 @@ Describe('minimal Tao parser', () => {
         \`\`\`
       }
     `)
-    const layout = parsed.ast.statements.find(statement => AST.isLayoutDeclaration(statement))
+    const layout = parseResult.entry.ast.statements.find(AST.isLayoutDeclaration)
     Expect.Is(layout, AST.isLayoutDeclaration)
-    const mainView = parsed.ast.statements.find(statement =>
+    const mainView = parseResult.entry.ast.statements.find(statement =>
       AST.isUiDeclaration(statement) && statement.name === 'MainView'
     )
     Expect.Is(mainView, AST.isUiDeclaration)
@@ -137,7 +140,7 @@ Describe('minimal Tao parser', () => {
   })
 
   Test('parses aliases, number literals, and value references', async () => {
-    const parsed = await testParseCode(`
+    const parseResult = await testParseCode(`
       alias Greeting = "Hello"
       alias LaunchCount = 3
 
@@ -150,7 +153,7 @@ Describe('minimal Tao parser', () => {
       }
     `)
 
-    const [greetingAlias, launchCountAlias, _textView, _statTileView, mainView] = parsed.ast.statements
+    const [greetingAlias, launchCountAlias, _textView, _statTileView, mainView] = parseResult.entry.ast.statements
 
     Expect.Is(greetingAlias, AST.isAliasDeclaration)
     Expect.Is(launchCountAlias, AST.isAliasDeclaration)
@@ -174,7 +177,7 @@ Describe('minimal Tao parser', () => {
     Expect(textArg.target.ref?.name).toBe('LocalLabel')
 
     const statArgs = statRender.argumentList?.arguments.map(argument => argument.value)
-    Expect(statArgs?.map(argument => AST.isValueReference(argument))).toEqual([true, true])
+    Expect(statArgs?.map(AST.isValueReference)).toEqual([true, true])
     const [labelArg, countArg] = statArgs ?? []
     Expect.Is(labelArg, AST.isValueReference)
     Expect.Is(countArg, AST.isValueReference)
@@ -183,7 +186,7 @@ Describe('minimal Tao parser', () => {
   })
 
   Test('resolves value references through nested scope shadowing', async () => {
-    const parsed = await testParseCode(`
+    const parseResult = await testParseCode(`
       alias Greeting = "File"
 
       layout Stack {
@@ -211,7 +214,7 @@ Describe('minimal Tao parser', () => {
       }
     `)
 
-    const [fileGreetingAlias, _stackView, _textView, mainView] = parsed.ast.statements
+    const [fileGreetingAlias, _stackView, _textView, mainView] = parseResult.entry.ast.statements
     Expect.Is(fileGreetingAlias, AST.isAliasDeclaration)
     Expect.Is(mainView, AST.isUiDeclaration)
 
@@ -250,27 +253,27 @@ Describe('minimal Tao parser', () => {
   })
 
   Test('parses the target Kitchen Sink app', async () => {
-    const parsed = await Parser.parseFile(targetKitchenSinkPath)
+    const parseResult = await Workspace.parse(targetKitchenSinkPath)
 
-    Expect(parsed.diagnostics).toEqual([])
-    Expect(parsed.ast.statements.filter(AST.isAliasDeclaration).map(alias => alias.name)).toEqual([
+    Expect(parseResult.diagnostics).toEqual([])
+    Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration).map(alias => alias.name)).toEqual([
       'Greeting',
       'LaunchCount',
     ])
   })
 
   Test('parses the Type System Tests app', async () => {
-    const parsed = await Parser.parseFile(typeSystemTestsPath)
+    const parseResult = await Workspace.parse(typeSystemTestsPath)
 
-    Expect(parsed.diagnostics).toEqual([])
-    Expect(parsed.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(4)
+    Expect(parseResult.diagnostics).toEqual([])
+    Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(4)
   })
 
   Test('parses the Runtime Stdlib Tests app', async () => {
-    const parsed = await Parser.parseFile(runtimeStdlibTestsPath)
+    const parseResult = await Workspace.parse(runtimeStdlibTestsPath)
 
-    Expect(parsed.diagnostics).toEqual([])
-    Expect(parsed.ast.statements.filter(AST.isUseStatement)).toHaveLength(1)
+    Expect(parseResult.diagnostics).toEqual([])
+    Expect(parseResult.entry.ast.statements.filter(AST.isUseStatement)).toHaveLength(1)
   })
 
   Test('parses Tao source strings', async () => {
@@ -282,42 +285,128 @@ Describe('minimal Tao parser', () => {
         \`\`\`
       }
     `
-    const parsed = await testParseCode(source)
+    const parseResult = await testParseCode(source)
 
-    Expect(parsed.ast.statements).toHaveLength(2)
-    Expect.Is(parsed.ast.statements[0], AST.isAppDeclaration)
+    Expect(parseResult.entry.ast.statements).toHaveLength(2)
+    Expect.Is(parseResult.entry.ast.statements[0], AST.isAppDeclaration)
   })
 
-  Test('parses use statements and shared declarations', async () => {
-    const parsed = await testParseCode(`
+  Test('parses use statements and project-visible declarations', async () => {
+    const parseResult = await testParseSyntax(`
       app MyApp { ui MainView }
       use Text, Stack from ./
-      share alias Greeting = "Hello"
-      share ui MainView {
+      project alias Greeting = "Hello"
+      project ui MainView {
         render Stack {
           Text Greeting
         }
       }
-      share layout Stack {
+      project layout Stack {
         render inject \`\`\`ts
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      share ui Text Value text {
+      project ui Text Value text {
         render inject Value \`\`\`ts
           return <RN.Text>{Value}</RN.Text>
         \`\`\`
       }
     `)
 
-    Expect(parsed.diagnostics).toEqual([])
-    const [, useStatement, sharedAlias, mainView] = parsed.ast.statements
+    const [, useStatement, sharedAlias, mainView] = parseResult.entry.ast.statements
     Expect.Is(useStatement, AST.isUseStatement)
     Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text', 'Stack'])
-    Expect(useStatement.modulePath).toBe('./')
+    Expect(useStatement.importPath).toBe('./')
     Expect.Is(sharedAlias, AST.isAliasDeclaration)
-    Expect(sharedAlias.visibility).toBe('share')
+    Expect(sharedAlias.visibility).toBe('project')
     Expect.Is(mainView, AST.isUiDeclaration)
-    Expect(mainView.visibility).toBe('share')
+    Expect(mainView.visibility).toBe('project')
+  })
+
+  Test('parses parent-directory imports with trailing slashes', async () => {
+    const parseResult = await testParseSyntax(`
+      use Text from ../
+    `)
+
+    const [useStatement] = parseResult.entry.ast.statements
+    Expect.Is(useStatement, AST.isUseStatement)
+    Expect(useStatement.importPath).toBe('../')
+  })
+
+  Test('parses bare use statements', async () => {
+    const parseResult = await testParseSyntax(`
+      use Text
+      project ui Text Value text {
+        render inject Value \`\`\`ts
+          return null
+        \`\`\`
+      }
+    `)
+
+    const [useStatement] = parseResult.entry.ast.statements
+    Expect.Is(useStatement, AST.isUseStatement)
+    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text'])
+    Expect(useStatement.importPath).toBeUndefined()
+  })
+
+  Test('parses local package import paths', async () => {
+    const parseResult = await testParseSyntax(`
+      use Text from @bar
+      use Label from @bar/forms
+    `)
+
+    Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
+    Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
+    const [packageUse, subfolderUse] = parseResult.entry.ast.statements
+    Expect.Is(packageUse, AST.isUseStatement)
+    Expect.Is(subfolderUse, AST.isUseStatement)
+    Expect(packageUse.importPath).toBe('@bar')
+    Expect(subfolderUse.importPath).toBe('@bar/forms')
+  })
+
+  Test('parses project package visibility declarations', async () => {
+    const parseResult = await testParseCode(`
+      package alias PackageTitle = "Package"
+      project ui ProjectView { }
+      publish layout PublishedStack { }
+    `)
+
+    const [packageAlias, projectView, publishedLayout] = parseResult.entry.ast.statements
+    Expect.Is(packageAlias, AST.isAliasDeclaration)
+    Expect.Is(projectView, AST.isUiDeclaration)
+    Expect.Is(publishedLayout, AST.isLayoutDeclaration)
+    Expect(packageAlias.visibility).toBe('package')
+    Expect(projectView.visibility).toBe('project')
+    Expect(publishedLayout.visibility).toBe('publish')
+  })
+
+  Test('keeps project visibility scoped out of stdlib imports', () => {
+    const stdlibResolution: Packages.Resolution = {
+      relation: 'stdlib',
+      targetPath: '/tao-stdlib/tao/ui',
+      candidateMode: 'direct',
+      importPath: '@tao/ui',
+    }
+
+    Expect(Packages.isVisible('project', stdlibResolution)).toBe(false)
+    Expect(Packages.isVisible('publish', stdlibResolution)).toBe(true)
+  })
+
+  Test('parses local project metadata', async () => {
+    const parseResult = await testParseCode(`
+      project {
+        name "Package Access"
+        remote none
+        license MIT
+      }
+    `)
+
+    const [project] = parseResult.entry.ast.statements
+    Expect.Is(project, AST.isProjectDeclaration)
+    Expect(project.block.statements.map(statement => statement.$type)).toEqual([
+      AST.ProjectName.$type,
+      AST.ProjectRemote.$type,
+      AST.ProjectLicense.$type,
+    ])
   })
 })

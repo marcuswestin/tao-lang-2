@@ -9,7 +9,7 @@ entry ViewsGrammarEntrypoint:
     UiDeclaration | LayoutDeclaration;
 
 DeclarationVisibility returns string:
-    'share' | 'hide';
+    'package' | 'project' | 'publish';
 
 UiDeclaration:
     visibility=DeclarationVisibility? 'ui' name=ID parameterList=ParameterList? block=Block;

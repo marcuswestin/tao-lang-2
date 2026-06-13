@@ -1,6 +1,6 @@
 # Tao Project and Packages
 
-Status: future design draft. This document records intended package/project behavior, not the current implemented import surface. The current implementation supports `share`/`hide` visibility and `use ... from ...` imports for relative Tao modules and `@tao/...` stdlib modules; `package`/`project`/`publish`, bare `use Foo`, import aliases, external project installation, and package publishing remain future work.
+Status: partially implemented design draft. The current implementation supports local `project { name "..." remote none license ... }` metadata, `package`/`project`/`publish` visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...` stdlib paths, bare same-package `use Foo`, and local `@package[/subfolder]` imports through an in-memory project package index. Import aliases, `requires`, external project installation, lockfiles, remotes, CLI package commands, and package publishing remain future work.
 
 ## Creating a Tao Project
 

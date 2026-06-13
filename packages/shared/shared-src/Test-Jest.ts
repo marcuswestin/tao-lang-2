@@ -1,4 +1,14 @@
-import { AfterEach, Describe, Expect, Jest, type JestApi, setTestRuntime, Test, type TestRuntime } from './Test'
+import {
+  AfterEach,
+  Describe,
+  Expect,
+  Jest,
+  type JestApi,
+  setTestRuntime,
+  Test,
+  type TestRuntime,
+  withTaoFiles,
+} from './Test'
 
 const testGlobals = globalThis as unknown as Partial<TestRuntime>
 
@@ -10,7 +20,7 @@ setTestRuntime({
   test: getTestRuntime('test'),
 })
 
-export { AfterEach, Describe, Expect, Jest, Test }
+export { AfterEach, Describe, Expect, Jest, Test, withTaoFiles }
 
 function getTestRuntime<Key extends keyof Omit<TestRuntime, 'jest'>>(key: Key): TestRuntime[Key] {
   const value = testGlobals[key]

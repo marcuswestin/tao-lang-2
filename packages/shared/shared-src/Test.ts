@@ -1,3 +1,7 @@
+import { Assert } from './Assert'
+import * as FS from './FS'
+import * as Text from './Text'
+
 /** AfterEach wraps the active test runner's afterEach hook. */
 export const AfterEach = createTestRunnerFunction('afterEach')
 
@@ -16,6 +20,30 @@ export const Jest: JestApi = {
 
 /** Test wraps the active test runner's test case API. */
 export const Test = createTestRunnerFunction('test')
+
+/** withTaoFiles creates temporary Tao source files for a test and removes them afterward. */
+export async function withTaoFiles<const Files extends Record<string, string>>(
+  prefix: string,
+  files: Files,
+  testFunction: (paths: { [Path in keyof Files]: string }, rootDir: string) => Promise<void> | void,
+): Promise<void> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath(prefix, { cwd: FS.tmpdir() }))
+  const paths = {} as { [Path in keyof Files]: string }
+
+  try {
+    for (const relativePath of Object.keys(files) as Array<keyof Files & string>) {
+      const source = files[relativePath]
+      Assert.defined(source, 'Tao test fixture source exists', { relativePath })
+      const path = FS.resolvePath(relativePath, { cwd: rootDir })
+      await FS.writeText(path, Text.stripIndent(source))
+      paths[relativePath] = path
+    }
+
+    await testFunction(paths, rootDir)
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
 
 /** setTestRuntime configures the active runner used by Tao test wrappers. */
 export function setTestRuntime(nextRuntime: TestRuntime): void {
