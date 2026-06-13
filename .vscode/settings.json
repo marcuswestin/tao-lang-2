@@ -34,8 +34,6 @@
     ".direnv": true,
     ".android": true,
     ".codex": true,
-    ".claude": true,
-    "CLAUDE.md": true,
     ".cursor": true,
     ".gemini": true,
     ".dprint.jsonc": true,
