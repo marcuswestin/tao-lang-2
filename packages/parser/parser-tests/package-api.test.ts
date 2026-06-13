@@ -6,7 +6,7 @@ import { LSPWorkspace, Workspace } from '@workspace'
 import { testParseCode } from './test-parse'
 
 Describe('parser package API', () => {
-  Test('exports Parser, AST, Langium, Packages, and Workspace APIs', async () => {
+  Test('exports parser, AST, Langium, package, and workspace entrypoints', async () => {
     Expect(Parser.lexCode('app MyApp { ui MainView } ui MainView { }').errors).toEqual([])
 
     const parseResult = await testParseCode('app MyApp { ui MainView } ui MainView { }')

@@ -119,10 +119,10 @@ Packages can make code available to other packages, and even other projects.
 - You make a declaration available to other files by declaring its visibility: `package`, `project`, or `publish`
 
   - By default a declaration is visible only inside its own file
-    - `view Foo { ... }` cannot be used outside its file
+    - `ui Foo { ... }` cannot be used outside its file
 
   - To make declarations visible to other files in _the same package_ you use `package` visibility:
-    - `package view Foo { ... }`
+    - `package ui Foo { ... }`
       - `Foo` can now be referenced from other files in the same package, e.g:
       - `use Foo` from any file in the same package
       - `use Foo from ./` from a file in the same folder
@@ -130,22 +130,22 @@ Packages can make code available to other packages, and even other projects.
       - `use Foo from ../<parent-folder>` from a child folder (that's in the same package)
 
   - To make declarations visible to files _the same project_ you use `project` visibility:
-    - If `project view Bar { ... }` is declared in `@foo/filename.tao`:
+    - If `project ui Bar { ... }` is declared in `@foo/filename.tao`:
       - then `use Bar from @foo` can be used from any file in the same project
     - If `Bar` is declared in `@foo/bar/utils.tao`
       - then `use Bar from @foo/utils` can be used from any file
 
   - To make declarations visible _in other projects_ you use `publish`:
-    - If project `<project id>` has package `@animals` with `publish view Cat { ... }`
+    - If project `<project id>` has package `@animals` with `publish ui Cat { ... }`
       - then a project with `requires <project id> @animals`
       - can `use Cat from @animals`
 
   - A folder is not allowed to make two declarations with the same name visible
-    - If `@<package>/file.tao` has `package view Foo { ... }`, then:
-      - `@<package>/file2.tao` with `package view Foo { ... }` is not ok
-      - `@<package>/file2.tao` with `project view Foo { ... }` is not ok
-      - `@<package>/file2.tao` with `publish view Foo { ... }` is not ok
-      - `@<package>/subfolder/file3.tao` with `<visibility> view Foo { ... }` _is_ ok
+    - If `@<package>/file.tao` has `package ui Foo { ... }`, then:
+      - `@<package>/file2.tao` with `package ui Foo { ... }` is not ok
+      - `@<package>/file2.tao` with `project ui Foo { ... }` is not ok
+      - `@<package>/file2.tao` with `publish ui Foo { ... }` is not ok
+      - `@<package>/subfolder/file3.tao` with `<visibility> ui Foo { ... }` _is_ ok
 
 ## Using available code from other packages
 
@@ -173,10 +173,10 @@ Packages can make code available to other packages, and even other projects.
 
 - Declarations are referenced by their folder, not their file names
   - If `@<package>/<filename>.tao` has:
-    - `publish view Foo { ... }`, then Foo is available via `@<package>`:
+    - `publish ui Foo { ... }`, then Foo is available via `@<package>`:
     - `use Foo from @<package>`
   - If `@<package>/<subfolder>/<filename>.tao` has:
-    - `publish view Bar { ... }` then Bar is available via `@<package>/subfolder`:
+    - `publish ui Bar { ... }` then Bar is available via `@<package>/subfolder`:
     - `use Bar from @<package>/<subfolder>`
 
 ### Package cycles and order of evalutation

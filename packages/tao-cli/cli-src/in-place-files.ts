@@ -34,14 +34,11 @@ export async function runOnTaoFiles(
 /** workspaceRootForInPlacePath returns the package-aware workspace root for an in-place command root. */
 export async function workspaceRootForInPlacePath(path: string): Promise<string> {
   const root = FS.resolvePath(path)
-  if (!await FS.isFile(root)) {
-    return root
-  }
   const cwd = FS.resolvePath('.')
   if (pathIsWithin(root, cwd)) {
     return cwd
   }
-  return packageAwareFileRoot(root)
+  return packageAwarePathRoot(root, await FS.isFile(root))
 }
 
 /** compareOnly reports whether `after` differs from `before` without writing the file. */
@@ -67,15 +64,16 @@ function isGeneratedOrVendoredTaoDirectory(name: string): boolean {
   return name === 'node_modules' || name.startsWith('_gen_') || name.startsWith('old-')
 }
 
-function packageAwareFileRoot(filePath: string): string {
-  const parts = FS.slashPath(filePath).split('/')
-  for (let index = parts.length - 2; index >= 0; index--) {
+function packageAwarePathRoot(path: string, isFile: boolean): string {
+  const parts = FS.slashPath(path).split('/')
+  const firstPackageCandidate = isFile ? parts.length - 2 : parts.length - 1
+  for (let index = firstPackageCandidate; index >= 0; index--) {
     const part = parts[index]!
     if (part.startsWith('@') && part.length > 1) {
       return FS.resolvePath(parts.slice(0, index).join('/'))
     }
   }
-  return FS.dirname(filePath)
+  return isFile ? FS.dirname(path) : path
 }
 
 function pathIsWithin(path: string, directoryPath: string): boolean {

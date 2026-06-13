@@ -281,6 +281,28 @@ Describe('organizeSource canonical statement order', () => {
     )
   })
 
+  Test('drops comments attached to imports that are removed', async () => {
+    await testOrganizeSource(
+      `
+        // unused import
+        use Button from @tao/ui
+        // rendered text import
+        use Text from @tao/ui
+        ui MainView {
+           render Text "hi"
+        }
+      `,
+      `
+        // rendered text import
+        use Text from @tao/ui
+
+        ui MainView {
+           render Text "hi"
+        }
+      `,
+    )
+  })
+
   Test('preserves trailing comments after the last statement', async () => {
     await testOrganizeSource(
       `
@@ -373,6 +395,29 @@ Describe('removeUnusedImports', () => {
     `)
 
     Expect(await SourceActions.removeUnusedImports(document)).toBeUndefined()
+  })
+
+  Test('drops comments attached to fully removed imports', async () => {
+    const document = await parseDocument(`
+      // unused import
+      use Button from @tao/ui
+      // kept import
+      use Text from @tao/ui
+      ui MainView {
+         render Text "hi"
+      }
+    `)
+
+    Expect(await SourceActions.removeUnusedImports(document)).toBe(`${
+      Text.stripIndent(`
+      // kept import
+      use Text from @tao/ui
+
+      ui MainView {
+         render Text "hi"
+      }
+    `)
+    }\n`)
   })
 })
 

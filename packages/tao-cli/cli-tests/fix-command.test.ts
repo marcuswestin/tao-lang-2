@@ -73,4 +73,28 @@ Describe('tao fix', () => {
       }\n`)
     })
   })
+
+  Test('uses package-aware workspace roots for explicit nested package directories', async () => {
+    await withTaoFixture({
+      'Packages/@cards/screens/Main.tao': Text.stripIndent(`
+        use LocalText, Missing from @cards/widgets
+
+        ui MainView { }
+      `),
+      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+    }, async (rootDir) => {
+      const directory = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
+      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
+      const results = await runFix(directory)
+
+      Expect(statusByFile(results, rootDir)).toEqual({ 'Packages/@cards/screens/Main.tao': 'changed' })
+      Expect(await FS.readText(path)).toBe(`${
+        Text.stripIndent(`
+        use Missing from @cards/widgets
+
+        ui MainView { }
+      `)
+      }\n`)
+    })
+  })
 })

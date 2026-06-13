@@ -8,24 +8,31 @@ export function synthesizeImportSection(
   useSlices: readonly StatementSlice<AST.UseStatement>[],
 ): string {
   const usedNames = ASTUtils.referencedNames(file)
-  const namesByModule = new Map<string, Set<string>>()
+  const groups = new Map<string, { names: Set<string>; leading: string[] }>()
   for (const slice of useSlices) {
     const source = importSource(slice.statement)
-    const names = namesByModule.get(source) ?? new Set<string>()
+    const keptNames = slice.statement.importedDeclarations
+      .filter(reference => shouldKeepImportedReference(reference, usedNames))
+      .map(reference => reference.$refText)
+    if (keptNames.length === 0) {
+      continue
+    }
+    const group = groups.get(source) ?? { names: new Set<string>(), leading: [] }
     for (const reference of slice.statement.importedDeclarations) {
       if (shouldKeepImportedReference(reference, usedNames)) {
-        names.add(reference.$refText)
+        group.names.add(reference.$refText)
       }
     }
-    namesByModule.set(source, names)
+    if (slice.leading !== '') {
+      group.leading.push(slice.leading)
+    }
+    groups.set(source, group)
   }
 
-  const importLines = [...namesByModule.entries()]
-    .filter(([, names]) => names.size > 0)
+  return [...groups.entries()]
     .sort(([a], [b]) => compareImportSources(a, b))
-    .map(([source, names]) => useStatementText([...names].sort(), source))
-  const comments = useSlices.map(slice => slice.leading).filter(leading => leading !== '')
-  return [...comments, ...importLines].join('\n')
+    .map(([source, group]) => [...group.leading, useStatementText([...group.names].sort(), source)].join('\n'))
+    .join('\n')
 }
 
 /** removeUnusedImportNames rewrites use-statement slices without unused names, dropping empty statements. */
@@ -49,7 +56,6 @@ export function removeUnusedImportNames(
       ),
     ]
     if (names.length === 0) {
-      pieces.push({ text: slice.leading, blankBefore })
       continue
     }
     const statementText = useStatementText(names, importSource(slice.statement))
