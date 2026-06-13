@@ -2,6 +2,81 @@
 
 Track the clean, stepwise Tao reimplementation. Keep this current as each slice is ready for Ro review and commit.
 
+## MVP Roadmap
+
+Assuming current in-progress branches land first: formatter/`tao fmt`, `tao fix`/source actions, local package access/project metadata, and CLI workflow.
+
+**V1/MVP Projects**
+
+- [ ] Define canonical buildable app target and acceptance bar
+  - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
+
+- [ ] Implement Tao-native testing v0
+  - Inline/sidecar `test`, `expect rendered`, `expect missing`, test-plan IR, runtime Jest execution through the existing Expo harness.
+
+- [ ] Add `tao test` and migrate Test Apps to Tao-authored behavior tests
+  - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures.
+
+- [ ] Add typed TS value injection expressions
+  - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
+
+- [ ] Expand core expression/value language
+  - Booleans, string interpolation, arithmetic, comparison, basic boolean operators, member access, call expressions, and better diagnostics.
+
+- [ ] Add item/list/custom type MVP
+  - Item/object literals, list literals, typed item constructors, simple custom type declarations, and field/member validation.
+
+- [ ] Add state and action MVP
+  - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
+
+- [ ] Add control flow and collection rendering MVP
+  - `if/else`, `when` if still preferred, pure functions/returns, `.Empty`, `for` over lists/query results, and formatter/compiler support.
+
+- [ ] Add interaction event MVP
+  - Press/change/submit/focus behavior for built-in controls, event-to-action binding, disabled/loading behavior, and testable event semantics.
+
+- [ ] Add layout/style arguments and app-shell baseline
+  - `[gap 8, pad 12, width fill]`, runtime layout lowering, safe default app frame, safe area/keyboard basics, and deterministic cross-platform behavior.
+
+- [ ] Add render IDs and minimal accessibility semantics
+  - Stable test/accessibility identifiers, labels, roles for built-ins, useful TextInput/Button semantics, and validator guidance.
+
+- [ ] Add forms and inputs MVP
+  - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
+
+- [ ] Add navigation and routing MVP
+  - `navigator`, stack/tabs, screen params, path metadata, `navigation push/pop/tab`, generated React Navigation runtime, and route tests.
+
+- [ ] Add datasource schema and query MVP
+  - `data`, entities/fields/relationships, `query`, `where`, ordering, `guard`, typed query rows, and Memory provider support.
+
+- [ ] Add data writes and provider runtime MVP
+  - `create`, strict row-handle `update`, provider-neutral IR, local InstantDB support, local dev setup, and post-write UI consistency.
+
+- [ ] Add loading, empty, and error-state MVP
+  - Practical `guard`/boundary semantics, app-visible failure states, provider/runtime errors, and canonical patterns for first apps.
+
+- [ ] Add beautiful app defaults mini slice
+  - Polished default text/input/button styles, seeded accent, neutral palette, app-shell content frame, empty/error/loading surfaces.
+
+- [ ] Add `tao create` project scaffold
+  - New app folder, minimal Tao app, default package layout, AGENTS/docs, dev/test scripts, and immediate “open and run” path.
+
+- [ ] Finish dev loop/device experience
+  - `tao dev`/`./dev` parity, app switching, file watching across imports, iOS device LAN support, Android/web parity where practical.
+
+- [ ] Add production/staging runtime targets
+  - Build profiles, environment handling, runtime manifest boundaries, secrets policy, Expo web/native build expectations.
+
+- [ ] Polish IDE MVP
+  - Syntax, diagnostics, formatting, source actions, go-to-definition/reference basics, and live preview once runtime/test flow is stable.
+
+- [ ] Complete Kitchen Sink as the v1 feature showcase
+  - One navigable app demonstrating every shipped v1 feature, separate from focused Test Apps.
+
+- [ ] Complete canonical app and v1 hardening
+  - Build the selected real app end to end, close gaps, tighten diagnostics/docs, remove stale roadmap/spec drift, and validate `prep`.
+
 ## Ro's STACK
 
 - [ ] Create "validators" directory for all the "*-validator.ts" files
@@ -10,6 +85,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
 - [x] Add runtime stdlib and module imports
   - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough package/project/publish visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
+- [ ] Consider only allowing state inside view declarations. App state maybe should be a datasource, that could be persisted to disk
 - [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
@@ -21,25 +97,6 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
 - [ ] Update target kitchen sink to have lots of intended parts featured
-- [x] Have `./dev [path/to/tao/app]` without command start a dev TUI, which:
-  - defaults to Kitchen Sink when no app path is supplied
-  - compiles the tao app
-  - launches the app in an expo runtime, opening web/ios and already-available android targets
-  - watches the tao app folder and recompiles on changes, including files not yet in the imported dependency tree
-  - watches the compiler/runtime/etc and its dependencies and recompiles on changes
-  - accepts input with
-    - 'd' to quit and reload the dev process
-    - 'r' to reload the Expo app
-    - 'w' to open Expo web
-    - 'i' to open Expo iOS
-    - 'a' to open Expo Android
-    - 't' to run all tests
-    - 'q' to quit
-    - 's' to switch app
-    - 'e' to build and install the ide extension
-    - 'f' to fix
-    - 'c' to clean, reinstall deps, quit, and reload
-    - 'p' to run prep
 - [ ] Add generic compiled-add test declarations
   - Should this map to test writing for the actual apps?
 - [ ] Enable over-the-network dev app running for ios device
@@ -99,3 +156,27 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [x] Add validator, type system, and IDE diagnostics
     - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
   - [x] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
+- 26-06-13
+- [x] Port over scope functionality
+  - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
+- [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
+- [x] Add runtime stdlib and module imports
+- [x] Have `./dev [path/to/tao/app]` without command start a dev TUI, which:
+  - defaults to Kitchen Sink when no app path is supplied
+  - compiles the tao app
+  - launches the app in an expo runtime, opening web/ios and already-available android targets
+  - watches the tao app folder and recompiles on changes, including files not yet in the imported dependency tree
+  - watches the compiler/runtime/etc and its dependencies and recompiles on changes
+  - accepts input with
+    - 'd' to quit and reload the dev process
+    - 'r' to reload the Expo app
+    - 'w' to open Expo web
+    - 'i' to open Expo iOS
+    - 'a' to open Expo Android
+    - 't' to run all tests
+    - 'q' to quit
+    - 's' to switch app
+    - 'e' to build and install the ide extension
+    - 'f' to fix
+    - 'c' to clean, reinstall deps, quit, and reload
+    - 'p' to run prep

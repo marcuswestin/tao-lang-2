@@ -40,8 +40,6 @@
     ".direnv": true,
     ".android": true,
     ".codex": true,
-    ".claude": true,
-    "CLAUDE.md": true,
     ".cursor": true,
     "**/.expo": true,
     ".gemini": true,
