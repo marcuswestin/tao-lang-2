@@ -27,7 +27,10 @@
       {
         "language": "tao",
         "scopeName": "source.tao-lang",
-        "path": "./ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json"
+        "path": "./ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.ts.tao-lang": "typescriptreact"
+        }
       }
     ],
     "languages": [
@@ -43,7 +46,45 @@
         ],
         "configuration": "./language-configuration.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "tao.fixSource",
+        "title": "Tao: Fix Source"
+      },
+      {
+        "command": "tao.organizeSource",
+        "title": "Tao: Organize Source"
+      },
+      {
+        "command": "tao.removeUnusedImports",
+        "title": "Tao: Remove Unused Imports"
+      },
+      {
+        "command": "tao.moveRendersLast",
+        "title": "Tao: Move Renders Last"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "tao.fixSource",
+          "when": "editorLangId == tao"
+        },
+        {
+          "command": "tao.organizeSource",
+          "when": "editorLangId == tao"
+        },
+        {
+          "command": "tao.removeUnusedImports",
+          "when": "editorLangId == tao"
+        },
+        {
+          "command": "tao.moveRendersLast",
+          "when": "editorLangId == tao"
+        }
+      ]
+    }
   },
   "dependencies": {
     "tao-formatter": "workspace:*",

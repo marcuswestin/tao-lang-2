@@ -4,6 +4,7 @@ import { TaoFormatter } from 'tao-formatter'
 import { AST, Langium } from 'tao-parser'
 import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
 import { createValidatorLspServices } from 'tao-validator/langium-services'
+import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-grammar'
 
 Describe('Tao IDE extension smoke', () => {
   Test('declares extension and language server entrypoint build inputs', async () => {
@@ -29,6 +30,38 @@ Describe('Tao IDE extension smoke', () => {
       { cwd: import.meta.dir },
     )
     Expect(await FS.isFile(grammarPath)).toBe(true)
+  })
+
+  Test('merges Tao syntax highlighting with embedded TypeScript fences', async () => {
+    const generatedGrammar = await FS.readJson<Record<string, unknown>>(
+      FS.resolvePath('../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', { cwd: import.meta.dir }),
+    )
+    const overlayGrammar = await FS.readJson<Record<string, unknown>>(
+      FS.resolvePath('../ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json', { cwd: import.meta.dir }),
+    )
+    const merged = mergeTaoTextMateGrammar(generatedGrammar, overlayGrammar)
+
+    Expect(JSON.stringify(merged)).toContain('meta.embedded.block.ts.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('source.tsx')
+    Expect(JSON.stringify(merged)).toContain('meta.template.expression.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('constant.numeric.tao-lang')
+  })
+
+  Test('contributes Tao command-palette source actions', async () => {
+    const packageJson = await FS.readJson<IdeExtensionPackageJson>(
+      FS.resolvePath('../package.json', { cwd: import.meta.dir }),
+    )
+    const commands = packageJson.contributes.commands.map(command => command.title)
+
+    Expect(commands).toEqual([
+      'Tao: Fix Source',
+      'Tao: Organize Source',
+      'Tao: Remove Unused Imports',
+      'Tao: Move Renders Last',
+    ])
+    Expect(packageJson.contributes.grammars[0]?.embeddedLanguages).toEqual({
+      'meta.embedded.block.ts.tao-lang': 'typescriptreact',
+    })
   })
 
   Test('reports structural and Typir diagnostics through Langium services', async () => {
@@ -137,7 +170,7 @@ Describe('Tao IDE extension smoke', () => {
       range: fullRange(document),
       context: { diagnostics: [], only: ['source.organizeImports'] },
     })
-    const organize = actions?.find(action => 'title' in action && action.title === 'tao: Organize Use Statements')
+    const organize = actions?.find(action => 'title' in action && action.title === 'Tao: Organize Use Statements')
 
     Expect(organize && 'kind' in organize ? organize.kind : undefined).toBe('source.organizeImports')
     const edits = organize && 'edit' in organize ? organize.edit?.changes?.[document.textDocument.uri] : undefined
@@ -158,7 +191,7 @@ Describe('Tao IDE extension smoke', () => {
         only: ['quickfix'],
       },
     })
-    const moveRender = actions?.find(action => 'title' in action && action.title === 'tao: Move render to end')
+    const moveRender = actions?.find(action => 'title' in action && action.title === 'Tao: Move render to end')
 
     const edits = moveRender && 'edit' in moveRender ? moveRender.edit?.changes?.[document.textDocument.uri] : undefined
     Expect(edits?.[0]?.newText).toBe('ui MainView {\n   alias Greeting = "hi"\n   render Text Greeting\n}\n')
@@ -223,4 +256,13 @@ async function validateWithLanguageServerServices(source: string): Promise<strin
 
 type IdeExtensionPackageJson = {
   main: string
+  contributes: {
+    commands: {
+      command: string
+      title: string
+    }[]
+    grammars: {
+      embeddedLanguages?: Record<string, string>
+    }[]
+  }
 }

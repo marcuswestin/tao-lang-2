@@ -25,7 +25,7 @@ export class TaoCodeActionProvider implements Langium.CodeActionProvider {
     if (kindRequested(params, organizeImportsKind)) {
       organized = await SourceActions.organizeSource(taoDocument)
       if (organized !== undefined) {
-        actions.push(action('tao: Organize Use Statements', organizeImportsKind, taoDocument, organized))
+        actions.push(action('Tao: Organize Use Statements', organizeImportsKind, taoDocument, organized))
       }
     }
     if (!kindRequested(params, quickFixKind)) {
@@ -36,21 +36,21 @@ export class TaoCodeActionProvider implements Langium.CodeActionProvider {
     if (organizeDiagnostics.length > 0) {
       organized ??= await SourceActions.organizeSource(taoDocument)
       if (organized !== undefined) {
-        actions.push(action('tao: Organize Use Statements', quickFixKind, taoDocument, organized, organizeDiagnostics))
+        actions.push(action('Tao: Organize Use Statements', quickFixKind, taoDocument, organized, organizeDiagnostics))
       }
     }
     const unusedDiagnostics = diagnosticsWithCodes(params, [useValidationCodes.unusedImport])
     if (unusedDiagnostics.length > 0) {
       const removed = await SourceActions.removeUnusedImports(taoDocument)
       if (removed !== undefined) {
-        actions.push(action('tao: Remove unused imports', quickFixKind, taoDocument, removed, unusedDiagnostics))
+        actions.push(action('Tao: Remove unused imports', quickFixKind, taoDocument, removed, unusedDiagnostics))
       }
     }
     const renderDiagnostics = diagnosticsWithCodes(params, [viewValidationCodes.renderNotLast])
     if (renderDiagnostics.length > 0) {
       const moved = await SourceActions.moveRendersLast(taoDocument)
       if (moved !== undefined) {
-        actions.push(action('tao: Move render to end', quickFixKind, taoDocument, moved, renderDiagnostics))
+        actions.push(action('Tao: Move render to end', quickFixKind, taoDocument, moved, renderDiagnostics))
       }
     }
     return actions
