@@ -10,7 +10,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add runtime stdlib and module imports
   - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough `share`/visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
 - [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
-- [x] Wire the formatter into the IDE extension language server and add `tao fmt` (tao-cli), run on Apps by `just fmt`/`fix`
+- [x] Wire the formatter into the IDE extension language server and add repo-wide `tao fmt`/`tao fix`/`tao check` (tao-cli), run by `just fmt`/`fix`/`check`
 - [x] Add LSP source actions: `tao: Organize Use Statements` (source.organizeImports), unused/out-of-section import warnings with quick fixes, a move-render-last quick fix, and `tao fix` applying all source fixes (run by `just fix`)
 - [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`

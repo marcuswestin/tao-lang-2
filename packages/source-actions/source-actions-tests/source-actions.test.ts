@@ -424,8 +424,9 @@ Describe('fixSource', () => {
          alias Greeting = "hi"
       }
     `)
+    const fixed = await SourceActions.fixSource(document)
 
-    Expect(await SourceActions.fixSource(document)).toBe(`${
+    Expect(fixed).toBe(`${
       Text.stripIndent(`
       use Text from @tao/ui
 
@@ -439,5 +440,6 @@ Describe('fixSource', () => {
       }
     `)
     }\n`)
+    Expect(await SourceActions.fixSource(await parseRawDocument(fixed))).toBe(fixed)
   })
 })

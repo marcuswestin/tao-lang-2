@@ -211,6 +211,19 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('does not treat block-comment markers inside strings as block comments', async () => {
+    await testFormatCode(
+      `ui MainView { render Stack { Text "/*" { Text "hi" } } }`,
+      `
+        ui MainView {
+           render Stack {
+              Text "/*" {
+                 Text "hi"
+        }  }  }
+      `,
+    )
+  })
+
   Test('formats empty blocks as braces with one interior space', async () => {
     await testFormatCode(
       `ui MainView {render Stack{Text "a"{   }}}`,

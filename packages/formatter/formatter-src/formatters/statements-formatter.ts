@@ -38,14 +38,14 @@ export function collapseClosingBraces(text: string): string {
       index = fenceEnd + 1
       continue
     }
-    const startsInBlockComment = inBlockComment
-    const startsBlockComment = !inBlockComment && line.includes('/*')
-    if (startsInBlockComment || startsBlockComment) {
+    const blockComment = scanBlockCommentLine(line, inBlockComment)
+    if (inBlockComment || blockComment.enteredBlockComment) {
       result.push(line)
-      inBlockComment = nextBlockCommentState(line, inBlockComment)
+      inBlockComment = blockComment.inBlockComment
       index++
       continue
     }
+    inBlockComment = blockComment.inBlockComment
     let runEnd = index
     while (isClosingBraceLine(lines[runEnd]!) && runEnd + 1 < lines.length && isClosingBraceLine(lines[runEnd + 1]!)) {
       runEnd++
@@ -66,26 +66,52 @@ function isClosingBraceLine(line: string): boolean {
   return /^[ \t]*\}$/.test(line)
 }
 
-function nextBlockCommentState(line: string, inBlockComment: boolean): boolean {
+function scanBlockCommentLine(
+  line: string,
+  inBlockComment: boolean,
+): { enteredBlockComment: boolean; inBlockComment: boolean } {
   let inside = inBlockComment
+  let enteredBlockComment = false
+  let insideString = false
   let index = 0
   while (index < line.length) {
     if (inside) {
       const end = line.indexOf('*/', index)
       if (end === -1) {
-        return true
+        return { enteredBlockComment, inBlockComment: true }
       }
       inside = false
       index = end + 2
       continue
     }
 
-    const start = line.indexOf('/*', index)
-    if (start === -1) {
-      return false
+    if (insideString) {
+      if (line[index] === '\\') {
+        index += 2
+        continue
+      }
+      if (line[index] === '"') {
+        insideString = false
+      }
+      index++
+      continue
     }
-    inside = true
-    index = start + 2
+
+    if (line.startsWith('//', index)) {
+      return { enteredBlockComment, inBlockComment: false }
+    }
+    if (line[index] === '"') {
+      insideString = true
+      index++
+      continue
+    }
+    if (line.startsWith('/*', index)) {
+      enteredBlockComment = true
+      inside = true
+      index += 2
+      continue
+    }
+    index++
   }
-  return inside
+  return { enteredBlockComment, inBlockComment: inside }
 }
