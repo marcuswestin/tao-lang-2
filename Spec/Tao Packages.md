@@ -165,7 +165,7 @@ Packages can make code available to other packages, and even other projects.
       - `use Foo from ../<sibling folder>`
       - `use Bar from ../<sibling folder>/<nephew folder>`
 
-- Cross-package references are referenced by `@<package name`, from anywhere in the project
+- Cross-package references are referenced by `@<package>`, from anywhere in the project
   - Cross-package references _do not_ use relative paths
   - `use Cat from @cat` is ok
   - `use Mat from ./@mat` not ok

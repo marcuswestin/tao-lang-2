@@ -11,19 +11,15 @@ export function synthesizeImportSection(
   const groups = new Map<string, { names: Set<string>; leading: string[] }>()
   for (const slice of useSlices) {
     const source = importSource(slice.statement)
-    const keptNames = slice.statement.importedDeclarations
-      .filter(reference => shouldKeepImportedReference(reference, usedNames))
-      .map(reference => reference.$refText)
-    if (keptNames.length === 0) {
+    const keptReferences = keptImportedReferences(slice.statement, usedNames)
+    if (keptReferences.length === 0) {
       continue
     }
     const group = groups.get(source) ?? { names: new Set<string>(), leading: [] }
-    for (const reference of slice.statement.importedDeclarations) {
-      if (shouldKeepImportedReference(reference, usedNames)) {
-        group.names.add(reference.$refText)
-      }
+    for (const reference of keptReferences) {
+      group.names.add(reference.$refText)
     }
-    if (slice.leading !== '') {
+    if (keepsOriginalImportList(slice.statement, keptReferences) && slice.leading !== '') {
       group.leading.push(slice.leading)
     }
     groups.set(source, group)
@@ -48,20 +44,16 @@ export function removeUnusedImportNames(
       pieces.push({ text: sliceText(slice), blankBefore })
       continue
     }
-    const names = [
-      ...new Set(
-        slice.statement.importedDeclarations
-          .filter(reference => shouldKeepImportedReference(reference, usedNames))
-          .map(reference => reference.$refText),
-      ),
-    ]
+    const keptReferences = keptImportedReferences(slice.statement, usedNames)
+    const names = [...new Set(keptReferences.map(reference => reference.$refText))]
     if (names.length === 0) {
       continue
     }
     const statementText = useStatementText(names, importSource(slice.statement))
+    const keepLeading = keepsOriginalImportList(slice.statement, keptReferences)
     pieces.push({
-      text: slice.leading === '' ? statementText : `${slice.leading}\n${statementText}`,
-      blankBefore,
+      text: !keepLeading || slice.leading === '' ? statementText : `${slice.leading}\n${statementText}`,
+      blankBefore: keepLeading && blankBefore,
     })
   }
   return pieces
@@ -91,6 +83,20 @@ function importSource(useStatement: AST.UseStatement): string {
 function useStatementText(names: readonly string[], source: string): string {
   const namesText = names.join(', ')
   return source === '' ? `use ${namesText}` : `use ${namesText} from ${source}`
+}
+
+function keptImportedReferences(
+  useStatement: AST.UseStatement,
+  usedNames: Set<string>,
+): AST.UseStatement['importedDeclarations'] {
+  return useStatement.importedDeclarations.filter(reference => shouldKeepImportedReference(reference, usedNames))
+}
+
+function keepsOriginalImportList(
+  useStatement: AST.UseStatement,
+  keptReferences: AST.UseStatement['importedDeclarations'],
+): boolean {
+  return keptReferences.length === useStatement.importedDeclarations.length
 }
 
 function shouldKeepImportedReference(

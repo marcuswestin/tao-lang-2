@@ -1,7 +1,7 @@
 import { FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runFix } from '../cli-src/fix-command'
-import { statusByFile, withTaoFixture } from './test-cli-files'
+import { statusByBasename, statusByFile, withCwd, withTaoFixture } from './test-cli-files'
 
 Describe('tao fix', () => {
   Test('applies render moves, import organization, and formatting in place', async () => {
@@ -95,6 +95,39 @@ Describe('tao fix', () => {
         ui MainView { }
       `)
       }\n`)
+    })
+  })
+
+  Test('uses package-aware workspace roots for relative paths inside nested package directories', async () => {
+    const originalSource = Text.stripIndent(`
+      use LocalText, Missing from @cards/widgets
+
+      ui MainView { }
+    `)
+    const fixedSource = `${
+      Text.stripIndent(`
+      use Missing from @cards/widgets
+
+      ui MainView { }
+    `)
+    }\n`
+    await withTaoFixture({
+      'Packages/@cards/screens/Main.tao': originalSource,
+      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+    }, async (rootDir) => {
+      const cwd = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
+      const path = FS.resolvePath('Main.tao', { cwd })
+
+      await withCwd(cwd, async () => {
+        Expect(statusByBasename(await runFix('.'))).toEqual({ 'Main.tao': 'changed' })
+      })
+      Expect(await FS.readText(path)).toBe(fixedSource)
+
+      await FS.writeText(path, originalSource)
+      await withCwd(cwd, async () => {
+        Expect(statusByBasename(await runFix('Main.tao'))).toEqual({ 'Main.tao': 'changed' })
+      })
+      Expect(await FS.readText(path)).toBe(fixedSource)
     })
   })
 })

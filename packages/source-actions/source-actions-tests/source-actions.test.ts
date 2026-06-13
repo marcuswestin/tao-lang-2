@@ -303,6 +303,25 @@ Describe('organizeSource canonical statement order', () => {
     )
   })
 
+  Test('drops statement comments when organizing partially pruned imports', async () => {
+    await testOrganizeSource(
+      `
+        // unused button import
+        use Text, Button from @tao/ui
+        ui MainView {
+           render Text "hi"
+        }
+      `,
+      `
+        use Text from @tao/ui
+
+        ui MainView {
+           render Text "hi"
+        }
+      `,
+    )
+  })
+
   Test('preserves trailing comments after the last statement', async () => {
     await testOrganizeSource(
       `
@@ -411,6 +430,26 @@ Describe('removeUnusedImports', () => {
     Expect(await SourceActions.removeUnusedImports(document)).toBe(`${
       Text.stripIndent(`
       // kept import
+      use Text from @tao/ui
+
+      ui MainView {
+         render Text "hi"
+      }
+    `)
+    }\n`)
+  })
+
+  Test('drops statement comments when partially pruning import names', async () => {
+    const document = await parseDocument(`
+      // unused button import
+      use Text, Button from @tao/ui
+      ui MainView {
+         render Text "hi"
+      }
+    `)
+
+    Expect(await SourceActions.removeUnusedImports(document)).toBe(`${
+      Text.stripIndent(`
       use Text from @tao/ui
 
       ui MainView {

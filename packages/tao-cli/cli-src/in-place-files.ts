@@ -36,7 +36,7 @@ export async function workspaceRootForInPlacePath(path: string): Promise<string>
   const root = FS.resolvePath(path)
   const cwd = FS.resolvePath('.')
   if (pathIsWithin(root, cwd)) {
-    return cwd
+    return packageContainerRoot(cwd) ?? cwd
   }
   return packageAwarePathRoot(root, await FS.isFile(root))
 }
@@ -65,15 +65,22 @@ function isGeneratedOrVendoredTaoDirectory(name: string): boolean {
 }
 
 function packageAwarePathRoot(path: string, isFile: boolean): string {
-  const parts = FS.slashPath(path).split('/')
-  const firstPackageCandidate = isFile ? parts.length - 2 : parts.length - 1
-  for (let index = firstPackageCandidate; index >= 0; index--) {
+  const packageRoot = packageContainerRoot(isFile ? FS.dirname(path) : path)
+  if (packageRoot !== undefined) {
+    return packageRoot
+  }
+  return isFile ? FS.dirname(path) : path
+}
+
+function packageContainerRoot(directoryPath: string): string | undefined {
+  const parts = FS.slashPath(directoryPath).split('/')
+  for (let index = parts.length - 1; index >= 0; index--) {
     const part = parts[index]!
     if (part.startsWith('@') && part.length > 1) {
       return FS.resolvePath(parts.slice(0, index).join('/'))
     }
   }
-  return isFile ? FS.dirname(path) : path
+  return undefined
 }
 
 function pathIsWithin(path: string, directoryPath: string): boolean {
