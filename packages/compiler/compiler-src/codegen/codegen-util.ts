@@ -32,6 +32,11 @@ export function genNoop(): Compiled {
   return new Langium.CompositeGeneratorNode()
 }
 
+/** genComment compiles one line comment into a structured generator node. */
+export function genComment(text: string): Compiled {
+  return gen`// ${text}`
+}
+
 /** genName compiles a named node's name as a generated code name token. */
 export function genName(node: NamedNode): Compiled {
   return gen`${node.name}`

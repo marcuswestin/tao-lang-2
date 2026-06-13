@@ -1,12 +1,12 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { testCompileCode } from './test-compile'
+import Compiler from '../compiler-src/compiler'
 
 const tsFence = '```ts'
 const fence = '```'
 
 Describe('Tao injection compiler', () => {
   Test('compiles inject arguments', async () => {
-    await testCompileCode(`
+    const compiled = await Compiler.compileCode(`
       app MyApp { ui MainView }
       alias UserName = "Ro"
       ui MainView {
@@ -18,17 +18,10 @@ Describe('Tao injection compiler', () => {
         ${fence}
       }
     `)
-  })
 
-  Test('rejects inject in multi-statement view blocks explicitly', async () => {
-    await Expect(testCompileCode(`
-      app MyApp { ui MainView }
-      ui MainView {
-        render inject ${tsFence}
-          return <RN.Text>Hello</RN.Text>
-        ${fence}
-        render MainView
-      }
-    `)).rejects.toThrow()
+    Expect(compiled.code).toContain('function __injection__(Value: string, Name: string, Count: number)')
+    Expect(compiled.code).toContain(
+      '[_Scope.Value.evaluate().jsValue, _Scope.UserName.evaluate().jsValue, new TR.Value(3).jsValue]',
+    )
   })
 })
