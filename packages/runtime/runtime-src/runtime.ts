@@ -1,5 +1,5 @@
-import Compiler from '@compiler'
 import { FS } from '@shared'
+import { Workspace } from '@workspace'
 
 type GenerateAppOptions = {
   runtimePackageRoot?: string
@@ -17,7 +17,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const sourcePath = FS.resolvePath(appPath)
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', { cwd: runtimePackageRoot })
-  const compiled = await Compiler.compileFile(sourcePath)
+  const compiled = await Workspace.compile(sourcePath)
 
   await writeGeneratedFiles(generatedAppRoot, compiled.files)
 
@@ -47,6 +47,7 @@ async function writeGeneratedFiles(
   for (const file of files) {
     await writeGeneratedApp(FS.resolvePath(file.relativePath, { cwd: outputRoot }), file.code)
   }
+  await removeEmptyGeneratedDirectories(outputRoot)
 }
 
 async function removeStaleGeneratedFiles(outputRoot: string, currentRelativePaths: ReadonlySet<string>): Promise<void> {
@@ -56,6 +57,23 @@ async function removeStaleGeneratedFiles(outputRoot: string, currentRelativePath
   for await (const path of FS.walk(outputRoot)) {
     const relativePath = FS.relativePath(outputRoot, path)
     if (!currentRelativePaths.has(relativePath)) {
+      await FS.remove(path)
+    }
+  }
+}
+
+async function removeEmptyGeneratedDirectories(outputRoot: string): Promise<void> {
+  if (!await FS.exists(outputRoot)) {
+    return
+  }
+  const directories: string[] = []
+  for await (const path of FS.walk(outputRoot, { includeDirectories: true })) {
+    if (await FS.isDirectory(path)) {
+      directories.push(path)
+    }
+  }
+  for (const path of directories.sort((left, right) => right.length - left.length)) {
+    if (await FS.isEmptyDirectory(path)) {
       await FS.remove(path)
     }
   }

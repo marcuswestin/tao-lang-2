@@ -1,7 +1,12 @@
 import { Langium } from 'tao-parser'
-import { createValidatorLspServices } from 'tao-validator/langium-services'
+import { LSPWorkspace } from 'tao-workspace'
 
 const connection = Langium.createConnection(Langium.ProposedFeatures.all)
-const services = createValidatorLspServices({ connection, ...Langium.NodeFileSystem })
+const workspaceRoot = process.env['TAO_WORKSPACE_ROOT'] ?? process.cwd()
 
-Langium.startLanguageServer(services.shared)
+void startLanguageServer()
+
+async function startLanguageServer(): Promise<void> {
+  const workspace = await LSPWorkspace.open(workspaceRoot, { connection, ...Langium.NodeFileSystem })
+  workspace.startLanguageServer()
+}
