@@ -5,8 +5,19 @@ import { runCommand, runWithCommands } from './commands/commands'
 import { registerJustCommand } from './commands/just'
 import { registerMergeFeaturePreflightCommand } from './commands/merge-feature-preflight'
 
-const AGENT_CLIS: readonly string[] = ['codex', 'claude', 'agy-ide']
-const AGENT_SHELL_COMMANDS: readonly string[] = ['ls', 'rg', 'cat', 'sed', 'git', 'cp', 'mv', 'rm', ...AGENT_CLIS]
+const AGENT_CLIS: readonly string[] = ['codex', 'claude', 'agy']
+const AGENT_SHELL_COMMANDS: readonly string[] = [
+  'ls',
+  'rg',
+  'cat',
+  'sed',
+  'git',
+  'cp',
+  'mv',
+  'rm',
+  'bun',
+  ...AGENT_CLIS,
+]
 const command = Platform.runtimeProcess.argv[2]
 
 if (command && AGENT_SHELL_COMMANDS.includes(command)) {
