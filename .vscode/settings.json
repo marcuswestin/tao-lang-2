@@ -26,24 +26,34 @@
   },
   /////////////////////////////
   // File and search exclusions
+  // Gitignored `_gen_*` dirs are hidden from Quick Open by default; use files.exclude
+  // (with an App.tsx exception) instead so compiled `packages/runtime/_gen_tao-app/App.tsx` is findable.
+  "explorer.excludeGitIgnore": false,
   "search.exclude": {
-    "**/bun.lock": true
+    "**/bun.lock": true,
+    // "**/_gen_*": true,
+    "!**/_gen_*/App.tsx": false
   },
   "files.exclude": {
+    // ".artifacts": true,
     ".devenv": true,
     ".direnv": true,
     ".android": true,
     ".codex": true,
     ".cursor": true,
+    "**/.expo": true,
     ".gemini": true,
     ".dprint.jsonc": true,
     "**/.DS_Store": true,
     "**/node_modules": true,
     "**/bun.lock": true,
     // "**/_gen_*": true,
+    "!**/_gen_*/App.tsx": false,
     "devenv.lock": true,
     "devenv.yaml": true,
     "**/tsconfig.tsbuildinfo": true,
     "local.properties": true,
+    // "packages/runtime/android": true,
+    // "packages/runtime/ios": true
   }
 }

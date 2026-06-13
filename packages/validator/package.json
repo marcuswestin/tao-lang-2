@@ -5,8 +5,9 @@
   "module": "validator-src/validator.ts",
   "exports": {
     ".": "./validator-src/validator.ts",
-    "./diagnostics": "./validator-src/diagnostics.ts",
-    "./langium-services": "./validator-src/langium-services.ts"
+    "./langium-validation": "./validator-src/langium-validation.ts",
+    "./type-system": "./validator-src/type-system.ts",
+    "./validation": "./validator-src/validation.ts"
   },
   "dependencies": {
     "tao-ast-utils": "workspace:*",

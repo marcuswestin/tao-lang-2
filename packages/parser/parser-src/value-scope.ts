@@ -1,10 +1,13 @@
 import { Langium } from './langium-exports'
-import { defaultStdLibRoot, moduleTargetMatchesFile, resolveModulePath } from './module-resolution'
+import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
 
 /** TaoValueScopeProvider resolves value references through Tao alias and parameter visibility. */
 export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
-  constructor(private readonly coreServices: Langium.LangiumCoreServices) {
+  constructor(
+    private readonly coreServices: Langium.LangiumCoreServices,
+    private readonly packages: PackageResolver,
+  ) {
     super(coreServices)
   }
 
@@ -95,21 +98,13 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
 
   private collectTargetDeclarations(useStatement: AST.UseStatement, currentPath?: string): AST.Declaration[] {
     const path = currentPath ?? Langium.AstUtils.getDocument(useStatement).uri.path
-    if (!useStatement.modulePath) {
-      return []
-    }
-    const resolution = resolveModulePath(useStatement.modulePath, path, defaultStdLibRoot())
-    if (!resolution) {
-      return []
-    }
     const allFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)
       .filter(AST.isTaoFile)
-    const targetFiles = allFiles.filter(file => {
-      const filePath = Langium.AstUtils.getDocument(file).uri.path
-      return moduleTargetMatchesFile(resolution.targetPath, filePath)
-    })
-    return targetFiles.flatMap(file => file.statements.filter(AST.isDeclaration))
+    return [...this.packages.collectTargetDeclarations(useStatement, {
+      fromFilePath: path,
+      workspaceFiles: allFiles,
+    })]
   }
 }
 

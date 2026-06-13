@@ -1,0 +1,29 @@
+use CardTitle
+use ChildFolderTitle
+use ProjectNotice from @copy
+use ProjectWidget from @copy/widgets
+use SiblingFileTitle
+use SiblingFolderTitle
+
+project ui MainView {
+    render Stack {
+        Text CardTitle
+        Text SiblingFileTitle
+        Text SiblingFolderTitle
+        Text ChildFolderTitle
+        Text ProjectNotice
+        ProjectWidget
+    }
+}
+
+layout Stack {
+    render inject ```ts
+        return <>{_ViewProps.children}</>
+    ```
+}
+
+ui Text Value text {
+    render inject Value ```ts
+        return <RN.Text>{Value}</RN.Text>
+    ```
+}

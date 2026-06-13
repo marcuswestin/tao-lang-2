@@ -41,7 +41,7 @@
       "version": "0.0.1",
       "dependencies": {
         "tao-parser": "workspace:*",
-        "tao-validator": "workspace:*",
+        "tao-workspace": "workspace:*",
         "vscode-languageclient": "~9.0.1",
       },
       "devDependencies": {
@@ -69,8 +69,8 @@
         "react-dom": "19.1.0",
         "react-native": "0.81.5",
         "react-native-web": "~0.21.0",
-        "tao-compiler": "workspace:*",
         "tao-shared": "workspace:*",
+        "tao-workspace": "workspace:*",
       },
       "devDependencies": {
         "@babel/runtime": "^7.28.4",
@@ -93,6 +93,17 @@
         "tao-ast-utils": "workspace:*",
         "tao-parser": "workspace:*",
         "typir": "~0.3.3",
+        "typir-langium": "~0.3.3",
+      },
+    },
+    "packages/workspace": {
+      "name": "tao-workspace",
+      "dependencies": {
+        "tao-ast-utils": "workspace:*",
+        "tao-compiler": "workspace:*",
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+        "tao-validator": "workspace:*",
         "typir-langium": "~0.3.3",
       },
     },
@@ -1729,6 +1740,8 @@
     "tao-shared": ["tao-shared@workspace:packages/shared"],
 
     "tao-validator": ["tao-validator@workspace:packages/validator"],
+
+    "tao-workspace": ["tao-workspace@workspace:packages/workspace"],
 
     "tar": ["tar@7.5.15", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.1.0", "yallist": "^5.0.0" } }, "sha512-dzGK0boVlC4W5QFuQN1EFSl3bIDYsk7Tj40U6eIBnK2k/8ml7TZ5agbI5j5+qnoVcAA+rNtBml8SEiLxZpNqRQ=="],
 

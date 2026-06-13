@@ -8,7 +8,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 
 ## Start Here
 
-- On a fresh worktree, run `direnv allow`.
+- At the beginning of every fresh worktree, run `direnv allow` before any other repo commands so the devenv shell is trusted and loaded.
 - Run `./agent help` once at the start of a fresh repo session; rerun it only to refresh command lists or diagnose agent command behavior.
 - Always use `./agent <cmd> ...` for executable shell commands. Use tool workdirs or normal `cd` to choose the command directory.
 - Use `./agent just <recipe>` for repo workflows; `just` is the workflow manager.
@@ -28,7 +28,6 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - Before editing files under `packages/`, read `packages/AGENTS.md`.
 - Before editing files under `Apps/Test Apps/`, read `Apps/Test Apps/AGENTS.md`.
 - Use `agent-instructions` for durable instruction, nested AGENTS, or skill placement work.
-- Use `reasoning-effort-advisor` at the beginning of a new task or when the task shifts enough to warrant effort re-evaluation.
 - Use the project lifecycle skills for roadmap selection, research, planning, implementation, review, and merge workflows.
 - Use `runtime-codegen` for generated-code runtime API, generated TS, `TR`, `@runtime/TR`, and `packages/runtime/TaoRuntime-src` work.
 - Use `old-repo-porting` when comparable behavior exists in `~/code/tao-lang`.

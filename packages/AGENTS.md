@@ -29,12 +29,15 @@ Add or edit the feature's file in each relevant package source dir (`<package>/<
 ## TypeScript And Shared APIs
 
 - Use shared wrappers for platform invocations (`@shared` `CLI`, `FS`, `HCI`, `Platform`, etc.) instead of direct Bun or Node platform APIs.
+- Use `Context` types for invocation state and `Options` types for configurable behavior. Keep `Context` types narrow and mostly required: a context defines what the invocation is, so many optional or conditional context properties usually mean the API needs more specific context types. `Options` types may use optional properties for defaults, toggles, and overrides.
+- Use `Assert` helpers for invariant checks and type contractions that would otherwise be `if (<check>) throw new Error(...)`. Keep explicit throws for expected domain errors such as user input, command failure, or test-runtime setup errors.
 - Use `HCI` for all user-intended terminal I/O, including messages, prompts, help text, replayed command output, and errors. Reserve `Platform.runtimeProcess` and `Platform.runtimeConsole` for low-level process plumbing and shared wrappers.
 - Use `CLI.run`/`CLI.mustRun` for completed child processes and `CLI.start` for long-running child processes. Use `prefixedOutput` when output should be captured while streaming colored `[process]:` lines. Use `HCI.logProcessInfo`, `HCI.logProcessWarn`, and `HCI.logProcessError` for standalone process-prefixed messages.
 - Plain JS/CJS config and bootstrap files that cannot safely load `@shared` are the exception. Keep direct `node:*` imports narrow, prefer slash-separated path strings where possible, and explain the loader constraint locally.
 - Prefer `FS.resolvePath('foo/bar', { cwd })` for concrete filesystem locations. Use one slash-separated string with interpolation; omit `{ cwd }` when the intended base is the current process cwd. Use `FS.joinPath('foo/bar')` only for ungrounded relative path fragments.
 - Never export raw `Platform.node*` APIs. Import `node:*` modules only inside the shared wrapper file that owns that capability, and use `FS` for filesystem access instead of `Platform`.
 - Use multiline template strings for multiline text; do not build static multiline strings with arrays joined by `\n`. Use `Text.stripIndent` from `@shared` when indentation should be removed.
+- Pass an existing one-argument predicate or helper directly to array methods, such as `.filter(isVisible)` or `.flatMap(declarationsInFile)`, instead of wrapping it as `item => isVisible(item)`. Keep a lambda when it captures other values, needs extra logic, or direct passing would make callback arity or `this` binding ambiguous.
 
 ## Exports, Comments, And Tests
 

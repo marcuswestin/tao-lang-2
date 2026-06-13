@@ -4,6 +4,7 @@ import {
   type ResolvedRenderInvocation as ResolvedRenderInvocationData,
   resolveRenderInvocation,
 } from './invocations'
+import { Packages } from './Packages'
 import { getDocument, isNode, streamAllContents } from './traversal'
 
 /** ASTUtils exposes shared semantic helpers for Tao AST consumers. */
@@ -23,4 +24,5 @@ namespace ASTUtils {
   export type ResolvedRenderInvocation = ResolvedRenderInvocationData
 }
 
+export { Packages }
 export default ASTUtils

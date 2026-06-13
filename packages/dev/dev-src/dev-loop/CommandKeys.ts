@@ -1,4 +1,5 @@
 import { Errors, FS, HCI, Switch } from '@shared'
+import { discoverSwitchableAppPaths } from './AppDiscovery'
 import CommandRunner from './CommandRunner'
 import Commands, { type CommandKey } from './Commands'
 import { Expo } from './Expo'
@@ -109,19 +110,16 @@ async function askForAppPath(currentAppPath: string): Promise<string> {
 
 async function appChoices(): Promise<HCI.Choice<string>[]> {
   const appsRoot = FS.repoPath('Apps')
-  const choices: AppChoice[] = []
-
-  for await (const appPath of FS.walk(appsRoot, { extensions: ['.tao'] })) {
-    choices.push({
-      label: formatAppChoiceLabel(appsRoot, appPath),
-      value: appPath,
-    })
-  }
+  const appPaths = await discoverSwitchableAppPaths(appsRoot)
+  const choices: AppChoice[] = appPaths.map(appPath => ({
+    label: formatAppChoiceLabel(appsRoot, appPath),
+    value: appPath,
+  }))
 
   if (choices.length === 0) {
-    throw new Errors.UserInputError('No switchable apps found in Apps/**/*.tao.')
+    throw new Errors.UserInputError('No switchable apps found in Apps/.')
   }
-  return choices.sort((a, b) => a.label.localeCompare(b.label))
+  return choices.sort((left, right) => left.label.localeCompare(right.label))
 }
 
 function formatAppChoiceLabel(appsRoot: string, appPath: string): string {

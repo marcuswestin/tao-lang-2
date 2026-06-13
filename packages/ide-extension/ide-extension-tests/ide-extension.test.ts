@@ -1,7 +1,7 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { AST, Langium } from 'tao-parser'
-import { createValidatorLspServices } from 'tao-validator/langium-services'
+import { LSPWorkspace } from 'tao-workspace'
 
 Describe('Tao IDE extension smoke', () => {
   Test('declares extension and language server entrypoint build inputs', async () => {
@@ -68,20 +68,114 @@ Describe('Tao IDE extension smoke', () => {
       "Alias 'First' cannot reference 'Second' because it is not declared before the alias.",
     )
   })
+
+  Test('reports duplicate visible declarations through Langium services', async () => {
+    const diagnostics = await validateFilesWithLanguageServerServices({
+      '/__tao__/First.tao': `
+        project alias Shared = "First"
+      `,
+      '/__tao__/Second.tao': `
+        package alias Shared = "Second"
+      `,
+    })
+
+    Expect(
+      diagnostics.some(diagnostic => diagnostic.includes("Visible declaration 'Shared' is declared more than once")),
+    ).toBe(true)
+  })
+
+  Test('resolves on-disk package imports through Langium services', async () => {
+    const diagnostics = await validateOnDiskFileWithLanguageServerServices('Main.tao', {
+      'Main.tao': `
+        app PackageApp { ui MainView }
+        use MainView from @bar/views
+      `,
+      'packages/@bar/views/Main.tao': `
+        project ui MainView {
+          render inject \`\`\`ts
+            return null
+          \`\`\`
+        }
+      `,
+    })
+
+    Expect(diagnostics).toEqual([])
+  })
 })
 
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
-  const services = createValidatorLspServices()
-  const uri = Langium.URI.file('/__tao__/ide-smoke.tao')
-  const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
-  services.shared.workspace.LangiumDocuments.addDocument(document)
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  try {
+    const workspace = await LSPWorkspace.open(rootDir)
+    const services = workspace.services
+    const uri = Langium.URI.file(FS.resolvePath('ide-smoke.tao', { cwd: rootDir }))
+    const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
+    services.shared.workspace.LangiumDocuments.addDocument(document)
 
-  await services.shared.workspace.DocumentBuilder.build([document], {
-    eagerLinking: true,
-    validation: true,
-  })
+    await services.shared.workspace.DocumentBuilder.build([document], {
+      eagerLinking: true,
+      validation: true,
+    })
 
-  return (document.diagnostics ?? []).map(diagnostic => diagnostic.message)
+    return (document.diagnostics ?? []).map(diagnostic => diagnostic.message)
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
+
+async function validateFilesWithLanguageServerServices(sources: Record<string, string>): Promise<string[]> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  try {
+    const workspace = await LSPWorkspace.open(rootDir)
+    const services = workspace.services
+    const documents = Object.entries(sources).map(([path, source]) => {
+      const workspacePath = path.startsWith('/__tao__/')
+        ? FS.resolvePath(path.slice('/__tao__/'.length), { cwd: rootDir })
+        : FS.resolvePath(path, { cwd: rootDir })
+      const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+        source,
+        Langium.URI.file(workspacePath),
+      )
+      services.shared.workspace.LangiumDocuments.addDocument(document)
+      return document
+    })
+
+    await services.shared.workspace.DocumentBuilder.build(documents, {
+      eagerLinking: true,
+      validation: true,
+    })
+
+    return documents.flatMap(document => (document.diagnostics ?? []).map(diagnostic => diagnostic.message))
+  } finally {
+    await FS.remove(rootDir)
+  }
+}
+
+async function validateOnDiskFileWithLanguageServerServices(
+  entryFile: string,
+  sources: Record<string, string>,
+): Promise<string[]> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  try {
+    for (const [path, source] of Object.entries(sources)) {
+      await FS.writeText(FS.resolvePath(path, { cwd: rootDir }), source)
+    }
+    const workspace = await LSPWorkspace.open(rootDir)
+    const services = workspace.services
+    const entryPath = FS.resolvePath(entryFile, { cwd: rootDir })
+    const document = Array.from(services.shared.workspace.LangiumDocuments.all)
+      .find(document => document.uri.path === entryPath) as AST.Document | undefined
+
+    Expect(document).toBeDefined()
+    await services.shared.workspace.DocumentBuilder.build([document!], {
+      eagerLinking: true,
+      validation: true,
+    })
+
+    return (document!.diagnostics ?? []).map(diagnostic => diagnostic.message)
+  } finally {
+    await FS.remove(rootDir)
+  }
 }
 
 type IdeExtensionPackageJson = {

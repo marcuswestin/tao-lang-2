@@ -8,6 +8,7 @@ export type WalkOptions = {
   includeDirectories?: boolean
   includeHidden?: boolean
   extensions?: readonly string[]
+  excludeDirectory?: (name: string) => boolean
 }
 
 /** FileHandle declares an opened filesystem handle. */
@@ -28,8 +29,8 @@ export function resolvePath(inputPath: string, options?: { cwd?: string }): stri
 /**
  * repoPath resolves a slash-separated path from the Git repo root by default.
  */
-export function repoPath(inputPath: string): string {
-  return resolvePath(inputPath, { cwd: Repo.getRoot() })
+export function repoPath(inputPath?: string): string {
+  return resolvePath(inputPath ?? '.', { cwd: Repo.getRoot() })
 }
 
 /**
@@ -90,6 +91,19 @@ export async function isDirectory(inputPath: string): Promise<boolean> {
     return (await nodeFs.stat(inputPath)).isDirectory()
   } catch {
     return false
+  }
+}
+
+/** isEmptyDirectory checks whether a directory contains any entries. */
+export async function isEmptyDirectory(inputPath: string): Promise<boolean> {
+  if (!await isDirectory(inputPath)) {
+    return false
+  }
+  const dir = await nodeFs.opendir(inputPath)
+  try {
+    return (await dir.read()) === null
+  } finally {
+    await dir.close()
   }
 }
 
@@ -180,20 +194,33 @@ export async function* walk(inputPath: string, options: WalkOptions = {}): Async
 }
 
 async function* walkDirectory(directoryPath: string, options: WalkOptions): AsyncGenerator<string> {
-  for (const entry of await nodeFs.readdir(directoryPath, { withFileTypes: true })) {
-    const entryPath = resolvePath(entry.name, { cwd: directoryPath })
-    const isDirectoryEntry = entry.isDirectory()
+  const dir = await nodeFs.opendir(directoryPath)
+  try {
+    while (true) {
+      const entry = await dir.read()
+      if (entry === null) {
+        break
+      }
 
-    if (shouldYield(entryPath, isDirectoryEntry, options)) {
-      yield entryPath
+      const entryPath = resolvePath(entry.name, { cwd: directoryPath })
+      const isDirectoryEntry = entry.isDirectory()
+
+      if (shouldYield(entryPath, isDirectoryEntry, options)) {
+        yield entryPath
+      }
+      if (isDirectoryEntry && shouldWalkDirectory(entry.name, options)) {
+        yield* walkDirectory(entryPath, options)
+      }
     }
-    if (isDirectoryEntry && shouldWalkDirectory(entry.name, options)) {
-      yield* walkDirectory(entryPath, options)
-    }
+  } finally {
+    await dir.close()
   }
 }
 
 function shouldWalkDirectory(name: string, options: WalkOptions): boolean {
+  if (options.excludeDirectory?.(name)) {
+    return false
+  }
   return options.includeHidden === true || !name.startsWith('.')
 }
 

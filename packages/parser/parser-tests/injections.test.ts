@@ -1,17 +1,18 @@
+import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { AST, Parser } from '../parser-src/parser'
-import { testParseCode } from './test-parse'
+import { AST } from '../parser-src/parser'
+import { parseCodeWithErrors, testParseCode } from './test-parse'
 
 Describe('Tao injection parser', () => {
   Test('parses top-level injections for later validator checks', async () => {
-    const parsed = await testParseCode('inject ```ts\nreturn null\n```')
+    const parseResult = await testParseCode('inject ```ts\nreturn null\n```')
 
-    Expect(parsed.ast.statements).toHaveLength(1)
+    Expect(parseResult.entry.ast.statements).toHaveLength(1)
   })
 
   Test('parses render injections', async () => {
-    const parsed = await testParseCode('ui Native { render inject ```ts\nreturn null\n``` }')
-    const view = parsed.ast.statements[0]
+    const parseResult = await testParseCode('ui Native { render inject ```ts\nreturn null\n``` }')
+    const view = parseResult.entry.ast.statements[0]
 
     Expect.Is(view, AST.isUiDeclaration)
     const render = view.block.statements[0]
@@ -20,7 +21,7 @@ Describe('Tao injection parser', () => {
   })
 
   Test('parses inject arguments', async () => {
-    const parsed = await testParseCode(`
+    const parseResult = await testParseCode(`
       alias UserName = "Ro"
       ui Native Value text {
         render inject Value, Name UserName, Count 3, Greeting "Hello" \`\`\`ts
@@ -28,7 +29,7 @@ Describe('Tao injection parser', () => {
         \`\`\`
       }
     `)
-    const view = parsed.ast.statements[1]
+    const view = parseResult.entry.ast.statements[1]
 
     Expect.Is(view, AST.isUiDeclaration)
     const render = view.block.statements[0]
@@ -58,7 +59,7 @@ Describe('Tao injection parser', () => {
   })
 
   Test('reports linker diagnostics for unresolved inject arguments', async () => {
-    const parsed = await Parser.parseCode(`
+    const parseResult = await parseCodeWithErrors(`
       ui Native {
         render inject Missing, Name OtherMissing \`\`\`ts
           return null
@@ -66,8 +67,11 @@ Describe('Tao injection parser', () => {
       }
     `)
 
-    Expect(parsed.document.parseResult.lexerErrors).toEqual([])
-    Expect(parsed.document.parseResult.parserErrors).toEqual([])
-    Expect(parsed.diagnostics).toHaveLength(2)
+    Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
+    Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
+    Expect(parseResult.diagnostics).toHaveLength(2)
+    Expect(Diagnostics.allFromSource(parseResult.diagnostics, 'linker')).toBe(true)
+    Expect(Diagnostics.allWithSeverity(parseResult.diagnostics, 'error')).toBe(true)
+    Expect(Diagnostics.allMessagesContain(parseResult.diagnostics, 'Could not resolve reference')).toBe(true)
   })
 })

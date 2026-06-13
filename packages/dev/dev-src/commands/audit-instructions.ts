@@ -84,7 +84,7 @@ export async function runAuditInstructions(options: InstructionAuditOptions = {}
 
 /** auditInstructionFiles scans instruction text for stale and duplicated patterns. */
 export function auditInstructionFiles(files: readonly InstructionAuditFile[]): InstructionAuditFinding[] {
-  return files.flatMap(file => auditInstructionFile(file))
+  return files.flatMap(auditInstructionFile)
 }
 
 /** formatInstructionAuditReport formats human-readable audit output. */

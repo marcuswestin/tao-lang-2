@@ -1,32 +1,43 @@
+import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
-import { type TaoDiagnostic, validatorError } from './diagnostics'
+import type { Diagnostic } from '@shared'
+import { validatorDiagnostic } from './diagnostics'
+import type { TaoTypirServices } from './type-system'
 
-/** ValidationContext collects Tao validator diagnostics. */
-export type ValidationContext = {
-  readonly diagnostics: readonly TaoDiagnostic[]
-  error(message: string, node?: AST.Node): void
+/** ValidationRunContext declares shared validation invocation state. */
+export interface ValidationRunContext {
+  readonly packagesContext: Packages.Context
+  readonly entryFilePath: string
+  readonly workspaceFiles: readonly AST.TaoFile[]
+  readonly typir: TaoTypirServices
 }
 
-/** createValidationContext creates a collecting validator context. */
-export function createValidationContext(): ValidationContext {
-  const diagnostics: TaoDiagnostic[] = []
-  return {
-    diagnostics,
-    error(message: string, node?: AST.Node) {
-      diagnostics.push(validatorError(message, node))
-    },
-  }
+/** ValidationContext carries validation run state and diagnostic reporting. */
+export interface ValidationContext extends ValidationRunContext {
+  error(message: string, node: AST.Node): void
 }
 
-/** createLangiumValidationContext creates a validator context backed by Langium diagnostics. */
-export function createLangiumValidationContext(
+/** createValidationContext creates a validator context backed by a Langium acceptor. */
+export function createValidationContext(
   accept: Langium.ValidationAcceptor,
-  fallback: AST.Node,
+  runContext: ValidationRunContext,
 ): ValidationContext {
   return {
-    diagnostics: [],
-    error(message: string, node?: AST.Node) {
-      accept('error', message, { node: node ?? fallback })
+    ...runContext,
+    error(message: string, node: AST.Node) {
+      accept('error', message, { node })
     },
   }
+}
+
+/** collectValidationDiagnostics creates a Langium acceptor that stores Tao diagnostics. */
+export function collectValidationDiagnostics(): {
+  accept: Langium.ValidationAcceptor
+  diagnostics: readonly Diagnostic[]
+} {
+  const diagnostics: Diagnostic[] = []
+  const accept: Langium.ValidationAcceptor = (severity, message, info) => {
+    diagnostics.push(validatorDiagnostic(severity, message, info.node as AST.Node))
+  }
+  return { accept, diagnostics }
 }

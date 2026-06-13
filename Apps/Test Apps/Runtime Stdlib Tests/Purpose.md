@@ -14,14 +14,14 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 ## Does Not Belong Here
 
 - Type-system-only cases that belong in `Type System Tests`.
-- Invalid import visibility/module-path errors (unit tests cover diagnostics).
+- Invalid import visibility/import-path errors (unit tests cover diagnostics).
 - Layout/design-style behavior planned for later roadmap slices.
 - State/action/control behavior planned for later roadmap slices.
 
 ## Edit When
 
 - `@tao/ui` adds or removes first-class runtime primitives.
-- Import/module resolution behavior changes in ways that affect valid app execution.
+- Import/package resolution behavior changes in ways that affect valid app execution.
 - Runtime-backed stdlib behavior changes for these primitives.
 
 ## Behavior Test Notes

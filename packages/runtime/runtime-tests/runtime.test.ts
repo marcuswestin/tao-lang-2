@@ -1,5 +1,5 @@
 import Runtime from '@runtime'
-import { FS, Platform } from '@shared'
+import { Assert, FS, Platform } from '@shared'
 import { AfterEach, Describe, Expect, Test } from '@shared/test'
 
 const kitchenSinkDir = FS.repoPath('Apps/Kitchen Sink')
@@ -65,19 +65,33 @@ Describe('Tao runtime app generation', () => {
     }
   })
 
-  Test('removes stale generated module files when imports change', async () => {
+  Test('removes stale generated module files and empty directories when imports change', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
-    const stdlibModulePath = FS.resolvePath(
-      '_gen_tao-app/modules/packages/runtime/tao-stdlib/tao/ui/Views.tao.tsx',
-      { cwd: runtimePackageRoot },
-    )
 
     await Runtime.generateApp(runtimeStdlibTestsPath, { runtimePackageRoot })
+    const stdlibModulePath = await findGeneratedModule(runtimePackageRoot, 'Views.tao.tsx')
+    const stdlibModuleDir = FS.dirname(stdlibModulePath)
+
     Expect(await FS.exists(stdlibModulePath)).toBe(true)
+    Expect(await FS.exists(stdlibModuleDir)).toBe(true)
 
     const generated = await Runtime.generateApp(typeSystemTestsPath, { runtimePackageRoot })
 
     Expect(await FS.exists(stdlibModulePath)).toBe(false)
+    Expect(await FS.exists(stdlibModuleDir)).toBe(false)
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
   })
 })
+
+async function findGeneratedModule(runtimePackageRoot: string, fileName: string): Promise<string> {
+  const generatedRoot = FS.resolvePath('_gen_tao-app', { cwd: runtimePackageRoot })
+  let foundPath: string | undefined
+  for await (const path of FS.walk(generatedRoot)) {
+    if (FS.basename(path) === fileName) {
+      foundPath = path
+      break
+    }
+  }
+  Assert.defined(foundPath, 'generated module exists', { fileName })
+  return foundPath
+}

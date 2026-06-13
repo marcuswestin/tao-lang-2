@@ -13,7 +13,7 @@ Review implemented work before merge preparation.
 - Read the plan, research notes, task docs, `Roadmap.md`, linked local docs, and current git state.
 - Use the `old-repo-porting` skill when reviewing comparable behavior under `~/code/tao-lang`.
 - Use `subagents-review` for the implemented changes with the plan, task docs named in the review scope, and initial parent commit hash.
-- Ask reviewers to focus on bugs, regressions, missed requirements, missing tests, stale docs, and unclear generated/runtime behavior.
+- Ask reviewers to focus on bugs, regressions, missed requirements, missing tests, unused exported code/APIs, stale docs, and unclear generated/runtime behavior.
 - Verify generated Tao TS stayed minimal and uses default `TR` from `@runtime/TR` for reusable runtime functionality where practical.
 - For Kitchen Sink changes, verify target-only code stayed in `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` until implemented, and implemented target slices were copied into `Apps/Kitchen Sink/Kitchen Sink.tao` with validation.
 - For test-app changes, verify each touched app has `Apps/Test Apps/<App Name>/Purpose.md` and that new Tao code fits that purpose or the purpose file was updated.

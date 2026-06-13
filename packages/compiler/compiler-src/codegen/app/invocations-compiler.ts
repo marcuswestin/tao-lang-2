@@ -5,8 +5,8 @@ import { type Compiled, gen, genJoin, genName, genScopeName } from '../codegen-u
 import { Compile } from '../Compile'
 
 export default {
-  /** RenderStatement compiles a Tao render statement into a JSX fragment. */
-  RenderStatement(render: AST.RenderStatement): Compiled {
+  /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
+  RenderStatementBody(render: AST.RenderStatement): Compiled {
     if (render.injection) {
       return Compile.Injection(render.injection)
     }

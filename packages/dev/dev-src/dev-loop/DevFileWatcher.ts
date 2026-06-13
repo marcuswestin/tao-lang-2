@@ -34,7 +34,7 @@ function startDebouncedWatcher(
   let timer: ReturnType<typeof setTimeout> | undefined
   const watcher = chokidar.watch(spec.paths, {
     ignoreInitial: true,
-    ignored: path => shouldIgnoreWatchPath(path),
+    ignored: shouldIgnoreWatchPath,
   })
   watcher.on('all', (event, path) => {
     HCI.logProcessInfo('dev', `${spec.label} ${event}: ${path}`)
