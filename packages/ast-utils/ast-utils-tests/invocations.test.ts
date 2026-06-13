@@ -1,17 +1,17 @@
 import ASTUtils from '@ast-utils'
-import { AST, Parser } from '@parser'
+import { AST, Parser, type ParseResult } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 
 Describe('Tao AST invocation resolution', () => {
   Test('resolves positional render argument pairs', async () => {
-    const parsed = await parseClean(`
+    const parseResult = await parseClean(`
       app MyApp { ui MainView }
       ui MainView {
         render Tile "Open", 1
       }
       ui Tile Title text, Count number { }
     `)
-    const mainView = findMainView(parsed)
+    const mainView = findMainView(parseResult)
     const render = mainView.block.statements[0]
     Expect.Is(render, AST.isRenderStatement)
 
@@ -22,25 +22,25 @@ Describe('Tao AST invocation resolution', () => {
   })
 
   Test('resolves only positional pairs with matching argument and parameter slots', async () => {
-    const missingParsed = await parseClean(`
+    const missingParseResult = await parseClean(`
       app MyApp { ui MainView }
       ui MainView {
         render Tile "Open"
       }
       ui Tile Title text, Count number { }
     `)
-    const missingRender = findMainView(missingParsed).block.statements[0]
+    const missingRender = findMainView(missingParseResult).block.statements[0]
     Expect.Is(missingRender, AST.isRenderStatement)
     const missing = ASTUtils.resolveRenderInvocation(missingRender)
 
-    const extraParsed = await parseClean(`
+    const extraParseResult = await parseClean(`
       app MyApp { ui MainView }
       ui MainView {
         render Tile "Open", 1, "extra"
       }
       ui Tile Title text, Count number { }
     `)
-    const extraRender = findMainView(extraParsed).block.statements[0]
+    const extraRender = findMainView(extraParseResult).block.statements[0]
     Expect.Is(extraRender, AST.isRenderStatement)
     const extra = ASTUtils.resolveRenderInvocation(extraRender)
 
@@ -49,7 +49,7 @@ Describe('Tao AST invocation resolution', () => {
   })
 
   Test('resolves positional child view invocation argument pairs', async () => {
-    const parsed = await parseClean(`
+    const parseResult = await parseClean(`
       app MyApp { ui MainView }
       ui MainView {
         render Stack {
@@ -67,7 +67,7 @@ Describe('Tao AST invocation resolution', () => {
         \`\`\`
       }
     `)
-    const render = findMainView(parsed).block.statements[0]
+    const render = findMainView(parseResult).block.statements[0]
     Expect.Is(render, AST.isRenderStatement)
     const child = render.block?.statements[0]
     Expect.Is(child, AST.isViewRender)
@@ -79,14 +79,14 @@ Describe('Tao AST invocation resolution', () => {
   })
 })
 
-async function parseClean(source: string): Promise<Awaited<ReturnType<typeof Parser.parseCode>>> {
-  const parsed = await Parser.parseCode(source)
-  Expect(parsed.diagnostics.map(diagnostic => diagnostic.message)).toEqual([])
-  return parsed
+async function parseClean(source: string): Promise<ParseResult> {
+  const parseResult = await Parser.parseCode(source)
+  Expect(parseResult.diagnostics).toEqual([])
+  return parseResult
 }
 
-function findMainView(parsed: Awaited<ReturnType<typeof Parser.parseCode>>): AST.UiDeclaration {
-  const mainView = parsed.ast.statements.find(statement =>
+function findMainView(parseResult: ParseResult): AST.UiDeclaration {
+  const mainView = parseResult.entry.ast.statements.find(statement =>
     AST.isUiDeclaration(statement) && statement.name === 'MainView'
   )
   Expect.Is(mainView, AST.isUiDeclaration)
