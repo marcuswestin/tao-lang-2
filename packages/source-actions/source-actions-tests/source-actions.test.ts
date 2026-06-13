@@ -1,7 +1,13 @@
-import { Text } from '@shared'
+import { FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import SourceActions from '../source-actions-src/source-actions'
-import { parseDocument, parseRawDocument, testOrganizeSource, testOrganizeSourceUnchanged } from './test-source-actions'
+import {
+  parseDocument,
+  parseRawDocument,
+  parseRawDocumentAt,
+  testOrganizeSource,
+  testOrganizeSourceUnchanged,
+} from './test-source-actions'
 
 Describe('organizeSource use statements', () => {
   Test('produces no edit for an already organized file', async () => {
@@ -461,5 +467,42 @@ Describe('fixSource', () => {
     `)
     }\n`)
     Expect(await SourceActions.fixSource(await parseRawDocument(fixed))).toBe(fixed)
+  })
+
+  Test('uses the source file URI when fixing files with relative imports after render moves', async () => {
+    const tmpDir = await FS.mkTmpDir(FS.resolvePath('tao-source-actions-', { cwd: FS.tmpdir() }))
+    try {
+      await FS.writeText(
+        FS.resolvePath('Local.tao', { cwd: tmpDir }),
+        'share ui LocalText Value text { }\n',
+      )
+      const document = await parseRawDocumentAt(
+        `${
+          Text.stripIndent(`
+          use Text from @tao/ui
+          use LocalText, MissingLocal from ./Local
+          ui MainView {
+             render Text Greeting
+             alias Greeting = "hi"
+          }
+        `)
+        }\n`,
+        FS.resolvePath('Main.tao', { cwd: tmpDir }),
+      )
+
+      Expect(await SourceActions.fixSource(document)).toBe(`${
+        Text.stripIndent(`
+        use Text from @tao/ui
+        use MissingLocal from ./Local
+
+        ui MainView {
+           alias Greeting = "hi"
+           render Text Greeting
+        }
+      `)
+      }\n`)
+    } finally {
+      await FS.remove(tmpDir)
+    }
   })
 })

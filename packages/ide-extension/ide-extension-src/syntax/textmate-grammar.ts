@@ -18,11 +18,14 @@ export async function writeMergedTaoTextMateGrammar(grammarPath: string, overlay
 export function mergeTaoTextMateGrammar(grammar: TextMateGrammar, overlay: TextMateGrammar): TextMateGrammar {
   const generatedPatterns = grammar.patterns ?? []
   const overlayPatterns = overlay.patterns ?? []
+  const overlayPatternKeys = new Set(overlayPatterns.map(patternKey))
   const patterns = [
     ...generatedPatterns.filter(isCommentPattern),
     ...generatedPatterns.filter(isKeywordPattern),
     ...overlayPatterns,
-    ...generatedPatterns.filter(isPreservedGeneratedPattern),
+    ...generatedPatterns.filter(pattern =>
+      isPreservedGeneratedPattern(pattern) && !overlayPatternKeys.has(patternKey(pattern))
+    ),
   ]
   return {
     ...grammar,
@@ -49,4 +52,8 @@ function isStringPattern(pattern: TextMatePattern): boolean {
 
 function isPreservedGeneratedPattern(pattern: TextMatePattern): boolean {
   return !isCommentPattern(pattern) && !isKeywordPattern(pattern) && !isStringPattern(pattern)
+}
+
+function patternKey(pattern: TextMatePattern): string {
+  return JSON.stringify(pattern)
 }

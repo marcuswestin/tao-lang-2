@@ -45,6 +45,7 @@ Describe('Tao IDE extension smoke', () => {
     Expect(JSON.stringify(merged)).toContain('source.tsx')
     Expect(JSON.stringify(merged)).toContain('meta.template.expression.tao-lang')
     Expect(JSON.stringify(merged)).toContain('constant.numeric.tao-lang')
+    Expect(mergeTaoTextMateGrammar(merged, overlayGrammar)).toEqual(merged)
   })
 
   Test('contributes Tao command-palette source actions', async () => {
