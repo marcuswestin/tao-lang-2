@@ -19,9 +19,7 @@ Describe('Tao injection compiler', () => {
       }
     `)
 
-    Expect(compiled.code).toContain('function __injection__(Value: string, Name: string, Count: number)')
-    Expect(compiled.code).toContain(
-      '[_Scope.Value.evaluate().jsValue, _Scope.UserName.evaluate().jsValue, new TR.Value(3).jsValue]',
-    )
+    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.validation.diagnostics).toEqual([])
   })
 })

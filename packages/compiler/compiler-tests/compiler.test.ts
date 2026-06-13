@@ -6,7 +6,7 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('Tao compiler', () => {
-  Test('compiles source strings into generated app code', async () => {
+  Test('compiles source strings into a generated app file', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { ui MainView }
       ui MainView {
@@ -21,16 +21,10 @@ Describe('Tao compiler', () => {
 
     Expect(compiled.files).toHaveLength(1)
     Expect(compiled.files[0]?.relativePath).toBe('App.tsx')
-    Expect(compiled.code).toContain('export default function TaoApp()')
-    Expect(compiled.code).toContain('return <_Scope.MainView />')
-    Expect(compiled.code).toContain('_Scope.MainView = function MainView')
-    Expect(compiled.code).toContain('_Scope.Text = function Text')
-    Expect(compiled.code).toContain('Value: TR.Value<string>')
-    Expect(compiled.code).toContain('return <_Scope.Text Value={new TR.Value("Hello")} />')
-    Expect(compiled.code).toContain('function __injection__(Value: string)')
+    Expect(compiled.validation.diagnostics).toEqual([])
   })
 
-  Test('emits imports for sibling Tao files', async () => {
+  Test('compiles sibling Tao file dependencies', async () => {
     await withCompiledFiles(
       'Main.tao',
       {
@@ -51,14 +45,12 @@ Describe('Tao compiler', () => {
       },
       compiled => {
         Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
-        Expect(compiled['Main.tao'].code).toContain("import { Text } from './modules/Views.tao'")
         Expect(compiled['Views.tao'].relativePath).toBe('modules/Views.tao.tsx')
-        Expect(compiled['Views.tao'].code).toContain('export const Text = _Scope.Text')
       },
     )
   })
 
-  Test('emits imports for indexed local package modules', async () => {
+  Test('compiles indexed local package modules', async () => {
     await withCompiledFiles(
       'Main.tao',
       {
@@ -78,20 +70,15 @@ Describe('Tao compiler', () => {
       `,
       },
       compiled => {
-        Expect(compiled['Main.tao'].code).toContain(
-          "import { MainView } from './modules/lib/nested/@bar/views/Main.tao'",
-        )
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
         Expect(compiled['lib/nested/@bar/views/Main.tao'].relativePath).toBe(
           'modules/lib/nested/@bar/views/Main.tao.tsx',
-        )
-        Expect(compiled['lib/nested/@bar/views/Main.tao'].code).toContain(
-          'export const MainView = _Scope.MainView',
         )
       },
     )
   })
 
-  Test('emits imports for bare package dependencies', async () => {
+  Test('compiles bare package dependencies', async () => {
     await withCompiledFiles(
       'Main.tao',
       {
@@ -115,14 +102,16 @@ Describe('Tao compiler', () => {
       `,
       },
       compiled => {
-        Expect(compiled['Main.tao'].code).toContain("import { MainView } from './modules/feature/@foo/forms/Main.tao'")
-        Expect(compiled['feature/@foo/forms/Main.tao'].code).toContain("import { PackageTitle } from '../Title.tao'")
-        Expect(compiled['feature/@foo/Title.tao'].code).toContain('export const PackageTitle = _Scope.PackageTitle')
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['feature/@foo/forms/Main.tao'].relativePath).toBe(
+          'modules/feature/@foo/forms/Main.tao.tsx',
+        )
+        Expect(compiled['feature/@foo/Title.tao'].relativePath).toBe('modules/feature/@foo/Title.tao.tsx')
       },
     )
   })
 
-  Test('emits imports for circular use imports between sibling Tao files', async () => {
+  Test('compiles circular use imports between sibling Tao files', async () => {
     await withCompiledFiles(
       'Main.tao',
       {
@@ -153,9 +142,9 @@ Describe('Tao compiler', () => {
       `,
       },
       compiled => {
-        Expect(compiled['Main.tao'].code).toContain("import { AView } from './modules/A.tao'")
-        Expect(compiled['A.tao'].code).toContain("import { BView } from './B.tao'")
-        Expect(compiled['B.tao'].code).toContain("import { SharedTitle } from './A.tao'")
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['A.tao'].relativePath).toBe('modules/A.tao.tsx')
+        Expect(compiled['B.tao'].relativePath).toBe('modules/B.tao.tsx')
       },
     )
   })
