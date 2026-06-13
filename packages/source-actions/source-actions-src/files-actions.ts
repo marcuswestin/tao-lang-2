@@ -1,5 +1,6 @@
 import { AST } from '@parser'
-import { assemblePieces, sliceText, type StatementSlice, statementSlices, trimBlankLines } from './text-slices'
+import { assembleWithTrailingSource, sourceStatementContext } from './source-actions-utils'
+import { sliceText, type StatementSlice } from './text-slices'
 import { synthesizeImportSection } from './use-actions'
 
 /**
@@ -9,21 +10,18 @@ import { synthesizeImportSection } from './use-actions'
  * kinds such as `project`, `theme`, and `datasource` slot into the rank list when they exist.
  */
 export function canonicalizeTopLevel(document: AST.Document): string {
-  const text = document.textDocument.getText()
-  const file = document.parseResult.value
-  const { slices, end } = statementSlices(text, file.statements)
+  const context = sourceStatementContext(document)
+  const { file, slices } = context
   const useSlices = slices.filter(isUseSlice)
   const ranked = slices
     .filter(slice => !isUseSlice(slice))
     .map((slice, index) => ({ slice, index }))
     .sort((a, b) => (statementRank(a.slice.statement) - statementRank(b.slice.statement)) || (a.index - b.index))
 
-  const pieces = [
+  return assembleWithTrailingSource(context, [
     { text: synthesizeImportSection(file, useSlices), blankBefore: false },
     ...ranked.map(entry => ({ text: sliceText(entry.slice), blankBefore: entry.slice.leading !== '' })),
-    { text: trimBlankLines(text.slice(end)), blankBefore: true },
-  ]
-  return assemblePieces(pieces)
+  ])
 }
 
 function isUseSlice(slice: StatementSlice<AST.Statement>): slice is StatementSlice<AST.UseStatement> {
