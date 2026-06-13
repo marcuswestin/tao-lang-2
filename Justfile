@@ -25,17 +25,17 @@ test: _compile-kitchen-sink-app
   cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false
 
 # Format code
-fmt:
+fmt: _parser-gen
   dprint fmt
-  ./tao fmt Apps packages/runtime/tao-stdlib
+  ./tao fmt
 
 # Fix and format all code
-fix:
+fix: _parser-gen
   dprint fmt --incremental=false
-  ./tao fix Apps packages/runtime/tao-stdlib
+  ./tao fix
 
 # Check and test all code
-check: _compile-kitchen-sink-app _ide-extension-build
+check: _compile-kitchen-sink-app _ide-extension-build _tao-check
   dprint check --incremental=false
   bunx tsc --build packages/*/tsconfig.json
   just test
@@ -79,6 +79,9 @@ _ide-extension-build: _parser-gen
 _ide-extension-package: _ide-extension-build
   mkdir -p .artifacts/build
   cd packages/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{IDE_EXTENSION_VSIX}}" 1> /dev/null
+
+_tao-check: _parser-gen
+  ./tao check
 
 _android-emulator:
   ./dev android-emulator

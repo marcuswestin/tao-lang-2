@@ -7,6 +7,8 @@ export type InPlaceFileResult = {
   error?: string
 }
 
+const excludedTaoDirectoryNames = ['node_modules']
+
 /** runOnTaoFiles runs an in-place operation over every .tao file at or under `path`. */
 export async function runOnTaoFiles(
   path: string,
@@ -23,12 +25,18 @@ export async function runOnTaoFiles(
   const results: InPlaceFileResult[] = []
   const files = FS.walk(root, {
     extensions: ['.tao'],
-    excludeDirectoryNames: ['node_modules'],
+    excludeDirectoryNames: excludedTaoDirectoryNames,
+    excludeDirectoryPredicate: isGeneratedOrVendoredTaoDirectory,
   })
   for await (const filePath of files) {
     results.push(await operation(filePath))
   }
   return results
+}
+
+/** compareOnly reports whether `after` differs from `before` without writing the file. */
+export function compareOnly(path: string, before: string, after: string): InPlaceFileResult {
+  return { path, status: after === before ? 'unchanged' : 'changed' }
 }
 
 /** writeWhenChanged writes `after` over the file at `path` when it differs from `before`. */
@@ -43,4 +51,8 @@ export async function writeWhenChanged(path: string, before: string, after: stri
 /** inPlaceError returns an error result for one in-place file operation. */
 export function inPlaceError(path: string, error: unknown): InPlaceFileResult {
   return { path, status: 'error', error: Errors.formatForUser(error) }
+}
+
+function isGeneratedOrVendoredTaoDirectory(name: string): boolean {
+  return name.startsWith('_gen_') || name.startsWith('old-')
 }

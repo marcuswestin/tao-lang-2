@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings'
 import { Errors, FS, HCI, Platform } from '@shared'
+import { runCheck } from './check-command'
 import { runCompile } from './compile-command'
 import { runFix } from './fix-command'
 import { runFmt } from './fmt-command'
@@ -13,6 +14,8 @@ type InPlaceLabels = {
   changedLine: string
   /** failedVerb names the operation in failure lines, e.g. `format`. */
   failedVerb: string
+  /** failOnChanged makes changed files a command failure for check-style commands. */
+  failOnChanged?: boolean
 }
 
 const commands = new Command()
@@ -49,6 +52,19 @@ commands
     await runInPlaceCommand(paths, runFix, { changed: 'fixed', changedLine: 'Fixed', failedVerb: 'fix' })
   })
 
+commands
+  .command('check')
+  .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
+  .description('Check .tao files for the full canonical source form without writing.')
+  .action(async (paths: string[]) => {
+    await runInPlaceCommand(paths, runCheck, {
+      changed: 'noncanonical',
+      changedLine: 'Needs fixes',
+      failedVerb: 'check',
+      failOnChanged: true,
+    })
+  })
+
 await commands.parseAsync(Platform.runtimeProcess.argv, { from: 'node' })
 
 async function runInPlaceCommand(
@@ -71,9 +87,7 @@ async function runInPlaceCommand(
     const changed = results.filter(result => result.status === 'changed')
     const errored = results.filter(result => result.status === 'error')
 
-    for (const result of changed) {
-      HCI.writeSuccess(`${labels.changedLine} ${displayPath(result.path)}\n`)
-    }
+    writeChangedResults(changed, labels)
     for (const result of errored) {
       HCI.writeErrorLine(`Failed to ${labels.failedVerb} ${displayPath(result.path)}: ${result.error}`)
     }
@@ -84,14 +98,25 @@ async function runInPlaceCommand(
 
     const unchangedCount = results.length - changed.length - errored.length
     const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged`
-    if (errored.length > 0) {
-      HCI.writeErrorLine(`${summary}, ${errored.length} failed`)
+    if (errored.length > 0 || labels.failOnChanged && changed.length > 0) {
+      HCI.writeErrorLine(`${summary}${errored.length > 0 ? `, ${errored.length} failed` : ''}`)
       Platform.runtimeProcess.exit(1)
     }
     HCI.writeSuccess(`${summary}\n`)
   } catch (error) {
     HCI.writeErrorLine(Errors.formatForUser(error))
     Platform.runtimeProcess.exit(1)
+  }
+}
+
+function writeChangedResults(results: readonly InPlaceFileResult[], labels: InPlaceLabels): void {
+  for (const result of results) {
+    const line = `${labels.changedLine} ${displayPath(result.path)}`
+    if (labels.failOnChanged) {
+      HCI.writeErrorLine(line)
+    } else {
+      HCI.writeSuccess(`${line}\n`)
+    }
   }
 }
 
