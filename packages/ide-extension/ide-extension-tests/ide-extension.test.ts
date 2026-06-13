@@ -1,7 +1,10 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { TaoFormatter } from 'tao-formatter'
 import { AST, Langium } from 'tao-parser'
+import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
 import { LSPWorkspace } from 'tao-workspace'
+import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-grammar'
 
 Describe('Tao IDE extension smoke', () => {
   Test('declares extension and language server entrypoint build inputs', async () => {
@@ -27,6 +30,39 @@ Describe('Tao IDE extension smoke', () => {
       { cwd: import.meta.dir },
     )
     Expect(await FS.isFile(grammarPath)).toBe(true)
+  })
+
+  Test('merges Tao syntax highlighting with embedded TypeScript fences', async () => {
+    const generatedGrammar = await FS.readJson<Record<string, unknown>>(
+      FS.resolvePath('../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', { cwd: import.meta.dir }),
+    )
+    const overlayGrammar = await FS.readJson<Record<string, unknown>>(
+      FS.resolvePath('../ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json', { cwd: import.meta.dir }),
+    )
+    const merged = mergeTaoTextMateGrammar(generatedGrammar, overlayGrammar)
+
+    Expect(JSON.stringify(merged)).toContain('meta.embedded.block.ts.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('source.tsx')
+    Expect(JSON.stringify(merged)).toContain('meta.template.expression.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('constant.numeric.tao-lang')
+    Expect(mergeTaoTextMateGrammar(merged, overlayGrammar)).toEqual(merged)
+  })
+
+  Test('contributes Tao command-palette source actions', async () => {
+    const packageJson = await FS.readJson<IdeExtensionPackageJson>(
+      FS.resolvePath('../package.json', { cwd: import.meta.dir }),
+    )
+    const commands = packageJson.contributes.commands.map(command => command.title)
+
+    Expect(commands).toEqual([
+      'Tao: Fix Source',
+      'Tao: Organize Source',
+      'Tao: Remove Unused Imports',
+      'Tao: Move Renders Last',
+    ])
+    Expect(packageJson.contributes.grammars[0]?.embeddedLanguages).toEqual({
+      'meta.embedded.block.ts.tao-lang': 'typescriptreact',
+    })
   })
 
   Test('reports structural and Typir diagnostics through Langium services', async () => {
@@ -69,6 +105,93 @@ Describe('Tao IDE extension smoke', () => {
     )
   })
 
+  Test('formats documents with canonical Tao indentation regardless of editor tab size', async () => {
+    const { formatter, document, cleanup } = await buildFormatterFixture('ui   MainView {  render  Stack {   } }')
+    try {
+      Expect(formatter).toBeInstanceOf(TaoFormatter)
+      const edits = await formatter!.formatDocument(document, {
+        textDocument: { uri: document.textDocument.uri },
+        options: { tabSize: 4, insertSpaces: true },
+      })
+
+      Expect(applyEdits(document, edits)).toBe('ui MainView {\n   render Stack { }\n}\n')
+    } finally {
+      await cleanup()
+    }
+  })
+
+  Test('formats embedded TypeScript fences through the language server', async () => {
+    const { formatter, document, cleanup } = await buildFormatterFixture(
+      `ui MainView { render inject \`\`\`ts\nconst message = "hi";\nreturn <RN.Text accessibilityLabel='greeting'>{ message }</RN.Text>;\n\`\`\` }`,
+    )
+    try {
+      Expect(formatter).toBeInstanceOf(TaoFormatter)
+      const edits = await formatter!.formatDocument(document, {
+        textDocument: { uri: document.textDocument.uri },
+        options: { tabSize: 4, insertSpaces: true },
+      })
+
+      Expect(applyEdits(document, edits)).toBe(
+        'ui MainView {\n'
+          + '   render inject ```ts\n'
+          + "      const message = 'hi'\n"
+          + '      return <RN.Text accessibilityLabel="greeting">{message}</RN.Text>\n'
+          + '   ```\n'
+          + '}\n',
+      )
+    } finally {
+      await cleanup()
+    }
+  })
+
+  Test('serves the organize use statements source action through the language server', async () => {
+    const fixture = await buildCodeActionFixture(
+      'app MyApp { ui MainView }\nuse Text from @tao/ui\nui MainView { render Text "hi" }\n',
+    )
+    try {
+      const { provider, document } = fixture
+      const actions = await provider.getCodeActions(document, {
+        textDocument: { uri: document.textDocument.uri },
+        range: fullRange(document),
+        context: { diagnostics: [], only: ['source.organizeImports'] },
+      })
+      const organize = actions?.find(action => 'title' in action && action.title === 'Tao: Organize Use Statements')
+
+      Expect(organize && 'kind' in organize ? organize.kind : undefined).toBe('source.organizeImports')
+      const edits = organize && 'edit' in organize ? organize.edit?.changes?.[document.textDocument.uri] : undefined
+      Expect(edits?.[0]?.newText).toBe(
+        'use Text from @tao/ui\n\napp MyApp {\n   ui MainView\n}\n\nui MainView {\n   render Text "hi"\n}\n',
+      )
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  Test('serves the move-render quick fix for render-not-last diagnostics', async () => {
+    const fixture = await buildCodeActionFixture(
+      'ui MainView {\n   render Text Greeting\n   alias Greeting = "hi"\n}\n',
+    )
+    try {
+      const { provider, document } = fixture
+      const actions = await provider.getCodeActions(document, {
+        textDocument: { uri: document.textDocument.uri },
+        range: fullRange(document),
+        context: {
+          diagnostics: [{ range: fullRange(document), message: 'render', code: 'tao-render-not-last' }],
+          only: ['quickfix'],
+        },
+      })
+      const moveRender = actions?.find(action => 'title' in action && action.title === 'Tao: Move render to end')
+
+      const edits = moveRender && 'edit' in moveRender
+        ? moveRender.edit?.changes?.[document.textDocument.uri]
+        : undefined
+      Expect(edits?.[0]?.newText).toBe('ui MainView {\n   alias Greeting = "hi"\n   render Text Greeting\n}\n')
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
   Test('reports duplicate visible declarations through Langium services', async () => {
     const diagnostics = await validateFilesWithLanguageServerServices({
       '/__tao__/First.tao': `
@@ -87,8 +210,8 @@ Describe('Tao IDE extension smoke', () => {
   Test('resolves on-disk package imports through Langium services', async () => {
     const diagnostics = await validateOnDiskFileWithLanguageServerServices('Main.tao', {
       'Main.tao': `
-        app PackageApp { ui MainView }
         use MainView from @bar/views
+        app PackageApp { ui MainView }
       `,
       'packages/@bar/views/Main.tao': `
         project ui MainView {
@@ -102,6 +225,75 @@ Describe('Tao IDE extension smoke', () => {
     Expect(diagnostics).toEqual([])
   })
 })
+
+async function buildCodeActionFixture(source: string): Promise<{
+  provider: Langium.CodeActionProvider
+  document: AST.Document
+  cleanup: () => Promise<void>
+}> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-actions-', { cwd: FS.tmpdir() }))
+  const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
+    lspCodeActionProvider: () => new TaoCodeActionProvider(),
+  })
+  const services = workspace.services
+  const uri = Langium.URI.file(FS.resolvePath(`ide-actions-${++codeActionFixtureId}.tao`, { cwd: rootDir }))
+  const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
+  services.shared.workspace.LangiumDocuments.addDocument(document)
+  await services.shared.workspace.DocumentBuilder.build([document], {
+    eagerLinking: true,
+    validation: false,
+  })
+  const provider = services.language.lsp.CodeActionProvider
+  Expect(provider).toBeInstanceOf(TaoCodeActionProvider)
+  return { provider: provider!, document, cleanup: async () => await FS.remove(rootDir) }
+}
+
+async function buildFormatterFixture(source: string): Promise<{
+  formatter: Langium.Formatter | undefined
+  document: AST.Document
+  cleanup: () => Promise<void>
+}> {
+  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-format-', { cwd: FS.tmpdir() }))
+  const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
+    lspFormatter: () => new TaoFormatter(),
+  })
+  const services = workspace.services
+  const uri = Langium.URI.file(FS.resolvePath('ide-format.tao', { cwd: rootDir }))
+  const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
+  services.shared.workspace.LangiumDocuments.addDocument(document)
+  await services.shared.workspace.DocumentBuilder.build([document], {
+    eagerLinking: true,
+    validation: false,
+  })
+  return {
+    formatter: services.language.lsp.Formatter,
+    document,
+    cleanup: async () => await FS.remove(rootDir),
+  }
+}
+
+let codeActionFixtureId = 0
+
+function fullRange(document: AST.Document): { start: Langium.Position; end: Langium.Position } {
+  return {
+    start: { line: 0, character: 0 },
+    end: document.textDocument.positionAt(document.textDocument.getText().length),
+  }
+}
+
+function applyEdits(document: AST.Document, edits: readonly Langium.TextEdit[]): string {
+  const textDocument = document.textDocument
+  const sorted = [...edits].sort(
+    (a, b) => textDocument.offsetAt(b.range.start) - textDocument.offsetAt(a.range.start),
+  )
+  let text = textDocument.getText()
+  for (const edit of sorted) {
+    text = text.slice(0, textDocument.offsetAt(edit.range.start))
+      + edit.newText
+      + text.slice(textDocument.offsetAt(edit.range.end))
+  }
+  return text
+}
 
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
   const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
@@ -180,4 +372,13 @@ async function validateOnDiskFileWithLanguageServerServices(
 
 type IdeExtensionPackageJson = {
   main: string
+  contributes: {
+    commands: {
+      command: string
+      title: string
+    }[]
+    grammars: {
+      embeddedLanguages?: Record<string, string>
+    }[]
+  }
 }

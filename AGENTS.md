@@ -11,6 +11,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - At the beginning of every fresh worktree, run `direnv allow` before any other repo commands so the devenv shell is trusted and loaded.
 - Run `./agent help` once at the start of a fresh repo session; rerun it only to refresh command lists or diagnose agent command behavior.
 - Always use `./agent <cmd> ...` for executable shell commands. Use tool workdirs or normal `cd` to choose the command directory.
+- Run ad-hoc Tao CLI commands through `./agent tao` (e.g. `./agent tao fmt`, `./agent tao compile <app path>`). Justfile recipes may call the thin `./tao` wrapper directly.
 - Use `./agent just <recipe>` for repo workflows; `just` is the workflow manager.
 - Use `bun` over `node` except with Expo and Jest.
 - Treat nix + direnv + devenv as the expected developer environment; do not add defensive availability/version checks for expected tools unless Ro asks for diagnostics.
@@ -31,7 +32,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - Use the project lifecycle skills for roadmap selection, research, planning, implementation, review, and merge workflows.
 - Use `runtime-codegen` for generated-code runtime API, generated TS, `TR`, `@runtime/TR`, and `packages/runtime/TaoRuntime-src` work.
 - Use `old-repo-porting` when comparable behavior exists in `~/code/tao-lang`.
-- Use `dev-automation` for `packages/dev`, `./agent`, `./dev`, and `Justfile` changes.
+- Use `dev-automation` for `packages/dev`, `./agent`, `./dev`, `./tao`, and `Justfile` changes.
 - Use `subagents-review` or `dual-agent-review-fix` for multi-agent review work.
 - Use `stale-repo-check` after renames, removals, workflow changes, roadmap updates, or instruction edits.
 - Treat generic Superpowers skills under `.agents/skills` as supplemental. Do not vendor or symlink generic skill bundles into `agents/skills` unless Ro explicitly asks; when workflows overlap, root/nested `AGENTS.md`, git safety, validation, and Tao lifecycle skills own the workflow.
@@ -68,6 +69,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - `packages/compiler`: Tao AST to generated runtime TypeScript.
 - `packages/validator`: Tao AST diagnostics for compiler and IDE.
 - `packages/formatter`: Tao AST to formatted Tao source.
+- `packages/source-actions`: Tao source canonicalization transforms and LSP code actions.
 - `packages/runtime`: Expo app template, runtime app generation, `TR`, and Tao std-lib work.
 
 ## Git And Validation

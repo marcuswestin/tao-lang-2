@@ -1,0 +1,15 @@
+{
+  "name": "tao-formatter",
+  "private": true,
+  "type": "module",
+  "module": "formatter-src/formatter.ts",
+  "exports": {
+    ".": "./formatter-src/formatter.ts"
+  },
+  "dependencies": {
+    "@dprint/formatter": "0.5.1",
+    "@dprint/typescript": "0.96.1",
+    "tao-parser": "workspace:*",
+    "tao-shared": "workspace:*"
+  }
+}

@@ -1,5 +1,4 @@
-import Runtime from '@runtime'
-import { Errors, FS, HCI, Platform } from '@shared'
+import { Errors, HCI, Platform } from '@shared'
 import { ensureAndroidEmulator, ensureAndroidExpoGo, startExpoAndroid } from './android'
 import { runWithCommands } from './commands/commands'
 import { runDevLoop } from './dev-loop/dev-loop'
@@ -30,14 +29,6 @@ await runWithCommands(commands => {
     .description('Ensure Expo Go is installed on the booted Android emulator.')
     .action(async () => {
       await ensureAndroidExpoGo()
-    })
-
-  commands
-    .command('compile-app <appPath>')
-    .description('Compile a Tao app into the local runtime package.')
-    .action(async (appPath: string) => {
-      const generated = await Runtime.generateApp(FS.resolvePath(appPath))
-      HCI.writeLine(`Compiled ${generated.sourcePath} -> ${generated.outputPath}`)
     })
 
   commands

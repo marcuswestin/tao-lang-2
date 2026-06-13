@@ -1,5 +1,6 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
+import { viewValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
@@ -55,7 +56,9 @@ function validateRenderCount(view: AST.ViewDeclaration, ctx: ValidationContext):
 function validateRenderLast(view: AST.ViewDeclaration, ctx: ValidationContext): void {
   const renderIndex = view.block.statements.findIndex(AST.isRenderStatement)
   if (renderIndex >= 0 && renderIndex !== view.block.statements.length - 1) {
-    ctx.error(viewValidationMessages.renderLast, view.block.statements[renderIndex]!)
+    ctx.error(viewValidationMessages.renderLast, view.block.statements[renderIndex]!, {
+      code: viewValidationCodes.renderNotLast,
+    })
   }
 }
 

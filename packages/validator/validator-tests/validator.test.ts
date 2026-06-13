@@ -5,11 +5,13 @@ import { ValidationResult } from '@validator'
 import { Workspace } from '@workspace'
 import { aliasValidationMessages } from '../validator-src/aliases-validator'
 import { appValidationMessages } from '../validator-src/app-validator'
+import { useValidationCodes } from '../validator-src/diagnostic-codes'
 import { inferExpressionType } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
 import { invocationValidationMessages } from '../validator-src/invocations-validator'
 import { projectValidationMessages } from '../validator-src/project-validator'
 import { useValidationMessages } from '../validator-src/use-validator'
+import Validator from '../validator-src/validator'
 import { viewValidationMessages } from '../validator-src/views-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
@@ -1512,5 +1514,51 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateRemote())
     Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateLicense())
     Expect(validationErrorMessages(result)).toContain(projectValidationMessages.unsupportedRequires())
+  })
+})
+
+Describe('Tao validator use organization diagnostics', () => {
+  Test('warns about unused imports with a quick-fix code', async () => {
+    const result = await Validator.validateCode(`
+      use Text, Stack from @tao/ui
+      app MyApp { ui MainView }
+      ui MainView {
+        render Text "hi"
+      }
+    `)
+    const warning = result.diagnostics.find(diagnostic =>
+      diagnostic.message === useValidationMessages.unusedImport('Stack')
+    )
+
+    Expect(validationErrorMessages(result)).toEqual([])
+    Expect(warning?.severity).toBe('warning')
+    Expect(warning?.code).toBe(useValidationCodes.unusedImport)
+  })
+
+  Test('warns about use statements after other top-level statements', async () => {
+    const result = await Validator.validateCode(`
+      app MyApp { ui MainView }
+      use Text from @tao/ui
+      ui MainView {
+        render Text "hi"
+      }
+    `)
+    const warning = result.diagnostics.find(diagnostic => diagnostic.message === useValidationMessages.useOutOfSection)
+
+    Expect(validationErrorMessages(result)).toEqual([])
+    Expect(warning?.severity).toBe('warning')
+    Expect(warning?.code).toBe(useValidationCodes.useOutOfSection)
+  })
+
+  Test('reports no organization warnings for a canonical import section', async () => {
+    const result = await Validator.validateCode(`
+      use Text from @tao/ui
+      app MyApp { ui MainView }
+      ui MainView {
+        render Text "hi"
+      }
+    `)
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'warning')).toEqual([])
   })
 })

@@ -1,0 +1,22 @@
+{
+  "name": "tao-cli",
+  "private": true,
+  "type": "module",
+  "module": "cli-src/tao-cli.ts",
+  "bin": {
+    "tao": "cli-src/tao-cli.ts"
+  },
+  "exports": {
+    ".": "./cli-src/tao-cli.ts"
+  },
+  "dependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
+    "commander": "^14.0.0",
+    "tao-formatter": "workspace:*",
+    "tao-parser": "workspace:*",
+    "tao-runtime": "workspace:*",
+    "tao-shared": "workspace:*",
+    "tao-source-actions": "workspace:*",
+    "tao-workspace": "workspace:*"
+  }
+}

@@ -50,6 +50,18 @@
       "@compiler/*": [
         "./compiler/compiler-src/*"
       ],
+      "@formatter": [
+        "./formatter/formatter-src/formatter.ts"
+      ],
+      "@formatter/*": [
+        "./formatter/formatter-src/*"
+      ],
+      "@source-actions": [
+        "./source-actions/source-actions-src/source-actions.ts"
+      ],
+      "@source-actions/*": [
+        "./source-actions/source-actions-src/*"
+      ],
       "@workspace": [
         "./workspace/workspace-src/index.ts"
       ],

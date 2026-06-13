@@ -1,6 +1,10 @@
 import { Langium } from '@parser'
 import { FS } from '@shared'
-import { createWorkspaceLspServices, type WorkspaceLspServices } from './langium-services'
+import {
+  createWorkspaceLspServices,
+  type WorkspaceLspContributions,
+  type WorkspaceLspServices,
+} from './langium-services'
 import { Workspace } from './Workspace'
 import { createProjectContext, type ProjectContext } from './workspace-utils'
 
@@ -14,11 +18,12 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
   static async open(
     directoryPath: string,
     context: Langium.DefaultSharedModuleContext = Langium.NodeFileSystem,
+    contributions: WorkspaceLspContributions = {},
   ): Promise<LSPWorkspace> {
     const workspace = new LSPWorkspace(
       await createProjectContext(
         directoryPath,
-        packagesContext => createWorkspaceLspServices(packagesContext, context),
+        packagesContext => createWorkspaceLspServices(packagesContext, context, contributions),
       ),
     )
     await workspace.loadWorkspaceDocuments()

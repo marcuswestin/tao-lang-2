@@ -17,6 +17,12 @@ export type WorkspaceLspServices = WorkspaceServices & {
   language: Langium.LangiumServices
 }
 
+/** WorkspaceLspContributions declares optional LSP services supplied by the host. */
+export type WorkspaceLspContributions = {
+  lspFormatter?: () => Langium.Formatter
+  lspCodeActionProvider?: () => Langium.CodeActionProvider
+}
+
 /** createWorkspaceServices creates parser, validator, and Typir services for one package context. */
 export function createWorkspaceServices(packagesContext: Packages.Context): WorkspaceServices {
   const packages = Packages.createResolver(packagesContext)
@@ -46,11 +52,13 @@ export function createWorkspaceServices(packagesContext: Packages.Context): Work
 export function createWorkspaceLspServices(
   packagesContext: Packages.Context,
   context: Langium.DefaultSharedModuleContext = Langium.NodeFileSystem,
+  contributions: WorkspaceLspContributions = {},
 ): WorkspaceLspServices {
   const packages = Packages.createResolver(packagesContext)
   const parserContext = Parser.createLspContext({
     packages,
     langiumContext: context,
+    ...contributions,
   })
   const typir = createTypirLangiumServices<TaoSpecifics>(
     parserContext.services.shared,

@@ -14,7 +14,13 @@ export interface ValidationRunContext {
 
 /** ValidationContext carries validation run state and diagnostic reporting. */
 export interface ValidationContext extends ValidationRunContext {
-  error(message: string, node: AST.Node): void
+  error(message: string, node: AST.Node, opts?: DiagnosticOptions): void
+  warning(message: string, node: AST.Node, opts?: DiagnosticOptions): void
+}
+
+/** DiagnosticOptions declares optional diagnostic metadata such as quick-fix codes. */
+export type DiagnosticOptions = {
+  code?: string
 }
 
 /** createValidationContext creates a validator context backed by a Langium acceptor. */
@@ -24,8 +30,11 @@ export function createValidationContext(
 ): ValidationContext {
   return {
     ...runContext,
-    error(message: string, node: AST.Node) {
-      accept('error', message, { node })
+    error(message: string, node: AST.Node, opts?: DiagnosticOptions) {
+      accept('error', message, { node, code: opts?.code })
+    },
+    warning(message: string, node: AST.Node, opts?: DiagnosticOptions) {
+      accept('warning', message, { node, code: opts?.code })
     },
   }
 }
@@ -37,7 +46,9 @@ export function collectValidationDiagnostics(): {
 } {
   const diagnostics: Diagnostic[] = []
   const accept: Langium.ValidationAcceptor = (severity, message, info) => {
-    diagnostics.push(validatorDiagnostic(severity, message, info.node as AST.Node))
+    diagnostics.push(validatorDiagnostic(severity, message, info.node as AST.Node, {
+      code: info.code === undefined ? undefined : String(info.code),
+    }))
   }
   return { accept, diagnostics }
 }

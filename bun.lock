@@ -36,11 +36,23 @@
         "tao-runtime": "workspace:*",
       },
     },
+    "packages/formatter": {
+      "name": "tao-formatter",
+      "dependencies": {
+        "@dprint/formatter": "0.5.1",
+        "@dprint/typescript": "0.96.1",
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+      },
+    },
     "packages/ide-extension": {
       "name": "tao-ide-extension",
       "version": "0.0.1",
       "dependencies": {
+        "tao-formatter": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+        "tao-source-actions": "workspace:*",
         "tao-workspace": "workspace:*",
         "vscode-languageclient": "~9.0.1",
       },
@@ -87,11 +99,38 @@
     "packages/shared": {
       "name": "tao-shared",
     },
+    "packages/source-actions": {
+      "name": "tao-source-actions",
+      "dependencies": {
+        "tao-ast-utils": "workspace:*",
+        "tao-formatter": "workspace:*",
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+        "tao-validator": "workspace:*",
+      },
+    },
+    "packages/tao-cli": {
+      "name": "tao-cli",
+      "bin": {
+        "tao": "cli-src/tao-cli.ts",
+      },
+      "dependencies": {
+        "@commander-js/extra-typings": "^14.0.0",
+        "commander": "^14.0.0",
+        "tao-formatter": "workspace:*",
+        "tao-parser": "workspace:*",
+        "tao-runtime": "workspace:*",
+        "tao-shared": "workspace:*",
+        "tao-source-actions": "workspace:*",
+        "tao-workspace": "workspace:*",
+      },
+    },
     "packages/validator": {
       "name": "tao-validator",
       "dependencies": {
         "tao-ast-utils": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
         "typir": "~0.3.3",
         "typir-langium": "~0.3.3",
       },
@@ -336,6 +375,10 @@
     "@chevrotain/utils": ["@chevrotain/utils@12.0.0", "", {}, "sha512-lB59uJoaGIfOOL9knQqQRfhl9g7x8/wqFkp13zTdkRu1huG9kg6IJs1O8hqj9rs6h7orGxHJUKb+mX3rPbWGhA=="],
 
     "@commander-js/extra-typings": ["@commander-js/extra-typings@14.0.0", "", { "peerDependencies": { "commander": "~14.0.0" } }, "sha512-hIn0ncNaJRLkZrxBIp5AsW/eXEHNKYQBh0aPdoUqNgD+Io3NIykQqpKFyKcuasZhicGaEZJX/JBSIkZ4e5x8Dg=="],
+
+    "@dprint/formatter": ["@dprint/formatter@0.5.1", "", {}, "sha512-cdZUrm0iv/FnnY3CKE2dEcVhNEzrC551aE2h2mTFwQCRBrqyARLDnb7D+3PlXTUVp3s34ftlnGOVCmhLT9DeKA=="],
+
+    "@dprint/typescript": ["@dprint/typescript@0.96.1", "", {}, "sha512-mz/nINSFQh1R5i2Qy90SWOCCK4SgNGRkNhCZba7LYmUkE4Zi8/45p8l8pqc9yN1fb4XY5Muhrzdh5Q3jFsYimw=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.25.12", "", { "os": "aix", "cpu": "ppc64" }, "sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA=="],
 
@@ -1727,9 +1770,13 @@
 
     "tao-ast-utils": ["tao-ast-utils@workspace:packages/ast-utils"],
 
+    "tao-cli": ["tao-cli@workspace:packages/tao-cli"],
+
     "tao-compiler": ["tao-compiler@workspace:packages/compiler"],
 
     "tao-dev": ["tao-dev@workspace:packages/dev"],
+
+    "tao-formatter": ["tao-formatter@workspace:packages/formatter"],
 
     "tao-ide-extension": ["tao-ide-extension@workspace:packages/ide-extension"],
 
@@ -1738,6 +1785,8 @@
     "tao-runtime": ["tao-runtime@workspace:packages/runtime"],
 
     "tao-shared": ["tao-shared@workspace:packages/shared"],
+
+    "tao-source-actions": ["tao-source-actions@workspace:packages/source-actions"],
 
     "tao-validator": ["tao-validator@workspace:packages/validator"],
 

@@ -225,7 +225,7 @@ view Example {
 }
 ```
 
-Conventional Tao always drops `render` inside any `view`; and `tao fmt` will even drop it automatically for you!
+Conventional Tao is expected to drop `render` inside any `view` once render elision is implemented.
 
 The one exception is for example code. It is useful to demonstrate using views without a wrapping `view Example { ... }` wrapper definition:
 

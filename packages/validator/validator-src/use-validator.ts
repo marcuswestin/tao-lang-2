@@ -1,6 +1,7 @@
 import ASTUtils, { Packages } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
+import { useValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
 
 /** useValidationMessages declares import diagnostics for Tao use statements. */
@@ -13,6 +14,8 @@ export const useValidationMessages = {
     `Relative import '${importPath}' crosses a package boundary; use an @package import instead.`,
   duplicateImport: (name: string) => `Imported name '${name}' is declared more than once in this use statement.`,
   repeatedImport: (name: string) => `Imported name '${name}' is already imported by an earlier use statement.`,
+  unusedImport: (name: string) => `Imported name '${name}' is not used in this file.`,
+  useOutOfSection: '`use` statements belong in the import section before other top-level statements.',
   localDeclarationCollision: (name: string) => `Imported name '${name}' collides with a declaration in this file.`,
   ambiguousImport: (name: string, importPath: string) =>
     `'${name}' matches multiple visible declarations in '${importPath}'.`,
@@ -42,12 +45,15 @@ export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext)
   const localDeclarationNames = new Set(
     file.statements.filter(AST.isDeclaration).map(declaration => declaration.name),
   )
+  const referencedNames = ASTUtils.referencedNames(file)
   const previouslyImportedNames = new Set<string>()
   for (const useStatement of useStatements) {
     reportDuplicateImports(useStatement, ctx)
     reportRepeatedAndCollidingImports(useStatement, ctx, localDeclarationNames, previouslyImportedNames)
+    reportUnusedImports(useStatement, ctx, referencedNames)
     validateUseStatement(useStatement, ctx, fromFilePath)
   }
+  reportUseStatementsOutOfSection(file, ctx)
 }
 
 function validateUseStatement(
@@ -144,7 +150,9 @@ function reportDuplicateImports(useStatement: AST.UseStatement, ctx: ValidationC
   const seen = new Set<string>()
   for (const name of useStatement.importedDeclarations.map(reference => reference.$refText)) {
     if (seen.has(name)) {
-      ctx.error(useValidationMessages.duplicateImport(name), useStatement)
+      ctx.error(useValidationMessages.duplicateImport(name), useStatement, {
+        code: useValidationCodes.duplicateImport,
+      })
       continue
     }
     seen.add(name)
@@ -159,12 +167,42 @@ function reportRepeatedAndCollidingImports(
 ): void {
   for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
     if (previouslyImportedNames.has(name)) {
-      ctx.error(useValidationMessages.repeatedImport(name), useStatement)
+      ctx.error(useValidationMessages.repeatedImport(name), useStatement, {
+        code: useValidationCodes.repeatedImport,
+      })
     } else {
       previouslyImportedNames.add(name)
     }
     if (localDeclarationNames.has(name)) {
       ctx.error(useValidationMessages.localDeclarationCollision(name), useStatement)
+    }
+  }
+}
+
+function reportUnusedImports(
+  useStatement: AST.UseStatement,
+  ctx: ValidationContext,
+  referencedNames: ReadonlySet<string>,
+): void {
+  for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
+    if (!referencedNames.has(name)) {
+      ctx.warning(useValidationMessages.unusedImport(name), useStatement, {
+        code: useValidationCodes.unusedImport,
+      })
+    }
+  }
+}
+
+function reportUseStatementsOutOfSection(file: AST.TaoFile, ctx: ValidationContext): void {
+  const firstNonUseIndex = file.statements.findIndex(statement => !AST.isUseStatement(statement))
+  if (firstNonUseIndex === -1) {
+    return
+  }
+  for (const statement of file.statements.slice(firstNonUseIndex)) {
+    if (AST.isUseStatement(statement)) {
+      ctx.warning(useValidationMessages.useOutOfSection, statement, {
+        code: useValidationCodes.useOutOfSection,
+      })
     }
   }
 }

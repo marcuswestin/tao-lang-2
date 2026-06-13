@@ -1,27 +1,26 @@
-use Text, Stack from @tao/ui
+use Stack, Text from @tao/ui
 
 app KitchenSink {
-    ui MainView
+   ui MainView
 }
 
 alias Greeting = "Hello, World!"
 alias LaunchCount = 3
 
 ui MainView {
-    alias LocalText = "Text from a local alias"
-    alias OuterGreeting = Greeting
-    render Stack {
-        alias Greeting = "Nested scope greeting"
-        Text OuterGreeting { }
-        Text LocalText
-        Text Greeting
-        Text "Hello World"
-        CountText LaunchCount
-    }
-}
+   alias LocalText = "Text from a local alias"
+   alias OuterGreeting = Greeting
+   render Stack {
+      alias Greeting = "Nested scope greeting"
+      Text OuterGreeting { }
+      Text LocalText
+      Text Greeting
+      Text "Hello World"
+      CountText LaunchCount
+}  }
 
 ui CountText Count number {
-    render inject Count ```ts
-        return <RN.Text>Launch count: {Count}</RN.Text>
-    ```
+   render inject Count ```ts
+      return <RN.Text>Launch count: {Count}</RN.Text>
+   ```
 }

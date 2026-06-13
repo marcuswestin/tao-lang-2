@@ -85,6 +85,9 @@ Assuming current in-progress branches land first: formatter/`tao fmt`, `tao fix`
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
 - [x] Add runtime stdlib and module imports
   - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough package/project/publish visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
+- [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
+- [x] Wire the formatter into the IDE extension language server and add repo-wide `tao fmt`/`tao fix`/`tao check` (tao-cli), run by `just fmt`/`fix`/`check`
+- [x] Add LSP/IDE source actions: `Tao: Organize Use Statements` (source.organizeImports), unused/out-of-section import warnings with quick fixes, command-palette entries prefixed `Tao:`, a move-render-last quick fix, and `tao fix` applying all source fixes (run by `just fix`)
 - [ ] Consider only allowing state inside view declarations. App state maybe should be a datasource, that could be persisted to disk
 - [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
@@ -102,6 +105,8 @@ Assuming current in-progress branches land first: formatter/`tao fmt`, `tao fix`
 - [ ] Enable over-the-network dev app running for ios device
 
 - Add followups for later:
+  - Formatter: keep standalone comments attached to the following top-level declaration when separating with blank lines
+  - Formatter: drop redundant `render` keywords automatically per `Spec/Tao Type System.md` once the language makes `render` optional in view bodies
   - Think through how to do app testing, and how to use that for our repo test apps tests
   - Compiler: Add codegen tracing/source maps when needed
   - Dev loop: watch resolved relative import roots outside the selected app folder.

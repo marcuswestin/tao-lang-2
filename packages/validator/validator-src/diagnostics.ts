@@ -7,12 +7,14 @@ export function validatorDiagnostic(
   severity: Parameters<Langium.ValidationAcceptor>[0],
   message: string,
   node: AST.Node,
+  opts: { code?: string } = {},
 ): Diagnostic {
   return {
     filePath: ASTUtils.getDocument(node).uri.path,
     message,
     severity: validatorSeverity(severity),
     source: 'validator',
+    code: opts.code,
     nodeType: node.$type,
     range: node.$cstNode?.range,
   }

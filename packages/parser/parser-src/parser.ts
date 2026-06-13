@@ -36,13 +36,20 @@ export type CreateParserContextOptions = {
 }
 
 /** CreateParserLspContextOptions configures parser LSP service creation. */
-export type CreateParserLspContextOptions = {
+export type CreateParserLspContextOptions = ParserLspContributions & {
   packages?: PackageResolver
   langiumContext?: Langium.DefaultSharedModuleContext
 }
 
+/** ParserLspContributions declares optional LSP services supplied by parser hosts. */
+export type ParserLspContributions = {
+  lspFormatter?: () => Langium.Formatter
+  lspCodeActionProvider?: () => Langium.CodeActionProvider
+}
+
 /** ParseOptions configures parser document loading and building. */
 export type ParseOptions = {
+  uri?: URI
   validation?: boolean
 }
 
@@ -110,15 +117,15 @@ export const Parser = {
   },
 
   /** parseCode parses Tao source code using a standalone parser context. */
-  async parseCode(code: string): Promise<ParseResult> {
-    return await Parser.parseSource(Parser.createContext(), code)
+  async parseCode(code: string, options: ParseOptions = {}): Promise<ParseResult> {
+    return await Parser.parseSource(Parser.createContext(), code, options)
   },
 
   /** parseSource parses Tao source code using an existing parser context. */
   async parseSource(context: ParserContext, code: string, options: ParseOptions = {}): Promise<ParseResult> {
     const document = context.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
       code,
-      codeSourceUri,
+      options.uri ?? codeSourceUri,
     )
     const documents = await loadReachableDocuments(context, document)
     return await buildDocuments(context.services, document, documents, options)
@@ -159,6 +166,21 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
   return { shared, language }
 }
 
+type ParserLspModule = {
+  lsp?: {
+    Formatter?: () => Langium.Formatter
+    CodeActionProvider?: () => Langium.CodeActionProvider
+  }
+}
+
+function lspModule(options: ParserLspContributions): ParserLspModule {
+  const lsp = {
+    ...(options.lspFormatter ? { Formatter: options.lspFormatter } : {}),
+    ...(options.lspCodeActionProvider ? { CodeActionProvider: options.lspCodeActionProvider } : {}),
+  }
+  return Object.keys(lsp).length > 0 ? { lsp } : {}
+}
+
 function createLspServices(options: CreateParserLspContextOptions & { packages: PackageResolver }): ParserLspServices {
   const shared = Langium.inject(
     Langium.createDefaultSharedModule(options.langiumContext ?? Langium.NodeFileSystem),
@@ -171,6 +193,7 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
       references: {
         ScopeProvider: (services) => new TaoValueScopeProvider(services, options.packages),
       },
+      ...lspModule(options),
     },
   )
   shared.ServiceRegistry.register(language)

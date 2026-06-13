@@ -18,8 +18,8 @@ export async function compileAndRenderApp(appPath: string): Promise<RuntimeScree
   const testAppRoot = FS.resolvePath(`_gen_tao-app-test/run-${++renderId}`, { cwd: runtimePackageRoot })
   const testAppPath = FS.resolvePath('App.tsx', { cwd: testAppRoot })
 
-  await CLI.mustRun(FS.repoPath('dev'), {
-    args: ['compile-app', appPath],
+  await CLI.mustRun(FS.repoPath('tao'), {
+    args: ['compile', appPath],
     cwd: repoRoot,
   })
 

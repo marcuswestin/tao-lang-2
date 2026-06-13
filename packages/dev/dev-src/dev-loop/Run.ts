@@ -42,8 +42,8 @@ async function compileApp(
       if (shouldRunParserGen) {
         await runJust(['_parser-gen'])
       }
-      const result = await CLI.run(FS.repoPath('dev'), {
-        args: ['compile-app', appPath],
+      const result = await CLI.run(FS.repoPath('tao'), {
+        args: ['compile', appPath],
         prefixedOutput: { processName: 'compile' },
         cwd: repoRoot,
       })

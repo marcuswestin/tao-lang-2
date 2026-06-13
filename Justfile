@@ -2,6 +2,7 @@ set quiet := true
 
 KITCHEN_SINK_APP := justfile_directory() + "/Apps/Kitchen Sink/Kitchen Sink.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
+DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
 
 # Print available recipes
 help:
@@ -21,18 +22,20 @@ deps:
 # Run all tests
 test: _compile-kitchen-sink-app
   bun test packages/*/*-tests/*.test.ts
-  cd packages/runtime && node node_modules/jest/bin/jest.js --runInBand --watchman=false
+  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false
 
 # Format code
-fmt:
+fmt: _parser-gen
   dprint fmt
+  ./tao fmt
 
 # Fix and format all code
-fix:
+fix: _parser-gen
   dprint fmt --incremental=false
+  ./tao fix
 
 # Check and test all code
-check: _compile-kitchen-sink-app _ide-extension-build
+check: _compile-kitchen-sink-app _ide-extension-build _tao-check
   dprint check --incremental=false
   bunx tsc --build packages/*/tsconfig.json
   just test
@@ -40,7 +43,7 @@ check: _compile-kitchen-sink-app _ide-extension-build
 
 # Compile a Tao app path relative to the invocation directory into the local runtime package
 compile-app app_path: _parser-gen
-  ./dev compile-app "{{app_path}}"
+  ./tao compile "{{app_path}}"
 
 # Build and install the IDE extension into local editor apps
 install-ide-extension: _ide-extension-package
@@ -68,7 +71,7 @@ prep: fix check
 #########
 
 _compile-kitchen-sink-app: _parser-gen
-  ./dev compile-app "{{KITCHEN_SINK_APP}}"
+  ./tao compile "{{KITCHEN_SINK_APP}}"
 
 _ide-extension-build: _parser-gen
   cd packages/ide-extension && bun esbuild.config.ts
@@ -77,6 +80,9 @@ _ide-extension-package: _ide-extension-build
   mkdir -p .artifacts/build
   cd packages/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{IDE_EXTENSION_VSIX}}" 1> /dev/null
 
+_tao-check: _parser-gen
+  ./tao check
+
 _android-emulator:
   ./dev android-emulator
 
@@ -84,4 +90,4 @@ _android-expo-go:
   ./dev android-expo-go
 
 _parser-gen:
-  cd packages/parser && ./node_modules/.bin/langium generate
+  cd packages/parser && "{{DEVENV_NODE}}" node_modules/langium-cli/bin/langium.js generate

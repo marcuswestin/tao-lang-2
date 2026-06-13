@@ -22,6 +22,7 @@ export type Diagnostic = {
   message: string
   severity: DiagnosticSeverity
   source: DiagnosticSource
+  code?: string
   nodeType?: string
   range?: DiagnosticRange
 }
