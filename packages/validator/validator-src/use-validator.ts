@@ -1,21 +1,25 @@
-import ASTUtils from '@ast-utils'
+import ASTUtils, { Packages } from '@ast-utils'
 import { AST } from '@parser'
-import { moduleTargetMatchesFile, resolveModulePath } from '@parser/module-resolution'
+import { FS } from '@shared'
 import type { ValidationContext } from './validation'
 
 /** useValidationMessages declares import diagnostics for Tao use statements. */
 export const useValidationMessages = {
-  unresolvedModule: (modulePath: string) => `Cannot resolve module path '${modulePath}'.`,
+  unresolvedImport: (importPath: string) => `Cannot resolve import path '${importPath}'.`,
+  unresolvedBareUse: () => `Cannot resolve bare use statement from this file.`,
+  duplicatePackage: (name: string, paths: readonly string[]) =>
+    `Package '${name}' is ambiguous because multiple folders declare it: ${paths.join(', ')}.`,
+  packageBoundary: (importPath: string) =>
+    `Relative import '${importPath}' crosses a package boundary; use an @package import instead.`,
   duplicateImport: (name: string) => `Imported name '${name}' is declared more than once in this use statement.`,
   repeatedImport: (name: string) => `Imported name '${name}' is already imported by an earlier use statement.`,
   localDeclarationCollision: (name: string) => `Imported name '${name}' collides with a declaration in this file.`,
-  ambiguousImport: (name: string, modulePath: string) =>
-    `'${name}' matches multiple visible declarations in '${modulePath}'.`,
-  sameModuleMissing: (name: string) => `'${name}' is not declared in this module.`,
-  sameModuleHidden: (name: string) =>
-    `'${name}' is marked as 'hide' and cannot be imported from another file in this module.`,
-  crossModuleMissing: (name: string, modulePath: string) => `'${name}' is not exported from '${modulePath}'.`,
-  crossModuleNotShared: (name: string) => `'${name}' must be marked as 'share' to be imported from this module.`,
+  ambiguousImport: (name: string, importPath: string) =>
+    `'${name}' matches multiple visible declarations in '${importPath}'.`,
+  duplicateVisibleDeclaration: (name: string, folderPath: string) =>
+    `Visible declaration '${name}' is declared more than once in folder '${folderPath}'.`,
+  missingImport: (name: string, importPath: string) => `'${name}' is not visible from '${importPath}'.`,
+  notVisible: (name: string) => `'${name}' is not visible from here; mark it as 'package', 'project', or 'publish'.`,
   appImport: (name: string) => `App '${name}' cannot be imported.`,
 } as const
 
@@ -25,16 +29,15 @@ type DeclarationRecord = {
   visibility?: AST.DeclarationVisibility
 }
 
-/** validateUseStatements validates module path resolution and import visibility rules. */
-export function validateUseStatements(
-  file: AST.TaoFile,
-  ctx: ValidationContext,
-  options: {
-    workspaceFiles: readonly AST.TaoFile[]
-    filePath: string
-    stdLibRoot?: string
-  },
-): void {
+type VisibleDeclarationRecord = {
+  declaration: AST.Declaration
+  document: AST.Document
+  folderPath: string
+}
+
+/** validateUseStatements validates import path resolution and visibility rules. */
+export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext): void {
+  const fromFilePath = ASTUtils.getDocument(file).uri.path
   const useStatements = file.statements.filter(AST.isUseStatement)
   const localDeclarationNames = new Set(
     file.statements.filter(AST.isDeclaration).map(declaration => declaration.name),
@@ -43,56 +46,79 @@ export function validateUseStatements(
   for (const useStatement of useStatements) {
     reportDuplicateImports(useStatement, ctx)
     reportRepeatedAndCollidingImports(useStatement, ctx, localDeclarationNames, previouslyImportedNames)
-    validateUseStatement(useStatement, ctx, options)
+    validateUseStatement(useStatement, ctx, fromFilePath)
   }
 }
 
 function validateUseStatement(
   useStatement: AST.UseStatement,
   ctx: ValidationContext,
-  options: {
-    workspaceFiles: readonly AST.TaoFile[]
-    filePath: string
-    stdLibRoot?: string
-  },
+  fromFilePath: string,
 ): void {
-  const resolution = resolveModulePath(useStatement.modulePath, options.filePath, options.stdLibRoot)
-  if (!resolution) {
-    ctx.error(useValidationMessages.unresolvedModule(useStatement.modulePath), useStatement)
+  const resolution = Packages.resolve(ctx.packagesContext, {
+    importPath: useStatement.importPath,
+    fromFilePath,
+  })
+  if (resolution.relation === 'invalid') {
+    reportInvalidResolution(useStatement, resolution, ctx)
     return
   }
 
-  const targetFiles = options.workspaceFiles.filter(file => {
-    const documentPath = ASTUtils.getDocument(file).uri.path
-    return moduleTargetMatchesFile(resolution.targetPath, documentPath)
+  const workspaceFilePaths = new Set(ctx.workspaceFiles.map(workspaceFilePath))
+  const targetFiles = ctx.workspaceFiles.filter(file => {
+    return Packages.targetMatches(resolution, {
+      filePath: workspaceFilePath(file),
+      workspaceFilePaths,
+    })
   })
   if (targetFiles.length === 0) {
-    ctx.error(useValidationMessages.unresolvedModule(useStatement.modulePath), useStatement)
+    ctx.error(unresolvedMessage(useStatement), useStatement)
     return
   }
 
   const declarations = targetFiles
-    .flatMap(targetFile => declarationsInFile(targetFile))
+    .flatMap(declarationsInFile)
     .filter(declaration => declaration.name.length > 0)
   for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
-    validateImportedName(importedName, useStatement, declarations, resolution.sameModule, ctx)
+    validateImportedName(importedName, useStatement, declarations, resolution, ctx)
   }
+}
+
+function reportInvalidResolution(
+  useStatement: AST.UseStatement,
+  resolution: Packages.Resolution,
+  ctx: ValidationContext,
+): void {
+  if (resolution.invalidReason === 'duplicate-package' && resolution.packageName) {
+    ctx.error(
+      useValidationMessages.duplicatePackage(resolution.packageName, resolution.duplicatePackagePaths ?? []),
+      useStatement,
+    )
+    return
+  }
+  if (resolution.invalidReason === 'package-boundary' && useStatement.importPath) {
+    ctx.error(useValidationMessages.packageBoundary(useStatement.importPath), useStatement)
+    return
+  }
+  ctx.error(unresolvedMessage(useStatement), useStatement)
+}
+
+function unresolvedMessage(useStatement: AST.UseStatement): string {
+  return useStatement.importPath
+    ? useValidationMessages.unresolvedImport(useStatement.importPath)
+    : useValidationMessages.unresolvedBareUse()
 }
 
 function validateImportedName(
   importedName: string,
   useStatement: AST.UseStatement,
   declarations: readonly DeclarationRecord[],
-  sameModule: boolean,
+  resolution: Packages.Resolution,
   ctx: ValidationContext,
 ): void {
   const matches = declarations.filter(declaration => declaration.name === importedName)
   if (matches.length === 0) {
-    if (sameModule) {
-      ctx.error(useValidationMessages.sameModuleMissing(importedName), useStatement)
-      return
-    }
-    ctx.error(useValidationMessages.crossModuleMissing(importedName, useStatement.modulePath), useStatement)
+    ctx.error(useValidationMessages.missingImport(importedName, importLabel(useStatement)), useStatement)
     return
   }
   if (matches.some(declaration => declaration.kind === AST.AppDeclaration.$type)) {
@@ -100,26 +126,18 @@ function validateImportedName(
     return
   }
 
-  if (sameModule) {
-    const visibleMatches = matches.filter(declaration => declaration.visibility !== 'hide')
-    if (visibleMatches.length === 0) {
-      ctx.error(useValidationMessages.sameModuleHidden(importedName), useStatement)
-      return
-    }
-    if (visibleMatches.length > 1) {
-      ctx.error(useValidationMessages.ambiguousImport(importedName, useStatement.modulePath), useStatement)
-    }
+  const visibleMatches = matches.filter(declaration => Packages.isVisible(declaration.visibility, resolution))
+  if (visibleMatches.length === 0) {
+    ctx.error(useValidationMessages.notVisible(importedName), useStatement)
     return
   }
+  if (visibleMatches.length > 1) {
+    ctx.error(useValidationMessages.ambiguousImport(importedName, importLabel(useStatement)), useStatement)
+  }
+}
 
-  const sharedMatches = matches.filter(declaration => declaration.visibility === 'share')
-  if (sharedMatches.length === 0) {
-    ctx.error(useValidationMessages.crossModuleNotShared(importedName), useStatement)
-    return
-  }
-  if (sharedMatches.length > 1) {
-    ctx.error(useValidationMessages.ambiguousImport(importedName, useStatement.modulePath), useStatement)
-  }
+function importLabel(useStatement: AST.UseStatement): string {
+  return useStatement.importPath ?? 'current package'
 }
 
 function reportDuplicateImports(useStatement: AST.UseStatement, ctx: ValidationContext): void {
@@ -157,10 +175,51 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
     .map((declaration) => ({
       name: declaration.name,
       kind: declaration.$type,
-      visibility: declarationVisibility(declaration),
+      visibility: Packages.visibilityOf(declaration),
     }))
 }
 
-function declarationVisibility(declaration: AST.Declaration): AST.DeclarationVisibility | undefined {
-  return 'visibility' in declaration ? declaration.visibility : undefined
+/** validateVisibleDeclarations validates repeated visible declaration names in each loaded folder. */
+export function validateVisibleDeclarations(
+  ctx: ValidationContext,
+  targetFile?: AST.TaoFile,
+): void {
+  const declarationsByFolder = new Map<string, Map<string, VisibleDeclarationRecord[]>>()
+  const targetDocument = targetFile ? ASTUtils.getDocument(targetFile) : undefined
+  for (const file of ctx.workspaceFiles) {
+    const document = ASTUtils.getDocument(file)
+    const folderPath = FS.dirname(document.uri.path)
+    const visibleDeclarations = file.statements
+      .filter(AST.isDeclaration)
+      .filter(declaration => Packages.visibilityOf(declaration) !== undefined)
+    const declarationsByName = declarationsByFolder.get(folderPath) ?? new Map()
+    declarationsByFolder.set(folderPath, declarationsByName)
+
+    for (const declaration of visibleDeclarations) {
+      const records = declarationsByName.get(declaration.name) ?? []
+      records.push({ declaration, document, folderPath })
+      declarationsByName.set(declaration.name, records)
+    }
+  }
+
+  for (const declarationsByName of declarationsByFolder.values()) {
+    for (const records of declarationsByName.values()) {
+      const documents = new Set(records.map(record => record.document))
+      if (documents.size < 2) {
+        continue
+      }
+      for (const record of records) {
+        if (targetDocument === undefined || targetDocument === record.document) {
+          ctx.error(
+            useValidationMessages.duplicateVisibleDeclaration(record.declaration.name, record.folderPath),
+            record.declaration,
+          )
+        }
+      }
+    }
+  }
+}
+
+function workspaceFilePath(file: AST.TaoFile): string {
+  return ASTUtils.getDocument(file).uri.path
 }

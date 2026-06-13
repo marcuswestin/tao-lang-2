@@ -1,98 +1,93 @@
-import ASTUtils from '@ast-utils'
-import { Parser, type ParseResult } from '@parser'
-import { defaultStdLibRoot } from '@parser/module-resolution'
-import { validateAliases } from './aliases-validator'
-import { validateApp } from './app-validator'
-import { hasError, linkerDiagnostics, parserDiagnostics, type TaoDiagnostic } from './diagnostics'
-import { validateTypirProblems } from './expressions-validator'
-import { validateInjections } from './injections-validator'
-import { validateInvocations } from './invocations-validator'
-import { parseCodeForValidation, parseFileForValidation, rebuildForValidation } from './langium-services'
-import { validateUseStatements } from './use-validator'
-import { createValidationContext } from './validation'
-import { validateViews } from './views-validator'
+import { Packages } from '@ast-utils'
+import { AST, Parser, type ParseResult } from '@parser'
+import { type Diagnostic, Diagnostics } from '@shared'
+import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typir-langium'
+import { type TaoSpecifics, TaoTypeSystem, type TaoTypirServices } from './type-system'
+import { Validate } from './Validate'
+import { collectValidationDiagnostics, createValidationContext, type ValidationRunContext } from './validation'
 
-/** ValidationResult declares the parsed source and Tao diagnostics. */
-export type ValidationResult = {
-  parsed: ParseResult & {
-    workspaceFiles?: import('@parser').AST.TaoFile[]
-    entryFilePath?: string
+const codeProjectRoot = '/__tao__'
+
+/** ValidationResult declares validated Tao source and diagnostics. */
+export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
+  diagnostics: readonly Diagnostic[]
+}
+
+/** createContext creates validator invocation state. */
+function createContext(
+  packagesContext: Packages.Context,
+  typir: TaoTypirServices,
+  workspaceFiles: readonly AST.TaoFile[],
+): ValidationRunContext {
+  return {
+    packagesContext,
+    typir,
+    workspaceFiles,
   }
-  diagnostics: readonly TaoDiagnostic[]
-  validatorDiagnostics: readonly TaoDiagnostic[]
 }
 
-/** validateFile validates the Tao file at `path`. */
-async function validateFile(path: string): Promise<ValidationResult> {
-  return await validateValidationParseResult(await parseFileForValidation(path))
-}
-
-/** validateCode validates Tao source code. */
-async function validateCode(code: string): Promise<ValidationResult> {
-  const parsed = await Parser.parseCode(code)
-  return await validateValidationParseResult(
-    await parseCodeForValidation(code, {
-      uri: parsed.document.uri,
-    }),
-  )
-}
-
-/** validateParsed validates an existing parser result. */
-async function validateParsed(parsed: ParseResult): Promise<ValidationResult> {
-  return await validateValidationParseResult(await rebuildForValidation(parsed))
-}
-
-async function validateValidationParseResult(
-  validationParsed: ParseResult & {
-    typir: import('./type-system').TaoTypirServices
-    workspaceFiles?: import('@parser').AST.TaoFile[]
-    entryFilePath?: string
-  },
-): Promise<ValidationResult> {
-  const workspaceFiles = validationParsed.workspaceFiles ?? [validationParsed.ast]
-  const workspaceDocuments = workspaceFiles.map(file => ASTUtils.getDocument(file))
-  const parserMessages = parserDiagnostics(validationParsed, workspaceDocuments)
-  if (hasError(parserMessages)) {
-    return {
-      parsed: validationParsed,
-      diagnostics: parserMessages,
-      validatorDiagnostics: [],
-    }
+/** validateParseResult validates an existing parse result. */
+function validateParseResult(parseResult: ParseResult, context: ValidationRunContext): ValidationResult {
+  if (Diagnostics.hasError(parseResult.diagnostics, 'lexer', 'parser')) {
+    return validationResultFromParse(parseResult, parseResult.diagnostics)
   }
 
   // Linker errors don't gate structural validation: the AST shape is intact and
   // validators tolerate unresolved references.
-  const linkerMessages = linkerDiagnostics(workspaceDocuments)
-  const ctx = createValidationContext()
-  for (const file of workspaceFiles) {
-    validateApp(file, ctx)
-    validateViews(file, ctx)
-    validateAliases(file, ctx)
-    validateInjections(file, ctx)
-    validateInvocations(file, ctx)
-    const document = ASTUtils.getDocument(file)
-    if (document.uri.scheme === 'file') {
-      validateUseStatements(file, ctx, {
-        workspaceFiles,
-        filePath: document.uri.path,
-        stdLibRoot: defaultStdLibRoot(),
-      })
-    }
-    validateTypirProblems(file, validationParsed.typir, ctx)
+  const validationDiagnostics = collectValidationDiagnostics()
+  const ctx = createValidationContext(validationDiagnostics.accept, {
+    packagesContext: context.packagesContext,
+    typir: context.typir,
+    workspaceFiles: context.workspaceFiles,
+  })
+  for (const file of context.workspaceFiles) {
+    Validate.TaoFile(file, ctx)
+    Validate.TypirProblems(file, context.typir, ctx)
   }
 
-  return {
-    parsed: validationParsed,
-    diagnostics: [...parserMessages, ...linkerMessages, ...ctx.diagnostics],
-    validatorDiagnostics: ctx.diagnostics,
-  }
+  return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
+}
+
+/** validateCode validates Tao source code using a standalone validator context. */
+async function validateCode(code: string): Promise<ValidationResult> {
+  const packagesContext = await Packages.createContext(codeProjectRoot)
+  const parserContext = Parser.createContext({
+    packages: Packages.createResolver(packagesContext),
+  })
+  const typir = createTypirLangiumServices<TaoSpecifics>(
+    parserContext.services.shared,
+    AST.reflection,
+    new TaoTypeSystem(),
+  )
+  initializeLangiumTypirServices(parserContext.services.language, typir)
+  const parseResult = await Parser.parseSource(parserContext, code, { validation: false })
+  return validateParseResult(
+    parseResult,
+    createContext(packagesContext, typir, parseResult.files.map(file => file.ast)),
+  )
 }
 
 /** Validator exposes Tao source validation functions. */
 const Validator = {
+  createContext,
   validateCode,
-  validateFile,
-  validateParsed,
+  validateParseResult,
+}
+
+namespace Validator {
+  /** Context declares the shared workspace state required by validation. */
+  export type Context = ValidationRunContext
 }
 
 export default Validator
+
+function validationResultFromParse(
+  parseResult: ParseResult,
+  diagnostics: readonly Diagnostic[],
+): ValidationResult {
+  return {
+    entry: parseResult.entry,
+    files: parseResult.files,
+    diagnostics,
+  }
+}

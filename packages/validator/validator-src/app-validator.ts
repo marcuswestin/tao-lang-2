@@ -3,7 +3,7 @@ import type { ValidationContext } from './validation'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement. */
 export const appValidationMessages = {
-  topLevel: 'Only app, ui, layout, alias declarations, and use statements are allowed at file level.',
+  topLevel: 'Only project, app, ui, layout, alias declarations, and use statements are allowed at file level.',
   appCount: (count: number) => `Tao file must declare at most one app, found ${count}.`,
   appBlock: (name: string) => `Only root ui declarations are allowed in app ${name}.`,
   appRootCount: (name: string, count: number) => `App ${name} must declare exactly one root ui, found ${count}.`,

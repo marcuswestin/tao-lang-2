@@ -12,7 +12,7 @@ export function inferExpressionType(expression: AST.Expression, typir: TaoTypirS
 /** validateTypirProblems reports Typir validation problems as Tao validator diagnostics. */
 export function validateTypirProblems(file: AST.TaoFile, typir: TaoTypirServices, ctx: ValidationContext): void {
   for (const problem of collectTypirProblems(file, typir)) {
-    const node = ASTUtils.isNode(problem.languageNode) ? problem.languageNode : undefined
+    const node = ASTUtils.isNode(problem.languageNode) ? problem.languageNode : file
     ctx.error(problem.message, node)
   }
 }

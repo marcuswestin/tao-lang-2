@@ -1,5 +1,6 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import type { Type } from 'typir'
 import type { ValidationProblemAcceptor } from 'typir'
 import type { TaoSpecifics, TaoTypirServices } from './type-system'
@@ -47,13 +48,18 @@ function reportArity(render: AST.Render, ctx: ValidationContext): void {
     ctx.error(invocationValidationMessages.missingArgument(view.name, parameter.name), render)
   }
   if (args.length > parameters.length) {
+    const extraArgument = args[parameters.length]
+    Assert.defined(extraArgument, 'extra render argument exists', {
+      argumentCount: args.length,
+      parameterCount: parameters.length,
+    })
     ctx.error(
       invocationValidationMessages.extraArguments(
         view.name,
         parameters.length,
         args.length,
       ),
-      args[parameters.length],
+      extraArgument,
     )
   }
 }
