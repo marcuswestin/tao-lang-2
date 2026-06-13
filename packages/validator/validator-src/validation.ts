@@ -7,6 +7,7 @@ import type { TaoTypirServices } from './type-system'
 /** ValidationRunContext declares shared validation invocation state. */
 export interface ValidationRunContext {
   readonly packagesContext: Packages.Context
+  readonly entryFilePath: string
   readonly workspaceFiles: readonly AST.TaoFile[]
   readonly typir: TaoTypirServices
 }

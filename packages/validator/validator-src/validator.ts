@@ -18,8 +18,10 @@ function createContext(
   packagesContext: Packages.Context,
   typir: TaoTypirServices,
   workspaceFiles: readonly AST.TaoFile[],
+  entryFilePath: string,
 ): ValidationRunContext {
   return {
+    entryFilePath,
     packagesContext,
     typir,
     workspaceFiles,
@@ -36,6 +38,7 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
   // validators tolerate unresolved references.
   const validationDiagnostics = collectValidationDiagnostics()
   const ctx = createValidationContext(validationDiagnostics.accept, {
+    entryFilePath: context.entryFilePath,
     packagesContext: context.packagesContext,
     typir: context.typir,
     workspaceFiles: context.workspaceFiles,
@@ -63,7 +66,7 @@ async function validateCode(code: string): Promise<ValidationResult> {
   const parseResult = await Parser.parseSource(parserContext, code, { validation: false })
   return validateParseResult(
     parseResult,
-    createContext(packagesContext, typir, parseResult.files.map(file => file.ast)),
+    createContext(packagesContext, typir, parseResult.files.map(file => file.ast), parseResult.entry.path),
   )
 }
 

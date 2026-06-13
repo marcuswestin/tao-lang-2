@@ -1122,6 +1122,55 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
+  Test('rejects app declarations outside the entry file', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { ui MainView }
+        use OtherView from ./Other.tao
+        ui MainView {
+          render OtherView
+        }
+      `,
+        'Other.tao': `
+        app OtherApp { ui OtherView }
+        project ui OtherView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(appValidationMessages.appEntryFile('OtherApp'))
+      },
+    )
+  })
+
+  Test('rejects app declarations inside packages', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { ui MainView }
+        use MainView from @bar
+      `,
+        'packages/@bar/Main.tao': `
+        app PackageApp { ui MainView }
+        project ui MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(appValidationMessages.appPackage('PackageApp'))
+      },
+    )
+  })
+
   Test('rejects imports that match multiple visible declarations in an import target', async () => {
     const sharedTextSource = `
       project ui Text Value text {

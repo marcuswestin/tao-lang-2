@@ -75,6 +75,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
       this.project.packagesContext,
       this.project.services.typir,
       parseResult.files.map(file => file.ast),
+      parseResult.entry.path,
     )
   }
 

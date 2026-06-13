@@ -1,4 +1,4 @@
-import { Packages } from '@ast-utils'
+import ASTUtils, { Packages } from '@ast-utils'
 import { AST, Langium, Parser, type ParserServices } from '@parser'
 import Validator from '@validator'
 import { registerTaoValidationChecks } from '@validator/langium-validation'
@@ -75,6 +75,11 @@ function validationContextFor(
     const workspaceFiles = Array.from(services.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)
       .filter(AST.isTaoFile)
-    return Validator.createContext(packagesContext, typir, workspaceFiles.length > 0 ? workspaceFiles : [file])
+    return Validator.createContext(
+      packagesContext,
+      typir,
+      workspaceFiles,
+      ASTUtils.getDocument(file).uri.path,
+    )
   }
 }
