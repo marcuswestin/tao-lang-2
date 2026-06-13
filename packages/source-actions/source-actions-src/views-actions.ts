@@ -31,8 +31,8 @@ export function moveViewRendersLast(document: AST.Document): string | undefined 
 }
 
 function statementRegionStart(text: string, block: AST.Block, firstStatementOffset: number): number {
-  const openOffset = text.lastIndexOf('{', firstStatementOffset)
-  const bodyStart = openOffset === -1 ? block.$cstNode!.offset : openOffset + 1
+  const openOffset = text.indexOf('{', block.$cstNode!.offset)
+  const bodyStart = openOffset === -1 || openOffset > firstStatementOffset ? block.$cstNode!.offset : openOffset + 1
   const leading = text.slice(bodyStart, firstStatementOffset)
   const comment = /(?:^|\n)[ \t]*(?:\/\/|\/\*)/.exec(leading)
   if (!comment) {

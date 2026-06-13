@@ -391,6 +391,26 @@ Describe('moveRendersLast', () => {
     }\n`)
   })
 
+  Test('keeps leading render comments that contain braces attached when moving renders', async () => {
+    const document = await parseDocument(`
+      ui MainView {
+         // render { comment
+         render Text Greeting
+         alias Greeting = "hi"
+      }
+    `)
+
+    Expect(await SourceActions.moveRendersLast(document)).toBe(`${
+      Text.stripIndent(`
+      ui MainView {
+         alias Greeting = "hi"
+         // render { comment
+         render Text Greeting
+      }
+    `)
+    }\n`)
+  })
+
   Test('produces no edit when render is already last', async () => {
     const document = await parseDocument(`
       ui MainView {

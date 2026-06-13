@@ -88,4 +88,18 @@ Describe('tao check', () => {
       Expect(result.stderr).toContain('1 failed')
     })
   })
+
+  Test('CLI accepts source produced by tao fix as canonical', async () => {
+    await withTaoFixture({
+      'app.tao':
+        'app MyApp { ui MainView }\nuse Text, Button from @tao/ui\nui MainView { render Text Greeting alias Greeting = "hi" }\n',
+    }, async (rootDir) => {
+      const fix = await CLI.run(FS.repoPath('tao'), { args: ['fix', rootDir] })
+      const check = await CLI.run(FS.repoPath('tao'), { args: ['check', rootDir] })
+
+      Expect(fix.exitCode).toBe(0)
+      Expect(check.exitCode).toBe(0)
+      Expect(check.stdout).toContain('0 noncanonical, 1 unchanged')
+    })
+  })
 })
