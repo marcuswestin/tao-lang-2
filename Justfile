@@ -2,6 +2,7 @@ set quiet := true
 
 KITCHEN_SINK_APP := justfile_directory() + "/Apps/Kitchen Sink/Kitchen Sink.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
+DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
 
 # Print available recipes
 help:
@@ -21,7 +22,7 @@ deps:
 # Run all tests
 test: _compile-kitchen-sink-app
   bun test packages/*/*-tests/*.test.ts
-  cd packages/runtime && node node_modules/jest/bin/jest.js --runInBand --watchman=false
+  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false
 
 # Format code
 fmt:
@@ -86,4 +87,4 @@ _android-expo-go:
   ./dev android-expo-go
 
 _parser-gen:
-  cd packages/parser && bunx langium generate
+  cd packages/parser && "{{DEVENV_NODE}}" node_modules/langium-cli/bin/langium.js generate
