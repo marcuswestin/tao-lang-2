@@ -84,4 +84,4 @@ _android-expo-go:
   ./dev android-expo-go
 
 _parser-gen:
-  cd packages/parser && bunx langium generate
+  cd packages/parser && ./node_modules/.bin/langium generate
