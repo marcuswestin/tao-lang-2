@@ -1,0 +1,11 @@
+project {
+    name "Package Access"
+    remote none
+    license MIT
+}
+
+app PackageAccess {
+    ui MainView
+}
+
+use MainView from @cards/screens
