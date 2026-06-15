@@ -17,9 +17,9 @@ Describe('minimal Tao lexer', () => {
   })
 
   Test('ignores line and block comments', () => {
-    const result = expectLexes('ui // comment\nMainView /* block */')
+    const result = expectLexes('view // comment\nMainView /* block */')
 
-    Expect(tokenImages(result)).toEqual(['ui', 'MainView'])
+    Expect(tokenImages(result)).toEqual(['view', 'MainView'])
     Expect(result.hidden.map(token => token.image)).toEqual(['// comment', '/* block */'])
   })
 

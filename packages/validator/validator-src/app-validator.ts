@@ -5,14 +5,14 @@ import type { ValidationContext } from './validation'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement. */
 export const appValidationMessages = {
-  topLevel: 'Only project, app, ui, layout, alias declarations, and use statements are allowed at file level.',
+  topLevel: 'Only project, app, view, layout, alias declarations, and use statements are allowed at file level.',
   appCount: (count: number) => `Tao file must declare at most one app, found ${count}.`,
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
-  appBlock: (name: string) => `Only root ui declarations are allowed in app ${name}.`,
-  appRootCount: (name: string, count: number) => `App ${name} must declare exactly one root ui, found ${count}.`,
-  rootUiParameters: (appName: string, uiName: string) =>
-    `App ${appName} root ui ${uiName} must not declare parameters.`,
+  appBlock: (name: string) => `Only root view declarations are allowed in app ${name}.`,
+  appRootCount: (name: string, count: number) => `App ${name} must declare exactly one root view, found ${count}.`,
+  rootViewParameters: (appName: string, viewName: string) =>
+    `App ${appName} root view ${viewName} must not declare parameters.`,
 } as const
 
 /** validateApp validates file-level and app-block structure. */
@@ -52,28 +52,28 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
 
 function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext): void {
   for (const statement of app.block.statements) {
-    if (AST.isAppUi(statement)) {
+    if (AST.isAppView(statement)) {
       continue
     }
     ctx.error(appValidationMessages.appBlock(app.name), statement)
   }
 
-  const roots = app.block.statements.filter(AST.isAppUi)
+  const roots = app.block.statements.filter(AST.isAppView)
   if (roots.length !== 1) {
     ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
   }
   for (const root of roots) {
-    validateRootUi(app, root, ctx)
+    validateRootView(app, root, ctx)
   }
 }
 
-function validateRootUi(app: AST.AppDeclaration, root: AST.AppUi, ctx: ValidationContext): void {
-  const ui = root.ui.ref
-  if (!ui) {
+function validateRootView(app: AST.AppDeclaration, root: AST.AppView, ctx: ValidationContext): void {
+  const view = root.view.ref
+  if (!view) {
     return
   }
-  if ((ui.parameterList?.parameters.length ?? 0) > 0) {
-    ctx.error(appValidationMessages.rootUiParameters(app.name, ui.name), root)
+  if ((view.parameterList?.parameters.length ?? 0) > 0) {
+    ctx.error(appValidationMessages.rootViewParameters(app.name, view.name), root)
   }
 }
 

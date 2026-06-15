@@ -1,5 +1,5 @@
 app TypeSystemTiles {
-   ui TileBoard
+   view TileBoard
 }
 
 alias FirstTitle = "Open"
@@ -7,7 +7,7 @@ alias FirstCount = 1
 alias SecondTitle = "Done"
 alias SecondCount = 2
 
-ui TileBoard {
+view TileBoard {
    render Stack {
       Tile FirstTitle, FirstCount
       Tile SecondTitle, SecondCount
@@ -19,7 +19,7 @@ layout Stack {
    ```
 }
 
-ui Tile Title text, Count number {
+view Tile Title text, Count number {
    render inject Title, Count ```ts
       return <RN.Text>{Title}: {Count}</RN.Text>
    ```

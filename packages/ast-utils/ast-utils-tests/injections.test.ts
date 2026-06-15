@@ -6,7 +6,7 @@ Describe('Tao AST injection helpers', () => {
   Test('resolves inject argument local names', async () => {
     const parseResult = await Parser.parseCode(`
       alias UserName = "Ro"
-      ui Native Value text {
+      view Native Value text {
         render inject Value, Name UserName \`\`\`ts
           return null
         \`\`\`
@@ -15,9 +15,9 @@ Describe('Tao AST injection helpers', () => {
     Expect(parseResult.diagnostics).toEqual([])
 
     const nativeView = parseResult.entry.ast.statements.find(statement =>
-      AST.isUiDeclaration(statement) && statement.name === 'Native'
+      AST.isViewDeclaration(statement) && statement.name === 'Native'
     )
-    Expect.Is(nativeView, AST.isUiDeclaration)
+    Expect.Is(nativeView, AST.isViewDeclaration)
 
     const render = nativeView.block.statements[0]
     Expect.Is(render, AST.isRenderStatement)

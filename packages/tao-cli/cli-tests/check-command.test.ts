@@ -6,45 +6,45 @@ import { statusByBasename, statusByFile, withCwd, withTaoFixture } from './test-
 Describe('tao check', () => {
   Test('reports canonical files as unchanged without writing', async () => {
     await withTaoFixture({
-      'canonical.tao': 'ui MainView { }\n',
+      'canonical.tao': 'view MainView { }\n',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'canonical.tao': 'unchanged' })
-      Expect(await FS.readText(FS.resolvePath('canonical.tao', { cwd: rootDir }))).toBe('ui MainView { }\n')
+      Expect(await FS.readText(FS.resolvePath('canonical.tao', { cwd: rootDir }))).toBe('view MainView { }\n')
     })
   })
 
   Test('reports drift without writing', async () => {
     await withTaoFixture({
-      'drift.tao': 'ui   MainView { }',
+      'drift.tao': 'view   MainView { }',
     }, async (rootDir) => {
       const path = FS.resolvePath('drift.tao', { cwd: rootDir })
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'drift.tao': 'changed' })
-      Expect(await FS.readText(path)).toBe('ui   MainView { }')
+      Expect(await FS.readText(path)).toBe('view   MainView { }')
     })
   })
 
   Test('reports syntax errors without writing', async () => {
     await withTaoFixture({
-      'broken.tao': 'ui Broken {',
+      'broken.tao': 'view Broken {',
     }, async (rootDir) => {
       const path = FS.resolvePath('broken.tao', { cwd: rootDir })
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'broken.tao': 'error' })
-      Expect(await FS.readText(path)).toBe('ui Broken {')
+      Expect(await FS.readText(path)).toBe('view Broken {')
     })
   })
 
   Test('uses the shared maximal walker exclusions', async () => {
     await withTaoFixture({
-      'canonical.tao': 'ui MainView { }\n',
-      'node_modules/pkg/ignored.tao': 'ui   Ignored { }',
-      '_gen_tao-app/ignored.tao': 'ui   Ignored { }',
-      'packages/old-fixtures/ignored.tao': 'ui   Ignored { }',
+      'canonical.tao': 'view MainView { }\n',
+      'node_modules/pkg/ignored.tao': 'view   Ignored { }',
+      '_gen_tao-app/ignored.tao': 'view   Ignored { }',
+      'packages/old-fixtures/ignored.tao': 'view   Ignored { }',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
@@ -57,9 +57,9 @@ Describe('tao check', () => {
       'Packages/@cards/screens/Main.tao': Text.stripIndent(`
         use LocalText, Missing from @cards/widgets
 
-        ui MainView { }
+        view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value text { }\n',
     }, async (rootDir) => {
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
       const results = await runCheck(path)
@@ -74,9 +74,9 @@ Describe('tao check', () => {
       'Packages/@cards/screens/Main.tao': Text.stripIndent(`
         use LocalText, Missing from @cards/widgets
 
-        ui MainView { }
+        view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value text { }\n',
     }, async (rootDir) => {
       const directory = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
@@ -92,9 +92,9 @@ Describe('tao check', () => {
       'Packages/@cards/screens/Main.tao': Text.stripIndent(`
         use LocalText, Missing from @cards/widgets
 
-        ui MainView { }
+        view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value text { }\n',
     }, async (rootDir) => {
       const cwd = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
       const path = FS.resolvePath('Main.tao', { cwd })
@@ -109,7 +109,7 @@ Describe('tao check', () => {
 
   Test('CLI exits zero when files are canonical', async () => {
     await withTaoFixture({
-      'canonical.tao': 'ui MainView { }\n',
+      'canonical.tao': 'view MainView { }\n',
     }, async (rootDir) => {
       const result = await CLI.run(FS.repoPath('tao'), { args: ['check', rootDir] })
 
@@ -120,7 +120,7 @@ Describe('tao check', () => {
 
   Test('CLI exits nonzero on drift without writing', async () => {
     await withTaoFixture({
-      'drift.tao': 'ui   MainView { }',
+      'drift.tao': 'view   MainView { }',
     }, async (rootDir) => {
       const path = FS.resolvePath('drift.tao', { cwd: rootDir })
       const result = await CLI.run(FS.repoPath('tao'), { args: ['check', rootDir] })
@@ -128,13 +128,13 @@ Describe('tao check', () => {
       Expect(result.exitCode).toBe(1)
       Expect(result.stderr).toContain('Needs fixes')
       Expect(result.stderr).toContain('1 noncanonical, 0 unchanged')
-      Expect(await FS.readText(path)).toBe('ui   MainView { }')
+      Expect(await FS.readText(path)).toBe('view   MainView { }')
     })
   })
 
   Test('CLI exits nonzero on check errors', async () => {
     await withTaoFixture({
-      'broken.tao': 'ui Broken {',
+      'broken.tao': 'view Broken {',
     }, async (rootDir) => {
       const result = await CLI.run(FS.repoPath('tao'), { args: ['check', rootDir] })
 
@@ -147,7 +147,7 @@ Describe('tao check', () => {
   Test('CLI accepts source produced by tao fix as canonical', async () => {
     await withTaoFixture({
       'app.tao':
-        'app MyApp { ui MainView }\nuse Text, Button from @tao/ui\nui MainView { render Text Greeting alias Greeting = "hi" }\n',
+        'app MyApp { view MainView }\nuse Text, Button from @tao/ui\nview MainView { render Text Greeting alias Greeting = "hi" }\n',
     }, async (rootDir) => {
       const fix = await CLI.run(FS.repoPath('tao'), { args: ['fix', rootDir] })
       const check = await CLI.run(FS.repoPath('tao'), { args: ['check', rootDir] })

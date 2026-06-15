@@ -1,21 +1,21 @@
-use Box, Button, Col, MultiLineText, Number, Row, Stack, Text, TextLabel, WrappingRow from @tao/ui
+use Box, Button, Col, Number, Row, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
 
 app RuntimeStdlibTests {
-   ui MainView
+   view MainView
 }
 
 alias LaunchCount = 3
 
-ui MainView {
+view MainView {
    render Stack {
       Text "Runtime stdlib smoke"
       Number LaunchCount
       Button "Tap me"
       Box {
          Col {
-            TextLabel "Label"
+            TextFrame "Label"
       }  }
       Row {
          WrappingRow {
-            MultiLineText "Wrapped"
+            TextMultiline "Wrapped"
 }  }  }  }

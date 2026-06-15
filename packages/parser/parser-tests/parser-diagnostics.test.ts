@@ -5,13 +5,13 @@ import { lexCodeWithErrors, parseCodeWithErrors, testParseCode } from './test-pa
 
 Describe('minimal Tao parser diagnostics', () => {
   Test('parses compact source without newlines', async () => {
-    const parseResult = await testParseCode('app MyApp { ui MyView } ui MyView { }')
+    const parseResult = await testParseCode('app MyApp { view MyView } view MyView { }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
 
   Test('parses unknown leading identifiers for later validator checks', async () => {
-    const parseResult = await parseCodeWithErrors('view Legacy { }')
+    const parseResult = await parseCodeWithErrors('Legacy { }')
 
     Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
     Expect.Is(parseResult.entry.ast.statements[0], AST.isViewRender)
@@ -21,7 +21,7 @@ Describe('minimal Tao parser diagnostics', () => {
   })
 
   Test('reports parser errors for incomplete render statements', async () => {
-    const parseResult = await parseCodeWithErrors('ui Broken { render }')
+    const parseResult = await parseCodeWithErrors('view Broken { render }')
     const parserDiagnostics = Diagnostics.errors(parseResult.diagnostics, 'parser')
 
     Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
@@ -30,30 +30,30 @@ Describe('minimal Tao parser diagnostics', () => {
   })
 
   Test('parses nested declarations for later validator checks', async () => {
-    const parseResult = await testParseCode('app MyApp { ui MyView } ui MyView { ui Nested { } }')
+    const parseResult = await testParseCode('app MyApp { view MyView } view MyView { view Nested { } }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
 
   Test('parses aliases in app blocks for later validator checks', async () => {
-    const parseResult = await testParseCode('app MyApp { alias Greeting = "hello" ui MyView } ui MyView { }')
+    const parseResult = await testParseCode('app MyApp { alias Greeting = "hello" view MyView } view MyView { }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
 
   Test('parses top-level renders for later validator checks', async () => {
-    const parseResult = await testParseCode('render Text "hello" ui Text Value text { }')
+    const parseResult = await testParseCode('render Text "hello" view Text Value text { }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
 
   Test('parses number-typed parameters in semantically invalid positions', async () => {
     const parseResult = await testParseCode(`
-      app MyApp { ui MyView }
-      ui MyView Count number {
+      app MyApp { view MyView }
+      view MyView Count number {
         render Text Count { }
       }
-      ui Text Value text { }
+      view Text Value text { }
     `)
 
     Expect(parseResult.entry.ast.statements).toHaveLength(3)
@@ -61,11 +61,11 @@ Describe('minimal Tao parser diagnostics', () => {
 
   Test('reports linker diagnostics for values outside their owning view', async () => {
     const parseResult = await parseCodeWithErrors(`
-      ui Text Value text { }
-      ui Source Secret text {
+      view Text Value text { }
+      view Source Secret text {
         alias Local = Secret
       }
-      ui Target {
+      view Target {
         render Text Secret { }
         render Text Local { }
       }
@@ -80,7 +80,7 @@ Describe('minimal Tao parser diagnostics', () => {
   })
 
   Test('reports lexer errors separately from parser errors', async () => {
-    const source = 'app MyApp { ui MyView } @ ui MyView { }'
+    const source = 'app MyApp { view MyView } @ view MyView { }'
     lexCodeWithErrors(source)
     const parseResult = await parseCodeWithErrors(source)
 

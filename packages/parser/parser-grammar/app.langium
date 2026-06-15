@@ -9,5 +9,5 @@ entry AppGrammarEntrypoint:
 AppDeclaration:
     'app' name=ID block=Block;
 
-AppUi:
-    'ui' ui=[UiDeclaration:ID];
+AppView:
+    'view' view=[ViewDeclaration:ID];

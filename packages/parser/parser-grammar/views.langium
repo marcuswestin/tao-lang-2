@@ -6,23 +6,23 @@ import "./injections"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
-    UiDeclaration | LayoutDeclaration;
+    ViewDeclaration | LayoutDeclaration;
 
 DeclarationVisibility returns string:
     'package' | 'project' | 'publish';
 
-UiDeclaration:
-    visibility=DeclarationVisibility? 'ui' name=ID parameterList=ParameterList? block=Block;
+ViewDeclaration:
+    visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList? block=Block;
 
 LayoutDeclaration:
     visibility=DeclarationVisibility? 'layout' name=ID parameterList=ParameterList? block=Block;
 
-type ViewDeclaration = UiDeclaration | LayoutDeclaration;
+type RenderableDeclaration = ViewDeclaration | LayoutDeclaration;
 
 RenderStatement:
-    'render' (injection=Injection | view=[ViewDeclaration:ID] argumentList=ArgumentList? block=Block?);
+    'render' (injection=Injection | view=[RenderableDeclaration:ID] argumentList=ArgumentList? block=Block?);
 
 ViewRender:
-    view=[ViewDeclaration:ID] argumentList=ArgumentList? block=Block?;
+    view=[RenderableDeclaration:ID] argumentList=ArgumentList? block=Block?;
 
 type Render = RenderStatement | ViewRender;

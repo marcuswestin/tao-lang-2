@@ -11,10 +11,10 @@ Describe('Tao injection parser', () => {
   })
 
   Test('parses render injections', async () => {
-    const parseResult = await testParseCode('ui Native { render inject ```ts\nreturn null\n``` }')
+    const parseResult = await testParseCode('view Native { render inject ```ts\nreturn null\n``` }')
     const view = parseResult.entry.ast.statements[0]
 
-    Expect.Is(view, AST.isUiDeclaration)
+    Expect.Is(view, AST.isViewDeclaration)
     const render = view.block.statements[0]
     Expect.Is(render, AST.isRenderStatement)
     Expect(render.injection?.tsCodeBlock).toContain('return null')
@@ -23,7 +23,7 @@ Describe('Tao injection parser', () => {
   Test('parses inject arguments', async () => {
     const parseResult = await testParseCode(`
       alias UserName = "Ro"
-      ui Native Value text {
+      view Native Value text {
         render inject Value, Name UserName, Count 3, Greeting "Hello" \`\`\`ts
           return null
         \`\`\`
@@ -31,7 +31,7 @@ Describe('Tao injection parser', () => {
     `)
     const view = parseResult.entry.ast.statements[1]
 
-    Expect.Is(view, AST.isUiDeclaration)
+    Expect.Is(view, AST.isViewDeclaration)
     const render = view.block.statements[0]
     Expect.Is(render, AST.isRenderStatement)
     const args = render.injection?.argumentList?.arguments ?? []
@@ -60,7 +60,7 @@ Describe('Tao injection parser', () => {
 
   Test('reports linker diagnostics for unresolved inject arguments', async () => {
     const parseResult = await parseCodeWithErrors(`
-      ui Native {
+      view Native {
         render inject Missing, Name OtherMissing \`\`\`ts
           return null
         \`\`\`

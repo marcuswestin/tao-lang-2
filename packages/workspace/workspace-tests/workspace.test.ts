@@ -16,7 +16,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
             remote none
             license MIT
           }
-          app PackageAccess { ui MainView }
+          app PackageAccess { view MainView }
           use MainView from @cards/screens
         `,
         'Packages/@cards/Title.tao': `
@@ -24,10 +24,10 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         `,
         'Packages/@cards/screens/Main.tao': `
           use Title
-          project ui MainView {
+          project view MainView {
             render Text Title
           }
-          ui Text Value text {
+          view Text Value text {
             render inject Value ${tsFence}
               return null
             ${fence}
@@ -56,18 +56,18 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-duplicate-package-',
       {
         'Main.tao': `
-          app DuplicatePackageApp { ui MainView }
+          app DuplicatePackageApp { view MainView }
           use MainView from @bar
         `,
         'one/@bar/Main.tao': `
-          project ui MainView {
+          project view MainView {
             render inject ${tsFence}
               return null
             ${fence}
           }
         `,
         'two/@bar/Main.tao': `
-          project ui MainView {
+          project view MainView {
             render inject ${tsFence}
               return null
             ${fence}
@@ -88,8 +88,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-root-',
       {
         'Main.tao': `
-          app RootApp { ui MainView }
-          ui MainView { }
+          app RootApp { view MainView }
+          view MainView { }
         `,
       },
       async (paths) => {

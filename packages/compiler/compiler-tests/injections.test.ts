@@ -7,12 +7,12 @@ const fence = '```'
 Describe('Tao injection compiler', () => {
   Test('compiles inject arguments', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp { ui MainView }
+      app MyApp { view MainView }
       alias UserName = "Ro"
-      ui MainView {
+      view MainView {
         render Text "Hello"
       }
-      ui Text Value text {
+      view Text Value text {
         render inject Value, Name UserName, Count 3 ${tsFence}
           return null
         ${fence}

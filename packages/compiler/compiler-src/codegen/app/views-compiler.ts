@@ -7,15 +7,12 @@ export default {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
   ViewDeclaration,
 
-  /** UiDeclaration compiles a Tao ui declaration into a runtime component. */
-  UiDeclaration: ViewDeclaration,
-
   /** LayoutDeclaration compiles a Tao layout declaration into a runtime component. */
   LayoutDeclaration: ViewDeclaration,
 
   /** ViewParameterList compiles Tao view parameters into generated React props. */
-  ViewParameterList(ui: AST.ViewDeclaration): Compiled {
-    const parameters = ui.parameterList?.parameters ?? []
+  ViewParameterList(renderable: AST.RenderableDeclaration): Compiled {
+    const parameters = renderable.parameterList?.parameters ?? []
     return gen`{
       ${genList(parameters, Compile.ParameterDeclaration)}
       __tao?: TR.TaoProps
@@ -54,12 +51,13 @@ export default {
   },
 } as const
 
-function ViewDeclaration(ui: AST.ViewDeclaration): Compiled {
+function ViewDeclaration(renderable: AST.RenderableDeclaration): Compiled {
+  const parameterList = Compile.ViewParameterList(renderable)
   return gen`
-    ${genScopeName(ui)} = function ${genName(ui)}(_ViewProps: ${Compile.ViewParameterList(ui)}) {
+    ${genScopeName(renderable)} = function ${genName(renderable)}(_ViewProps: ${parameterList}) {
       return TR.BlockScope(_Scope, _Scope => {
-        ${genList(ui.parameterList?.parameters ?? [], Compile.ViewParameterBinding)}
-        ${genList(ui.block.statements, Compile.Statement)}
+        ${genList(renderable.parameterList?.parameters ?? [], Compile.ViewParameterBinding)}
+        ${genList(renderable.block.statements, Compile.Statement)}
       })
     }
   `

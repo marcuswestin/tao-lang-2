@@ -7,5 +7,5 @@ project {
 }
 
 app PackageAccess {
-   ui MainView
+   view MainView
 }

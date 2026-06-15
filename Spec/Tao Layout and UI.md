@@ -2,7 +2,7 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `ui` and `layout` declarations, explicit `render` roots, basic stdlib layout views, and render child blocks. This document uses the intended `view` name for the closed UI kind. The repo does not yet implement the full layout clause language, `frame`, `@@content`, named render slots, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
+Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, and render child blocks. The repo does not yet implement the full layout clause language, `frame`, `@@content`, named render slots, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
 
 Open design question: should `frame` and `layout` be allowed to paint pixels with `<style>`, or should visual styling be restricted to `view` declarations and view-like primitives? Disallowing style on containers may make the model clearer, but it may also make common framed surfaces awkward. This document does not settle that question yet.
 
@@ -301,8 +301,6 @@ TextMultiline Article.Summary, Lines 3
 ```
 
 This keeps text pressure visible in the view being rendered. A layout clause should not have to say "this text is multiline" or "this label clips instead of ellipsizing." That is part of the text view's job.
-
-The current repo still has older stdlib names in places, such as `TextLabel` and `MultiLineText`. This document uses the intended names above.
 
 ### Wrapping Rows
 

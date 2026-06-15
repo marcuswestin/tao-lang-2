@@ -33,7 +33,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
 
 - [ ] Implement Tao-native testing v0
-  - Inline/sidecar `test`, `expect rendered`, `expect missing`, test-plan IR, runtime Jest execution through the existing Expo harness.
+  - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness.
 
 - [ ] Add `tao test` and migrate Test Apps to Tao-authored behavior tests
   - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures.
@@ -78,7 +78,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
 - [x] Add runtime stdlib and module imports
-  - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough package/project/publish visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
+  - Import previous-repo `use ... from @tao/ui` / relative `use` behavior, enough package/project/publish visibility for stdlib declarations, and first runtime-backed UI views: `Text`, `Number`, `Button`, `Col`, `Row`, `Box`, `Stack`, `WrappingRow`, `TextFrame`, and `TextMultiline`.
 - [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
 - [x] Wire the formatter into the IDE extension language server and add repo-wide `tao fmt`/`tao fix`/`tao check` (tao-cli), run by `just fmt`/`fix`/`check`
 - [x] Add LSP/IDE source actions: `Tao: Organize Use Statements` (source.organizeImports), unused/out-of-section import warnings with quick fixes, command-palette entries prefixed `Tao:`, a move-render-last quick fix, and `tao fix` applying all source fixes (run by `just fix`)
@@ -87,7 +87,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
 - [ ] Add layout/style arguments and default app-shell UI baseline
-  - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `_taoLayout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
+  - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `__tao.layout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
 - [ ] Remove magical strings
 - [ ] Add state/actions/control mini slice
   - Import `state`, `action`, action parameters/values, inline `action {}`, `set`, `do`, `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
@@ -123,7 +123,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
     - [x] Split grammar under `packages/parser/parser-grammar`
     - [x] Generate Langium parser artifacts under `parser-src/_gen_tao-parser`
     - [x] Export `AST`, `Langium`, and the `Parser` object API
-    - [x] Support current syntax: `app`, `ui`, text parameters, `render`, view calls, optional empty blocks, and `inject` TS fences
+    - [x] Support current syntax: `app`, `view`, text parameters, `render`, view calls, optional empty blocks, and `inject` TS fences
     - [x] Keep `Render` named `Render`
     - [x] Parse general statements and leave context-specific placement checks for the validator
     - [x] Cover parser grammar mechanics without adding validator behavior

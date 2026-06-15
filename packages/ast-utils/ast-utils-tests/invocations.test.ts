@@ -5,11 +5,11 @@ import { Describe, Expect, Test } from '@shared/test'
 Describe('Tao AST invocation resolution', () => {
   Test('resolves positional render argument pairs', async () => {
     const parseResult = await parseClean(`
-      app MyApp { ui MainView }
-      ui MainView {
+      app MyApp { view MainView }
+      view MainView {
         render Tile "Open", 1
       }
-      ui Tile Title text, Count number { }
+      view Tile Title text, Count number { }
     `)
     const mainView = findMainView(parseResult)
     const render = mainView.block.statements[0]
@@ -23,22 +23,22 @@ Describe('Tao AST invocation resolution', () => {
 
   Test('resolves only positional pairs with matching argument and parameter slots', async () => {
     const missingParseResult = await parseClean(`
-      app MyApp { ui MainView }
-      ui MainView {
+      app MyApp { view MainView }
+      view MainView {
         render Tile "Open"
       }
-      ui Tile Title text, Count number { }
+      view Tile Title text, Count number { }
     `)
     const missingRender = findMainView(missingParseResult).block.statements[0]
     Expect.Is(missingRender, AST.isRenderStatement)
     const missing = ASTUtils.resolveRenderInvocation(missingRender)
 
     const extraParseResult = await parseClean(`
-      app MyApp { ui MainView }
-      ui MainView {
+      app MyApp { view MainView }
+      view MainView {
         render Tile "Open", 1, "extra"
       }
-      ui Tile Title text, Count number { }
+      view Tile Title text, Count number { }
     `)
     const extraRender = findMainView(extraParseResult).block.statements[0]
     Expect.Is(extraRender, AST.isRenderStatement)
@@ -50,8 +50,8 @@ Describe('Tao AST invocation resolution', () => {
 
   Test('resolves positional child view invocation argument pairs', async () => {
     const parseResult = await parseClean(`
-      app MyApp { ui MainView }
-      ui MainView {
+      app MyApp { view MainView }
+      view MainView {
         render Stack {
           Tile "Open", 1
         }
@@ -61,7 +61,7 @@ Describe('Tao AST invocation resolution', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      ui Tile Title text, Count number {
+      view Tile Title text, Count number {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -85,10 +85,10 @@ async function parseClean(source: string): Promise<ParseResult> {
   return parseResult
 }
 
-function findMainView(parseResult: ParseResult): AST.UiDeclaration {
+function findMainView(parseResult: ParseResult): AST.ViewDeclaration {
   const mainView = parseResult.entry.ast.statements.find(statement =>
-    AST.isUiDeclaration(statement) && statement.name === 'MainView'
+    AST.isViewDeclaration(statement) && statement.name === 'MainView'
   )
-  Expect.Is(mainView, AST.isUiDeclaration)
+  Expect.Is(mainView, AST.isViewDeclaration)
   return mainView
 }

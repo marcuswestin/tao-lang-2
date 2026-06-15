@@ -8,11 +8,11 @@ const fence = '```'
 Describe('Tao compiler', () => {
   Test('compiles source strings into a generated app file', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp { ui MainView }
-      ui MainView {
+      app MyApp { view MainView }
+      view MainView {
         render Text "Hello"
       }
-      ui Text Value text {
+      view Text Value text {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -29,14 +29,14 @@ Describe('Tao compiler', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app MultiFile { ui MainView }
+        app MultiFile { view MainView }
         use Text from ./
-        ui MainView {
+        view MainView {
           render Text "Hello from imports"
         }
       `,
         'Views.tao': `
-        project ui Text Value text {
+        project view Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -55,14 +55,14 @@ Describe('Tao compiler', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app IndexedPackage { ui MainView }
+        app IndexedPackage { view MainView }
         use MainView from @bar/views
       `,
         'lib/nested/@bar/views/Main.tao': `
-        project ui MainView {
+        project view MainView {
           render Text "Package import"
         }
-        ui Text Value text {
+        view Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -83,7 +83,7 @@ Describe('Tao compiler', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app BarePackageUse { ui MainView }
+        app BarePackageUse { view MainView }
         use MainView from @foo/forms
       `,
         'feature/@foo/Title.tao': `
@@ -91,10 +91,10 @@ Describe('Tao compiler', () => {
       `,
         'feature/@foo/forms/Main.tao': `
         use PackageTitle
-        project ui MainView {
+        project view MainView {
           render Text PackageTitle
         }
-        ui Text Value text {
+        view Text Value text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -116,25 +116,25 @@ Describe('Tao compiler', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app CircularApp { ui MainView }
+        app CircularApp { view MainView }
         use AView from ./
-        ui MainView {
+        view MainView {
           render AView
         }
       `,
         'A.tao': `
         use BView from ./
         project alias SharedTitle = "Cycle"
-        project ui AView {
+        project view AView {
           render BView
         }
       `,
         'B.tao': `
         use SharedTitle from ./
-        project ui BView {
+        project view BView {
           render Leaf SharedTitle
         }
-        ui Leaf Value text {
+        view Leaf Value text {
           render inject Value ${tsFence}
             return null
           ${fence}
@@ -151,7 +151,7 @@ Describe('Tao compiler', () => {
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      project ui ${name} Value text {
+      project view ${name} Value text {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -161,10 +161,10 @@ Describe('Tao compiler', () => {
       'app/Main.tao',
       {
         'app/Main.tao': `
-        app CollisionApp { ui MainView }
+        app CollisionApp { view MainView }
         use AText from ../liba
         use BText from ../libb
-        ui MainView {
+        view MainView {
           render AText "Hello"
         }
       `,
@@ -185,7 +185,7 @@ Describe('Tao compiler', () => {
 
   Test('rejects entry files without an app declaration', async () => {
     await Expect(Compiler.compileCode(`
-      ui MainView {
+      view MainView {
         render inject ${tsFence}
           return null
         ${fence}

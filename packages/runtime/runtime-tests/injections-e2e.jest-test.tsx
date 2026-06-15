@@ -9,17 +9,17 @@ Describe('Tao injection runtime', () => {
     await testCompileApp(
       `
         app InjectArgs {
-            ui MainView
+            view MainView
         }
 
         alias UserName = "Ro"
         alias Count = 3
 
-        ui MainView {
+        view MainView {
             render Text "Hello"
         }
 
-        ui Text Value text {
+        view Text Value text {
             render inject Value, Name UserName, Count \`\`\`ts
                 return <RN.Text>{Value + " " + Name + " " + Count}</RN.Text>
             \`\`\`

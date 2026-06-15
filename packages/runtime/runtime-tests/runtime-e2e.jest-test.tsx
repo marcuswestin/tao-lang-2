@@ -37,7 +37,7 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Package sibling folder works')
     ExpectScreen(screen).toHaveText('Package child folder works')
     ExpectScreen(screen).toHaveText('Project alias works')
-    ExpectScreen(screen).toHaveText('Project UI works')
+    ExpectScreen(screen).toHaveText('Project view works')
   })
 
   Test('renders imported alias references through circular module imports', async () => {
@@ -46,12 +46,12 @@ Describe('Expo runtime', () => {
       {
         'Main.tao': `
           app CircularAliasApp {
-              ui MainView
+              view MainView
           }
 
           use AView from ./
 
-          ui MainView {
+          view MainView {
               render AView
           }
         `,
@@ -60,7 +60,7 @@ Describe('Expo runtime', () => {
 
           project alias SharedTitle = "Circular alias"
 
-          project ui AView {
+          project view AView {
               render BView
           }
         `,
@@ -69,11 +69,11 @@ Describe('Expo runtime', () => {
 
           alias ImportedTitle = SharedTitle
 
-          project ui BView {
+          project view BView {
               render Text ImportedTitle
           }
 
-          ui Text Value text {
+          view Text Value text {
               render inject Value \`\`\`ts
                   return <RN.Text>{Value}</RN.Text>
               \`\`\`
@@ -90,17 +90,17 @@ Describe('Expo runtime', () => {
     await testCompileApp(
       `
         app OrderedAlias {
-            ui MainView
+            view MainView
         }
 
         alias Message = "Ordered output"
         alias Greeting = Message
 
-        ui MainView {
+        view MainView {
             render Text Greeting { }
         }
 
-        ui Text Value text {
+        view Text Value text {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
@@ -116,12 +116,12 @@ Describe('Expo runtime', () => {
     await testCompileApp(
       `
         app ScopedAlias {
-            ui MainView
+            view MainView
         }
 
         alias Greeting = "Outer"
 
-        ui MainView {
+        view MainView {
             alias OuterGreeting = Greeting
             render Stack {
                 alias Greeting = "Inner"
@@ -136,7 +136,7 @@ Describe('Expo runtime', () => {
             \`\`\`
         }
 
-        ui Text Value text {
+        view Text Value text {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`

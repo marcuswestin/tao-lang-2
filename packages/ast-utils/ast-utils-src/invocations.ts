@@ -9,7 +9,7 @@ export type RenderInvocationPair = {
 /** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
 export type ResolvedRenderInvocation = {
   render: AST.Render
-  view?: AST.ViewDeclaration
+  view?: AST.RenderableDeclaration
   pairs: RenderInvocationPair[]
 }
 

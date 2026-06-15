@@ -12,9 +12,9 @@ export default {
     `
   },
 
-  /** AppUi compiles an app ui statement into the generated app root return. */
-  AppUi(appUi: AST.AppUi): Compiled {
-    const view = resolveRef(appUi.ui)
+  /** AppView compiles an app view statement into the generated app root return. */
+  AppView(appView: AST.AppView): Compiled {
+    const view = resolveRef(appView.view)
     return gen`return <${genScopeName(view)} />`
   },
 } as const
