@@ -8,7 +8,7 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 ## Belongs Here
 
 - `use ... from @tao/ui` imports for first stdlib views.
-- Runtime rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextLabel`, and `MultiLineText`.
+- Runtime rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, and `TextMultiline`.
 - Basic nested stdlib layout/container composition that remains valid and executable.
 
 ## Does Not Belong Here

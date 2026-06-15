@@ -2,8 +2,8 @@ import { AST } from '@parser'
 import type { FormatHandlers, NodeFormat } from '../formatting'
 
 export default {
-  /** UiDeclaration formats a `ui Name parameters` view header. */
-  UiDeclaration: ViewDeclaration,
+  /** ViewDeclaration formats a `view Name parameters` view header. */
+  ViewDeclaration: ViewDeclaration,
 
   /** LayoutDeclaration formats a `layout Name parameters` view header. */
   LayoutDeclaration: ViewDeclaration,
@@ -20,7 +20,7 @@ export default {
   },
 } satisfies Partial<FormatHandlers>
 
-function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
-  f.oneSpaceAfter('package', 'project', 'publish', 'ui', 'layout')
+function ViewDeclaration(f: NodeFormat<AST.RenderableDeclaration>): void {
+  f.oneSpaceAfter('package', 'project', 'publish', 'view', 'layout')
   f.oneSpaceBeforeProperty('parameterList')
 }

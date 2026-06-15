@@ -64,12 +64,12 @@ export const Views = {
     return React.createElement(RN.Text, undefined, props.children)
   },
 
-  TextLabel(props: TaoViewProps): React.JSX.Element {
+  TextFrame(props: TaoViewProps): React.JSX.Element {
     const RN = requireReactNativeRuntime()
     return React.createElement(RN.Text, undefined, props.children)
   },
 
-  MultiLineText(props: TaoViewProps): React.JSX.Element {
+  TextMultiline(props: TaoViewProps): React.JSX.Element {
     const RN = requireReactNativeRuntime()
     return React.createElement(RN.Text, undefined, props.children)
   },

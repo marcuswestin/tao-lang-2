@@ -6,8 +6,8 @@ export default {
     f.oneSpaceAfter('app')
   },
 
-  /** AppUi formats the `ui MainView` entry-view statement. */
-  AppUi(f) {
-    f.oneSpaceAfter('ui')
+  /** AppView formats the `view MainView` entry-view statement. */
+  AppView(f) {
+    f.oneSpaceAfter('view')
   },
 } satisfies Partial<FormatHandlers>

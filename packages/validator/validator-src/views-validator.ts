@@ -7,9 +7,9 @@ import type { ValidationContext } from './validation'
 export const viewValidationMessages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this view.`,
   reservedParameter: (name: string) => `Parameter name '${name}' is reserved for generated view props.`,
-  renderCount: (name: string) => `view '${name}' must declare exactly one render statement.`,
-  renderLast: '`render` must be the last statement in a view body.',
-  viewBody: 'Only alias and render statements are allowed in view bodies.',
+  renderCount: (name: string) => `Renderable declaration '${name}' must declare exactly one render statement.`,
+  renderLast: '`render` must be the last statement in a view or layout body.',
+  viewBody: 'Only alias and render statements are allowed in view and layout bodies.',
   renderBlock: 'Only alias, render, and view invocation statements are allowed in render blocks.',
   renderBlockAliasPlacement: 'Aliases in render blocks must be declared before child view invocations.',
   renderTarget: '`render` must target a view or inject block.',
@@ -20,19 +20,19 @@ const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao'])
 
 /** validateViews validates view declarations and view-body structure. */
 export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const view of ASTUtils.streamAllContents(file).filter(AST.isViewDeclaration)) {
+  for (const view of ASTUtils.streamAllContents(file).filter(AST.isRenderableDeclaration)) {
     validateViewDeclaration(view, ctx)
   }
 }
 
-function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+function validateViewDeclaration(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
   validateDuplicateParameters(view, ctx)
   validateRenderCount(view, ctx)
   validateRenderLast(view, ctx)
   validateViewBodyBlock(view.block, ctx)
 }
 
-function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+function validateDuplicateParameters(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
   const seen = new Set<string>()
   for (const parameter of view.parameterList?.parameters ?? []) {
     if (reservedParameterNames.has(parameter.name)) {
@@ -46,14 +46,14 @@ function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationC
   }
 }
 
-function validateRenderCount(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+function validateRenderCount(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
   const renderCount = view.block.statements.filter(AST.isRenderStatement).length
   if (renderCount !== 1) {
     ctx.error(viewValidationMessages.renderCount(view.name), view)
   }
 }
 
-function validateRenderLast(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+function validateRenderLast(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
   const renderIndex = view.block.statements.findIndex(AST.isRenderStatement)
   if (renderIndex >= 0 && renderIndex !== view.block.statements.length - 1) {
     ctx.error(viewValidationMessages.renderLast, view.block.statements[renderIndex]!, {
@@ -108,7 +108,8 @@ function validateRender(render: AST.RenderStatement, owningBlock: AST.Block, ctx
   if (render.injection === undefined) {
     return
   }
-  const isSoleViewBodyStatement = AST.isViewDeclaration(owningBlock.$container) && owningBlock.statements.length === 1
+  const isSoleViewBodyStatement = AST.isRenderableDeclaration(owningBlock.$container)
+    && owningBlock.statements.length === 1
   if (!isSoleViewBodyStatement) {
     ctx.error(viewValidationMessages.renderInjectPlacement, render)
   }

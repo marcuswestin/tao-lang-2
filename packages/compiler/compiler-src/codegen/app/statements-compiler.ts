@@ -9,13 +9,13 @@ export default {
     return Switch.type(statement, {
       AliasDeclaration: Compile.AliasDeclaration,
       AppDeclaration: Compile.App,
-      AppUi: Compile.AppUi,
+      AppView: Compile.AppView,
       Injection: Compile.Injection,
       LayoutDeclaration: Compile.LayoutDeclaration,
       ProjectDeclaration: Compile.ProjectDeclaration,
       RenderStatement: Compile.RenderStatement,
       UseStatement: Compile.UseStatement,
-      UiDeclaration: Compile.UiDeclaration,
+      ViewDeclaration: Compile.ViewDeclaration,
       ViewRender: Compile.ViewRender,
     })
   },

@@ -8,12 +8,12 @@ const fence = '```'
 Describe('Tao injection validator', () => {
   Test('allows inject arguments that bind visible values as TS locals', async () => {
     await testValidateCode(`
-      app MyApp { ui MainView }
+      app MyApp { view MainView }
       alias UserName = "Ro"
-      ui MainView {
+      view MainView {
         render Text "Hello"
       }
-      ui Text Value text {
+      view Text Value text {
         render inject Value, Name UserName, Count 3 ${tsFence}
           return null
         ${fence}
@@ -23,11 +23,11 @@ Describe('Tao injection validator', () => {
 
   Test('rejects duplicate inject argument names', async () => {
     const result = await testValidateCodeWithErrors(`
-      app MyApp { ui MainView }
-      ui MainView {
+      app MyApp { view MainView }
+      view MainView {
         render Text "Hello"
       }
-      ui Text Value text {
+      view Text Value text {
         render inject Value, Value "Again" ${tsFence}
           return null
         ${fence}

@@ -1,8 +1,8 @@
-project ui ProjectWidget {
-   render Text "Project UI works"
+project view ProjectWidget {
+   render Text "Project view works"
 }
 
-ui Text Value text {
+view Text Value text {
    render inject Value ```ts
       return <RN.Text>{Value}</RN.Text>
    ```

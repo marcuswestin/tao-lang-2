@@ -32,4 +32,4 @@ Exercise positive behavior for local project package access, package-indexed imp
   - `Package sibling folder works`
   - `Package child folder works`
   - `Project alias works`
-  - `Project UI works`
+  - `Project view works`

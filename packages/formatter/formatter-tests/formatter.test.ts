@@ -22,20 +22,20 @@ Describe('Tao formatter top-level statements', () => {
   Test('separates declarations with one blank line and keeps alias groups adjacent', async () => {
     await testFormatCode(
       `
-        app MyApp { ui MainView }
+        app MyApp { view MainView }
         alias Greeting = "Hello"
         alias Count = 3
-        ui MainView { }
+        view MainView { }
       `,
       `
         app MyApp {
-           ui MainView
+           view MainView
         }
 
         alias Greeting = "Hello"
         alias Count = 3
 
-        ui MainView { }
+        view MainView { }
       `,
     )
   })
@@ -47,12 +47,12 @@ Describe('Tao formatter top-level statements', () => {
 
 
 
-        ui MainView { }
+        view MainView { }
       `,
       `
         alias Greeting = "Hello"
 
-        ui MainView { }
+        view MainView { }
       `,
     )
   })
@@ -62,13 +62,13 @@ Describe('Tao formatter top-level statements', () => {
       `
         use Text from @tao/ui
         use Stack from @tao/ui
-        ui MainView { render Text "hi" }
+        view MainView { render Text "hi" }
       `,
       `
         use Text from @tao/ui
         use Stack from @tao/ui
 
-        ui MainView {
+        view MainView {
            render Text "hi"
         }
       `,
@@ -84,7 +84,7 @@ Describe('Tao formatter top-level statements', () => {
         alias Greeting = "a"
 
         alias Count = 3
-        ui MainView { }
+        view MainView { }
       `,
       `
         use Text from @tao/ui
@@ -95,7 +95,7 @@ Describe('Tao formatter top-level statements', () => {
 
         alias Count = 3
 
-        ui MainView { }
+        view MainView { }
       `,
     )
   })
@@ -108,35 +108,35 @@ Describe('Tao formatter top-level statements', () => {
 
 
         alias Count = 3
-        ui MainView { }
+        view MainView { }
       `,
       `
         alias Greeting = "a"
 
         alias Count = 3
 
-        ui MainView { }
+        view MainView { }
       `,
     )
   })
 
   Test('removes leading blank lines', async () => {
-    Expect(await Formatter.formatCode('\n\n   ui MainView { }')).toBe('ui MainView { }\n')
+    Expect(await Formatter.formatCode('\n\n   view MainView { }')).toBe('view MainView { }\n')
   })
 
   Test('ends the formatted file with exactly one trailing newline', async () => {
-    Expect(await Formatter.formatCode('ui MainView { }\n\n\n')).toBe('ui MainView { }\n')
+    Expect(await Formatter.formatCode('view MainView { }\n\n\n')).toBe('view MainView { }\n')
   })
 })
 
 Describe('Tao formatter use statements', () => {
   Test('normalizes use statement spacing', async () => {
     await testFormatCode(
-      `use   Text,Stack   from    @tao/ui\nui MainView { }`,
+      `use   Text,Stack   from    @tao/ui\nview MainView { }`,
       `
         use Text, Stack from @tao/ui
 
-        ui MainView { }
+        view MainView { }
       `,
     )
   })
@@ -145,9 +145,9 @@ Describe('Tao formatter use statements', () => {
 Describe('Tao formatter views and blocks', () => {
   Test('indents nested render blocks and collapses closing braces', async () => {
     await testFormatCode(
-      `ui MainView{render Stack{Text "a"\nText "b"}}`,
+      `view MainView{render Stack{Text "a"\nText "b"}}`,
       `
-        ui MainView {
+        view MainView {
            render Stack {
               Text "a"
               Text "b"
@@ -158,9 +158,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('collapses deep closing brace runs onto one line at the outermost indentation', async () => {
     await testFormatCode(
-      `ui MainView{render Stack{Text "a"{Text "b"{Text "c"}}}}`,
+      `view MainView{render Stack{Text "a"{Text "b"{Text "c"}}}}`,
       `
-        ui MainView {
+        view MainView {
            render Stack {
               Text "a" {
                  Text "b" {
@@ -172,9 +172,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('keeps a closing brace on its own line when statements follow it', async () => {
     await testFormatCode(
-      `ui MainView{render Stack{Text "a"{Text "b"}\nText "c"}}`,
+      `view MainView{render Stack{Text "a"{Text "b"}\nText "c"}}`,
       `
-        ui MainView {
+        view MainView {
            render Stack {
               Text "a" {
                  Text "b"
@@ -188,7 +188,7 @@ Describe('Tao formatter views and blocks', () => {
   Test('does not collapse close-looking lines inside block comments', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         render Stack {
         /*
         }
@@ -199,7 +199,7 @@ Describe('Tao formatter views and blocks', () => {
         }
       `,
       `
-        ui MainView {
+        view MainView {
            render Stack {
               /*
               }
@@ -213,9 +213,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('does not treat block-comment markers inside strings as block comments', async () => {
     await testFormatCode(
-      `ui MainView { render Stack { Text "/*" { Text "hi" } } }`,
+      `view MainView { render Stack { Text "/*" { Text "hi" } } }`,
       `
-        ui MainView {
+        view MainView {
            render Stack {
               Text "/*" {
                  Text "hi"
@@ -226,9 +226,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats empty blocks as braces with one interior space', async () => {
     await testFormatCode(
-      `ui MainView {render Stack{Text "a"{   }}}`,
+      `view MainView {render Stack{Text "a"{   }}}`,
       `
-        ui MainView {
+        view MainView {
            render Stack {
               Text "a" { }
         }  }
@@ -238,9 +238,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view parameter spacing', async () => {
     await testFormatCode(
-      `publish ui CountText Count   number,Label    text { render Text Label }`,
+      `publish view CountText Count   number,Label    text { render Text Label }`,
       `
-        publish ui CountText Count number, Label text {
+        publish view CountText Count number, Label text {
            render Text Label
         }
       `,
@@ -249,14 +249,14 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view invocation argument spacing', async () => {
     await testFormatCode(
-      `ui MainView { render Stack { CountText 3,"label" } }\nui CountText Count number, Label text { render Text Label }`,
+      `view MainView { render Stack { CountText 3,"label" } }\nview CountText Count number, Label text { render Text Label }`,
       `
-        ui MainView {
+        view MainView {
            render Stack {
               CountText 3, "label"
         }  }
 
-        ui CountText Count number, Label text {
+        view CountText Count number, Label text {
            render Text Label
         }
       `,
@@ -267,11 +267,11 @@ Describe('Tao formatter views and blocks', () => {
 Describe('Tao formatter aliases', () => {
   Test('normalizes alias declaration spacing', async () => {
     await testFormatCode(
-      `publish alias   Greeting="Hello"\nui MainView { }`,
+      `publish alias   Greeting="Hello"\nview MainView { }`,
       `
         publish alias Greeting = "Hello"
 
-        ui MainView { }
+        view MainView { }
       `,
     )
   })
@@ -296,7 +296,7 @@ Describe('Tao formatter injections', () => {
   Test('formats injection fence bodies with dprint TypeScript style', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         render inject ${tsFence}
         const message = "hi";
         return <RN.Text accessibilityLabel='greeting'>{ message }</RN.Text>;
@@ -304,7 +304,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        ui MainView {
+        view MainView {
            render inject ${tsFence}
               const message = 'hi'
               return <RN.Text accessibilityLabel="greeting">{message}</RN.Text>
@@ -317,14 +317,14 @@ Describe('Tao formatter injections', () => {
   Test('indents injection fence bodies one level below the inject line', async () => {
     await testFormatCode(
       `
-        ui CountText Count number {
+        view CountText Count number {
         render inject Count ${tsFence}
         return <RN.Text>{Count}</RN.Text>
         ${fence}
         }
       `,
       `
-        ui CountText Count number {
+        view CountText Count number {
            render inject Count ${tsFence}
               return <RN.Text>{Count}</RN.Text>
            ${fence}
@@ -336,7 +336,7 @@ Describe('Tao formatter injections', () => {
   Test('preserves relative indentation and brace lines inside fence bodies', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         render inject ${tsFence}
         function label() {
             return 'hi'
@@ -346,7 +346,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        ui MainView {
+        view MainView {
            render inject ${tsFence}
               function label() {
                 return 'hi'
@@ -361,7 +361,7 @@ Describe('Tao formatter injections', () => {
   Test('detects fences with trailing whitespace after the opener and leaves their bodies untouched', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         render inject ${tsFence}${' '}
         function wrap() {
            if (true) {
@@ -372,7 +372,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        ui MainView {
+        view MainView {
            render inject ${tsFence}
               function wrap() {
                 if (true) {
@@ -388,7 +388,7 @@ Describe('Tao formatter injections', () => {
   Test('ignores comment lines that mention inject fences', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         // inject some TS via ${tsFence}
         render inject ${tsFence}
         return null
@@ -396,7 +396,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        ui MainView {
+        view MainView {
            // inject some TS via ${tsFence}
            render inject ${tsFence}
               return null
@@ -409,7 +409,7 @@ Describe('Tao formatter injections', () => {
   Test('preserves trailing whitespace inside fence bodies', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         render inject ${tsFence}
         const s = \`abc${'   '}
         def\`
@@ -418,7 +418,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        ui MainView {
+        view MainView {
            render inject ${tsFence}
               const s = \`abc${'   '}
               def\`
@@ -432,14 +432,14 @@ Describe('Tao formatter injections', () => {
   Test('moves body content sharing the close-fence line onto its own body line', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         render inject ${tsFence}
         const value = 1
         return value${fence}
         }
       `,
       `
-        ui MainView {
+        view MainView {
            render inject ${tsFence}
               const value = 1
               return value
@@ -452,7 +452,7 @@ Describe('Tao formatter injections', () => {
   Test('falls back to reindent-only for invalid embedded TypeScript', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         render inject ${tsFence}
         const =
         return null
@@ -460,7 +460,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        ui MainView {
+        view MainView {
            render inject ${tsFence}
               const =
               return null
@@ -474,7 +474,7 @@ Describe('Tao formatter injections', () => {
     await testFormatCode(
       `
         alias UserName = "Ro"
-        ui MainView {
+        view MainView {
         render inject Name    UserName,UserName ${tsFence}
         return <RN.Text>{Name}</RN.Text>
         ${fence}
@@ -483,7 +483,7 @@ Describe('Tao formatter injections', () => {
       `
         alias UserName = "Ro"
 
-        ui MainView {
+        view MainView {
            render inject Name UserName, UserName ${tsFence}
               return <RN.Text>{Name}</RN.Text>
            ${fence}
@@ -500,13 +500,13 @@ Describe('Tao formatter comments', () => {
         alias Greeting = "hi"
 
         // the main view
-        ui MainView { render Text Greeting }
+        view MainView { render Text Greeting }
       `,
       `
         alias Greeting = "hi"
 
         // the main view
-        ui MainView {
+        view MainView {
            render Text Greeting
         }
       `,
@@ -516,14 +516,14 @@ Describe('Tao formatter comments', () => {
   Test('preserves and indents comments inside blocks', async () => {
     await testFormatCode(
       `
-        ui MainView {
+        view MainView {
         // local greeting
         alias G = "hi"
         render Text G
         }
       `,
       `
-        ui MainView {
+        view MainView {
            // local greeting
            alias G = "hi"
            render Text G
@@ -535,7 +535,7 @@ Describe('Tao formatter comments', () => {
 
 Describe('Tao formatter error handling', () => {
   Test('throws on Tao source with syntax errors', async () => {
-    await Expect(Formatter.formatCode('ui Broken {')).rejects.toThrow(
+    await Expect(Formatter.formatCode('view Broken {')).rejects.toThrow(
       'Tao source without syntax errors when formatting',
     )
   })

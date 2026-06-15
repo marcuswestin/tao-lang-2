@@ -1,13 +1,13 @@
 use Stack, Text from @tao/ui
 
 app KitchenSink {
-   ui MainView
+   view MainView
 }
 
 alias Greeting = "Hello, World!"
 alias LaunchCount = 3
 
-ui MainView {
+view MainView {
    alias LocalText = "Text from a local alias"
    alias OuterGreeting = Greeting
    render Stack {
@@ -19,7 +19,7 @@ ui MainView {
       CountText LaunchCount
 }  }
 
-ui CountText Count number {
+view CountText Count number {
    render inject Count ```ts
       return <RN.Text>Launch count: {Count}</RN.Text>
    ```

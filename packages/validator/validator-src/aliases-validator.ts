@@ -17,12 +17,12 @@ export function validateAliases(file: AST.TaoFile, ctx: ValidationContext): void
   reportAliasReferenceOrder(allAliases(file), ctx)
   reportLocalValueReferenceOrder(file, ctx)
 
-  const fileViews = file.statements.filter(AST.isViewDeclaration)
-  for (const view of ASTUtils.streamAllContents(file).filter(AST.isViewDeclaration)) {
+  const fileRenderables = file.statements.filter(AST.isRenderableDeclaration)
+  for (const view of ASTUtils.streamAllContents(file).filter(AST.isRenderableDeclaration)) {
     const parameters = view.parameterList?.parameters ?? []
-    reportNameConflicts(parameters, visibleDeclarations(fileViews), ctx)
+    reportNameConflicts(parameters, visibleDeclarations(fileRenderables), ctx)
     for (const block of blocksOwnedByView(view)) {
-      const blockNames = visibleDeclarations([...fileViews, ...parameters])
+      const blockNames = visibleDeclarations([...fileRenderables, ...parameters])
       reportDuplicateNames(aliasesOwnedByBlock(block), blockNames, ctx)
     }
   }
@@ -103,7 +103,7 @@ function isDeclaredBefore(declaration: AST.ValueDeclaration, use: AST.Node): boo
   return declarationOffset !== undefined && useOffset !== undefined && declarationOffset < useOffset
 }
 
-function blocksOwnedByView(view: AST.ViewDeclaration): AST.Block[] {
+function blocksOwnedByView(view: AST.RenderableDeclaration): AST.Block[] {
   const blocks: AST.Block[] = []
   collectRenderBlocks(view.block, blocks)
   return blocks
@@ -122,10 +122,10 @@ function aliasesOwnedByBlock(block: AST.Block): AST.AliasDeclaration[] {
   return block.statements.filter(AST.isAliasDeclaration)
 }
 
-function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
+function findOwningView(node: AST.Node): AST.RenderableDeclaration | undefined {
   let current = node.$container
   while (current) {
-    if (AST.isViewDeclaration(current)) {
+    if (AST.isRenderableDeclaration(current)) {
       return current
     }
     current = current.$container

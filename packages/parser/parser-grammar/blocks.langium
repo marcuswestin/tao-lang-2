@@ -12,15 +12,15 @@ entry BlocksGrammarEntrypoint:
     Block;
 
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | AppUi | Injection | RenderStatement | ViewRender;
+    Declaration | ProjectDeclaration | UseStatement | AppView | Injection | RenderStatement | ViewRender;
 
 Declaration:
-    AppDeclaration | UiDeclaration | LayoutDeclaration | AliasDeclaration;
+    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration;
 
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement;
 type ViewStatement = AliasDeclaration | Render;
 type NamedDeclaration = Declaration | ParameterDeclaration;
-type ExportableDeclaration = AliasDeclaration | ViewDeclaration;
+type ExportableDeclaration = AliasDeclaration | RenderableDeclaration;
 
 Block:
     '{' statements+=Statement* '}';

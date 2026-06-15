@@ -22,15 +22,15 @@ Describe('minimal Tao parser', () => {
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(greetingAlias, AST.isAliasDeclaration)
     Expect.Is(launchCountAlias, AST.isAliasDeclaration)
-    Expect.Is(mainView, AST.isUiDeclaration)
-    Expect.Is(countTextView, AST.isUiDeclaration)
+    Expect.Is(mainView, AST.isViewDeclaration)
+    Expect.Is(countTextView, AST.isViewDeclaration)
     Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Stack', 'Text'])
     Expect(useStatement.importPath).toBe('@tao/ui')
 
     Expect(app.name).toBe('KitchenSink')
     const appRoot = app.block.statements[0]
-    Expect.Is(appRoot, AST.isAppUi)
-    Expect(appRoot.ui.ref?.name).toBe('MainView')
+    Expect.Is(appRoot, AST.isAppView)
+    Expect(appRoot.view.ref?.name).toBe('MainView')
 
     Expect(greetingAlias.name).toBe('Greeting')
     Expect.Is(greetingAlias.value, AST.isStringLiteral)
@@ -93,10 +93,10 @@ Describe('minimal Tao parser', () => {
   })
 
   Test('parses inject render declarations', async () => {
-    const parseResult = await testParseCode('ui Native { render inject ```ts\nreturn null\n``` }')
+    const parseResult = await testParseCode('view Native { render inject ```ts\nreturn null\n``` }')
     const view = parseResult.entry.ast.statements[0]
 
-    Expect.Is(view, AST.isUiDeclaration)
+    Expect.Is(view, AST.isViewDeclaration)
 
     const render = view.block.statements[0]
     Expect.Is(render, AST.isRenderStatement)
@@ -105,8 +105,8 @@ Describe('minimal Tao parser', () => {
 
   Test('parses layout declarations and child view invocations', async () => {
     const parseResult = await testParseCode(`
-      app MyApp { ui MainView }
-      ui MainView {
+      app MyApp { view MainView }
+      view MainView {
         render Stack {
           alias Local = "Inside"
           Text Local { }
@@ -118,7 +118,7 @@ Describe('minimal Tao parser', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      ui Text Value text {
+      view Text Value text {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -127,9 +127,9 @@ Describe('minimal Tao parser', () => {
     const layout = parseResult.entry.ast.statements.find(AST.isLayoutDeclaration)
     Expect.Is(layout, AST.isLayoutDeclaration)
     const mainView = parseResult.entry.ast.statements.find(statement =>
-      AST.isUiDeclaration(statement) && statement.name === 'MainView'
+      AST.isViewDeclaration(statement) && statement.name === 'MainView'
     )
-    Expect.Is(mainView, AST.isUiDeclaration)
+    Expect.Is(mainView, AST.isViewDeclaration)
     const render = mainView.block.statements[0]
     Expect.Is(render, AST.isRenderStatement)
     const [_localAlias, firstChild, secondChild] = render.block?.statements ?? []
@@ -144,9 +144,9 @@ Describe('minimal Tao parser', () => {
       alias Greeting = "Hello"
       alias LaunchCount = 3
 
-      ui Text Value text { }
-      ui StatTile Label text, Count number { }
-      ui MainView Label text {
+      view Text Value text { }
+      view StatTile Label text, Count number { }
+      view MainView Label text {
         alias LocalLabel = Label
         render Text LocalLabel { }
         render StatTile Greeting, LaunchCount { }
@@ -157,7 +157,7 @@ Describe('minimal Tao parser', () => {
 
     Expect.Is(greetingAlias, AST.isAliasDeclaration)
     Expect.Is(launchCountAlias, AST.isAliasDeclaration)
-    Expect.Is(mainView, AST.isUiDeclaration)
+    Expect.Is(mainView, AST.isViewDeclaration)
 
     Expect.Is(greetingAlias.value, AST.isStringLiteral)
     Expect.Is(launchCountAlias.value, AST.isNumberLiteral)
@@ -194,12 +194,12 @@ Describe('minimal Tao parser', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      ui Text Value text {
+      view Text Value text {
         render inject \`\`\`ts
           return null
         \`\`\`
       }
-      ui MainView Label text {
+      view MainView Label text {
         alias Greeting = "View"
         alias LabelAlias = Label
         render Stack {
@@ -216,7 +216,7 @@ Describe('minimal Tao parser', () => {
 
     const [fileGreetingAlias, _stackView, _textView, mainView] = parseResult.entry.ast.statements
     Expect.Is(fileGreetingAlias, AST.isAliasDeclaration)
-    Expect.Is(mainView, AST.isUiDeclaration)
+    Expect.Is(mainView, AST.isViewDeclaration)
 
     const labelParameter = mainView.parameterList?.parameters[0]
     Expect.Is(labelParameter, AST.isParameterDeclaration)
@@ -278,8 +278,8 @@ Describe('minimal Tao parser', () => {
 
   Test('parses Tao source strings', async () => {
     const source = `
-      app InlineApp { ui MainView }
-      ui MainView {
+      app InlineApp { view MainView }
+      view MainView {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -293,10 +293,10 @@ Describe('minimal Tao parser', () => {
 
   Test('parses use statements and project-visible declarations', async () => {
     const parseResult = await testParseSyntax(`
-      app MyApp { ui MainView }
+      app MyApp { view MainView }
       use Text, Stack from ./
       project alias Greeting = "Hello"
-      project ui MainView {
+      project view MainView {
         render Stack {
           Text Greeting
         }
@@ -306,7 +306,7 @@ Describe('minimal Tao parser', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      project ui Text Value text {
+      project view Text Value text {
         render inject Value \`\`\`ts
           return <RN.Text>{Value}</RN.Text>
         \`\`\`
@@ -319,7 +319,7 @@ Describe('minimal Tao parser', () => {
     Expect(useStatement.importPath).toBe('./')
     Expect.Is(sharedAlias, AST.isAliasDeclaration)
     Expect(sharedAlias.visibility).toBe('project')
-    Expect.Is(mainView, AST.isUiDeclaration)
+    Expect.Is(mainView, AST.isViewDeclaration)
     Expect(mainView.visibility).toBe('project')
   })
 
@@ -336,7 +336,7 @@ Describe('minimal Tao parser', () => {
   Test('parses bare use statements', async () => {
     const parseResult = await testParseSyntax(`
       use Text
-      project ui Text Value text {
+      project view Text Value text {
         render inject Value \`\`\`ts
           return null
         \`\`\`
@@ -367,13 +367,13 @@ Describe('minimal Tao parser', () => {
   Test('parses project package visibility declarations', async () => {
     const parseResult = await testParseCode(`
       package alias PackageTitle = "Package"
-      project ui ProjectView { }
+      project view ProjectView { }
       publish layout PublishedStack { }
     `)
 
     const [packageAlias, projectView, publishedLayout] = parseResult.entry.ast.statements
     Expect.Is(packageAlias, AST.isAliasDeclaration)
-    Expect.Is(projectView, AST.isUiDeclaration)
+    Expect.Is(projectView, AST.isViewDeclaration)
     Expect.Is(publishedLayout, AST.isLayoutDeclaration)
     Expect(packageAlias.visibility).toBe('package')
     Expect(projectView.visibility).toBe('project')

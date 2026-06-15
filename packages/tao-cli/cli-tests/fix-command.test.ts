@@ -7,9 +7,9 @@ Describe('tao fix', () => {
   Test('applies render moves, import organization, and formatting in place', async () => {
     await withTaoFixture({
       'app.tao': Text.stripIndent(`
-        app   MyApp { ui MainView }
+        app   MyApp { view MainView }
         use Text,Button from @tao/ui
-        ui MainView {
+        view MainView {
            render Text Greeting
            alias Greeting = "hi"
         }
@@ -24,10 +24,10 @@ Describe('tao fix', () => {
         use Text from @tao/ui
 
         app MyApp {
-           ui MainView
+           view MainView
         }
 
-        ui MainView {
+        view MainView {
            alias Greeting = "hi"
            render Text Greeting
         }
@@ -38,8 +38,8 @@ Describe('tao fix', () => {
 
   Test('leaves canonical files unchanged and reports broken files', async () => {
     await withTaoFixture({
-      'canonical.tao': 'use Text from @tao/ui\n\nui MainView {\n   render Text "hi"\n}\n',
-      'broken.tao': 'ui Broken {',
+      'canonical.tao': 'use Text from @tao/ui\n\nview MainView {\n   render Text "hi"\n}\n',
+      'broken.tao': 'view Broken {',
     }, async (rootDir) => {
       const results = await runFix(rootDir)
 
@@ -47,7 +47,7 @@ Describe('tao fix', () => {
         'canonical.tao': 'unchanged',
         'broken.tao': 'error',
       })
-      Expect(await FS.readText(FS.resolvePath('broken.tao', { cwd: rootDir }))).toBe('ui Broken {')
+      Expect(await FS.readText(FS.resolvePath('broken.tao', { cwd: rootDir }))).toBe('view Broken {')
     })
   })
 
@@ -56,9 +56,9 @@ Describe('tao fix', () => {
       'Packages/@cards/screens/Main.tao': Text.stripIndent(`
         use LocalText, Missing from @cards/widgets
 
-        ui MainView { }
+        view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value text { }\n',
     }, async (rootDir) => {
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
       const results = await runFix(path)
@@ -68,7 +68,7 @@ Describe('tao fix', () => {
         Text.stripIndent(`
         use Missing from @cards/widgets
 
-        ui MainView { }
+        view MainView { }
       `)
       }\n`)
     })
@@ -79,9 +79,9 @@ Describe('tao fix', () => {
       'Packages/@cards/screens/Main.tao': Text.stripIndent(`
         use LocalText, Missing from @cards/widgets
 
-        ui MainView { }
+        view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value text { }\n',
     }, async (rootDir) => {
       const directory = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
@@ -92,7 +92,7 @@ Describe('tao fix', () => {
         Text.stripIndent(`
         use Missing from @cards/widgets
 
-        ui MainView { }
+        view MainView { }
       `)
       }\n`)
     })
@@ -102,18 +102,18 @@ Describe('tao fix', () => {
     const originalSource = Text.stripIndent(`
       use LocalText, Missing from @cards/widgets
 
-      ui MainView { }
+      view MainView { }
     `)
     const fixedSource = `${
       Text.stripIndent(`
       use Missing from @cards/widgets
 
-      ui MainView { }
+      view MainView { }
     `)
     }\n`
     await withTaoFixture({
       'Packages/@cards/screens/Main.tao': originalSource,
-      'Packages/@cards/widgets/Widget.tao': 'publish ui LocalText Value text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value text { }\n',
     }, async (rootDir) => {
       const cwd = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
       const path = FS.resolvePath('Main.tao', { cwd })

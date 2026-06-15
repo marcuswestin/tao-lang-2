@@ -28,31 +28,31 @@ publish layout WrappingRow {
    ```
 }
 
-publish ui Text Value text {
+publish view Text Value text {
    render inject Value ```ts
       return TR.Views.Text({ __tao: _ViewProps.__tao, children: [Value] })
    ```
 }
 
-publish ui TextLabel Value text {
+publish view TextFrame Value text {
    render inject Value ```ts
-      return TR.Views.TextLabel({ __tao: _ViewProps.__tao, children: [Value] })
+      return TR.Views.TextFrame({ __tao: _ViewProps.__tao, children: [Value] })
    ```
 }
 
-publish ui MultiLineText Value text {
+publish view TextMultiline Value text {
    render inject Value ```ts
-      return TR.Views.MultiLineText({ __tao: _ViewProps.__tao, children: [Value] })
+      return TR.Views.TextMultiline({ __tao: _ViewProps.__tao, children: [Value] })
    ```
 }
 
-publish ui Number Value number {
+publish view Number Value number {
    render inject Value ```ts
       return TR.Views.Number({ __tao: _ViewProps.__tao, children: [String(Value)] })
    ```
 }
 
-publish ui Button Title text {
+publish view Button Title text {
    render inject Title ```ts
       return TR.Views.Button({ __tao: _ViewProps.__tao, title: Title })
    ```

@@ -22,8 +22,8 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'view' && AST.isRender(context.container)) {
       return this.createViewScope(context.container)
     }
-    if (context.property === 'ui' && AST.isAppUi(context.container)) {
-      return this.createAppUiScope(context.container)
+    if (context.property === 'view' && AST.isAppView(context.container)) {
+      return this.createAppViewScope(context.container)
     }
     return super.getScope(context)
   }
@@ -54,18 +54,18 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isViewDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(render, AST.isViewDeclaration), scope)
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isRenderableDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(render, AST.isRenderableDeclaration), scope)
     return scope
   }
 
-  private createAppUiScope(appUi: AST.AppUi): Langium.Scope {
-    const root = findRoot(appUi)
+  private createAppViewScope(appView: AST.AppView): Langium.Scope {
+    const root = findRoot(appView)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isUiDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(appUi, AST.isUiDeclaration), scope)
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isViewDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(appView, AST.isViewDeclaration), scope)
     return scope
   }
 
@@ -108,10 +108,10 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 }
 
-function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
+function findOwningView(node: AST.Node): AST.RenderableDeclaration | undefined {
   let current = node.$container
   while (current) {
-    if (AST.isViewDeclaration(current)) {
+    if (AST.isRenderableDeclaration(current)) {
       return current
     }
     current = current.$container
