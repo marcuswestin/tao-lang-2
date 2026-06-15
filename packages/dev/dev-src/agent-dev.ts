@@ -5,10 +5,11 @@ import { runCommand, runWithCommands } from './commands/commands'
 import { registerJustCommand } from './commands/just'
 import { registerMergeFeaturePreflightCommand } from './commands/merge-feature-preflight'
 
-const AGENT_CLIS: readonly string[] = ['codex', 'claude', 'agy-ide']
+const AGENT_CLIS: readonly string[] = ['codex', 'claude', 'agy']
 const AGENT_SHELL_COMMANDS: readonly string[] = [
   'ls',
   'rg',
+  'nl',
   'cat',
   'sed',
   'git',

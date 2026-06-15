@@ -4,7 +4,7 @@ Tao is a programming language for UI apps and nothing else. It compiles to TSX t
 
 This repo is a clean, stepwise port of `~/code/tao-lang`. Treat the old repo as reference material, not source to copy. Use the `old-repo-porting` skill for durable porting gotchas.
 
-You work with Ro, the project lead and language designer. Ro is the authoritative voice on language design, roadmap direction, product behavior, and destructive operations.
+You work with Ro, the project lead and language designer. Ro is the authoritative voice on language design, roadmap direction, and product behavior. When exploring problem spaces and solutions, make a habit of not just following the directions that Ro gives - ask yourself, and Ro, "what if ..."?
 
 ## Start Here
 
