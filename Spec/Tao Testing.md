@@ -41,7 +41,7 @@ test "optional description" {
    alias Foo "ASD"
 
    check "optional description" {
-      render ViewName Foo, Cats 1 with UserName "Henry" { }
+      render ViewName Foo, Cats.1 with UserName."Henry" { }
 
       expect text "Henry has 1 cat"
       press text "Add cat"
@@ -79,7 +79,7 @@ Some things to notice:
 
 - `alias Foo "ASD"` and `app AppNameStage = ...` are test-local helper declarations visible to checks in the same `test`.
 - Each `check` starts its own app or focused render subject. Checks do not share runtime state.
-- `render ViewName Foo, Cats 1 with UserName "Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
+- `render ViewName Foo, Cats.1 with UserName."Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
 - `run AppName with { ... }` launches a one-off app expression without requiring a named staging app.
 - `run AppNameStage` launches a named app variant declared by applying `with { ... }` to an app object.
 - `expect text "..."`, `press text "..."`, `write "..."`, and later focused selectors operate through rendered UI and accessibility-visible behavior.
@@ -87,17 +87,17 @@ Some things to notice:
 The test runner should report each check with enough context to identify the suite, check, launch subject, and result. A focused render check can be displayed in a shape like:
 
 ```text
-test "optional description" check "optional description" render ViewName Foo, Cats 1 with UserName "Henry" { } passed
+test "optional description" check "optional description" render ViewName Foo, Cats.1 with UserName."Henry" { } passed
 ```
 
 Inline tests share the file's normal scope and are stripped from app builds and publishes:
 
 ```tao
 app RuntimeStdlibTests {
-   ui MainView
+   view MainView
 }
 
-ui MainView {
+view MainView {
    render Text "Runtime stdlib smoke"
 }
 
@@ -235,13 +235,13 @@ The `run ... with { ... }` block is an app expression overlay. It is useful when
 ```tao
 test "focused UI behavior" {
    check "renders validation message" {
-      render ViewX ParamA "abc", ParamB "asd" { }
+      render ViewX ParamA."abc", ParamB."asd" { }
 
       expect text "asd"
    }
 
    check "disabled save button ignores presses" {
-      render SaveControls ItemId "task-1" with CanSave false { }
+      render SaveControls ItemId."task-1" with CanSave.false { }
 
       expect text "Save"
       press text "Save"
@@ -249,7 +249,7 @@ test "focused UI behavior" {
    }
 
    check "task row renders staging data" {
-      render TaskRow TaskId "task-1" using app TodoStaging { }
+      render TaskRow TaskId."task-1" using app TodoStaging { }
 
       expect text "Book dentist"
    }
@@ -269,14 +269,14 @@ Render rules:
 
 - `render` uses the same Tao invocation shape as normal render code. The test language should not invent a separate parameter grammar.
 - If Tao accepts commas in render call sites, `render` checks should accept the same comma style.
-- `render <ViewName> <params> with <StateName> <Value>, ... { }` sets initial state for the mounted subject.
+- `render <ViewName> <params> with <StateOverride>, ... { }` sets initial state for the mounted subject.
 - State overrides must name existing state declarations on the rendered subject or its focused runtime context. They do not create new state.
 - The render block supplies child UI or named slot fills when the subject accepts them. An empty block is valid when there are no children or slots.
 - A focused render gets a minimal app shell and can optionally name an app capability context with `using app <AppName>`.
 - If no app context is named, the test runner supplies the default test shell, theme, strings, and empty/no-op capabilities that the subject can legally render without.
 - Focused render checks are still black-box UI tests: assertions target rendered output and accessibility-visible state, not internal values.
 
-This gives package-like confidence without introducing package unit tests. A package can test exported `ui`, `view`, `layout`, `screen`, or `nav` declarations through a focused render subject. If a full harness app is needed, it should live at a project root, because package folders cannot declare apps.
+This gives package-like confidence without introducing package unit tests. A package can test exported `view`, `layout`, `screen`, or `nav` declarations through a focused render subject. If a full harness app is needed, it should live at a project root, because package folders cannot declare apps.
 
 ## Data And Datasource Setup
 
@@ -300,7 +300,7 @@ datasource TodoDatasource {
 
 app TodoApp {
    datasource TodoDatasource
-   ui TodoMain
+   view TodoMain
 }
 
 app TodoStaging = TodoApp with {
@@ -386,7 +386,7 @@ V1 selector priority:
 - Text for simple smoke tests and copy-sensitive behavior.
 - Label for inputs and form controls.
 - Placeholder when there is no label.
-- Stable render id as a last resort.
+- Stable render ID as a last resort.
 
 Examples:
 
@@ -410,7 +410,7 @@ expect checkbox label "Complete" checked
 expect button "Save" disabled
 ```
 
-Those selectors require the Tao stdlib and runtime components to emit platform accessibility metadata such as React Native roles, accessible names, labels, and states. The compiler should pass through declared labels and render ids; it should not guess arbitrary accessibility roles from syntax. The validator should report role/state selectors that the selected runtime or component cannot support.
+Those selectors require the Tao stdlib and runtime components to emit platform accessibility metadata such as React Native roles, accessible names, labels, and states. The compiler should pass through declared labels and render IDs; it should not guess arbitrary accessibility roles from syntax. The validator should report role/state selectors that the selected runtime or component cannot support.
 
 ### Render IDs
 
@@ -431,7 +431,7 @@ TextInput Name {
 TextInput Name [id NameInput]
 ```
 
-Recommended direction: use a render label prefix for authored Tao UI, and compile it to runtime test/accessibility identifiers:
+Recommended direction: use a render ID prefix for authored Tao UI, and compile it to runtime test/accessibility identifiers:
 
 ```tao
 NameInput: TextInput Name
@@ -449,13 +449,13 @@ press id SaveButton
 
 Why this shape:
 
-- It labels a rendered node without adding a child block solely for metadata.
-- It keeps render ids outside layout/style brackets.
+- It gives a rendered node an ID without adding a child block solely for metadata.
+- It keeps render IDs outside layout/style brackets.
 - It avoids overloading `@icon` / `@row` named slot syntax.
 - It is easy to lower to React Native `testID`.
 - It reads well for repeated rows and icon-only controls.
 
-The `@NameInput:` family is worth revisiting if Tao settles on `@` for all named render-surface concepts. Old render-slot work uses `@icon` and `@row` for supplied UI holes, so using plain `NameInput:` for element labels keeps a useful distinction: `@name` means a slot, `Name:` means this rendered node is labelable.
+The `@NameInput:` family is worth revisiting if Tao settles on `@` for all named render-surface concepts. Old render-slot work uses `@icon` and `@row` for supplied UI holes, so using plain `NameInput:` for element IDs keeps a useful distinction: `@name` means a slot, `Name:` means this rendered node has a stable ID.
 
 ### Selectors, I18n, And Specificity
 
@@ -465,10 +465,10 @@ For i18n-heavy apps, tests should prefer:
 
 - Role/name when the accessible name comes from localized copy and the test runs in a fixed locale.
 - Label selectors for form controls.
-- Render ids for behavior tests that should not fail when copy changes.
+- Render IDs for behavior tests that should not fail when copy changes.
 - Future string-key selectors if Tao strings become first-class app capabilities, such as `expect text string .tasks.EmptyTitle`.
 
-Action targets and value/state assertions must match exactly one rendered node. `expect text` passes when at least one node matches, and `expect missing text` passes when no node matches. Tests that need to distinguish repeated copy should narrow by label, containing region, row identity, or render id. Later, explicit count or uniqueness assertions can be added without changing the default selector model.
+Action targets and value/state assertions must match exactly one rendered node. `expect text` passes when at least one node matches, and `expect missing text` passes when no node matches. Tests that need to distinguish repeated copy should narrow by label, containing region, row identity, or render ID. Later, explicit count or uniqueness assertions can be added without changing the default selector model.
 
 ### Matching Semantics
 
@@ -482,42 +482,39 @@ Text selectors should be exact, case-sensitive, and normalized by default:
 
 This gives predictable matching for early Test Apps. Regex, substring, locale string-key, and count assertions can be added later as explicit syntax.
 
-## Render Slots And Test Labels
+## Render Slots And Render IDs
 
-Named render slots and render ids should fit together without stealing each other's syntax.
+Named render slots still need their own spec. This testing spec only owns the boundary between render slots and render IDs.
 
 Render slot direction from old repo work:
 
 ```tao
-view Button Label text {
+view Button text as Label {
    Row {
       @icon
       Text Label
-   }
-}
+}  }
 
 Button "Foo" {
-   @icon: Image SaveIcon
+   @icon Image SaveIcon
 }
 ```
 
-Render labels name concrete rendered nodes:
+Render IDs name concrete rendered nodes:
 
 ```tao
 NameInput: TextInput Name
-SaveButton: Button "Save" {
-   @icon: Image SaveIcon
-}
+SaveButton: Button "Save"
 ```
 
 The distinction:
 
-- `@icon` declares or fills a named hole in a view's render surface.
-- `NameInput:` labels the concrete node produced at that render site.
+- `@icon` declares, invokes, or fills a named hole in a view's render surface.
+- `NameInput:` assigns a stable ID to the concrete node produced at that render site.
 - `press id NameInput` targets the concrete rendered node.
-- `press id SaveButton` targets the whole labeled button, not its `@icon` slot.
+- `press id SaveButton` targets the whole labeled button, not any internal or slotted child.
 
-This gives tests stable handles without making slots double as test ids.
+This gives tests stable handles without making slots double as test IDs.
 
 ## Verifying
 
@@ -547,7 +544,7 @@ expect checkbox label "Complete" checked
 Rules:
 
 - `expect text "..."` asserts that exact normalized text or an exact normalized accessible name exists in the rendered tree.
-- `expect id <Name>` asserts that a render id exists in the rendered tree.
+- `expect id <Name>` asserts that a render ID exists in the rendered tree.
 - `expect missing <selector>` asserts that a selector does not exist in the rendered tree.
 - Rendered does not mean viewport-visible. A node can be rendered outside a small viewport or below the scroll position.
 - `expect visible` should be a later, stricter assertion for viewport/screen visibility when Tao owns that runtime distinction.
@@ -754,7 +751,7 @@ Future target examples:
 - A state/actions test app presses buttons and asserts rendered counters.
 - A datasource app targets a named local/staging datasource, creates or updates rows through the UI, and asserts rendered rows.
 - A navigation app presses user-visible links and asserts the destination screen content while prior content is missing.
-- Focused `view`/`ui` and `layout` checks render rare UI states directly, instead of forcing the full app through awkward setup paths.
+- Focused `view` and `layout` checks render rare UI states directly, instead of forcing the full app through awkward setup paths.
 
 ## Package Testing
 
@@ -763,7 +760,7 @@ Package testing is deferred.
 When package testing is designed, the preferred starting point is focused subject testing, with project-root harness apps as a fallback:
 
 - A package test imports package declarations.
-- The check mounts an exported `view`/`ui`, `layout`, `screen`, or `nav`.
+- The check mounts an exported `view`, `layout`, `screen`, or `nav`.
 - A full harness app, when needed, is declared from a project root that imports the package, not inside the package folder itself.
 - The user drives that subject through rendered UI behavior.
 - Assertions remain rendered-behavior-only.
@@ -779,7 +776,7 @@ The design borrows these stable ideas from existing UI testing systems:
 - Maestro: readable ordered flows, `tapOn`, `assertVisible`, and automatic retrying.
 - Detox: native app e2e through element matchers, actions, and expectations.
 - The old Tao repo: scenario adapters proved that one ordered app-flow model can run against headless and Expo-like runtimes, but this spec replaces JSON scenarios with Tao-native `test` and `check` syntax.
-- Old Tao named-render work: `@slot` syntax is valuable for render holes; test labels should complement it instead of overloading it.
+- Old Tao named-render work: `@slot` syntax is valuable for render holes; render IDs should complement it instead of overloading it.
 
 References:
 
@@ -796,7 +793,7 @@ References:
 - Exact runtime spelling for datasource integration mode and production-config opt-in.
 - Whether `run ... with { ... }` should also own app state overrides, or whether app state setup should stay focused on rendered subjects.
 - Exact ownership and spelling for role/name and accessibility-state selectors.
-- Whether render labels should be `Name: View`, `[id Name]`, or an `@Name:` family if named render syntax evolves.
+- Whether render IDs should be `Name: View`, `[id Name]`, or an `@Name:` family if named render syntax evolves.
 - How selectors should target a specific row or region without overfitting to layout structure.
 - How i18n string-key selectors should look once Tao strings/localization are first-class.
 - How screenshots, rendered UI trees, and videos are named and retained in CI.

@@ -12,7 +12,7 @@ Status: partially implemented design draft. The current implementation supports 
 ### Creating a Tao app
 
 - Only the project root can declare an `app`
-  - The barebones app uses tao's default ui, theme and navigation:
+  - The barebones app uses tao's default UI, theme and navigation:
   - `<ProjectName>App.tao`:
 
   ```tao
@@ -45,8 +45,8 @@ Status: partially implemented design draft. The current implementation supports 
      theme DarkTheme
      nav StackNav RootScreen {
         on navigation -> Nav {
-          NavCount += 1
-          Log "Navigate to { Nav.Screen }"
+          set NavCount += 1
+          Log "Navigate to {Nav.Screen}"
   }  }  }
 
   // Create a root screen with a button to open chat, and
@@ -54,7 +54,7 @@ Status: partially implemented design draft. The current implementation supports 
   state NavCount = 0
   screen RootScreen {
      render Col {
-        Text "Navigation count { NavCount }"
+        Text "Navigation count {NavCount}"
         Button "Chat" [centered] {
            on press -> {
               app.nav.push ThreadView ParentMessage none
@@ -79,7 +79,7 @@ Status: partially implemented design draft. The current implementation supports 
         }
 
         ParentMessage ? {
-           Text <color gray> "Thread: { ParentMessage.Text }"
+           Text <color gray> "Thread: {ParentMessage.Text}"
         }
         List Messages <Pad, gap .1> {
            Pressable Row {
@@ -88,14 +88,16 @@ Status: partially implemented design draft. The current implementation supports 
   }  }  }  }
   ```
 
+This package example is a broad future app sketch. Screen, navigation, query, conditional, and event syntax shown here is illustrative; the package rules below are the authoritative part of this document.
+
 Some things to notice:
 
-- The app uses @tao standard libary for common ui elements
+- The app uses the @tao standard library for common UI elements
 - A simple datasource automatically provides realtime sync for all users
 - Closing brackets auto-formats to collapse onto a single indented line
 - Data items are declared in both singular and plural form
 - Native stack navigation automatically works on ios, android and web
-- The button to open chat is layed out centered on the screen
+- The button to open chat is laid out centered in the column
 - ThreadView takes an optional parent message and queries its thread
 - List takes Messages, and tao knows that Message refers to the singular item
 - `<color .grey>` knows we refer to a theme and defaults to `app.theme.colors.*`
@@ -111,7 +113,7 @@ Packages can make code available to other packages, and even other projects.
 
 - You create a package by naming a folder `@<package name>` and writing `.tao` files in it
   - Declarations under `@<package>` are referenced via `use Foo from @<package>`
-  - Declarations are referenced by it's folder name, _not_ its file's name
+  - A declaration is referenced by its folder name, _not_ its file's name
   - A project root folder cannot be a `@package`
 
 ### Making packages available to other files
@@ -119,10 +121,10 @@ Packages can make code available to other packages, and even other projects.
 - You make a declaration available to other files by declaring its visibility: `package`, `project`, or `publish`
 
   - By default a declaration is visible only inside its own file
-    - `ui Foo { ... }` cannot be used outside its file
+    - `view Foo { ... }` cannot be used outside its file
 
   - To make declarations visible to other files in _the same package_ you use `package` visibility:
-    - `package ui Foo { ... }`
+    - `package view Foo { ... }`
       - `Foo` can now be referenced from other files in the same package, e.g:
       - `use Foo` from any file in the same package
       - `use Foo from ./` from a file in the same folder
@@ -130,22 +132,22 @@ Packages can make code available to other packages, and even other projects.
       - `use Foo from ../<parent-folder>` from a child folder (that's in the same package)
 
   - To make declarations visible to files _the same project_ you use `project` visibility:
-    - If `project ui Bar { ... }` is declared in `@foo/filename.tao`:
+    - If `project view Bar { ... }` is declared in `@foo/filename.tao`:
       - then `use Bar from @foo` can be used from any file in the same project
     - If `Bar` is declared in `@foo/bar/utils.tao`
       - then `use Bar from @foo/utils` can be used from any file
 
   - To make declarations visible _in other projects_ you use `publish`:
-    - If project `<project id>` has package `@animals` with `publish ui Cat { ... }`
+    - If project `<project id>` has package `@animals` with `publish view Cat { ... }`
       - then a project with `requires <project id> @animals`
       - can `use Cat from @animals`
 
   - A folder is not allowed to make two declarations with the same name visible
-    - If `@<package>/file.tao` has `package ui Foo { ... }`, then:
-      - `@<package>/file2.tao` with `package ui Foo { ... }` is not ok
-      - `@<package>/file2.tao` with `project ui Foo { ... }` is not ok
-      - `@<package>/file2.tao` with `publish ui Foo { ... }` is not ok
-      - `@<package>/subfolder/file3.tao` with `<visibility> ui Foo { ... }` _is_ ok
+    - If `@<package>/file.tao` has `package view Foo { ... }`, then:
+      - `@<package>/file2.tao` with `package view Foo { ... }` is not ok
+      - `@<package>/file2.tao` with `project view Foo { ... }` is not ok
+      - `@<package>/file2.tao` with `publish view Foo { ... }` is not ok
+      - `@<package>/subfolder/file3.tao` with `<visibility> view Foo { ... }` _is_ ok
 
 ## Using available code from other packages
 
@@ -173,13 +175,13 @@ Packages can make code available to other packages, and even other projects.
 
 - Declarations are referenced by their folder, not their file names
   - If `@<package>/<filename>.tao` has:
-    - `publish ui Foo { ... }`, then Foo is available via `@<package>`:
+    - `publish view Foo { ... }`, then Foo is available via `@<package>`:
     - `use Foo from @<package>`
   - If `@<package>/<subfolder>/<filename>.tao` has:
-    - `publish ui Bar { ... }` then Bar is available via `@<package>/subfolder`:
+    - `publish view Bar { ... }` then Bar is available via `@<package>/subfolder`:
     - `use Bar from @<package>/<subfolder>`
 
-### Package cycles and order of evalutation
+### Package cycles and order of evaluation
 
 - Cyclical package use is ok
   - Each used package file is evaluated once, in depth-first order, by the typescript runtime.
@@ -198,7 +200,7 @@ Packages can make code available to other packages, and even other projects.
 
 ## Using external Tao Projects and packages
 
-- To import another tao project and its packages you list them them in `project { ... }` with `requires ...`:
+- To import another tao project and its packages you list them in `project { ... }` with `requires ...`:
 
   ```tao
   project {
