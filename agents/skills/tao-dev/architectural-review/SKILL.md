@@ -46,6 +46,14 @@ Use this for Tao architecture review before implementation or after implementati
 - For Gemini in plan mode, assume it may not run shell commands and may not read ignored `.artifacts` paths. Pass the scope and key diff excerpts inline in the prompt instead of asking Gemini to inspect an artifact path or run `git diff` itself.
 - Treat reviewer output as evidence, not truth. The main agent reconciles findings and decides which risks, alternatives, and recommendations are valid.
 
+## Review Runner Gotchas
+
+- `codexbar usage` can exit nonzero while still printing useful provider JSON mixed with unavailable-provider errors. Use the usable provider entries instead of treating the command as fatal.
+- The repo-owned `./agent review` runner is useful for architecture passes: create a run with `./agent review new --slug <slug>`, then use lenses such as `architecture` and `api-boundary`.
+- Count only substantive reviewer output as coverage. Empty files, one-byte files, or metadata with `status: empty` are failed coverage even if the wrapper exits successfully.
+- Time-box reviewers that stall without artifacts. Stop long-running wrappers before final handoff so no review command is left running.
+- If external reviewers return empty or stall, fall back to available read-only subagents and report that limitation clearly; still reconcile findings yourself.
+
 ## Output
 
 - Start with the current architecture summary and the important assumptions.

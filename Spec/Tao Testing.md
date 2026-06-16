@@ -435,7 +435,7 @@ Recommended direction: use a render ID prefix for authored Tao UI, and compile i
 
 ```tao
 NameInput: TextInput Name
-SaveButton: Button "Save"
+SaveButton: Button "Save", Save
 ```
 
 Then tests target it explicitly:
@@ -489,13 +489,13 @@ Named render slots still need their own spec. This testing spec only owns the bo
 Render slot direction from old repo work:
 
 ```tao
-view Button text as Label {
+view Button Label text, Press action {
    Row {
       @icon
       Text Label
 }  }
 
-Button "Foo" {
+Button "Foo", Save {
    @icon Image SaveIcon
 }
 ```
@@ -504,7 +504,7 @@ Render IDs name concrete rendered nodes:
 
 ```tao
 NameInput: TextInput Name
-SaveButton: Button "Save"
+SaveButton: Button "Save", Save
 ```
 
 The distinction:
