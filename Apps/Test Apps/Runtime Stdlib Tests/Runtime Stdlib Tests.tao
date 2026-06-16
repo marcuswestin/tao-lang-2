@@ -7,10 +7,11 @@ app RuntimeStdlibTests {
 alias LaunchCount = 3
 
 view MainView {
+   action Ignore { }
    render Stack {
       Text "Runtime stdlib smoke"
       Number LaunchCount
-      Button "Tap me"
+      Button "Tap me", Ignore
       Box {
          Col {
             TextFrame "Label"
