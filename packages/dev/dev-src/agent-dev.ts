@@ -1,11 +1,12 @@
 import { FS, Platform } from '@shared'
 import { registerAgentHelpCommand } from './commands/agent-help'
 import { registerAuditInstructionsCommand } from './commands/audit-instructions'
+import { registerReviewCommand } from './commands/code-review'
 import { runCommand, runWithCommands } from './commands/commands'
 import { registerJustCommand } from './commands/just'
 import { registerMergeFeaturePreflightCommand } from './commands/merge-feature-preflight'
 
-const AGENT_CLIS: readonly string[] = ['codex', 'claude', 'agy']
+const AGENT_CLIS: readonly string[] = ['codex', 'claude', 'agy', 'cursor', 'gemini']
 const AGENT_SHELL_COMMANDS: readonly string[] = [
   'ls',
   'rg',
@@ -40,4 +41,5 @@ await runWithCommands(commands => {
   registerAuditInstructionsCommand(commands)
   registerJustCommand(commands)
   registerMergeFeaturePreflightCommand(commands)
+  registerReviewCommand(commands)
 })
