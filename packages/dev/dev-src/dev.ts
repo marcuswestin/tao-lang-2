@@ -1,5 +1,5 @@
 import { Errors, HCI, Platform } from '@shared'
-import { ensureAndroidEmulator, ensureAndroidExpoGo, startExpoAndroid } from './android'
+import { Android } from './android'
 import { runWithCommands } from './commands/commands'
 import { runDevLoop } from './dev-loop/dev-loop'
 
@@ -21,20 +21,20 @@ await runWithCommands(commands => {
     .command('android-emulator')
     .description('Ensure an Android emulator exists and is booted.')
     .action(async () => {
-      await ensureAndroidEmulator()
+      await Android.ensureEmulator()
     })
 
   commands
     .command('android-expo-go')
     .description('Ensure Expo Go is installed on the booted Android emulator.')
     .action(async () => {
-      await ensureAndroidExpoGo()
+      await Android.ensureExpoGo()
     })
 
   commands
     .command('expo-android')
     .description('Start the Expo runtime and open it on the booted Android emulator.')
     .action(async () => {
-      await startExpoAndroid()
+      await Android.startExpo()
     })
 })

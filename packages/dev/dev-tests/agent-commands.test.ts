@@ -8,6 +8,7 @@ import {
   extractRoadmapCandidates,
   formatMergeFeaturePreflightReport,
 } from '../dev-src/commands/merge-feature-preflight'
+import { Ports } from '../dev-src/dev-loop/Ports'
 
 Describe('agent just command helpers', () => {
   Test('classifies streamed and quiet just invocations', () => {
@@ -75,6 +76,60 @@ Describe('agent artifact helpers', () => {
     Expect(formatArtifactRunId(new Date(2026, 5, 6, 2, 55, 55, 123))).toMatch(
       /^20260606-025555\.123-[a-z0-9]{6}$/,
     )
+  })
+})
+
+Describe('dev loop port helpers', () => {
+  Test('formats lsof field output for listening processes', () => {
+    const listeners = Ports.formatLsofListeners({
+      exitCode: 0,
+      stderr: '',
+      stdout: [
+        'p1234',
+        'cnode',
+        'n127.0.0.1:8081',
+        'p5678',
+        'cexpo',
+        'n*:8081',
+        'p1234',
+        'cnode',
+        'n127.0.0.1:8081',
+      ].join('\n'),
+    })
+
+    Expect(listeners).toEqual([
+      { command: 'node', name: '127.0.0.1:8081', pid: 1234 },
+      { command: 'expo', name: '*:8081', pid: 5678 },
+    ])
+  })
+
+  Test('formats port listeners for prompts', () => {
+    Expect(Ports.formatListeners([
+      { command: 'node', name: '127.0.0.1:8081', pid: 1234 },
+      { command: 'expo', pid: 5678 },
+    ])).toBe('node pid 1234 (127.0.0.1:8081), expo pid 5678')
+  })
+
+  Test('uses parsed lsof listeners even when lsof exits nonzero with warnings', () => {
+    const listeners = Ports.formatLsofListeners({
+      exitCode: 1,
+      stderr: 'lsof: warning: incomplete information',
+      stdout: ['p1234', 'cnode', 'n127.0.0.1:8081'].join('\n'),
+    })
+
+    Expect(listeners).toEqual([
+      { command: 'node', name: '127.0.0.1:8081', pid: 1234 },
+    ])
+  })
+
+  Test('treats blank nonzero lsof output as no listeners', () => {
+    const listeners = Ports.formatLsofListeners({
+      exitCode: 1,
+      stderr: '',
+      stdout: '',
+    })
+
+    Expect(listeners).toEqual([])
   })
 })
 

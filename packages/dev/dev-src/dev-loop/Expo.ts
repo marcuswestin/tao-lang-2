@@ -1,11 +1,7 @@
 import { CLI, Errors, FS, HCI, Platform } from '@shared'
 import betterOpen from 'better-opn'
-import {
-  ensureAndroidEmulator,
-  ensureAndroidExpoGo,
-  openExpoAndroid,
-  prepareAvailableAndroidExpoGo,
-} from '../android'
+import { Android } from '../android'
+import { Ports } from './Ports'
 
 type ExpoPlatform = 'android' | 'ios' | 'web'
 
@@ -118,8 +114,8 @@ export const Expo = {
 /** openAndroid asks Expo to open the current app on Android, launching an emulator when Expo can. */
 async function openAndroid(): Promise<boolean> {
   try {
-    await ensureAndroidEmulator()
-    await ensureAndroidExpoGo()
+    await Android.ensureEmulator()
+    await Android.ensureExpoGo()
     const endpoint = await expoOpenEndpoint('android')
     await openPreparedAndroid(endpointUrl(endpoint))
     HCI.logProcessInfo('dev', `opened Android${formatOpenedRuntime(endpoint)}`)
@@ -132,7 +128,7 @@ async function openAndroid(): Promise<boolean> {
 
 /** openAvailableAndroid opens the current Expo app on an already-booted Android emulator. */
 async function openAvailableAndroid(): Promise<boolean> {
-  if (await prepareAvailableAndroidExpoGo()) {
+  if (await Android.prepareAvailableExpoGo()) {
     const endpoint = await expoOpenEndpoint('android')
     await openPreparedAndroid(endpointUrl(endpoint))
     HCI.logProcessInfo('dev', `opened Android${formatOpenedRuntime(endpoint)}`)
@@ -199,6 +195,10 @@ async function reloadExpoApps(): Promise<void> {
 
 /** ensureMetroPortFree fails when another Metro server already owns the dev-loop port. */
 async function ensureMetroPortFree(): Promise<void> {
+  if (await Ports.ensureFree(EXPO_PORT)) {
+    return
+  }
+
   try {
     const response = await fetch(EXPO_STATUS_URL)
     Errors.throwUserInput(
@@ -232,7 +232,7 @@ async function waitForMetro(shouldStop: () => boolean = () => false): Promise<bo
 }
 
 async function openPreparedAndroid(url?: string): Promise<void> {
-  await openExpoAndroid(url)
+  await Android.openExpo(url)
 }
 
 async function commandExists(command: string): Promise<boolean> {
