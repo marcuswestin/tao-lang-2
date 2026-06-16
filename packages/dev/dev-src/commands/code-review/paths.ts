@@ -13,6 +13,15 @@ export function resolveReviewRunDir(run: string, repoRoot = Repo.getRoot()): str
   return FS.resolvePath(run, { cwd: repoRoot })
 }
 
+/** reviewMetricsPath returns the runtime metrics JSONL path for the skill owning a run directory. */
+export function reviewMetricsPath(runDir: string, repoRoot = Repo.getRoot()): string {
+  const relativeRunDir = FS.relativePath(repoRoot, runDir)
+  const parts = relativeRunDir.split('/')
+  const skillsIndex = parts.findIndex((part, index) => part === 'skills' && parts[index - 1] === '.artifacts')
+  const skillName = skillsIndex === -1 ? 'subagents-review' : parts[skillsIndex + 1] ?? 'subagents-review'
+  return FS.resolvePath(`.artifacts/skills/${skillName}/metrics/reviewer-runtimes.jsonl`, { cwd: repoRoot })
+}
+
 /** formatReviewRunDir builds a sortable, human-readable run directory name. */
 export function formatReviewRunDir(slug: string | undefined, date: Date): string {
   const cleanSlug = (slug ?? 'review').trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-+|-+$/g, '')

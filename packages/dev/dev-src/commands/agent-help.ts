@@ -42,6 +42,7 @@ export function formatAgentHelpText(justList: string, allowlistedCommands: reado
 Usage:
   ./agent help
   ./agent just <recipe> [args...]
+  ./agent ai-usage [--provider <name>] [--source <source>] [--json]
   ./agent audit-instructions [--strict] [--json]
   ./agent merge-feature-preflight [--json]
   ./agent review <command> [options]
@@ -58,12 +59,17 @@ Behavior:
 Examples:
   ./agent just prep
   ./agent just test
+  ./agent ai-usage --provider all --json
   ./agent audit-instructions
   ./agent merge-feature-preflight
   ./agent review new --stringent --slug my-review
-  ./agent cursor agent --print --mode=plan --sandbox enabled --trust --model composer-2.5 "Review this read-only."
-  ./agent gemini --skip-trust --approval-mode plan --model gemini-3.1-pro-preview --prompt "Review this read-only."
-  ./agent codex exec -C . --sandbox read-only --ephemeral -
+  ./agent review plan --run .artifacts/skills/subagents-review/<run> --profile standard
+  ./agent review usage --run .artifacts/skills/subagents-review/<run>
+  ./agent review smoke-providers --provider codex-spark,codexbar
+  ./agent codexbar usage --provider all --source oauth --format json --pretty
+  ./agent cursor agent --print --mode=plan --sandbox enabled --trust --output-format stream-json --stream-partial-output --model composer-2.5 "Review this read-only."
+  ./agent gemini --skip-trust --approval-mode plan --model gemini-3.1-pro-preview --output-format stream-json --prompt "Review this read-only."
+  ./agent codex exec -C . --sandbox read-only --ephemeral -m gpt-5.3-codex-spark --json --output-last-message /tmp/final.txt -
   ./agent rg -n 'pattern' packages
 
 Just recipes:

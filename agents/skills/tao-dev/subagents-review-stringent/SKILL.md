@@ -15,7 +15,7 @@ Use this as a stricter wrapper around `subagents-review` when Ro wants more grou
 - Keep reviewers read-only. Do not let reviewers edit files, stage, unstage, stash, reset, commit, run destructive commands, or run final validation.
 - The main agent owns every edit, every validation run, and every decision to accept or reject reviewer feedback.
 - Save reviewer prompts and meaningful outputs under `.artifacts/skills/subagents-review-stringent/<run>/`.
-- Prefer the repo-owned orchestration command: `./agent review new --stringent --slug <short-name>`, then `./agent review fanout --run <run-dir> --manifest <manifest.json>`, then `./agent review collect --run <run-dir>`.
+- Prefer the repo-owned orchestration command: `./agent review new --stringent --slug <short-name>`, then `./agent review plan --run <run-dir> --profile stringent`, then `./agent review fanout --run <run-dir> --manifest <run-dir>/manifest.recommended.json`, then `./agent review collect --run <run-dir>`.
 
 ## Scope
 
@@ -26,15 +26,18 @@ Use this as a stricter wrapper around `subagents-review` when Ro wants more grou
 
 ## Review Matrix
 
-Before building the wave, run `codexbar usage --provider all --format json --pretty` once and size the matrix to remaining per-provider budget: for providers running short this session, use fewer reviewers, cheaper models, or lower effort, and shift the heavier passes (Codex `max`, slower Google models) onto providers with ample budget. Drop a provider entirely rather than exhausting it.
+Before building the wave, run `./agent ai-usage --provider all --json` when budget matters. Then use `./agent review plan --run <run-dir> --profile stringent` to generate the budget-aware reviewer matrix. The generated `review-plan.json` records selected and skipped providers with reasons; `manifest.recommended.json` is the fanout input.
 
-Default to a first wave of four independent reviews for substantial diffs:
+For providers running short this session, use fewer reviewers, cheaper models, or lower effort, and shift heavier passes onto providers with ample budget. Drop a provider entirely rather than exhausting it. When normal Codex session budget is low and Spark windows have room, let the planner choose Codex model `gpt-5.3-codex-spark` for focused lenses.
+
+Default to the generated stringent profile for substantial diffs, then edit `manifest.recommended.json` only when the diff calls for a specific adjustment. The desired first wave covers these independent review angles:
 
 - `codex-correctness`: Codex reviewer with `correctness` or `api-boundary` lens for logic, data model, generated-code contracts, and package ownership.
 - `codex-coverage`: Codex reviewer with `tests` or `stale` lens for negative paths, fixture drift, stale code/docs, and missed integration coverage.
+- `codex-spark-focused`: optional Codex reviewer with model `gpt-5.3-codex-spark` for a narrow focused lens when normal Codex session budget is low but Spark windows have room.
 - `claude-semantics`: Claude reviewer with `requirements` or `architecture` lens for semantic regressions, missing validation, and plan/spec mismatch.
 - `agy-focused`: Antigravity reviewer with `regressions` or `consistency` lens, limited to the top high-confidence cross-package risks that another reviewer is unlikely to catch.
-- Cursor or Gemini reviewer: optional independent `api-boundary`, `architecture`, or `consistency` lens when another read-only model would add coverage or when Claude/Antigravity is unavailable. Use Gemini CLI through `./agent gemini --skip-trust --approval-mode plan --model gemini-3.1-pro-preview --prompt "<prompt>"`.
+- Cursor or Gemini reviewer: optional independent `api-boundary`, `architecture`, or `consistency` lens when another read-only model would add coverage or when Claude/Antigravity is unavailable.
 
 Add focused reviewers when the diff is broad or high risk. Keep prompts distinct so agents do not all inspect the same path:
 
@@ -47,7 +50,7 @@ Add focused reviewers when the diff is broad or high risk. Keep prompts distinct
 
 Use more reviewers for coverage, not repetition. A normal stringent run should use four to seven reviewers; go beyond that only when Ro asks for an exhaustive sweep or the diff is unusually risky.
 
-Create the manifest as JSON with unique filename-safe labels and one reviewer per lens; leave scope to the default working-tree diff unless Ro supplies a `scopeFile`. Use `effort: "max"` for Codex on hard review passes, Claude `effort: "high"` unless the CLI supports more, Cursor through `cursor agent --print --mode=plan --sandbox enabled --trust --model composer-2.5`, Gemini through `./agent gemini --skip-trust --approval-mode plan --model gemini-3.1-pro-preview --prompt "<prompt>"`, and Antigravity with a Google Gemini model only, usually `Gemini 3.5 Flash (High)`, a narrower scope, and no more than three to five requested findings. Reserve a slower Google model such as `Gemini 3.1 Pro (High)` for explicit exhaustive sweeps or narrow follow-up questions where earlier reviewers disagree.
+Create or edit the manifest as JSON with unique filename-safe labels and one reviewer per lens; leave scope to the default working-tree diff unless Ro supplies a `scopeFile`. Use `./agent review plan` for the default model/effort/timeout choices. If you hand-edit a stringent manifest, keep Antigravity on Google Gemini models only, usually `Gemini 3.5 Flash (High)`, with a narrower scope and no more than three requested findings. Reserve slower Google models only for explicit exhaustive sweeps or narrow follow-up questions where earlier reviewers disagree.
 
 ## Prompt Contract
 
@@ -74,7 +77,7 @@ Every reviewer prompt must include the scoped diff summary, changed files, relev
 - If meaningful fixes are applied, run one targeted re-review over the changed files and accepted fixes. Re-run only the reviewer(s) whose prior findings were most meaningful, not the full matrix, and respect remaining provider budget when choosing which to re-run.
 - Run a second targeted re-review only if the first rerun finds a new meaningful issue.
 - Do not exceed three total review rounds unless Ro explicitly asks to keep going.
-- If reviewers stall, inspect whether their output artifact is growing, time-box the stalled process, stop or ignore hung reviewers when needed, and continue with completed reviewers plus local verification. Report the stall plainly.
+- If reviewers stall, inspect the reviewer subdirectory written by `./agent review`: `status.json`, `events.jsonl`, `stdout.*`, `stderr.log`, and provider-specific logs. Time-box the stalled process, stop or ignore hung reviewers when needed, and continue with completed reviewers plus local verification. Report the stall plainly.
 
 ## Validate And Report
 

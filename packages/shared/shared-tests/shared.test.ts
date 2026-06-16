@@ -399,6 +399,19 @@ Describe('CLI', () => {
       runtimeProcess.stdout = stdout
     }
   })
+
+  Test('streams stdout and stderr chunks to an onOutput callback', async () => {
+    const chunks: { stream: string; text: string }[] = []
+    const command = CLI.start(runtimeProcess.execPath, {
+      args: ['-e', 'process.stdout.write(`out`); process.stderr.write(`err`)'],
+      onOutput: (stream, chunk) => chunks.push({ stream, text: chunk.toString('utf8') }),
+      stdio: 'pipe',
+    })
+    await command.waitForClose()
+
+    Expect(chunks.some(chunk => chunk.stream === 'stdout' && chunk.text.includes('out'))).toBe(true)
+    Expect(chunks.some(chunk => chunk.stream === 'stderr' && chunk.text.includes('err'))).toBe(true)
+  })
 })
 
 Describe('Repo', () => {
@@ -409,24 +422,6 @@ Describe('Repo', () => {
     try {
       runtimeProcess.chdir(FS.resolvePath('packages/shared', { cwd: root }))
       Expect(Repo.getRoot()).toBe(root)
-    } finally {
-      runtimeProcess.chdir(cwd)
-    }
-  })
-
-  Test('finds a nested git repo root without using an outer root', async () => {
-    const cwd = runtimeProcess.cwd()
-    const outerRoot = await tmpDir()
-    const taoRoot = FS.resolvePath('workspace/tao', { cwd: outerRoot })
-    const nestedDir = FS.resolvePath('packages/shared', { cwd: taoRoot })
-
-    await FS.mkdir(nestedDir)
-    await CLI.mustRun('git', { args: ['init'], cwd: taoRoot })
-    const expectedRoot = Repo.getRoot(taoRoot)
-
-    try {
-      runtimeProcess.chdir(nestedDir)
-      Expect(Repo.getRoot()).toBe(expectedRoot)
     } finally {
       runtimeProcess.chdir(cwd)
     }

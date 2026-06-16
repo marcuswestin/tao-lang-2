@@ -7,8 +7,11 @@ export type ReviewEffort = 'low' | 'medium' | 'high' | 'max'
 /** ReviewRunKind names the artifact root used for a review run. */
 export type ReviewRunKind = 'standard' | 'stringent'
 
+/** ReviewLaunchKind distinguishes real reviews from provider smoke checks. */
+export type ReviewLaunchKind = 'review' | 'smoke'
+
 /** ReviewStatus summarizes a finished reviewer launch. */
-export type ReviewStatus = 'ok' | 'empty' | 'failed'
+export type ReviewStatus = 'ok' | 'empty' | 'failed' | 'timeout'
 
 /** ReviewLens describes one adversarial review angle a reviewer can take. */
 export type ReviewLens = {
@@ -20,6 +23,7 @@ export type ReviewLens = {
 export type ReviewerInvocation = {
   command: string
   args: string[]
+  finalPath?: string
   stdin?: string
   outputFormat: 'jsonl' | 'text'
 }
@@ -42,9 +46,17 @@ export type ReviewMeta = {
   bytes: number
   reviewPath: string
   command: string
+  kind?: ReviewLaunchKind
+  artifactDir?: string
+  eventsPath?: string
+  firstOutputMs?: number
   model?: string
   lens?: string
   rawPath?: string
+  stderrPath?: string
+  statusPath?: string
+  stdoutPath?: string
+  timedOut?: boolean
 }
 
 /** ReviewerManifestEntry is one reviewer spec in a fanout manifest. */

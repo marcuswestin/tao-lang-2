@@ -21,8 +21,9 @@ export function formatFanoutReport(metas: readonly ReviewMeta[]): string {
 export function formatMetaLine(meta: ReviewMeta): string {
   const model = meta.model === undefined ? '' : `/${meta.model}`
   const lens = meta.lens === undefined ? '' : ` [${meta.lens}]`
+  const kind = meta.kind === 'smoke' ? ' [smoke]' : ''
   const seconds = (meta.durationMs / 1_000).toFixed(1)
-  return `${meta.label}: ${meta.reviewer}${model}${lens} ${meta.status} in ${seconds}s, ${meta.bytes}b -> ${meta.reviewPath}`
+  return `${meta.label}${kind}: ${meta.reviewer}${model}${lens} ${meta.status} in ${seconds}s, ${meta.bytes}b -> ${meta.reviewPath}`
 }
 
 export function isUsableReview(meta: ReviewMeta): boolean {
@@ -39,9 +40,9 @@ export async function buildReviewDigest(
   for (const meta of metas) {
     const body = await FS.exists(meta.reviewPath) ? await FS.readText(meta.reviewPath) : ''
     const capped = capText(body.trim(), maxBytes)
-    const heading = `## ${meta.label} (${meta.reviewer}${meta.model === undefined ? '' : `/${meta.model}`}${
-      meta.lens === undefined ? '' : `, ${meta.lens}`
-    })`
+    const heading = `## ${meta.label}${meta.kind === 'smoke' ? ' [smoke]' : ''} (${meta.reviewer}${
+      meta.model === undefined ? '' : `/${meta.model}`
+    }${meta.lens === undefined ? '' : `, ${meta.lens}`})`
     const note = capped.truncated ? ` — truncated from ${capped.originalBytes} bytes` : ''
     sections.push(heading + note, '', capped.text.length > 0 ? capped.text : '_(no output)_', '')
   }

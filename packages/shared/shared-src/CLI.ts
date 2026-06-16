@@ -27,6 +27,7 @@ export type CommandSpec = {
   cwd?: string
   detached?: boolean
   env?: Platform.ProcessEnv
+  onOutput?: (stream: CommandOutputStream, chunk: Buffer) => void
   prefixedOutput?: PrefixedOutputOptions
   stdin?: string | Uint8Array
   stdio?: CommandStdio
@@ -135,6 +136,7 @@ function startCommand(
     if (options.captureOutput) {
       stdoutChunks.push(buffer)
     }
+    spec.onOutput?.('stdout', buffer)
     if (stdio.streamOutput) {
       HCI.write(buffer)
     } else if (prefixedOutput) {
@@ -146,6 +148,7 @@ function startCommand(
     if (options.captureOutput) {
       stderrChunks.push(buffer)
     }
+    spec.onOutput?.('stderr', buffer)
     if (stdio.streamOutput) {
       HCI.writeError(buffer)
     } else if (prefixedOutput) {

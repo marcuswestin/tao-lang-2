@@ -18,6 +18,7 @@ Use this for Tao architecture review before implementation or after implementati
 ## Grounding
 
 - Read the supplied plan, proposal, diff, or artifact, then inspect live repo truth: root/nested instructions, relevant source, nearby patterns, package boundaries, tests/fixtures, and `Roadmap.md` or `Spec/` docs when they bear on the decision.
+- For commit-range reviews, freeze the exact range in the prompt, such as `HEAD~2..HEAD`, and include commit summaries, changed files, touched architecture levels, and the key diff commands used. Do not let reviewers fall back to the current working-tree diff unless that is the requested scope.
 - Use `old-repo-porting` only when comparable previous-repo behavior or migration precedent matters.
 - Identify the architecture level being reviewed: language semantics, package/pipeline slice, runtime/codegen contract, app/test fixture shape, dev automation, roadmap sequencing, or documentation/decision record.
 - Prefer Tao-specific criteria over generic cloud or enterprise architecture checklists unless those criteria map directly to the repo risk.
@@ -35,12 +36,14 @@ Use this for Tao architecture review before implementation or after implementati
 
 ## Multi-Agent Workflow
 
-- Run `codexbar usage --provider all --format json --pretty` once before launching reviewers; for any provider running short this session, prefer a cheaper model, lower effort, or fewer reviewers.
-- Run at least two independent read-only reviews by default:
-  - `architectural-reviewer`: design-partner review of tradeoffs, alternatives, quality attributes, and recommendation.
-  - Boundary/conformance reviewer: repo-pattern review focused on package ownership, instruction drift, generated/runtime boundaries, and implementation fit. Cursor is a good choice here via `cursor agent --print --mode=plan --sandbox enabled --trust --model composer-2.5` when an independent read-only model would add coverage.
-- For broad or high-risk work, add focused reviewers for language semantics, runtime/codegen, roadmap sequencing, docs/ADRs, or old-repo precedent.
+- Try `./agent ai-usage --provider all --json` once before launching reviewers when budget matters. If repo command policy rejects the command, do not bypass `./agent`; note the skipped budget check and size the reviewer wave conservatively.
+- Prefer progress-aware orchestration for multi-agent runs: `./agent review new --slug <short-name>`, then `./agent review plan --run <run-dir> --profile architecture`, then `./agent review fanout --run <run-dir> --manifest <run-dir>/manifest.recommended.json`, then `./agent review collect --run <run-dir>`. Inspect each reviewer subdirectory's `review.md`, `status.json`, `events.jsonl`, `stdout.*`, and `stderr.log` before deciding a reviewer is stalled.
+- Run at least two independent read-only reviews by default. The architecture profile should include:
+  - Architecture/design-partner review of tradeoffs, alternatives, quality attributes, and recommendation.
+  - Boundary/conformance review focused on package ownership, instruction drift, generated/runtime boundaries, and implementation fit.
+- For broad or high-risk work, add focused reviewers for language semantics, runtime/codegen, roadmap sequencing, docs/ADRs, or old-repo precedent by editing the generated manifest or running a targeted follow-up. Let `./agent review plan` choose Codex Spark for narrow focused lenses when normal Codex session budget is low and Spark windows have room.
 - Give each reviewer a narrow prompt with the mode, scope, relevant instructions, current architecture summary, and the specific review axis.
+- For Gemini in plan mode, assume it may not run shell commands and may not read ignored `.artifacts` paths. Pass the scope and key diff excerpts inline in the prompt instead of asking Gemini to inspect an artifact path or run `git diff` itself.
 - Treat reviewer output as evidence, not truth. The main agent reconciles findings and decides which risks, alternatives, and recommendations are valid.
 
 ## Output
@@ -50,3 +53,11 @@ Use this for Tao architecture review before implementation or after implementati
 - Use code-review severity only for concrete conformance risks in implemented diffs.
 - State when the current architecture is defensible, and explain why; do not invent objections just to be adversarial.
 - Include reviewers used, artifact paths if any, and whether any durable record should be written.
+
+## Acting On Findings
+
+- Reviewers stay read-only, but the orchestrating agent does not stop at reporting. After presenting the summary, recommendation, and action items, go ahead and act on the findings as you see fit: implement the ones you judge correct and in-scope, defer or skip the rest, and say which you did and why.
+- Acting on findings never relaxes the reviewer contract: reviewers remain strictly read-only; only the orchestrating agent edits after local verification.
+- Do not act blindly. Verify each finding against live repo truth (root/nested instructions, existing patterns, tests, the actual diff) before changing anything; a confident reviewer is evidence, not proof. Drop or downgrade findings the code, docs, or established conventions refute, and note when repo truth resolves an earlier open question.
+- When acting, follow the usual edit, validation, and Git-safety rules: make minimal coherent edits, run `./agent just prep` or the relevant targeted checks, and never touch Git index or stash state without Ro's go-ahead.
+- Escalate to Ro instead of acting when a finding implies a language-design decision, roadmap reprioritization, destructive operation, or any choice that cannot be derived safely from the repo.

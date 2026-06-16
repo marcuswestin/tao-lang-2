@@ -1,4 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
+import { formatAiUsageReport, summarizeAiUsage } from '../dev-src/commands/ai-usage'
 import { formatArtifactRunId } from '../dev-src/commands/artifacts'
 import { auditInstructionFiles, formatInstructionAuditReport } from '../dev-src/commands/audit-instructions'
 import { formatJustSuccessLine, parseJustSuccessSummary, shouldStreamJustOutput } from '../dev-src/commands/just'
@@ -20,6 +21,52 @@ Describe('agent just command helpers', () => {
     Expect(parseJustSuccessSummary(' 27 pass\n 0 fail\nTests: 12 passed, 12 total\n')).toBe('39 tests passed')
     Expect(formatJustSuccessLine(['test'], 'Tests: 12 passed, 12 total', 1_234))
       .toBe('[just]: test ok in 1.2s (12 tests passed)')
+  })
+})
+
+Describe('ai usage summary', () => {
+  Test('normalizes provider windows, spark windows, and errors', () => {
+    const providers = summarizeAiUsage(JSON.stringify([
+      {
+        provider: 'codex',
+        source: 'oauth',
+        usage: {
+          primary: { usedPercent: 100, resetDescription: '7:34 AM' },
+          secondary: { usedPercent: 16, resetDescription: 'Jun 23' },
+          extraRateWindows: [
+            { id: 'codex-spark', window: { usedPercent: 0, resetDescription: '11:01 AM' } },
+            { id: 'codex-spark-weekly', window: { usedPercent: 2 } },
+          ],
+        },
+      },
+      { provider: 'mistral', error: { message: 'No Mistral session cookies found.' } },
+    ]))
+
+    Expect(providers).toBeDefined()
+    const codex = providers?.find(entry => entry.provider === 'codex')
+    Expect(codex?.ok).toBe(true)
+    Expect(codex?.windows.map(window => `${window.label}:${window.remainingPercent}`)).toEqual([
+      'primary:0',
+      'secondary:84',
+      'codex-spark:100',
+      'codex-spark-weekly:98',
+    ])
+    Expect(providers?.find(entry => entry.provider === 'mistral')?.ok).toBe(false)
+  })
+
+  Test('returns undefined for non-array output and reports availability lines', () => {
+    Expect(summarizeAiUsage('not json')).toBeUndefined()
+    const report = formatAiUsageReport([
+      {
+        provider: 'codex',
+        source: 'oauth',
+        ok: true,
+        windows: [{ label: 'codex-spark', remainingPercent: 100, resetDescription: '11:01 AM' }],
+      },
+      { provider: 'mistral', ok: false, error: 'no session', windows: [] },
+    ])
+    Expect(report).toContain('- codex [oauth]: codex-spark 100% left (resets 11:01 AM)')
+    Expect(report).toContain('unavailable: mistral')
   })
 })
 
