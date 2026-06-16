@@ -3,10 +3,11 @@ import { Switch } from '@shared'
 import { type Compiled, gen, genScopeName, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
-export default {
+export const ExpressionsCompiler = {
   /** Expression compiles a Tao expression into a runtime value expression. */
   Expression(expression: AST.Expression): Compiled {
     return Switch.type(expression, {
+      ActionExpression: Compile.ActionExpression,
       NumberLiteral: Compile.NumberLiteral,
       StringLiteral: Compile.StringLiteral,
       ValueReference: Compile.ValueReference,
@@ -26,9 +27,6 @@ export default {
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
   ValueReference(reference: AST.ValueReference): Compiled {
     const target = resolveRef(reference.target)
-    return Switch.type(target, {
-      AliasDeclaration: alias => gen`${genScopeName(alias)}.evaluate()`,
-      ParameterDeclaration: parameter => gen`${genScopeName(parameter)}.evaluate()`,
-    })
+    return gen`${genScopeName(target)}.evaluate()`
   },
 } as const
