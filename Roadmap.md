@@ -10,7 +10,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Add layout/style arguments and app-shell baseline
   - `[gap 8, pad 12, width fill]`, runtime layout lowering, safe default app frame, safe area/keyboard basics, and deterministic cross-platform behavior.
 
-- [ ] Add state and action MVP
+- [x] Add state and action MVP
   - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
 
 - [ ] Expand core expression/value language
@@ -82,18 +82,20 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
 - [x] Wire the formatter into the IDE extension language server and add repo-wide `tao fmt`/`tao fix`/`tao check` (tao-cli), run by `just fmt`/`fix`/`check`
 - [x] Add LSP/IDE source actions: `Tao: Organize Use Statements` (source.organizeImports), unused/out-of-section import warnings with quick fixes, command-palette entries prefixed `Tao:`, a move-render-last quick fix, and `tao fix` applying all source fixes (run by `just fix`)
-- [ ] Consider only allowing state inside view declarations. App state maybe should be a datasource, that could be persisted to disk
 - [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
 - [ ] Add layout/style arguments and default app-shell UI baseline
   - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `__tao.layout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
 - [ ] Remove magical strings
-- [ ] Add state/actions/control mini slice
-  - Import `state`, `action`, action parameters/values, inline `action {}`, `set`, `do`, `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
+- [ ] Add remaining control mini slice
+  - Import `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
 - [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
-- [ ] Update target kitchen sink to have lots of intended parts featured
+- [ ] Apply the main named const export pattern across the rest of the repo
+  - Prefer `export const ModuleName = { ... }` over default exports or many free function exports. Keep existing filenames while converting existing modules.
+- [ ] Rename existing TypeScript module files to match their main named const exports
+  - Do this in one coordinated sweep after current projects have merged, rather than inside each active feature branch.
 - [ ] Add generic compiled-add test declarations
   - Should this map to test writing for the actual apps?
 - [ ] Enable over-the-network dev app running for ios device
@@ -111,8 +113,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - Copy/fill spec
 - Apps
   - Kitchen Sink
-    - Target: intended Tao syntax/functionality written during research and planning when the target should change
-    - Current: executable Tao app used by tests; copy in target slices only after that functionality is implemented
+    - Executable Tao app used by tests; add slices only after that functionality is implemented
 
 ## Minimal Port: Kitchen Sink Current
 
