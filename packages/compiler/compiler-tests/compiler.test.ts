@@ -24,6 +24,35 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
+  Test('compiles state and action declarations', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      view Button Title text, Action action {
+        render inject Title ${tsFence}
+          return null
+        ${fence}
+      }
+      view Number Value number {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        alias DisplayCount = Count
+        action AddOne {
+          set Count += 1
+        }
+        render Button "Add", AddOne {
+          Number DisplayCount
+        }
+      }
+    `)
+
+    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.validation.diagnostics).toEqual([])
+  })
+
   Test('compiles sibling Tao file dependencies', async () => {
     await withCompiledFiles(
       'Main.tao',

@@ -18,6 +18,9 @@ type TaoViewProps = {
 }
 
 type TaoButtonProps = TaoViewProps & {
+  action?: {
+    invoke(): void
+  }
   title: string
 }
 
@@ -83,7 +86,7 @@ export const Views = {
     const RN = requireReactNativeRuntime()
     return React.createElement(
       RN.Pressable,
-      { accessibilityRole: 'button' },
+      { accessibilityRole: 'button', onPress: () => props.action?.invoke() },
       React.createElement(RN.Text, undefined, props.title),
     )
   },

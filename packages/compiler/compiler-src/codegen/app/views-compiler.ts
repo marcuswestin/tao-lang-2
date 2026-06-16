@@ -3,7 +3,7 @@ import { Switch } from '@shared'
 import { type Compiled, gen, genList, genName, genScopeName } from '../codegen-util'
 import { Compile } from '../Compile'
 
-export default {
+export const ViewsCompiler = {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
   ViewDeclaration,
 
@@ -28,6 +28,7 @@ export default {
   /** ParameterType returns the generated runtime value type for a Tao parameter. */
   ParameterType(param: AST.ParameterDeclaration): Compiled {
     return Switch.value(param.type, {
+      action: () => gen`TR.Action`,
       number: () => gen`TR.Value<number>`,
       text: () => gen`TR.Value<string>`,
     })

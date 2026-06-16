@@ -4,17 +4,12 @@ import Formatter from '../formatter-src/formatter'
 import { testFormatCode } from './test-format'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const tsFence = '```ts'
 const fence = '```'
 
 Describe('Tao formatter Kitchen Sink apps', () => {
   Test('the current Kitchen Sink app is a formatting fixed point', async () => {
     Expect(await Formatter.formatFile(kitchenSinkPath)).toBe(await FS.readText(kitchenSinkPath))
-  })
-
-  Test('the target Kitchen Sink app is a formatting fixed point', async () => {
-    Expect(await Formatter.formatFile(targetKitchenSinkPath)).toBe(await FS.readText(targetKitchenSinkPath))
   })
 })
 
@@ -259,6 +254,29 @@ Describe('Tao formatter views and blocks', () => {
         view CountText Count number, Label text {
            render Text Label
         }
+      `,
+    )
+  })
+
+  Test('formats state declarations and action bodies', async () => {
+    await testFormatCode(
+      `view MainView{state Count=0 action AddStep Step number{set Count+=Step} action AddFive{do AddStep 5} render Stack{Button "Reset",action{set Count=0} Button "Inline",->{set Count+=1}}}`,
+      `
+        view MainView {
+           state Count = 0
+           action AddStep Step number {
+              set Count += Step
+           }
+           action AddFive {
+              do AddStep 5
+           }
+           render Stack {
+              Button "Reset", action {
+                 set Count = 0
+              }
+              Button "Inline", -> {
+                 set Count += 1
+        }  }  }
       `,
     )
   })

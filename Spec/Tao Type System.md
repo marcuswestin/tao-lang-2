@@ -2,7 +2,7 @@
 
 This document describes the (intended) Tao type system.
 
-Current implementation status: this repo currently supports `text` and `number` literals, `view` and `layout` declarations, `alias` values, primitive `text`/`number` parameters, value references, positional render arguments, and basic invocation type validation. Boolean, item, list, action, custom type declarations, typed construction, operators, interpolation, stateful values, actions, functions, `match`, and by-type argument matching remain future work.
+Current implementation status: this repo currently supports `text` and `number` literals, `view` and `layout` declarations, `alias` values, primitive `text`/`number`/`action` parameters, value references, positional render arguments, basic invocation type validation, and the state/action MVP for view-local `state`, named/inline `action`, `set`, `do`, stateful reads, and reactive rerendering. Boolean, item, list, custom type declarations, typed construction, operators beyond MVP compound `set`, interpolation, functions, `match`, and by-type argument matching remain future work.
 
 Any commented out code is WIP material and should be ignored.
 

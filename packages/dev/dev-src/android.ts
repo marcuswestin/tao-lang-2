@@ -27,8 +27,16 @@ const EMULATOR_BOOT_POLL_MS = 2_000
 const METRO_START_TIMEOUT_MS = 60_000
 const METRO_START_POLL_MS = 1_000
 
-/** ensureAndroidEmulator ensures an Android emulator exists and is booted. */
-export async function ensureAndroidEmulator(): Promise<void> {
+/** Android groups Android emulator and Expo helpers. */
+export const Android = {
+  ensureEmulator,
+  ensureExpoGo,
+  openExpo,
+  prepareAvailableExpoGo,
+  startExpo,
+}
+
+async function ensureEmulator(): Promise<void> {
   await requireCommand(
     'emulator',
     'Android emulator CLI not found. Run direnv allow so devenv can expose the Android SDK.',
@@ -85,8 +93,7 @@ export async function ensureAndroidEmulator(): Promise<void> {
   }
 }
 
-/** ensureAndroidExpoGo ensures Expo Go is installed on the booted Android emulator. */
-export async function ensureAndroidExpoGo(): Promise<void> {
+async function ensureExpoGo(): Promise<void> {
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
   const serial = await requireBootedEmulator()
   if (await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
@@ -102,8 +109,7 @@ export async function ensureAndroidExpoGo(): Promise<void> {
   })
 }
 
-/** prepareAvailableAndroidExpoGo prepares an already-booted emulator with Expo Go for Metro. */
-export async function prepareAvailableAndroidExpoGo(): Promise<boolean> {
+async function prepareAvailableExpoGo(): Promise<boolean> {
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
   const serial = await findRunningEmulator()
   if (!serial || !await isEmulatorBooted(serial)) {
@@ -121,15 +127,13 @@ export async function prepareAvailableAndroidExpoGo(): Promise<boolean> {
   return true
 }
 
-/** openExpoAndroid opens an Expo URL directly on the booted Android emulator. */
-export async function openExpoAndroid(url = EXPO_GO_URL): Promise<void> {
+async function openExpo(url = EXPO_GO_URL): Promise<void> {
   await openExpoGoWhenMetroIsReady(url)
 }
 
-/** startExpoAndroid starts Expo and opens it on the booted Android emulator. */
-export async function startExpoAndroid(): Promise<void> {
+async function startExpo(): Promise<void> {
   const runtimePackageRoot = FS.repoPath(RUNTIME_PACKAGE_PATH)
-  void openExpoAndroid().catch(error => HCI.writeErrorLine(Errors.formatForUser(error)))
+  void openExpo().catch(error => HCI.writeErrorLine(Errors.formatForUser(error)))
   const result = await CLI.run('bunx', {
     args: EXPO_START_ARGS,
     cwd: runtimePackageRoot,
@@ -165,7 +169,7 @@ async function requireAndroidSdkPackage(sdkPackage: string): Promise<void> {
 }
 
 async function ensureAvdConfig(avdName: string): Promise<void> {
-  const configPath = FS.resolvePath(`${avdName}.avd/config.ini`, { cwd: androidAvdHome() })
+  const configPath = FS.resolvePath(`${avdName}.avd/config.ini`, { cwd: avdHome() })
   if (!await FS.exists(configPath)) {
     return
   }
@@ -180,7 +184,7 @@ async function ensureAvdConfig(avdName: string): Promise<void> {
   }
 }
 
-function androidAvdHome(): string {
+function avdHome(): string {
   const androidUserHome = Platform.runtimeProcess.env['ANDROID_USER_HOME']
     ?? FS.resolvePath('.android', { cwd: FS.homeDir() })
   return Platform.runtimeProcess.env['ANDROID_AVD_HOME'] ?? FS.resolvePath('avd', { cwd: androidUserHome })

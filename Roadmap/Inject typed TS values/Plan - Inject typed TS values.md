@@ -34,12 +34,12 @@ Type soundness is split across the two type systems:
 - Syntax is `inject <PrimitiveType> <InjectionArgumentList?> <TS_CODE_BLOCK>` in expression position, approved by Ro in chat (26-06-11). The fence is a function body and must `return` a value, consistent with render injections.
 - Injection expressions are allowed anywhere an `Expression` is allowed (alias values, render arguments, injection argument values). If implementation shows a position should be restricted, the restriction is a validator rule and a Ro decision.
 - The render-injection statement grammar (`render inject ...`) is unchanged; only expressions gain the typed form. The parser distinguishes the two by context (statement vs expression position).
-- `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` is pinned by parser and compiler tests, so the target snippet above lands in the Target app in step 1 together with parser support, not before.
+- Parser and compiler tests pin the intended syntax directly, so the injection examples land in focused fixtures and test apps before executable Kitchen Sink coverage.
 - The old repo has no comparable typed-value-injection feature to port; render-injection mechanics in this repo are the reference.
 
-## Target Tao code
+## Tao code coverage
 
-Add to `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` in step 1, and copy into `Apps/Kitchen Sink/Kitchen Sink.tao` in step 3 once it compiles and renders:
+Add to focused parser/compiler fixtures in step 1, and add to `Apps/Kitchen Sink/Kitchen Sink.tao` in step 3 once it compiles and renders:
 
 - `alias PlatformName = inject text ...` returning `RN.Platform.OS`.
 - `alias DoubleLaunchCount = inject number Count LaunchCount ...` returning `Count * 2`.
@@ -55,14 +55,13 @@ Concrete work:
 
 - Extend `packages/parser/parser-grammar/injections.langium` with an `InjectionExpression` rule: `'inject' type=PrimitiveType argumentList=InjectionArgumentList? tsCodeBlock=TS_CODE_BLOCK`. Reuse `InjectionArgumentList`; do not fork it.
 - Add `InjectionExpression` to the `Expression` union in `expressions.langium` and regenerate parser artifacts.
-- Add the target snippet to `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao`.
-- Parser tests: injected text/number alias values, injected expression with arguments, injected expression as a render argument, and the Target app parsing cleanly. Diagnostics test for a missing type keyword (``alias X = inject ```ts...`` must be a parser error).
+- Parser tests: injected text/number alias values, injected expression with arguments, and injected expression as a render argument. Diagnostics test for a missing type keyword (``alias X = inject ```ts...`` must be a parser error).
 
-Likely commit unit: grammar, generated artifacts, Target app update, parser tests.
+Likely commit unit: grammar, generated artifacts, parser tests, and focused fixture updates.
 
-Validation: parser package tests; Target Kitchen Sink parses without errors.
+Validation: parser package tests.
 
-Exit criteria: target snippet parses; render-injection statement tests unchanged and green; expression form rejects a missing declared type.
+Exit criteria: injection examples parse; render-injection statement tests unchanged and green; expression form rejects a missing declared type.
 
 ### 2. Validator and type system
 
@@ -71,11 +70,11 @@ Concrete work:
 - Typir inference rule in `validator-src/type-system.ts`: `InjectionExpression` infers to its declared primitive type.
 - `injections-validator.ts`: duplicate-argument checks apply to injection expressions too (shared with render injections).
 - Aliases/invocations need no new rules: declared-type inference makes existing assignability checks work (e.g. passing an injected `text` to a `number` parameter errors).
-- Validator tests: injected alias type flows into invocation checking (positive and mismatch cases), duplicate arguments inside an injection expression, injection expressions inside imported module files validate (workspace-wide validation), and the Target app validates cleanly.
+- Validator tests: injected alias type flows into invocation checking (positive and mismatch cases), duplicate arguments inside an injection expression, and injection expressions inside imported module files validate (workspace-wide validation).
 
 Likely commit unit: typir rule, validator wiring, validator tests.
 
-Validation: validator package tests; Target Kitchen Sink validates cleanly.
+Validation: validator package tests.
 
 Exit criteria: declared types participate in type checking with stable diagnostics; no TS analysis added to the validator.
 
@@ -85,7 +84,7 @@ Concrete work:
 
 - `injections-compiler.ts` gains the expression form, reusing the existing parameter/value compilation: emit the fence as a `Reflect.apply`-invoked function with the declared TS return type annotation (`text` -> `string`, `number` -> `number`), wrapped as a Tao value, e.g. `new TR.Value<number>(Reflect.apply(function __injection__(Count: number): number { ... }, undefined, [...]))`. Reuse `CompilePrimitiveJsType`; keep generated code minimal and add a `TR` helper only if the emitted shape repeats beyond this wrapping.
 - Compiler tests through compilation success and validation failures, not generated-string assertions; the existing inject-arguments tests extend to expression form.
-- Copy the implemented Target slice into `Apps/Kitchen Sink/Kitchen Sink.tao`; extend `Apps/Test Apps/Type System Tests/Type System Tests.tao` and its `Purpose.md`.
+- Add the implemented injected-value slice to `Apps/Kitchen Sink/Kitchen Sink.tao`; extend `Apps/Test Apps/Type System Tests/Type System Tests.tao` and its `Purpose.md`.
 - Runtime e2e: Kitchen Sink renders the injected platform text and doubled launch count (extend the existing Kitchen Sink runtime test expectations).
 - Confirm `check`'s `tsc` over `_gen_tao-app` fails when a fence returns the wrong type (manual verification during implementation; keep a compiler test only if it can assert through compile/typecheck behavior rather than string matching).
 

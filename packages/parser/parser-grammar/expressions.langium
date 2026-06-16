@@ -1,6 +1,7 @@
 grammar TaoExpressions
 
 import "./aliases"
+import "./actions"
 import "./blocks"
 import "./terminals"
 
@@ -14,7 +15,7 @@ Argument:
     value=Expression;
 
 Expression:
-    StringLiteral | NumberLiteral | ValueReference;
+    StringLiteral | NumberLiteral | ActionExpression | ValueReference;
 
 StringLiteral:
     value=STRING;
@@ -25,4 +26,4 @@ NumberLiteral:
 ValueReference:
     target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration;
+type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration;

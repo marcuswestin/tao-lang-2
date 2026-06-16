@@ -23,7 +23,7 @@ Add or edit the feature's file in each relevant package source dir (`<package>/<
 - Use `@ast-utils` for shared Tao AST traversal and node/document helpers; do not call `Langium.AstUtils` or `Langium.isAstNode` directly from package consumers.
 - Use `Switch.type` for behavior that branches by AST node kind. Reserve `AST.is*` checks for tests, filters, and local assertions where no union dispatch is needed.
 - When a reusable AST union can be described in grammar, declare a Langium `type` alias and use the generated `AST.is<Type>` guard instead of writing a manual type guard function.
-- In compiler codegen, keep `compiler-src/codegen/app/Compile.ts` as the single `Compile` object assembly. Feature compiler files export AST-node-named functions and call recursive codegen through `Compile.<ASTNode>`.
+- In compiler codegen, keep `compiler-src/codegen/app/Compile.ts` as the single `Compile` object assembly. Feature compiler files expose AST-node-named handlers through a main named const export and call recursive codegen through `Compile.<ASTNode>`.
 - Keep generated Tao TS minimal. Prefer reusable runtime functionality on default `TR` from `@runtime/TR` (`packages/runtime/TaoRuntime-src/TR.ts`) over emitting helper implementations in generated app files. Use the `runtime-codegen` skill for generated/runtime API work.
 - Do not special-case empty iterables before `genJoin` or `genList`; those helpers already emit empty output. Branch only when empty input needs different generated syntax or runtime behavior.
 
@@ -42,6 +42,8 @@ Add or edit the feature's file in each relevant package source dir (`<package>/<
 
 ## Exports, Comments, And Tests
 
+- Prefer a module's public surface to be one main named const export that groups the exported values, such as `export const Android = { ensureEmulator, startExpo }`. Prefer named const exports over default exports for repo-owned modules.
+- For newly created grouped modules, usually name the file and main export in UpperCamelCase, such as `Android.ts` exporting `Android`. When converting an existing module, keep its existing filename until the repo-wide filename sweep lands. Types may be exported separately when TypeScript needs them as types.
 - Prefer self-documenting names and small functions over comments. Add comments only for intent, invariants, edge cases, or surprising constraints.
 - Document exported functions and types with short, contract-focused JSDoc in the `<decl> <verb>s <description>` style.
 - When touching existing exported code, add or update missing export docs as part of the same change.

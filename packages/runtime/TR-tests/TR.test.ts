@@ -19,17 +19,68 @@ Describe('TR.Alias', () => {
     Expect(alias.evaluate().jsValue).toBe(3)
   })
 
-  Test('evaluates lazy alias values once on first use', () => {
+  Test('re-evaluates lazy alias values on each use', () => {
     let evaluations = 0
     const alias: TR.Alias<string> = TR.Alias(() => {
       evaluations += 1
-      return new TR.Value('lazy')
+      return new TR.Value(`lazy ${evaluations}`)
     })
 
     Expect(evaluations).toBe(0)
-    Expect(alias.evaluate().jsValue).toBe('lazy')
-    Expect(alias.evaluate().jsValue).toBe('lazy')
-    Expect(evaluations).toBe(1)
+    Expect(alias.evaluate().jsValue).toBe('lazy 1')
+    Expect(alias.evaluate().jsValue).toBe('lazy 2')
+    Expect(evaluations).toBe(2)
+  })
+})
+
+Describe('TR.Action', () => {
+  Test('exposes invokable action payloads', () => {
+    const calls: number[] = []
+    const action = TR.Action((step: number) => calls.push(step))
+
+    action.jsValue.invoke(2)
+
+    Expect(action.evaluate()).toBe(action)
+    Expect(action.evaluate().jsValue).toBe(action.jsValue)
+    Expect(calls).toEqual([2])
+  })
+
+  Test('invokes action payloads through TR.Do with runtime arguments', () => {
+    const calls: number[] = []
+    const action = TR.Action((step: number) => calls.push(step))
+
+    TR.Do(action, 3)
+
+    Expect(calls).toEqual([3])
+  })
+})
+
+Describe('TR.Set', () => {
+  Test('updates state wrappers with evaluated runtime values', () => {
+    let assigned: number | undefined
+    const state = {
+      evaluate: () => new TR.Value(1),
+      set(value: TR.Value<number>) {
+        assigned = value.evaluate().jsValue
+      },
+    } as TR.State<number>
+
+    TR.Set(state, () => new TR.Value(5))
+
+    Expect(assigned).toBe(5)
+  })
+})
+
+Describe('TR.CompoundSet', () => {
+  Test('computes numeric compound state updates', () => {
+    const state = {
+      evaluate: () => new TR.Value(8),
+    } as TR.State<number>
+
+    Expect(TR.CompoundSet(state, '+=', new TR.Value(2)).jsValue).toBe(10)
+    Expect(TR.CompoundSet(state, '-=', new TR.Value(2)).jsValue).toBe(6)
+    Expect(TR.CompoundSet(state, '*=', new TR.Value(2)).jsValue).toBe(16)
+    Expect(TR.CompoundSet(state, '/=', new TR.Value(2)).jsValue).toBe(4)
   })
 })
 
