@@ -1,13 +1,12 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import type { Type } from 'typir'
 import type { ValidationProblemAcceptor } from 'typir'
-import type { TaoSpecifics, TaoTypirServices } from './type-system'
+import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
 import type { ValidationContext } from './validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
-export const invocationValidationMessages = {
+const invocationValidationMessages = {
   missingArgument: (view: string, parameter: string) =>
     `Render of ${view} is missing argument for parameter '${parameter}'.`,
   extraArguments: (view: string, expected: number, actual: number) =>
@@ -16,15 +15,22 @@ export const invocationValidationMessages = {
     `Argument for parameter '${parameter.name}' expects ${parameter.type}, got ${actual}.`,
 } as const
 
+/** InvocationsValidator validates render invocations and Typir argument checks. */
+export const InvocationsValidator = {
+  messages: invocationValidationMessages,
+  registerTypeValidation,
+  validate,
+}
+
 /** validateInvocations validates structural render invocation diagnostics. */
-export function validateInvocations(file: AST.TaoFile, ctx: ValidationContext): void {
+function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const render of ASTUtils.streamAllContents(file).filter(AST.isRender)) {
     reportArity(render, ctx)
   }
 }
 
 /** registerInvocationTypeValidation registers Typir checks for render argument compatibility. */
-export function registerInvocationTypeValidation(typir: TaoTypirServices): void {
+function registerTypeValidation(typir: TaoTypirServices): void {
   typir.validation.Collector.addValidationRulesForAstNodes({
     RenderStatement: (render, accept, services) => {
       validateInvocationTypes(render, accept, services as TaoTypirServices)
@@ -36,28 +42,27 @@ export function registerInvocationTypeValidation(typir: TaoTypirServices): void 
 }
 
 function reportArity(render: AST.Render, ctx: ValidationContext): void {
-  const view = render.view?.ref
-  if (!view) {
+  const invocation = ASTUtils.resolveRenderInvocation(render)
+  if (!invocation.view) {
     return
   }
 
-  const parameters = view.parameterList?.parameters ?? []
-  const args = render.argumentList?.arguments ?? []
+  const arity = ASTUtils.invocationArity(invocation, invocation.view, render)
 
-  for (const parameter of parameters.slice(args.length)) {
-    ctx.error(invocationValidationMessages.missingArgument(view.name, parameter.name), render)
+  for (const parameter of arity.parameters.slice(arity.pairCount)) {
+    ctx.error(invocationValidationMessages.missingArgument(invocation.view.name, parameter.name), render)
   }
-  if (args.length > parameters.length) {
-    const extraArgument = args[parameters.length]
+  if (arity.args.length > arity.pairCount) {
+    const extraArgument = arity.args[arity.pairCount]
     Assert.defined(extraArgument, 'extra render argument exists', {
-      argumentCount: args.length,
-      parameterCount: parameters.length,
+      argumentCount: arity.args.length,
+      pairCount: arity.pairCount,
     })
     ctx.error(
       invocationValidationMessages.extraArguments(
-        view.name,
-        parameters.length,
-        args.length,
+        invocation.view.name,
+        arity.parameters.length,
+        arity.args.length,
       ),
       extraArgument,
     )
@@ -71,14 +76,10 @@ function validateInvocationTypes(
 ): void {
   const invocation = ASTUtils.resolveRenderInvocation(render)
   for (const pair of invocation.pairs) {
-    const expected = taoPrimitiveType(pair.parameter.type, services)
+    const expected = TypeSystemHelpers.taoPrimitiveType(pair.parameter.type, services)
     services.validation.Constraints.ensureNodeIsAssignable(pair.argument.value, expected, accept, (actual) => ({
       languageNode: pair.argument.value,
       message: invocationValidationMessages.typeMismatch(pair.parameter, actual.name),
     }))
   }
-}
-
-function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): Type | undefined {
-  return typir.factory.Primitives.get({ primitiveName: type })
 }

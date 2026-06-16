@@ -3,22 +3,24 @@ import { Diagnostics, FS, Text } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { ValidationResult } from '@validator'
 import { Workspace } from '@workspace'
-import { aliasValidationMessages } from '../validator-src/aliases-validator'
-import { appValidationMessages } from '../validator-src/app-validator'
+import { ActionsValidator } from '../validator-src/ActionsValidator'
+import { AliasesValidator } from '../validator-src/aliases-validator'
+import { AppValidator } from '../validator-src/app-validator'
 import { useValidationCodes } from '../validator-src/diagnostic-codes'
-import { inferExpressionType } from '../validator-src/expressions-validator'
+import { ExpressionsValidator } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
-import { invocationValidationMessages } from '../validator-src/invocations-validator'
+import { InvocationsValidator } from '../validator-src/invocations-validator'
 import { projectValidationMessages } from '../validator-src/project-validator'
+import { StateValidator } from '../validator-src/StateValidator'
 import { useValidationMessages } from '../validator-src/use-validator'
 import Validator from '../validator-src/validator'
-import { viewValidationMessages } from '../validator-src/views-validator'
+import { ViewsValidator } from '../validator-src/views-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
+const stateActionMvpPath = FS.repoPath('Apps/Test Apps/State Action MVP/State Action MVP.tao')
 const tsFence = '```ts'
 const fence = '```'
 
@@ -63,12 +65,6 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
-  Test('validates the target Kitchen Sink app', async () => {
-    const result = await Workspace.validate(targetKitchenSinkPath)
-
-    Expect(validationErrorMessages(result)).toEqual([])
-  })
-
   Test('validates the Type System Tests app', async () => {
     const result = await Workspace.validate(typeSystemTestsPath)
 
@@ -77,6 +73,12 @@ Describe('Tao validator structural diagnostics', () => {
 
   Test('validates the Runtime Stdlib Tests app', async () => {
     const result = await Workspace.validate(runtimeStdlibTestsPath)
+
+    Expect(validationErrorMessages(result)).toEqual([])
+  })
+
+  Test('validates the State Action MVP app', async () => {
+    const result = await Workspace.validate(stateActionMvpPath)
 
     Expect(validationErrorMessages(result)).toEqual([])
   })
@@ -115,8 +117,44 @@ Describe('Tao validator structural diagnostics', () => {
       ({ result, workspace }) => {
         const aliases = result.entry.ast.statements.filter(AST.isAliasDeclaration)
 
-        Expect(inferExpressionType(aliases[0]!.value, workspace.typir)).toBe('text')
-        Expect(inferExpressionType(aliases[1]!.value, workspace.typir)).toBe('number')
+        Expect(ExpressionsValidator.inferExpressionType(aliases[0]!.value, workspace.typir)).toBe('text')
+        Expect(ExpressionsValidator.inferExpressionType(aliases[1]!.value, workspace.typir)).toBe('number')
+      },
+    )
+  })
+
+  Test('infers action and stateful expression types', async () => {
+    await withValidationParse(
+      `
+      app MyApp { view MainView }
+      alias SaveAction = action { }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 3
+        alias DisplayCount = Count
+        render Text "hi"
+      }
+    `,
+      ({ result, workspace }) => {
+        const actionAlias = result.entry.ast.statements.find(statement =>
+          AST.isAliasDeclaration(statement) && statement.name === 'SaveAction'
+        )
+        Expect.Is(actionAlias, AST.isAliasDeclaration)
+        const mainView = result.entry.ast.statements.find(statement =>
+          AST.isViewDeclaration(statement) && statement.name === 'MainView'
+        )
+        Expect.Is(mainView, AST.isViewDeclaration)
+        const displayAlias = mainView.block.statements.find(statement =>
+          AST.isAliasDeclaration(statement) && statement.name === 'DisplayCount'
+        )
+        Expect.Is(displayAlias, AST.isAliasDeclaration)
+
+        Expect(ExpressionsValidator.inferExpressionType(actionAlias.value, workspace.typir)).toBe('action')
+        Expect(ExpressionsValidator.inferExpressionType(displayAlias.value, workspace.typir)).toBe('stateful number')
       },
     )
   })
@@ -128,7 +166,17 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView { }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(appValidationMessages.topLevel)
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.topLevel)
+  })
+
+  Test('rejects file-level state declarations', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      state Count = 0
+      view MainView { }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.topLevel)
   })
 
   Test('requires at most one app declaration', async () => {
@@ -145,7 +193,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView { }
     `)
 
-    Expect(validationErrorMessages(duplicate)).toContain(appValidationMessages.appCount(2))
+    Expect(validationErrorMessages(duplicate)).toContain(AppValidator.messages.appCount(2))
   })
 
   Test('requires exactly one root view in app blocks', async () => {
@@ -162,8 +210,8 @@ Describe('Tao validator structural diagnostics', () => {
       view OtherView { }
     `)
 
-    Expect(validationErrorMessages(missing)).toContain(appValidationMessages.appRootCount('MyApp', 0))
-    Expect(validationErrorMessages(duplicate)).toContain(appValidationMessages.appRootCount('MyApp', 2))
+    Expect(validationErrorMessages(missing)).toContain(AppValidator.messages.appRootCount('MyApp', 0))
+    Expect(validationErrorMessages(duplicate)).toContain(AppValidator.messages.appRootCount('MyApp', 2))
   })
 
   Test('rejects app root view declarations with parameters', async () => {
@@ -179,7 +227,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(appValidationMessages.rootViewParameters('MyApp', 'MainView'))
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.rootViewParameters('MyApp', 'MainView'))
   })
 
   Test('rejects non-root-view statements in app blocks', async () => {
@@ -191,7 +239,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView { }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(appValidationMessages.appBlock('MyApp'))
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appBlock('MyApp'))
   })
 
   Test('rejects unsupported view body statements', async () => {
@@ -202,7 +250,394 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.viewBody)
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.viewBody)
+  })
+
+  Test('allows state and action declarations before a view render', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        action AddOne {
+          set Count += 1
+        }
+        render Text "ok"
+      }
+    `)
+  })
+
+  Test('rejects state and action declarations in layouts and render blocks', async () => {
+    const layoutResult = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Stack
+      }
+      layout Stack {
+        state Count = 0
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const renderBlockResult = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Text "hi" {
+          action AddOne { }
+        }
+      }
+    `)
+
+    Expect(validationErrorMessages(layoutResult)).toContain(ViewsValidator.messages.layoutBody)
+    Expect(validationErrorMessages(renderBlockResult)).toContain(ViewsValidator.messages.renderBlock)
+  })
+
+  Test('validates set, do, action parameters, and stateful render arguments', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view Button Title text, Action action {
+        render inject Title ${tsFence}
+          return null
+        ${fence}
+      }
+      view Number Value number {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        alias DisplayCount = Count
+        action AddStep Step number {
+          set Count += Step
+        }
+        action AddFive {
+          do AddStep 5
+        }
+        render Button "Add", AddFive {
+          Number DisplayCount
+          Button "Reset", action {
+            set Count = 0
+          }
+        }
+      }
+    `)
+  })
+
+  Test('allows file-level actions and forward action references inside action bodies', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      action SharedAction { }
+      view Button Title text, Action action {
+        render inject Title ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        action AddTwo {
+          do AddOne
+          do AddOne
+        }
+        action AddOne {
+          set Count += 1
+        }
+        render Button "Shared", SharedAction
+      }
+    `)
+  })
+
+  Test('allows inline action bodies to reference later local actions', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view Button Title text, Action action {
+        render inject Title ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        alias LaterClick = action {
+          do AddOne
+        }
+        action AddOne { }
+        render Button "Add", LaterClick
+      }
+    `)
+  })
+
+  Test('rejects local alias initializers that reference later local actions directly', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        alias LaterClick = AddOne
+        action AddOne { }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      AliasesValidator.messages.aliasUsedBeforeDeclaration('LaterClick', 'AddOne'),
+    )
+  })
+
+  Test('allows local state and alias initializers to reference later file-level values', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = InitialCount
+        alias Greeting = LateGreeting
+        alias Save = SharedAction
+        render Text Greeting
+      }
+      alias InitialCount = 1
+      alias LateGreeting = "Hello"
+      action SharedAction { }
+    `)
+  })
+
+  Test('reports action arity and action argument type mismatches', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        action AddStep Step number {
+          set Count += Step
+        }
+        action DynamicArgs {
+          do action { } 1
+        }
+        action Missing {
+          do AddStep
+        }
+        action Extra {
+          do AddStep 1, 2
+        }
+        action WrongType {
+          do AddStep "one"
+        }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.dynamicActionArguments)
+    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.missingArgument('AddStep', 'Step'))
+    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.extraArguments('AddStep', 1, 2))
+    Expect(validationErrorMessages(result)).toContain(
+      ActionsValidator.messages.argumentTypeMismatch('Step', 'number', 'text'),
+    )
+  })
+
+  Test('does not report dynamic action arguments for unresolved named do targets', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        action CallMissing {
+          do Missing 1
+        }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).not.toContain(ActionsValidator.messages.dynamicActionArguments)
+  })
+
+  Test('reports dynamic action arguments for action-typed parameters', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Wrapper action { }
+      }
+      view Wrapper Callback action {
+        action CallCallback {
+          do Callback 1
+        }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.dynamicActionArguments)
+  })
+
+  Test('rejects action parameters that shadow visible state declarations', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        action Add Count number {
+          set Count += Count
+        }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Count'))
+  })
+
+  Test('reports action arity for do invocations through action aliases', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        action AddStep Step number {
+          set Count += Step
+        }
+        alias CallAdd = AddStep
+        action Missing {
+          do CallAdd
+        }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.missingArgument('AddStep', 'Step'))
+  })
+
+  Test('reports alias diagnostics when cyclic action aliases are invoked', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      alias First = Second
+      alias Second = First
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        action Run {
+          do First
+        }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second'),
+    )
+  })
+
+  Test('reports invalid set value and compound set state types', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = 0
+        state Name = "Ro"
+        action BadSet {
+          set Count = "many"
+        }
+        action BadCompound {
+          set Name += "!"
+        }
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.setTypeMismatch('Count', 'number', 'text'),
+    )
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.compoundStateType('Name', '+=', 'stateful text'),
+    )
+  })
+
+  Test('rejects action-valued state and set targets used before declaration', async () => {
+    const actionState = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Click = action { }
+        render Text "hi"
+      }
+    `)
+    const lateSetTarget = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        action AddOne {
+          set Count += 1
+        }
+        state Count = 0
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(actionState)).toContain(StateValidator.messages.stateActionType('Click'))
+    Expect(validationErrorMessages(lateSetTarget)).toContain(StateValidator.messages.usedBeforeDeclaration('Count'))
+  })
+
+  Test('rejects local state initializer references to later local values', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Count = LaterCount
+        alias LaterCount = 1
+        render Text "hi"
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.usedBeforeDeclaration('LaterCount'))
   })
 
   Test('rejects bare child invocations directly in view bodies', async () => {
@@ -218,7 +653,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.viewBody)
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.viewBody)
   })
 
   Test('rejects duplicate view parameters', async () => {
@@ -227,8 +662,8 @@ Describe('Tao validator structural diagnostics', () => {
       view Text Value text, Value text { }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.duplicateParameter('Value'))
-    Expect(validationErrorMessages(result)).not.toContain(aliasValidationMessages.duplicateName('Value'))
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.duplicateParameter('Value'))
+    Expect(validationErrorMessages(result)).not.toContain(AliasesValidator.messages.duplicateName('Value'))
   })
 
   Test('rejects generated view prop names as parameter names', async () => {
@@ -256,10 +691,10 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.reservedParameter('children'))
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.reservedParameter('key'))
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.reservedParameter('ref'))
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.reservedParameter('__tao'))
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.reservedParameter('children'))
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.reservedParameter('key'))
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.reservedParameter('ref'))
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.reservedParameter('__tao'))
   })
 
   Test('requires exactly one render statement in view bodies', async () => {
@@ -282,8 +717,8 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(missing)).toContain(viewValidationMessages.renderCount('MainView'))
-    Expect(validationErrorMessages(extra)).toContain(viewValidationMessages.renderCount('MainView'))
+    Expect(validationErrorMessages(missing)).toContain(ViewsValidator.messages.renderCount('MainView'))
+    Expect(validationErrorMessages(extra)).toContain(ViewsValidator.messages.renderCount('MainView'))
   })
 
   Test('requires render to be the last view body statement', async () => {
@@ -300,7 +735,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.renderLast)
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.renderLast)
   })
 
   Test('allows render inject as the only view body statement', async () => {
@@ -334,8 +769,8 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(withRender)).toContain(viewValidationMessages.renderInjectPlacement)
-    Expect(validationErrorMessages(withAlias)).toContain(viewValidationMessages.renderInjectPlacement)
+    Expect(validationErrorMessages(withRender)).toContain(ViewsValidator.messages.renderInjectPlacement)
+    Expect(validationErrorMessages(withAlias)).toContain(ViewsValidator.messages.renderInjectPlacement)
   })
 
   Test('rejects render inject inside render child blocks', async () => {
@@ -351,7 +786,7 @@ Describe('Tao validator structural diagnostics', () => {
       view Container { }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.renderInjectPlacement)
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.renderInjectPlacement)
   })
 
   Test('validates aliases and parameter references as render arguments', async () => {
@@ -430,7 +865,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(viewValidationMessages.renderBlockAliasPlacement)
+    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.renderBlockAliasPlacement)
   })
 
   Test('allows the same alias name in separate render child blocks', async () => {
@@ -483,7 +918,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(aliasValidationMessages.duplicateName('Local'))
+    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Local'))
   })
 
   Test('rejects duplicate aliases in nested child invocation blocks', async () => {
@@ -510,7 +945,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(aliasValidationMessages.duplicateName('Local'))
+    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Local'))
   })
 
   Test('rejects nested child invocation aliases that shadow visible declarations', async () => {
@@ -535,7 +970,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(aliasValidationMessages.duplicateName('Text'))
+    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Text'))
   })
 
   Test('rejects alias references to later values', async () => {
@@ -554,7 +989,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     Expect(validationErrorMessages(result)).toContain(
-      aliasValidationMessages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
+      AliasesValidator.messages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
     )
   })
 
@@ -568,7 +1003,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     Expect(validationErrorMessages(result)).toContain(
-      aliasValidationMessages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
+      AliasesValidator.messages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
     )
   })
 
@@ -593,7 +1028,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(aliasValidationMessages.usedBeforeDeclaration('Local'))
+    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.usedBeforeDeclaration('Local'))
   })
 
   Test('rejects duplicate file-level aliases', async () => {
@@ -604,10 +1039,10 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView { }
     `)
     const diagnostic = result.diagnostics.find(diagnostic =>
-      diagnostic.message === aliasValidationMessages.duplicateName('Greeting')
+      diagnostic.message === AliasesValidator.messages.duplicateName('Greeting')
     )
 
-    Expect(validationErrorMessages(result)).toContain(aliasValidationMessages.duplicateName('Greeting'))
+    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Greeting'))
     Expect(diagnostic?.nodeType).toBe(AST.AliasDeclaration.$type)
     Expect(diagnostic?.range).toBeDefined()
   })
@@ -630,9 +1065,9 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView { }
     `)
 
-    Expect(validationErrorMessages(aliasBeforeView)).toContain(aliasValidationMessages.duplicateName('Text'))
-    Expect(validationErrorMessages(aliasAfterApp)).toContain(aliasValidationMessages.duplicateName('MyApp'))
-    Expect(validationErrorMessages(viewAfterApp)).toContain(aliasValidationMessages.duplicateName('MyApp'))
+    Expect(validationErrorMessages(aliasBeforeView)).toContain(AliasesValidator.messages.duplicateName('Text'))
+    Expect(validationErrorMessages(aliasAfterApp)).toContain(AliasesValidator.messages.duplicateName('MyApp'))
+    Expect(validationErrorMessages(viewAfterApp)).toContain(AliasesValidator.messages.duplicateName('MyApp'))
   })
 
   Test('rejects local aliases that shadow view declarations', async () => {
@@ -660,8 +1095,8 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(aliasShadow)).toContain(aliasValidationMessages.duplicateName('Text'))
-    Expect(validationErrorMessages(parameterShadow)).toContain(aliasValidationMessages.duplicateName('Text'))
+    Expect(validationErrorMessages(aliasShadow)).toContain(AliasesValidator.messages.duplicateName('Text'))
+    Expect(validationErrorMessages(parameterShadow)).toContain(AliasesValidator.messages.duplicateName('Text'))
   })
 
   Test('allows local aliases that shadow file-level aliases', async () => {
@@ -697,7 +1132,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(parameterShadow)).toContain(aliasValidationMessages.duplicateName('Label'))
+    Expect(validationErrorMessages(parameterShadow)).toContain(AliasesValidator.messages.duplicateName('Label'))
   })
 
   Test('rejects alias self references as undeclared-before references', async () => {
@@ -708,7 +1143,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     Expect(validationErrorMessages(result)).toContain(
-      aliasValidationMessages.aliasUsedBeforeDeclaration('First', 'First'),
+      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'First'),
     )
   })
 
@@ -721,7 +1156,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     Expect(validationErrorMessages(result)).toContain(
-      aliasValidationMessages.aliasUsedBeforeDeclaration('First', 'Second'),
+      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second'),
     )
   })
 
@@ -741,7 +1176,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     Expect(validationErrorMessages(result)).toContain(
-      aliasValidationMessages.aliasUsedBeforeDeclaration('First', 'Second'),
+      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second'),
     )
   })
 
@@ -769,13 +1204,13 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(missing)).toContain(invocationValidationMessages.missingArgument('Tile', 'Count'))
+    Expect(validationErrorMessages(missing)).toContain(InvocationsValidator.messages.missingArgument('Tile', 'Count'))
     Expect(
       missing.diagnostics.find(diagnostic =>
-        diagnostic.message === invocationValidationMessages.missingArgument('Tile', 'Count')
+        diagnostic.message === InvocationsValidator.messages.missingArgument('Tile', 'Count')
       )?.nodeType,
     ).toBe(AST.RenderStatement.$type)
-    Expect(validationErrorMessages(extra)).toContain(invocationValidationMessages.extraArguments('Text', 1, 2))
+    Expect(validationErrorMessages(extra)).toContain(InvocationsValidator.messages.extraArguments('Text', 1, 2))
   })
 
   Test('rejects child view invocation arity and type errors', async () => {
@@ -798,7 +1233,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.missingArgument('Tile', 'Count'))
+    Expect(validationErrorMessages(result)).toContain(InvocationsValidator.messages.missingArgument('Tile', 'Count'))
     Expect(validationErrorMessages(result)).toContain("Argument for parameter 'Title' expects text, got number.")
   })
 
@@ -831,7 +1266,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.extraArguments('Tile', 1, 2))
+    Expect(validationErrorMessages(result)).toContain(InvocationsValidator.messages.extraArguments('Tile', 1, 2))
     Expect(validationErrorMessages(result)).toContain("Argument for parameter 'Title' expects text, got number.")
   })
 
@@ -1145,7 +1580,7 @@ Describe('Tao validator structural diagnostics', () => {
       `,
       },
       async result => {
-        Expect(validationErrorMessages(result)).toContain(appValidationMessages.appEntryFile('OtherApp'))
+        Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appEntryFile('OtherApp'))
       },
     )
   })
@@ -1168,7 +1603,7 @@ Describe('Tao validator structural diagnostics', () => {
       `,
       },
       async result => {
-        Expect(validationErrorMessages(result)).toContain(appValidationMessages.appPackage('PackageApp'))
+        Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appPackage('PackageApp'))
       },
     )
   })
