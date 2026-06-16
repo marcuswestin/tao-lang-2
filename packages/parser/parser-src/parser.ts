@@ -2,7 +2,7 @@ import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics } from '@sha
 import { Langium } from './langium-exports'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
-import { TaoValueScopeProvider } from './value-scope'
+import { ValueScopeProvider } from './value-scope'
 
 const URI = Langium.URI
 const codeSourceUri = Langium.URI.file('/__tao__/source.tao')
@@ -157,7 +157,7 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
     AST.GeneratedModule,
     {
       references: {
-        ScopeProvider: (services) => new TaoValueScopeProvider(services, options.packages),
+        ScopeProvider: (services) => new ValueScopeProvider(services, options.packages),
       },
     },
   )
@@ -191,7 +191,7 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
     AST.GeneratedModule,
     {
       references: {
-        ScopeProvider: (services) => new TaoValueScopeProvider(services, options.packages),
+        ScopeProvider: (services) => new ValueScopeProvider(services, options.packages),
       },
       ...lspModule(options),
     },
