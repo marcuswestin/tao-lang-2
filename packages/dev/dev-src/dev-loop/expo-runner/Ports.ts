@@ -1,4 +1,4 @@
-import { CLI, Errors, HCI } from '@shared'
+import { CLI, Errors, HCI, Time } from '@shared'
 
 const RELEASE_TIMEOUT_MS = 5_000
 const RELEASE_POLL_MS = 250
@@ -150,7 +150,7 @@ async function waitForRelease(port: number): Promise<void> {
   const deadline = Date.now() + RELEASE_TIMEOUT_MS
   let remaining: readonly Listener[] = []
   do {
-    await sleep(RELEASE_POLL_MS)
+    await Time.sleep(RELEASE_POLL_MS)
     const listeners = await findListeners(port)
     if (listeners === undefined) {
       throw new Errors.UserInputError(`Sent SIGTERM, but could not verify that port ${port} is free.`)
@@ -187,8 +187,4 @@ function formatListener(listener: Listener): string {
 
 function formatListenerSubject(listeners: readonly Listener[]): string {
   return listeners.length === 1 ? 'this process' : 'these processes'
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }

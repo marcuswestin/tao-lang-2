@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Time } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { formatAgentHelpText } from '../dev-src/commands/agent-help'
 import type { UsageProviderSummary } from '../dev-src/commands/ai-usage-normalizer'
@@ -646,7 +646,7 @@ Describe('review streaming runner', () => {
         stderrPath,
         stdoutPath,
       })
-      await new Promise(resolve => setTimeout(resolve, 150))
+      await Time.sleep(150)
       Expect(await FS.readText(stdoutPath)).toContain('start')
       Expect(await FS.readText(statusPath)).toContain('"status": "running"')
 

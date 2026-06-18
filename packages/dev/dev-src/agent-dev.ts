@@ -20,6 +20,7 @@ const AGENT_SHELL_COMMANDS: readonly string[] = [
   'rm',
   'tao',
   'bun',
+  'find',
   ...AGENT_CLIS,
 ]
 const command = Platform.runtimeProcess.argv[2]

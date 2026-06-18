@@ -1,11 +1,5 @@
-import { CLI, Errors, FS, HCI, Platform, Text } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Text, Time } from '@shared'
 
-const RUNTIME_PACKAGE_PATH = FS.joinPath('packages/runtime')
-const EXPO_ANDROID_ENV = {
-  EXPO_NO_TELEMETRY: '1',
-  OPEN_MATCH_HOST_ONLY: 'true',
-}
-const EXPO_START_ARGS = ['expo', 'start', '--localhost']
 const EXPO_GO_APP_ID = 'host.exp.exponent'
 const EXPO_GO_METRO_PORT = 8081
 const EXPO_GO_SDK_VERSION = '54.0.0'
@@ -31,9 +25,8 @@ const METRO_START_POLL_MS = 1_000
 export const Android = {
   ensureEmulator,
   ensureExpoGo,
-  openExpo,
+  openExpoGo,
   prepareAvailableExpoGo,
-  startExpo,
 }
 
 async function ensureEmulator(): Promise<void> {
@@ -127,22 +120,9 @@ async function prepareAvailableExpoGo(): Promise<boolean> {
   return true
 }
 
-async function openExpo(url = EXPO_GO_URL): Promise<void> {
+/** openExpoGo opens Expo Go on the booted Android emulator once Metro is ready. */
+async function openExpoGo(url = EXPO_GO_URL): Promise<void> {
   await openExpoGoWhenMetroIsReady(url)
-}
-
-async function startExpo(): Promise<void> {
-  const runtimePackageRoot = FS.repoPath(RUNTIME_PACKAGE_PATH)
-  void openExpo().catch(error => HCI.writeErrorLine(Errors.formatForUser(error)))
-  const result = await CLI.run('bunx', {
-    args: EXPO_START_ARGS,
-    cwd: runtimePackageRoot,
-    env: EXPO_ANDROID_ENV,
-    stdio: 'stream',
-  })
-  if (result.error || result.exitCode !== 0) {
-    throw new Errors.CommandExecutionError(result)
-  }
 }
 
 async function requireCommand(command: string, missingMessage: string): Promise<void> {
@@ -249,14 +229,10 @@ async function waitForBootedEmulator(logPath: string): Promise<void> {
       HCI.writeLine(`Android emulator ${serial} is booted.`)
       return
     }
-    await sleep(EMULATOR_BOOT_POLL_MS)
+    await Time.sleep(EMULATOR_BOOT_POLL_MS)
   }
 
   Errors.throwUserInput(`Android emulator did not finish booting. Check ${logPath}.`)
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 async function requireBootedEmulator(): Promise<string> {
@@ -355,7 +331,7 @@ async function waitForMetro(): Promise<void> {
     } catch {
       // Metro is still starting.
     }
-    await sleep(METRO_START_POLL_MS)
+    await Time.sleep(METRO_START_POLL_MS)
   }
 
   Errors.throwUserInput(`Expo Metro did not start at ${EXPO_METRO_STATUS_URL}.`)

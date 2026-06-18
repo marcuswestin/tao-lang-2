@@ -7,7 +7,7 @@ function printControls(): void {
   HCI.writeLine(`
   ${formatControl('q', 'quit')}
   ${formatControl('d', 'reload dev process')}
-  ${formatControl('r', 'reload Expo app')}
+  ${formatControl('r', 'recompile and reload Expo app')}
   ${formatControl('w', 'open web')}
   ${formatControl('i', 'open iOS simulator')}
   ${formatControl('a', 'open Android')}
