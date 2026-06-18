@@ -13,15 +13,15 @@ view MainView {
       Text PageTitle [width fill]
       TextMultiline BodyCopy [width fill]
       TextFrame "Safe default app frame" [width fill]
-      Stack [content top stretch, gap 8, pad 12, width fill, hug] {
-         Text "Stack uses column content defaults, gap, pad, width fill, and hug."
+      Stack [content top stretch, gap 8, pad 12, margin bottom 4, width fill, hug] {
+         Text "Stack uses column content defaults, gap, pad, margin, width fill, and hug."
          Button "Primary action", Noop [centered]
       }
       Row [content spread center, gap 8, pad horizontal 12 vertical 8, width fill, rigid] {
          Text "Left"
          Text "Right" [aligned center]
       }
-      Box [content center, gap 6, pad 8, hug, rigid] {
+      Box [content center, gap 6, pad 8, margin horizontal 4, hug, rigid] {
          Text "Box frame"
       }
       Col [content top stretch, gap 8, pad top 8 bottom 12 left 10 right 10, width fill, compress] {

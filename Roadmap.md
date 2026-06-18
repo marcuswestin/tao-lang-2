@@ -77,6 +77,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Implement Dev menu etc in tao
 - [ ] Create "validators" directory for all the "*-validator.ts" files
 - [ ] Cleanup TR package inter-dependencies and general structure for cleanliness
+- [ ] Go through each TR/ file, and review them slowly, and simplify and cleanup code where possible.
 - [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.

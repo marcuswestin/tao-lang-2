@@ -6,7 +6,7 @@ This app verifies bracketed layout clauses and the default app-shell baseline. `
 
 ## Belongs Here
 
-- Bracketed layout clauses on render sites, including `content`, `gap`, `pad`, numeric and `fill` `width`/`height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
+- Bracketed layout clauses on render sites, including `content`, `gap`, `pad`, `margin`, numeric and `fill` `width`/`height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
 - App-root content that should render inside the safe default Tao app shell.
 - Rendered text used by behavior-test assertions for the layout/app-shell smoke path.
 
