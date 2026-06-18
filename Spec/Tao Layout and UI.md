@@ -134,16 +134,17 @@ To describe how to arrange content inside a container, use:
 
 To describe how a UI element resizes when necessary, use:
 
-- `fill` to take up available space and allow its content to expand
-- `hug` to take up minimal space, without asking its content to compress
+- `fill` to expand on the parent container's main axis and fill the cross axis
+- `hug` to avoid expanding on the parent container's main axis
 - `compress` to shrink beyond its content size when under pressure
 - `rigid` to resist shrinking
+- `width <number>` and `height <number>` to set physical dimensions directly
+- `width fill` and `height fill` to fill one physical axis; Tao lowers this at runtime using the actual parent container direction
 
-To specify how to align and size a single item in a container, use:
+To specify how to align a single item in a container, use:
 
 - `aligned <direction>` to align the item along the cross axis
-- `centered` as shorthand for `aligned center center`
-- `stretched` to fill the container in the cross axis
+- `centered` as shorthand for `aligned center`
 
 ### UI Element Spacing
 
@@ -199,7 +200,7 @@ Or, if we want to:
 - Align just the third icon to the bottom:
   - `Icon "settings" [aligned bottom]`
 - Make the row hug the icons vertically (i.e., it shrinks to fit its content):
-  - `Row [content spread, height hug] { ... }`
+  - `Row [content spread, hug] { ... }`
 - Make the row fill its parent, but also compress (i.e., it shrinks beyond the size of its content when under pressure):
   - `Row [fill, compress] { ... }`
 - Make the row rigid (i.e., it never shrinks more than the minimum size of its content):
@@ -207,23 +208,25 @@ Or, if we want to:
 - Center icons vertically and horizontally, and add a gap between each one:
   - `Row [content center, gap 2]`
 - Set the width and height of the row:
-  - `Row [height 20, width min 120 max 340] { ... }`
+  - `Row [height 20, width 320] { ... }`
+- Fill only the horizontal axis:
+  - `Text "Name" [width fill]`
 
 ### Example: App Shell
 
 ```tao
 layout AppShell {
    render Col [fill, content top stretch, gap 12, pad 16] {
-      Header [height hug]
+      Header [hug]
       Row [fill, gap 16] {
          Sidebar [width 280, rigid]
-         MainPane [fill, compress]
+         MainPane [width fill, compress]
       }
    }
 }
 ```
 
-Here, the outer `Col` fills the screen. The header hugs its content. The body row fills the remaining space. The sidebar keeps a fixed width and resists compression. The main pane takes the flexible space.
+Here, the outer `Col` fills the screen. The header hugs its content. The body row fills the remaining space. The sidebar keeps a fixed width and resists compression. The main pane fills the row's width at runtime.
 
 ### Example: Framed Content
 
@@ -365,13 +368,18 @@ Raw absolute positioning, raw overflow flags, z-index-like layering, popovers, p
 
 ### UI Defaults
 
-These are the layout values of Tao's stdlib containers:
+These are the layout values of Tao's stdlib containers, and the React Native styles they resolve to:
 
-- `Row`: `[layout-direction horizontal, content baseline left, fill]`
-- `Col`: `[layout-direction vertical, content top stretch, fill]`
-- `Box`: `[layout-direction horizontal, content left center, hug]`
-- `Stack`: `[layout-direction vertical, content top center, hug]`
-- `WrappingRow`: `[layout-direction horizontal, content baseline left, compress, width fill, height hug]`
+- `Col`: `[content top stretch, fill]`
+  - `{ flexDirection: column, justifyContent: flex-start, alignItems: stretch, alignSelf: stretch, flexGrow: 1 }`
+- `Row`: `[content baseline left, fill]`
+  - `{ flexDirection: row, justifyContent: flex-start, alignItems: baseline, alignSelf: stretch, flexGrow: 1 }`
+- `Stack`: `[content top center, hug]`
+  - `{ flexDirection: column, justifyContent: flex-start, alignItems: center, flexGrow: 0 }`
+- `Box`: `[content left center, hug]`
+  - `{ flexDirection: row, justifyContent: flex-start, alignItems: center, flexGrow: 0 }`
+- `WrappingRow`: `[content baseline left, compress, hug]`
+  - `{ flexDirection: row, justifyContent: flex-start, alignItems: baseline, flexGrow: 0, flexShrink: 1, flexWrap: wrap }`
 
 All defaults can be overridden by the caller:
 
@@ -418,7 +426,7 @@ Important history:
 - Old settled layout used `items`; this document uses `content`.
 - Old unnamed caller content was `@@children`; this document uses `@@content`.
 - Old drafts tried bare layout words such as `Row [top left]`; this document keeps the explicit `content` head.
-- `centered` is shorthand for `aligned center center`.
+- `centered` is shorthand for `aligned center`.
 - Old drafts considered raw `row`, `column`, `wrap`, `nowrap`, `absolute`, offsets, `z`, `basis`, and `shrink`; this document keeps the common surface smaller.
 - Old spread names included `spread-hug` and `spread-hug-tight`; this document uses `spread-inset` and `spread-balanced`.
 

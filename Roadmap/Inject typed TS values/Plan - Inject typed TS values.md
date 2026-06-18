@@ -82,7 +82,7 @@ Exit criteria: declared types participate in type checking with stable diagnosti
 
 Concrete work:
 
-- `injections-compiler.ts` gains the expression form, reusing the existing parameter/value compilation: emit the fence as a `Reflect.apply`-invoked function with the declared TS return type annotation (`text` -> `string`, `number` -> `number`), wrapped as a Tao value, e.g. `new TR.Value<number>(Reflect.apply(function __injection__(Count: number): number { ... }, undefined, [...]))`. Reuse `CompilePrimitiveJsType`; keep generated code minimal and add a `TR` helper only if the emitted shape repeats beyond this wrapping.
+- `injections-compiler.ts` gains the expression form, reusing the existing parameter/value compilation: emit the fence as a `Reflect.apply`-invoked function with the declared TS return type annotation (`text` -> `string`, `number` -> `number`), wrapped as a Tao value, e.g. `TR.Value<number>(Reflect.apply(function __injection__(Count: number): number { ... }, undefined, [...]))`. Reuse `CompilePrimitiveJsType`; keep generated code minimal and add a `TR` helper only if the emitted shape repeats beyond this wrapping.
 - Compiler tests through compilation success and validation failures, not generated-string assertions; the existing inject-arguments tests extend to expression form.
 - Add the implemented injected-value slice to `Apps/Kitchen Sink/Kitchen Sink.tao`; extend `Apps/Test Apps/Type System Tests/Type System Tests.tao` and its `Purpose.md`.
 - Runtime e2e: Kitchen Sink renders the injected platform text and doubled launch count (extend the existing Kitchen Sink runtime test expectations).
