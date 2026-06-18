@@ -29,6 +29,7 @@ export const useValidationMessages = {
 type DeclarationRecord = {
   name: string
   kind: AST.Declaration['$type']
+  namespace: DeclarationNamespace
   visibility?: AST.DeclarationVisibility
 }
 
@@ -38,20 +39,21 @@ type VisibleDeclarationRecord = {
   folderPath: string
 }
 
+type DeclarationNamespace = 'type' | 'value'
+
 /** validateUseStatements validates import path resolution and visibility rules. */
 export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext): void {
   const fromFilePath = ASTUtils.getDocument(file).uri.path
   const useStatements = file.statements.filter(AST.isUseStatement)
   const localDeclarationNames = new Set(
-    file.statements.filter(AST.isDeclaration).map(declaration => declaration.name),
+    file.statements.filter(AST.isDeclaration).map(declarationKey),
   )
   const referencedNames = ASTUtils.referencedNames(file)
   const previouslyImportedNames = new Set<string>()
   for (const useStatement of useStatements) {
     reportDuplicateImports(useStatement, ctx)
-    reportRepeatedAndCollidingImports(useStatement, ctx, localDeclarationNames, previouslyImportedNames)
     reportUnusedImports(useStatement, ctx, referencedNames)
-    validateUseStatement(useStatement, ctx, fromFilePath)
+    validateUseStatement(useStatement, ctx, fromFilePath, localDeclarationNames, previouslyImportedNames)
   }
   reportUseStatementsOutOfSection(file, ctx)
 }
@@ -60,6 +62,8 @@ function validateUseStatement(
   useStatement: AST.UseStatement,
   ctx: ValidationContext,
   fromFilePath: string,
+  localDeclarationNames: ReadonlySet<string>,
+  previouslyImportedNames: Set<string>,
 ): void {
   const resolution = Packages.resolve(ctx.packagesContext, {
     importPath: useStatement.importPath,
@@ -86,7 +90,10 @@ function validateUseStatement(
     .flatMap(declarationsInFile)
     .filter(declaration => declaration.name.length > 0)
   for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
-    validateImportedName(importedName, useStatement, declarations, resolution, ctx)
+    validateImportedName(importedName, useStatement, declarations, resolution, ctx, {
+      localDeclarationNames,
+      previouslyImportedNames,
+    })
   }
 }
 
@@ -121,24 +128,50 @@ function validateImportedName(
   declarations: readonly DeclarationRecord[],
   resolution: Packages.Resolution,
   ctx: ValidationContext,
+  seen: {
+    localDeclarationNames: ReadonlySet<string>
+    previouslyImportedNames: Set<string>
+  },
 ): void {
   const matches = declarations.filter(declaration => declaration.name === importedName)
   if (matches.length === 0) {
     ctx.error(useValidationMessages.missingImport(importedName, importLabel(useStatement)), useStatement)
     return
   }
-  if (matches.some(declaration => declaration.kind === AST.AppDeclaration.$type)) {
+  const importableMatches = matches.filter(declaration => declaration.kind !== AST.AppDeclaration.$type)
+  if (importableMatches.length === 0 && matches.some(declaration => declaration.kind === AST.AppDeclaration.$type)) {
     ctx.error(useValidationMessages.appImport(importedName), useStatement)
     return
   }
-
-  const visibleMatches = matches.filter(declaration => Packages.isVisible(declaration.visibility, resolution))
+  const visibleMatches = importableMatches.filter(declaration => Packages.isVisible(declaration.visibility, resolution))
   if (visibleMatches.length === 0) {
     ctx.error(useValidationMessages.notVisible(importedName), useStatement)
     return
   }
-  if (visibleMatches.length > 1) {
+  for (const namespace of new Set(visibleMatches.map(match => match.namespace))) {
+    if (seen.localDeclarationNames.has(`${namespace}:${importedName}`)) {
+      ctx.error(useValidationMessages.localDeclarationCollision(importedName), useStatement)
+    }
+  }
+  const matchesByNamespace = new Map<DeclarationNamespace, DeclarationRecord[]>()
+  for (const match of visibleMatches) {
+    const records = matchesByNamespace.get(match.namespace) ?? []
+    records.push(match)
+    matchesByNamespace.set(match.namespace, records)
+  }
+  if ([...matchesByNamespace.values()].some(records => records.length > 1)) {
     ctx.error(useValidationMessages.ambiguousImport(importedName, importLabel(useStatement)), useStatement)
+    return
+  }
+  for (const match of visibleMatches) {
+    const key = declarationRecordKey(match)
+    if (seen.previouslyImportedNames.has(key)) {
+      ctx.error(useValidationMessages.repeatedImport(importedName), useStatement, {
+        code: useValidationCodes.repeatedImport,
+      })
+    } else {
+      seen.previouslyImportedNames.add(key)
+    }
   }
 }
 
@@ -156,26 +189,6 @@ function reportDuplicateImports(useStatement: AST.UseStatement, ctx: ValidationC
       continue
     }
     seen.add(name)
-  }
-}
-
-function reportRepeatedAndCollidingImports(
-  useStatement: AST.UseStatement,
-  ctx: ValidationContext,
-  localDeclarationNames: ReadonlySet<string>,
-  previouslyImportedNames: Set<string>,
-): void {
-  for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
-    if (previouslyImportedNames.has(name)) {
-      ctx.error(useValidationMessages.repeatedImport(name), useStatement, {
-        code: useValidationCodes.repeatedImport,
-      })
-    } else {
-      previouslyImportedNames.add(name)
-    }
-    if (localDeclarationNames.has(name)) {
-      ctx.error(useValidationMessages.localDeclarationCollision(name), useStatement)
-    }
   }
 }
 
@@ -213,6 +226,7 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
     .map((declaration) => ({
       name: declaration.name,
       kind: declaration.$type,
+      namespace: declarationNamespace(declaration),
       visibility: Packages.visibilityOf(declaration),
     }))
 }
@@ -234,9 +248,9 @@ export function validateVisibleDeclarations(
     declarationsByFolder.set(folderPath, declarationsByName)
 
     for (const declaration of visibleDeclarations) {
-      const records = declarationsByName.get(declaration.name) ?? []
+      const records = declarationsByName.get(declarationKey(declaration)) ?? []
       records.push({ declaration, document, folderPath })
-      declarationsByName.set(declaration.name, records)
+      declarationsByName.set(declarationKey(declaration), records)
     }
   }
 
@@ -260,4 +274,16 @@ export function validateVisibleDeclarations(
 
 function workspaceFilePath(file: AST.TaoFile): string {
   return ASTUtils.getDocument(file).uri.path
+}
+
+function declarationKey(declaration: AST.Declaration): string {
+  return `${declarationNamespace(declaration)}:${declaration.name}`
+}
+
+function declarationRecordKey(declaration: DeclarationRecord): string {
+  return `${declaration.namespace}:${declaration.name}`
+}
+
+function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
+  return AST.isTypeDeclaration(declaration) ? 'type' : 'value'
 }

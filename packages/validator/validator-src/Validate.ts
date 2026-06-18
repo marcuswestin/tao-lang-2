@@ -6,6 +6,7 @@ import { validateTypirProblems } from './expressions-validator'
 import { validateInjections } from './injections-validator'
 import { validateInvocations } from './invocations-validator'
 import { validateProject } from './project-validator'
+import { validateTypes } from './types-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './use-validator'
 import type { ValidationContext } from './validation'
 import { validateViews } from './views-validator'
@@ -17,6 +18,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   validateAliases(file, ctx)
   validateInjections(file, ctx)
   validateInvocations(file, ctx)
+  validateTypes(file, ctx)
 
   const document = ASTUtils.getDocument(file)
   if (document.uri.scheme === 'file') {
@@ -34,6 +36,7 @@ export const Validate = {
   Project: validateProject,
   TaoFile: validateTaoFile,
   TypirProblems: validateTypirProblems,
+  Types: validateTypes,
   UseStatements: validateUseStatements,
   VisibleDeclarations: validateVisibleDeclarations,
   Views: validateViews,

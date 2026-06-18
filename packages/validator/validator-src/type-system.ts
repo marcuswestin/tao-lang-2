@@ -1,6 +1,6 @@
-import ASTUtils from '@ast-utils'
+import ASTUtils, { Type } from '@ast-utils'
 import { AST } from '@parser'
-import { InferenceRuleNotApplicable, isType, type Type } from 'typir'
+import { InferenceRuleNotApplicable, isType, type Type as TypirType } from 'typir'
 import type { LangiumTypeSystemDefinition, TypirLangiumServices, TypirLangiumSpecifics } from 'typir-langium'
 import { registerInvocationTypeValidation } from './invocations-validator'
 
@@ -30,14 +30,22 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
       .inferenceRule({ filter: AST.isNumberLiteral })
       .finish()
 
+    typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
+    typir.factory.Primitives.create({ primitiveName: 'list' })
+      .inferenceRule({ filter: AST.isListLiteral })
+      .finish()
+
     typir.Inference.addInferenceRulesForAstNodes({
+      MemberAccessExpression: (node) => taoType(Type.ofMemberAccess(node), typir) ?? InferenceRuleNotApplicable,
+      TypeCastExpression: (node) => taoType(Type.ofReference(node.type), typir) ?? InferenceRuleNotApplicable,
+      TypedConstructor: (node) => taoType(Type.ofConstructorReference(node.type), typir) ?? InferenceRuleNotApplicable,
       ValueReference: (node) => {
         const target = node.target.ref
         if (AST.isAliasDeclaration(target)) {
           return safeInferType(typir, target.value) ?? InferenceRuleNotApplicable
         }
         if (AST.isParameterDeclaration(target)) {
-          return taoPrimitiveType(target.type, typir) ?? InferenceRuleNotApplicable
+          return taoType(Type.ofParameter(target), typir) ?? InferenceRuleNotApplicable
         }
         return InferenceRuleNotApplicable
       },
@@ -47,12 +55,48 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
   }
 
   /** onNewAstNode handles AST-instance-specific type creation. */
-  onNewAstNode(): void {}
+  onNewAstNode(node: AST.Node, typir: TaoTypirServices): void {
+    if (AST.isTypeDeclaration(node)) {
+      ensurePrimitive(typirTypeDefinitionName(node), typir)
+    }
+    if (AST.isTypeProperty(node) && node.type) {
+      ensurePrimitive(typirTypeDefinitionName(node), typir)
+    }
+  }
 }
 
 /** taoPrimitiveType returns the Typir primitive for a Tao primitive type. */
-function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): Type | undefined {
+function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): TypirType | undefined {
   return typir.factory.Primitives.get({ primitiveName: type })
+}
+
+function taoType(type: Type.TaoType, typir: TaoTypirServices): TypirType | undefined {
+  if (type.kind === 'unresolved') {
+    return undefined
+  }
+  if (type.nominal) {
+    return ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
+  }
+  if (type.kind === 'primitive') {
+    return taoPrimitiveType(type.primitive, typir)
+  }
+  return taoPrimitiveType(type.kind, typir)
+}
+
+function ensurePrimitive(name: string, typir: TaoTypirServices): TypirType | undefined {
+  const existing = typir.factory.Primitives.get({ primitiveName: name })
+  if (existing) {
+    return existing
+  }
+  return typir.factory.Primitives.create({ primitiveName: name }).finish()
+}
+
+function typirTypeDefinitionName(definition: AST.TypeDefinition): string {
+  try {
+    return `${ASTUtils.getDocument(definition).uri.path}#${Type.definitionName(definition)}`
+  } catch {
+    return Type.definitionName(definition)
+  }
 }
 
 /** astNodeHasDocument returns true when Typir can safely cache inference for `node`. */
@@ -69,7 +113,7 @@ function astNodeHasDocument(node: AST.Node | undefined): node is AST.Node {
 }
 
 /** safeInferType infers a Tao expression type and returns undefined for unresolved Typir paths. */
-export function safeInferType(typir: TaoTypirServices, node: AST.Node | undefined): Type | undefined {
+export function safeInferType(typir: TaoTypirServices, node: AST.Node | undefined): TypirType | undefined {
   if (!astNodeHasDocument(node)) {
     return undefined
   }

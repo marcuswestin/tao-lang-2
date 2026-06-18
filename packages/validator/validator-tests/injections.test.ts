@@ -13,7 +13,7 @@ Describe('Tao injection validator', () => {
       view MainView {
         render Text "Hello"
       }
-      view Text Value text {
+      view Text text as Value {
         render inject Value, Name UserName, Count 3 ${tsFence}
           return null
         ${fence}
@@ -27,7 +27,7 @@ Describe('Tao injection validator', () => {
       view MainView {
         render Text "Hello"
       }
-      view Text Value text {
+      view Text text as Value {
         render inject Value, Value "Again" ${tsFence}
           return null
         ${fence}

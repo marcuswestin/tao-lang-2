@@ -1,6 +1,16 @@
-import ASTUtils from '@ast-utils'
+import ASTUtils, { Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from './validation'
+
+type NamedValueDeclaration =
+  | NamedFileValueDeclaration
+  | AST.ParameterDeclaration
+type NamedFileValueDeclaration =
+  | AST.AliasDeclaration
+  | AST.AppDeclaration
+  | AST.RenderableDeclaration
+type NamedDeclaration = NamedValueDeclaration | AST.TypeDeclaration
+type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
 
 /** aliasValidationMessages declares name and alias-reference diagnostics. */
 export const aliasValidationMessages = {
@@ -12,8 +22,10 @@ export const aliasValidationMessages = {
 
 /** validateAliases validates duplicate names and alias reference order. */
 export function validateAliases(file: AST.TaoFile, ctx: ValidationContext): void {
-  const fileDeclarations = file.statements.filter(AST.isDeclaration)
-  reportDuplicateNames(fileDeclarations, new Map(), ctx)
+  const fileValueDeclarations = file.statements.filter(isValueDeclaration)
+  const fileTypeDeclarations = file.statements.filter(AST.isTypeDeclaration)
+  reportDuplicateNames(fileValueDeclarations, new Map(), ctx)
+  reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
   reportAliasReferenceOrder(allAliases(file), ctx)
   reportLocalValueReferenceOrder(file, ctx)
 
@@ -29,33 +41,35 @@ export function validateAliases(file: AST.TaoFile, ctx: ValidationContext): void
 }
 
 function reportDuplicateNames(
-  declarations: readonly AST.NamedDeclaration[],
-  visible: Map<string, AST.NamedDeclaration>,
+  declarations: readonly NamedDeclaration[],
+  visible: Map<string, NamedDeclaration>,
   ctx: ValidationContext,
 ): void {
   for (const declaration of declarations) {
-    if (visible.has(declaration.name)) {
-      ctx.error(aliasValidationMessages.duplicateName(declaration.name), declaration)
+    const name = declarationName(declaration)
+    if (visible.has(name)) {
+      ctx.error(aliasValidationMessages.duplicateName(name), declaration)
       continue
     }
-    visible.set(declaration.name, declaration)
+    visible.set(name, declaration)
   }
 }
 
 function reportNameConflicts(
-  declarations: readonly AST.NamedDeclaration[],
-  visible: Map<string, AST.NamedDeclaration>,
+  declarations: readonly NamedDeclaration[],
+  visible: Map<string, NamedDeclaration>,
   ctx: ValidationContext,
 ): void {
   for (const declaration of declarations) {
-    if (visible.has(declaration.name)) {
-      ctx.error(aliasValidationMessages.duplicateName(declaration.name), declaration)
+    const name = declarationName(declaration)
+    if (visible.has(name)) {
+      ctx.error(aliasValidationMessages.duplicateName(name), declaration)
     }
   }
 }
 
-function visibleDeclarations(declarations: readonly AST.NamedDeclaration[]): Map<string, AST.NamedDeclaration> {
-  return new Map(declarations.map(declaration => [declaration.name, declaration] as const))
+function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<string, NamedDeclaration> {
+  return new Map(declarations.map(declaration => [declarationName(declaration), declaration] as const))
 }
 
 function allAliases(file: AST.TaoFile): AST.AliasDeclaration[] {
@@ -67,14 +81,14 @@ function reportAliasReferenceOrder(aliases: readonly AST.AliasDeclaration[], ctx
     for (const reference of aliasValueReferences(alias)) {
       const target = reference.target.ref
       if (target && !isDeclaredBefore(target, alias)) {
-        ctx.error(aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, target.name), reference)
+        ctx.error(aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, declarationName(target)), reference)
       }
     }
   }
 }
 
 function reportLocalValueReferenceOrder(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const reference of ASTUtils.streamAllContents(file).filter(AST.isValueReference)) {
+  for (const reference of ASTUtils.streamAllContents(file).filter(isValueReferenceLike)) {
     if (findOwningAlias(reference)) {
       continue
     }
@@ -85,11 +99,11 @@ function reportLocalValueReferenceOrder(file: AST.TaoFile, ctx: ValidationContex
   }
 }
 
-function aliasValueReferences(alias: AST.AliasDeclaration): AST.ValueReference[] {
-  if (AST.isValueReference(alias.value)) {
+function aliasValueReferences(alias: AST.AliasDeclaration): ValueReferenceLike[] {
+  if (AST.isValueReference(alias.value) || AST.isMemberAccessExpression(alias.value)) {
     return [alias.value]
   }
-  return ASTUtils.streamAllContents(alias.value).filter(AST.isValueReference)
+  return ASTUtils.streamAllContents(alias.value).filter(isValueReferenceLike)
 }
 
 function isDeclaredBefore(declaration: AST.ValueDeclaration, use: AST.Node): boolean {
@@ -120,6 +134,18 @@ function collectRenderBlocks(block: AST.Block, blocks: AST.Block[]): void {
 
 function aliasesOwnedByBlock(block: AST.Block): AST.AliasDeclaration[] {
   return block.statements.filter(AST.isAliasDeclaration)
+}
+
+function declarationName(declaration: NamedDeclaration): string {
+  return AST.isParameterDeclaration(declaration) ? Type.parameterName(declaration) : declaration.name
+}
+
+function isValueReferenceLike(node: AST.Node): node is ValueReferenceLike {
+  return AST.isValueReference(node) || AST.isMemberAccessExpression(node)
+}
+
+function isValueDeclaration(node: AST.Node): node is NamedFileValueDeclaration {
+  return AST.isAliasDeclaration(node) || AST.isAppDeclaration(node) || AST.isRenderableDeclaration(node)
 }
 
 function findOwningView(node: AST.Node): AST.RenderableDeclaration | undefined {

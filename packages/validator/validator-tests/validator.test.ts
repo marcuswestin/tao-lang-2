@@ -10,6 +10,7 @@ import { inferExpressionType } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
 import { invocationValidationMessages } from '../validator-src/invocations-validator'
 import { projectValidationMessages } from '../validator-src/project-validator'
+import { typeValidationMessages } from '../validator-src/types-validator'
 import { useValidationMessages } from '../validator-src/use-validator'
 import Validator from '../validator-src/validator'
 import { viewValidationMessages } from '../validator-src/views-validator'
@@ -121,6 +122,45 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
+  Test('keeps Typir nominal names distinct across files', async () => {
+    await withTaoFiles('tao-validator-typir-names-', {
+      'Entry.tao': `
+        use OtherPerson from ./Other.tao
+        app MyApp { view MainView }
+        type Person is text
+        alias LocalPerson = Person."Ada"
+        view MainView {
+          render Text LocalPerson
+        }
+        view Text text as Value { }
+      `,
+      'Other.tao': `
+        type Person is text
+        project alias OtherPerson = Person."Grace"
+        view OtherView { }
+      `,
+    }, async paths => {
+      const workspace = await Workspace.open(FS.dirname(paths['Entry.tao']))
+      const result = await workspace.validate(paths['Entry.tao'])
+      const entryAlias = result.entry.ast.statements.find(
+        statement => AST.isAliasDeclaration(statement) && statement.name === 'LocalPerson',
+      )
+      const otherFile = result.files.find(file => file.path === paths['Other.tao'])
+      const otherAlias = otherFile?.ast.statements.find(
+        statement => AST.isAliasDeclaration(statement) && statement.name === 'OtherPerson',
+      )
+      Expect.Is(entryAlias, AST.isAliasDeclaration)
+      Expect.Is(otherAlias, AST.isAliasDeclaration)
+
+      const entryType = inferExpressionType(entryAlias.value, workspace.typir)
+      const otherType = inferExpressionType(otherAlias.value, workspace.typir)
+
+      Expect(entryType).toContain('/Entry.tao#Person')
+      Expect(otherType).toContain('/Other.tao#Person')
+      Expect(entryType).not.toBe(otherType)
+    })
+  })
+
   Test('rejects unsupported top-level statements', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
@@ -169,10 +209,10 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects app root view declarations with parameters', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView Label text {
+      view MainView text as Label {
         render Text Label
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -211,7 +251,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         Text "Hello"
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -224,7 +264,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects duplicate view parameters', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view Text }
-      view Text Value text, Value text { }
+      view Text text as Value, number as Value { }
     `)
 
     Expect(validationErrorMessages(result)).toContain(viewValidationMessages.duplicateParameter('Value'))
@@ -234,22 +274,22 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects generated view prop names as parameter names', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view ChildrenView }
-      view ChildrenView children text {
+      view ChildrenView text as children {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view KeyView key text {
+      view KeyView text as key {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view RefView ref text {
+      view RefView text as ref {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view TaoPropView __tao text {
+      view TaoPropView text as __tao {
         render inject ${tsFence}
           return null
         ${fence}
@@ -275,7 +315,7 @@ Describe('Tao validator structural diagnostics', () => {
         render Text "Hello"
         render Text "Again"
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -293,7 +333,7 @@ Describe('Tao validator structural diagnostics', () => {
         render Text "Hello"
         alias Greeting = "Again"
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -363,12 +403,12 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view ParameterEcho Label text {
+      view ParameterEcho text as Label {
         render Text Label
       }
       view MainView {
@@ -389,7 +429,7 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -416,7 +456,7 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -441,7 +481,7 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -469,7 +509,7 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -494,7 +534,7 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -521,7 +561,7 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -543,7 +583,7 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       alias Greeting = Later
       alias Later = "Hello"
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -561,7 +601,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects local alias references to later values', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView Label text {
+      view MainView text as Label {
         alias Greeting = Later
         alias Later = Label
       }
@@ -580,7 +620,7 @@ Describe('Tao validator structural diagnostics', () => {
           return <>{_ViewProps.children}</>
         ${fence}
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -617,7 +657,7 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       alias Text = "Hello"
       view MainView { }
-      view Text Value text { }
+      view Text text as Value { }
     `)
     const aliasAfterApp = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
@@ -635,6 +675,31 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(viewAfterApp)).toContain(aliasValidationMessages.duplicateName('MyApp'))
   })
 
+  Test('keeps type and value names in separate namespaces', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      type Name is text
+      alias Name = Name."Ro"
+      view MainView {
+        render Text Name
+      }
+      view Text text as Value {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    const duplicateTypes = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Name is text
+      type Name is number
+      view MainView { }
+    `)
+
+    Expect(validationErrorMessages(duplicateTypes)).toContain(aliasValidationMessages.duplicateName('Name'))
+  })
+
   Test('rejects local aliases that shadow view declarations', async () => {
     const aliasShadow = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
@@ -642,7 +707,7 @@ Describe('Tao validator structural diagnostics', () => {
         alias Text = "Hello"
         render Text Text
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -650,10 +715,10 @@ Describe('Tao validator structural diagnostics', () => {
     `)
     const parameterShadow = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView Text text {
+      view MainView text as Text {
         render Text Text
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -681,7 +746,7 @@ Describe('Tao validator structural diagnostics', () => {
           Text OuterGreeting
         }
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -692,7 +757,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects local aliases that shadow visible values', async () => {
     const parameterShadow = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView Label text {
+      view MainView text as Label {
         alias Label = "shadow"
       }
     `)
@@ -730,7 +795,7 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       alias First = Second
       alias Second = First
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -751,7 +816,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Tile "Open"
       }
-      view Tile Title text, Count number {
+      view Tile text as Title, number as Count {
         render inject ${tsFence}
           return null
         ${fence}
@@ -762,7 +827,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Text "Open", 1
       }
-      view Text Value text {
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -775,7 +840,7 @@ Describe('Tao validator structural diagnostics', () => {
         diagnostic.message === invocationValidationMessages.missingArgument('Tile', 'Count')
       )?.nodeType,
     ).toBe(AST.RenderStatement.$type)
-    Expect(validationErrorMessages(extra)).toContain(invocationValidationMessages.extraArguments('Text', 1, 2))
+    Expect(validationErrorMessages(extra)).toContain(invocationValidationMessages.unmatchedArgument('Text'))
   })
 
   Test('rejects child view invocation arity and type errors', async () => {
@@ -791,31 +856,464 @@ Describe('Tao validator structural diagnostics', () => {
           Tile 42
         }
       }
-      view Tile Title text, Count number {
+      view Tile text as Title, number as Count {
         render inject ${tsFence}
           return null
         ${fence}
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.missingArgument('Tile', 'Count'))
-    Expect(validationErrorMessages(result)).toContain("Argument for parameter 'Title' expects text, got number.")
+    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.missingArgument('Tile', 'Title'))
   })
 
-  Test('rejects text and number argument mismatches through Typir', async () => {
+  Test('rejects text and number argument mismatches by type', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Tile "Open", "not a count"
+        render Tile "not a count"
       }
-      view Tile Title text, Count number {
+      view Tile number as Count {
         render inject ${tsFence}
           return null
         ${fence}
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain("Argument for parameter 'Count' expects number, got text.")
+    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.unmatchedArgument('Tile'))
+    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.missingArgument('Tile', 'Count'))
+  })
+
+  Test('validates custom type declarations, constructors, casts, member access, and type-based binding', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      type Name is text
+      type Age is number
+      type Tags is list
+      type Job is {
+        Title is text
+        Level is number
+      }
+      type Person is {
+        Name
+        Age
+        Tags
+        Job
+      }
+      type InlineJob is {
+        Role is text
+        Rank is number
+      }
+      type CurrentJob is InlineJob
+      alias DisplayName = "Ada" as Name
+      alias DemoPerson = Person.{
+        Tags.["types"]
+        Job.{ Level.2 Title."Compiler engineer" }
+        Age.40
+        DisplayName
+      }
+      alias DemoCurrentJob = CurrentJob.{ Role."Architect" Rank.3 }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      view MainView {
+        render Stack {
+          Profile DemoPerson
+          Summary Count.2, "People"
+        }
+      }
+      type Count is number
+      view Profile Person {
+        render Stack {
+          TextValue Person.Name
+          TextValue Person.Job.Title
+        }
+      }
+      view Summary text as Label, Count {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view TextValue text as Value {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+  })
+
+  Test('rejects duplicate provided exact types before nominal lineage fallback', async () => {
+    const duplicateArguments = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Name is Base
+      view MainView {
+        render Pair Name."Ada", Name."Grace"
+      }
+      view Pair Base, Name {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const duplicateProperties = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Name is Base
+      type Pair is {
+        Base
+        Name
+      }
+      alias BadPair = Pair.{ Name."Ada" Name."Grace" }
+      view MainView { }
+    `)
+    const duplicateLineageArguments = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Middle is Base
+      type Leaf is Middle
+      view MainView {
+        render Pair Leaf."Ada", Leaf."Grace"
+      }
+      view Pair Base, Middle {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const duplicateLineageProperties = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Middle is Base
+      type Leaf is Middle
+      type Pair is {
+        Base
+        Middle
+      }
+      alias BadPair = Pair.{ Leaf."Ada" Leaf."Grace" }
+      view MainView { }
+    `)
+
+    Expect(validationErrorMessages(duplicateArguments)).toContain(
+      invocationValidationMessages.duplicateArgumentType('Pair'),
+    )
+    Expect(validationErrorMessages(duplicateArguments)).toContain(
+      invocationValidationMessages.missingArgument('Pair', 'Base'),
+    )
+    Expect(validationErrorMessages(duplicateProperties)).toContain(typeValidationMessages.duplicateProvidedPropertyType)
+    Expect(validationErrorMessages(duplicateProperties)).toContain(typeValidationMessages.missingProperty('Base'))
+    Expect(validationErrorMessages(duplicateLineageArguments)).toContain(
+      invocationValidationMessages.duplicateArgumentType('Pair'),
+    )
+    Expect(validationErrorMessages(duplicateLineageArguments)).toContain(
+      invocationValidationMessages.missingArgument('Pair', 'Base'),
+    )
+    Expect(validationErrorMessages(duplicateLineageArguments)).toContain(
+      invocationValidationMessages.missingArgument('Pair', 'Middle'),
+    )
+    Expect(
+      validationErrorMessages(duplicateLineageArguments).some(message =>
+        message.includes('matches multiple parameters by type')
+      ),
+    ).toBe(false)
+    Expect(validationErrorMessages(duplicateLineageProperties)).toContain(
+      typeValidationMessages.duplicateProvidedPropertyType,
+    )
+    Expect(validationErrorMessages(duplicateLineageProperties)).toContain(
+      typeValidationMessages.missingProperty('Base'),
+    )
+    Expect(validationErrorMessages(duplicateLineageProperties)).toContain(
+      typeValidationMessages.missingProperty('Middle'),
+    )
+    Expect(
+      validationErrorMessages(duplicateLineageProperties).some(message =>
+        message.includes('matches multiple fields by type')
+      ),
+    ).toBe(false)
+  })
+
+  Test('rejects ambiguous and duplicate expected binding types', async () => {
+    const duplicateParameters = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Pair "Ada"
+      }
+      view Pair text as First, text as Second {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const ambiguousArgument = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Middle is Base
+      type Leaf is Middle
+      view MainView {
+        render Pair Leaf."Ada"
+      }
+      view Pair Base, Middle {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const duplicateProperties = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Name is text
+      type Person is {
+        Name
+        Name
+      }
+      alias BadPerson = Person.{ Name."Ada" }
+      view MainView { }
+    `)
+    const ambiguousProperty = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Middle is Base
+      type Leaf is Middle
+      type Person is {
+        Base
+        Middle
+      }
+      alias BadPerson = Person.{ Leaf."Ada" }
+      view MainView { }
+    `)
+    const ambiguousParameter = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Name is Base
+      type Title is Base
+      view MainView {
+        render Pair Name."Ada", Title."Grace"
+      }
+      view Pair Base {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const ambiguousField = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Base is text
+      type Name is Base
+      type Title is Base
+      type Pair is {
+        Base
+      }
+      alias BadPair = Pair.{ Name."Ada" Title."Grace" }
+      view MainView { }
+    `)
+
+    Expect(validationErrorMessages(duplicateParameters)).toContain(
+      invocationValidationMessages.duplicateParameterType('Pair', 'Second'),
+    )
+    Expect(validationErrorMessages(ambiguousArgument)).toContain(
+      'Render of Pair has an argument that matches multiple parameters by type: Base, Middle.',
+    )
+    Expect(validationErrorMessages(duplicateProperties)).toContain(
+      typeValidationMessages.duplicatePropertyType('Name'),
+    )
+    Expect(validationErrorMessages(ambiguousProperty)).toContain(
+      typeValidationMessages.ambiguousProperty(['Base', 'Middle']),
+    )
+    Expect(validationErrorMessages(ambiguousParameter)).toContain(
+      invocationValidationMessages.ambiguousParameter('Pair', 'Base'),
+    )
+    Expect(validationErrorMessages(ambiguousField)).toContain(typeValidationMessages.ambiguousField('Base'))
+  })
+
+  Test('rejects primitive parameters without aliases and invalid custom type operations', async () => {
+    const primitiveParameter = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const badCast = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Age is number
+      alias BadAge = "Ada" as Age
+      view MainView { }
+    `)
+    const missingField = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Name is text
+      type Age is number
+      type Person is {
+        Name
+        Age
+      }
+      alias BadPerson = Person.{ Name."Ada" }
+      view MainView { }
+    `)
+    const unmatchedField = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Name is text
+      type Age is number
+      type Person is {
+        Name
+        Age
+      }
+      alias BadPerson = Person.{ Name."Ada" Age.40 "extra" }
+      view MainView { }
+    `)
+    const badMember = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Name is text
+      alias DisplayName = Name."Ada"
+      view MainView {
+        render Text DisplayName.First
+      }
+      view Text text as Value {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const unknownMember = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Name is text
+      type Person is {
+        Name
+      }
+      alias DemoPerson = Person.{ Name."Ada" }
+      view MainView {
+        render Text DemoPerson.Missing
+      }
+      view Text text as Value {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const shapelessItem = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Bag is item
+      alias BadBag = Bag.{ "extra" }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const unresolvedCast = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      alias Bad = "Ada" as Missing
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const unresolvedConstructor = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      alias Bad = Missing."Ada"
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const unresolvedMember = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Text Missing.First
+      }
+      view Text text as Value {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const unresolvedArgument = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Text Missing
+      }
+      view Text text as Value {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const unresolvedProperty = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Name is text
+      type Person is {
+        Name
+      }
+      alias BadPerson = Person.{ Missing }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(primitiveParameter)).toContain(
+      typeValidationMessages.primitiveParameterAlias('text'),
+    )
+    Expect(validationErrorMessages(badCast)).toContain(typeValidationMessages.castIncompatible('Age'))
+    Expect(validationErrorMessages(missingField)).toContain(typeValidationMessages.missingProperty('Age'))
+    Expect(validationErrorMessages(unmatchedField)).toContain(typeValidationMessages.unmatchedProperty)
+    Expect(validationErrorMessages(badMember)).toContain(typeValidationMessages.memberNotItem('First'))
+    Expect(validationErrorMessages(unknownMember)).toContain(typeValidationMessages.unknownMember('Person', 'Missing'))
+    Expect(validationErrorMessages(shapelessItem)).toContain(
+      typeValidationMessages.shapelessItemConstructor('Bag'),
+    )
+    Expect(validationErrorMessages(unresolvedCast)).not.toContain(typeValidationMessages.castIncompatible('Missing'))
+    Expect(validationErrorMessages(unresolvedConstructor)).not.toContain(
+      typeValidationMessages.constructorShape('Missing', 'text'),
+    )
+    Expect(validationErrorMessages(unresolvedMember)).not.toContain(typeValidationMessages.memberNotItem('First'))
+    Expect(validationErrorMessages(unresolvedArgument)).not.toContain(
+      invocationValidationMessages.unmatchedArgument('Text'),
+    )
+    Expect(validationErrorMessages(unresolvedArgument)).not.toContain(
+      invocationValidationMessages.missingArgument('Text', 'Value'),
+    )
+    Expect(validationErrorMessages(unresolvedProperty)).not.toContain(typeValidationMessages.unmatchedProperty)
+    Expect(validationErrorMessages(unresolvedProperty)).not.toContain(typeValidationMessages.missingProperty('Name'))
+  })
+
+  Test('rejects cyclic type aliases without recursing forever', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type A is B
+      type B is A
+      alias Bad = A."value"
+      view MainView { }
+    `)
+    const qualifiedResult = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type A is B.C
+      type B is {
+        C is A
+      }
+      alias Bad = A."value"
+      view MainView { }
+    `)
+    const shorthandResult = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Person is {
+        Friend
+      }
+      type Friend is Person
+      alias Bad = Person.{ Friend.{ Friend.{ } } }
+      view MainView { }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.cyclicType('A'))
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.cyclicType('B'))
+    Expect(validationErrorMessages(qualifiedResult)).toContain(typeValidationMessages.cyclicType('A'))
+    Expect(validationErrorMessages(qualifiedResult)).toContain(typeValidationMessages.cyclicType('B'))
+    Expect(validationErrorMessages(shorthandResult)).toContain(typeValidationMessages.cyclicType('Person'))
+    Expect(validationErrorMessages(shorthandResult)).toContain(typeValidationMessages.cyclicType('Friend'))
   })
 
   Test('reports type diagnostics alongside structural invocation errors', async () => {
@@ -824,22 +1322,21 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Tile 42, "extra"
       }
-      view Tile Title text {
+      view Tile text as Title {
         render inject ${tsFence}
           return null
         ${fence}
       }
     `)
 
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.extraArguments('Tile', 1, 2))
-    Expect(validationErrorMessages(result)).toContain("Argument for parameter 'Title' expects text, got number.")
+    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.unmatchedArgument('Tile'))
   })
 
   Test('keeps cross-view values out of scope through validator diagnostics', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view Target }
-      view Text Value text { }
-      view Source Secret text { }
+      view Text text as Value { }
+      view Source text as Secret { }
       view Target {
         render Text Secret
       }
@@ -861,7 +1358,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value text {
+        project view Text text as Value {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -870,6 +1367,89 @@ Describe('Tao validator structural diagnostics', () => {
       },
       async result => {
         Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('allows imported types to share names with local values', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { view MainView }
+        use Name from ./Types.tao
+        alias Name = Name."Ro"
+        view MainView {
+          render Text Name
+        }
+        view Text text as Value {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+        'Types.tao': `
+        alias Name = "Hidden"
+        project type Name is text
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('keeps invisible same-name imports out of value scopes', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { view MainView }
+        use Name from ./Types.tao
+        view MainView {
+          render Text Name
+        }
+        view Text text as Value {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+        'Types.tao': `
+        alias Name = "Hidden"
+        project type Name is text
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result).some(message => message.includes('Name'))).toBe(true)
+      },
+    )
+  })
+
+  Test('keeps invisible same-name imports out of type scopes', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { view MainView }
+        use Name from ./Types.tao
+        alias DisplayName = Name."Ro"
+        view MainView {
+          render Text DisplayName
+        }
+        view Text text as Value {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+        'Types.tao': `
+        type Name is text
+        project alias Name = "Visible"
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result).some(message => message.includes('Name'))).toBe(true)
       },
     )
   })
@@ -886,7 +1466,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value text {
+        project view Text text as Value {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -921,7 +1501,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        view Text Value text {
+        view Text text as Value {
           render inject ${tsFence}
             return null
           ${fence}
@@ -944,7 +1524,7 @@ Describe('Tao validator structural diagnostics', () => {
         view MainView { }
       `,
         'views/Views.tao': `
-        view Text Value text {
+        view Text text as Value {
           render inject ${tsFence}
             return null
           ${fence}
@@ -969,7 +1549,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value text {
+        project view Text text as Value {
           render inject Value, Value ${tsFence}
             return null
           ${fence}
@@ -998,7 +1578,7 @@ Describe('Tao validator structural diagnostics', () => {
           render Text "Hello"
         }
       `,
-        'Views.tao': 'view Text Value text {',
+        'Views.tao': 'view Text text as Value {',
       },
       async result => {
         Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
@@ -1040,7 +1620,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value text {
+        project view Text text as Value {
           render MissingView
         }
       `,
@@ -1066,7 +1646,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value text {
+        project view Text text as Value {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -1080,10 +1660,13 @@ Describe('Tao validator structural diagnostics', () => {
   })
 
   Test('rejects imports that collide with declarations in the importing file', async () => {
-    const result = await testValidateCodeWithErrors(`
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
       app MyApp { view MainView }
-      use Text from ./
-      view Text Value text {
+      use Text from ./Views.tao
+      view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -1091,9 +1674,19 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Text "Hello"
       }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(useValidationMessages.localDeclarationCollision('Text'))
+    `,
+        'Views.tao': `
+      project view Text text as Value {
+        render inject Value ${tsFence}
+          return <RN.Text>{Value}</RN.Text>
+        ${fence}
+      }
+    `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(useValidationMessages.localDeclarationCollision('Text'))
+      },
+    )
   })
 
   Test('rejects app imports', async () => {
@@ -1175,7 +1768,7 @@ Describe('Tao validator structural diagnostics', () => {
 
   Test('rejects imports that match multiple visible declarations in an import target', async () => {
     const sharedTextSource = `
-      project view Text Value text {
+      project view Text text as Value {
         render inject ${tsFence}
           return null
         ${fence}
@@ -1208,7 +1801,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Greeting from ./
         alias Local = Greeting
-        view Text Value text {
+        view Text text as Value {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -1247,7 +1840,7 @@ Describe('Tao validator structural diagnostics', () => {
         project view MainView {
           render Text PackageTitle
         }
-        view Text Value text {
+        view Text text as Value {
           render inject Value ${tsFence}
             return null
           ${fence}
@@ -1408,7 +2001,7 @@ Describe('Tao validator structural diagnostics', () => {
         project view MainView {
           render Text NestedAlias
         }
-        view Text Value text {
+        view Text text as Value {
           render inject Value ${tsFence}
             return null
           ${fence}
@@ -1533,6 +2126,35 @@ Describe('Tao validator use organization diagnostics', () => {
     Expect(validationErrorMessages(result)).toEqual([])
     Expect(warning?.severity).toBe('warning')
     Expect(warning?.code).toBe(useValidationCodes.unusedImport)
+  })
+
+  Test('treats imported shorthand item field types as used', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        use Name from ./Types.tao
+        app MyApp { view MainView }
+        type Person is {
+          Name
+        }
+        view MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'Types.tao': `
+        project type Name is text
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+        Expect(
+          result.diagnostics.some(diagnostic => diagnostic.message === useValidationMessages.unusedImport('Name')),
+        ).toBe(false)
+      },
+    )
   })
 
   Test('warns about use statements after other top-level statements', async () => {

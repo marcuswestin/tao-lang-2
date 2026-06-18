@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import ASTUtils, { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { viewValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
@@ -35,14 +35,15 @@ function validateViewDeclaration(view: AST.RenderableDeclaration, ctx: Validatio
 function validateDuplicateParameters(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
   const seen = new Set<string>()
   for (const parameter of view.parameterList?.parameters ?? []) {
-    if (reservedParameterNames.has(parameter.name)) {
-      ctx.error(viewValidationMessages.reservedParameter(parameter.name), parameter)
+    const name = Type.parameterName(parameter)
+    if (reservedParameterNames.has(name)) {
+      ctx.error(viewValidationMessages.reservedParameter(name), parameter)
     }
-    if (seen.has(parameter.name)) {
-      ctx.error(viewValidationMessages.duplicateParameter(parameter.name), parameter)
+    if (seen.has(name)) {
+      ctx.error(viewValidationMessages.duplicateParameter(name), parameter)
       continue
     }
-    seen.add(parameter.name)
+    seen.add(name)
   }
 }
 
