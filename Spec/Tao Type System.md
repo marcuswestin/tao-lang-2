@@ -2,7 +2,7 @@
 
 This document describes the (intended) Tao type system.
 
-Current implementation status: this repo currently supports `text` and `number` literals, `view` and `layout` declarations, `alias` values, primitive `text`/`number` parameters, value references, positional render arguments, and basic invocation type validation. Boolean, item, list, action, custom type declarations, typed construction, operators, interpolation, stateful values, actions, functions, `match`, and by-type argument matching remain future work.
+Current implementation status: this repo currently supports `text` and `number` literals, coarse `list` and `item` values, `view` and `layout` declarations, `alias` values, simple custom `type` declarations, typed primitive/list/item construction, `as` type-fixing, item member access, type-first parameters, value references, and exact-first type-based render/item-field binding. Boolean, typed list elements, operators, interpolation, stateful values, actions, functions, `match`, optional item fields, item extension, and richer collection inference remain future work.
 
 Any commented out code is WIP material and should be ignored.
 
@@ -21,8 +21,8 @@ Each one can be expressed as "literals", e.g
 - `number`: `1`, `-99`, `5,100,234,110`, `3.14`
 - `text`: `"Hello World"`, `"Tao"`, `""` (empty text)
 - `boolean`: `true`, `false`
-- `item`: `Person.{ Name."Ro", Age.40 }`, `Person.{ }` (empty item of type `Person`)
-- `list`: `[1, 2, 3]`, `[ ]` (empty list)
+- `item`: `Person.{ Name."Ro" Age.40 }`, `Person.{ }` (empty item of type `Person`)
+- `list`: `[1 2 3]`, `[ ]` (empty list)
 - `action`: `action Name { ... }` (declaration), `action { ... }` or `action.{ ... }` (inline)
 - `view`: `view Name { ... }` (declaration)
 
@@ -44,17 +44,17 @@ typeof text."100" => text
 
 // The `list` type:
 typeof list T => list T
-typeof [T, ...] => list T
-typeof [TypeA, TypeB, ...] => list TypeA | TypeB | ...
+typeof [T ...] => list T
+typeof [TypeA TypeB ...] => list TypeA | TypeB | ...
 // e.g:
-typeof [1, 2, 3] => list number
-typeof ["Hello", "World"] => list text
-typeof [1, "Hello", "World", true] => list number | text | boolean
-typeof [number, text] => list number | text
+typeof [1 2 3] => list number
+typeof ["Hello" "World"] => list text
+typeof [1 "Hello" "World" true] => list number | text | boolean
+typeof [number text] => list number | text
 
 // The `item` type:
-type Person is { Name, Age }
-typeof Person.{ Name."Ro", Age.40 }
+type Person is { Name Age }
+typeof Person.{ Name."Ro" Age.40 }
   => Person
 
 typeof boolean T => boolean
@@ -74,7 +74,7 @@ alias ExampleName = Name."Ro"
   => typeof ExampleName is Name // true
   => typeof ExampleName is text // false
   => text is Name // false
-type Person is { Name, Age }
+type Person is { Name Age }
 ```
 
 - `type <Type> is <Type>` for defining a new type, based on another
@@ -130,8 +130,8 @@ Some examples:
 ```tao
 1 + 2 => 3
 "Hello" + "World" => "HelloWorld"
-[1, 2, 3] - 2 => [1, 3]
-[1, 2, 3, 4, 5] - [2, 4] => [1, 3, 5]
+[1 2 3] - 2 => [1 3]
+[1 2 3 4 5] - [2 4] => [1 3 5]
 "Hello" * 2 => "HelloHello"
 true and true => true
 true and false => false
@@ -144,9 +144,9 @@ All other uses of these operators are blocked by Tao's type system:
 
 ```tao
 1 + "Hello" => Type Error!
-"Hello" + [1, 2, 3] => Type Error!
-[1, 2, 3] - "Hello" => Type Error!
-"Hello" * [1, 2, 3] => Type Error!
+"Hello" + [1 2 3] => Type Error!
+[1 2 3] - "Hello" => Type Error!
+"Hello" * [1 2 3] => Type Error!
 true and "Hello" => Type Error!
 true or "Hello" => Type Error!
 not "Hello" => Type Error!
@@ -440,14 +440,14 @@ Type.<Literal>       // constructs a typed value, e.g. Name."Ro", Age.40, Person
 `with` produces a new value by overlaying the right value onto the left value. For item values, matching properties from the right value replace matching properties from the left value, and properties that are only present on one side remain present in the result.
 
 ```tao
-type Person is { Name, Age }
+type Person is { Name Age }
 
-alias PersonA = Person.{ Name."A", Age.1 }
-alias PersonB = PersonA with Person.{ Name."B", Age.1 }
-  => Person.{ Name."B", Age.1 }
+alias PersonA = Person.{ Name."A" Age.1 }
+alias PersonB = PersonA with Person.{ Name."B" Age.1 }
+  => Person.{ Name."B" Age.1 }
 
 alias PersonC = PersonA with { Name."C" }
-  => Person.{ Name."C", Age.1 }
+  => Person.{ Name."C" Age.1 }
 ```
 
 In `Value with { ... }`, the bare item patch is interpreted in the type context of `Value`. Its properties are matched with the same rules as item construction. Scalar properties named in the overlay replace the inherited scalar value. Nested item properties merge recursively with the inherited nested item value. List and collection merge semantics are deferred; until explicit append/remove syntax exists, list-like properties replace as a whole. Overlays do not mutate the base value.
@@ -747,11 +747,11 @@ view ViewA match
 An item type has properties. Each property is a typed value. Item construction uses `Type.{ ... }`; bare `{ ... }` is reserved for bodies and content blocks. In a type definition, `ItemType + { ... }` creates a new item type by adding or refining properties from the right-hand shape.
 
 ```tao
-type Person is { Name, Age }
-type Person2 is { Name is text, Age } // creates type Person2.Name
+type Person is { Name Age }
+type Person2 is { Name is text Age } // creates type Person2.Name
 
-alias PersonA = Person.{ Name."A", Age.1 }
-alias PersonB = PersonA with Person.{ Name."B", Age.1 }
+alias PersonA = Person.{ Name."A" Age.1 }
+alias PersonB = PersonA with Person.{ Name."B" Age.1 }
 alias PersonC = PersonA with { Name."C" }
 ```
 
@@ -763,14 +763,14 @@ Item properties are matched with the same rules as view arguments. They are not 
 type FirstName is text
 type LastName is text
 type Age is number
-type Person is { FirstName, LastName, Age }
+type Person is { FirstName LastName Age }
 
-alias Person1 = Person.{ FirstName."Ro", LastName."Cat", Age.40 } // OK
-alias Person2 = Person.{ "Ro", 40 }                               // Type Error
-alias Person3 = Person.{ "Ro", "Cat", 40 }                        // Type Error
+alias Person1 = Person.{ FirstName."Ro" LastName."Cat" Age.40 } // OK
+alias Person2 = Person.{ "Ro" 40 }                              // Type Error
+alias Person3 = Person.{ "Ro" "Cat" 40 }                        // Type Error
 
 alias RoAge = Age.40
-alias Person4 = Person.{ FirstName."Ro", LastName."Cat", RoAge }   // OK, RoAge type-matches Age
+alias Person4 = Person.{ FirstName."Ro" LastName."Cat" RoAge }   // OK, RoAge type-matches Age
 ```
 
 Inline item property types create scoped property types:
@@ -781,14 +781,14 @@ alias Age 40
 
 type LastName is Name
 type FullNamePerson is Person + { LastName }
-alias FullNamePerson = FullNamePerson.{ Name, Age, LastName."Johnsson" }
+alias FullNamePerson = FullNamePerson.{ Name Age LastName."Johnsson" }
 
 type FullNamePerson2 is Person + { LastName is text }
 alias LastName "Petterson"
 
-alias Bad = FullNamePerson2.{ Name, Age, LastName }              // Type Error: LastName value is the outer LastName type
-alias OK = FullNamePerson2.{ Name, Age, LastName."West" }         // OK: LastName type resolves to the scoped property type
-alias OK2 = FullNamePerson2.{ Name, Age, text."West" as LastName } // OK: explicit type-fix to the scoped property type
+alias Bad = FullNamePerson2.{ Name Age LastName }              // Type Error: LastName value is the outer LastName type
+alias OK = FullNamePerson2.{ Name Age LastName."West" }         // OK: LastName type resolves to the scoped property type
+alias OK2 = FullNamePerson2.{ Name Age text."West" as LastName } // OK: explicit type-fix to the scoped property type
 
 type FullNamePerson3 is Person + { LastName }
 type FullNamePerson4 is Person + { LastName is FullNamePerson2.LastName }

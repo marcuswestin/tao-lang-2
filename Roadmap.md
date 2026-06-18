@@ -4,8 +4,9 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## MVP Roadmap
 
-- [ ] Add item/list/custom type MVP
+- [x] Add item/list/custom type MVP
   - Item/object literals, list literals, typed item constructors, simple custom type declarations, and field/member validation.
+  - Plan: `Roadmap/Add item list custom type MVP/Plan - Add item list custom type MVP.md`
 
 - [ ] Add layout/style arguments and app-shell baseline
   - `[gap 8, pad 12, width fill]`, runtime layout lowering, safe default app frame, safe area/keyboard basics, and deterministic cross-platform behavior.
