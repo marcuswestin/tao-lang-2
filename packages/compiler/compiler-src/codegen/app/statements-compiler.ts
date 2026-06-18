@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled } from '../codegen-util'
+import { type Compiled, genNoop } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
@@ -14,9 +14,15 @@ export default {
       LayoutDeclaration: Compile.LayoutDeclaration,
       ProjectDeclaration: Compile.ProjectDeclaration,
       RenderStatement: Compile.RenderStatement,
+      TypeDeclaration: Compile.TypeDeclaration,
       UseStatement: Compile.UseStatement,
       ViewDeclaration: Compile.ViewDeclaration,
       ViewRender: Compile.ViewRender,
     })
+  },
+
+  /** TypeDeclaration emits no runtime code; Tao named types are compile-time only. */
+  TypeDeclaration(): Compiled {
+    return genNoop()
   },
 } as const

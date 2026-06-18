@@ -1,5 +1,5 @@
+import { Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
 import { type Compiled, gen, genList, genName, genScopeName } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -22,15 +22,19 @@ export default {
 
   /** ParameterDeclaration compiles one Tao parameter into a generated React prop. */
   ParameterDeclaration(param: AST.ParameterDeclaration): Compiled {
-    return gen`${genName(param)}: ${Compile.ParameterType(param)}`
+    return gen`${genName({ name: Type.parameterName(param) })}: ${Compile.ParameterType(param)}`
   },
 
   /** ParameterType returns the generated runtime value type for a Tao parameter. */
   ParameterType(param: AST.ParameterDeclaration): Compiled {
-    return Switch.value(param.type, {
-      number: () => gen`TR.Value<number>`,
-      text: () => gen`TR.Value<string>`,
-    })
+    const type = Type.ofParameter(param)
+    if (type.kind === 'primitive') {
+      return type.primitive === 'number' ? gen`TR.Value<number>` : gen`TR.Value<string>`
+    }
+    if (type.kind === 'list') {
+      return gen`TR.Value<any[]>`
+    }
+    return gen`TR.Value<Record<string, any>>`
   },
 
   /** RenderBlockBody compiles render child setup statements followed by JSX children. */
@@ -47,7 +51,8 @@ export default {
 
   /** ViewParameterBinding compiles one view parameter into the current generated scope. */
   ViewParameterBinding(parameter: AST.ParameterDeclaration): Compiled {
-    return gen`${genScopeName(parameter)} = _ViewProps.${genName(parameter)}`
+    const name = { name: Type.parameterName(parameter) }
+    return gen`${genScopeName(name)} = _ViewProps.${genName(name)}`
   },
 } as const
 

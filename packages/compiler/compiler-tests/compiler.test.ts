@@ -12,7 +12,7 @@ Describe('Tao compiler', () => {
       view MainView {
         render Text "Hello"
       }
-      view Text Value text {
+      view Text text as Value {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -36,7 +36,7 @@ Describe('Tao compiler', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value text {
+        project view Text text as Value {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -62,7 +62,7 @@ Describe('Tao compiler', () => {
         project view MainView {
           render Text "Package import"
         }
-        view Text Value text {
+        view Text text as Value {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -94,7 +94,7 @@ Describe('Tao compiler', () => {
         project view MainView {
           render Text PackageTitle
         }
-        view Text Value text {
+        view Text text as Value {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -107,6 +107,85 @@ Describe('Tao compiler', () => {
           'modules/feature/@foo/forms/Main.tao.tsx',
         )
         Expect(compiled['feature/@foo/Title.tao'].relativePath).toBe('modules/feature/@foo/Title.tao.tsx')
+      },
+    )
+  })
+
+  Test('compiles custom types, list and item constructors, casts, and member access', async () => {
+    const compiled = await Compiler.compileCode(`
+      app TypeApp { view MainView }
+      type Name is text
+      type Tags is list
+      type Job is {
+        Title is text
+      }
+      type Person is {
+        Name
+        Tags
+        Job
+      }
+      type InlineJob is {
+        Role is text
+      }
+      type CurrentJob is InlineJob
+      alias DisplayName = text."Ada" as Name
+      alias DemoPerson = Person.{
+        DisplayName
+        Tags.["compiler" "runtime"]
+        Job.{ Title."Engineer" }
+      }
+      alias DemoCurrentJob = CurrentJob.{ Role."Engineer" }
+      view MainView {
+        render Stack {
+          TextValue DemoPerson.Name
+          ListValue DemoPerson.Tags
+        }
+      }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      view TextValue text as Value {
+        render inject Value ${tsFence}
+          return <RN.Text>{Value}</RN.Text>
+        ${fence}
+      }
+      view ListValue list as Values {
+        render inject Values ${tsFence}
+          return <RN.Text>{Values.join(", ")}</RN.Text>
+        ${fence}
+      }
+    `)
+
+    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.validation.diagnostics).toEqual([])
+  })
+
+  Test('compiles type-only imports without requiring runtime type bindings', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app TypeImportApp { view MainView }
+        use Name from ./Types.tao
+        alias Name = Name."Ada"
+        view MainView {
+          render TextValue Name
+        }
+        view TextValue text as Value {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+        'Types.tao': `
+        project type Name is text
+      `,
+      },
+      compiled => {
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['Types.tao'].relativePath).toBe('modules/Types.tao.tsx')
       },
     )
   })
@@ -134,7 +213,7 @@ Describe('Tao compiler', () => {
         project view BView {
           render Leaf SharedTitle
         }
-        view Leaf Value text {
+        view Leaf text as Value {
           render inject Value ${tsFence}
             return null
           ${fence}
@@ -151,7 +230,7 @@ Describe('Tao compiler', () => {
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      project view ${name} Value text {
+      project view ${name} text as Value {
         render inject Value ${tsFence}
           return null
         ${fence}

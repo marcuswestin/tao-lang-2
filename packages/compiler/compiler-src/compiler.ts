@@ -118,6 +118,7 @@ function compileSourceFile(
   const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
   const exportedNames = file.ast.statements
     .filter(AST.isExportableDeclaration)
+    .filter(declarationEmitsRuntimeBinding)
     .filter(declarationVisibleOutsideFile)
     .map((statement: AST.Declaration) => statement.name)
 
@@ -201,6 +202,7 @@ function resolveImports(
       const target = targets.find(candidate =>
         candidate.ast.statements.some(statement =>
           AST.isDeclaration(statement)
+          && declarationEmitsRuntimeBinding(statement)
           && statement.name === importedName
           && Packages.isVisible(Packages.visibilityOf(statement), resolution)
         )
@@ -226,4 +228,10 @@ function relativeImportPath(fromOutputPath: string, toOutputPath: string): strin
 
 function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {
   return Packages.visibilityOf(declaration) !== undefined
+}
+
+function declarationEmitsRuntimeBinding(
+  declaration: AST.Declaration,
+): declaration is AST.AliasDeclaration | AST.RenderableDeclaration {
+  return AST.isAliasDeclaration(declaration) || AST.isRenderableDeclaration(declaration)
 }

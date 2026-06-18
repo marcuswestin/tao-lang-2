@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import ASTUtils, { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, genJoin, genName, genScopeName } from '../codegen-util'
@@ -49,7 +49,7 @@ export default {
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
   InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen` ${genName(pair.parameter)}={${Compile.Argument(pair.argument)}}`
+    return gen` ${genName({ name: Type.parameterName(pair.parameter) })}={${Compile.Argument(pair.argument)}}`
   },
 
   /** Argument compiles a Tao render argument into a runtime value expression. */

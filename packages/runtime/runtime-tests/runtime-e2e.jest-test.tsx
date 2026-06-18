@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { AfterEach, Describe, Test } from '@shared/test'
+import { AfterEach, Describe, Expect, Test } from '@shared/test'
 import { cleanup } from '@testing-library/react-native'
 import { compileAndRenderApp, ExpectScreen, testCompileApp, testCompileFiles } from './test-compile-app'
 
@@ -15,6 +15,25 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Nested scope greeting')
     ExpectScreen(screen).toHaveText('Hello World')
     ExpectScreen(screen).toHaveText('Launch count: 3')
+    ExpectScreen(screen).toHaveText('Fixed Kitchen type')
+    ExpectScreen(screen).toHaveText('Typed Kitchen')
+    ExpectScreen(screen).toHaveText('item, list, type')
+  })
+
+  Test('compiles and renders Type System Tests custom values', async () => {
+    const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
+    const screen = await compileAndRenderApp(typeSystemTestsPath)
+
+    ExpectScreen(screen).toHaveText('Open: 1')
+    ExpectScreen(screen).toHaveText('Done: 2')
+    Expect(screen.getAllByText('Ada').length).toBeGreaterThan(0)
+    ExpectScreen(screen).toHaveText('40')
+    Expect(screen.getAllByText('Compiler engineer').length).toBeGreaterThan(0)
+    ExpectScreen(screen).toHaveText('types, items, lists')
+    ExpectScreen(screen).toHaveText('People in the team: 2')
+    ExpectScreen(screen).toHaveText('2 team member(s)')
+    ExpectScreen(screen).toHaveText('Grace')
+    ExpectScreen(screen).toHaveText('Constructed primitive text')
   })
 
   Test('compiles and renders runtime stdlib imports', async () => {
@@ -73,7 +92,7 @@ Describe('Expo runtime', () => {
               render Text ImportedTitle
           }
 
-          view Text Value text {
+          view Text text as Value {
               render inject Value \`\`\`ts
                   return <RN.Text>{Value}</RN.Text>
               \`\`\`
@@ -100,7 +119,7 @@ Describe('Expo runtime', () => {
             render Text Greeting { }
         }
 
-        view Text Value text {
+        view Text text as Value {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
@@ -136,7 +155,7 @@ Describe('Expo runtime', () => {
             \`\`\`
         }
 
-        view Text Value text {
+        view Text text as Value {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`

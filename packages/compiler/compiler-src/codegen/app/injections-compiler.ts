@@ -1,7 +1,7 @@
-import ASTUtils from '@ast-utils'
+import ASTUtils, { Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch, Text } from '@shared'
-import { type Compiled, gen, genJoin, genName, genTextLines, resolveRef } from '../codegen-util'
+import { Text } from '@shared'
+import { type Compiled, gen, genJoin, genName, genTextLines } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
@@ -34,24 +34,14 @@ function CompileInjectionValue(argument: AST.InjectionArgument): Compiled {
 }
 
 function CompileExpressionJsType(expression: AST.Expression): Compiled {
-  return Switch.type(expression, {
-    NumberLiteral: () => gen`number`,
-    StringLiteral: () => gen`string`,
-    ValueReference: reference => {
-      const target = resolveRef(reference.target)
-      return Switch.type(target, {
-        AliasDeclaration: alias => CompileExpressionJsType(alias.value),
-        ParameterDeclaration: parameter => CompilePrimitiveJsType(parameter.type),
-      })
-    },
-  })
-}
-
-function CompilePrimitiveJsType(type: AST.PrimitiveType): Compiled {
-  return Switch.value(type, {
-    number: () => gen`number`,
-    text: () => gen`string`,
-  })
+  const type = Type.ofExpression(expression)
+  if (type.kind === 'primitive') {
+    return type.primitive === 'number' ? gen`number` : gen`string`
+  }
+  if (type.kind === 'list') {
+    return gen`any[]`
+  }
+  return gen`any`
 }
 
 function stripTsFence(code: string): string {

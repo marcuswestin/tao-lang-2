@@ -27,7 +27,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           project view MainView {
             render Text Title
           }
-          view Text Value text {
+          view Text text as Value {
             render inject Value ${tsFence}
               return null
             ${fence}
