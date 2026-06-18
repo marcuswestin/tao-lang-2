@@ -1,6 +1,7 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { ASTStructure } from '@parser/ASTStructure'
+import { Switch } from '@shared'
 
 /** DeclarationOrder groups source-order and ownership checks for value declarations. */
 export const DeclarationOrder = {
@@ -21,9 +22,15 @@ export const DeclarationOrder = {
 
 /** valueReferences returns all value references owned by an expression. */
 function valueReferences(value: AST.Expression): AST.ValueReference[] {
-  if (AST.isValueReference(value)) {
-    return [value]
-  }
+  return Switch.type(value, {
+    ActionExpression: expressionValueReferences,
+    NumberLiteral: expressionValueReferences,
+    StringLiteral: expressionValueReferences,
+    ValueReference: reference => [reference],
+  })
+}
+
+function expressionValueReferences(value: AST.Expression): AST.ValueReference[] {
   return ASTUtils.streamAllContents(value).filter(AST.isValueReference)
 }
 

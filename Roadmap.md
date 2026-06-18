@@ -7,7 +7,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Add item/list/custom type MVP
   - Item/object literals, list literals, typed item constructors, simple custom type declarations, and field/member validation.
 
-- [ ] Add layout/style arguments and app-shell baseline
+- [x] Add layout clauses and app-shell baseline
   - `[gap 8, pad 12, width fill]`, runtime layout lowering, safe default app frame, safe area/keyboard basics, and deterministic cross-platform behavior.
 
 - [x] Add state and action MVP
@@ -73,7 +73,11 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
+- [ ] /refactor all test files that are getting really big
+- [ ] Implement Dev menu etc in tao
 - [ ] Create "validators" directory for all the "*-validator.ts" files
+- [ ] Cleanup TR package inter-dependencies and general structure for cleanliness
+- [ ] Go through each TR/ file, and review them slowly, and simplify and cleanup code where possible.
 - [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
@@ -85,8 +89,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
-- [ ] Add layout/style arguments and default app-shell UI baseline
-  - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `__tao.layout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
+- [x] Add layout clauses and default app-shell UI baseline
+  - Import previous-repo layout modifiers as Tao-owned clauses such as `[gap 8, pad 12, width fill]`, runtime `__tao.layout` forwarding, app-shell content frame, and deterministic default layout for stdlib primitives.
 - [ ] Remove magical strings
 - [ ] Add remaining control mini slice
   - Import `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.

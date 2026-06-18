@@ -11,12 +11,12 @@ view MainView {
    state KitchenCount = 0
    alias LocalText = "Text from a local alias"
    alias OuterGreeting = Greeting
-   render Stack {
+   render Stack [gap 8, pad 12, fill] {
       alias Greeting = "Nested scope greeting"
       Text OuterGreeting { }
       Text LocalText
       Text Greeting
-      Text "Hello World"
+      Text "Hello World" [width fill]
       CountText LaunchCount
       Number KitchenCount
       Button "Add kitchen count", action {

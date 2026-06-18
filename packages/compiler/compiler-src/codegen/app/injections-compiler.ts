@@ -72,7 +72,7 @@ function CompileExpressionJsType(
 }
 
 function CompilePrimitiveJsType(type: AST.PrimitiveType): Compiled {
-  return Switch.value(type, {
+  return Switch(type, {
     action: () => gen`TR.ActionValue`,
     number: () => gen`number`,
     text: () => gen`string`,

@@ -20,7 +20,8 @@ deps:
   bun install
 
 # Run all tests
-test: _compile-kitchen-sink-app _test
+test PATTERN="": _compile-kitchen-sink-app
+  just _test '{{PATTERN}}'
 
 # Format code
 fmt: _parser-gen
@@ -84,9 +85,9 @@ _dprint-check:
 _typecheck:
   bunx tsc --build packages/*/tsconfig.json
 
-_test:
-  bun test packages/*/*-tests/*.test.ts
-  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false
+_test PATTERN="":
+  bun test packages/*/*-tests/*.test.ts --test-name-pattern='{{PATTERN}}'
+  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false --testNamePattern="{{PATTERN}}"
 
 _android-emulator:
   ./dev android-emulator

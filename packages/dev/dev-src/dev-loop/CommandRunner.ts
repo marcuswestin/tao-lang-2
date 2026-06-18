@@ -1,5 +1,5 @@
 import { Errors, HCI } from '@shared'
-import Commands from './Commands'
+import Commands from './keyboard-input/Commands'
 
 let commandRunning = false
 
@@ -20,6 +20,13 @@ function beginCommand(): boolean {
 /** endCommand finishes the active exclusive dev-loop command. */
 function endCommand(): void {
   commandRunning = false
+}
+
+/** assertCommandRunning requires an exclusive dev-loop command to own the current operation. */
+function assertCommandRunning(operation: string): void {
+  if (!commandRunning) {
+    throw new Errors.UnexpectedBehaviorError(`${operation} requires an active dev-loop command.`)
+  }
 }
 
 /** runNonInteractiveCommand runs one command while other dev-loop commands are ignored. */
@@ -45,6 +52,7 @@ async function runNonInteractiveCommand(
 
 /** CommandRunner coordinates exclusive dev-loop command execution. */
 const CommandRunner = {
+  assertCommandRunning,
   beginCommand,
   endCommand,
   isCommandRunning,

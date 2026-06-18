@@ -53,6 +53,34 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
+  Test('compiles layout clauses into a generated app file', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Col, Row from @tao/ui
+      app LayoutApp { view MainView }
+      layout Screen {
+        render Col [gap 4] {
+          Text "Wrapped"
+        }
+      }
+      view Text Value text {
+        render inject Value ${tsFence}
+          return TR.Views.Text({ __tao: _ViewProps.__tao, children: [Value] })
+        ${fence}
+      }
+      view MainView {
+        render Col [fill, content top stretch, gap 12, pad 16, width fill] {
+          Row [content spread-inset center, gap 8] {
+            Text "Layout" [width fill]
+          }
+          Screen [content center]
+        }
+      }
+    `)
+
+    Expect(compiled.files.map(file => file.relativePath)).toContain('App.tsx')
+    Expect(compiled.validation.diagnostics).toEqual([])
+  })
+
   Test('compiles sibling Tao file dependencies', async () => {
     await withCompiledFiles(
       'Main.tao',

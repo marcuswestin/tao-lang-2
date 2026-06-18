@@ -1,9 +1,9 @@
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
-import { handleCommandKey } from './CommandKeys'
-import Commands from './Commands'
 import { DevFileWatcher } from './DevFileWatcher'
-import { Expo, ExpoServer } from './Expo'
-import { RawKeyInput } from './RawKeyInput'
+import { ExpoRunner } from './expo-runner/ExpoRunner'
+import { handleCommandKey } from './keyboard-input/CommandKeys'
+import Commands from './keyboard-input/Commands'
+import { RawKeyInput } from './keyboard-input/RawKeyInput'
 import Run from './Run'
 
 const DEFAULT_APP_PATH = 'Apps/Kitchen Sink/Kitchen Sink.tao'
@@ -14,7 +14,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
   const repoRoot = Repo.getRoot()
   const appPath = await resolveDevAppPath(appPathInput)
   const runtimeRoot = FS.repoPath(RUNTIME_PACKAGE_PATH)
-  const expoServer = new ExpoServer(runtimeRoot)
+  const expoServer = ExpoRunner.createServer(runtimeRoot)
   let keyInput: RawKeyInput | undefined
   let watcher: DevFileWatcher | undefined
   let finished = false
@@ -55,6 +55,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
       appPath,
       finish,
       keyInput: keyInput!,
+      repoRoot,
       stopServices,
     })
   })
@@ -90,7 +91,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
     watcher = new DevFileWatcher(appPath, shouldRunParserGen => {
       void Run.compileApp(repoRoot, appPath, 'file change', shouldRunParserGen)
     })
-    await Expo.ensureMetroPortFree()
+    await ExpoRunner.ensureMetroPortFree()
     if (shouldStop()) {
       return await done
     }
@@ -98,7 +99,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
     if (shouldStop()) {
       return await done
     }
-    if (!await Expo.waitForMetro(shouldStop)) {
+    if (!await ExpoRunner.waitForMetro(shouldStop)) {
       return await done
     }
     if (shouldStop()) {
@@ -108,7 +109,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
     if (!keyInput.start()) {
       HCI.logProcessInfo('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
-    void Expo.openStartupTargets(shouldStop)
+    void ExpoRunner.openStartupTargets(shouldStop)
     return await done
   } finally {
     removeSigint()

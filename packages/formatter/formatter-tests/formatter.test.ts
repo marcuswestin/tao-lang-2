@@ -138,6 +138,18 @@ Describe('Tao formatter use statements', () => {
 })
 
 Describe('Tao formatter views and blocks', () => {
+  Test('formats layout clauses on render sites', async () => {
+    await testFormatCode(
+      `view MainView{render Col[fill,content top spread-inset,gap 12,pad 16,margin horizontal 4,width fill]{Text "Label"[width fill,height fill]}}`,
+      `
+        view MainView {
+           render Col [fill, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+              Text "Label" [width fill, height fill]
+        }  }
+      `,
+    )
+  })
+
   Test('indents nested render blocks and collapses closing braces', async () => {
     await testFormatCode(
       `view MainView{render Stack{Text "a"\nText "b"}}`,

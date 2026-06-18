@@ -1,9 +1,9 @@
-import { Packages } from '@ast-utils'
+import ASTUtils, { Packages } from '@ast-utils'
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { Workspace } from '@workspace'
 import { AST } from '../parser-src/parser'
-import { testParseCode, testParseSyntax } from './test-parse'
+import { parseCodeWithErrors, testParseCode, testParseSyntax } from './test-parse'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
 const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
@@ -153,6 +153,62 @@ Describe('minimal Tao parser', () => {
     Expect.Is(secondChild, AST.isViewRender)
     Expect(firstChild.view.ref?.name).toBe('Text')
     Expect(secondChild.view.ref?.name).toBe('Text')
+  })
+
+  Test('parses layout clauses on render sites', async () => {
+    const parseResult = await testParseCode(`
+      app MyApp { view MainView }
+      view MainView {
+        render Col [fill, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+          Text "Label" [width fill, height fill]
+        }
+      }
+      layout Col {
+        render inject \`\`\`ts
+          return null
+        \`\`\`
+      }
+      view Text Value text {
+        render inject \`\`\`ts
+          return null
+        \`\`\`
+      }
+    `)
+    const mainView = parseResult.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'MainView'
+    )
+    Expect.Is(mainView, AST.isViewDeclaration)
+    const render = mainView.block.statements[0]
+    Expect.Is(render, AST.isRenderStatement)
+    const entries = render.layoutClause?.entries ?? []
+    Expect(entries).toHaveLength(6)
+    Expect(layoutEntryTerms(entries[0]!)).toEqual(['fill'])
+    Expect(layoutEntryTerms(entries[1]!)).toEqual(['content', 'top', 'spread-inset'])
+    Expect(layoutEntryTerms(entries[2]!)).toEqual(['gap', 12])
+    Expect(layoutEntryTerms(entries[3]!)).toEqual(['pad', 16])
+    Expect(layoutEntryTerms(entries[4]!)).toEqual(['margin', 'horizontal', 4])
+    Expect(layoutEntryTerms(entries[5]!)).toEqual(['width', 'fill'])
+
+    const child = render.block?.statements.find(AST.isViewRender)
+    Expect.Is(child, AST.isViewRender)
+    Expect(child.layoutClause?.entries.map(layoutEntryTerms)).toEqual([
+      ['width', 'fill'],
+      ['height', 'fill'],
+    ])
+  })
+
+  Test('rejects empty layout clauses', async () => {
+    await parseCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Col []
+      }
+      layout Col {
+        render inject \`\`\`ts
+          return null
+        \`\`\`
+      }
+    `)
   })
 
   Test('parses aliases, number literals, and value references', async () => {
@@ -471,3 +527,7 @@ Describe('minimal Tao parser', () => {
     ])
   })
 })
+
+function layoutEntryTerms(entry: AST.LayoutEntry): Array<string | number> {
+  return ASTUtils.Layout.entryValues(entry)
+}

@@ -70,8 +70,9 @@ function validateUseStatement(
     return
   }
 
-  const workspaceFilePaths = new Set(ctx.workspaceFiles.map(workspaceFilePath))
-  const targetFiles = ctx.workspaceFiles.filter(file => {
+  const workspaceFiles = uniqueWorkspaceFiles(ctx.workspaceFiles)
+  const workspaceFilePaths = new Set(workspaceFiles.map(workspaceFilePath))
+  const targetFiles = workspaceFiles.filter(file => {
     return Packages.targetMatches(resolution, {
       filePath: workspaceFilePath(file),
       workspaceFilePaths,
@@ -224,7 +225,7 @@ export function validateVisibleDeclarations(
 ): void {
   const declarationsByFolder = new Map<string, Map<string, VisibleDeclarationRecord[]>>()
   const targetDocument = targetFile ? ASTUtils.getDocument(targetFile) : undefined
-  for (const file of ctx.workspaceFiles) {
+  for (const file of uniqueWorkspaceFiles(ctx.workspaceFiles)) {
     const document = ASTUtils.getDocument(file)
     const folderPath = FS.dirname(document.uri.path)
     const visibleDeclarations = file.statements
@@ -260,4 +261,8 @@ export function validateVisibleDeclarations(
 
 function workspaceFilePath(file: AST.TaoFile): string {
   return ASTUtils.getDocument(file).uri.path
+}
+
+function uniqueWorkspaceFiles(files: readonly AST.TaoFile[]): AST.TaoFile[] {
+  return [...new Map(files.map(file => [workspaceFilePath(file), file])).values()]
 }

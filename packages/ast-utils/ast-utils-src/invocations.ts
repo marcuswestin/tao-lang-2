@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Switch } from '@shared'
 
 /** RenderInvocationPair declares one positional render argument-to-parameter pairing. */
 export type InvocationPair = {
@@ -57,38 +58,24 @@ type ArgumentListOwner = {
 export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvocation {
   const view = render.view?.ref
   if (!view) {
-    return {
-      render,
-      pairs: [],
-    }
+    return { render, pairs: [] }
   }
 
   const inputs = invocationInputs(view, render)
-
-  return {
-    render,
-    view,
-    pairs: pairInvocationArguments(inputs),
-  }
+  const pairs = pairInvocationArguments(inputs)
+  return { render, view, pairs }
 }
 
 /** resolveActionInvocation resolves a named action call and positional argument bindings. */
 export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedActionInvocation {
   const target = resolveActionTarget(invocation.action)
   if (target.kind !== 'named') {
-    return {
-      invocation,
-      pairs: [],
-    }
+    return { invocation, pairs: [] }
   }
 
   const inputs = invocationInputs(target.action, invocation)
-
-  return {
-    invocation,
-    action: target.action,
-    pairs: pairInvocationArguments(inputs),
-  }
+  const pairs = pairInvocationArguments(inputs)
+  return { invocation, action: target.action, pairs }
 }
 
 /** invocationArity returns the argument, parameter, and matched-pair counts for an invocation. */
@@ -97,12 +84,9 @@ export function invocationArity(
   target: ParameterListOwner,
   source: ArgumentListOwner,
 ): InvocationArity {
-  const inputs = invocationInputs(target, source)
-  return {
-    parameters: inputs.parameters,
-    pairCount: invocation.pairs.length,
-    args: inputs.args,
-  }
+  const { parameters, args } = invocationInputs(target, source)
+  const pairCount = invocation.pairs.length
+  return { parameters, pairCount, args }
 }
 
 /** resolveActionTarget classifies an expression used as a Tao action value. */
@@ -125,32 +109,44 @@ function pairInvocationArguments({ parameters, args }: InvocationInputs): Invoca
   }))
 }
 
+const UnresolvedActionTarget: ResolvedActionTarget = { kind: 'unresolved' }
 function resolveActionTargetWithSeenAliases(
   expression: AST.Expression | undefined,
   seenAliases = new Set<AST.AliasDeclaration>(),
 ): ResolvedActionTarget {
   if (!expression) {
+    return UnresolvedActionTarget
+  }
+  return Switch.type(expression, {
+    ActionExpression: () => ({ kind: 'dynamic' }),
+    NumberLiteral: () => ({ kind: 'unresolved' }),
+    StringLiteral: () => ({ kind: 'unresolved' }),
+    ValueReference: valueReference => resolveActionTargetReference(valueReference, seenAliases),
+  })
+}
+
+function resolveActionTargetReference(
+  reference: AST.ValueReference,
+  seenAliases: Set<AST.AliasDeclaration>,
+): ResolvedActionTarget {
+  if (!reference.target.ref) {
+    return UnresolvedActionTarget
+  }
+  return Switch.type(reference.target.ref, {
+    ActionDeclaration: action => ({ kind: 'named', action }),
+    AliasDeclaration: alias => resolveAliasActionTarget(alias, seenAliases),
+    ParameterDeclaration: parameter => parameter.type === 'action' ? { kind: 'dynamic' } : { kind: 'unresolved' },
+    StateDeclaration: () => ({ kind: 'unresolved' }),
+  })
+}
+
+function resolveAliasActionTarget(
+  target: AST.AliasDeclaration,
+  seenAliases: Set<AST.AliasDeclaration>,
+): ResolvedActionTarget {
+  if (seenAliases.has(target)) {
     return { kind: 'unresolved' }
   }
-  if (AST.isActionExpression(expression)) {
-    return { kind: 'dynamic' }
-  }
-  if (!AST.isValueReference(expression)) {
-    return { kind: 'unresolved' }
-  }
-  const target = expression.target.ref
-  if (AST.isActionDeclaration(target)) {
-    return { kind: 'named', action: target }
-  }
-  if (AST.isParameterDeclaration(target) && target.type === 'action') {
-    return { kind: 'dynamic' }
-  }
-  if (AST.isAliasDeclaration(target)) {
-    if (seenAliases.has(target)) {
-      return { kind: 'unresolved' }
-    }
-    seenAliases.add(target)
-    return resolveActionTargetWithSeenAliases(target.value, seenAliases)
-  }
-  return { kind: 'unresolved' }
+  seenAliases.add(target)
+  return resolveActionTargetWithSeenAliases(target.value, seenAliases)
 }

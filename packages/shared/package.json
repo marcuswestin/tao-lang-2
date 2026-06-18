@@ -4,6 +4,7 @@
   "type": "module",
   "module": "shared-src/shared.ts",
   "exports": {
-    ".": "./shared-src/shared.ts"
+    ".": "./shared-src/shared.ts",
+    "./core": "./shared-src/core/shared-core.ts"
   }
 }

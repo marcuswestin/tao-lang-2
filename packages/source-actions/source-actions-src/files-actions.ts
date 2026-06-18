@@ -28,12 +28,15 @@ function isUseSlice(slice: StatementSlice<AST.Statement>): slice is StatementSli
   return AST.isUseStatement(slice.statement)
 }
 
+const ProjectStatementRank = 0
+const AppDeclarationRank = 1
+const DefaultStatementRank = 2
 function statementRank(statement: AST.Statement): number {
-  if (AST.isProjectDeclaration(statement)) {
-    return 0
-  } else if (AST.isAppDeclaration(statement)) {
-    return 1
-  } else {
-    return 2
-  }
+  return (
+    AST.isProjectDeclaration(statement)
+      ? ProjectStatementRank
+      : AST.isAppDeclaration(statement)
+      ? AppDeclarationRank
+      : DefaultStatementRank
+  )
 }

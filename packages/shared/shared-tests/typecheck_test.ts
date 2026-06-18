@@ -26,15 +26,35 @@ type Item =
 
 declare const item: Item
 
+const callableRendered: string = Switch<'text' | 'count', string>('text', {
+  text: () => 'text',
+  count: () => 'count',
+})
+void callableRendered
+
 const rendered: string = Switch.type(item, {
   text: text => text.value,
   count: count => count.value.toString(),
 })
 void rendered
 
+declare const optionalItem: Item | undefined
+const maybeRendered: string = Switch.typeMaybe(optionalItem, {
+  text: text => text.value,
+  count: count => count.value.toString(),
+  undefined: () => 'missing',
+})
+void maybeRendered
+
 // @ts-expect-error Missing the count handler must remain a type error.
 Switch.type(item, {
   text: text => text.value,
+})
+
+// @ts-expect-error Missing the undefined handler must remain a type error.
+Switch.typeMaybe(optionalItem, {
+  text: text => text.value,
+  count: count => count.value.toString(),
 })
 
 const mode: string = Switch.property(item, 'mode', {
@@ -44,7 +64,7 @@ const mode: string = Switch.property(item, 'mode', {
 void mode
 
 declare const optionalMode: 'raw' | undefined
-const optionalModeName: string = Switch.value(optionalMode, {
+const optionalModeName: string = Switch(optionalMode, {
   raw: () => 'raw',
   undefined: () => 'normal',
 })

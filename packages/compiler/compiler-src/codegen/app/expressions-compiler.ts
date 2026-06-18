@@ -16,12 +16,12 @@ export const ExpressionsCompiler = {
 
   /** StringLiteral compiles a Tao string literal into a Tao text value. */
   StringLiteral(str: AST.StringLiteral): Compiled {
-    return gen`new TR.Value(${JSON.stringify(str.value)})`
+    return gen`TR.Value(${JSON.stringify(str.value)})`
   },
 
   /** NumberLiteral compiles a Tao number literal into a Tao number value. */
   NumberLiteral(num: AST.NumberLiteral): Compiled {
-    return gen`new TR.Value(${JSON.stringify(num.value)})`
+    return gen`TR.Value(${JSON.stringify(num.value)})`
   },
 
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
