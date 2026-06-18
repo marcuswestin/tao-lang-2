@@ -27,7 +27,7 @@ export const ViewsCompiler = {
 
   /** ParameterType returns the generated runtime value type for a Tao parameter. */
   ParameterType(param: AST.ParameterDeclaration): Compiled {
-    return Switch.value(param.type, {
+    return Switch(param.type, {
       action: () => gen`TR.Action`,
       number: () => gen`TR.Value<number>`,
       text: () => gen`TR.Value<string>`,

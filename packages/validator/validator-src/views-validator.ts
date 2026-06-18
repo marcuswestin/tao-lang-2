@@ -1,5 +1,6 @@
 import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import { viewValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
 
@@ -70,11 +71,10 @@ function validateRenderLast(view: AST.RenderableDeclaration, ctx: ValidationCont
 }
 
 function validateRenderableBodyBlock(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
-  if (AST.isViewDeclaration(view)) {
-    validateViewBodyBlock(view.block, ctx)
-    return
-  }
-  validateLayoutBodyBlock(view.block, ctx)
+  Switch.type(view, {
+    LayoutDeclaration: layout => validateLayoutBodyBlock(layout.block, ctx),
+    ViewDeclaration: viewDeclaration => validateViewBodyBlock(viewDeclaration.block, ctx),
+  })
 }
 
 function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {

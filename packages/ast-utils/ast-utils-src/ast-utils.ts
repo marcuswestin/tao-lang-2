@@ -11,6 +11,7 @@ import {
   type ResolvedRenderInvocation as ResolvedRenderInvocationData,
   resolveRenderInvocation,
 } from './invocations'
+import { type LayoutTermValue as LayoutTermValueData, LayoutUtils } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
 import { getDocument, isNode, streamAllContents } from './traversal'
@@ -21,6 +22,7 @@ const ASTUtils = {
   injectionArgumentName,
   invocationArity,
   isNode,
+  Layout: LayoutUtils,
   referencedNames,
   resolveActionInvocation,
   resolveActionTarget,
@@ -46,6 +48,12 @@ namespace ASTUtils {
 
   /** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
   export type ResolvedRenderInvocation = ResolvedRenderInvocationData
+
+  /** Layout declares types produced by parsed layout-clause semantic helpers. */
+  export namespace Layout {
+    /** TermValue declares compact runtime values from parsed layout terms. */
+    export type TermValue = LayoutTermValueData
+  }
 }
 
 export { Packages }

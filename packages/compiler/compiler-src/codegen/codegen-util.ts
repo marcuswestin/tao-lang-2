@@ -22,8 +22,19 @@ type NamedNode = {
   name: string
 }
 
-/** gen expands a source template into a structured generator node. */
-export function gen(staticParts: TemplateStringsArray, ...substitutions: GenValue[]): Compiled {
+/** gen expands source templates and exposes common codegen helpers. */
+export const gen = Object.assign(gen_, {
+  Name: genName,
+  NameLiteral: genNameLiteral,
+  TextLines: genTextLines,
+  comment: genComment,
+  join: genJoin,
+  list: genList,
+  noop: genNoop,
+  scopeName: genScopeName,
+})
+
+function gen_(staticParts: TemplateStringsArray, ...substitutions: GenValue[]): Compiled {
   return Langium.expandToNode(staticParts, ...substitutions)
 }
 

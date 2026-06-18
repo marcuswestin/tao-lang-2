@@ -9,6 +9,7 @@ import ProjectDeclarationCompiler from './app/project-declaration-compiler'
 import RenderStatementCompiler from './app/render-statement-compiler'
 import { StateCompiler } from './app/StateCompiler'
 import { StatementsCompiler } from './app/statements-compiler'
+import { TaoPropsCompiler } from './app/tao-props-compiler'
 import UseStatementCompiler from './app/use-statement-compiler'
 import { ViewsCompiler } from './app/views-compiler'
 
@@ -22,6 +23,7 @@ export const Compile = {
   ...AliasesCompiler,
   ...ViewsCompiler,
   ...InvocationsCompiler,
+  ...TaoPropsCompiler,
   ...RenderStatementCompiler,
   ...UseStatementCompiler,
   ...ProjectDeclarationCompiler,

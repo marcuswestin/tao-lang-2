@@ -16,11 +16,13 @@ export default {
     const exportLines = opts.exportedNames?.map(name => `export const ${name} = _Scope.${name}`).join('\n') ?? ''
     return gen`
       import React from 'react'
-      import * as RN from 'react-native'
       import TR from '@runtime/TR'
+
+      // @ts-ignore RN is available to Tao inject blocks
+      import * as RN from 'react-native'
+
       ${genTextLines(importLines)}
 
-      TR.setReactNativeRuntime(RN)
       const _Scope: any = {}
       ${genTextLines(scopeBindings)}
 

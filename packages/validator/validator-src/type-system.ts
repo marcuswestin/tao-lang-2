@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import { InferenceRuleNotApplicable, type Type } from 'typir'
 import type { LangiumTypeSystemDefinition } from 'typir-langium'
 import { ActionsValidator } from './ActionsValidator'
@@ -38,19 +39,16 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
     typir.Inference.addInferenceRulesForAstNodes({
       ValueReference: (node) => {
         const target = node.target.ref
-        if (AST.isAliasDeclaration(target)) {
-          return TypeSystemHelpers.safeInferType(typir, target.value) ?? InferenceRuleNotApplicable
+        if (!target) {
+          return InferenceRuleNotApplicable
         }
-        if (AST.isStateDeclaration(target)) {
-          return TypeSystemHelpers.safeInferType(typir, target) ?? InferenceRuleNotApplicable
-        }
-        if (AST.isActionDeclaration(target)) {
-          return TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable
-        }
-        if (AST.isParameterDeclaration(target)) {
-          return TypeSystemHelpers.taoPrimitiveType(target.type, typir) ?? InferenceRuleNotApplicable
-        }
-        return InferenceRuleNotApplicable
+        return Switch.type(target, {
+          ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
+          AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
+          ParameterDeclaration: parameter =>
+            TypeSystemHelpers.taoPrimitiveType(parameter.type, typir) ?? InferenceRuleNotApplicable,
+          StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
+        })
       },
       StateDeclaration: (node) => {
         const valueType = TypeSystemHelpers.safeInferType(typir, node.value)

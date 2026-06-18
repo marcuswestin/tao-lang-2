@@ -3,6 +3,7 @@ grammar TaoViews
 import "./blocks"
 import "./expressions"
 import "./injections"
+import "./layout"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
@@ -20,9 +21,9 @@ LayoutDeclaration:
 type RenderableDeclaration = ViewDeclaration | LayoutDeclaration;
 
 RenderStatement:
-    'render' (injection=Injection | view=[RenderableDeclaration:ID] argumentList=ArgumentList? block=Block?);
+    'render' (injection=Injection layoutClause=LayoutClause? | view=[RenderableDeclaration:ID] argumentList=ArgumentList? layoutClause=LayoutClause? block=Block?);
 
 ViewRender:
-    view=[RenderableDeclaration:ID] argumentList=ArgumentList? block=Block?;
+    view=[RenderableDeclaration:ID] argumentList=ArgumentList? layoutClause=LayoutClause? block=Block?;
 
 type Render = RenderStatement | ViewRender;
