@@ -203,6 +203,7 @@ Describe('TR.Layout', () => {
         ['content', 'spread-inset', 'center'],
         ['gap', 8],
         ['pad', 'horizontal', 4, 'vertical', 2],
+        ['margin', 'top', 3, 'horizontal', 5],
         ['compress'],
         ['fill'],
       ],
@@ -214,6 +215,9 @@ Describe('TR.Layout', () => {
       flexShrink: 1,
       gap: 8,
       justifyContent: 'space-around',
+      marginLeft: 5,
+      marginRight: 5,
+      marginTop: 3,
       paddingBottom: 2,
       paddingLeft: 4,
       paddingRight: 4,
@@ -285,8 +289,80 @@ Describe('TR.Layout', () => {
 
   Test('exposes only generated-code layout controls', () => {
     Expect(typeof TR.Layout.create).toBe('function')
+    Expect(typeof TR.Layout.merge).toBe('function')
     Expect(typeof TR.Layout.resolve).toBe('function')
-    Expect('merge' in TR.Layout).toBe(false)
+    Expect('nativePropsWithStyle' in TR.Layout).toBe(false)
+    Expect('resolveProps' in TR.Layout).toBe(false)
+  })
+
+  Test('overlays layout entries over defaults by semantic slot', () => {
+    const rowLayout = TR.Layout.merge(
+      TR.Layout.create([['content', 'baseline', 'left'], ['fill'], ['gap', 4]]),
+      TR.Layout.create([['content', 'right'], ['gap', 8]]),
+      { direction: 'row' },
+    )
+
+    Expect(TR.Layout.resolve({
+      direction: 'row',
+      entries: rowLayout?.entries ?? [],
+    })).toEqual({
+      alignItems: 'baseline',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      flexGrow: 1,
+      gap: 8,
+      justifyContent: 'flex-end',
+    })
+
+    const spacingLayout = TR.Layout.merge(
+      TR.Layout.create([['pad', 12], ['margin', 'vertical', 4]]),
+      TR.Layout.create([['pad', 'horizontal', 6], ['margin', 'left', 2]]),
+    )
+
+    Expect(TR.Layout.resolve({
+      entries: spacingLayout?.entries ?? [],
+    })).toEqual({
+      marginBottom: 4,
+      marginLeft: 2,
+      marginTop: 4,
+      paddingBottom: 12,
+      paddingLeft: 6,
+      paddingRight: 6,
+      paddingTop: 12,
+    })
+  })
+
+  Test('treats missing layouts as empty inputs when merging', () => {
+    const overlayOnly = TR.Layout.merge(
+      undefined,
+      TR.Layout.create([['content', 'right'], ['gap', 8]]),
+      { direction: 'row' },
+    )
+    const baseOnly = TR.Layout.merge(
+      TR.Layout.create([['content', 'baseline', 'left'], ['fill']]),
+      undefined,
+      { direction: 'row' },
+    )
+
+    Expect(TR.Layout.resolve({
+      direction: 'row',
+      entries: overlayOnly?.entries ?? [],
+    })).toEqual({
+      flexDirection: 'row',
+      gap: 8,
+      justifyContent: 'flex-end',
+    })
+    Expect(TR.Layout.resolve({
+      direction: 'row',
+      entries: baseOnly?.entries ?? [],
+    })).toEqual({
+      alignItems: 'baseline',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      flexGrow: 1,
+      justifyContent: 'flex-start',
+    })
+    Expect(TR.Layout.merge(undefined, undefined, { direction: 'row' })).toBeUndefined()
   })
 })
 
@@ -299,7 +375,7 @@ Describe('TR.TaoProps', () => {
       { layout: TR.Layout.create([['gap', 8]]) },
       callerProps,
     )).toEqual({
-      layout: [['gap', 8]],
+      layout: { entries: [['gap', 8]] },
       callerProps,
     })
     Expect(TR.TaoProps({ style: { backgroundColor: 'red' } })).toEqual({
@@ -311,6 +387,14 @@ Describe('TR.TaoProps', () => {
     )).toEqual({
       callerProps: { parentDirection: 'column' },
       parentDirection: 'row',
+    })
+    Expect(TR.TaoProps(
+      { layout: TR.Layout.create([['width', 'fill']]) },
+      { parentDirection: 'column' },
+    )).toEqual({
+      callerProps: { parentDirection: 'column' },
+      layout: { entries: [['width', 'fill']] },
+      parentDirection: 'column',
     })
     Expect(TR.TaoProps({ layout: undefined })).toEqual({ layout: undefined })
     Expect(TR.TaoProps({}, undefined)).toEqual({})

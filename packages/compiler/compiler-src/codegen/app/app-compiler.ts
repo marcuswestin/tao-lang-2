@@ -17,7 +17,7 @@ export default {
     const view = resolveRef(appView.view)
     return gen`
       return <TR.AppShell>
-        <${genScopeName(view)} __tao={TR.TaoProps({ parentDirection: "column" })} />
+        <${genScopeName(view)} />
       </TR.AppShell>
     `
   },

@@ -203,6 +203,44 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('provides default Tao props to app root injected layouts', async () => {
+    await testCompileApp(
+      `
+        app RootInjectedLayoutDirectionApp {
+            view MainView
+        }
+
+        layout Screen {
+            render inject \`\`\`ts
+                const style = TR.Layout.resolve({
+                  parentDirection: _ViewProps.__tao?.parentDirection,
+                  entries: _ViewProps.__tao?.layout?.entries ?? [],
+                })
+                return <RN.View testID="root-screen" style={style}>{_ViewProps.children}</RN.View>
+            \`\`\`
+        }
+
+        view Text Value text {
+            render inject Value \`\`\`ts
+                return <RN.Text>{Value}</RN.Text>
+            \`\`\`
+        }
+
+        view MainView {
+            render Screen [width fill] {
+                Text "Root injected fill"
+            }
+        }
+      `,
+      screen => {
+        const rootScreenStyle = RN.StyleSheet.flatten(screen.getByTestId('root-screen').props.style)
+
+        ExpectScreen(screen).toHaveText('Root injected fill')
+        Expect(rootScreenStyle).toMatchObject({ alignSelf: 'stretch' })
+      },
+    )
+  })
+
   Test('keeps dev chrome disabled by default outside React Native dev mode', () => {
     const restoreDevGlobal = setReactNativeDevModeForTest(false)
     TR.setDevMode()
@@ -460,7 +498,7 @@ Describe('Expo runtime', () => {
     ))
     const style = RN.StyleSheet.flatten(screen.UNSAFE_getByType(RN.View).props.style)
 
-    Expect(style.gap).toBeUndefined()
+    Expect(style.gap).toBe(4)
     Expect(style.padding).toBe(6)
     Expect(style.borderColor).toBe('red')
     Expect(style.borderWidth).toBe(1)
@@ -485,6 +523,33 @@ Describe('Expo runtime', () => {
     ))
     const style = RN.StyleSheet.flatten(screen.getByText('Immediate direction').props.style)
 
+    Expect(style.flexGrow).toBe(1)
+    Expect(style.alignSelf).toBeUndefined()
+  })
+
+  Test('preserves existing child caller props when adding parent direction', () => {
+    TR.setDevMode({ enabled: false })
+
+    const screen = render(createElement(
+      TaoRuntimeRow,
+      null,
+      createElement(
+        TR.Views.Text,
+        {
+          __tao: TR.TaoProps(
+            { layout: TR.Layout.create([['width', 'fill']]) },
+            {
+              parentDirection: 'column',
+              style: { borderWidth: 2 },
+            },
+          ),
+        },
+        'Preserved caller props',
+      ),
+    ))
+    const style = RN.StyleSheet.flatten(screen.getByText('Preserved caller props').props.style)
+
+    Expect(style.borderWidth).toBe(2)
     Expect(style.flexGrow).toBe(1)
     Expect(style.alignSelf).toBeUndefined()
   })
@@ -636,7 +701,7 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('keeps compiled layout clauses from reapplying stdlib layout defaults', async () => {
+  Test('overlays compiled layout clauses over stdlib layout defaults', async () => {
     await testCompileApp(
       `
         app ExplicitRowLayout {
@@ -646,7 +711,7 @@ Describe('Expo runtime', () => {
         use Row, Text from @tao/ui
 
         view MainView {
-            render Row [gap 4] {
+            render Row [content right, gap 4] {
                 Text "Explicit row"
             }
         }
@@ -657,9 +722,14 @@ Describe('Expo runtime', () => {
           .find(style => style?.gap === 4)
 
         ExpectScreen(screen).toHaveText('Explicit row')
-        Expect(rowStyle).toMatchObject({ flexDirection: 'row', gap: 4 })
-        Expect(rowStyle?.flexGrow).toBeUndefined()
-        Expect(rowStyle?.justifyContent).toBeUndefined()
+        Expect(rowStyle).toMatchObject({
+          alignItems: 'baseline',
+          alignSelf: 'stretch',
+          flexDirection: 'row',
+          flexGrow: 1,
+          gap: 4,
+          justifyContent: 'flex-end',
+        })
       },
     )
   })
@@ -711,7 +781,7 @@ Describe('Expo runtime', () => {
         view Row {
             render inject \`\`\`ts
                 const style = TR.Layout.resolve({
-                  entries: _ViewProps.__tao?.layout ?? [],
+                  entries: _ViewProps.__tao?.layout?.entries ?? [],
                 })
                 return <RN.View style={style}>{_ViewProps.children}</RN.View>
             \`\`\`

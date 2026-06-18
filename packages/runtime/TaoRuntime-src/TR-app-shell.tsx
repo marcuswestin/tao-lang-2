@@ -1,6 +1,8 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { DevMenu } from './dev-runtime/TR-dev-menu'
+import type { TaoLayoutProps } from './TR-layout'
+import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 export type AppShellProps = {
@@ -70,21 +72,30 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
         keyboardShouldPersistTaps: 'handled',
         style: rootStyle,
       },
-      repaintOnDevModeChange(props.children, devMode),
+      React.createElement(
+        ParentDirectionContext.Provider,
+        { direction: ParentDirectionContext.defaultProps.parentDirection },
+        appRootChildren(props.children, devMode),
+      ),
     ),
     devMode.enabled ? React.createElement(DevMenu) : null,
   )
 }
 
 // The generated app root reaches AppShell as a stable `children` element, so React skips
-// re-rendering that subtree when only the frame re-renders. Cloning with the current dev mode
-// hands React fresh elements, repainting the whole app (e.g. to add or remove layout bounds)
-// while preserving its component state.
-function repaintOnDevModeChange(children: React.ReactNode, devMode: unknown): React.ReactNode {
+// re-rendering that subtree when only the frame re-renders. Cloning the root hands React fresh
+// elements for dev-mode repaints and supplies default Tao layout props to root injected layouts.
+function appRootChildren(children: React.ReactNode, devMode: unknown): React.ReactNode {
   return React.Children.map(children, child => {
-    return React.isValidElement(child)
-      ? React.cloneElement(child as React.ReactElement<{ __taoDevMode?: unknown }>, { __taoDevMode: devMode })
-      : child
+    if (!React.isValidElement(child)) {
+      return child
+    }
+
+    const childProps = child.props as { __tao?: TaoLayoutProps }
+    return React.cloneElement(child as React.ReactElement<{ __tao?: TaoLayoutProps; __taoDevMode?: unknown }>, {
+      __tao: ParentDirectionContext.propsWithDefault(childProps.__tao),
+      __taoDevMode: devMode,
+    })
   })
 }
 

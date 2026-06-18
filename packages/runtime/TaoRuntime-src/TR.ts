@@ -83,7 +83,14 @@ class TR {
 
   /** TaoProps creates a Tao-owned props bag with optional inherited caller props. */
   static TaoProps(localProps: TR.TaoProps, callerProps?: TR.TaoProps): TR.TaoProps {
-    return callerProps ? { ...localProps, callerProps } : localProps
+    if (!callerProps) {
+      return localProps
+    }
+
+    const inheritedParentDirection = parentDirectionFromProps(callerProps)
+    return inheritedParentDirection && localProps.parentDirection === undefined
+      ? { ...localProps, parentDirection: inheritedParentDirection, callerProps }
+      : { ...localProps, callerProps }
   }
 
   /** setDevMode configures Tao runtime development-only diagnostics. */
@@ -102,6 +109,13 @@ class TR {
 
   /** Views exposes runtime-backed Tao stdlib primitives. */
   static readonly Views = TRViews.Views
+}
+
+function parentDirectionFromProps(props: TR.TaoProps | undefined): TR.TaoProps['parentDirection'] {
+  if (!props) {
+    return undefined
+  }
+  return props.parentDirection ?? parentDirectionFromProps(props.callerProps)
 }
 
 class RuntimeValue<T> {
