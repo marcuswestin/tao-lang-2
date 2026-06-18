@@ -1,10 +1,9 @@
 import { CLI, Errors, FS, HCI, Platform, Text, Time } from '@shared'
+import { ExpoConfig } from './expo-config'
+import { ExpoMetro } from './metro'
 
 const EXPO_GO_APP_ID = 'host.exp.exponent'
-const EXPO_GO_METRO_PORT = 8081
 const EXPO_GO_SDK_VERSION = '54.0.0'
-const EXPO_GO_URL = `exp://127.0.0.1:${EXPO_GO_METRO_PORT}`
-const EXPO_METRO_STATUS_URL = `http://127.0.0.1:${EXPO_GO_METRO_PORT}/status`
 const EXPO_VERSIONS_URL = 'https://api.expo.dev/v2/versions/latest'
 const EXPO_GO_APK_CACHE_DIR = FS.joinPath('.artifacts/android/expo-go')
 const EXPO_ADB_USER = '0'
@@ -18,8 +17,6 @@ const ANDROID_AVD_CONFIG = {
 }
 const EMULATOR_BOOT_TIMEOUT_MS = 180_000
 const EMULATOR_BOOT_POLL_MS = 2_000
-const METRO_START_TIMEOUT_MS = 60_000
-const METRO_START_POLL_MS = 1_000
 
 /** Android groups Android emulator and Expo helpers. */
 export const Android = {
@@ -121,7 +118,7 @@ async function prepareAvailableExpoGo(): Promise<boolean> {
 }
 
 /** openExpoGo opens Expo Go on the booted Android emulator once Metro is ready. */
-async function openExpoGo(url = EXPO_GO_URL): Promise<void> {
+async function openExpoGo(url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
   await openExpoGoWhenMetroIsReady(url)
 }
 
@@ -291,8 +288,8 @@ async function getExpoGoApkUrl(): Promise<string> {
   return url
 }
 
-async function openExpoGoWhenMetroIsReady(url = EXPO_GO_URL): Promise<void> {
-  await waitForMetro()
+async function openExpoGoWhenMetroIsReady(url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
+  await ExpoMetro.waitForMetro()
   const serial = await requireBootedEmulator()
   await reverseMetroPort(serial)
   HCI.writeLine(`Opening ${url} on ${serial}.`)
@@ -316,23 +313,6 @@ async function openExpoGoWhenMetroIsReady(url = EXPO_GO_URL): Promise<void> {
 
 async function reverseMetroPort(serial: string): Promise<void> {
   await CLI.mustRun('adb', {
-    args: ['-s', serial, 'reverse', `tcp:${EXPO_GO_METRO_PORT}`, `tcp:${EXPO_GO_METRO_PORT}`],
+    args: ['-s', serial, 'reverse', `tcp:${ExpoConfig.EXPO_PORT}`, `tcp:${ExpoConfig.EXPO_PORT}`],
   })
-}
-
-async function waitForMetro(): Promise<void> {
-  const deadline = Date.now() + METRO_START_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(EXPO_METRO_STATUS_URL)
-      if (response.ok && (await response.text()).includes('running')) {
-        return
-      }
-    } catch {
-      // Metro is still starting.
-    }
-    await Time.sleep(METRO_START_POLL_MS)
-  }
-
-  Errors.throwUserInput(`Expo Metro did not start at ${EXPO_METRO_STATUS_URL}.`)
 }
