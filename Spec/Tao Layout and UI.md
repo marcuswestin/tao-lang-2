@@ -2,7 +2,7 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, and render child blocks. The repo does not yet implement the full layout clause language, `frame`, `@@content`, named render slots, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
+Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, and the first bracketed layout clauses for `content`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, style clauses, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
 
 Open design question: should `frame` and `layout` be allowed to paint pixels with `<style>`, or should visual styling be restricted to `view` declarations and view-like primitives? Disallowing style on containers may make the model clearer, but it may also make common framed surfaces awkward. This document does not settle that question yet.
 
@@ -119,7 +119,7 @@ frame Card {
 
 ## Layout Properties
 
-Below are all of Tao's layout properties:
+Below are Tao's current layout properties:
 
 ### Content Alignment And Distribution
 
@@ -138,7 +138,7 @@ To describe how a UI element resizes when necessary, use:
 - `hug` to avoid expanding on the parent container's main axis
 - `compress` to shrink beyond its content size when under pressure
 - `rigid` to resist shrinking
-- `width <number>` and `height <number>` to set physical dimensions directly
+- `width <positive number>` and `height <positive number>` to set physical dimensions directly
 - `width fill` and `height fill` to fill one physical axis; Tao lowers this at runtime using the actual parent container direction
 
 To specify how to align a single item in a container, use:
@@ -150,9 +150,9 @@ To specify how to align a single item in a container, use:
 
 To describe spacing, use:
 
-- `gap` for space between each UI element in a container.
+- `gap` for positive space between each UI element in a container.
 - `pad` for space between a UI element's content and its edges:
-  - `[pad N]` for all sides
+  - `[pad N]` for all sides, where `N` is positive
   - `[pad horizontal N vertical N]`
   - `[pad top N bottom N]`
   - `[pad left N right N]`
@@ -381,7 +381,7 @@ These are the layout values of Tao's stdlib containers, and the React Native sty
 - `WrappingRow`: `[content baseline left, compress, hug]`
   - `{ flexDirection: row, justifyContent: flex-start, alignItems: baseline, flexGrow: 0, flexShrink: 1, flexWrap: wrap }`
 
-All defaults can be overridden by the caller:
+A caller layout clause overlays the render site's defaults. Terms that target the same layout slot replace that default slot; unrelated defaults remain:
 
 ```tao
 Row [content spread center, compress] {

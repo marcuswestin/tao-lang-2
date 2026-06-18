@@ -10,6 +10,7 @@ const layoutValidationMessages = {
     `Layout properties '${left}' and '${right}' cannot be used together.`,
   injectLayout: 'Layout clauses cannot be used on `render inject`.',
   malformedEntry: (entry: string) => `Malformed layout entry '${entry}'.`,
+  positiveNumber: (entry: string) => `Layout entry '${entry}' must use positive numbers.`,
   unsupportedEntry: (entry: string) => `Unsupported layout entry '${entry}'.`,
   unsupportedTerm: (entry: string, term: string) => `Unsupported layout term '${term}' in '${entry}'.`,
 } as const
@@ -42,6 +43,7 @@ type LayoutConflictKey =
   | 'gap'
   | 'height'
   | 'main-size-pressure'
+  | 'margin'
   | 'pad'
   | 'self-alignment'
   | 'width'
@@ -107,7 +109,8 @@ function validateLayoutEntry(
   Switch(headValue, {
     content: () => validateContent(entry, ctx),
     gap: () => validateSingleNumber(entry, ctx),
-    pad: () => validatePad(entry, ctx),
+    margin: () => validateSpacing(entry, ctx, 'margin'),
+    pad: () => validateSpacing(entry, ctx, 'pad'),
     width: () => validateDimension(entry, ctx),
     height: () => validateDimension(entry, ctx),
     fill: () => validateBareEntry(entry, ctx),
@@ -136,12 +139,25 @@ function validateSingleNumber(entry: AST.LayoutEntry, ctx: ValidationContext): v
   const terms = entry.terms
   if (terms.length !== 1 || !AST.isLayoutNumberLiteral(terms[0])) {
     ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    return
+  }
+  validatePositiveNumber(entry, terms[0], ctx)
+}
+
+function validatePositiveNumber(
+  entry: AST.LayoutEntry,
+  term: AST.LayoutNumberLiteral,
+  ctx: ValidationContext,
+): void {
+  if (term.value <= 0) {
+    ctx.error(layoutValidationMessages.positiveNumber(layoutEntryText(entry)), entry)
   }
 }
 
-function validatePad(entry: AST.LayoutEntry, ctx: ValidationContext): void {
+function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: 'margin' | 'pad'): void {
   const terms = entry.terms
   if (terms.length === 1 && AST.isLayoutNumberLiteral(terms[0])) {
+    validatePositiveNumber(entry, terms[0], ctx)
     return
   }
   if (terms.length < 2 || terms.length % 2 !== 0) {
@@ -158,9 +174,10 @@ function validatePad(entry: AST.LayoutEntry, ctx: ValidationContext): void {
       ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
       return
     }
+    validatePositiveNumber(entry, value, ctx)
     for (const physicalSide of padPhysicalSides(side)) {
       if (seenSides.has(physicalSide)) {
-        ctx.error(layoutValidationMessages.duplicateEntry(`pad ${physicalSide}`), entry)
+        ctx.error(layoutValidationMessages.duplicateEntry(`${head} ${physicalSide}`), entry)
         return
       }
       seenSides.add(physicalSide)
@@ -176,6 +193,7 @@ function validateDimension(entry: AST.LayoutEntry, ctx: ValidationContext): void
   }
   const value = terms[0]!
   if (AST.isLayoutNumberLiteral(value)) {
+    validatePositiveNumber(entry, value, ctx)
     return
   }
   if (AST.isLayoutWord(value) && dimensionTermValue(value)) {
@@ -265,6 +283,7 @@ function layoutEntryConflictKeys(entry: AST.LayoutEntry): readonly LayoutConflic
     'content': () => ['content'],
     'gap': () => ['gap'],
     'pad': () => ['pad'],
+    'margin': () => ['margin'],
     'width': () => ['width'],
     'height': () => ['height'],
     'hug': () => ['main-size-pressure'],
@@ -285,6 +304,7 @@ const layoutHeads = [
   'gap',
   'height',
   'hug',
+  'margin',
   'pad',
   'rigid',
   'width',

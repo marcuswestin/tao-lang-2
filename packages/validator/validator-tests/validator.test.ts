@@ -1015,7 +1015,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, content top stretch, gap 12, pad 16, width fill] {
+        render Col [fill, content top stretch, gap 12, pad 16, margin horizontal 4, width fill] {
           Text "Label" [width fill, height fill]
         }
       }
@@ -1159,6 +1159,17 @@ Describe('Tao validator structural diagnostics', () => {
         render Col [pad horizontal]
       }
     `)
+    const malformedMargin = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [margin vertical]
+      }
+    `)
     const alignedStretch = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       layout Col {
@@ -1203,6 +1214,61 @@ Describe('Tao validator structural diagnostics', () => {
         render Col [stretch]
       }
     `)
+    const zeroGap = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [gap 0]
+      }
+    `)
+    const zeroPad = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [pad 0]
+      }
+    `)
+    const zeroMargin = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [margin left 0]
+      }
+    `)
+    const zeroWidth = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [width 0]
+      }
+    `)
+    const zeroHeight = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [height 0]
+      }
+    `)
 
     Expect(validationErrorMessages(malformedGap)).toContain(layoutValidationMessages.malformedEntry('gap fill'))
     Expect(validationErrorMessages(unknownHead)).toContain(layoutValidationMessages.unsupportedEntry('unknown 1'))
@@ -1214,6 +1280,9 @@ Describe('Tao validator structural diagnostics', () => {
       layoutValidationMessages.malformedEntry('content left center right'),
     )
     Expect(validationErrorMessages(malformedPad)).toContain(layoutValidationMessages.malformedEntry('pad horizontal'))
+    Expect(validationErrorMessages(malformedMargin)).toContain(
+      layoutValidationMessages.malformedEntry('margin vertical'),
+    )
     Expect(validationErrorMessages(alignedStretch)).toContain(
       layoutValidationMessages.unsupportedTerm('aligned stretch', 'stretch'),
     )
@@ -1222,6 +1291,11 @@ Describe('Tao validator structural diagnostics', () => {
     )
     Expect(validationErrorMessages(removedExpand)).toContain(layoutValidationMessages.unsupportedEntry('expand'))
     Expect(validationErrorMessages(removedStretch)).toContain(layoutValidationMessages.unsupportedEntry('stretch'))
+    Expect(validationErrorMessages(zeroGap)).toContain(layoutValidationMessages.positiveNumber('gap 0'))
+    Expect(validationErrorMessages(zeroPad)).toContain(layoutValidationMessages.positiveNumber('pad 0'))
+    Expect(validationErrorMessages(zeroMargin)).toContain(layoutValidationMessages.positiveNumber('margin left 0'))
+    Expect(validationErrorMessages(zeroWidth)).toContain(layoutValidationMessages.positiveNumber('width 0'))
+    Expect(validationErrorMessages(zeroHeight)).toContain(layoutValidationMessages.positiveNumber('height 0'))
   })
 
   Test('rejects duplicate and conflicting layout entries', async () => {
@@ -1269,6 +1343,17 @@ Describe('Tao validator structural diagnostics', () => {
         render Col [pad horizontal 8 left 4]
       }
     `)
+    const marginSide = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [margin vertical 8 top 4]
+      }
+    `)
     const contentHorizontalAxis = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       use Row from @tao/ui
@@ -1310,6 +1395,7 @@ Describe('Tao validator structural diagnostics', () => {
       layoutValidationMessages.conflictingEntries('fill', 'centered'),
     )
     Expect(validationErrorMessages(padSide)).toContain(layoutValidationMessages.duplicateEntry('pad left'))
+    Expect(validationErrorMessages(marginSide)).toContain(layoutValidationMessages.duplicateEntry('margin top'))
     Expect(validationErrorMessages(contentHorizontalAxis)).toContain(
       layoutValidationMessages.conflictingEntries('content left', 'content right'),
     )

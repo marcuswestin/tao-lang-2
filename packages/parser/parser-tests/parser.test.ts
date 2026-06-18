@@ -159,7 +159,7 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Col [fill, content top spread-inset, gap 12, pad 16, width fill] {
+        render Col [fill, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
           Text "Label" [width fill, height fill]
         }
       }
@@ -181,12 +181,13 @@ Describe('minimal Tao parser', () => {
     const render = mainView.block.statements[0]
     Expect.Is(render, AST.isRenderStatement)
     const entries = render.layoutClause?.entries ?? []
-    Expect(entries).toHaveLength(5)
+    Expect(entries).toHaveLength(6)
     Expect(layoutEntryTerms(entries[0]!)).toEqual(['fill'])
     Expect(layoutEntryTerms(entries[1]!)).toEqual(['content', 'top', 'spread-inset'])
     Expect(layoutEntryTerms(entries[2]!)).toEqual(['gap', 12])
     Expect(layoutEntryTerms(entries[3]!)).toEqual(['pad', 16])
-    Expect(layoutEntryTerms(entries[4]!)).toEqual(['width', 'fill'])
+    Expect(layoutEntryTerms(entries[4]!)).toEqual(['margin', 'horizontal', 4])
+    Expect(layoutEntryTerms(entries[5]!)).toEqual(['width', 'fill'])
 
     const child = render.block?.statements.find(AST.isViewRender)
     Expect.Is(child, AST.isViewRender)
