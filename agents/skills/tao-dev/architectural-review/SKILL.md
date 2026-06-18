@@ -44,6 +44,7 @@ Use this for Tao architecture review before implementation or after implementati
 - For broad or high-risk work, add focused reviewers for language semantics, runtime/codegen, roadmap sequencing, docs/ADRs, or old-repo precedent by editing the generated manifest or running a targeted follow-up. Let `./agent review plan` choose Codex Spark for narrow focused lenses when normal Codex session budget is low and Spark windows have room.
 - Give each reviewer a narrow prompt with the mode, scope, relevant instructions, current architecture summary, and the specific review axis.
 - For Gemini in plan mode, assume it may not run shell commands and may not read ignored `.artifacts` paths. Pass the scope and key diff excerpts inline in the prompt instead of asking Gemini to inspect an artifact path or run `git diff` itself.
+- When accepted architecture findings cause code or docs changes, rerun at least the affected architecture/conformance lens against the final staged diff before final handoff.
 - Treat reviewer output as evidence, not truth. The main agent reconciles findings and decides which risks, alternatives, and recommendations are valid.
 
 ## Output
