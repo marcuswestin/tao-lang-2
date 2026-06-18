@@ -11,6 +11,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: nodePath.resolve(__dirname, 'TaoRuntime-src', 'TR.ts'),
     }
   }
+  if (moduleName === '@shared/core') {
+    return {
+      type: 'sourceFile',
+      filePath: nodePath.resolve(__dirname, '..', 'shared', 'shared-src', 'core', 'shared-core.ts'),
+    }
+  }
 
   return context.resolveRequest(context, moduleName, platform)
 }

@@ -1,6 +1,6 @@
-import { Assert } from './Assert'
+import { Assert } from './core/Assert'
+import * as Text from './core/Text'
 import * as FS from './FS'
-import * as Text from './Text'
 
 /** AfterEach wraps the active test runner's afterEach hook. */
 export const AfterEach = createTestRunnerFunction('afterEach')

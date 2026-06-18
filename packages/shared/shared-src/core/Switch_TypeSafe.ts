@@ -1,15 +1,20 @@
 import { UnexpectedBehaviorError } from './Errors'
 
 type SwitchKey = string | number | symbol
-type SwitchValue = SwitchKey | undefined
+type SwitchValueKey = SwitchKey | undefined
+type TypeItem = { $type: SwitchKey }
 
-type ValueHandlers<ValueT extends SwitchValue, ResultT> =
+type ValueHandlers<ValueT extends SwitchValueKey, ResultT> =
   & { [KeyT in Exclude<ValueT, undefined> & SwitchKey]: (value: KeyT) => ResultT }
   & (undefined extends ValueT ? { undefined: (value: undefined) => ResultT } : {})
 
-type TypeHandlers<ItemT extends { $type: SwitchKey }, ResultT> = {
+type TypeHandlers<ItemT extends TypeItem, ResultT> = {
   [KeyT in ItemT['$type']]: (item: Extract<ItemT, { $type: KeyT }>) => ResultT
 }
+
+type TypeMaybeHandlers<ItemT extends TypeItem | undefined, ResultT> =
+  & TypeHandlers<Exclude<ItemT, undefined>, ResultT>
+  & (undefined extends ItemT ? { undefined: (item: undefined) => ResultT } : {})
 
 type PropertyValue<ItemT, PropertyT extends keyof ItemT> = ItemT[PropertyT]
 
@@ -19,8 +24,14 @@ type PropertyHandlers<ItemT, PropertyT extends keyof ItemT, ResultT> = PropertyV
     & (undefined extends ValueT ? { undefined: (value: undefined) => ResultT } : {})
   : never
 
-/** value dispatches exhaustively on a literal value. */
-export function value<ValueT extends SwitchValue, ResultT>(
+export default Object.assign(Switch, {
+  property: SwitchProperty,
+  type: SwitchType,
+  typeMaybe: SwitchTypeMaybe,
+})
+
+/** Switch dispatches exhaustively on a literal value. */
+function Switch<ValueT extends SwitchValueKey, ResultT>(
   input: ValueT,
   handlers: ValueHandlers<ValueT, ResultT>,
 ): ResultT {
@@ -33,8 +44,8 @@ export function value<ValueT extends SwitchValue, ResultT>(
   return (handler as (value: ValueT) => ResultT)(input)
 }
 
-/** type dispatches exhaustively on an AST-style `$type` discriminator. */
-export function type<ItemT extends { $type: SwitchKey }, ResultT>(
+/** SwitchType dispatches exhaustively on an AST-style `$type` discriminator. */
+function SwitchType<ItemT extends TypeItem, ResultT>(
   item: ItemT,
   handlers: TypeHandlers<ItemT, ResultT>,
 ): ResultT {
@@ -47,8 +58,22 @@ export function type<ItemT extends { $type: SwitchKey }, ResultT>(
   return (handler as (item: ItemT) => ResultT)(item)
 }
 
-/** property dispatches exhaustively on one property value. */
-export function property<ItemT extends object, PropertyT extends keyof ItemT, ResultT>(
+/** SwitchTypeMaybe dispatches exhaustively on an AST-style `$type` discriminator or undefined. */
+function SwitchTypeMaybe<ItemT extends TypeItem | undefined, ResultT>(
+  item: ItemT,
+  handlers: TypeMaybeHandlers<ItemT, ResultT>,
+): ResultT {
+  const key = item === undefined ? 'undefined' : item.$type
+  const handler = handlers[key as keyof TypeMaybeHandlers<ItemT, ResultT>]
+
+  if (!handler) {
+    throw new UnexpectedBehaviorError(`Unhandled item type: ${String(key)}`)
+  }
+  return (handler as (item: ItemT) => ResultT)(item)
+}
+
+/** SwitchProperty dispatches exhaustively on one property value. */
+function SwitchProperty<ItemT extends object, PropertyT extends keyof ItemT, ResultT>(
   item: ItemT,
   propertyName: PropertyT,
   handlers: PropertyHandlers<ItemT, PropertyT, ResultT>,
