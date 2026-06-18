@@ -3,6 +3,7 @@ grammar TaoBlocks
 import "./app"
 import "./views"
 import "./aliases"
+import "./actions"
 import "./injections"
 import "./imports"
 import "./project"
@@ -13,15 +14,15 @@ entry BlocksGrammarEntrypoint:
     Block;
 
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | AppView | Injection | RenderStatement | ViewRender;
+    Declaration | ProjectDeclaration | UseStatement | AppView | StateDeclaration | Injection | RenderStatement | ViewRender;
 
 Declaration:
-    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration;
+    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration;
 
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement;
-type ViewStatement = AliasDeclaration | Render;
-type NamedDeclaration = Declaration;
-type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration;
+type ViewStatement = AliasDeclaration | StateDeclaration | ActionDeclaration | Render;
+type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration;
+type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration;
 
 Block:
     '{' statements+=Statement* '}';

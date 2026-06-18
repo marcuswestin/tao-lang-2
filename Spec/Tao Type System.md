@@ -2,7 +2,7 @@
 
 This document describes the (intended) Tao type system.
 
-Current implementation status: this repo currently supports `text` and `number` literals, coarse `list` and `item` values, `view` and `layout` declarations, `alias` values, simple custom `type` declarations, typed primitive/list/item construction, `as` type-fixing, item member access, type-first parameters, value references, and exact-first type-based render/item-field binding. Boolean, typed list elements, operators, interpolation, stateful values, actions, functions, `match`, optional item fields, item extension, and richer collection inference remain future work.
+Current implementation status: this repo currently supports `text` and `number` literals, coarse `list` and `item` values, `view` and `layout` declarations, `alias` values, the state/action MVP for view-local `state`, named/inline `action`, `set`, `do`, stateful reads, and reactive rerendering, simple custom `type` declarations, typed primitive/list/item construction, `as` type-fixing, item member access, type-first parameters including `action`, value references, and exact-first type-based render/item-field binding. Boolean, typed list elements, operators beyond MVP compound `set`, interpolation, functions, `match`, optional item fields, item extension, and richer collection inference remain future work.
 
 Any commented out code is WIP material and should be ignored.
 
@@ -564,10 +564,10 @@ action <ActionName> <Parameters> { <Body> }
 
 Parameters are types. A parameter signature is a dictionary of `<Type> -> <Alias>` pairs. When no alias is given, the type name is also the value alias inside the view body.
 
-Primitive source types such as `text`, `number`, and `boolean` must use `as <Alias>` when used directly as parameters, because the primitive type name itself is not a value alias authors can use in expressions.
+Primitive source types such as `text`, `number`, and `action` must use `as <Alias>` when used directly as parameters, because the primitive type name itself is not a value alias authors can use in expressions.
 
 ```tao
-view <Name> <Type> [is <ParentType>] [as <ScopedAlias>] [, <MoreTypes> ...] { ... }
+view <Name> <Type> [as <ScopedAlias>] [, <MoreTypes> ...] { ... }
 
 view Profile Person {
   Text Person.Name + " " + Person.Age

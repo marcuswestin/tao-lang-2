@@ -4,7 +4,7 @@ import { AST } from '@parser'
 export namespace Type {
   /** TaoType declares the static Tao type shape used by semantic helpers. */
   export type TaoType =
-    | { kind: 'primitive'; primitive: 'text' | 'number'; nominal?: AST.TypeDefinition }
+    | { kind: 'primitive'; primitive: 'text' | 'number' | 'action'; nominal?: AST.TypeDefinition }
     | { kind: 'list'; nominal?: AST.TypeDefinition }
     | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
     | { kind: 'unresolved' }
@@ -252,6 +252,9 @@ export namespace Type {
     if (AST.isValueReference(expression)) {
       return valueDeclarationType(expression.target.ref, seenAliases)
     }
+    if (AST.isActionExpression(expression)) {
+      return primitiveType('action')
+    }
     return unresolvedType()
   }
 
@@ -261,6 +264,12 @@ export namespace Type {
   ): TaoType {
     if (AST.isParameterDeclaration(declaration)) {
       return ofParameter(declaration)
+    }
+    if (AST.isStateDeclaration(declaration)) {
+      return ofExpressionSeen(declaration.value, seenAliases)
+    }
+    if (AST.isActionDeclaration(declaration)) {
+      return primitiveType('action')
     }
     if (AST.isAliasDeclaration(declaration)) {
       if (aliasAlreadySeen(declaration, seenAliases)) {
@@ -292,8 +301,8 @@ export namespace Type {
     return current
   }
 
-  function isTextOrNumberPrimitive(primitive: AST.PrimitiveType): primitive is 'text' | 'number' {
-    return primitive === 'text' || primitive === 'number'
+  function isPrimitiveValueType(primitive: AST.PrimitiveType): primitive is 'text' | 'number' | 'action' {
+    return primitive === 'text' || primitive === 'number' || primitive === 'action'
   }
 
   function isListPrimitive(primitive: AST.PrimitiveType): boolean {
@@ -301,7 +310,7 @@ export namespace Type {
   }
 
   function primitiveType(primitive: AST.PrimitiveType): TaoType {
-    if (isTextOrNumberPrimitive(primitive)) {
+    if (isPrimitiveValueType(primitive)) {
       return { kind: 'primitive', primitive }
     }
     if (isListPrimitive(primitive)) {

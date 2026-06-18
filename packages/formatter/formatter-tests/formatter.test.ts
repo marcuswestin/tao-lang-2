@@ -4,17 +4,12 @@ import Formatter from '../formatter-src/formatter'
 import { testFormatCode } from './test-format'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const tsFence = '```ts'
 const fence = '```'
 
 Describe('Tao formatter Kitchen Sink apps', () => {
   Test('the current Kitchen Sink app is a formatting fixed point', async () => {
     Expect(await Formatter.formatFile(kitchenSinkPath)).toBe(await FS.readText(kitchenSinkPath))
-  })
-
-  Test('the target Kitchen Sink app is a formatting fixed point', async () => {
-    Expect(await Formatter.formatFile(targetKitchenSinkPath)).toBe(await FS.readText(targetKitchenSinkPath))
   })
 })
 
@@ -143,6 +138,18 @@ Describe('Tao formatter use statements', () => {
 })
 
 Describe('Tao formatter views and blocks', () => {
+  Test('formats layout clauses on render sites', async () => {
+    await testFormatCode(
+      `view MainView{render Col[fill,content top spread-inset,gap 12,pad 16,margin horizontal 4,width fill]{Text "Label"[width fill,height fill]}}`,
+      `
+        view MainView {
+           render Col [fill, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+              Text "Label" [width fill, height fill]
+        }  }
+      `,
+    )
+  })
+
   Test('indents nested render blocks and collapses closing braces', async () => {
     await testFormatCode(
       `view MainView{render Stack{Text "a"\nText "b"}}`,
@@ -259,6 +266,29 @@ Describe('Tao formatter views and blocks', () => {
         view CountText number as Count, text as Label {
            render Text Label
         }
+      `,
+    )
+  })
+
+  Test('formats state declarations and action bodies', async () => {
+    await testFormatCode(
+      `view MainView{state Count=0 action AddStep number as Step{set Count+=Step} action AddFive{do AddStep 5} render Stack{Button "Reset",action{set Count=0} Button "Inline",->{set Count+=1}}}`,
+      `
+        view MainView {
+           state Count = 0
+           action AddStep number as Step {
+              set Count += Step
+           }
+           action AddFive {
+              do AddStep 5
+           }
+           render Stack {
+              Button "Reset", action {
+                 set Count = 0
+              }
+              Button "Inline", -> {
+                 set Count += 1
+        }  }  }
       `,
     )
   })

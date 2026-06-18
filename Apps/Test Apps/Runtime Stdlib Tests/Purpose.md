@@ -9,6 +9,7 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 
 - `use ... from @tao/ui` imports for first stdlib views.
 - Runtime rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, and `TextMultiline`.
+- A no-op `Button` action binding required by the Button primitive.
 - Basic nested stdlib layout/container composition that remains valid and executable.
 
 ## Does Not Belong Here
@@ -16,7 +17,7 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 - Type-system-only cases that belong in `Type System Tests`.
 - Invalid import visibility/import-path errors (unit tests cover diagnostics).
 - Layout/design-style behavior planned for later roadmap slices.
-- State/action/control behavior planned for later roadmap slices.
+- Stateful interaction behavior beyond the no-op Button binding.
 
 ## Edit When
 

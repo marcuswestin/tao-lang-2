@@ -1,6 +1,6 @@
 import { AST, Langium } from '@parser'
 import { Validate } from './Validate'
-import { createValidationContext, type ValidationRunContext } from './validation'
+import { Validation, type ValidationRunContext } from './validation'
 
 /** LangiumValidationContextProvider supplies workspace validation state for one file. */
 export type LangiumValidationContextProvider = (file: AST.TaoFile) => ValidationRunContext
@@ -13,7 +13,7 @@ export function registerTaoValidationChecks(
   const registry = services.validation.ValidationRegistry
   const checks: Langium.ValidationChecks<AST.TaoLangAstType> = {
     TaoFile: (file, accept) => {
-      const ctx = createValidationContext(accept, contextForFile(file))
+      const ctx = Validation.createContext(accept, contextForFile(file))
       Validate.TaoFile(file, ctx)
     },
   }

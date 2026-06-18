@@ -1,0 +1,50 @@
+use Button, Col, Number, Text from @tao/ui
+
+app StateActionMVP {
+   view MainView
+}
+
+view CounterButton text as Title, action as Action {
+   render Button Title, Action
+}
+
+view MainView {
+   state Count = 0
+   alias DisplayCount = Count
+   action SetZero {
+      set Count = 0
+   }
+   action AddStep number as Step {
+      set Count += Step
+   }
+   action AddFive {
+      do AddStep 5
+   }
+   action AddTwice {
+      set Count += 1
+      do AddOne
+   }
+   action AddOne {
+      set Count += 1
+   }
+   action Decrement {
+      set Count -= 1
+   }
+   action Double {
+      set Count *= 2
+   }
+   action Halve {
+      set Count /= 2
+   }
+   render Col {
+      Text "State/action MVP"
+      Number DisplayCount
+      CounterButton "Add twice", AddTwice
+      CounterButton "Add five", AddFive
+      CounterButton "Decrement", Decrement
+      Button "Double", Double
+      Button "Halve", Halve
+      Button "Reset", SetZero
+      Button "Inline add one", -> {
+         set Count += 1
+}  }  }

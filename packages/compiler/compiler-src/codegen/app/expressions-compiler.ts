@@ -4,10 +4,11 @@ import { Switch } from '@shared'
 import { type Compiled, gen, genJoin, genList, genScopeName, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
-export default {
+export const ExpressionsCompiler = {
   /** Expression compiles a Tao expression into a runtime value expression. */
   Expression(expression: AST.Expression): Compiled {
     return Switch.type(expression, {
+      ActionExpression: Compile.ActionExpression,
       NumberLiteral: Compile.NumberLiteral,
       StringLiteral: Compile.StringLiteral,
       ListLiteral: Compile.ListLiteral,
@@ -20,17 +21,17 @@ export default {
 
   /** StringLiteral compiles a Tao string literal into a Tao text value. */
   StringLiteral(str: AST.StringLiteral): Compiled {
-    return gen`new TR.Value(${JSON.stringify(str.value)})`
+    return gen`TR.Value(${JSON.stringify(str.value)})`
   },
 
   /** NumberLiteral compiles a Tao number literal into a Tao number value. */
   NumberLiteral(num: AST.NumberLiteral): Compiled {
-    return gen`new TR.Value(${JSON.stringify(num.value)})`
+    return gen`TR.Value(${JSON.stringify(num.value)})`
   },
 
   /** ListLiteral compiles a Tao list literal into a runtime value wrapper. */
   ListLiteral(list: AST.ListLiteral): Compiled {
-    return gen`new TR.Value([${genJoin(list.elements, element => gen`${Compile.Expression(element)}.jsValue`)}])`
+    return gen`TR.Value([${genJoin(list.elements, element => gen`${Compile.Expression(element)}.jsValue`)}])`
   },
 
   /** TypeCastExpression compiles `as` away after validation. */
@@ -50,7 +51,7 @@ export default {
   ItemLiteral(item: AST.ItemLiteral, type: AST.ConstructorTypeReference): Compiled {
     const itemType = Type.constructorReferenceItemType(type)
     const pairs = itemType ? ASTUtils.resolveItemPropertyBindings(itemType.properties, item.properties).pairs : []
-    return gen`new TR.Value({
+    return gen`TR.Value({
       ${
       genList(pairs, pair =>
         gen`${JSON.stringify(pair.expected.name)}: ${Compile.Expression(pair.property.value)}.jsValue,`)
@@ -63,7 +64,7 @@ export default {
     const target = resolveRef(reference.target)
     const root = Compile.ValueDeclarationReference(target)
     const path = reference.members.map(member => `[${JSON.stringify(member)}]`).join('')
-    return gen`new TR.Value(${root}.jsValue${path})`
+    return gen`TR.Value(${root}.jsValue${path})`
   },
 
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
@@ -75,8 +76,10 @@ export default {
   /** ValueDeclarationReference compiles an alias or parameter declaration reference. */
   ValueDeclarationReference(target: AST.ValueDeclaration): Compiled {
     return Switch.type(target, {
+      ActionDeclaration: action => gen`${genScopeName(action)}.evaluate()`,
       AliasDeclaration: alias => gen`${genScopeName(alias)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${genScopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
+      StateDeclaration: state => gen`${genScopeName(state)}.evaluate()`,
     })
   },
 } as const

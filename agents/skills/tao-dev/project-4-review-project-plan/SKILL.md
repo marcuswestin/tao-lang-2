@@ -14,7 +14,7 @@ Review the plan before implementation starts.
 - Use the `old-repo-porting` skill when checking comparable behavior under `~/code/tao-lang`.
 - Use `subagents-review` skill with appropriate instructions.
 - Ask reviewers to focus on invalid assumptions, poor decisions, stale docs, bad sequencing, unclear acceptance criteria, scope creep, and missing details.
-- When target syntax/functionality changes, verify the plan uses `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` for intended code and schedules implemented slices to move into `Apps/Kitchen Sink/Kitchen Sink.tao` for tests.
+- When intended syntax/functionality changes, verify the plan records examples in docs and schedules implemented slices for `Apps/Kitchen Sink/Kitchen Sink.tao` or focused test apps.
 - Treat reviewer output as evidence, not truth. Verify findings locally before editing.
 - Incorporate feedback that improves clarity, sequencing, scope, validation, implementation safety.
 - Record valid future work as deferrals; ignore weak, duplicate, speculative, or otherwise inappropriate feedback.

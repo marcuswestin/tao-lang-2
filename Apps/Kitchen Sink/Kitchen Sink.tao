@@ -1,4 +1,4 @@
-use Stack, Text from @tao/ui
+use Button, Number, Stack, Text from @tao/ui
 
 app KitchenSink {
    view MainView
@@ -23,19 +23,23 @@ alias SinkProfileValue = SinkProfile.{
 }
 
 view MainView {
+   state KitchenCount = 0
    alias LocalText = "Text from a local alias"
    alias OuterGreeting = Greeting
-   render Stack {
+   render Stack [gap 8, pad 12, fill] {
       alias Greeting = "Nested scope greeting"
       Text OuterGreeting { }
       Text LocalText
       Text Greeting
-      Text "Hello World"
+      Text "Hello World" [width fill]
       CountText LaunchCount
       Text FixedSinkName
       Text SinkProfileValue.SinkName
       TagText SinkProfileValue.SinkTags
-}  }
+      Number KitchenCount
+      Button "Add kitchen count", action {
+         set KitchenCount += 1
+}  }  }
 
 view CountText number as Count {
    render inject Count ```ts

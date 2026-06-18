@@ -7,6 +7,9 @@ export type RenderInvocationPair = {
   parameter: AST.ParameterDeclaration
 }
 
+/** ActionInvocationPair declares one resolved action argument-to-parameter pairing. */
+export type ActionInvocationPair = RenderInvocationPair
+
 export type ArgumentBindingDiagnostic =
   | { kind: 'duplicate-parameter-type'; parameter: AST.ParameterDeclaration; type: string }
   | { kind: 'duplicate-argument-type'; argument: AST.Argument; type: string }
@@ -57,6 +60,39 @@ export type ResolvedRenderInvocation = {
   view?: AST.RenderableDeclaration
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
+}
+
+/** ResolvedActionInvocation declares the semantic shape of an action invocation. */
+export type ResolvedActionInvocation = {
+  invocation: AST.DoStatement
+  action?: AST.ActionDeclaration
+  pairs: ActionInvocationPair[]
+  diagnostics: ArgumentBindingDiagnostic[]
+}
+
+/** ResolvedActionTarget declares how an expression resolves as an action target. */
+export type ResolvedActionTarget =
+  | { kind: 'named'; action: AST.ActionDeclaration }
+  | { kind: 'dynamic' }
+  | { kind: 'unresolved' }
+
+/** InvocationArity declares the lists and matched-pair count used for arity diagnostics. */
+export type InvocationArity = {
+  parameters: readonly AST.ParameterDeclaration[]
+  pairCount: number
+  args: readonly AST.Argument[]
+}
+
+type InvocationWithPairs = {
+  pairs: readonly RenderInvocationPair[]
+}
+
+type ParameterListOwner = {
+  parameterList?: AST.ParameterList
+}
+
+type ArgumentListOwner = {
+  argumentList?: AST.ArgumentList
 }
 
 /** resolveItemPropertyBindings binds item constructor property values to item type fields by type. */
@@ -181,6 +217,47 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
     pairs: bindings.pairs,
     diagnostics: bindings.diagnostics,
   }
+}
+
+/** resolveActionInvocation resolves a named action call and type-based argument bindings. */
+export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedActionInvocation {
+  const target = resolveActionTarget(invocation.action)
+  if (target.kind !== 'named') {
+    return {
+      invocation,
+      pairs: [],
+      diagnostics: [],
+    }
+  }
+
+  const bindings = resolveArgumentBindings(
+    target.action.parameterList?.parameters ?? [],
+    invocation.argumentList?.arguments ?? [],
+  )
+  return {
+    invocation,
+    action: target.action,
+    pairs: bindings.pairs,
+    diagnostics: bindings.diagnostics,
+  }
+}
+
+/** invocationArity returns the argument, parameter, and matched-pair counts for an invocation. */
+export function invocationArity(
+  invocation: InvocationWithPairs,
+  target: ParameterListOwner,
+  source: ArgumentListOwner,
+): InvocationArity {
+  return {
+    parameters: target.parameterList?.parameters ?? [],
+    pairCount: invocation.pairs.length,
+    args: source.argumentList?.arguments ?? [],
+  }
+}
+
+/** resolveActionTarget classifies an expression used as a Tao action value. */
+export function resolveActionTarget(expression: AST.Expression | undefined): ResolvedActionTarget {
+  return resolveActionTargetWithSeenAliases(expression, new Set())
 }
 
 function reportDuplicatePropertyTypes(
@@ -521,4 +598,61 @@ function reportDuplicateProvidedPropertyTypes(
     seen.add(key)
   }
   return duplicates
+}
+
+const UnresolvedActionTarget: ResolvedActionTarget = { kind: 'unresolved' }
+
+function resolveActionTargetWithSeenAliases(
+  expression: AST.Expression | undefined,
+  seenAliases: Set<AST.AliasDeclaration>,
+): ResolvedActionTarget {
+  if (!expression) {
+    return UnresolvedActionTarget
+  }
+  if (AST.isActionExpression(expression)) {
+    return { kind: 'dynamic' }
+  }
+  if (AST.isValueReference(expression)) {
+    return resolveActionTargetReference(expression, seenAliases)
+  }
+  if (AST.isTypeCastExpression(expression)) {
+    return resolveActionTargetWithSeenAliases(expression.value, seenAliases)
+  }
+  return UnresolvedActionTarget
+}
+
+function resolveActionTargetReference(
+  reference: AST.ValueReference,
+  seenAliases: Set<AST.AliasDeclaration>,
+): ResolvedActionTarget {
+  const target = reference.target.ref
+  if (!target) {
+    return UnresolvedActionTarget
+  }
+  if (AST.isActionDeclaration(target)) {
+    return { kind: 'named', action: target }
+  }
+  if (AST.isAliasDeclaration(target)) {
+    return resolveAliasActionTarget(target, seenAliases)
+  }
+  if (AST.isParameterDeclaration(target)) {
+    return parameterAcceptsAction(target) ? { kind: 'dynamic' } : UnresolvedActionTarget
+  }
+  return UnresolvedActionTarget
+}
+
+function resolveAliasActionTarget(
+  target: AST.AliasDeclaration,
+  seenAliases: Set<AST.AliasDeclaration>,
+): ResolvedActionTarget {
+  if (seenAliases.has(target)) {
+    return UnresolvedActionTarget
+  }
+  seenAliases.add(target)
+  return resolveActionTargetWithSeenAliases(target.value, seenAliases)
+}
+
+function parameterAcceptsAction(parameter: AST.ParameterDeclaration): boolean {
+  const type = Type.ofParameter(parameter)
+  return type.kind === 'primitive' && type.primitive === 'action'
 }

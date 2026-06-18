@@ -1,4 +1,5 @@
-import type { ProcessSignal } from './Platform'
+/** ProcessSignal declares a platform process signal value without depending on Node types. */
+export type ProcessSignal = string
 
 /** TaoError declares errors expected by Tao command and library code. */
 export type TaoError =

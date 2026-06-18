@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import { type Compiled, gen, genList, genName, genScopeName } from '../codegen-util'
 import { Compile } from '../Compile'
 
-export default {
+export const ViewsCompiler = {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
   ViewDeclaration,
 
@@ -29,6 +29,9 @@ export default {
   ParameterType(param: AST.ParameterDeclaration): Compiled {
     const type = Type.ofParameter(param)
     if (type.kind === 'primitive') {
+      if (type.primitive === 'action') {
+        return gen`TR.Action`
+      }
       return type.primitive === 'number' ? gen`TR.Value<number>` : gen`TR.Value<string>`
     }
     if (type.kind === 'list') {

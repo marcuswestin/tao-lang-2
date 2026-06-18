@@ -4,7 +4,7 @@ import { Text } from '@shared'
 import { type Compiled, gen, genJoin, genName, genTextLines } from '../codegen-util'
 import { Compile } from '../Compile'
 
-export default {
+export const InjectionsCompiler = {
   /** Injection generates a self-invoked block of the injected TS code. */
   Injection(injection: AST.Injection): Compiled {
     const argumentList = injection.argumentList?.arguments ?? []
@@ -36,6 +36,9 @@ function CompileInjectionValue(argument: AST.InjectionArgument): Compiled {
 function CompileExpressionJsType(expression: AST.Expression): Compiled {
   const type = Type.ofExpression(expression)
   if (type.kind === 'primitive') {
+    if (type.primitive === 'action') {
+      return gen`TR.ActionValue`
+    }
     return type.primitive === 'number' ? gen`number` : gen`string`
   }
   if (type.kind === 'list') {

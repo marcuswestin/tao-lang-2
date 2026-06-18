@@ -2,7 +2,7 @@ import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
 import type { Diagnostic } from '@shared'
 import { validatorDiagnostic } from './diagnostics'
-import type { TaoTypirServices } from './type-system'
+import type { TaoTypirServices } from './TypeSystemHelpers'
 
 /** ValidationRunContext declares shared validation invocation state. */
 export interface ValidationRunContext {
@@ -23,8 +23,14 @@ export type DiagnosticOptions = {
   code?: string
 }
 
+/** Validation creates validator contexts and diagnostic collectors. */
+export const Validation = {
+  collectDiagnostics,
+  createContext,
+}
+
 /** createValidationContext creates a validator context backed by a Langium acceptor. */
-export function createValidationContext(
+function createContext(
   accept: Langium.ValidationAcceptor,
   runContext: ValidationRunContext,
 ): ValidationContext {
@@ -40,7 +46,7 @@ export function createValidationContext(
 }
 
 /** collectValidationDiagnostics creates a Langium acceptor that stores Tao diagnostics. */
-export function collectValidationDiagnostics(): {
+function collectDiagnostics(): {
   accept: Langium.ValidationAcceptor
   diagnostics: readonly Diagnostic[]
 } {

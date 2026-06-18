@@ -4,8 +4,9 @@ import { FS } from '@shared'
 import type { ValidationContext } from './validation'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement. */
-export const appValidationMessages = {
-  topLevel: 'Only project, app, view, layout, alias, type declarations, and use statements are allowed at file level.',
+const appValidationMessages = {
+  topLevel:
+    'Only project, app, view, layout, alias, action, type declarations, and use statements are allowed at file level.',
   appCount: (count: number) => `Tao file must declare at most one app, found ${count}.`,
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
@@ -15,8 +16,14 @@ export const appValidationMessages = {
     `App ${appName} root view ${viewName} must not declare parameters.`,
 } as const
 
+/** AppValidator validates Tao app placement and structure. */
+export const AppValidator = {
+  messages: appValidationMessages,
+  validate,
+}
+
 /** validateApp validates file-level and app-block structure. */
-export function validateApp(file: AST.TaoFile, ctx: ValidationContext): void {
+function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   validateTopLevelStatements(file, ctx)
 
   const apps = file.statements.filter(AST.isAppDeclaration)

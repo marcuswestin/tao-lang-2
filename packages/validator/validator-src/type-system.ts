@@ -1,22 +1,16 @@
-import ASTUtils, { Type } from '@ast-utils'
+import { Type as TaoType } from '@ast-utils'
 import { AST } from '@parser'
-import { InferenceRuleNotApplicable, isType, type Type as TypirType } from 'typir'
-import type { LangiumTypeSystemDefinition, TypirLangiumServices, TypirLangiumSpecifics } from 'typir-langium'
-import { registerInvocationTypeValidation } from './invocations-validator'
+import { Switch } from '@shared'
+import { InferenceRuleNotApplicable, type Type as TypirType } from 'typir'
+import type { LangiumTypeSystemDefinition } from 'typir-langium'
+import { ActionsValidator } from './ActionsValidator'
+import { InvocationsValidator } from './invocations-validator'
+import { StateValidator } from './StateValidator'
+import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
 
-/** TaoSpecifics binds Tao AST types to Typir-Langium services. */
-export interface TaoSpecifics extends TypirLangiumSpecifics {
-  LanguageType: AST.Node
-  AstTypes: AST.TaoLangAstType
-}
+const statefulPrimitiveTypes = ['text', 'number'] as const satisfies readonly AST.PrimitiveType[]
 
-/** TaoTypirServices declares the Typir services configured for Tao. */
-export type TaoTypirServices = TypirLangiumServices<TaoSpecifics>
-
-/** NO_DOCUMENT_ERROR is the Typir-Langium cache error for unlinked AST nodes. */
-const NO_DOCUMENT_ERROR = 'AST node has no document'
-
-const activeInferenceNodes = new WeakSet<AST.Node>()
+export type { TaoSpecifics, TaoTypirServices } from './TypeSystemHelpers'
 
 /** TaoTypeSystem registers Tao primitive types, expression inference, and Typir validation hooks. */
 export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> {
@@ -30,108 +24,79 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
       .inferenceRule({ filter: AST.isNumberLiteral })
       .finish()
 
+    typir.factory.Primitives.create({ primitiveName: 'action' })
+      .inferenceRule({ filter: AST.isActionExpression })
+      .finish()
+
     typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
     typir.factory.Primitives.create({ primitiveName: 'list' })
       .inferenceRule({ filter: AST.isListLiteral })
       .finish()
 
+    for (const primitive of statefulPrimitiveTypes) {
+      const baseType = TypeSystemHelpers.taoPrimitiveType(primitive, typir)
+      const statefulType = typir.factory.Primitives.create({ primitiveName: statefulPrimitiveName(primitive) })
+        .finish()
+      if (baseType) {
+        typir.Conversion.markAsConvertible(statefulType, baseType, 'IMPLICIT_EXPLICIT')
+      }
+    }
+
     typir.Inference.addInferenceRulesForAstNodes({
-      MemberAccessExpression: (node) => taoType(Type.ofMemberAccess(node), typir) ?? InferenceRuleNotApplicable,
-      TypeCastExpression: (node) => taoType(Type.ofReference(node.type), typir) ?? InferenceRuleNotApplicable,
-      TypedConstructor: (node) => taoType(Type.ofConstructorReference(node.type), typir) ?? InferenceRuleNotApplicable,
+      MemberAccessExpression: (node) =>
+        TypeSystemHelpers.taoType(TaoType.ofMemberAccess(node), typir)
+          ?? InferenceRuleNotApplicable,
+      TypeCastExpression: (node) =>
+        TypeSystemHelpers.taoType(TaoType.ofReference(node.type), typir)
+          ?? InferenceRuleNotApplicable,
+      TypedConstructor: (node) =>
+        TypeSystemHelpers.taoType(TaoType.ofConstructorReference(node.type), typir)
+          ?? InferenceRuleNotApplicable,
       ValueReference: (node) => {
         const target = node.target.ref
-        if (AST.isAliasDeclaration(target)) {
-          return safeInferType(typir, target.value) ?? InferenceRuleNotApplicable
+        if (!target) {
+          return InferenceRuleNotApplicable
         }
-        if (AST.isParameterDeclaration(target)) {
-          return taoType(Type.ofParameter(target), typir) ?? InferenceRuleNotApplicable
-        }
-        return InferenceRuleNotApplicable
+        return Switch.type(target, {
+          ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
+          AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
+          ParameterDeclaration: parameter =>
+            TypeSystemHelpers.taoPrimitiveType(parameter.type, typir) ?? InferenceRuleNotApplicable,
+          StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
+        })
+      },
+      StateDeclaration: (node) => {
+        const valueType = TypeSystemHelpers.safeInferType(typir, node.value)
+        const underlying = TypeSystemHelpers.underlyingPrimitiveName(valueType)
+        return underlying
+          ? taoStatefulPrimitiveType(underlying, typir) ?? InferenceRuleNotApplicable
+          : InferenceRuleNotApplicable
       },
     })
 
-    registerInvocationTypeValidation(typir)
+    ActionsValidator.registerTypeValidation(typir)
+    StateValidator.registerTypeValidation(typir)
+    InvocationsValidator.registerTypeValidation(typir)
   }
 
   /** onNewAstNode handles AST-instance-specific type creation. */
   onNewAstNode(node: AST.Node, typir: TaoTypirServices): void {
     if (AST.isTypeDeclaration(node)) {
-      ensurePrimitive(typirTypeDefinitionName(node), typir)
+      TypeSystemHelpers.ensurePrimitive(TypeSystemHelpers.typirTypeDefinitionName(node), typir)
     }
     if (AST.isTypeProperty(node) && node.type) {
-      ensurePrimitive(typirTypeDefinitionName(node), typir)
+      TypeSystemHelpers.ensurePrimitive(TypeSystemHelpers.typirTypeDefinitionName(node), typir)
     }
   }
 }
 
-/** taoPrimitiveType returns the Typir primitive for a Tao primitive type. */
-function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): TypirType | undefined {
-  return typir.factory.Primitives.get({ primitiveName: type })
+function taoStatefulPrimitiveType(
+  type: AST.PrimitiveType,
+  typir: TaoTypirServices,
+): TypirType | undefined {
+  return typir.factory.Primitives.get({ primitiveName: statefulPrimitiveName(type) })
 }
 
-function taoType(type: Type.TaoType, typir: TaoTypirServices): TypirType | undefined {
-  if (type.kind === 'unresolved') {
-    return undefined
-  }
-  if (type.nominal) {
-    return ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
-  }
-  if (type.kind === 'primitive') {
-    return taoPrimitiveType(type.primitive, typir)
-  }
-  return taoPrimitiveType(type.kind, typir)
-}
-
-function ensurePrimitive(name: string, typir: TaoTypirServices): TypirType | undefined {
-  const existing = typir.factory.Primitives.get({ primitiveName: name })
-  if (existing) {
-    return existing
-  }
-  return typir.factory.Primitives.create({ primitiveName: name }).finish()
-}
-
-function typirTypeDefinitionName(definition: AST.TypeDefinition): string {
-  try {
-    return `${ASTUtils.getDocument(definition).uri.path}#${Type.definitionName(definition)}`
-  } catch {
-    return Type.definitionName(definition)
-  }
-}
-
-/** astNodeHasDocument returns true when Typir can safely cache inference for `node`. */
-function astNodeHasDocument(node: AST.Node | undefined): node is AST.Node {
-  if (!node) {
-    return false
-  }
-  try {
-    ASTUtils.getDocument(node)
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** safeInferType infers a Tao expression type and returns undefined for unresolved Typir paths. */
-export function safeInferType(typir: TaoTypirServices, node: AST.Node | undefined): TypirType | undefined {
-  if (!astNodeHasDocument(node)) {
-    return undefined
-  }
-  if (activeInferenceNodes.has(node)) {
-    return undefined
-  }
-
-  activeInferenceNodes.add(node)
-  let inferred: unknown
-  try {
-    inferred = typir.Inference.inferType(node)
-  } catch (error) {
-    if (error instanceof Error && error.message.includes(NO_DOCUMENT_ERROR)) {
-      return undefined
-    }
-    throw error
-  } finally {
-    activeInferenceNodes.delete(node)
-  }
-  return isType(inferred) ? inferred : undefined
+function statefulPrimitiveName(type: AST.PrimitiveType): string {
+  return `stateful ${type}`
 }

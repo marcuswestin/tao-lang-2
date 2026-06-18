@@ -1,16 +1,9 @@
-import { CLI, Errors, FS, HCI, Platform, Text } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Text, Time } from '@shared'
+import { ExpoConfig } from './expo-config'
+import { ExpoMetro } from './metro'
 
-const RUNTIME_PACKAGE_PATH = FS.joinPath('packages/runtime')
-const EXPO_ANDROID_ENV = {
-  EXPO_NO_TELEMETRY: '1',
-  OPEN_MATCH_HOST_ONLY: 'true',
-}
-const EXPO_START_ARGS = ['expo', 'start', '--localhost']
 const EXPO_GO_APP_ID = 'host.exp.exponent'
-const EXPO_GO_METRO_PORT = 8081
 const EXPO_GO_SDK_VERSION = '54.0.0'
-const EXPO_GO_URL = `exp://127.0.0.1:${EXPO_GO_METRO_PORT}`
-const EXPO_METRO_STATUS_URL = `http://127.0.0.1:${EXPO_GO_METRO_PORT}/status`
 const EXPO_VERSIONS_URL = 'https://api.expo.dev/v2/versions/latest'
 const EXPO_GO_APK_CACHE_DIR = FS.joinPath('.artifacts/android/expo-go')
 const EXPO_ADB_USER = '0'
@@ -24,11 +17,16 @@ const ANDROID_AVD_CONFIG = {
 }
 const EMULATOR_BOOT_TIMEOUT_MS = 180_000
 const EMULATOR_BOOT_POLL_MS = 2_000
-const METRO_START_TIMEOUT_MS = 60_000
-const METRO_START_POLL_MS = 1_000
 
-/** ensureAndroidEmulator ensures an Android emulator exists and is booted. */
-export async function ensureAndroidEmulator(): Promise<void> {
+/** Android groups Android emulator and Expo helpers. */
+export const Android = {
+  ensureEmulator,
+  ensureExpoGo,
+  openExpoGo,
+  prepareAvailableExpoGo,
+}
+
+async function ensureEmulator(): Promise<void> {
   await requireCommand(
     'emulator',
     'Android emulator CLI not found. Run direnv allow so devenv can expose the Android SDK.',
@@ -85,8 +83,7 @@ export async function ensureAndroidEmulator(): Promise<void> {
   }
 }
 
-/** ensureAndroidExpoGo ensures Expo Go is installed on the booted Android emulator. */
-export async function ensureAndroidExpoGo(): Promise<void> {
+async function ensureExpoGo(): Promise<void> {
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
   const serial = await requireBootedEmulator()
   if (await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
@@ -102,8 +99,7 @@ export async function ensureAndroidExpoGo(): Promise<void> {
   })
 }
 
-/** prepareAvailableAndroidExpoGo prepares an already-booted emulator with Expo Go for Metro. */
-export async function prepareAvailableAndroidExpoGo(): Promise<boolean> {
+async function prepareAvailableExpoGo(): Promise<boolean> {
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
   const serial = await findRunningEmulator()
   if (!serial || !await isEmulatorBooted(serial)) {
@@ -121,24 +117,9 @@ export async function prepareAvailableAndroidExpoGo(): Promise<boolean> {
   return true
 }
 
-/** openExpoAndroid opens an Expo URL directly on the booted Android emulator. */
-export async function openExpoAndroid(url = EXPO_GO_URL): Promise<void> {
+/** openExpoGo opens Expo Go on the booted Android emulator once Metro is ready. */
+async function openExpoGo(url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
   await openExpoGoWhenMetroIsReady(url)
-}
-
-/** startExpoAndroid starts Expo and opens it on the booted Android emulator. */
-export async function startExpoAndroid(): Promise<void> {
-  const runtimePackageRoot = FS.repoPath(RUNTIME_PACKAGE_PATH)
-  void openExpoAndroid().catch(error => HCI.writeErrorLine(Errors.formatForUser(error)))
-  const result = await CLI.run('bunx', {
-    args: EXPO_START_ARGS,
-    cwd: runtimePackageRoot,
-    env: EXPO_ANDROID_ENV,
-    stdio: 'stream',
-  })
-  if (result.error || result.exitCode !== 0) {
-    throw new Errors.CommandExecutionError(result)
-  }
 }
 
 async function requireCommand(command: string, missingMessage: string): Promise<void> {
@@ -165,7 +146,7 @@ async function requireAndroidSdkPackage(sdkPackage: string): Promise<void> {
 }
 
 async function ensureAvdConfig(avdName: string): Promise<void> {
-  const configPath = FS.resolvePath(`${avdName}.avd/config.ini`, { cwd: androidAvdHome() })
+  const configPath = FS.resolvePath(`${avdName}.avd/config.ini`, { cwd: avdHome() })
   if (!await FS.exists(configPath)) {
     return
   }
@@ -180,7 +161,7 @@ async function ensureAvdConfig(avdName: string): Promise<void> {
   }
 }
 
-function androidAvdHome(): string {
+function avdHome(): string {
   const androidUserHome = Platform.runtimeProcess.env['ANDROID_USER_HOME']
     ?? FS.resolvePath('.android', { cwd: FS.homeDir() })
   return Platform.runtimeProcess.env['ANDROID_AVD_HOME'] ?? FS.resolvePath('avd', { cwd: androidUserHome })
@@ -245,14 +226,10 @@ async function waitForBootedEmulator(logPath: string): Promise<void> {
       HCI.writeLine(`Android emulator ${serial} is booted.`)
       return
     }
-    await sleep(EMULATOR_BOOT_POLL_MS)
+    await Time.sleep(EMULATOR_BOOT_POLL_MS)
   }
 
   Errors.throwUserInput(`Android emulator did not finish booting. Check ${logPath}.`)
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 async function requireBootedEmulator(): Promise<string> {
@@ -311,8 +288,8 @@ async function getExpoGoApkUrl(): Promise<string> {
   return url
 }
 
-async function openExpoGoWhenMetroIsReady(url = EXPO_GO_URL): Promise<void> {
-  await waitForMetro()
+async function openExpoGoWhenMetroIsReady(url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
+  await ExpoMetro.waitForMetro()
   const serial = await requireBootedEmulator()
   await reverseMetroPort(serial)
   HCI.writeLine(`Opening ${url} on ${serial}.`)
@@ -336,23 +313,6 @@ async function openExpoGoWhenMetroIsReady(url = EXPO_GO_URL): Promise<void> {
 
 async function reverseMetroPort(serial: string): Promise<void> {
   await CLI.mustRun('adb', {
-    args: ['-s', serial, 'reverse', `tcp:${EXPO_GO_METRO_PORT}`, `tcp:${EXPO_GO_METRO_PORT}`],
+    args: ['-s', serial, 'reverse', `tcp:${ExpoConfig.EXPO_PORT}`, `tcp:${ExpoConfig.EXPO_PORT}`],
   })
-}
-
-async function waitForMetro(): Promise<void> {
-  const deadline = Date.now() + METRO_START_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(EXPO_METRO_STATUS_URL)
-      if (response.ok && (await response.text()).includes('running')) {
-        return
-      }
-    } catch {
-      // Metro is still starting.
-    }
-    await sleep(METRO_START_POLL_MS)
-  }
-
-  Errors.throwUserInput(`Expo Metro did not start at ${EXPO_METRO_STATUS_URL}.`)
 }

@@ -1,13 +1,21 @@
 import { injectionArgumentName } from './injections'
 import {
+  type ActionInvocationPair as ActionInvocationPairData,
+  type InvocationArity as InvocationArityData,
+  invocationArity,
   type ItemPropertyBindingDiagnostic as ItemPropertyBindingDiagnosticData,
   type ItemPropertyBindingPair as ItemPropertyBindingPairData,
   type ItemPropertyBindingResult as ItemPropertyBindingResultData,
   type RenderInvocationPair as RenderInvocationPairData,
+  resolveActionInvocation,
+  resolveActionTarget,
+  type ResolvedActionInvocation as ResolvedActionInvocationData,
+  type ResolvedActionTarget as ResolvedActionTargetData,
   type ResolvedRenderInvocation as ResolvedRenderInvocationData,
   resolveItemPropertyBindings,
   resolveRenderInvocation,
 } from './invocations'
+import { type LayoutTermValue as LayoutTermValueData, LayoutUtils } from './layouts'
 import { referencedNames } from './references'
 import { getDocument, isNode, streamAllContents } from './traversal'
 
@@ -15,14 +23,24 @@ import { getDocument, isNode, streamAllContents } from './traversal'
 const ASTUtils = {
   getDocument,
   injectionArgumentName,
+  invocationArity,
   isNode,
+  Layout: LayoutUtils,
   referencedNames,
+  resolveActionInvocation,
+  resolveActionTarget,
   resolveItemPropertyBindings,
   resolveRenderInvocation,
   streamAllContents,
 }
 
 namespace ASTUtils {
+  /** ActionInvocationPair declares one resolved action argument-to-parameter pairing. */
+  export type ActionInvocationPair = ActionInvocationPairData
+
+  /** InvocationArity declares the lists and matched-pair count used for arity diagnostics. */
+  export type InvocationArity = InvocationArityData
+
   /** RenderInvocationPair declares one resolved render argument-to-parameter pairing. */
   export type RenderInvocationPair = RenderInvocationPairData
 
@@ -37,6 +55,18 @@ namespace ASTUtils {
 
   /** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
   export type ResolvedRenderInvocation = ResolvedRenderInvocationData
+
+  /** ResolvedActionInvocation declares the semantic shape of an action invocation. */
+  export type ResolvedActionInvocation = ResolvedActionInvocationData
+
+  /** ResolvedActionTarget declares how an expression resolves as an action target. */
+  export type ResolvedActionTarget = ResolvedActionTargetData
+
+  /** Layout declares types produced by parsed layout-clause semantic helpers. */
+  export namespace Layout {
+    /** TermValue declares compact runtime values from parsed layout terms. */
+    export type TermValue = LayoutTermValueData
+  }
 }
 
 export { Packages } from './Packages'

@@ -15,6 +15,10 @@ export default {
   /** AppView compiles an app view statement into the generated app root return. */
   AppView(appView: AST.AppView): Compiled {
     const view = resolveRef(appView.view)
-    return gen`return <${genScopeName(view)} />`
+    return gen`
+      return <TR.AppShell>
+        <${genScopeName(view)} />
+      </TR.AppShell>
+    `
   },
 } as const

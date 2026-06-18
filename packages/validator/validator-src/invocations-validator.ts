@@ -1,10 +1,10 @@
 import ASTUtils, { Type } from '@ast-utils'
 import { AST } from '@parser'
-import type { TaoTypirServices } from './type-system'
+import type { TaoTypirServices } from './TypeSystemHelpers'
 import type { ValidationContext } from './validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
-export const invocationValidationMessages = {
+const invocationValidationMessages = {
   missingArgument: (view: string, parameter: string) =>
     `Render of ${view} is missing argument for parameter '${parameter}'.`,
   unmatchedArgument: (view: string) =>
@@ -20,15 +20,22 @@ export const invocationValidationMessages = {
   duplicateArgumentType: (view: string) => `Render of ${view} has more than one argument with the same exact type.`,
 } as const
 
-/** validateInvocations validates structural render invocation diagnostics. */
-export function validateInvocations(file: AST.TaoFile, ctx: ValidationContext): void {
+/** InvocationsValidator validates render invocations and Typir argument checks. */
+export const InvocationsValidator = {
+  messages: invocationValidationMessages,
+  registerTypeValidation,
+  validate,
+}
+
+/** validate validates structural render invocation diagnostics. */
+function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const render of ASTUtils.streamAllContents(file).filter(AST.isRender)) {
     reportInvocationDiagnostics(render, ctx)
   }
 }
 
-/** registerInvocationTypeValidation preserves the Typir initialization hook for future expression rules. */
-export function registerInvocationTypeValidation(_typir: TaoTypirServices): void {}
+/** registerTypeValidation preserves the Typir initialization hook for future expression rules. */
+function registerTypeValidation(_typir: TaoTypirServices): void {}
 
 function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext): void {
   const invocation = ASTUtils.resolveRenderInvocation(render)

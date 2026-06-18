@@ -1,6 +1,7 @@
 grammar TaoExpressions
 
 import "./aliases"
+import "./actions"
 import "./blocks"
 import "./types"
 import "./terminals"
@@ -18,7 +19,7 @@ Expression:
     TypeCastExpression | PrimaryExpression;
 
 PrimaryExpression:
-    TypedConstructor | ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | ValueReference;
+    TypedConstructor | ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | ActionExpression | ValueReference;
 
 TypeCastExpression:
     value=PrimaryExpression 'as' type=TypeReference;
@@ -53,4 +54,4 @@ NumberLiteral:
 ValueReference:
     target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration;
+type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration;

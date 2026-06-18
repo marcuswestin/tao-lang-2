@@ -21,7 +21,7 @@ export function validatorDiagnostic(
 }
 
 function validatorSeverity(severity: Parameters<Langium.ValidationAcceptor>[0]): DiagnosticSeverity {
-  return Switch.value(severity, {
+  return Switch(severity, {
     error: () => 'error',
     warning: () => 'warning',
     info: () => 'information',

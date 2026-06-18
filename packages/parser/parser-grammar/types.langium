@@ -28,6 +28,6 @@ NamedTypeReference:
     target=[TypeDefinition:ID] ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'item' | 'list';
+    'text' | 'number' | 'item' | 'list' | 'action';
 
 type TypeDefinition = TypeDeclaration | TypeProperty;

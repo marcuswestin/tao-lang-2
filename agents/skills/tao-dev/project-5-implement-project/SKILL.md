@@ -14,8 +14,8 @@ Implement the reviewed plan in controlled slices.
 - Read `Roadmap.md`, the task folder, plan, research notes, and current git state.
 - Use the `old-repo-porting` skill before implementing comparable behavior from `~/code/tao-lang`.
 - Work on a `feat/<Task>` branch when starting a new project branch.
-- Use `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` only when implementation discovers the target syntax or functionality should change.
-- As each target slice becomes implemented, copy the relevant Tao code into `Apps/Kitchen Sink/Kitchen Sink.tao`; keep only implemented, testable functionality in the executable app.
+- If implementation discovers intended syntax or functionality should change, update the task docs and test app purpose docs as needed.
+- As each slice becomes implemented, add the relevant Tao code to `Apps/Kitchen Sink/Kitchen Sink.tao`; keep only implemented, testable functionality in the executable app.
 - Follow `Apps/Test Apps/AGENTS.md` before changing test apps.
 - Validate copied Kitchen Sink functionality through the relevant package tests and runtime/app checks.
 - Implement one numbered plan step at a time.

@@ -1,7 +1,7 @@
 import ASTUtils, { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type Compiled, gen, genJoin, genName, genScopeName } from '../codegen-util'
+import { type Compiled, gen, genName } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
@@ -26,25 +26,26 @@ export default {
     Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
 
     const renderArguments = Compile.RenderArguments(invocation)
+    const taoProps = Compile.RenderTaoProps(render)
     const block = render.block
     const children = block?.statements ?? []
     if (children.length === 0) {
-      return gen`<${genScopeName(view)}${renderArguments} />`
+      return gen`<${gen.scopeName(view)}${renderArguments}${taoProps} />`
     }
     Assert.defined(block, 'render with child statements has a block')
 
     return gen`
-      <${genScopeName(view)}${renderArguments}>
+      <${gen.scopeName(view)}${renderArguments}${taoProps}>
         {TR.BlockScope(_Scope, _Scope => {
           ${Compile.RenderBlockBody(block)}
         })}
-      </${genScopeName(view)}>
+      </${gen.scopeName(view)}>
     `
   },
 
   /** RenderArguments compiles render invocation arguments into JSX props. */
   RenderArguments(invocation: ASTUtils.ResolvedRenderInvocation): Compiled {
-    return genJoin(invocation.pairs, Compile.InvocationArgument, { separator: '' })
+    return gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })
   },
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */

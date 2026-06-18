@@ -1,59 +1,90 @@
 publish layout Box {
    render inject ```ts
-      return TR.Views.Box(_ViewProps)
+      return TR.Views.View(_ViewProps, {
+        direction: 'row',
+        layout: TR.Layout.create([['content', 'left', 'center'], ['hug']]),
+      })
    ```
 }
 
 publish layout Stack {
    render inject ```ts
-      return TR.Views.Stack(_ViewProps)
+      return TR.Views.View(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'center'], ['hug']]),
+      })
    ```
 }
 
 publish layout Col {
    render inject ```ts
-      return TR.Views.Col(_ViewProps)
+      return TR.Views.View(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+      })
    ```
 }
 
 publish layout Row {
    render inject ```ts
-      return TR.Views.Row(_ViewProps)
+      return TR.Views.View(_ViewProps, {
+        direction: 'row',
+        layout: TR.Layout.create([['content', 'baseline', 'left'], ['fill']]),
+      })
    ```
 }
 
 publish layout WrappingRow {
    render inject ```ts
-      return TR.Views.WrappingRow(_ViewProps)
+      return TR.Views.View(_ViewProps, {
+        direction: 'row',
+        layout: TR.Layout.create([['content', 'baseline', 'left'], ['compress'], ['hug']]),
+        style: { flexWrap: 'wrap' },
+      })
    ```
 }
 
 publish view Text text as Value {
    render inject Value ```ts
-      return TR.Views.Text({ __tao: _ViewProps.__tao, children: [Value] })
+      return TR.Views.Text(
+        { __tao: _ViewProps.__tao, children: [Value] },
+        { nativeProps: { numberOfLines: 1, ellipsizeMode: 'tail' } },
+      )
    ```
 }
 
 publish view TextFrame text as Value {
    render inject Value ```ts
-      return TR.Views.TextFrame({ __tao: _ViewProps.__tao, children: [Value] })
+      return TR.Views.Text(
+        { __tao: _ViewProps.__tao, children: [Value] },
+        { nativeProps: { numberOfLines: 1, ellipsizeMode: 'clip' } },
+      )
    ```
 }
 
 publish view TextMultiline text as Value {
    render inject Value ```ts
-      return TR.Views.TextMultiline({ __tao: _ViewProps.__tao, children: [Value] })
+      return TR.Views.Text(
+        { __tao: _ViewProps.__tao, children: [Value] },
+        { nativeProps: {} },
+      )
    ```
 }
 
 publish view Number number as Value {
    render inject Value ```ts
-      return TR.Views.Number({ __tao: _ViewProps.__tao, children: [String(Value)] })
+      return TR.Views.Text(
+        { __tao: _ViewProps.__tao, children: [String(Value)] },
+        { nativeProps: { numberOfLines: 1, ellipsizeMode: 'tail' } },
+      )
    ```
 }
 
-publish view Button text as Title {
-   render inject Title ```ts
-      return TR.Views.Button({ __tao: _ViewProps.__tao, title: Title })
+publish view Button text as Title, action as Action {
+   render inject Title, Action ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: Action },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
    ```
 }

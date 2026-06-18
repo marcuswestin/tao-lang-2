@@ -44,8 +44,18 @@ Use this for Tao architecture review before implementation or after implementati
 - For broad or high-risk work, add focused reviewers for language semantics, runtime/codegen, roadmap sequencing, docs/ADRs, or old-repo precedent by editing the generated manifest or running a targeted follow-up. Let `./agent review plan` choose Codex Spark for narrow focused lenses when normal Codex session budget is low and Spark windows have room.
 - Give each reviewer a narrow prompt with the mode, scope, relevant instructions, current architecture summary, and the specific review axis.
 - For Gemini in plan mode, assume it may not run shell commands and may not read ignored `.artifacts` paths. Pass the scope and key diff excerpts inline in the prompt instead of asking Gemini to inspect an artifact path or run `git diff` itself.
-- When accepted architecture findings cause code or docs changes, rerun at least the affected architecture/conformance lens against the final staged diff before final handoff.
+- When accepted architecture findings cause code or docs changes, rerun at least the affected architecture/conformance lens against the final scoped diff before final handoff.
+- Count only substantive reviewer artifacts. A command that exits successfully but writes an empty or near-empty review is not a completed review; keep the artifact as evidence and launch a replacement reviewer.
+- Do not leave reviewer sessions running after enough substantive reviews have completed. Collect usable outputs, interrupt or otherwise close stalled extras, and mention failed, empty, or interrupted reviewers separately from reviewers used for conclusions.
 - Treat reviewer output as evidence, not truth. The main agent reconciles findings and decides which risks, alternatives, and recommendations are valid.
+
+## Review Runner Gotchas
+
+- `codexbar usage` can exit nonzero while still printing useful provider JSON mixed with unavailable-provider errors. Use the usable provider entries instead of treating the command as fatal.
+- The repo-owned `./agent review` runner is useful for architecture passes: create a run with `./agent review new --slug <slug>`, then use lenses such as `architecture` and `api-boundary`.
+- Count only substantive reviewer output as coverage. Empty files, one-byte files, or metadata with `status: empty` are failed coverage even if the wrapper exits successfully.
+- Time-box reviewers that stall without artifacts. Stop long-running wrappers before final handoff so no review command is left running.
+- If external reviewers return empty or stall, fall back to available read-only subagents and report that limitation clearly; still reconcile findings yourself.
 
 ## Output
 

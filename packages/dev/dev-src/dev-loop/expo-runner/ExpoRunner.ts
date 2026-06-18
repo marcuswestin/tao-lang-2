@@ -1,0 +1,52 @@
+import { CLI, Errors, FS, HCI } from '@shared'
+import { Android } from './android'
+import { ExpoConfig } from './expo-config'
+import { ExpoServer } from './expo-server'
+import { ExpoMetro } from './metro'
+import { Ports } from './Ports'
+import { ExpoTargets } from './run-targets'
+
+export type ExpoServerProcess = {
+  onUnexpectedExit: (listener: () => void) => void
+  start: () => Promise<void>
+  stop: () => Promise<void>
+}
+
+/** ExpoRunner is the public Expo runner facade for dev-loop callers. */
+export const ExpoRunner = {
+  createServer,
+  ensureMetroPortFree: ExpoMetro.ensureMetroPortFree,
+  ensureAndroidEmulator: Android.ensureEmulator,
+  ensureAndroidExpoGo: Android.ensureExpoGo,
+  openAndroid: ExpoTargets.openAndroid,
+  openIosSimulator: ExpoTargets.openIosSimulator,
+  openStartupTargets: ExpoTargets.openStartupTargets,
+  openWeb: ExpoTargets.openWeb,
+  portDiagnostics: {
+    formatListeners: Ports.formatListeners,
+    formatLsofListeners: Ports.formatLsofListeners,
+  },
+  reloadExpoApps: ExpoMetro.reloadExpoApps,
+  startExpo,
+  waitForMetro: ExpoMetro.waitForMetro,
+}
+
+/** createServer creates an owned Expo CLI server process wrapper. */
+function createServer(runtimeRoot: string): ExpoServerProcess {
+  return new ExpoServer(runtimeRoot)
+}
+
+/** startExpo starts the Expo runtime and opens it on Android once Metro is ready. */
+async function startExpo(): Promise<void> {
+  const runtimePackageRoot = FS.repoPath(ExpoConfig.RUNTIME_PACKAGE_PATH)
+  void ExpoTargets.openPreparedAndroid().catch(error => HCI.writeErrorLine(Errors.formatForUser(error)))
+  const result = await CLI.run('bunx', {
+    args: ExpoConfig.EXPO_START_ARGS,
+    cwd: runtimePackageRoot,
+    env: ExpoConfig.EXPO_START_ENV,
+    stdio: 'stream',
+  })
+  if (result.error || result.exitCode !== 0) {
+    throw new Errors.CommandExecutionError(result)
+  }
+}
