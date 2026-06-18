@@ -8,6 +8,9 @@
       "android",
       "web"
     ],
+    "android": {
+      "softwareKeyboardLayoutMode": "pan"
+    },
     "web": {
       "bundler": "metro"
     }

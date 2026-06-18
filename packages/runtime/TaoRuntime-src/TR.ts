@@ -1,5 +1,108 @@
+import { Switch } from '@shared/core'
 import React from 'react'
-import { type ReactNativeRuntime, setReactNativeRuntime, type TaoProps as ViewTaoProps, Views } from './TR-views'
+import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
+import { AppShell } from './TR-app-shell'
+import { LayoutControls } from './TR-layout'
+import * as TRTaoProps from './TR-TaoProps'
+import * as TRViews from './TR-views'
+
+/** TR exposes the generated-code runtime API used by generated apps. */
+class TR {
+  private constructor() {}
+
+  /** Value creates runtime Tao values from JavaScript values. */
+  static Value<T>(jsValue: T): TR.Value<T> {
+    return new RuntimeValue(jsValue)
+  }
+
+  /** Action creates runtime Tao actions from generated callbacks. */
+  static Action(body: (...args: any[]) => void): TR.Action {
+    return new RuntimeAction(body)
+  }
+
+  /** Alias creates live runtime Tao aliases that intentionally re-evaluate their initializer on every read. */
+  static Alias<T>(value: TR.Evaluable | (() => TR.Evaluable)): TR.Alias<T> {
+    return new RuntimeAlias(value)
+  }
+
+  /** BlockScope creates a child scope that can shadow parent declarations. */
+  static BlockScope<ScopeT extends TR.Scope, ReturnT>(parentScope: ScopeT, body: (scope: ScopeT) => ReturnT): ReturnT {
+    const scope = Object.create(parentScope) as ScopeT
+    return body(scope)
+  }
+
+  /** CompoundSet returns the numeric value produced by a Tao compound state update. */
+  static CompoundSet(
+    state: TR.State<number>,
+    operator: TR.CompoundSetOperator,
+    value: TR.Value<number>,
+  ): TR.Value<number> {
+    const current = state.evaluate().jsValue
+    const next = value.evaluate().jsValue
+    return Switch(operator, {
+      '+=': () => new RuntimeValue(current + next),
+      '-=': () => new RuntimeValue(current - next),
+      '*=': () => new RuntimeValue(current * next),
+      '/=': () => new RuntimeValue(current / next),
+    })
+  }
+
+  /** Do invokes a Tao action value with already-compiled runtime arguments. */
+  static Do(action: TR.Action, ...args: any[]): void {
+    action.evaluate().jsValue.invoke(...args)
+  }
+
+  /** Set updates a Tao state value. */
+  static Set<T>(state: TR.State<T>, value: () => TR.Value<T>): void {
+    state.set(value())
+  }
+
+  /** State creates view-local reactive Tao state. */
+  static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
+    const [jsValue, setJsValue] = React.useState<T>(() => initialValue().evaluate().jsValue)
+    const jsValueRef = React.useRef(jsValue)
+    jsValueRef.current = jsValue
+    return new RuntimeState(jsValueRef, setJsValue)
+  }
+
+  /** Use binds an imported module declaration into a file scope as a lazy, live binding. */
+  static Use(scope: TR.Scope, name: string, getValue: () => unknown): void {
+    Object.defineProperty(scope, name, {
+      // Lazy reads keep circular module imports working: the imported binding is only
+      // dereferenced when used, after module initialization.
+      get: getValue,
+      // Assignments through child scopes must still shadow on the receiver instead of
+      // throwing against a get-only prototype property.
+      set(value: unknown) {
+        Object.defineProperty(this, name, { value, writable: true, enumerable: true, configurable: true })
+      },
+      enumerable: true,
+      configurable: true,
+    })
+  }
+
+  /** TaoProps creates a Tao-owned props bag with optional inherited caller props. */
+  static TaoProps(localProps: TR.TaoProps, callerProps?: TR.TaoProps): TR.TaoProps {
+    return callerProps ? { ...localProps, callerProps } : localProps
+  }
+
+  /** setDevMode configures Tao runtime development-only diagnostics. */
+  static setDevMode(options?: TR.DevModeOptions): void {
+    Dev.setMode(options)
+  }
+
+  /** AppShell wraps generated app roots in Tao's safe default app frame. */
+  static readonly AppShell = AppShell
+
+  /** Dev exposes public Tao runtime development-only diagnostic controls. */
+  static readonly Dev = DevControls
+
+  /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
+  static readonly Layout = LayoutControls
+
+  /** Views exposes runtime-backed Tao stdlib primitives. */
+  static readonly Views = TRViews.Views
+}
 
 class RuntimeValue<T> {
   constructor(readonly jsValue: T) {}
@@ -54,92 +157,6 @@ class RuntimeAction {
   }
 }
 
-/** TR exposes the generated-code runtime API used by generated apps. */
-class TR {
-  private constructor() {}
-
-  /** Value creates runtime Tao values from JavaScript values. */
-  static readonly Value = RuntimeValue
-
-  /** Action creates runtime Tao actions from generated callbacks. */
-  static Action(body: (...args: any[]) => void): TR.Action {
-    return new RuntimeAction(body)
-  }
-
-  /** Alias creates live runtime Tao aliases that intentionally re-evaluate their initializer on every read. */
-  static Alias<T>(value: TR.Evaluable | (() => TR.Evaluable)): TR.Alias<T> {
-    return new RuntimeAlias(value)
-  }
-
-  /** BlockScope creates a child scope that can shadow parent declarations. */
-  static BlockScope<ScopeT extends TR.Scope, ReturnT>(parentScope: ScopeT, body: (scope: ScopeT) => ReturnT): ReturnT {
-    const scope = Object.create(parentScope) as ScopeT
-    return body(scope)
-  }
-
-  /** CompoundSet returns the numeric value produced by a Tao compound state update. */
-  static CompoundSet(
-    state: TR.State<number>,
-    operator: TR.CompoundSetOperator,
-    value: TR.Value<number>,
-  ): TR.Value<number> {
-    const current = state.evaluate().jsValue
-    const next = value.evaluate().jsValue
-    switch (operator) {
-      case '+=':
-        return new RuntimeValue(current + next)
-      case '-=':
-        return new RuntimeValue(current - next)
-      case '*=':
-        return new RuntimeValue(current * next)
-      case '/=':
-        return new RuntimeValue(current / next)
-    }
-  }
-
-  /** Do invokes a Tao action value with already-compiled runtime arguments. */
-  static Do(action: TR.Action, ...args: any[]): void {
-    action.evaluate().jsValue.invoke(...args)
-  }
-
-  /** Set updates a Tao state value. */
-  static Set<T>(state: TR.State<T>, value: () => TR.Value<T>): void {
-    state.set(value())
-  }
-
-  /** State creates view-local reactive Tao state. */
-  static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
-    const [jsValue, setJsValue] = React.useState<T>(() => initialValue().evaluate().jsValue)
-    const jsValueRef = React.useRef(jsValue)
-    jsValueRef.current = jsValue
-    return new RuntimeState(jsValueRef, setJsValue)
-  }
-
-  /** Use binds an imported module declaration into a file scope as a lazy, live binding. */
-  static Use(scope: TR.Scope, name: string, getValue: () => unknown): void {
-    Object.defineProperty(scope, name, {
-      // Lazy reads keep circular module imports working: the imported binding is only
-      // dereferenced when used, after module initialization.
-      get: getValue,
-      // Assignments through child scopes must still shadow on the receiver instead of
-      // throwing against a get-only prototype property.
-      set(value: unknown) {
-        Object.defineProperty(this, name, { value, writable: true, enumerable: true, configurable: true })
-      },
-      enumerable: true,
-      configurable: true,
-    })
-  }
-
-  /** setReactNativeRuntime sets the runtime RN component set used by TR.Views. */
-  static setReactNativeRuntime(runtime: ReactNativeRuntime): void {
-    setReactNativeRuntime(runtime)
-  }
-
-  /** Views exposes runtime-backed Tao stdlib primitives. */
-  static readonly Views = Views
-}
-
 namespace TR {
   /** Action declares a runtime Tao action wrapper. */
   export type Action = RuntimeAction
@@ -160,7 +177,9 @@ namespace TR {
   /** Scope declares generated Tao runtime declaration storage. */
   export type Scope = Record<string, any>
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
-  export type TaoProps = ViewTaoProps
+  export type TaoProps = TRTaoProps.TaoProps
+  /** DevModeOptions declares runtime development-only diagnostic flags. */
+  export type DevModeOptions = TaoDevModeOptions
 }
 
 export default TR

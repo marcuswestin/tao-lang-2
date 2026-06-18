@@ -1,21 +1,7 @@
 import React from 'react'
-
-/** ReactNativeRuntime declares the RN component set TR.Views renders with. */
-export type ReactNativeRuntime = {
-  View: React.ComponentType<any>
-  Text: React.ComponentType<any>
-  Pressable: React.ComponentType<any>
-}
-
-/** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
-export type TaoProps = {
-  layout?: unknown
-}
-
-type TaoViewProps = {
-  __tao?: TaoProps
-  children?: React.ReactNode
-}
+import { Dev } from './dev-runtime/TR-dev'
+import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
+import { TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
 
 type TaoButtonProps = TaoViewProps & {
   action?: {
@@ -24,77 +10,48 @@ type TaoButtonProps = TaoViewProps & {
   title: string
 }
 
-let reactNativeRuntime: ReactNativeRuntime | undefined
-
-/** setReactNativeRuntime sets the runtime RN component set used by Views. */
-export function setReactNativeRuntime(runtime: ReactNativeRuntime): void {
-  reactNativeRuntime = runtime
-}
-
 /** Views declares runtime-backed primitive Tao stdlib view implementations. */
 export const Views = {
-  Box(props: TaoViewProps): React.JSX.Element {
+  View(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     const RN = requireReactNativeRuntime()
-    return React.createElement(RN.View, { style: [{ flexDirection: 'row' }, props.__tao?.layout] }, props.children)
+    return createReactElement(RN, RN.View, props, runtimeProps)
   },
 
-  Stack(props: TaoViewProps): React.JSX.Element {
+  Text(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     const RN = requireReactNativeRuntime()
-    return React.createElement(RN.View, { style: [{ flexDirection: 'column' }, props.__tao?.layout] }, props.children)
+    return createReactElement(RN, RN.Text, props, runtimeProps)
   },
 
-  Col(props: TaoViewProps): React.JSX.Element {
+  Pressable(props: TaoButtonProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     const RN = requireReactNativeRuntime()
-    return React.createElement(RN.View, { style: [{ flexDirection: 'column' }, props.__tao?.layout] }, props.children)
-  },
-
-  Row(props: TaoViewProps): React.JSX.Element {
-    const RN = requireReactNativeRuntime()
-    return React.createElement(RN.View, { style: [{ flexDirection: 'row' }, props.__tao?.layout] }, props.children)
-  },
-
-  WrappingRow(props: TaoViewProps): React.JSX.Element {
-    const RN = requireReactNativeRuntime()
-    return React.createElement(
-      RN.View,
-      { style: [{ flexDirection: 'row', flexWrap: 'wrap' }, props.__tao?.layout] },
-      props.children,
-    )
-  },
-
-  Text(props: TaoViewProps): React.JSX.Element {
-    const RN = requireReactNativeRuntime()
-    return React.createElement(RN.Text, undefined, props.children)
-  },
-
-  TextFrame(props: TaoViewProps): React.JSX.Element {
-    const RN = requireReactNativeRuntime()
-    return React.createElement(RN.Text, undefined, props.children)
-  },
-
-  TextMultiline(props: TaoViewProps): React.JSX.Element {
-    const RN = requireReactNativeRuntime()
-    return React.createElement(RN.Text, undefined, props.children)
-  },
-
-  Number(props: TaoViewProps): React.JSX.Element {
-    const RN = requireReactNativeRuntime()
-    return React.createElement(RN.Text, undefined, props.children)
-  },
-
-  Button(props: TaoButtonProps): React.JSX.Element {
-    const RN = requireReactNativeRuntime()
-    return React.createElement(
+    return createReactElement(
+      RN,
       RN.Pressable,
-      { accessibilityRole: 'button', onPress: () => props.action?.invoke() },
-      React.createElement(RN.Text, undefined, props.title),
+      props,
+      runtimeProps,
+      { onPress: () => props.action?.invoke() },
+      createReactElement(RN, RN.Text, {}, {}, undefined, props.title),
     )
   },
 } as const
 
-function requireReactNativeRuntime(): ReactNativeRuntime {
-  if (!reactNativeRuntime) {
-    throw new Error('TR React Native runtime is not set. Generated app modules must call TR.setReactNativeRuntime(RN).')
+function createReactElement(
+  runtime: ReactNativeRuntime,
+  component: React.ElementType,
+  props: TaoViewProps,
+  runtimeProps: TaoViewRuntimeProps = {},
+  nativePropOverrides?: Record<string, unknown>,
+  children?: React.ReactNode,
+): React.ReactElement {
+  const merged = TaoPropsControls.mergeViewProps(props, runtimeProps)
+  const elementProps = {
+    ...TaoPropsControls.nativePropsWithStyle(merged),
+    ...nativePropOverrides,
   }
-  return reactNativeRuntime
+  const elementChildren = children ?? merged.children
+  const args = [component, elementProps, elementChildren]
+  Dev.processCreateReactElementArgs(args, {
+    platformOS: runtime.Platform?.OS,
+  })
+  return React.createElement.apply(React, args as any)
 }
