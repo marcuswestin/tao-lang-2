@@ -71,7 +71,11 @@ export namespace Packages {
             workspaceFilePaths,
           })
         )
-        return targetFiles.flatMap(file => file.statements.filter(AST.isDeclaration))
+        return targetFiles.flatMap(file =>
+          file.statements
+            .filter(AST.isDeclaration)
+            .filter(declaration => isVisible(visibilityOf(declaration), resolution))
+        )
       },
       async candidateFilePaths(useStatement, request) {
         return await candidateFilePaths(resolveUse(context, useStatement, request.fromFilePath))
