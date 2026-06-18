@@ -238,9 +238,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view parameter spacing', async () => {
     await testFormatCode(
-      `publish view CountText Count   number,Label    text { render Text Label }`,
+      `publish view CountText number as Count,text as Label { render Text Label }`,
       `
-        publish view CountText Count number, Label text {
+        publish view CountText number as Count, text as Label {
            render Text Label
         }
       `,
@@ -249,14 +249,14 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view invocation argument spacing', async () => {
     await testFormatCode(
-      `view MainView { render Stack { CountText 3,"label" } }\nview CountText Count number, Label text { render Text Label }`,
+      `view MainView { render Stack { CountText 3,"label" } }\nview CountText number as Count, text as Label { render Text Label }`,
       `
         view MainView {
            render Stack {
               CountText 3, "label"
         }  }
 
-        view CountText Count number, Label text {
+        view CountText number as Count, text as Label {
            render Text Label
         }
       `,
@@ -272,6 +272,41 @@ Describe('Tao formatter aliases', () => {
         publish alias Greeting = "Hello"
 
         view MainView { }
+      `,
+    )
+  })
+})
+
+Describe('Tao formatter types and constructors', () => {
+  Test('normalizes type declarations, constructors, casts, lists, and member access', async () => {
+    await testFormatCode(
+      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nalias Demo = Person.{Tags.["a" "b"] Job.{Level.2 Title."Engineer"} Age.40 "Ada" as Name}\nview Profile Person { render Text Person.Job.Title }`,
+      `
+        type Job is {
+           Title is text
+           Level is number
+        }
+
+        type Person is {
+           Name
+           Age
+           Tags
+           Job
+        }
+
+        alias Demo = Person.{
+           Tags.["a" "b"]
+           Job.{
+              Level.2
+              Title."Engineer"
+           }
+           Age.40
+           "Ada" as Name
+        }
+
+        view Profile Person {
+           render Text Person.Job.Title
+        }
       `,
     )
   })
@@ -317,14 +352,14 @@ Describe('Tao formatter injections', () => {
   Test('indents injection fence bodies one level below the inject line', async () => {
     await testFormatCode(
       `
-        view CountText Count number {
+        view CountText number as Count {
         render inject Count ${tsFence}
         return <RN.Text>{Count}</RN.Text>
         ${fence}
         }
       `,
       `
-        view CountText Count number {
+        view CountText number as Count {
            render inject Count ${tsFence}
               return <RN.Text>{Count}</RN.Text>
            ${fence}

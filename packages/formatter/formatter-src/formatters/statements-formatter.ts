@@ -12,9 +12,9 @@ export default {
     f.commaSpacedList()
   },
 
-  /** ParameterDeclaration formats `Name type` spacing. */
+  /** ParameterDeclaration formats type-first parameters and optional aliases. */
   ParameterDeclaration(f) {
-    f.oneSpaceBeforeProperty('type')
+    f.oneSpaceAround('as')
   },
 } satisfies Partial<FormatHandlers>
 

@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import { sliceText, statementSlices } from './text-slices'
 
 /**
- * moveViewRendersLast returns the document text with each view body's single render statement
+ * moveViewRendersLast returns the text as document with each view body's single render statement
  * moved to the end, or undefined when nothing needs to move. Views with zero or multiple render
  * statements are left for the validator to report.
  */

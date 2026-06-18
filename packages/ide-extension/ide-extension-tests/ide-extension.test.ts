@@ -71,10 +71,10 @@ Describe('Tao IDE extension smoke', () => {
       app Demo {
         render Greeting
       }
-      view Counter Count number {
+      view Counter number as Count {
         render Text Count
       }
-      view Text Value text {
+      view Text text as Value {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -83,7 +83,9 @@ Describe('Tao IDE extension smoke', () => {
 
     Expect(diagnostics).toContain('Only root view declarations are allowed in app Demo.')
     Expect(
-      diagnostics.some(diagnostic => diagnostic.includes("Argument for parameter 'Value' expects text, got number.")),
+      diagnostics.some(diagnostic =>
+        diagnostic.includes('Render of Text has an argument that does not match any unbound parameter by type.')
+      ),
     ).toBe(true)
   })
 
@@ -97,7 +99,7 @@ Describe('Tao IDE extension smoke', () => {
       view MainView {
         render Text First
       }
-      view Text Value text { }
+      view Text text as Value { }
     `)
 
     Expect(diagnostics).toContain(

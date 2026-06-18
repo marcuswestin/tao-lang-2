@@ -20,8 +20,16 @@ export type NodeFormat<NodeT extends AST.Node> = {
   oneSpaceBeforeProperty(...properties: Langium.Properties<NodeT>[]): void
   /** commaSpacedList formats list commas with no space before and one space after. */
   commaSpacedList(): void
+  /** commaLineList formats block-list commas without adding a space before the line break. */
+  commaLineList(): void
+  /** spaceSeparatedList formats adjacent nodes with one space between them. */
+  spaceSeparatedList(items: readonly AST.Node[]): void
+  /** lineSeparatedList formats adjacent nodes with one newline between them. */
+  lineSeparatedList(items: readonly AST.Node[]): void
   /** indentedBraceBlock formats braces as `{ }` when empty, or one indented item per line with `}` on its own line. */
   indentedBraceBlock(items: readonly AST.Node[]): void
+  /** indentedBracketBlock formats list brackets with one indented item per line when non-empty. */
+  indentedBracketBlock(items: readonly AST.Node[]): void
   /** separateLines puts each item after the first on its own line, `linesBetween` newlines below the previous item. */
   separateLines<ItemT extends AST.Node>(
     items: readonly ItemT[],
@@ -69,6 +77,19 @@ export function createNodeFormat<NodeT extends AST.Node>(
     commaSpacedList() {
       formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace())
     },
+    commaLineList() {
+      formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.noSpace())
+    },
+    spaceSeparatedList(items) {
+      for (const item of items.slice(1)) {
+        formatter.node(item).prepend(Formatting.oneSpace())
+      }
+    },
+    lineSeparatedList(items) {
+      for (const item of items.slice(1)) {
+        formatter.node(item).prepend(Formatting.indent())
+      }
+    },
     indentedBraceBlock(items) {
       const open = formatter.keyword('{')
       const close = formatter.keyword('}')
@@ -78,6 +99,15 @@ export function createNodeFormat<NodeT extends AST.Node>(
         formatter.interior(open, close).prepend(Formatting.indent())
         close.prepend(Formatting.newLine())
       }
+    },
+    indentedBracketBlock(items) {
+      if (items.length === 0) {
+        return
+      }
+      const open = formatter.keyword('[')
+      const close = formatter.keyword(']')
+      formatter.interior(open, close).prepend(Formatting.indent())
+      close.prepend(Formatting.newLine())
     },
     separateLines(items, linesBetween) {
       if (items.length < 2) {
