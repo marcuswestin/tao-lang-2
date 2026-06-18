@@ -16,8 +16,20 @@ Describe('minimal Tao parser', () => {
 
     Expect(parseResult.diagnostics).toEqual([])
 
-    const [useStatement, app, greetingAlias, launchCountAlias, mainView, countTextView] =
-      parseResult.entry.ast.statements
+    const useStatement = parseResult.entry.ast.statements.find(AST.isUseStatement)
+    const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
+    const greetingAlias = parseResult.entry.ast.statements.find(
+      statement => AST.isAliasDeclaration(statement) && statement.name === 'Greeting',
+    )
+    const launchCountAlias = parseResult.entry.ast.statements.find(
+      statement => AST.isAliasDeclaration(statement) && statement.name === 'LaunchCount',
+    )
+    const mainView = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'MainView',
+    )
+    const countTextView = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'CountText',
+    )
     Expect.Is(useStatement, AST.isUseStatement)
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(greetingAlias, AST.isAliasDeclaration)
@@ -52,7 +64,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(blockGreetingAlias, AST.isAliasDeclaration)
     Expect(blockGreetingAlias.name).toBe('Greeting')
     const childInvocations = mainRender.block?.statements.filter(AST.isViewRender) ?? []
-    Expect(childInvocations).toHaveLength(5)
+    Expect(childInvocations).toHaveLength(8)
     const [outerText, shadowedText, nestedText, literalText, countText] = childInvocations
     Expect.Is(outerText, AST.isViewRender)
     Expect.Is(shadowedText, AST.isViewRender)
@@ -85,7 +97,9 @@ Describe('minimal Tao parser', () => {
 
     Expect(countTextView.name).toBe('CountText')
     Expect(countTextView.parameterList?.parameters[0]?.name).toBe('Count')
-    Expect(countTextView.parameterList?.parameters[0]?.type).toBe('number')
+    const countParameterType = countTextView.parameterList?.parameters[0]?.type
+    Expect.Is(countParameterType, AST.isPrimitiveTypeReference)
+    Expect(countParameterType.primitive).toBe('number')
     const countRender = countTextView.block.statements[0]
     Expect.Is(countRender, AST.isRenderStatement)
     Expect(countRender.injection?.tsCodeBlock).toContain('Launch count:')
@@ -118,7 +132,7 @@ Describe('minimal Tao parser', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      view Text Value text {
+      view Text text as Value {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -144,9 +158,9 @@ Describe('minimal Tao parser', () => {
       alias Greeting = "Hello"
       alias LaunchCount = 3
 
-      view Text Value text { }
-      view StatTile Label text, Count number { }
-      view MainView Label text {
+      view Text text as Value { }
+      view StatTile text as Label, number as Count { }
+      view MainView text as Label {
         alias LocalLabel = Label
         render Text LocalLabel { }
         render StatTile Greeting, LaunchCount { }
@@ -162,7 +176,9 @@ Describe('minimal Tao parser', () => {
     Expect.Is(greetingAlias.value, AST.isStringLiteral)
     Expect.Is(launchCountAlias.value, AST.isNumberLiteral)
     Expect(launchCountAlias.value.value).toBe(3)
-    Expect(mainView.parameterList?.parameters[0]?.type).toBe('text')
+    const mainViewParameterType = mainView.parameterList?.parameters[0]?.type
+    Expect.Is(mainViewParameterType, AST.isPrimitiveTypeReference)
+    Expect(mainViewParameterType.primitive).toBe('text')
 
     const [localAlias, textRender, statRender] = mainView.block.statements
     Expect.Is(localAlias, AST.isAliasDeclaration)
@@ -194,12 +210,12 @@ Describe('minimal Tao parser', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      view Text Value text {
+      view Text text as Value {
         render inject \`\`\`ts
           return null
         \`\`\`
       }
-      view MainView Label text {
+      view MainView text as Label {
         alias Greeting = "View"
         alias LabelAlias = Label
         render Stack {
@@ -259,6 +275,13 @@ Describe('minimal Tao parser', () => {
     Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration).map(alias => alias.name)).toEqual([
       'Greeting',
       'LaunchCount',
+      'FixedSinkName',
+      'SinkProfileValue',
+    ])
+    Expect(parseResult.entry.ast.statements.filter(AST.isTypeDeclaration).map(type => type.name)).toEqual([
+      'SinkName',
+      'SinkTags',
+      'SinkProfile',
     ])
   })
 
@@ -266,7 +289,102 @@ Describe('minimal Tao parser', () => {
     const parseResult = await Workspace.parse(typeSystemTestsPath)
 
     Expect(parseResult.diagnostics).toEqual([])
-    Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(4)
+    Expect(parseResult.entry.ast.statements.filter(AST.isTypeDeclaration).map(type => type.name)).toEqual([
+      'Name',
+      'Age',
+      'Count',
+      'Tags',
+      'Job',
+      'Person',
+    ])
+    Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(11)
+  })
+
+  Test('parses type declarations, constructors, casts, lists, and member access', async () => {
+    const parseResult = await testParseCode(`
+      type Name is text
+      type Tags is list
+      type Job is {
+        Title is text
+      }
+      type Person is {
+        Name
+        Tags
+        Job
+      }
+
+      alias DisplayName = "Ada" as Name
+      alias DemoTags = Tags.["types" "items"]
+      alias DemoJob = Job.{ Title."Compiler engineer" }
+      alias DemoPerson = Person.{ DisplayName DemoTags DemoJob }
+
+      view Profile Person {
+        render Text Person.Job.Title
+      }
+      view Text text as Value { }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const [nameType, tagsType, jobType, personType] = parseResult.entry.ast.statements.filter(AST.isTypeDeclaration)
+    Expect.Is(nameType, AST.isTypeDeclaration)
+    Expect.Is(tagsType, AST.isTypeDeclaration)
+    Expect.Is(jobType, AST.isTypeDeclaration)
+    Expect.Is(personType, AST.isTypeDeclaration)
+    Expect(nameType?.name).toBe('Name')
+    Expect(tagsType?.name).toBe('Tags')
+    Expect.Is(jobType.type, AST.isItemTypeExpression)
+    Expect.Is(personType.type, AST.isItemTypeExpression)
+
+    const [displayName, demoTags, demoJob, demoPerson] = parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)
+    Expect.Is(displayName, AST.isAliasDeclaration)
+    Expect.Is(demoTags, AST.isAliasDeclaration)
+    Expect.Is(demoJob, AST.isAliasDeclaration)
+    Expect.Is(demoPerson, AST.isAliasDeclaration)
+    Expect.Is(displayName.value, AST.isTypeCastExpression)
+    Expect.Is(demoTags.value, AST.isTypedConstructor)
+    Expect.Is(demoTags.value.value, AST.isListLiteral)
+    Expect.Is(demoJob.value, AST.isTypedConstructor)
+    Expect.Is(demoJob.value.value, AST.isItemLiteral)
+    Expect.Is(demoPerson.value, AST.isTypedConstructor)
+
+    const profile = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'Profile',
+    )
+    Expect.Is(profile, AST.isViewDeclaration)
+    const render = profile.block.statements[0]
+    Expect.Is(render, AST.isRenderStatement)
+    const argument = render.argumentList?.arguments[0]?.value
+    Expect.Is(argument, AST.isMemberAccessExpression)
+    Expect(argument.members).toEqual(['Job', 'Title'])
+  })
+
+  Test('resolves nested item property constructor types', async () => {
+    const parseResult = await testParseCode(`
+      type Job is {
+        Title is text
+      }
+      type Profile is {
+        Role is Job
+      }
+      alias DemoProfile = Profile.{ Role.{ Title."Compiler engineer" } }
+      view MainView { }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const profile = parseResult.entry.ast.statements.find(
+      statement => AST.isTypeDeclaration(statement) && statement.name === 'Profile',
+    )
+    const alias = parseResult.entry.ast.statements.find(
+      statement => AST.isAliasDeclaration(statement) && statement.name === 'DemoProfile',
+    )
+    Expect.Is(profile, AST.isTypeDeclaration)
+    Expect.Is(profile.type, AST.isItemTypeExpression)
+    Expect.Is(alias, AST.isAliasDeclaration)
+    Expect.Is(alias.value, AST.isTypedConstructor)
+    Expect.Is(alias.value.value, AST.isItemLiteral)
+    const role = alias.value.value.properties[0]?.value
+    Expect.Is(role, AST.isTypedConstructor)
+    Expect(role.type.target?.ref?.name).toBe('Role')
   })
 
   Test('parses the Runtime Stdlib Tests app', async () => {
@@ -306,7 +424,7 @@ Describe('minimal Tao parser', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      project view Text Value text {
+      project view Text text as Value {
         render inject Value \`\`\`ts
           return <RN.Text>{Value}</RN.Text>
         \`\`\`
@@ -336,7 +454,7 @@ Describe('minimal Tao parser', () => {
   Test('parses bare use statements', async () => {
     const parseResult = await testParseSyntax(`
       use Text
-      project view Text Value text {
+      project view Text text as Value {
         render inject Value \`\`\`ts
           return null
         \`\`\`

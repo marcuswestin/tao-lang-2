@@ -6,6 +6,7 @@ import "./aliases"
 import "./injections"
 import "./imports"
 import "./project"
+import "./types"
 import "./terminals"
 
 entry BlocksGrammarEntrypoint:
@@ -15,12 +16,12 @@ Statement:
     Declaration | ProjectDeclaration | UseStatement | AppView | Injection | RenderStatement | ViewRender;
 
 Declaration:
-    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration;
+    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration;
 
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement;
 type ViewStatement = AliasDeclaration | Render;
-type NamedDeclaration = Declaration | ParameterDeclaration;
-type ExportableDeclaration = AliasDeclaration | RenderableDeclaration;
+type NamedDeclaration = Declaration;
+type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration;
 
 Block:
     '{' statements+=Statement* '}';
@@ -29,7 +30,4 @@ ParameterList:
     parameters+=ParameterDeclaration (',' parameters+=ParameterDeclaration)*;
 
 ParameterDeclaration:
-    name=ID type=PrimitiveType;
-
-PrimitiveType returns string:
-    'text' | 'number';
+    type=TypeReference ('as' name=ID)?;

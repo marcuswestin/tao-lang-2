@@ -3,13 +3,11 @@ grammar TaoViews
 import "./blocks"
 import "./expressions"
 import "./injections"
+import "./visibility"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
     ViewDeclaration | LayoutDeclaration;
-
-DeclarationVisibility returns string:
-    'package' | 'project' | 'publish';
 
 ViewDeclaration:
     visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList? block=Block;

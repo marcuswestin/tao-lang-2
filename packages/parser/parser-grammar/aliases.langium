@@ -1,7 +1,7 @@
 grammar TaoAliases
 
 import "./expressions"
-import "./views"
+import "./visibility"
 import "./terminals"
 
 entry AliasesGrammarEntrypoint:
