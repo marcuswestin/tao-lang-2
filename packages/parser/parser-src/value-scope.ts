@@ -25,6 +25,9 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
     }
+    if (context.property === 'app' && AST.isRunStep(context.container)) {
+      return this.createRunAppScope(context.container)
+    }
     return super.getScope(context)
   }
 
@@ -66,6 +69,16 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     let scope = this.createScopeForNodes(root.statements.filter(AST.isViewDeclaration))
     scope = this.createScopeForNodes(this.importedDeclarations(appView, AST.isViewDeclaration), scope)
+    return scope
+  }
+
+  private createRunAppScope(run: AST.RunStep): Langium.Scope {
+    const root = findRoot(run)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isAppDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(run, AST.isAppDeclaration), scope)
     return scope
   }
 

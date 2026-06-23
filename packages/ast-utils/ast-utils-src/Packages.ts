@@ -297,10 +297,10 @@ export namespace Packages {
       return []
     }
     if (await FS.isFile(targetPath)) {
-      return canUseFileCandidate(resolution) && FS.extname(targetPath) === '.tao' ? [targetPath] : []
+      return canUseFileCandidate(resolution) && isImportableTaoSourcePath(targetPath) ? [targetPath] : []
     }
     const fileCandidate = `${targetPath}.tao`
-    if (canUseFileCandidate(resolution) && await FS.isFile(fileCandidate)) {
+    if (canUseFileCandidate(resolution) && isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)) {
       return [fileCandidate]
     }
     if (!await FS.isDirectory(targetPath)) {
@@ -308,7 +308,7 @@ export namespace Packages {
     }
     const names = await FS.listDir(targetPath)
     return names
-      .filter(name => FS.extname(name) === '.tao')
+      .filter(isImportableTaoSourceName)
       .map(name => FS.resolvePath(name, { cwd: targetPath }))
   }
 
@@ -325,10 +325,10 @@ export namespace Packages {
 
   async function recursiveCandidateFiles(targetPath: string): Promise<string[]> {
     if (await FS.isFile(targetPath)) {
-      return FS.extname(targetPath) === '.tao' ? [targetPath] : []
+      return isImportableTaoSourcePath(targetPath) ? [targetPath] : []
     }
     const fileCandidate = `${targetPath}.tao`
-    if (await FS.isFile(fileCandidate)) {
+    if (isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)) {
       return [fileCandidate]
     }
     if (!await FS.isDirectory(targetPath)) {
@@ -349,7 +349,7 @@ export namespace Packages {
         await collectTaoFiles(rootPath, path, files)
         continue
       }
-      if (FS.extname(name) === '.tao') {
+      if (isImportableTaoSourceName(name)) {
         files.push(path)
       }
     }
@@ -358,6 +358,9 @@ export namespace Packages {
   /** targetMatches returns whether a resolution target includes a Tao file path. */
   export function targetMatches(resolution: Resolution, request: TargetMatchRequest): boolean {
     if (resolution.relation === 'invalid' || !resolution.targetPath) {
+      return false
+    }
+    if (isTestSourcePath(request.filePath)) {
       return false
     }
     if (resolution.candidateMode === 'recursive') {
@@ -386,6 +389,19 @@ export namespace Packages {
 
   function canUseFileCandidate(resolution: Resolution): boolean {
     return !resolution.importPath?.startsWith('@')
+  }
+
+  /** isTestSourcePath returns whether a path names a Tao sidecar test file. */
+  export function isTestSourcePath(filePath: string): boolean {
+    return FS.basename(filePath).endsWith('.test.tao')
+  }
+
+  function isImportableTaoSourceName(name: string): boolean {
+    return FS.extname(name) === '.tao' && !isTestSourcePath(name)
+  }
+
+  function isImportableTaoSourcePath(filePath: string): boolean {
+    return FS.extname(filePath) === '.tao' && !isTestSourcePath(filePath)
   }
 
   function recursiveTargetMatches(targetPath: string, filePath: string): boolean {

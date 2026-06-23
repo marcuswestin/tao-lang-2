@@ -7,6 +7,7 @@ import InvocationsCompiler from './app/invocations-compiler'
 import ProjectDeclarationCompiler from './app/project-declaration-compiler'
 import RenderStatementCompiler from './app/render-statement-compiler'
 import StatementsCompiler from './app/statements-compiler'
+import TestsCompiler from './app/tests-compiler'
 import UseStatementCompiler from './app/use-statement-compiler'
 import ViewsCompiler from './app/views-compiler'
 
@@ -14,6 +15,7 @@ import ViewsCompiler from './app/views-compiler'
 export const Compile = {
   ...FilesCompiler,
   ...StatementsCompiler,
+  ...TestsCompiler,
   ...AppCompiler,
   ...AliasesCompiler,
   ...ViewsCompiler,

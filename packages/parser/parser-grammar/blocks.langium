@@ -6,18 +6,19 @@ import "./aliases"
 import "./injections"
 import "./imports"
 import "./project"
+import "./tests"
 import "./terminals"
 
 entry BlocksGrammarEntrypoint:
     Block;
 
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | AppView | Injection | RenderStatement | ViewRender;
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | ExpectTextStep | AppView | Injection | RenderStatement | ViewRender;
 
 Declaration:
     AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration;
 
-type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement;
+type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 type ViewStatement = AliasDeclaration | Render;
 type NamedDeclaration = Declaration | ParameterDeclaration;
 type ExportableDeclaration = AliasDeclaration | RenderableDeclaration;

@@ -7,6 +7,7 @@ import "./aliases"
 import "./expressions"
 import "./injections"
 import "./project"
+import "./tests"
 import "./terminals"
 
 entry TaoFile:

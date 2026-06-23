@@ -1,3 +1,5 @@
+import { Packages } from '@ast-utils'
+import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Compiler, { type CompiledFile } from '../compiler-src/compiler'
@@ -46,6 +48,43 @@ Describe('Tao compiler', () => {
       compiled => {
         Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
         Expect(compiled['Views.tao'].relativePath).toBe('modules/Views.tao.tsx')
+      },
+    )
+  })
+
+  Test('does not compile sidecar test files from app directory imports', async () => {
+    await withTaoFiles(
+      'tao-compiler-sidecar-',
+      {
+        'Main.tao': `
+        app MyApp { view MainView }
+        use Text from ./
+        view MainView {
+          render Text "Hello"
+        }
+      `,
+        'Views.tao': `
+        project view Text Value text {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+        'Main.test.tao': `
+        test "Sidecar" {
+          check "intentionally incomplete" {
+            expect text "This file should not compile"
+          }
+        }
+      `,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['Main.tao']!)
+        const sourcePaths = compiled.files.map(file => file.sourcePath)
+
+        Expect(sourcePaths).toContain(paths['Main.tao'])
+        Expect(sourcePaths).toContain(paths['Views.tao'])
+        Expect(sourcePaths).not.toContain(paths['Main.test.tao'])
       },
     )
   })
@@ -191,6 +230,83 @@ Describe('Tao compiler', () => {
         ${fence}
       }
     `)).rejects.toThrow('entry file must declare exactly one app')
+  })
+
+  Test('strips test declarations from generated app code', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      view MainView {
+        render Text "Hello"
+      }
+      view Text Value text {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+
+      test "Smoke" {
+        check "renders" {
+          run MyApp
+          expect text "Should not compile"
+        }
+      }
+    `)
+
+    Expect(compiled.code).not.toContain('Smoke')
+    Expect(compiled.code).not.toContain('Should not compile')
+  })
+
+  Test('compiles v0 Tao test-plan IR', async () => {
+    await withTaoFiles(
+      'tao-test-plan-',
+      {
+        'Main.test.tao': `
+        use MyApp from ./
+
+        test "Smoke" {
+          check "renders" {
+            run MyApp
+            expect text "Hello"
+            expect missing text "Loading"
+          }
+        }
+      `,
+        'Main.tao': `
+        app MyApp { view MainView }
+        view MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async paths => {
+        const testPath = paths['Main.test.tao']!
+        const validation = await Workspace.validate(testPath)
+        const plan = Compiler.compileTestPlan(
+          validation,
+          Compiler.createContext(await Packages.createContext(FS.dirname(testPath)), FS.dirname(testPath)),
+        )
+
+        Expect(plan.sourcePath).toBe(testPath)
+        Expect(plan.suites).toHaveLength(1)
+        Expect(plan.suites[0]?.name).toBe('Smoke')
+        Expect(plan.suites[0]?.checks[0]?.name).toBe('renders')
+        Expect(plan.suites[0]?.checks[0]?.run.appName).toBe('MyApp')
+        Expect(plan.suites[0]?.checks[0]?.run.appSourcePath).toBe(paths['Main.tao'])
+        Expect(
+          plan.suites[0]?.checks[0]?.expectations.map(expectation => ({
+            kind: expectation.kind,
+            text: expectation.text,
+          })),
+        ).toEqual([
+          { kind: 'text', text: 'Hello' },
+          { kind: 'missingText', text: 'Loading' },
+        ])
+        Expect(plan.suites[0]?.source.range).toBeDefined()
+        Expect(plan.suites[0]?.checks[0]?.run.source.range).toBeDefined()
+      },
+    )
   })
 })
 

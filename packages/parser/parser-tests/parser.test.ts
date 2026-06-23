@@ -1,11 +1,12 @@
 import { Packages } from '@ast-utils'
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import { AST } from '../parser-src/parser'
 import { testParseCode, testParseSyntax } from './test-parse'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
 const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
@@ -183,6 +184,90 @@ Describe('minimal Tao parser', () => {
     Expect.Is(countArg, AST.isValueReference)
     Expect(labelArg.target.ref?.name).toBe('Greeting')
     Expect(countArg.target.ref?.name).toBe('LaunchCount')
+  })
+
+  Test('parses v0 Tao test declarations', async () => {
+    const parseResult = await testParseCode(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject \`\`\`ts
+          return null
+        \`\`\`
+      }
+
+      test "Smoke" {
+        check "renders text" {
+          run MyApp
+
+          expect text "Hello"
+          expect missing text "Loading"
+        }
+      }
+    `)
+
+    const test = parseResult.entry.ast.statements.find(AST.isTestDeclaration)
+    Expect.Is(test, AST.isTestDeclaration)
+    Expect(test.name).toBe('Smoke')
+    const [check] = test.block.statements
+    Expect.Is(check, AST.isCheckDeclaration)
+    Expect(check.name).toBe('renders text')
+    const [run, expectedText, missingText] = check.block.statements
+    Expect.Is(run, AST.isRunStep)
+    Expect(run.app.ref?.name).toBe('MyApp')
+    Expect.Is(expectedText, AST.isExpectTextStep)
+    Expect(expectedText.text).toBe('Hello')
+    Expect(expectedText.missing).toBe(false)
+    Expect.Is(missingText, AST.isExpectTextStep)
+    Expect(missingText.text).toBe('Loading')
+    Expect(missingText.missing).toBe(true)
+  })
+
+  Test('parses the Kitchen Sink v0 Tao test sidecar', async () => {
+    const parseResult = await Workspace.parse(kitchenSinkTestPath)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const [useStatement, test] = parseResult.entry.ast.statements
+    Expect.Is(useStatement, AST.isUseStatement)
+    Expect(useStatement.importedDeclarations[0]?.ref?.name).toBe('KitchenSink')
+    Expect.Is(test, AST.isTestDeclaration)
+    Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(3)
+  })
+
+  Test('does not discover test sidecars from app directory imports', async () => {
+    await withTaoFiles(
+      'tao-parser-sidecar-',
+      {
+        'Main.tao': `
+        app MyApp { view MainView }
+        use SharedView from ./
+        view MainView {
+          render SharedView
+        }
+      `,
+        'Shared.tao': `
+        project view SharedView {
+          render inject \`\`\`ts
+            return null
+          \`\`\`
+        }
+      `,
+        'Main.test.tao': `
+        test "Sidecar" {
+          check "intentionally incomplete" {
+            expect text "This file should not load"
+          }
+        }
+      `,
+      },
+      async paths => {
+        const parseResult = await Workspace.parse(paths['Main.tao']!)
+        const parsedFiles = parseResult.files.map(file => FS.basename(file.path))
+
+        Expect(parsedFiles).toContain('Main.tao')
+        Expect(parsedFiles).toContain('Shared.tao')
+        Expect(parsedFiles).not.toContain('Main.test.tao')
+      },
+    )
   })
 
   Test('resolves value references through nested scope shadowing', async () => {
