@@ -1,7 +1,8 @@
 import { FS } from '@shared'
-import { AfterEach, Describe, Test } from '@shared/test'
+import { AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { cleanup } from '@testing-library/react-native'
 import { compileAndRenderApp, ExpectScreen, testCompileApp, testCompileFiles } from './test-compile-app'
+import { runTaoTestPlan } from './test-tao-test-plan'
 
 AfterEach(() => cleanup())
 
@@ -15,6 +16,135 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Nested scope greeting')
     ExpectScreen(screen).toHaveText('Hello World')
     ExpectScreen(screen).toHaveText('Launch count: 3')
+  })
+
+  Test('runs Tao-authored Kitchen Sink smoke tests', async () => {
+    const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
+
+    await runTaoTestPlan(kitchenSinkTestPath)
+  })
+
+  Test('runs Tao text expectations with duplicate rendered text', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use DuplicateTextApp from ./
+
+        test "Duplicate text" {
+          check "matches at least one text node" {
+            run DuplicateTextApp
+            expect text "Repeated"
+          }
+        }
+      `,
+        'Main.tao': `
+        app DuplicateTextApp { view MainView }
+        view MainView {
+          render Stack {
+            Text "Repeated"
+            Text "Repeated"
+          }
+        }
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+        view Text Value text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('reports Tao suite and check context for failed text expectations', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use BrokenTextApp from ./
+
+        test "Broken text" {
+          check "misses expected text" {
+            run BrokenTextApp
+            expect text "Expected"
+          }
+        }
+      `,
+        'Main.tao': `
+        app BrokenTextApp { view MainView }
+        view MainView {
+          render Text "Actual"
+        }
+        view Text Value text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await Expect(runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /Tao check failed: Broken text > misses expected text[\s\S]*expect text "Expected"[\s\S]*Main\.test\.tao:/,
+        )
+      },
+    )
+  })
+
+  Test('cleans up rendered apps between Tao checks', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use FirstApp, SecondApp from ./
+
+        test "Isolated checks" {
+          check "first app" {
+            run FirstApp
+            expect text "First"
+          }
+
+          check "second app" {
+            run SecondApp
+            expect missing text "First"
+            expect text "Second"
+          }
+        }
+      `,
+        'First.tao': `
+        app FirstApp { view MainView }
+        view MainView {
+          render Text "First"
+        }
+        view Text Value text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+        'Second.tao': `
+        app SecondApp { view MainView }
+        view MainView {
+          render Text "Second"
+        }
+        view Text Value text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
   })
 
   Test('compiles and renders runtime stdlib imports', async () => {

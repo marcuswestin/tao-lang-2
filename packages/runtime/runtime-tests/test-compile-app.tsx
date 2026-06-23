@@ -4,6 +4,9 @@ import { render } from '@testing-library/react-native'
 import { type ComponentType, createElement } from 'react'
 
 export type RuntimeScreen = ReturnType<typeof render>
+export type CompiledRuntimeApp = {
+  testAppPath: string
+}
 
 type RuntimeFiles = Record<string, string>
 type RuntimeScreenAssertions = (screen: RuntimeScreen) => void | Promise<void>
@@ -12,6 +15,11 @@ let renderId = 0
 
 /** compileAndRenderApp compiles a Tao app path, renders it, and returns the test screen. */
 export async function compileAndRenderApp(appPath: string): Promise<RuntimeScreen> {
+  return renderCompiledApp(await compileAppForTest(appPath))
+}
+
+/** compileAppForTest compiles a Tao app path into an isolated runtime test app. */
+export async function compileAppForTest(appPath: string): Promise<CompiledRuntimeApp> {
   const repoRoot = Repo.getRoot()
   const runtimePackageRoot = FS.repoPath('packages/runtime')
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', { cwd: runtimePackageRoot })
@@ -24,6 +32,12 @@ export async function compileAndRenderApp(appPath: string): Promise<RuntimeScree
   })
 
   await FS.copyDirectory(generatedAppRoot, testAppRoot)
+  return { testAppPath }
+}
+
+/** renderCompiledApp renders a previously compiled runtime test app. */
+export function renderCompiledApp(compiledApp: CompiledRuntimeApp): RuntimeScreen {
+  const testAppPath = compiledApp.testAppPath
   const appModule = require(testAppPath) as { default: ComponentType }
   return render(createElement(appModule.default))
 }
