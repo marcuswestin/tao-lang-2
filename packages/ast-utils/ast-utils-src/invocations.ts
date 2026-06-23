@@ -76,25 +76,6 @@ export type ResolvedActionTarget =
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
 
-/** InvocationArity declares the lists and matched-pair count used for arity diagnostics. */
-export type InvocationArity = {
-  parameters: readonly AST.ParameterDeclaration[]
-  pairCount: number
-  args: readonly AST.Argument[]
-}
-
-type InvocationWithPairs = {
-  pairs: readonly RenderInvocationPair[]
-}
-
-type ParameterListOwner = {
-  parameterList?: AST.ParameterList
-}
-
-type ArgumentListOwner = {
-  argumentList?: AST.ArgumentList
-}
-
 /** resolveItemPropertyBindings binds item constructor property values to item type fields by type. */
 export function resolveItemPropertyBindings(
   expectedProperties: readonly AST.TypeProperty[],
@@ -195,7 +176,7 @@ export function resolveItemPropertyBindings(
     })
   }
 
-  return { pairs, diagnostics }
+  return { pairs: pairsByExpectedPropertyOrder(expectedProperties, pairs), diagnostics }
 }
 
 /** resolveRenderInvocation resolves a render target and type-based argument bindings. */
@@ -209,7 +190,7 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
     }
   }
 
-  const bindings = resolveArgumentBindings(view.parameterList?.parameters ?? [], render.argumentList?.arguments ?? [])
+  const bindings = resolveArgumentBindings(view, render)
 
   return {
     render,
@@ -230,28 +211,12 @@ export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedAc
     }
   }
 
-  const bindings = resolveArgumentBindings(
-    target.action.parameterList?.parameters ?? [],
-    invocation.argumentList?.arguments ?? [],
-  )
+  const bindings = resolveArgumentBindings(target.action, invocation)
   return {
     invocation,
     action: target.action,
     pairs: bindings.pairs,
     diagnostics: bindings.diagnostics,
-  }
-}
-
-/** invocationArity returns the argument, parameter, and matched-pair counts for an invocation. */
-export function invocationArity(
-  invocation: InvocationWithPairs,
-  target: ParameterListOwner,
-  source: ArgumentListOwner,
-): InvocationArity {
-  return {
-    parameters: target.parameterList?.parameters ?? [],
-    pairCount: invocation.pairs.length,
-    args: source.argumentList?.arguments ?? [],
   }
 }
 
@@ -283,10 +248,12 @@ function reportDuplicatePropertyTypes(
 }
 
 /** resolveArgumentBindings binds Tao arguments to parameters by exact type and unambiguous lineage. */
-export function resolveArgumentBindings(
-  parameters: readonly AST.ParameterDeclaration[],
-  args: readonly AST.Argument[],
+function resolveArgumentBindings(
+  declaration: AST.ParameterizedDeclaration,
+  invocation: AST.Render | AST.DoStatement,
 ): ArgumentBindingResult {
+  const parameters = AST.parametersOf(declaration)
+  const args = AST.argumentsOf(invocation)
   const diagnostics: ArgumentBindingDiagnostic[] = []
   const pairs: RenderInvocationPair[] = []
   const remainingParameters = new Set(parameters)
@@ -303,7 +270,7 @@ export function resolveArgumentBindings(
   const ambiguousParameters = new Set<AST.ParameterDeclaration>()
   let unresolvedArguments = 0
   for (const argument of remainingArgs) {
-    const actualType = Type.ofExpression(argument.value)
+    const actualType = Type.ofArgument(argument)
     if (actualType.kind === 'unresolved') {
       unresolvedArguments += 1
       continue
@@ -342,7 +309,7 @@ export function resolveArgumentBindings(
     if (ambiguousArguments.has(argument)) {
       continue
     }
-    const actualType = Type.ofExpression(argument.value)
+    const actualType = Type.ofArgument(argument)
     const argumentType = Type.identityKey(actualType)
     if (
       actualType.kind !== 'unresolved'
@@ -370,7 +337,27 @@ export function resolveArgumentBindings(
     })
   }
 
-  return { pairs, diagnostics }
+  return { pairs: pairsByParameterOrder(parameters, pairs), diagnostics }
+}
+
+function pairsByExpectedPropertyOrder(
+  expectedProperties: readonly AST.TypeProperty[],
+  pairs: readonly ItemPropertyBindingPair[],
+): ItemPropertyBindingPair[] {
+  // Item properties bind by type, not source position. Return pairs in the declared item
+  // shape order so compiler output is stable and object fields follow the expected type.
+  return pairs.toSorted((left, right) =>
+    expectedProperties.indexOf(left.expected) - expectedProperties.indexOf(right.expected)
+  )
+}
+
+function pairsByParameterOrder(
+  parameters: readonly AST.ParameterDeclaration[],
+  pairs: readonly RenderInvocationPair[],
+): RenderInvocationPair[] {
+  // Render/action arguments bind by type, not source position. Return pairs in parameter
+  // declaration order so codegen emits props and callback arguments in the callee's order.
+  return pairs.toSorted((left, right) => parameters.indexOf(left.parameter) - parameters.indexOf(right.parameter))
 }
 
 function reportDuplicateParameterTypes(
@@ -406,7 +393,7 @@ function bindArguments(
     candidates: remainingArgs,
     targets: remainingParameters,
     isCandidateBlocked: argument => {
-      const argumentType = Type.identityKey(Type.ofExpression(argument.value))
+      const argumentType = Type.identityKey(Type.ofArgument(argument))
       return !!argumentType && blockedArgumentTypes.has(argumentType)
     },
     matches,
@@ -493,11 +480,11 @@ function matchGraph<Candidate, Target>(
 }
 
 function argumentTypesExactlyMatch(argument: AST.Argument, parameter: AST.ParameterDeclaration): boolean {
-  return typesExactlyMatch(Type.ofExpression(argument.value), Type.ofParameter(parameter))
+  return typesExactlyMatch(Type.ofArgument(argument), Type.ofParameter(parameter))
 }
 
 function argumentTypesAreAssignable(argument: AST.Argument, parameter: AST.ParameterDeclaration): boolean {
-  return Type.isAssignable(Type.ofExpression(argument.value), Type.ofParameter(parameter))
+  return Type.isAssignable(Type.ofArgument(argument), Type.ofParameter(parameter))
 }
 
 function propertyTypesExactlyMatch(property: AST.ItemProperty, expected: AST.TypeProperty): boolean {
@@ -517,7 +504,7 @@ function argumentMatchGraph(
     remainingArgs,
     remainingParameters,
     argument => {
-      const type = Type.ofExpression(argument.value)
+      const type = Type.ofArgument(argument)
       const key = Type.identityKey(type)
       return type.kind === 'unresolved' || (!!key && duplicateArgumentTypes.has(key))
     },
@@ -557,7 +544,7 @@ function reportDuplicateArgumentTypes(
   const seen = new Set<string>()
   const duplicates = new Set<string>()
   for (const argument of args) {
-    const key = Type.identityKey(Type.ofExpression(argument.value))
+    const key = Type.identityKey(Type.ofArgument(argument))
     if (!key) {
       continue
     }
@@ -614,9 +601,6 @@ function resolveActionTargetWithSeenAliases(
   }
   if (AST.isValueReference(expression)) {
     return resolveActionTargetReference(expression, seenAliases)
-  }
-  if (AST.isTypeCastExpression(expression)) {
-    return resolveActionTargetWithSeenAliases(expression.value, seenAliases)
   }
   return UnresolvedActionTarget
 }

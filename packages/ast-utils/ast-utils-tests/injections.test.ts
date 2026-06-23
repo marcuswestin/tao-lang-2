@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils } from '@ast-utils'
 import { AST, Parser } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 
@@ -6,7 +6,7 @@ Describe('Tao AST injection helpers', () => {
   Test('resolves inject argument local names', async () => {
     const parseResult = await Parser.parseCode(`
       alias UserName = "Ro"
-      view Native text as Value {
+      view Native Value is text {
         render inject Value, Name UserName \`\`\`ts
           return null
         \`\`\`
@@ -19,9 +19,13 @@ Describe('Tao AST injection helpers', () => {
     )
     Expect.Is(nativeView, AST.isViewDeclaration)
 
-    const render = nativeView.block.statements[0]
+    const render = AST.blockStatementOf(nativeView, 0)
     Expect.Is(render, AST.isRenderStatement)
 
-    Expect(render.injection?.argumentList?.arguments.map(ASTUtils.injectionArgumentName)).toEqual(['Value', 'Name'])
+    Expect.Is(render.injection, AST.isInjection)
+    Expect(AST.injectionArgumentsOf(render.injection).map(ASTUtils.injectionArgumentName)).toEqual([
+      'Value',
+      'Name',
+    ])
   })
 })

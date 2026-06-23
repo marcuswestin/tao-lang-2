@@ -6,7 +6,7 @@ entry LayoutGrammarEntrypoint:
     LayoutClause;
 
 LayoutClause:
-    '[' entries+=LayoutEntry (',' entries+=LayoutEntry)* ']';
+    '[' (entries+=LayoutEntry (',' entries+=LayoutEntry)*)? ']';
 
 LayoutEntry:
     head=LayoutTerm terms+=LayoutTerm*;

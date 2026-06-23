@@ -13,22 +13,22 @@ ArgumentList:
     arguments+=Argument (',' arguments+=Argument)*;
 
 Argument:
-    value=Expression;
+    (type=TypeReference ':' value=TypedArgumentValue) | value=ArgumentValue;
+
+TypedArgumentValue:
+    ItemLiteral | Expression;
+
+ArgumentValue:
+    MemberAccessExpression | StringLiteral | NumberLiteral | ActionExpression | ValueReference;
 
 Expression:
-    TypeCastExpression | PrimaryExpression;
+    ActionExpression | TypedConstructor | PrimaryExpression;
 
 PrimaryExpression:
-    TypedConstructor | ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | ActionExpression | ValueReference;
-
-TypeCastExpression:
-    value=PrimaryExpression 'as' type=TypeReference;
+    ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | ValueReference;
 
 TypedConstructor:
-    type=ConstructorTypeReference '.' value=TypedConstructorValue;
-
-ConstructorTypeReference:
-    primitive=PrimitiveType | target=[TypeDefinition:ID];
+    type=ConstructorTypeReference value=TypedConstructorValue;
 
 TypedConstructorValue:
     StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;

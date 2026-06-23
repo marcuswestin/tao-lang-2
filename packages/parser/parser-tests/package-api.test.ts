@@ -1,8 +1,7 @@
+import { Packages } from '@ast-utils'
 import { Describe, Expect, Test } from '@shared/test'
 
-import { Packages } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
-import { ASTStructure } from '@parser/ASTStructure'
 import { LSPWorkspace, Workspace } from '@workspace'
 import { testParseCode } from './test-parse'
 
@@ -12,8 +11,15 @@ Describe('parser package API', () => {
 
     const parseResult = await testParseCode('app MyApp { view MainView } view MainView { }')
 
-    Expect(AST.isAppDeclaration(parseResult.entry.ast.statements[0])).toBe(true)
-    Expect(ASTStructure.findRoot(parseResult.entry.ast)).toBe(parseResult.entry.ast)
+    const app = parseResult.entry.ast.statements[0]
+    const view = parseResult.entry.ast.statements[1]
+    Expect(AST.isAppDeclaration(app)).toBe(true)
+    Expect(AST.isViewDeclaration(view)).toBe(true)
+    const viewDeclaration = view as AST.ViewDeclaration
+    Expect(AST.findRoot(parseResult.entry.ast)).toBe(parseResult.entry.ast)
+    Expect(AST.parametersOf(viewDeclaration)).toEqual([])
+    Expect(AST.blockStatementOf(viewDeclaration, { filter: () => true })).toEqual([])
+    Expect(AST.isEmittingRuntimeBinding(viewDeclaration)).toBe(true)
     Expect(Langium.URI.file('/tmp/example.tao').path).toBe('/tmp/example.tao')
     Expect(Packages.isStdLibImport('@tao/ui')).toBe(true)
     Expect(LSPWorkspace).toBeDefined()

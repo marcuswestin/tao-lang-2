@@ -23,6 +23,10 @@ type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement;
 type ViewStatement = AliasDeclaration | StateDeclaration | ActionDeclaration | Render;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration;
 type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration;
+type EmittingRuntimeBinding = AliasDeclaration | RenderableDeclaration | ActionDeclaration;
+type ParameterizedDeclaration = RenderableDeclaration | ActionDeclaration;
+type BlockStatementOwner = AppDeclaration | ProjectDeclaration | RenderableDeclaration | Render | ActionDeclaration | ActionExpression;
+type OwnedBlockStatement = ActionStatement | ProjectStatement | Statement;
 
 Block:
     '{' statements+=Statement* '}';
@@ -31,4 +35,4 @@ ParameterList:
     parameters+=ParameterDeclaration (',' parameters+=ParameterDeclaration)*;
 
 ParameterDeclaration:
-    type=TypeReference ('as' name=ID)?;
+    inlineType=ParameterTypeDeclaration | type=NamedTypeReference;

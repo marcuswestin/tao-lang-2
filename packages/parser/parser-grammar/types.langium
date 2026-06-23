@@ -18,16 +18,28 @@ ItemTypeExpression:
 TypeProperty:
     name=ID ('is' type=TypeReference)?;
 
+ParameterTypeDeclaration:
+    name=ID 'is' type=TypeExpression;
+
 TypeReference:
     PrimitiveTypeReference | NamedTypeReference;
+
+ConstructorTypeReference:
+    ConstructablePrimitiveTypeReference | NamedTypeReference;
 
 PrimitiveTypeReference:
     primitive=PrimitiveType;
 
+ConstructablePrimitiveTypeReference:
+    primitive=ConstructablePrimitiveType;
+
 NamedTypeReference:
-    target=[TypeDefinition:ID] ('.' members+=ID)*;
+    root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
     'text' | 'number' | 'item' | 'list' | 'action';
 
-type TypeDefinition = TypeDeclaration | TypeProperty;
+ConstructablePrimitiveType returns string:
+    'text' | 'number' | 'item' | 'list';
+
+type TypeDefinition = TypeDeclaration | TypeProperty | ParameterTypeDeclaration;

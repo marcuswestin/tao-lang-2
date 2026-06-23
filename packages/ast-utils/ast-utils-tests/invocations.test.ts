@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST, Parser, type ParseResult } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 
@@ -9,16 +9,16 @@ Describe('Tao AST invocation resolution', () => {
       view MainView {
         render Tile "Open", 1
       }
-      view Tile text as Title, number as Count { }
+      view Tile Title is text, Count is number { }
     `)
     const mainView = findMainView(parseResult)
-    const render = mainView.block.statements[0]
+    const render = AST.blockStatementOf(mainView, 0)
     Expect.Is(render, AST.isRenderStatement)
 
     const invocation = ASTUtils.resolveRenderInvocation(render)
 
     Expect(invocation.view?.name).toBe('Tile')
-    Expect(invocation.pairs.map(pair => pair.parameter.name)).toEqual(['Title', 'Count'])
+    Expect(invocation.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Title', 'Count'])
   })
 
   Test('resolves out-of-order render arguments by type', async () => {
@@ -27,16 +27,101 @@ Describe('Tao AST invocation resolution', () => {
       view MainView {
         render Tile 1, "Open"
       }
-      view Tile text as Title, number as Count { }
+      view Tile Title is text, Count is number { }
     `)
     const mainView = findMainView(parseResult)
-    const render = mainView.block.statements[0]
+    const render = AST.blockStatementOf(mainView, 0)
     Expect.Is(render, AST.isRenderStatement)
 
     const invocation = ASTUtils.resolveRenderInvocation(render)
 
     Expect(invocation.view?.name).toBe('Tile')
-    Expect(invocation.pairs.map(pair => pair.parameter.name)).toEqual(['Count', 'Title'])
+    Expect(invocation.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Title', 'Count'])
+  })
+
+  Test('resolves out-of-order action arguments by type', async () => {
+    const parseResult = await parseClean(`
+      app MyApp { view MainView }
+      view MainView {
+        action Save Count is number, Label is text { }
+        action CallSave {
+          do Save "Open", 1
+        }
+        render Text "Done"
+      }
+      view Text Value is text { }
+    `)
+    const mainView = findMainView(parseResult)
+    const callSave = AST.blockStatementOf(mainView, {
+      find: statement => AST.isActionDeclaration(statement) && statement.name === 'CallSave',
+    })
+    Expect.Is(callSave, AST.isActionDeclaration)
+    const invocation = AST.blockStatementOf(callSave, 0)
+    Expect.Is(invocation, AST.isDoStatement)
+
+    const resolved = ASTUtils.resolveActionInvocation(invocation)
+
+    Expect(resolved.action?.name).toBe('Save')
+    Expect(resolved.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Count', 'Label'])
+    Expect(resolved.diagnostics).toEqual([])
+  })
+
+  Test('reports action binding diagnostics by type', async () => {
+    const parseResult = await parseClean(`
+      app MyApp { view MainView }
+      view MainView {
+        action AddStep Step is number { }
+        action CallAddStep {
+          do AddStep "wrong"
+        }
+        render Text "Done"
+      }
+      view Text Value is text { }
+    `)
+    const mainView = findMainView(parseResult)
+    const callAddStep = AST.blockStatementOf(mainView, {
+      find: statement => AST.isActionDeclaration(statement) && statement.name === 'CallAddStep',
+    })
+    Expect.Is(callAddStep, AST.isActionDeclaration)
+    const invocation = AST.blockStatementOf(callAddStep, 0)
+    Expect.Is(invocation, AST.isDoStatement)
+
+    const resolved = ASTUtils.resolveActionInvocation(invocation)
+
+    Expect(resolved.pairs).toEqual([])
+    Expect(resolved.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([
+      'unmatched-argument',
+      'missing-argument',
+    ])
+  })
+
+  Test('resolves action invocations through aliases', async () => {
+    const parseResult = await parseClean(`
+      app MyApp { view MainView }
+      action Save { }
+      alias SaveAlias = Save
+      view MainView {
+        action CallSave {
+          do SaveAlias
+        }
+        render Text "Done"
+      }
+      view Text Value is text { }
+    `)
+    const mainView = findMainView(parseResult)
+    const callSave = AST.blockStatementOf(mainView, {
+      find: statement => AST.isActionDeclaration(statement) && statement.name === 'CallSave',
+    })
+    Expect.Is(callSave, AST.isActionDeclaration)
+    const invocation = AST.blockStatementOf(callSave, 0)
+    Expect.Is(invocation, AST.isDoStatement)
+
+    const target = ASTUtils.resolveActionTarget(invocation.action)
+
+    Expect(target.kind).toBe('named')
+    if (target.kind === 'named') {
+      Expect(target.action.name).toBe('Save')
+    }
   })
 
   Test('resolves only type-matched pairs and reports remaining arguments or parameters', async () => {
@@ -45,9 +130,9 @@ Describe('Tao AST invocation resolution', () => {
       view MainView {
         render Tile "Open"
       }
-      view Tile text as Title, number as Count { }
+      view Tile Title is text, Count is number { }
     `)
-    const missingRender = findMainView(missingParseResult).block.statements[0]
+    const missingRender = AST.blockStatementOf(findMainView(missingParseResult), 0)
     Expect.Is(missingRender, AST.isRenderStatement)
     const missing = ASTUtils.resolveRenderInvocation(missingRender)
 
@@ -56,14 +141,14 @@ Describe('Tao AST invocation resolution', () => {
       view MainView {
         render Tile "Open", 1, "extra"
       }
-      view Tile text as Title, number as Count { }
+      view Tile Title is text, Count is number { }
     `)
-    const extraRender = findMainView(extraParseResult).block.statements[0]
+    const extraRender = AST.blockStatementOf(findMainView(extraParseResult), 0)
     Expect.Is(extraRender, AST.isRenderStatement)
     const extra = ASTUtils.resolveRenderInvocation(extraRender)
 
-    Expect(missing.pairs.map(pair => pair.parameter.name)).toEqual(['Title'])
-    Expect(extra.pairs.map(pair => pair.parameter.name)).toEqual(['Count'])
+    Expect(missing.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Title'])
+    Expect(extra.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Count'])
     Expect(missing.diagnostics.map(diagnostic => diagnostic.kind)).toEqual(['missing-argument'])
     Expect(extra.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([
       'duplicate-argument-type',
@@ -78,11 +163,11 @@ Describe('Tao AST invocation resolution', () => {
       type Middle is Base
       type Leaf is Middle
       view MainView {
-        render Pair Leaf."Ada", Leaf."Grace"
+        render Pair Leaf: "Ada", Leaf: "Grace"
       }
       view Pair Base, Middle { }
     `)
-    const render = findMainView(parseResult).block.statements[0]
+    const render = AST.blockStatementOf(findMainView(parseResult), 0)
     Expect.Is(render, AST.isRenderStatement)
 
     const invocation = ASTUtils.resolveRenderInvocation(render)
@@ -102,11 +187,11 @@ Describe('Tao AST invocation resolution', () => {
       type Name is Base
       type Title is Base
       view MainView {
-        render Pair Name."Ada", Title."Grace"
+        render Pair Name: "Ada", Title: "Grace"
       }
       view Pair Base { }
     `)
-    const render = findMainView(parseResult).block.statements[0]
+    const render = AST.blockStatementOf(findMainView(parseResult), 0)
     Expect.Is(render, AST.isRenderStatement)
 
     const invocation = ASTUtils.resolveRenderInvocation(render)
@@ -128,21 +213,21 @@ Describe('Tao AST invocation resolution', () => {
           return <>{_ViewProps.children}</>
         \`\`\`
       }
-      view Tile text as Title, number as Count {
+      view Tile Title is text, Count is number {
         render inject \`\`\`ts
           return null
         \`\`\`
       }
     `)
-    const render = findMainView(parseResult).block.statements[0]
+    const render = AST.blockStatementOf(findMainView(parseResult), 0)
     Expect.Is(render, AST.isRenderStatement)
-    const child = render.block?.statements[0]
+    const child = AST.blockStatementOf(render, 0)
     Expect.Is(child, AST.isViewRender)
 
     const invocation = ASTUtils.resolveRenderInvocation(child)
 
     Expect(invocation.view?.name).toBe('Tile')
-    Expect(invocation.pairs.map(pair => pair.parameter.name)).toEqual(['Title', 'Count'])
+    Expect(invocation.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Title', 'Count'])
   })
 
   Test('resolves item constructor properties by field type', async () => {
@@ -153,7 +238,7 @@ Describe('Tao AST invocation resolution', () => {
         Name
         Age
       }
-      alias DemoPerson = Person.{ Age.40 Name."Ada" }
+      alias DemoPerson = Person { Age 40 Name "Ada" }
       view MainView { }
     `)
     const person = parseResult.entry.ast.statements.find(
@@ -170,7 +255,7 @@ Describe('Tao AST invocation resolution', () => {
 
     const result = ASTUtils.resolveItemPropertyBindings(person.type.properties, alias.value.value.properties)
 
-    Expect(result.pairs.map(pair => pair.expected.name)).toEqual(['Age', 'Name'])
+    Expect(result.pairs.map(pair => pair.expected.name)).toEqual(['Name', 'Age'])
     Expect(result.diagnostics).toEqual([])
   })
 
@@ -182,7 +267,7 @@ Describe('Tao AST invocation resolution', () => {
       type Pair is {
         Base
       }
-      alias BadPair = Pair.{ Name."Ada" Title."Grace" }
+      alias BadPair = Pair { Name "Ada" Title "Grace" }
       view MainView { }
     `)
     const pair = parseResult.entry.ast.statements.find(

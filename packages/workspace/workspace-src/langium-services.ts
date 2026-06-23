@@ -1,4 +1,4 @@
-import ASTUtils, { Packages } from '@ast-utils'
+import { Packages } from '@ast-utils'
 import { AST, Langium, Parser, type ParserServices } from '@parser'
 import Validator from '@validator'
 import { registerTaoValidationChecks } from '@validator/langium-validation'
@@ -87,7 +87,7 @@ function validationContextFor(
       packagesContext,
       typir,
       workspaceFiles,
-      ASTUtils.getDocument(file).uri.path,
+      AST.getDocument(file).uri.path,
     )
   }
 }

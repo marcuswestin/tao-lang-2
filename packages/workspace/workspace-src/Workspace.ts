@@ -54,7 +54,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     return await Parser.parse(this.parserContext(), Langium.URI.file(entryPath), { validation: false })
   }
 
-  /** parseSource parses source text as the given workspace file URI. */
+  /** parseSource parses source given a workspace file URI. */
   async parseSource(source: string, uri: Langium.URI): Promise<ParseResult> {
     return await Parser.parseSource(this.parserContext(), source, {
       uri,
