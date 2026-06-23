@@ -4,7 +4,7 @@ import "./visibility"
 import "./terminals"
 
 entry TypesGrammarEntrypoint:
-    TypeDeclaration;
+    TypeDeclaration | ParameterTypeDeclaration | ConstructorTypeReference;
 
 TypeDeclaration:
     visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;
