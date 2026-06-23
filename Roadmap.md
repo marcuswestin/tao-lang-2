@@ -33,10 +33,10 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
 
 - [ ] Implement Tao-native testing v0
-  - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness.
+  - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
 
-- [ ] Add `tao test` and migrate Test Apps to Tao-authored behavior tests
-  - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures.
+- [ ] Migrate Test Apps to Tao-authored behavior tests and harden `tao test`
+  - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures; add filters, watch/CI output, richer failure reporting, and broader runtime coverage.
 
 - [ ] Add interaction event MVP
   - Press/change/submit/focus behavior for built-in controls, event-to-action binding, disabled/loading behavior, and testable event semantics.
@@ -73,6 +73,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
+- [ ] Add actions to kitchen sink tests
+  - [ ] And switch other test apps to use tao testing rather than ts
 - [ ] Create "validators" directory for all the "*-validator.ts" files
 - [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
