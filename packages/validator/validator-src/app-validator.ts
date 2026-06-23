@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import type { ValidationContext } from './validation'
@@ -38,7 +37,7 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
 }
 
 function validateAppPlacement(app: AST.AppDeclaration, file: AST.TaoFile, ctx: ValidationContext): void {
-  const filePath = ASTUtils.getDocument(file).uri.path
+  const filePath = AST.getDocument(file).uri.path
   if (isInsidePackage(filePath, ctx)) {
     ctx.error(appValidationMessages.appPackage(app.name), app)
     return
@@ -58,14 +57,14 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
 }
 
 function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext): void {
-  for (const statement of app.block.statements) {
+  for (const statement of AST.blockStatements(app)) {
     if (AST.isAppView(statement)) {
       continue
     }
     ctx.error(appValidationMessages.appBlock(app.name), statement)
   }
 
-  const roots = app.block.statements.filter(AST.isAppView)
+  const roots = AST.blockStatementOf(app, { filter: AST.isAppView })
   if (roots.length !== 1) {
     ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
   }
@@ -79,7 +78,7 @@ function validateRootView(app: AST.AppDeclaration, root: AST.AppView, ctx: Valid
   if (!view) {
     return
   }
-  if ((view.parameterList?.parameters.length ?? 0) > 0) {
+  if (AST.parametersOf(view).length > 0) {
     ctx.error(appValidationMessages.rootViewParameters(app.name, view.name), root)
   }
 }

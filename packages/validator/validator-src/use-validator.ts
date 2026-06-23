@@ -1,4 +1,4 @@
-import ASTUtils, { Packages } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import { useValidationCodes } from './diagnostic-codes'
@@ -43,7 +43,7 @@ type DeclarationNamespace = 'type' | 'value'
 
 /** validateUseStatements validates import path resolution and visibility rules. */
 export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext): void {
-  const fromFilePath = ASTUtils.getDocument(file).uri.path
+  const fromFilePath = AST.getDocument(file).uri.path
   const useStatements = file.statements.filter(AST.isUseStatement)
   const localDeclarationNames = new Set(
     file.statements.filter(AST.isDeclaration).map(declarationKey),
@@ -238,9 +238,9 @@ export function validateVisibleDeclarations(
   targetFile?: AST.TaoFile,
 ): void {
   const declarationsByFolder = new Map<string, Map<string, VisibleDeclarationRecord[]>>()
-  const targetDocument = targetFile ? ASTUtils.getDocument(targetFile) : undefined
+  const targetDocument = targetFile ? AST.getDocument(targetFile) : undefined
   for (const file of uniqueWorkspaceFiles(ctx.workspaceFiles)) {
-    const document = ASTUtils.getDocument(file)
+    const document = AST.getDocument(file)
     const folderPath = FS.dirname(document.uri.path)
     const visibleDeclarations = file.statements
       .filter(AST.isDeclaration)
@@ -274,7 +274,7 @@ export function validateVisibleDeclarations(
 }
 
 function workspaceFilePath(file: AST.TaoFile): string {
-  return ASTUtils.getDocument(file).uri.path
+  return AST.getDocument(file).uri.path
 }
 
 function declarationKey(declaration: AST.Declaration): string {

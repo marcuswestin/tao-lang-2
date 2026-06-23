@@ -1,4 +1,4 @@
-import ASTUtils, { Type as TaoType } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { isType, type Type as TypirType } from 'typir'
 import type { TypirLangiumServices, TypirLangiumSpecifics } from 'typir-langium'
@@ -30,20 +30,20 @@ export const TypeSystemHelpers = {
 
 /** taoPrimitiveType returns the Typir primitive for a Tao primitive type. */
 function taoPrimitiveType(
-  type: AST.PrimitiveType | AST.TypeReference | TaoType.TaoType,
+  type: AST.PrimitiveType | AST.TypeReference | ASTUtils.TaoType,
   typir: TaoTypirServices,
 ): TypirType | undefined {
   if (typeof type === 'string') {
     return typir.factory.Primitives.get({ primitiveName: type })
   }
   if (AST.isTypeReference(type)) {
-    return taoType(TaoType.ofReference(type), typir)
+    return taoType(Type.ofReference(type), typir)
   }
   return taoType(type, typir)
 }
 
 /** taoType returns the Typir type matching a statically resolved Tao type. */
-function taoType(type: TaoType.TaoType, typir: TaoTypirServices): TypirType | undefined {
+function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | undefined {
   if (type.kind === 'unresolved') {
     return undefined
   }
@@ -68,9 +68,9 @@ function ensurePrimitive(name: string, typir: TaoTypirServices): TypirType | und
 /** typirTypeDefinitionName returns a document-qualified Typir name for a Tao type definition. */
 function typirTypeDefinitionName(definition: AST.TypeDefinition): string {
   try {
-    return `${ASTUtils.getDocument(definition).uri.path}#${TaoType.definitionName(definition)}`
+    return `${AST.getDocument(definition).uri.path}#${Type.definitionName(definition)}`
   } catch {
-    return TaoType.definitionName(definition)
+    return Type.definitionName(definition)
   }
 }
 
@@ -101,7 +101,7 @@ function astNodeHasDocument(node: AST.Node | undefined): node is AST.Node {
     return false
   }
   try {
-    ASTUtils.getDocument(node)
+    AST.getDocument(node)
     return true
   } catch {
     return false

@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
@@ -55,7 +55,7 @@ export const LayoutValidator = {
 }
 
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const render of ASTUtils.streamAllContents(file).filter(AST.isRender)) {
+  for (const render of AST.streamAllContents(file).filter(AST.isRender)) {
     if (AST.isRenderStatement(render) && render.injection && render.layoutClause) {
       ctx.error(layoutValidationMessages.injectLayout, render.layoutClause)
       continue
@@ -321,15 +321,15 @@ function layoutEntryHead(entry: AST.LayoutEntry): AST.LayoutWord | undefined {
 }
 
 function layoutEntryText(entry: AST.LayoutEntry): string {
-  return ASTUtils.Layout.entryValues(entry).join(' ')
+  return ASTUtils.layoutEntryValues(entry).join(' ')
 }
 
 function layoutEntryHeadText(entry: AST.LayoutEntry): string {
-  return String(ASTUtils.Layout.termValue(entry.head))
+  return String(ASTUtils.layoutTermValue(entry.head))
 }
 
 function layoutTermText(term: AST.LayoutTerm): string {
-  return String(ASTUtils.Layout.termValue(term))
+  return String(ASTUtils.layoutTermValue(term))
 }
 
 function layoutWordText(term: AST.LayoutWord): string {

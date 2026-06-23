@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationProblem } from 'typir'
 import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
@@ -27,7 +26,7 @@ function validateTypirProblems(
   ctx: ValidationContext,
 ): void {
   for (const problem of collectTypirProblems(file, typir)) {
-    const node = ASTUtils.isNode(problem.languageNode) ? problem.languageNode : file
+    const node = AST.isNode(problem.languageNode) ? problem.languageNode : file
     ctx.error(problem.message, node)
   }
 }
@@ -38,7 +37,7 @@ function collectTypirProblems(
 ): ValidationProblem<TaoSpecificsForProblems>[] {
   return [
     ...typir.validation.Collector.validateBefore(file),
-    ...ASTUtils.streamAllContents(file).flatMap(node => typir.validation.Collector.validate(node)),
+    ...AST.streamAllContents(file).flatMap(node => typir.validation.Collector.validate(node)),
     ...typir.validation.Collector.validateAfter(file),
   ]
 }

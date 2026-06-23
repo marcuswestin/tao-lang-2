@@ -1,16 +1,15 @@
-import ASTUtils, { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from './validation'
 
-/** typeValidationMessages declares diagnostics for custom types, item constructors, and member access. */
+/** typeValidationMessages declares diagnostics for custom types, constructors is item, and member access. */
 export const typeValidationMessages = {
-  primitiveParameterAlias: (type: string) => `Primitive parameter '${type}' must declare a value alias with 'as'.`,
-  unknownPropertyType: (name: string) => `Item field '${name}' must reference a visible type or declare one with 'is'.`,
+  unknownType: (name: string) => `Unknown type '${name}'.`,
   duplicateItemField: (name: string) => `Item field '${name}' is declared more than once.`,
-  constructorShape: (type: string, expected: string) => `Typed constructor '${type}.' expects a ${expected} literal.`,
+  constructorShape: (type: string, expected: string) => `Typed constructor '${type}' expects a ${expected} literal.`,
   shapelessItemConstructor: (type: string) =>
-    `Typed constructor '${type}.' cannot accept fields because its item type has no declared shape.`,
-  castIncompatible: (type: string) => `Value cannot be type-fixed as '${type}'.`,
+    `Typed constructor '${type}' cannot accept fields because its item type has no declared shape.`,
+  typeFixIncompatible: (type: string) => `Value cannot be type-fixed as '${type}'.`,
   missingProperty: (name: string) => `Item constructor is missing required field '${name}'.`,
   unmatchedProperty: 'Item constructor value does not match any unbound field by type.',
   ambiguousProperty: (names: readonly string[]) =>
@@ -25,25 +24,28 @@ export const typeValidationMessages = {
 
 /** validateTypes validates custom type declarations and item/list/custom expression forms. */
 export function validateTypes(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const declaration of ASTUtils.streamAllContents(file).filter(AST.isTypeDeclaration)) {
+  for (const declaration of AST.streamAllContents(file).filter(AST.isTypeDeclaration)) {
     validateTypeDeclaration(declaration, ctx)
   }
-  for (const type of ASTUtils.streamAllContents(file).filter(AST.isItemTypeExpression)) {
+  for (const type of AST.streamAllContents(file).filter(AST.isItemTypeExpression)) {
     validateItemType(type, ctx)
   }
-  for (const property of ASTUtils.streamAllContents(file).filter(AST.isTypeProperty)) {
+  for (const property of AST.streamAllContents(file).filter(AST.isTypeProperty)) {
     validateTypeProperty(property, ctx)
   }
-  for (const parameter of ASTUtils.streamAllContents(file).filter(AST.isParameterDeclaration)) {
+  for (const reference of AST.streamAllContents(file).filter(AST.isNamedTypeReference)) {
+    validateNamedTypeReference(reference, ctx)
+  }
+  for (const parameter of AST.streamAllContents(file).filter(AST.isParameterDeclaration)) {
     validateParameter(parameter, ctx)
   }
-  for (const cast of ASTUtils.streamAllContents(file).filter(AST.isTypeCastExpression)) {
-    validateTypeCast(cast, ctx)
+  for (const argument of AST.streamAllContents(file).filter(AST.isArgument)) {
+    validateTypedArgument(argument, ctx)
   }
-  for (const constructor of ASTUtils.streamAllContents(file).filter(AST.isTypedConstructor)) {
+  for (const constructor of AST.streamAllContents(file).filter(AST.isTypedConstructor)) {
     validateTypedConstructor(constructor, ctx)
   }
-  for (const memberAccess of ASTUtils.streamAllContents(file).filter(AST.isMemberAccessExpression)) {
+  for (const memberAccess of AST.streamAllContents(file).filter(AST.isMemberAccessExpression)) {
     validateMemberAccess(memberAccess, ctx)
   }
 }
@@ -54,11 +56,7 @@ function validateTypeDeclaration(declaration: AST.TypeDeclaration, ctx: Validati
   }
 }
 
-function validateParameter(parameter: AST.ParameterDeclaration, ctx: ValidationContext): void {
-  if (AST.isPrimitiveTypeReference(parameter.type) && !parameter.name) {
-    ctx.error(typeValidationMessages.primitiveParameterAlias(parameter.type.primitive), parameter)
-  }
-}
+function validateParameter(_parameter: AST.ParameterDeclaration, _ctx: ValidationContext): void {}
 
 function validateItemType(type: AST.ItemTypeExpression, ctx: ValidationContext): void {
   const seen = new Set<string>()
@@ -73,18 +71,57 @@ function validateItemType(type: AST.ItemTypeExpression, ctx: ValidationContext):
 
 function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext): void {
   if (!property.type && Type.ofProperty(property).kind === 'unresolved') {
-    ctx.error(typeValidationMessages.unknownPropertyType(property.name), property)
+    ctx.error(typeValidationMessages.unknownType(property.name), property)
   }
 }
 
-function validateTypeCast(cast: AST.TypeCastExpression, ctx: ValidationContext): void {
-  const actual = Type.ofExpression(cast.value)
-  const target = Type.ofReference(cast.type)
+function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: ValidationContext): void {
+  const root = Type.rootOfReference(reference)
+  if (!root.definition) {
+    ctx.error(typeValidationMessages.unknownType(Type.referenceName(reference)), reference)
+    return
+  }
+
+  let currentDefinition = root.definition
+  for (const member of root.remainingMembers) {
+    const currentType = Type.ofDefinition(currentDefinition)
+    if (currentType.kind !== 'item' || !currentType.item) {
+      ctx.error(typeValidationMessages.memberNotItem(member), reference)
+      return
+    }
+    const property = currentType.item.properties.find(candidate => candidate.name === member)
+    if (!property) {
+      ctx.error(typeValidationMessages.unknownMember(Type.definitionName(currentDefinition), member), reference)
+      return
+    }
+    currentDefinition = property
+  }
+}
+
+function validateTypedArgument(argument: AST.Argument, ctx: ValidationContext): void {
+  if (!argument.type) {
+    return
+  }
+  if (AST.isItemLiteral(argument.value)) {
+    validateTypedItemLiteral(argument.value, argument.type, ctx)
+    return
+  }
+  validateValueCanBeFixedAs(argument.value, argument.type, argument, ctx)
+}
+
+function validateValueCanBeFixedAs(
+  value: AST.Expression,
+  type: AST.TypeReference,
+  node: AST.Node,
+  ctx: ValidationContext,
+): void {
+  const actual = Type.ofExpression(value)
+  const target = Type.ofReference(type)
   if (actual.kind === 'unresolved' || target.kind === 'unresolved') {
     return
   }
   if (!Type.isCastCompatible(actual, target)) {
-    ctx.error(typeValidationMessages.castIncompatible(Type.referenceName(cast.type)), cast)
+    ctx.error(typeValidationMessages.typeFixIncompatible(Type.referenceName(type)), node)
   }
 }
 
@@ -93,24 +130,20 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
   if (expected.kind === 'unresolved') {
     return
   }
+  const expectedKind = constructorLiteralKind(expected)
   if (AST.isStringLiteral(constructor.value)) {
-    validateConstructorKind(constructor, expected.kind === 'primitive' && expected.primitive === 'text', 'text', ctx)
+    validateConstructorKind(constructor, expectedKind === 'text', expectedKind, ctx)
     return
   }
   if (AST.isNumberLiteral(constructor.value)) {
-    validateConstructorKind(
-      constructor,
-      expected.kind === 'primitive' && expected.primitive === 'number',
-      'number',
-      ctx,
-    )
+    validateConstructorKind(constructor, expectedKind === 'number', expectedKind, ctx)
     return
   }
   if (AST.isListLiteral(constructor.value)) {
-    validateConstructorKind(constructor, expected.kind === 'list', 'list', ctx)
+    validateConstructorKind(constructor, expectedKind === 'list', expectedKind, ctx)
     return
   }
-  validateConstructorKind(constructor, expected.kind === 'item', 'item', ctx)
+  validateConstructorKind(constructor, expectedKind === 'item', expectedKind, ctx)
   if (expected.kind !== 'item') {
     return
   }
@@ -118,7 +151,7 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
     if (constructor.value.properties.length > 0) {
       ctx.error(
         typeValidationMessages.shapelessItemConstructor(
-          Type.constructorReferenceName(constructor.type),
+          Type.referenceName(constructor.type),
         ),
         constructor.value,
       )
@@ -126,6 +159,31 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
     return
   }
   validateItemConstructor(constructor.value, expected.item, ctx)
+}
+
+function validateTypedItemLiteral(item: AST.ItemLiteral, type: AST.TypeReference, ctx: ValidationContext): void {
+  const expected = Type.ofReference(type)
+  if (expected.kind === 'unresolved') {
+    return
+  }
+  if (expected.kind !== 'item') {
+    ctx.error(typeValidationMessages.constructorShape(Type.referenceName(type), constructorLiteralKind(expected)), item)
+    return
+  }
+  if (!expected.item) {
+    if (item.properties.length > 0) {
+      ctx.error(typeValidationMessages.shapelessItemConstructor(Type.referenceName(type)), item)
+    }
+    return
+  }
+  validateItemConstructor(item, expected.item, ctx)
+}
+
+function constructorLiteralKind(type: ASTUtils.TaoType): string {
+  if (type.kind === 'primitive') {
+    return type.primitive
+  }
+  return type.kind
 }
 
 function validateConstructorKind(
@@ -196,11 +254,15 @@ function typeDefinitionReferencesRoot(
   if (AST.isTypeDeclaration(current)) {
     return typeExpressionReferencesRoot(root, current.type, seen)
   }
-  if (!current.type) {
-    const declaration = visibleTypeDeclaration(current, current.name)
-    return declaration ? typeDefinitionReferencesRoot(root, declaration, seen) : false
+  if (AST.isParameterTypeDeclaration(current)) {
+    return typeExpressionReferencesRoot(root, current.type, seen)
   }
-  return typeReferenceReferencesRoot(root, current.type, seen)
+  const propertyType = current.type
+  if (propertyType) {
+    return typeReferenceReferencesRoot(root, propertyType, seen)
+  }
+  const shorthandType = Type.shorthandPropertyDefinition(current)
+  return shorthandType ? typeDefinitionReferencesRoot(root, shorthandType, seen) : false
 }
 
 function typeExpressionReferencesRoot(
@@ -209,7 +271,7 @@ function typeExpressionReferencesRoot(
   seen: Set<AST.TypeDefinition>,
 ): boolean {
   if (AST.isItemTypeExpression(type)) {
-    return type.properties.some(property => typeDefinitionReferencesRoot(root, property, seen))
+    return type.properties.some(property => typeDefinitionReferencesRoot(root, property, new Set(seen)))
   }
   return typeReferenceReferencesRoot(root, type, seen)
 }
@@ -239,35 +301,12 @@ function typeDefinitionOwnedBy(definition: AST.TypeDefinition, root: AST.TypeDec
   return AST.isTypeProperty(definition) && definition.$container.$container === root
 }
 
-function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
-  const root = findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return undefined
-  }
-  return [
-    ...root.statements.filter(AST.isTypeDeclaration),
-    ...root.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement =>
-        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isTypeDeclaration)
-      ),
-  ].find(type => type.name === name)
-}
-
-function findRoot(node: AST.Node): AST.Node {
-  let current = node
-  while (current.$container) {
-    current = current.$container
-  }
-  return current
-}
-
 function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: ValidationContext): void {
   let current = declarationType(memberAccess.target.ref)
   if (current.kind === 'unresolved') {
     return
   }
-  let typeName = taoTypeName(current)
+  let typeName = Type.displayName(current)
   for (const member of memberAccess.members) {
     if (current.kind !== 'item' || !current.item) {
       ctx.error(typeValidationMessages.memberNotItem(member), memberAccess)
@@ -282,23 +321,22 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
     if (current.kind === 'unresolved') {
       return
     }
-    typeName = taoTypeName(current)
+    typeName = Type.displayName(current)
   }
 }
 
-function taoTypeName(type: Type.TaoType): string {
-  if (type.kind === 'unresolved') {
-    return 'unresolved'
-  }
-  return type.nominal ? Type.definitionName(type.nominal) : type.kind
-}
-
-function declarationType(declaration: AST.ValueDeclaration | undefined): Type.TaoType {
+function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtils.TaoType {
   if (AST.isParameterDeclaration(declaration)) {
     return Type.ofParameter(declaration)
   }
   if (AST.isAliasDeclaration(declaration)) {
     return Type.ofExpression(declaration.value)
+  }
+  if (AST.isStateDeclaration(declaration)) {
+    return Type.ofExpression(declaration.value)
+  }
+  if (AST.isActionDeclaration(declaration)) {
+    return { kind: 'primitive', primitive: 'action' }
   }
   return { kind: 'unresolved' }
 }

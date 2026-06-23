@@ -1,4 +1,4 @@
-import ASTUtils, { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { TaoTypirServices } from './TypeSystemHelpers'
 import type { ValidationContext } from './validation'
@@ -20,7 +20,7 @@ const invocationValidationMessages = {
   duplicateArgumentType: (view: string) => `Render of ${view} has more than one argument with the same exact type.`,
 } as const
 
-/** InvocationsValidator validates render invocations and Typir argument checks. */
+/** InvocationsValidator validates render invocations through shared type-based binding diagnostics. */
 export const InvocationsValidator = {
   messages: invocationValidationMessages,
   registerTypeValidation,
@@ -29,12 +29,12 @@ export const InvocationsValidator = {
 
 /** validate validates structural render invocation diagnostics. */
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const render of ASTUtils.streamAllContents(file).filter(AST.isRender)) {
+  for (const render of AST.streamAllContents(file).filter(AST.isRender)) {
     reportInvocationDiagnostics(render, ctx)
   }
 }
 
-/** registerTypeValidation preserves the Typir initialization hook for future expression rules. */
+/** registerTypeValidation is intentionally empty; render argument assignability is checked by AST binding. */
 function registerTypeValidation(_typir: TaoTypirServices): void {}
 
 function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext): void {
@@ -45,10 +45,7 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
   for (const diagnostic of invocation.diagnostics) {
     if (diagnostic.kind === 'missing-argument') {
       ctx.error(
-        invocationValidationMessages.missingArgument(
-          invocation.view.name,
-          Type.parameterName(diagnostic.parameter),
-        ),
+        invocationValidationMessages.missingArgument(invocation.view.name, Type.parameterName(diagnostic.parameter)),
         render,
       )
       continue
@@ -66,10 +63,7 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
     }
     if (diagnostic.kind === 'ambiguous-parameter') {
       ctx.error(
-        invocationValidationMessages.ambiguousParameter(
-          invocation.view.name,
-          Type.parameterName(diagnostic.parameter),
-        ),
+        invocationValidationMessages.ambiguousParameter(invocation.view.name, Type.parameterName(diagnostic.parameter)),
         render,
       )
       continue

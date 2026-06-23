@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from './validation'
 
@@ -9,14 +9,14 @@ export const injectionValidationMessages = {
 
 /** validateInjections validates inject argument declarations. */
 export function validateInjections(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const injection of ASTUtils.streamAllContents(file).filter(AST.isInjection)) {
+  for (const injection of AST.streamAllContents(file).filter(AST.isInjection)) {
     reportDuplicateArguments(injection, ctx)
   }
 }
 
 function reportDuplicateArguments(injection: AST.Injection, ctx: ValidationContext): void {
   const seen = new Set<string>()
-  for (const argument of injection.argumentList?.arguments ?? []) {
+  for (const argument of AST.injectionArgumentsOf(injection)) {
     const name = ASTUtils.injectionArgumentName(argument)
     if (seen.has(name)) {
       ctx.error(injectionValidationMessages.duplicateArgument(name), argument)

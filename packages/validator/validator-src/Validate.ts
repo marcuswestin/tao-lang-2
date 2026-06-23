@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { ActionsValidator } from './ActionsValidator'
 import { AliasesValidator } from './aliases-validator'
@@ -26,7 +25,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   validateTypes(file, ctx)
   InvocationsValidator.validate(file, ctx)
 
-  const document = ASTUtils.getDocument(file)
+  const document = AST.getDocument(file)
   if (document.uri.scheme === 'file') {
     validateVisibleDeclarations(ctx, file)
     validateUseStatements(file, ctx)
