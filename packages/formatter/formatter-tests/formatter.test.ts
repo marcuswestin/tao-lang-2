@@ -4,7 +4,9 @@ import Formatter from '../formatter-src/formatter'
 import { testFormatCode } from './test-format'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
 const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
+const targetKitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink.test.tao-next')
 const tsFence = '```ts'
 const fence = '```'
 
@@ -13,8 +15,17 @@ Describe('Tao formatter Kitchen Sink apps', () => {
     Expect(await Formatter.formatFile(kitchenSinkPath)).toBe(await FS.readText(kitchenSinkPath))
   })
 
+  Test('the current Kitchen Sink v0 test sidecar is a formatting fixed point', async () => {
+    Expect(await Formatter.formatFile(kitchenSinkTestPath)).toBe(await FS.readText(kitchenSinkTestPath))
+  })
+
   Test('the target Kitchen Sink app is a formatting fixed point', async () => {
     Expect(await Formatter.formatFile(targetKitchenSinkPath)).toBe(await FS.readText(targetKitchenSinkPath))
+  })
+
+  Test('the target Kitchen Sink v0 test sidecar is a formatting fixed point', async () => {
+    const targetSource = await FS.readText(targetKitchenSinkTestPath)
+    Expect(await Formatter.formatCode(targetSource)).toBe(targetSource)
   })
 })
 
@@ -137,6 +148,42 @@ Describe('Tao formatter use statements', () => {
         use Text, Stack from @tao/ui
 
         view MainView { }
+      `,
+    )
+  })
+})
+
+Describe('Tao formatter tests', () => {
+  Test('formats v0 Tao test declarations', async () => {
+    await testFormatCode(
+      `use KitchenSink from ./\ntest   "Kitchen Sink"{check "renders"{run   KitchenSink\nexpect   text "Hello"\nexpect missing   text "Loading"}}`,
+      `
+        use KitchenSink from ./
+
+        test "Kitchen Sink" {
+           check "renders" {
+              run KitchenSink
+
+              expect text "Hello"
+              expect missing text "Loading"
+           }
+        }
+      `,
+    )
+  })
+
+  Test('keeps test closing braces separate after trailing step comments', async () => {
+    await testFormatCode(
+      `test "Smoke"{check "renders"{run MyApp\nexpect text "Hello"\n// last step note\n}}`,
+      `
+        test "Smoke" {
+           check "renders" {
+              run MyApp
+
+              expect text "Hello"
+              // last step note
+           }
+        }
       `,
     )
   })

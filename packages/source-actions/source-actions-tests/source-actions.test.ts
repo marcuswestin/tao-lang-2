@@ -1,5 +1,5 @@
 import { FS, Text } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import SourceActions from '../source-actions-src/source-actions'
 import {
   parseDocument,
@@ -404,6 +404,50 @@ Describe('removeUnusedImports', () => {
     `)
 
     Expect(await SourceActions.removeUnusedImports(document)).toBeUndefined()
+  })
+
+  Test('keeps app imports used by run steps', async () => {
+    await withTaoFiles(
+      'tao-source-actions-tests-',
+      {
+        'Main.test.tao': `
+        use MyApp from ./
+
+        test "Smoke" {
+          check "renders" {
+            run MyApp
+            expect text "Hello"
+          }
+        }
+      `,
+        'Main.tao': `
+        app MyApp { view MainView }
+        view MainView {
+          render inject \`\`\`ts
+            return null
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        const source = await FS.readText(paths['Main.test.tao']!)
+        const document = await parseRawDocumentAt(source, paths['Main.test.tao']!)
+
+        Expect(await SourceActions.removeUnusedImports(document)).toBe(`${
+          Text.stripIndent(`
+          use MyApp from ./
+
+          test "Smoke" {
+             check "renders" {
+                run MyApp
+
+                expect text "Hello"
+             }
+          }
+        `)
+        }\n`)
+      },
+    )
   })
 
   Test('keeps unresolved imports even when they are not referenced', async () => {

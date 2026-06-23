@@ -5,6 +5,7 @@ import FilesFormatter from './formatters/files-formatter'
 import InjectionsFormatter from './formatters/injections-formatter'
 import ProjectFormatter from './formatters/project-formatter'
 import StatementsFormatter from './formatters/statements-formatter'
+import TestsFormatter from './formatters/tests-formatter'
 import UseFormatter from './formatters/use-formatter'
 import ViewsFormatter from './formatters/views-formatter'
 import type { FormatHandlers } from './formatting'
@@ -14,6 +15,7 @@ export const Format = {
   ...FilesFormatter,
   ...UseFormatter,
   ...ProjectFormatter,
+  ...TestsFormatter,
   ...AppFormatter,
   ...AliasesFormatter,
   ...ViewsFormatter,
