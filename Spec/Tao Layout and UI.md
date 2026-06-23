@@ -81,7 +81,7 @@ When creating a UI element, you can allow for parts of the UI to be rendered by 
 ```tao
 use Icon, Text, Box, Row from @tao/ui
 
-view Label text as Title {
+view Label Title is text {
    @icon = empty
 
    render Box {
@@ -267,7 +267,7 @@ ToolbarArea [gap 8] {
 If the declaration has fixed siblings and caller content, put `@@content` inside an explicit inner host when caller layout should affect only caller content:
 
 ```tao
-frame LabeledSection text as Label {
+frame LabeledSection text Label {
    render Stack [gap 12, pad 16] {
       Text Label
 

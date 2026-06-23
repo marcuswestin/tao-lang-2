@@ -85,7 +85,7 @@ Deferred from the spec:
 - Wire Typir through the validator package with an initially minimal type model:
   - `text`
   - `number`
-- Use the old repo's Typir service mechanics, but shrink the rules to this slice. Register only the primitives and inference/validation checks needed for string literals, number literals, aliases, parameters, and render arguments.
+- Use the old repo's Typir service mechanics, but shrink the rules to this slice. Register only the primitives and inference/validation checks needed for string literals, literals is number, aliases, parameters, and render arguments.
 - Do not add an `unknown` Tao type, Typir primitive, or Typir sentinel. The previous repo did not need one; Typir inference misses used `undefined` / `InferenceRuleNotApplicable`. Internal `unresolved` helper variants are acceptable only where the previous repo needed that shape for non-Typir structural helpers, such as broken type-shape or argument-fingerprint resolution, and must never surface as a Tao type.
 - Implement expression inference for current expressions:
   - `StringLiteral` -> `text`
