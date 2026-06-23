@@ -1,4 +1,5 @@
 import { Errors, FS } from '@shared'
+import { findTaoFiles } from './tao-files'
 
 /** InPlaceFileResult declares the outcome of one in-place Tao file operation. */
 export type InPlaceFileResult = {
@@ -12,20 +13,8 @@ export async function runOnTaoFiles(
   path: string,
   operation: (filePath: string) => Promise<InPlaceFileResult>,
 ): Promise<InPlaceFileResult[]> {
-  const root = FS.resolvePath(path)
-  if (!await FS.exists(root)) {
-    Errors.throwUserInput(`No file or directory found at ${root}`)
-  }
-  // An explicitly named file is an opt-in; walk filters only apply to directory recursion.
-  if (await FS.isFile(root)) {
-    return [await operation(root)]
-  }
   const results: InPlaceFileResult[] = []
-  const files = FS.walk(root, {
-    extensions: ['.tao'],
-    excludeDirectory: isGeneratedOrVendoredTaoDirectory,
-  })
-  for await (const filePath of files) {
+  for (const filePath of await findTaoFiles(path)) {
     results.push(await operation(filePath))
   }
   return results
@@ -58,10 +47,6 @@ export async function writeWhenChanged(path: string, before: string, after: stri
 /** inPlaceError returns an error result for one in-place file operation. */
 export function inPlaceError(path: string, error: unknown): InPlaceFileResult {
   return { path, status: 'error', error: Errors.formatForUser(error) }
-}
-
-function isGeneratedOrVendoredTaoDirectory(name: string): boolean {
-  return name === 'node_modules' || name.startsWith('_gen_') || name.startsWith('old-')
 }
 
 function packageAwarePathRoot(path: string, isFile: boolean): string {

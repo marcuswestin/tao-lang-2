@@ -39,8 +39,13 @@ Describe('tao check', () => {
     })
   })
 
-  Test('uses the shared maximal walker exclusions', async () => {
+  Test('uses the nearest gitignore for directory walks', async () => {
     await withTaoFixture({
+      '.gitignore': Text.stripIndent(`
+        node_modules
+        _gen_*
+        packages/old-fixtures
+      `),
       'canonical.tao': 'view MainView { }\n',
       'node_modules/pkg/ignored.tao': 'view   Ignored { }',
       '_gen_tao-app/ignored.tao': 'view   Ignored { }',
