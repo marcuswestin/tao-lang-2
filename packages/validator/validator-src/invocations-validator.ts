@@ -1,85 +1,83 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Assert } from '@shared'
-import type { ValidationProblemAcceptor } from 'typir'
-import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
+import type { TaoTypirServices } from './TypeSystemHelpers'
 import type { ValidationContext } from './validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
 const invocationValidationMessages = {
   missingArgument: (view: string, parameter: string) =>
     `Render of ${view} is missing argument for parameter '${parameter}'.`,
-  extraArguments: (view: string, expected: number, actual: number) =>
-    `Render of ${view} expects ${expected} argument(s), found ${actual}.`,
-  typeMismatch: (parameter: AST.ParameterDeclaration, actual: string) =>
-    `Argument for parameter '${parameter.name}' expects ${parameter.type}, got ${actual}.`,
+  unmatchedArgument: (view: string) =>
+    `Render of ${view} has an argument that does not match any unbound parameter by type.`,
+  ambiguousArgument: (view: string, parameters: readonly AST.ParameterDeclaration[]) =>
+    `Render of ${view} has an argument that matches multiple parameters by type: ${
+      parameters.map(Type.parameterName).join(', ')
+    }.`,
+  ambiguousParameter: (view: string, parameter: string) =>
+    `Render of ${view} has multiple arguments that match parameter '${parameter}' by type.`,
+  duplicateParameterType: (view: string, parameter: string) =>
+    `Renderable ${view} has more than one parameter with the same type near '${parameter}'.`,
+  duplicateArgumentType: (view: string) => `Render of ${view} has more than one argument with the same exact type.`,
 } as const
 
-/** InvocationsValidator validates render invocations and Typir argument checks. */
+/** InvocationsValidator validates render invocations through shared type-based binding diagnostics. */
 export const InvocationsValidator = {
   messages: invocationValidationMessages,
   registerTypeValidation,
   validate,
 }
 
-/** validateInvocations validates structural render invocation diagnostics. */
+/** validate validates structural render invocation diagnostics. */
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const render of ASTUtils.streamAllContents(file).filter(AST.isRender)) {
-    reportArity(render, ctx)
+  for (const render of AST.streamAllContents(file).filter(AST.isRender)) {
+    reportInvocationDiagnostics(render, ctx)
   }
 }
 
-/** registerInvocationTypeValidation registers Typir checks for render argument compatibility. */
-function registerTypeValidation(typir: TaoTypirServices): void {
-  typir.validation.Collector.addValidationRulesForAstNodes({
-    RenderStatement: (render, accept, services) => {
-      validateInvocationTypes(render, accept, services as TaoTypirServices)
-    },
-    ViewRender: (render, accept, services) => {
-      validateInvocationTypes(render, accept, services as TaoTypirServices)
-    },
-  })
-}
+/** registerTypeValidation is intentionally empty; render argument assignability is checked by AST binding. */
+function registerTypeValidation(_typir: TaoTypirServices): void {}
 
-function reportArity(render: AST.Render, ctx: ValidationContext): void {
+function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext): void {
   const invocation = ASTUtils.resolveRenderInvocation(render)
   if (!invocation.view) {
     return
   }
-
-  const arity = ASTUtils.invocationArity(invocation, invocation.view, render)
-
-  for (const parameter of arity.parameters.slice(arity.pairCount)) {
-    ctx.error(invocationValidationMessages.missingArgument(invocation.view.name, parameter.name), render)
-  }
-  if (arity.args.length > arity.pairCount) {
-    const extraArgument = arity.args[arity.pairCount]
-    Assert.defined(extraArgument, 'extra render argument exists', {
-      argumentCount: arity.args.length,
-      pairCount: arity.pairCount,
-    })
+  for (const diagnostic of invocation.diagnostics) {
+    if (diagnostic.kind === 'missing-argument') {
+      ctx.error(
+        invocationValidationMessages.missingArgument(invocation.view.name, Type.parameterName(diagnostic.parameter)),
+        render,
+      )
+      continue
+    }
+    if (diagnostic.kind === 'unmatched-argument') {
+      ctx.error(invocationValidationMessages.unmatchedArgument(invocation.view.name), diagnostic.argument)
+      continue
+    }
+    if (diagnostic.kind === 'ambiguous-argument') {
+      ctx.error(
+        invocationValidationMessages.ambiguousArgument(invocation.view.name, diagnostic.parameters),
+        diagnostic.argument,
+      )
+      continue
+    }
+    if (diagnostic.kind === 'ambiguous-parameter') {
+      ctx.error(
+        invocationValidationMessages.ambiguousParameter(invocation.view.name, Type.parameterName(diagnostic.parameter)),
+        render,
+      )
+      continue
+    }
+    if (diagnostic.kind === 'duplicate-argument-type') {
+      ctx.error(invocationValidationMessages.duplicateArgumentType(invocation.view.name), diagnostic.argument)
+      continue
+    }
     ctx.error(
-      invocationValidationMessages.extraArguments(
+      invocationValidationMessages.duplicateParameterType(
         invocation.view.name,
-        arity.parameters.length,
-        arity.args.length,
+        Type.parameterName(diagnostic.parameter),
       ),
-      extraArgument,
+      render,
     )
-  }
-}
-
-function validateInvocationTypes(
-  render: AST.Render,
-  accept: ValidationProblemAcceptor<TaoSpecifics>,
-  services: TaoTypirServices,
-): void {
-  const invocation = ASTUtils.resolveRenderInvocation(render)
-  for (const pair of invocation.pairs) {
-    const expected = TypeSystemHelpers.taoPrimitiveType(pair.parameter.type, services)
-    services.validation.Constraints.ensureNodeIsAssignable(pair.argument.value, expected, accept, (actual) => ({
-      languageNode: pair.argument.value,
-      message: invocationValidationMessages.typeMismatch(pair.parameter, actual.name),
-    }))
   }
 }

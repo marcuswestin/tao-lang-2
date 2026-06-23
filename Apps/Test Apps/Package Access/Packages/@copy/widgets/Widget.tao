@@ -2,7 +2,7 @@ project view ProjectWidget {
    render Text "Project view works"
 }
 
-view Text Value text {
+view Text Value is text {
    render inject Value ```ts
       return <RN.Text>{Value}</RN.Text>
    ```

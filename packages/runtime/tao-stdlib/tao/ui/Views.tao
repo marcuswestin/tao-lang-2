@@ -44,7 +44,7 @@ publish layout WrappingRow {
    ```
 }
 
-publish view Text Value text {
+publish view Text Value is text {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [Value] },
@@ -53,7 +53,7 @@ publish view Text Value text {
    ```
 }
 
-publish view TextFrame Value text {
+publish view TextFrame Value is text {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [Value] },
@@ -62,7 +62,7 @@ publish view TextFrame Value text {
    ```
 }
 
-publish view TextMultiline Value text {
+publish view TextMultiline Value is text {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [Value] },
@@ -71,7 +71,7 @@ publish view TextMultiline Value text {
    ```
 }
 
-publish view Number Value number {
+publish view Number Value is number {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [String(Value)] },
@@ -80,7 +80,7 @@ publish view Number Value number {
    ```
 }
 
-publish view Button Title text, Action action {
+publish view Button Title is text, Action is action {
    render inject Title, Action ```ts
       return TR.Views.Pressable(
         { __tao: _ViewProps.__tao, title: Title, action: Action },

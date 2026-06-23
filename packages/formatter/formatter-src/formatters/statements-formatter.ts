@@ -12,17 +12,16 @@ export default {
     f.commaSpacedList()
   },
 
-  /** ParameterDeclaration formats `Name type` spacing. */
-  ParameterDeclaration(f) {
-    f.oneSpaceBeforeProperty('type')
-  },
+  /** ParameterDeclaration formats either a bare named type or an inline `Name is Type` declaration. */
+  ParameterDeclaration() {},
 } satisfies Partial<FormatHandlers>
 
 /**
- * collapseClosingBraces merges runs of consecutive closing-brace-only lines onto one line at the
- * outermost (last) brace's indentation, with two spaces between braces, per `Spec/Tao Packages.md`.
+ * collapseClosingBraces merges runs of consecutive closing-delimiter-only lines onto one line at the
+ * outermost (last) delimiter's indentation, with two spaces between delimiters, per `Spec/Tao Packages.md`.
  * Lines inside inject TS fences and block comments are left untouched. Runs as a text post-pass
- * because each Block formats its own `}` and Langium indentation is always block-local.
+ * because each block-like node formats its own closing delimiter and Langium indentation is always
+ * block-local.
  */
 export function collapseClosingBraces(text: string): string {
   const lines = text.split('\n')
@@ -47,12 +46,17 @@ export function collapseClosingBraces(text: string): string {
     }
     inBlockComment = blockComment.inBlockComment
     let runEnd = index
-    while (isClosingBraceLine(lines[runEnd]!) && runEnd + 1 < lines.length && isClosingBraceLine(lines[runEnd + 1]!)) {
+    while (
+      isClosingDelimiterLine(lines[runEnd]!)
+      && runEnd + 1 < lines.length
+      && isClosingDelimiterLine(lines[runEnd + 1]!)
+    ) {
       runEnd++
     }
     if (runEnd > index) {
       const indent = lines[runEnd]!.match(/^[ \t]*/)![0]
-      result.push(indent + Array.from({ length: runEnd - index + 1 }, () => '}').join('  '))
+      const delimiters = lines.slice(index, runEnd + 1).map(closingDelimiter)
+      result.push(indent + delimiters.join('  '))
       index = runEnd + 1
       continue
     }
@@ -62,8 +66,12 @@ export function collapseClosingBraces(text: string): string {
   return result.join('\n')
 }
 
-function isClosingBraceLine(line: string): boolean {
-  return /^[ \t]*\}$/.test(line)
+function isClosingDelimiterLine(line: string): boolean {
+  return /^[ \t]*}$/.test(line)
+}
+
+function closingDelimiter(line: string): string {
+  return line.trim()
 }
 
 function scanBlockCommentLine(

@@ -4,8 +4,7 @@
   "type": "module",
   "module": "parser-src/parser.ts",
   "exports": {
-    ".": "./parser-src/parser.ts",
-    "./ASTStructure": "./parser-src/ASTStructure.ts"
+    ".": "./parser-src/parser.ts"
   },
   "dependencies": {
     "tao-shared": "workspace:*",

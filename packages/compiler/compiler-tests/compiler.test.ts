@@ -12,7 +12,7 @@ Describe('Tao compiler', () => {
       view MainView {
         render Text "Hello"
       }
-      view Text Value text {
+      view Text Value is text {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -27,12 +27,12 @@ Describe('Tao compiler', () => {
   Test('compiles state and action declarations', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
-      view Button Title text, Action action {
+      view Button Title is text, Action is action {
         render inject Title ${tsFence}
           return null
         ${fence}
       }
-      view Number Value number {
+      view Number Value is number {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -53,6 +53,28 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
+  Test('compiles dynamic action parameter invocations without arguments', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      view MainView {
+        render Wrapper action { }
+      }
+      view Wrapper Callback is action {
+        action CallCallback {
+          do Callback
+        }
+        render Text "Done"
+      }
+      view Text Value is text {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+  })
+
   Test('compiles layout clauses into a generated app file', async () => {
     const compiled = await Compiler.compileCode(`
       use Col, Row from @tao/ui
@@ -62,7 +84,7 @@ Describe('Tao compiler', () => {
           Text "Wrapped"
         }
       }
-      view Text Value text {
+      view Text Value is text {
         render inject Value ${tsFence}
           return TR.Views.Text({ __tao: _ViewProps.__tao, children: [Value] })
         ${fence}
@@ -93,7 +115,7 @@ Describe('Tao compiler', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value text {
+        project view Text Value is text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -119,7 +141,7 @@ Describe('Tao compiler', () => {
         project view MainView {
           render Text "Package import"
         }
-        view Text Value text {
+        view Text Value is text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -151,7 +173,7 @@ Describe('Tao compiler', () => {
         project view MainView {
           render Text PackageTitle
         }
-        view Text Value text {
+        view Text Value is text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -164,6 +186,92 @@ Describe('Tao compiler', () => {
           'modules/feature/@foo/forms/Main.tao.tsx',
         )
         Expect(compiled['feature/@foo/Title.tao'].relativePath).toBe('modules/feature/@foo/Title.tao.tsx')
+      },
+    )
+  })
+
+  Test('compiles custom types, and is list item constructors, casts, and member access', async () => {
+    const compiled = await Compiler.compileCode(`
+      app TypeApp { view MainView }
+      type Name is text
+      type Tags is list
+      type Job is {
+        Title is text
+      }
+      type Person is {
+        Name
+        Tags
+        Job
+      }
+      type InlineJob is {
+        Role is text
+      }
+      type CurrentJob is InlineJob
+      alias DisplayName = Name "Ada"
+      alias DemoPerson = Person {
+        DisplayName
+        Tags ["compiler" "runtime"]
+        Job { Title "Engineer" }
+      }
+      alias EmptyItem = item {}
+      alias DemoCurrentJob = CurrentJob { Role "Engineer" }
+      view MainView {
+        render Stack {
+          TextValue DemoPerson.Name
+          ListValue DemoPerson.Tags
+          ItemValue item: {}
+        }
+      }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      view TextValue Value is text {
+        render inject Value ${tsFence}
+          return <RN.Text>{Value}</RN.Text>
+        ${fence}
+      }
+      view ListValue Values is list {
+        render inject Values ${tsFence}
+          return <RN.Text>{Values.join(", ")}</RN.Text>
+        ${fence}
+      }
+      view ItemValue Value is item {
+        render inject Value ${tsFence}
+          return <RN.Text>{Object.keys(Value).length}</RN.Text>
+        ${fence}
+      }
+    `)
+
+    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.validation.diagnostics).toEqual([])
+  })
+
+  Test('compiles type-only imports without requiring runtime type bindings', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app TypeImportApp { view MainView }
+        use Name from ./Types.tao
+        alias Name = Name "Ada"
+        view MainView {
+          render TextValue Name
+        }
+        view TextValue Value is text {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+        'Types.tao': `
+        project type Name is text
+      `,
+      },
+      compiled => {
+        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
+        Expect(compiled['Types.tao'].relativePath).toBe('modules/Types.tao.tsx')
       },
     )
   })
@@ -191,7 +299,7 @@ Describe('Tao compiler', () => {
         project view BView {
           render Leaf SharedTitle
         }
-        view Leaf Value text {
+        view Leaf Value is text {
           render inject Value ${tsFence}
             return null
           ${fence}
@@ -208,7 +316,7 @@ Describe('Tao compiler', () => {
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      project view ${name} Value text {
+      project view ${name} Value is text {
         render inject Value ${tsFence}
           return null
         ${fence}

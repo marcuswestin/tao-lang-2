@@ -72,9 +72,9 @@ in
     exec = ''just build "$@"'';
     description = "just build";
   };
-  scripts.p = {
-    exec = ''just prep "$@"'';
-    description = "just prep";
+  scripts.v = {
+    exec = ''just verify "$@"'';
+    description = "just verify";
   };
   scripts.c = {
     exec = ''just check "$@"'';

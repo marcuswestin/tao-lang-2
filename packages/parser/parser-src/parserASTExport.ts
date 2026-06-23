@@ -3,6 +3,7 @@ import { TaoLangGeneratedModule, TaoLangGeneratedSharedModule } from './_gen_tao
 import { Langium } from './langium-exports'
 
 export * from './_gen_tao-parser/ast'
+export * from './ast-structure'
 
 /** Document declares a Langium document whose root is a Tao file AST. */
 export type Document = Langium.LangiumDocument<ASTGen.TaoFile>

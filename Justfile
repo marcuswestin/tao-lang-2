@@ -61,7 +61,7 @@ clean-all: clean
   rm -rf .artifacts packages/runtime/ios packages/runtime/android
 
 # Prepare all code for commit
-prep: fix check
+verify: fix check
 
 # Private
 #########

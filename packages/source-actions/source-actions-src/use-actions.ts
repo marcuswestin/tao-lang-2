@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { sliceText, type StatementSlice, type TextPiece } from './text-slices'
 

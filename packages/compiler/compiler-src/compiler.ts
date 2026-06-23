@@ -118,6 +118,7 @@ function compileSourceFile(
   const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
   const exportedNames = file.ast.statements
     .filter(AST.isExportableDeclaration)
+    .filter(AST.isEmittingRuntimeBinding)
     .filter(declarationVisibleOutsideFile)
     .map((statement: AST.Declaration) => statement.name)
 
@@ -140,9 +141,9 @@ function importLinesForCompiledFile(
   return [...imports.bySource.entries()].map(([sourcePath, names]) => {
     const sourceOutputPath = outputPathBySourcePath.get(sourcePath)
     Assert.defined(sourceOutputPath, 'compiled source output path exists', { sourcePath })
-    return `import { ${[...names].sort().join(', ')} } from '${
-      relativeImportPath(currentOutputPath, sourceOutputPath)
-    }'`
+    const importedNames = Array.from(names).toSorted((left, right) => left.localeCompare(right)).join(', ')
+    const importPath = relativeImportPath(currentOutputPath, sourceOutputPath)
+    return `import { ${importedNames} } from '${importPath}'`
   })
 }
 
@@ -201,6 +202,7 @@ function resolveImports(
       const target = targets.find(candidate =>
         candidate.ast.statements.some(statement =>
           AST.isDeclaration(statement)
+          && AST.isEmittingRuntimeBinding(statement)
           && statement.name === importedName
           && Packages.isVisible(Packages.visibilityOf(statement), resolution)
         )

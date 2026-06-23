@@ -1,60 +1,39 @@
 import { injectionArgumentName } from './injections'
 import {
-  type ActionInvocationPair as ActionInvocationPairData,
-  type InvocationArity as InvocationArityData,
-  invocationArity,
-  type RenderInvocationPair as RenderInvocationPairData,
   resolveActionInvocation,
   resolveActionTarget,
-  type ResolvedActionInvocation as ResolvedActionInvocationData,
-  type ResolvedActionTarget as ResolvedActionTargetData,
-  type ResolvedRenderInvocation as ResolvedRenderInvocationData,
+  resolveItemPropertyBindings,
   resolveRenderInvocation,
 } from './invocations'
-import { type LayoutTermValue as LayoutTermValueData, LayoutUtils } from './layouts'
+import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
-import { getDocument, isNode, streamAllContents } from './traversal'
+import { Type } from './Type'
 
-/** ASTUtils exposes shared semantic helpers for Tao AST consumers. */
-const ASTUtils = {
-  getDocument,
+export { Packages, Type }
+
+/** ASTUtils groups shared semantic helpers for Tao AST consumers. */
+export const ASTUtils = {
   injectionArgumentName,
-  invocationArity,
-  isNode,
-  Layout: LayoutUtils,
+  layoutEntryValues,
+  layoutTermValue,
   referencedNames,
   resolveActionInvocation,
   resolveActionTarget,
+  resolveItemPropertyBindings,
   resolveRenderInvocation,
-  streamAllContents,
+} as const
+
+export namespace ASTUtils {
+  export type ActionInvocationPair = import('./invocations').ActionInvocationPair
+  export type ArgumentBindingDiagnostic = import('./invocations').ArgumentBindingDiagnostic
+  export type ItemPropertyBindingDiagnostic = import('./invocations').ItemPropertyBindingDiagnostic
+  export type ItemPropertyBindingPair = import('./invocations').ItemPropertyBindingPair
+  export type ItemPropertyBindingResult = import('./invocations').ItemPropertyBindingResult
+  export type LayoutTermValue = import('./layouts').LayoutTermValue
+  export type RenderInvocationPair = import('./invocations').RenderInvocationPair
+  export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
+  export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
+  export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
+  export type TaoType = import('./Type').TaoType
 }
-
-namespace ASTUtils {
-  /** ActionInvocationPair declares one positional action argument-to-parameter pairing. */
-  export type ActionInvocationPair = ActionInvocationPairData
-
-  /** InvocationArity declares the lists and matched-pair count used for arity diagnostics. */
-  export type InvocationArity = InvocationArityData
-
-  /** RenderInvocationPair declares one positional render argument-to-parameter pairing. */
-  export type RenderInvocationPair = RenderInvocationPairData
-
-  /** ResolvedActionInvocation declares the semantic shape of an action invocation. */
-  export type ResolvedActionInvocation = ResolvedActionInvocationData
-
-  /** ResolvedActionTarget declares how an expression resolves as an action target. */
-  export type ResolvedActionTarget = ResolvedActionTargetData
-
-  /** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
-  export type ResolvedRenderInvocation = ResolvedRenderInvocationData
-
-  /** Layout declares types produced by parsed layout-clause semantic helpers. */
-  export namespace Layout {
-    /** TermValue declares compact runtime values from parsed layout terms. */
-    export type TermValue = LayoutTermValueData
-  }
-}
-
-export { Packages }
-export default ASTUtils

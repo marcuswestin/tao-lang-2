@@ -4,13 +4,11 @@ import "./blocks"
 import "./expressions"
 import "./injections"
 import "./layout"
+import "./visibility"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
     ViewDeclaration | LayoutDeclaration;
-
-DeclarationVisibility returns string:
-    'package' | 'project' | 'publish';
 
 ViewDeclaration:
     visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList? block=Block;
@@ -21,9 +19,10 @@ LayoutDeclaration:
 type RenderableDeclaration = ViewDeclaration | LayoutDeclaration;
 
 RenderStatement:
-    'render' (injection=Injection layoutClause=LayoutClause? | view=[RenderableDeclaration:ID] argumentList=ArgumentList? layoutClause=LayoutClause? block=Block?);
+    'render' (injection=Injection layoutClause=LayoutClause?
+        | view=[RenderableDeclaration:ID] (layoutClause=LayoutClause block=Block? | argumentList=ArgumentList layoutClause=LayoutClause? block=Block? | block=Block?));
 
 ViewRender:
-    view=[RenderableDeclaration:ID] argumentList=ArgumentList? layoutClause=LayoutClause? block=Block?;
+    view=[RenderableDeclaration:ID] (layoutClause=LayoutClause block=Block? | argumentList=ArgumentList layoutClause=LayoutClause? block=Block? | block=Block?);
 
 type Render = RenderStatement | ViewRender;

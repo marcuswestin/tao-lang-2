@@ -1,6 +1,6 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { isType, type Type } from 'typir'
+import { isType, type Type as TypirType } from 'typir'
 import type { TypirLangiumServices, TypirLangiumSpecifics } from 'typir-langium'
 
 /** TaoSpecifics binds Tao AST types to Typir-Langium services. */
@@ -16,22 +16,66 @@ export type TaoTypirServices = TypirLangiumServices<TaoSpecifics>
 const NO_DOCUMENT_ERROR = 'AST node has no document'
 
 const activeInferenceNodes = new WeakSet<AST.Node>()
-const primitiveTypes = ['text', 'number', 'action'] as const satisfies readonly AST.PrimitiveType[]
+const primitiveTypes = ['text', 'number', 'action', 'item', 'list'] as const satisfies readonly AST.PrimitiveType[]
 
 /** TypeSystemHelpers groups Tao Typir helper functions. */
 export const TypeSystemHelpers = {
+  ensurePrimitive,
   safeInferType,
   taoPrimitiveType,
+  taoType,
+  typirTypeDefinitionName,
   underlyingPrimitiveName,
 }
 
 /** taoPrimitiveType returns the Typir primitive for a Tao primitive type. */
-function taoPrimitiveType(type: AST.PrimitiveType, typir: TaoTypirServices): Type | undefined {
-  return typir.factory.Primitives.get({ primitiveName: type })
+function taoPrimitiveType(
+  type: AST.PrimitiveType | AST.TypeReference | ASTUtils.TaoType,
+  typir: TaoTypirServices,
+): TypirType | undefined {
+  if (typeof type === 'string') {
+    return typir.factory.Primitives.get({ primitiveName: type })
+  }
+  if (AST.isTypeReference(type)) {
+    return taoType(Type.ofReference(type), typir)
+  }
+  return taoType(type, typir)
+}
+
+/** taoType returns the Typir type matching a statically resolved Tao type. */
+function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | undefined {
+  if (type.kind === 'unresolved') {
+    return undefined
+  }
+  if (type.nominal) {
+    return ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
+  }
+  if (type.kind === 'primitive') {
+    return taoPrimitiveType(type.primitive, typir)
+  }
+  return taoPrimitiveType(type.kind, typir)
+}
+
+/** ensurePrimitive returns an existing Typir primitive or creates it for nominal Tao types. */
+function ensurePrimitive(name: string, typir: TaoTypirServices): TypirType | undefined {
+  const existing = typir.factory.Primitives.get({ primitiveName: name })
+  if (existing) {
+    return existing
+  }
+  return typir.factory.Primitives.create({ primitiveName: name }).finish()
+}
+
+/** typirTypeDefinitionName returns a document-qualified Typir name for a Tao type definition. */
+function typirTypeDefinitionName(definition: AST.TypeDefinition): string {
+  try {
+    return `${AST.getDocument(definition).uri.path}#${Type.definitionName(definition)}`
+  } catch {
+    return Type.definitionName(definition)
+  }
 }
 
 /** underlyingPrimitiveName returns the base primitive name for primitive and stateful primitive types. */
-function underlyingPrimitiveName(type: Type | undefined): AST.PrimitiveType | undefined {
+function underlyingPrimitiveName(type: TypirType | undefined): AST.PrimitiveType | undefined {
   const name = type?.getName()
   if (!name) {
     return undefined
@@ -57,7 +101,7 @@ function astNodeHasDocument(node: AST.Node | undefined): node is AST.Node {
     return false
   }
   try {
-    ASTUtils.getDocument(node)
+    AST.getDocument(node)
     return true
   } catch {
     return false
@@ -65,7 +109,7 @@ function astNodeHasDocument(node: AST.Node | undefined): node is AST.Node {
 }
 
 /** safeInferType infers a Tao expression type and returns undefined for unresolved Typir paths. */
-function safeInferType(typir: TaoTypirServices, node: AST.Node | undefined): Type | undefined {
+function safeInferType(typir: TaoTypirServices, node: AST.Node | undefined): TypirType | undefined {
   if (!astNodeHasDocument(node)) {
     return undefined
   }

@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { ActionsValidator } from './ActionsValidator'
 import { AliasesValidator } from './aliases-validator'
@@ -9,6 +8,7 @@ import { InvocationsValidator } from './invocations-validator'
 import { LayoutValidator } from './layout-validator'
 import { validateProject } from './project-validator'
 import { StateValidator } from './StateValidator'
+import { validateTypes } from './types-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './use-validator'
 import type { ValidationContext } from './validation'
 import { ViewsValidator } from './views-validator'
@@ -22,9 +22,10 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   AliasesValidator.validate(file, ctx)
   LayoutValidator.validate(file, ctx)
   validateInjections(file, ctx)
+  validateTypes(file, ctx)
   InvocationsValidator.validate(file, ctx)
 
-  const document = ASTUtils.getDocument(file)
+  const document = AST.getDocument(file)
   if (document.uri.scheme === 'file') {
     validateVisibleDeclarations(ctx, file)
     validateUseStatements(file, ctx)
@@ -42,6 +43,7 @@ export const Validate = {
   Project: validateProject,
   States: StateValidator.validate,
   TaoFile: validateTaoFile,
+  Types: validateTypes,
   TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,
   VisibleDeclarations: validateVisibleDeclarations,

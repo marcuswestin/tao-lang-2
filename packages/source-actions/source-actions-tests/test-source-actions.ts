@@ -2,8 +2,7 @@ import { type AST, Langium } from '@parser'
 import { FS, Text } from '@shared'
 import { Expect } from '@shared/test'
 import { Workspace } from '@workspace'
-import type { SourceActionOptions } from '../source-actions-src/source-actions'
-import SourceActions from '../source-actions-src/source-actions'
+import SourceActions, { type SourceActionOptions } from '../source-actions-src/source-actions'
 
 /** parseRawDocument parses exact Tao source text into a linked document for source-action tests. */
 export async function parseRawDocument(text: string): Promise<AST.Document> {

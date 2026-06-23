@@ -4,7 +4,7 @@ app StateActionMVP {
    view MainView
 }
 
-view CounterButton Title text, Action action {
+view CounterButton Title is text, Action is action {
    render Button Title, Action
 }
 
@@ -14,7 +14,7 @@ view MainView {
    action SetZero {
       set Count = 0
    }
-   action AddStep Step number {
+   action AddStep Step is number {
       set Count += Step
    }
    action AddFive {

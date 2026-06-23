@@ -7,6 +7,7 @@ import InjectionsFormatter from './formatters/injections-formatter'
 import ProjectFormatter from './formatters/project-formatter'
 import { StateFormatter } from './formatters/StateFormatter'
 import StatementsFormatter from './formatters/statements-formatter'
+import TypesFormatter from './formatters/types-formatter'
 import UseFormatter from './formatters/use-formatter'
 import ViewsFormatter from './formatters/views-formatter'
 import type { FormatHandlers } from './formatting'
@@ -21,6 +22,7 @@ export const Format = {
   ...StateFormatter,
   ...AliasesFormatter,
   ...ViewsFormatter,
+  ...TypesFormatter,
   ...StatementsFormatter,
   ...ExpressionsFormatter,
   ...InjectionsFormatter,

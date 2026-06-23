@@ -51,7 +51,7 @@ const PROCESS_COLORS: Record<string, ProcessColor> = {
   fix: yellow,
   just: yellow,
   parser: green,
-  prep: blue,
+  verify: blue,
   test: green,
 }
 

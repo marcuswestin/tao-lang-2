@@ -1,3 +1,4 @@
+import { Type } from '@ast-utils'
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { AST } from '../parser-src/parser'
@@ -15,7 +16,7 @@ Describe('Tao injection parser', () => {
     const view = parseResult.entry.ast.statements[0]
 
     Expect.Is(view, AST.isViewDeclaration)
-    const render = view.block.statements[0]
+    const render = AST.blockStatementOf(view, 0)
     Expect.Is(render, AST.isRenderStatement)
     Expect(render.injection?.tsCodeBlock).toContain('return null')
   })
@@ -23,7 +24,7 @@ Describe('Tao injection parser', () => {
   Test('parses inject arguments', async () => {
     const parseResult = await testParseCode(`
       alias UserName = "Ro"
-      view Native Value text {
+      view Native Value is text {
         render inject Value, Name UserName, Count 3, Greeting "Hello" \`\`\`ts
           return null
         \`\`\`
@@ -32,20 +33,21 @@ Describe('Tao injection parser', () => {
     const view = parseResult.entry.ast.statements[1]
 
     Expect.Is(view, AST.isViewDeclaration)
-    const render = view.block.statements[0]
+    const render = AST.blockStatementOf(view, 0)
     Expect.Is(render, AST.isRenderStatement)
-    const args = render.injection?.argumentList?.arguments ?? []
+    Expect.Is(render.injection, AST.isInjection)
+    const args = AST.injectionArgumentsOf(render.injection)
 
     Expect(args).toHaveLength(4)
 
     const [valueArg, nameArg, countArg, greetingArg] = args
     Expect.Is(valueArg, AST.isShorthandInjectionArgument)
-    Expect(valueArg.value.target.ref?.name).toBe('Value')
+    Expect(valueDeclarationName(valueArg.value.target.ref)).toBe('Value')
 
     Expect.Is(nameArg, AST.isNamedInjectionArgument)
     Expect(nameArg.name).toBe('Name')
     Expect.Is(nameArg.value, AST.isValueReference)
-    Expect(nameArg.value.target.ref?.name).toBe('UserName')
+    Expect(valueDeclarationName(nameArg.value.target.ref)).toBe('UserName')
 
     Expect.Is(countArg, AST.isNamedInjectionArgument)
     Expect(countArg.name).toBe('Count')
@@ -75,3 +77,10 @@ Describe('Tao injection parser', () => {
     Expect(Diagnostics.allMessagesContain(parseResult.diagnostics, 'Could not resolve reference')).toBe(true)
   })
 })
+
+function valueDeclarationName(declaration: AST.ValueDeclaration | undefined): string | undefined {
+  if (!declaration) {
+    return undefined
+  }
+  return AST.isParameterDeclaration(declaration) ? Type.parameterName(declaration) : declaration.name
+}

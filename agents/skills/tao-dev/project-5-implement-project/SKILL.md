@@ -23,7 +23,7 @@ Implement the reviewed plan in controlled slices.
 - Keep changes scoped to the current step, and update stale docs or instructions encountered in scope.
 - Use the `runtime-codegen` skill for generated Tao TS, `TR`, `@runtime/TR`, or reusable runtime functionality.
 - Run the step's validation before marking the step complete; intermediate commits may defer step-specific validation when appropriate.
-- Run `./agent just prep` before every commit unless Ro explicitly opts out.
+- Run `./agent just verify` before every commit unless Ro explicitly opts out.
 - Stop on discovery that an implementation step had invalid assumptions and should be reconsidered.
 - Update the task doc and `Roadmap.md` with completed or deferred discoveries.
 

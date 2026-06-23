@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled } from '../codegen-util'
+import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export const StatementsCompiler = {
@@ -16,9 +16,15 @@ export const StatementsCompiler = {
       ProjectDeclaration: Compile.ProjectDeclaration,
       RenderStatement: Compile.RenderStatement,
       StateDeclaration: Compile.StateDeclaration,
+      TypeDeclaration: Compile.TypeDeclaration,
       UseStatement: Compile.UseStatement,
       ViewDeclaration: Compile.ViewDeclaration,
       ViewRender: Compile.ViewRender,
     })
+  },
+
+  /** TypeDeclaration emits no runtime code; Tao named types are compile-time only. */
+  TypeDeclaration(): Compiled {
+    return gen.noop()
   },
 } as const

@@ -24,11 +24,15 @@ function merge(
   overlay: TaoLayout | undefined,
   spec: TaoLayoutMergeSpec = {},
 ): TaoLayout | undefined {
-  const entries = [...(base?.entries ?? [])]
-  for (const entry of overlay?.entries ?? []) {
+  const entries = [...entriesOf(base)]
+  for (const entry of entriesOf(overlay)) {
     mergeEntry(entries, entry, spec.direction)
   }
   return entries.length === 0 ? undefined : createLayout(entries)
+}
+
+function entriesOf(layout: TaoLayout | undefined): readonly TaoLayoutEntry[] {
+  return layout?.entries ?? []
 }
 
 function mergeEntry(

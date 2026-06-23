@@ -17,12 +17,12 @@ async function runJust(args: readonly string[]): Promise<void> {
 
 const JUST_LABELS: Record<string, string> = {
   '_parser-gen': 'parser',
-  clean: 'clean',
-  deps: 'deps',
-  fix: 'fix',
+  'clean': 'clean',
+  'deps': 'deps',
+  'fix': 'fix',
   'install-ide-extension': 'extension',
-  prep: 'prep',
-  test: 'test',
+  'verify': 'verify',
+  'test': 'test',
 }
 
 /** compileApp runs parser generation when needed and compiles the selected Tao app, returning success. */

@@ -4,7 +4,7 @@
 
 Add Tao semantic validation and a Typir-backed Tao type checker for parsed `.tao` files, then route those diagnostics through source compilation and the first real IDE extension slice.
 
-The implementation should support the current executable Kitchen Sink plus the target syntax already captured in `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao`: `alias`, `number` parameters, number literals, and value references used as render arguments.
+The implementation should support the current executable Kitchen Sink plus the target syntax already captured in `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao`: `alias`, `number` parameters, literals is number, and value references used as render arguments.
 
 ## Non-goals
 
@@ -98,7 +98,7 @@ If implementation needs a cross-cutting helper, keep it small and name it for th
 Concrete work:
 
 - Extend `packages/parser/parser-grammar/blocks.langium` so `PrimitiveType` includes `number` and alias declarations can appear wherever the broad `Statement` grammar currently permits later validation.
-- Extend `packages/parser/parser-grammar/expressions.langium` with an `Expression` union for string literals, number literals, and value references; rewire `Argument.value` from `StringLiteral` to `Expression`.
+- Extend `packages/parser/parser-grammar/expressions.langium` with an `Expression` union for string literals, literals is number, and value references; rewire `Argument.value` from `StringLiteral` to `Expression`.
 - Add `packages/parser/parser-grammar/aliases.langium` with `AliasDeclaration: 'alias' name=ID '=' value=Expression`, and import it through the block/entry grammar so `Statement` can include aliases.
 - Add a value-reference cross-reference to a `ValueDeclaration`-style AST union of `AliasDeclaration | ParameterDeclaration`, or an equivalent explicit design that keeps value references distinct from view references.
 - Add the smallest custom scoping service needed to keep parameters visible only inside their owning `ui`, view-local aliases visible only in the owning view, and file aliases visible throughout the file. Do not let default global Langium scoping expose one view's parameters or local aliases to another view.
@@ -199,7 +199,7 @@ Concrete work:
 - Keep codegen defensive assertions in place but stop relying on them for normal source-level semantic failures.
 - Split codegen for new surfaces into the feature files named above, with `Compile.ts` as the single `Compile.<ASTNode>` object assembly. Keep shared helpers in `compiler-src/codegen/codegen-util.ts`.
 - Replace the temporary generated text-only helper with a minimal runtime-owned Tao value constructor that supports `text` and `number`, exposed as `TR.Value<T>` / `new TR.Value(...)` from `packages/runtime/TaoRuntime-src/TR.ts`. Keep generated Tao TS minimal and keep the injection contract unchanged: `_ViewProps.<Param>.evaluate().jsValue`.
-- Compile string literals, number literals, alias references, and parameter references.
+- Compile string literals, literals is number, alias references, and parameter references.
 - Compile file-level aliases as generated bindings before views.
 - Compile view-local aliases as local bindings before the view return expression.
 - Compile render props from validated positional arguments.

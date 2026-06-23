@@ -7,6 +7,7 @@ import "./actions"
 import "./injections"
 import "./imports"
 import "./project"
+import "./types"
 import "./terminals"
 
 entry BlocksGrammarEntrypoint:
@@ -16,12 +17,16 @@ Statement:
     Declaration | ProjectDeclaration | UseStatement | AppView | StateDeclaration | Injection | RenderStatement | ViewRender;
 
 Declaration:
-    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | ActionDeclaration;
+    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration;
 
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement;
 type ViewStatement = AliasDeclaration | StateDeclaration | ActionDeclaration | Render;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration;
-type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | ActionDeclaration;
+type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration;
+type EmittingRuntimeBinding = AliasDeclaration | RenderableDeclaration | ActionDeclaration;
+type ParameterizedDeclaration = RenderableDeclaration | ActionDeclaration;
+type BlockStatementOwner = AppDeclaration | ProjectDeclaration | RenderableDeclaration | Render | ActionDeclaration | ActionExpression;
+type OwnedBlockStatement = ActionStatement | ProjectStatement | Statement;
 
 Block:
     '{' statements+=Statement* '}';
@@ -30,7 +35,4 @@ ParameterList:
     parameters+=ParameterDeclaration (',' parameters+=ParameterDeclaration)*;
 
 ParameterDeclaration:
-    name=ID type=PrimitiveType;
-
-PrimitiveType returns string:
-    'text' | 'number' | 'action';
+    inlineType=ParameterTypeDeclaration | type=NamedTypeReference;

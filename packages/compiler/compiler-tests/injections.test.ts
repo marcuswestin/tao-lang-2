@@ -12,7 +12,7 @@ Describe('Tao injection compiler', () => {
       view MainView {
         render Text "Hello"
       }
-      view Text Value text {
+      view Text Value is text {
         render inject Value, Name UserName, Count 3 ${tsFence}
           return null
         ${fence}

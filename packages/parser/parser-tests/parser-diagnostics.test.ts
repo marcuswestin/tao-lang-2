@@ -42,7 +42,7 @@ Describe('minimal Tao parser diagnostics', () => {
   })
 
   Test('parses top-level renders for later validator checks', async () => {
-    const parseResult = await testParseCode('render Text "hello" view Text Value text { }')
+    const parseResult = await testParseCode('render Text "hello" view Text Value is text { }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
@@ -50,19 +50,26 @@ Describe('minimal Tao parser diagnostics', () => {
   Test('parses number-typed parameters in semantically invalid positions', async () => {
     const parseResult = await testParseCode(`
       app MyApp { view MyView }
-      view MyView Count number {
+      view MyView Count is number {
         render Text Count { }
       }
-      view Text Value text { }
+      view Text Value is text { }
     `)
 
     Expect(parseResult.entry.ast.statements).toHaveLength(3)
   })
 
+  Test('reports parser errors for old name-first parameter syntax', async () => {
+    const parseResult = await parseCodeWithErrors('view Text Value text { }')
+
+    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
+  })
+
   Test('reports linker diagnostics for values outside their owning view', async () => {
     const parseResult = await parseCodeWithErrors(`
-      view Text Value text { }
-      view Source Secret text {
+      view Text Value is text { }
+      view Source Secret is text {
         alias Local = Secret
       }
       view Target {

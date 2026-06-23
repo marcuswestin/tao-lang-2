@@ -1,5 +1,10 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import type { TaoLayout, TaoLayoutEntry } from '../TaoRuntime-src/TR-layout'
+
+function layoutEntries(layout: TaoLayout | undefined): readonly TaoLayoutEntry[] {
+  return layout?.entries ?? []
+}
 
 Describe('TR.Value', () => {
   Test('wraps JavaScript values as evaluable Tao runtime values', () => {
@@ -304,7 +309,7 @@ Describe('TR.Layout', () => {
 
     Expect(TR.Layout.resolve({
       direction: 'row',
-      entries: rowLayout?.entries ?? [],
+      entries: layoutEntries(rowLayout),
     })).toEqual({
       alignItems: 'baseline',
       alignSelf: 'stretch',
@@ -320,7 +325,7 @@ Describe('TR.Layout', () => {
     )
 
     Expect(TR.Layout.resolve({
-      entries: spacingLayout?.entries ?? [],
+      entries: layoutEntries(spacingLayout),
     })).toEqual({
       marginBottom: 4,
       marginLeft: 2,
@@ -346,7 +351,7 @@ Describe('TR.Layout', () => {
 
     Expect(TR.Layout.resolve({
       direction: 'row',
-      entries: overlayOnly?.entries ?? [],
+      entries: layoutEntries(overlayOnly),
     })).toEqual({
       flexDirection: 'row',
       gap: 8,
@@ -354,7 +359,7 @@ Describe('TR.Layout', () => {
     })
     Expect(TR.Layout.resolve({
       direction: 'row',
-      entries: baseOnly?.entries ?? [],
+      entries: layoutEntries(baseOnly),
     })).toEqual({
       alignItems: 'baseline',
       alignSelf: 'stretch',

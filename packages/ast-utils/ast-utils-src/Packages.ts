@@ -1,6 +1,5 @@
 import { AST, type PackageResolver } from '@parser'
 import { FS } from '@shared'
-import { getDocument } from './traversal'
 
 /** Packages exposes Tao package discovery, import resolution, and visibility helpers. */
 export namespace Packages {
@@ -71,7 +70,11 @@ export namespace Packages {
             workspaceFilePaths,
           })
         )
-        return targetFiles.flatMap(file => file.statements.filter(AST.isDeclaration))
+        return targetFiles.flatMap(file =>
+          file.statements
+            .filter(AST.isDeclaration)
+            .filter(declaration => isVisible(visibilityOf(declaration), resolution))
+        )
       },
       async candidateFilePaths(useStatement, request) {
         return await candidateFilePaths(resolveUse(context, useStatement, request.fromFilePath))
@@ -432,6 +435,6 @@ export namespace Packages {
   }
 
   function workspaceFilePath(file: AST.TaoFile): string {
-    return getDocument(file).uri.path
+    return AST.getDocument(file).uri.path
   }
 }

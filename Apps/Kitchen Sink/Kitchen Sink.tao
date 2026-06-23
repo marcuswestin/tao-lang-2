@@ -7,6 +7,21 @@ app KitchenSink {
 alias Greeting = "Hello, World!"
 alias LaunchCount = 3
 
+type SinkName is text
+
+type SinkTags is list
+
+type SinkProfile is {
+   SinkName
+   SinkTags
+}
+
+alias FixedSinkName = SinkName "Fixed Kitchen type"
+alias SinkProfileValue = SinkProfile {
+   SinkName "Typed Kitchen"
+   SinkTags ["item" "list" "type"]
+}
+
 view MainView {
    state KitchenCount = 0
    alias LocalText = "Text from a local alias"
@@ -18,13 +33,22 @@ view MainView {
       Text Greeting
       Text "Hello World" [width fill]
       CountText LaunchCount
+      Text FixedSinkName
+      Text SinkProfileValue.SinkName
+      TagText SinkProfileValue.SinkTags
       Number KitchenCount
       Button "Add kitchen count", action {
          set KitchenCount += 1
 }  }  }
 
-view CountText Count number {
+view CountText Count is number {
    render inject Count ```ts
       return <RN.Text>Launch count: {Count}</RN.Text>
+   ```
+}
+
+view TagText Tags is list {
+   render inject Tags ```ts
+      return <RN.Text>{Tags.join(', ')}</RN.Text>
    ```
 }
