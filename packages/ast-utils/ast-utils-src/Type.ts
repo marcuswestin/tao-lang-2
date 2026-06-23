@@ -53,8 +53,8 @@ export class Type {
     return Switch.type(type, {
       TypeDeclaration: declaration => declaration.name,
       TypeProperty: property => {
-        const owner = owningTypeDeclaration(property)
-        return owner ? `${owner.name}.${property.name}` : property.name
+        const owner = owningTypePropertyDefinition(property)
+        return owner ? `${Type.definitionName(owner)}.${property.name}` : property.name
       },
       ParameterTypeDeclaration: parameterType => {
         const owner = owningParameterizedDeclaration(parameterType)
@@ -185,7 +185,10 @@ export class Type {
     if (owner) {
       const [member, ...remainingMembers] = reference.members
       if (member) {
-        return { definition: parameterTypeDeclarationNamed(owner, member), remainingMembers }
+        const parameterType = parameterTypeDeclarationNamed(owner, member)
+        if (parameterType) {
+          return { definition: parameterType, remainingMembers }
+        }
       }
     }
 
@@ -519,10 +522,10 @@ function parameterizedDeclarationsInFile(file: AST.TaoFile): AST.ParameterizedDe
   ]
 }
 
-function owningTypeDeclaration(property: AST.TypeProperty): AST.TypeDeclaration | undefined {
+function owningTypePropertyDefinition(property: AST.TypeProperty): AST.TypeDefinition | undefined {
   const itemType = property.$container
   const owner = itemType?.$container
-  return AST.isTypeDeclaration(owner) ? owner : undefined
+  return AST.isTypeDeclaration(owner) || AST.isParameterTypeDeclaration(owner) ? owner : undefined
 }
 
 function owningParameterizedDeclaration(

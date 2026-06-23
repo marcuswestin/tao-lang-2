@@ -51,12 +51,19 @@ export function validateTypes(file: AST.TaoFile, ctx: ValidationContext): void {
 }
 
 function validateTypeDeclaration(declaration: AST.TypeDeclaration, ctx: ValidationContext): void {
-  if (typeDeclarationHasCycle(declaration, declaration, new Set())) {
-    ctx.error(typeValidationMessages.cyclicType(declaration.name), declaration)
+  if (typeDefinitionHasCycle(declaration, declaration, new Set())) {
+    ctx.error(typeValidationMessages.cyclicType(Type.definitionName(declaration)), declaration)
   }
 }
 
-function validateParameter(_parameter: AST.ParameterDeclaration, _ctx: ValidationContext): void {}
+function validateParameter(parameter: AST.ParameterDeclaration, ctx: ValidationContext): void {
+  if (!parameter.inlineType) {
+    return
+  }
+  if (typeDefinitionHasCycle(parameter.inlineType, parameter.inlineType, new Set())) {
+    ctx.error(typeValidationMessages.cyclicType(Type.definitionName(parameter.inlineType)), parameter.inlineType)
+  }
+}
 
 function validateItemType(type: AST.ItemTypeExpression, ctx: ValidationContext): void {
   const seen = new Set<string>()
@@ -234,8 +241,8 @@ function validateItemConstructor(
   }
 }
 
-function typeDeclarationHasCycle(
-  root: AST.TypeDeclaration,
+function typeDefinitionHasCycle(
+  root: AST.TypeDefinition,
   current: AST.TypeDefinition,
   seen: Set<AST.TypeDefinition>,
 ): boolean {
@@ -243,7 +250,7 @@ function typeDeclarationHasCycle(
 }
 
 function typeDefinitionReferencesRoot(
-  root: AST.TypeDeclaration,
+  root: AST.TypeDefinition,
   current: AST.TypeDefinition,
   seen: Set<AST.TypeDefinition>,
 ): boolean {
@@ -266,7 +273,7 @@ function typeDefinitionReferencesRoot(
 }
 
 function typeExpressionReferencesRoot(
-  root: AST.TypeDeclaration,
+  root: AST.TypeDefinition,
   type: AST.TypeExpression,
   seen: Set<AST.TypeDefinition>,
 ): boolean {
@@ -277,7 +284,7 @@ function typeExpressionReferencesRoot(
 }
 
 function typeReferenceReferencesRoot(
-  root: AST.TypeDeclaration,
+  root: AST.TypeDefinition,
   type: AST.TypeReference,
   seen: Set<AST.TypeDefinition>,
 ): boolean {
@@ -294,11 +301,16 @@ function typeReferenceReferencesRoot(
   return typeDefinitionReferencesRoot(root, target, seen)
 }
 
-function typeDefinitionOwnedBy(definition: AST.TypeDefinition, root: AST.TypeDeclaration): boolean {
+function typeDefinitionOwnedBy(definition: AST.TypeDefinition, root: AST.TypeDefinition): boolean {
   if (definition === root) {
     return true
   }
-  return AST.isTypeProperty(definition) && definition.$container.$container === root
+  return AST.isTypeProperty(definition) && typePropertyOwner(definition) === root
+}
+
+function typePropertyOwner(property: AST.TypeProperty): AST.TypeDefinition | undefined {
+  const owner = property.$container.$container
+  return AST.isTypeDeclaration(owner) || AST.isParameterTypeDeclaration(owner) ? owner : undefined
 }
 
 function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: ValidationContext): void {

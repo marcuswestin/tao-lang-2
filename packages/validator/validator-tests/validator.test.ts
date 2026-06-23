@@ -2446,6 +2446,27 @@ Describe('Tao validator structural diagnostics', () => {
     `)
   })
 
+  Test('rejects top-level values for same-name scoped parameter item properties', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Age is number
+      alias OuterAge = Age 42
+      view MainView {
+        render Card Details: { OuterAge }
+      }
+      view Card Details is {
+        Age is number
+      } {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.unmatchedProperty)
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.missingProperty('Age'))
+  })
+
   Test('rejects cyclic type aliases without recursing forever', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
@@ -2479,6 +2500,40 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(qualifiedResult)).toContain(typeValidationMessages.cyclicType('B'))
     Expect(validationErrorMessages(shorthandResult)).toContain(typeValidationMessages.cyclicType('Person'))
     Expect(validationErrorMessages(shorthandResult)).toContain(typeValidationMessages.cyclicType('Friend'))
+  })
+
+  Test('rejects cyclic scoped parameter type declarations without recursing forever', async () => {
+    const directResult = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view Cycle Self is Cycle.Self {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const itemResult = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view Card Details is {
+        Age is Card.Details.Age
+      } {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(directResult)).toContain(typeValidationMessages.cyclicType('Cycle.Self'))
+    Expect(validationErrorMessages(itemResult)).toContain(typeValidationMessages.cyclicType('Card.Details'))
   })
 
   Test('allows item type properties to reference sibling properties without false cycles', async () => {
@@ -2577,6 +2632,31 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         render Text CardValue
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toEqual([])
+  })
+
+  Test('resolves same-name qualified item types when renderables lack that scoped member', async () => {
+    const result = await testValidateCode(`
+      app MyApp { view MainView }
+      type Card is {
+        Name is text
+      }
+      alias CardName = Card.Name "Ada"
+      view Card Label is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Text CardName
       }
       view Text Value is text {
         render inject ${tsFence}

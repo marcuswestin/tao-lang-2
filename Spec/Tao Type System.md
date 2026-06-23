@@ -432,7 +432,7 @@ text is Name => false
 Typed construction has these forms:
 
 ```tao
-<Type> <Value>       // constructs or type-fixes a typed value, e.g. Name "Ro", Age 40, Person { ... }
+<Type> <Literal>     // constructs a typed literal-shaped value, e.g. Name "Ro", Age 40, Person { ... }
 <ValueA> with <ValueB> // merges two values
 ```
 
@@ -451,7 +451,7 @@ alias PersonC = PersonA with { Name "C" }
 
 In `Value with { ... }`, the bare item patch is interpreted in the type context of `Value`. Its properties are matched with the same rules as item construction. Scalar properties named in the overlay replace the inherited scalar value. Nested item properties merge recursively with the inherited nested item value. List and collection merge semantics are deferred; until explicit append/remove syntax exists, list-like properties replace as a whole. Overlays do not mutate the base value.
 
-Two types are compatible for typed value creation when they are in the same direct ancestry chain. Child-to-parent and parent-to-child type-fixing are allowed; sibling-to-sibling type-fixing is not. Union types, structural `like` types, and other overlapping shapes do not participate unless a later spec defines that explicitly.
+Two types are compatible for typed value creation when they are in the same direct ancestry chain. Child-to-parent and parent-to-child type-fixing are allowed at invocation labels such as `Name: FirstName`; sibling-to-sibling type-fixing is not. Union types, structural `like` types, and other overlapping shapes do not participate unless a later spec defines that explicitly.
 
 ```tao
 type Name is text
@@ -459,9 +459,17 @@ type Alias is Name
 type Nickname is Alias
 type AKA is Alias
 
-alias Alias = Name Alias "Ro"         // OK: parent to child
-alias ParentName = Alias Name "Ro"    // OK: child to parent
-alias Nickname = AKA Nickname "Ro"    // Type Error: sibling to sibling
+view NameSink Name { ... }
+view AliasSink Alias { ... }
+view NicknameSink Nickname { ... }
+
+alias NameValue = Name "Ro"
+alias AliasValue = Alias "Ro"
+alias NicknameValue = Nickname "Ro"
+
+render NameSink Alias: AliasValue      // OK: child to parent
+render AliasSink Name: NameValue       // OK: parent to child
+render NicknameSink AKA: NicknameValue // Type Error: sibling to sibling
 ```
 
 Action values have two extra construction shorthands:
@@ -496,20 +504,19 @@ typeof Name
 typeof FirstName
   => FirstName
 
-FirstName Name
+FirstName is Name
   => true
-Name FirstName
+Name is FirstName
   => false
 
-alias AlsoName = Name FirstName
-  => typeof AlsoName => Name
+view NameSink Name { ... }
 
 state CurrentFirstName = FirstName "Ro"
 
 set CurrentFirstName = Name "Mo"
   => Type Error
 
-set CurrentFirstName = Name FirstName "Mo"
+render NameSink FirstName: CurrentFirstName
   => OK
 ```
 
@@ -790,7 +797,7 @@ alias LastName "Petterson"
 
 alias Bad = FullNamePerson2 { Name Age LastName }              // Type Error: LastName value is the outer LastName type
 alias OK = FullNamePerson2 { Name Age LastName "West" }         // OK: LastName type resolves to the scoped property type
-alias OK2 = FullNamePerson2 { Name Age LastName "West" } // OK: explicit type-fix to the scoped property type
+alias OK2 = FullNamePerson2 { Name Age LastName "West" } // OK: typed construction uses the scoped property type
 
 type FullNamePerson3 is Person + { LastName }
 type FullNamePerson4 is Person + { LastName is FullNamePerson2.LastName }
