@@ -1,7 +1,7 @@
-import ASTUtils, { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
-import { type Compiled, gen, genJoin, genList, genScopeName, resolveRef } from '../codegen-util'
+import { Assert, Switch } from '@shared'
+import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export const ExpressionsCompiler = {
@@ -13,7 +13,6 @@ export const ExpressionsCompiler = {
       StringLiteral: Compile.StringLiteral,
       ListLiteral: Compile.ListLiteral,
       MemberAccessExpression: Compile.MemberAccessExpression,
-      TypeCastExpression: Compile.TypeCastExpression,
       TypedConstructor: Compile.TypedConstructor,
       ValueReference: Compile.ValueReference,
     })
@@ -31,12 +30,7 @@ export const ExpressionsCompiler = {
 
   /** ListLiteral compiles a Tao list literal into a runtime value wrapper. */
   ListLiteral(list: AST.ListLiteral): Compiled {
-    return gen`TR.Value([${genJoin(list.elements, element => gen`${Compile.Expression(element)}.jsValue`)}])`
-  },
-
-  /** TypeCastExpression compiles `as` away after validation. */
-  TypeCastExpression(cast: AST.TypeCastExpression): Compiled {
-    return Compile.Expression(cast.value)
+    return gen`TR.Value([${gen.join(list.elements, element => gen`${Compile.Expression(element)}.jsValue`)}])`
   },
 
   /** TypedConstructor compiles the named type wrapper away after validation. */
@@ -48,13 +42,19 @@ export const ExpressionsCompiler = {
   },
 
   /** ItemLiteral compiles an item constructor to a plain JavaScript object runtime value. */
-  ItemLiteral(item: AST.ItemLiteral, type: AST.ConstructorTypeReference): Compiled {
+  ItemLiteral(item: AST.ItemLiteral, type: AST.ConstructorTypeReference | AST.TypeReference): Compiled {
     const itemType = Type.constructorReferenceItemType(type)
-    const pairs = itemType ? ASTUtils.resolveItemPropertyBindings(itemType.properties, item.properties).pairs : []
+    if (!itemType) {
+      Assert(item.properties.length === 0, 'validated shapeless item constructor is empty')
+      return gen`TR.Value({})`
+    }
+    const pairs = itemPropertyBindingPairs(item, itemType)
     return gen`TR.Value({
       ${
-      genList(pairs, pair =>
-        gen`${JSON.stringify(pair.expected.name)}: ${Compile.Expression(pair.property.value)}.jsValue,`)
+      gen.list(
+        pairs,
+        pair => gen`${gen.nameLiteral(pair.expected)}: ${Compile.Expression(pair.property.value)}.jsValue,`,
+      )
     }
     })`
   },
@@ -76,10 +76,19 @@ export const ExpressionsCompiler = {
   /** ValueDeclarationReference compiles an alias or parameter declaration reference. */
   ValueDeclarationReference(target: AST.ValueDeclaration): Compiled {
     return Switch.type(target, {
-      ActionDeclaration: action => gen`${genScopeName(action)}.evaluate()`,
-      AliasDeclaration: alias => gen`${genScopeName(alias)}.evaluate()`,
-      ParameterDeclaration: parameter => gen`${genScopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
-      StateDeclaration: state => gen`${genScopeName(state)}.evaluate()`,
+      ActionDeclaration: action => gen`${gen.scopeName(action)}.evaluate()`,
+      AliasDeclaration: alias => gen`${gen.scopeName(alias)}.evaluate()`,
+      ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
+      StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
     })
   },
 } as const
+
+function itemPropertyBindingPairs(
+  item: AST.ItemLiteral,
+  itemType: AST.ItemTypeExpression,
+): ASTUtils.ItemPropertyBindingPair[] {
+  const result = ASTUtils.resolveItemPropertyBindings(itemType.properties, item.properties)
+  Assert(result.diagnostics.length === 0, 'validated item constructor has no binding diagnostics')
+  return result.pairs
+}

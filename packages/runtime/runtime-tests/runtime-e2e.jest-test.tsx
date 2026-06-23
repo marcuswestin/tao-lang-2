@@ -127,7 +127,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton text as Title, action as Action {
+        view NativeButton Title is text, Action is action {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -137,7 +137,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Number number as Value {
+        view Number Value is number {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -148,6 +148,175 @@ Describe('Expo runtime', () => {
 
         fireEvent.press(screen.getByText('Native add'))
         ExpectScreen(screen).toHaveText('1')
+      },
+    )
+  })
+
+  Test('invokes action parameters in declaration order after type-based binding', async () => {
+    await testCompileApp(
+      `
+        app ReorderedActionApp {
+          view MainView
+        }
+
+        view MainView {
+          state Count = 0
+          action AddTagged Step is number, Label is text {
+            set Count += Step
+          }
+          action RunAddTagged {
+            do AddTagged "tag", 3
+          }
+          render Stack {
+            NativeButton "Run reordered action", RunAddTagged
+            Number Count
+          }
+        }
+
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+
+        view NativeButton Title is text, Action is action {
+          render inject Title, Action \`\`\`ts
+            return (
+              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
+                <RN.Text>{Title}</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+
+        view Number Value is number {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('0')
+
+        fireEvent.press(screen.getByText('Run reordered action'))
+        ExpectScreen(screen).toHaveText('3')
+      },
+    )
+  })
+
+  Test('renders imported project actions as runtime values', async () => {
+    await testCompileFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          app ImportedActionApp {
+            view MainView
+          }
+
+          use Save from ./Actions.tao
+
+          view MainView {
+            render Button "Imported action", Save
+          }
+
+          view Button Title is text, Action is action {
+            render inject Title, Action \`\`\`ts
+              return <RN.Text>{Title}</RN.Text>
+            \`\`\`
+          }
+        `,
+        'Actions.tao': `
+          project action Save { }
+        `,
+      },
+      screen => {
+        ExpectScreen(screen).toHaveText('Imported action')
+      },
+    )
+  })
+
+  Test('emits item constructor fields in declaration order after type-based binding', async () => {
+    await testCompileApp(
+      `
+        app ItemOrderApp {
+          view MainView
+        }
+
+        type Name is text
+        type Age is number
+        type Person is {
+          Name
+          Age
+        }
+
+        alias Ada = Person { Age 40 Name "Ada" }
+
+        view MainView {
+          render Keys Ada
+        }
+
+        view Keys Person {
+          render inject Person \`\`\`ts
+            return <RN.Text>{Object.keys(Person).join(",")}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('Name,Age')
+      },
+    )
+  })
+
+  Test('rerenders state-backed item member access after state updates', async () => {
+    await testCompileApp(
+      `
+        app StatefulItemMemberApp {
+          view MainView
+        }
+
+        type Name is text
+        type Person is {
+          Name
+        }
+
+        view MainView {
+          state Current = Person { Name "Ada" }
+          action Rename {
+            set Current = Person { Name "Grace" }
+          }
+          render Stack {
+            Button "Rename", Rename
+            Text Current.Name
+          }
+        }
+
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+
+        view Button Title is text, Action is action {
+          render inject Title, Action \`\`\`ts
+            return (
+              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
+                <RN.Text>{Title}</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('Ada')
+
+        fireEvent.press(screen.getByText('Rename'))
+        ExpectScreen(screen).toHaveText('Grace')
       },
     )
   })
@@ -239,7 +408,7 @@ Describe('Expo runtime', () => {
             \`\`\`
         }
 
-        view Text text as Value {
+        view Text Value is text {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
@@ -646,7 +815,7 @@ Describe('Expo runtime', () => {
 
         view MainView {
           state Count = 0
-          action AddStep number as _Scope {
+          action AddStep _Scope is number {
             set Count += _Scope
           }
           action AddOne {
@@ -664,7 +833,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton text as Title, action as Action {
+        view NativeButton Title is text, Action is action {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -674,7 +843,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Number number as Value {
+        view Number Value is number {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -806,7 +975,7 @@ Describe('Expo runtime', () => {
             \`\`\`
         }
 
-        view Text text as Value {
+        view Text Value is text {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
@@ -875,7 +1044,7 @@ Describe('Expo runtime', () => {
               render Text ImportedTitle
           }
 
-          view Text text as Value {
+          view Text Value is text {
               render inject Value \`\`\`ts
                   return <RN.Text>{Value}</RN.Text>
               \`\`\`
@@ -902,7 +1071,7 @@ Describe('Expo runtime', () => {
             render Text Greeting { }
         }
 
-        view Text text as Value {
+        view Text Value is text {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
@@ -938,7 +1107,7 @@ Describe('Expo runtime', () => {
             \`\`\`
         }
 
-        view Text text as Value {
+        view Text Value is text {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`

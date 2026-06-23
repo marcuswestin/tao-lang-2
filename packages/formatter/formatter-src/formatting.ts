@@ -18,6 +18,8 @@ export type NodeFormat<NodeT extends AST.Node> = {
   oneSpaceAround(...keywords: string[]): void
   /** oneSpaceBeforeProperty requests exactly one space before each present property value. */
   oneSpaceBeforeProperty(...properties: Langium.Properties<NodeT>[]): void
+  /** oneSpaceBetweenProperties requests exactly one space before the second property when both are present. */
+  oneSpaceBetweenProperties(left: Langium.Properties<NodeT>, right: Langium.Properties<NodeT>): void
   /** commaSpacedList formats list commas with no space before and one space after. */
   commaSpacedList(): void
   /** commaLineList formats block-list commas without adding a space before the line break. */
@@ -73,6 +75,12 @@ export function createNodeFormat<NodeT extends AST.Node>(
     },
     oneSpaceBeforeProperty(...properties) {
       formatter.properties(...properties).prepend(Formatting.oneSpace())
+    },
+    oneSpaceBetweenProperties(left, right) {
+      const properties = node as Record<string, unknown>
+      if (properties[left] !== undefined && properties[right] !== undefined) {
+        formatter.property(right).prepend(Formatting.oneSpace())
+      }
     },
     commaSpacedList() {
       formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace())

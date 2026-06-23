@@ -1,12 +1,12 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled, genComment } from '../codegen-util'
+import { type Compiled, gen } from '../codegen-util'
 
 export default {
   /** ProjectDeclaration compiles a Tao project block into a source comment. */
   ProjectDeclaration(project: AST.ProjectDeclaration): Compiled {
-    const body = project.block.statements.map(formatProjectStatement).join(' ')
-    return genComment(`project { ${body} }`)
+    const body = AST.blockStatementOf(project, { map: formatProjectStatement }).join(' ')
+    return gen.comment(`project { ${body} }`)
   },
 } as const
 

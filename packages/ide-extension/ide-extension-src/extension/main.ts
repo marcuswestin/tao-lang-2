@@ -3,8 +3,13 @@ import { type AST, Langium } from 'tao-parser'
 import SourceActions, { type SourceActionOptions } from 'tao-source-actions'
 import Workspace from 'tao-workspace'
 import * as vscode from 'vscode'
-import type { ExecutableOptions, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node'
-import { LanguageClient, TransportKind } from 'vscode-languageclient/node'
+import {
+  type ExecutableOptions,
+  LanguageClient,
+  type LanguageClientOptions,
+  type ServerOptions,
+  TransportKind,
+} from 'vscode-languageclient/node'
 
 let client: LanguageClient | undefined
 

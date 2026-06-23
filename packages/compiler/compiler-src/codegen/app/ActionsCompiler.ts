@@ -1,7 +1,7 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
-import { type Compiled, gen, genJoin, genList, genName, genScopeName } from '../codegen-util'
+import { Assert, Switch } from '@shared'
+import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 type ActionParameter = {
@@ -14,10 +14,10 @@ export const ActionsCompiler = {
   ActionDeclaration(action: AST.ActionDeclaration): Compiled {
     const parameters = actionParameters(action)
     return gen`
-      ${genScopeName(action)} = TR.Action((${genJoin(parameters, Compile.ActionRuntimeParameter)}) => {
+      ${gen.scopeName(action)} = TR.Action((${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
         return TR.BlockScope(_Scope, _Scope => {
-          ${genList(parameters, Compile.ActionParameterBinding)}
-          ${genList(action.block.statements, Compile.ActionStatement)}
+          ${gen.list(parameters, Compile.ActionParameterBinding)}
+          ${gen.block(action, Compile.ActionStatement)}
         })
       })
     `
@@ -28,7 +28,7 @@ export const ActionsCompiler = {
     return gen`
       TR.Action(() => {
         return TR.BlockScope(_Scope, _Scope => {
-          ${genList(action.block.statements, Compile.ActionStatement)}
+          ${gen.block(action, Compile.ActionStatement)}
         })
       })
     `
@@ -36,7 +36,7 @@ export const ActionsCompiler = {
 
   /** ActionParameterBinding binds one runtime action argument into the action-local scope. */
   ActionParameterBinding(parameter: ActionParameter): Compiled {
-    return gen`${genScopeName({ name: Type.parameterName(parameter.parameter) })} = ${
+    return gen`${gen.scopeName({ name: Type.parameterName(parameter.parameter) })} = ${
       actionRuntimeParameterName(parameter.index)
     }`
   },
@@ -61,18 +61,27 @@ export const ActionsCompiler = {
 
   /** ActionArguments compiles action invocation argument expressions. */
   ActionArguments(invocation: AST.DoStatement): Compiled {
-    return genJoin(
-      invocation.argumentList?.arguments ?? [],
-      argument => gen`, ${Compile.Argument(argument)}`,
-      { separator: '' },
-    )
+    return gen.join(actionInvocationArguments(invocation), argument => gen`, ${Compile.Argument(argument)}`, {
+      separator: '',
+    })
   },
 } as const
 
 function actionParameters(action: AST.ActionDeclaration): ActionParameter[] {
-  return (action.parameterList?.parameters ?? []).map((parameter, index) => ({ index, parameter }))
+  return AST.parametersOf(action).map((parameter, index) => ({ index, parameter }))
 }
 
 function actionRuntimeParameterName(index: number): Compiled {
-  return genName({ name: `_TaoActionArg${index}` })
+  return gen.name({ name: `_TaoActionArg${index}` })
+}
+
+function actionInvocationArguments(invocation: AST.DoStatement): AST.Argument[] {
+  const resolved = ASTUtils.resolveActionInvocation(invocation)
+  if (!resolved.action) {
+    Assert(AST.argumentsOf(invocation).length === 0, 'validated dynamic action invocation has no arguments')
+    return []
+  }
+  Assert.defined(resolved.action, 'validated action invocation targets a named action')
+  Assert(resolved.diagnostics.length === 0, 'validated action invocation has no binding diagnostics')
+  return resolved.pairs.map(pair => pair.argument)
 }

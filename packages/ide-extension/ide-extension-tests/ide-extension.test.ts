@@ -71,10 +71,10 @@ Describe('Tao IDE extension smoke', () => {
       app Demo {
         render Greeting
       }
-      view Counter number as Count {
+      view Counter Count is number {
         render Text Count
       }
-      view Text text as Value {
+      view Text Value is text {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -99,7 +99,7 @@ Describe('Tao IDE extension smoke', () => {
       view MainView {
         render Text First
       }
-      view Text text as Value { }
+      view Text Value is text { }
     `)
 
     Expect(diagnostics).toContain(

@@ -7,19 +7,15 @@ export default {
     f.commaSpacedList()
   },
 
-  /** Argument is a single expression; its spacing is owned by ArgumentList commas. */
-  Argument() {},
-
-  /** TypeCastExpression formats `<value> as <Type>`. */
-  TypeCastExpression(f) {
-    f.oneSpaceAround('as')
+  /** Argument formats an optional invocation type label and one value. */
+  Argument(f) {
+    f.oneSpaceAfter(':')
   },
 
-  /** TypedConstructor has no whitespace around the constructor dot. */
-  TypedConstructor() {},
-
-  /** Constructor type references have no interior spacing. */
-  ConstructorTypeReference() {},
+  /** TypedConstructor formats juxtaposed `<Type> <Value>` value creation. */
+  TypedConstructor(f) {
+    f.oneSpaceBetweenProperties('type', 'value')
+  },
 
   /** ListLiteral formats list elements. */
   ListLiteral(f) {

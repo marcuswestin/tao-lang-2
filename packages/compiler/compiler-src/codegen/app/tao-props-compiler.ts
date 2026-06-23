@@ -1,4 +1,4 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
@@ -18,9 +18,8 @@ function createTaoPropsLayout(clause: AST.LayoutClause | undefined): Compiled {
   if (!clause) {
     return gen`undefined`
   }
-  const entries = clause.entries.map(ASTUtils.Layout.entryValues)
-  const entriesLiteral = JSON.stringify(entries)
-  return gen`TR.Layout.create(${entriesLiteral})`
+  const entries = clause.entries.map(ASTUtils.layoutEntryValues)
+  return gen`TR.Layout.create(${JSON.stringify(entries)})`
 }
 
 function compileTaoPropsForRenderStatement(layout: Compiled, render: AST.RenderStatement): Compiled {

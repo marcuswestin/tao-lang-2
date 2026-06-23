@@ -6,20 +6,23 @@
   "brackets": [
     ["{", "}"],
     ["[", "]"],
-    ["(", ")"]
+    ["(", ")"],
+    ["<", ">"]
   ],
   "autoClosingPairs": [
-    ["{", "}"],
-    ["[", "]"],
-    ["(", ")"],
-    ["\"", "\""],
-    ["'", "'"]
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "<", "close": ">" },
+    { "open": "\"", "close": "\"" },
+    { "open": "'", "close": "'" }
   ],
   "surroundingPairs": [
-    ["{", "}"],
-    ["[", "]"],
-    ["(", ")"],
-    ["\"", "\""],
-    ["'", "'"]
+    { "open": "{", "close": "}" },
+    { "open": "[", "close": "]" },
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"" },
+    { "open": "'", "close": "'" }
+    // < and > are intentionally omitted for now; render child blocks use them, but ordinary expressions may eventually use comparison operators.
   ]
 }
