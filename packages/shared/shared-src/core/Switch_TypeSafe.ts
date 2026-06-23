@@ -3,6 +3,7 @@ import { UnexpectedBehaviorError } from './Errors'
 type SwitchKey = string | number | symbol
 type SwitchValueKey = SwitchKey | undefined
 type TypeItem = { $type: SwitchKey }
+type KindItem = { kind: SwitchKey }
 
 type ValueHandlers<ValueT extends SwitchValueKey, ResultT> =
   & { [KeyT in Exclude<ValueT, undefined> & SwitchKey]: (value: KeyT) => ResultT }
@@ -12,8 +13,16 @@ type TypeHandlers<ItemT extends TypeItem, ResultT> = {
   [KeyT in ItemT['$type']]: (item: Extract<ItemT, { $type: KeyT }>) => ResultT
 }
 
+type KindHandlers<ItemT extends KindItem, ResultT> = {
+  [KeyT in ItemT['kind']]: (item: Extract<ItemT, { kind: KeyT }>) => ResultT
+}
+
 type TypeMaybeHandlers<ItemT extends TypeItem | undefined, ResultT> =
   & TypeHandlers<Exclude<ItemT, undefined>, ResultT>
+  & (undefined extends ItemT ? { undefined: (item: undefined) => ResultT } : {})
+
+type KindMaybeHandlers<ItemT extends KindItem | undefined, ResultT> =
+  & KindHandlers<Exclude<ItemT, undefined>, ResultT>
   & (undefined extends ItemT ? { undefined: (item: undefined) => ResultT } : {})
 
 type PropertyValue<ItemT, PropertyT extends keyof ItemT> = ItemT[PropertyT]
@@ -25,6 +34,8 @@ type PropertyHandlers<ItemT, PropertyT extends keyof ItemT, ResultT> = PropertyV
   : never
 
 export default Object.assign(Switch, {
+  kind: SwitchKind,
+  kindMaybe: SwitchKindMaybe,
   property: SwitchProperty,
   type: SwitchType,
   typeMaybe: SwitchTypeMaybe,
@@ -58,6 +69,20 @@ function SwitchType<ItemT extends TypeItem, ResultT>(
   return (handler as (item: ItemT) => ResultT)(item)
 }
 
+/** SwitchKind dispatches exhaustively on a `kind` discriminator. */
+function SwitchKind<ItemT extends KindItem, ResultT>(
+  item: ItemT,
+  handlers: KindHandlers<ItemT, ResultT>,
+): ResultT {
+  const key = item.kind as ItemT['kind']
+  const handler = handlers[key]
+
+  if (!handler) {
+    throw new UnexpectedBehaviorError(`Unhandled item kind: ${String(key)}`)
+  }
+  return (handler as (item: ItemT) => ResultT)(item)
+}
+
 /** SwitchTypeMaybe dispatches exhaustively on an AST-style `$type` discriminator or undefined. */
 function SwitchTypeMaybe<ItemT extends TypeItem | undefined, ResultT>(
   item: ItemT,
@@ -68,6 +93,20 @@ function SwitchTypeMaybe<ItemT extends TypeItem | undefined, ResultT>(
 
   if (!handler) {
     throw new UnexpectedBehaviorError(`Unhandled item type: ${String(key)}`)
+  }
+  return (handler as (item: ItemT) => ResultT)(item)
+}
+
+/** SwitchKindMaybe dispatches exhaustively on a `kind` discriminator or undefined. */
+function SwitchKindMaybe<ItemT extends KindItem | undefined, ResultT>(
+  item: ItemT,
+  handlers: KindMaybeHandlers<ItemT, ResultT>,
+): ResultT {
+  const key = item === undefined ? 'undefined' : item.kind
+  const handler = handlers[key as keyof KindMaybeHandlers<ItemT, ResultT>]
+
+  if (!handler) {
+    throw new UnexpectedBehaviorError(`Unhandled item kind: ${String(key)}`)
   }
   return (handler as (item: ItemT) => ResultT)(item)
 }

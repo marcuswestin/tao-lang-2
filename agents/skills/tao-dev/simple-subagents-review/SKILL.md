@@ -43,7 +43,7 @@ Run one Codex reviewer and one Claude reviewer over the current uncommitted chan
 
 3. Reconcile reviewer output into confirmed issues, false positives, and open questions. Treat reviewer output as evidence, not truth; verify each finding against the code before acting.
 4. Apply only warranted fixes. Keep fixes scoped and minimal, preserve unrelated changes, and ask before expanding scope or doing anything destructive.
-5. Run `./agent just test` unless the task or repo instructions require `./agent just prep`. If risk is narrow and a focused check is clearly enough, run the focused check first, then broaden if warranted.
+5. Run `./agent just test` unless the task or repo instructions require `./agent just verify`. If risk is narrow and a focused check is clearly enough, run the focused check first, then broaden if warranted.
 6. Re-run the two reviewers once only if the accepted fixes were substantial or risky enough to need fresh eyes. This is the final pass; never run reviewers more than twice.
 7. Summarize confirmed issues fixed, findings intentionally skipped and why, validation results, and remaining risks.
 

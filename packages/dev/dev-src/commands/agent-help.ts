@@ -57,7 +57,7 @@ Behavior:
   - use shell cd or tool workdir before invoking ./agent when you need another cwd.
 
 Examples:
-  ./agent just prep
+  ./agent just verify
   ./agent just test
   ./agent ai-usage --provider all --json
   ./agent audit-instructions

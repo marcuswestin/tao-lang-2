@@ -76,7 +76,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 
 ## Git And Validation
 
-- Run `./agent just prep` before commits and as the final validation command; do not use `check` as the handoff or commit validation shortcut.
+- Run `./agent just verify` before commits and as the final validation command; do not use `check` as the handoff or commit validation shortcut.
 - Commit message format: `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`.
 - Squash-merge into `main` with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`.
 - When merged into `main`, rename the branch to `merged/...` and sync that with origin.

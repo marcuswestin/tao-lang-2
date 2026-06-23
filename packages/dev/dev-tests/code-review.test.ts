@@ -267,7 +267,7 @@ Describe('reviewer JSONL extraction', () => {
 
   Test('prefers the Cursor createPlan tool call body over the preamble result', () => {
     const jsonl = [
-      '{"type":"thinking","subtype":"delta","delta":{"text":"Reviewing..."}}',
+      '{"type":"thinking","subtype":"delta","delta":{"text":"Reviewing.. "}}',
       '{"type":"tool_call","subtype":"completed","tool_call":{"createPlanToolCall":{"args":{"plan":"# API Boundary Review\\n\\nNo blockers."}}}}',
       '{"type":"result","subtype":"success","result":"Reviewing the diff against live code."}',
     ].join('\n')

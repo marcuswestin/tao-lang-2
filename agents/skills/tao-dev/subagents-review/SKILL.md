@@ -34,7 +34,7 @@ Request adversarial independent review over the requested changes, then fix only
 - Keep reviewer output available in the thread or in `.artifacts/skills/subagents-review/...` when the review is substantial. Read `review.md` first; use verbose stdout/stderr only when extraction failed, output is empty, or debugging requires it.
 - Reconcile findings in your working context. Verify each finding before acting; reviewer output is evidence, not truth. Do not create a separate reconciliation file unless Ro explicitly asks for one.
 - Apply only minimal warranted fixes. Preserve unrelated changes and ask before expanding scope.
-- Run `./agent just prep` unless a broader requested workflow applies.
+- Run `./agent just verify` unless a broader requested workflow applies.
 - Run up to two additional reviewer passes only when the previous pass found meaningful issues, accepted fixes were applied, and one more pass is worth the cost. Never run more than three total passes. When you do re-run, re-launch only the reviewer(s) that produced the most meaningful findings in the prior pass, not the whole set, and respect remaining provider budget when choosing which to re-run.
 - Report reviewers used, fixes, skipped findings, validation, rerun rationale, and remaining risks in the final response.
 - Stop for Ro review before staging or committing any fixes. Do not hand off to a commit workflow until Ro explicitly approves the changes.

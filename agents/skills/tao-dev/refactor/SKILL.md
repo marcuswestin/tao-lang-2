@@ -26,7 +26,7 @@ Refactor the code Ro points at by simplifying its internal design first, changin
    - Can parameters be removed, renamed, grouped, or made harder to misuse?
    - Can state, ownership, or lifecycle move to the code that already owns it?
 5. Edit in the focused area first. Update callers only to support the cleaner internal shape.
-6. Validate behavior with the narrowest relevant tests, then broader validation when the touched surface is shared or risky. In this repo, final validation is usually `./agent just prep`.
+6. Validate behavior with the narrowest relevant tests, then broader validation when the touched surface is shared or risky. In this repo, final validation is usually `./agent just verify`.
 7. Summarize what got simpler: deleted files/exports, collapsed layers, renamed APIs, behavior preserved, tests run, and simplifications intentionally skipped.
 
 ## Refactor Priorities

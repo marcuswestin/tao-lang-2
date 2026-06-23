@@ -10,19 +10,25 @@ import {
 } from '../dev-src/commands/merge-feature-preflight'
 import { ExpoRunner } from '../dev-src/dev-loop/expo-runner/ExpoRunner'
 import { AppSwitchChoices } from '../dev-src/dev-loop/keyboard-input/AppSwitchChoices'
+import Commands from '../dev-src/dev-loop/keyboard-input/Commands'
 
 Describe('agent just command helpers', () => {
   Test('classifies streamed and quiet just invocations', () => {
     Expect(shouldStreamJustOutput([])).toBe(true)
     Expect(shouldStreamJustOutput(['help'])).toBe(true)
     Expect(shouldStreamJustOutput(['dev'])).toBe(true)
-    Expect(shouldStreamJustOutput(['prep'])).toBe(false)
+    Expect(shouldStreamJustOutput(['verify'])).toBe(false)
   })
 
   Test('formats quiet success summaries with parsed test counts', () => {
     Expect(parseJustSuccessSummary(' 27 pass\n 0 fail\nTests: 12 passed, 12 total\n')).toBe('39 tests passed')
     Expect(formatJustSuccessLine(['test'], 'Tests: 12 passed, 12 total', 1_234))
       .toBe('[just]: test ok in 1.2s (12 tests passed)')
+  })
+
+  Test('recognizes the verify dev-loop shortcut key', () => {
+    Expect(Commands.isCommandKey('v')).toBe(true)
+    Expect(Commands.isCommandKey('p')).toBe(false)
   })
 })
 

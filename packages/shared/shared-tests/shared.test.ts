@@ -493,12 +493,17 @@ Describe('Errors, Assert, and Switch', () => {
     Expect(() => Assert(false, 'truthy')).toThrow(Errors.UnexpectedBehaviorError)
   })
 
-  Test('switches exhaustively by value, type, and property', () => {
+  Test('switches exhaustively by value, type, kind, and property', () => {
     type Item =
       | { $type: 'text'; value: string; state: 'ready' }
       | { $type: 'count'; value: number; state: 'empty' }
 
+    type Status =
+      | { kind: 'ready'; value: string }
+      | { kind: 'empty'; value: number }
+
     const item: Item = { $type: 'text', value: 'hello', state: 'ready' }
+    const status: Status = { kind: 'ready', value: 'hello' }
 
     const selectedValue = Switch<'a' | 'b', number>('a', {
       a: () => 1,
@@ -521,6 +526,15 @@ Describe('Errors, Assert, and Switch', () => {
       count: count => count.value.toString(),
       undefined: () => 'missing',
     })
+    const selectedKind = Switch.kind<Status, string>(status, {
+      ready: ready => ready.value,
+      empty: empty => empty.value.toString(),
+    })
+    const selectedOptionalKind = Switch.kindMaybe<Status | undefined, string>(undefined, {
+      ready: ready => ready.value,
+      empty: empty => empty.value.toString(),
+      undefined: () => 'missing',
+    })
     const selectedProperty = Switch.property<Item, 'state', string>(item, 'state', {
       ready: () => 'Ready',
       empty: () => 'Empty',
@@ -531,6 +545,8 @@ Describe('Errors, Assert, and Switch', () => {
     Expect(selectedOptionalValue).toBe('normal')
     Expect(selectedType).toBe('hello')
     Expect(selectedOptionalType).toBe('missing')
+    Expect(selectedKind).toBe('hello')
+    Expect(selectedOptionalKind).toBe('missing')
     Expect(selectedProperty).toBe('Ready')
   })
 
