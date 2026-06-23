@@ -4,7 +4,7 @@
 
 Exercise Tao type-system behavior through a small UI that passes typed values into views.
 This app must stay valid Tao; invalid type and validation cases belong in validator unit tests.
-`Item List Custom Type MVP.tao-next` is the non-executable acceptance sketch for this slice and should mirror the implemented examples in `Type System Tests.tao`.
+`Item List Custom Type MVP.tao-next` is the non-executable acceptance sketch that preceded this slice; `Type System Tests.tao` is the executable fixture that mirrors its implemented examples.
 
 ## Belongs Here
 
@@ -34,5 +34,5 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 ## Behavior Test Notes
 
 - Behavior automation is not wired yet.
-- Expected visible output includes `Open: 1`, `Done: 2`, `Ada`, `40`, `Compiler engineer`, `types, items, lists`, `People in the team: 2`, `2 team member(s)`, `Grace`, and `Constructed primitive text`.
+- Expected visible output includes `Open: 1`, `Done: 2`, `Ada`, `40`, `Compiler engineer`, `types, items, lists`, `Kai`, `29`, `Runtime engineer`, `runtime, mobile`, `People in the team: 2`, `2 team member(s)`, `Grace`, and `Constructed primitive text`.
 - Future behavior metadata can live in this section without changing the app layout.

@@ -16,10 +16,10 @@ type SinkProfile is {
    SinkTags
 }
 
-alias FixedSinkName = "Fixed Kitchen type" as SinkName
-alias SinkProfileValue = SinkProfile.{
-   SinkName."Typed Kitchen"
-   SinkTags.["item" "list" "type"]
+alias FixedSinkName = SinkName "Fixed Kitchen type"
+alias SinkProfileValue = SinkProfile {
+   SinkName "Typed Kitchen"
+   SinkTags ["item" "list" "type"]
 }
 
 view MainView {
@@ -41,13 +41,13 @@ view MainView {
          set KitchenCount += 1
 }  }  }
 
-view CountText number as Count {
+view CountText Count is number {
    render inject Count ```ts
       return <RN.Text>Launch count: {Count}</RN.Text>
    ```
 }
 
-view TagText list as Tags {
+view TagText Tags is list {
    render inject Tags ```ts
       return <RN.Text>{Tags.join(', ')}</RN.Text>
    ```

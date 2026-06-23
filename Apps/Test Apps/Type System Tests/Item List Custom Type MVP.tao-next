@@ -26,29 +26,29 @@ alias FirstTitle = "Open"
 alias FirstCount = 1
 alias SecondTitle = "Done"
 alias SecondCount = 2
-alias DisplayName = "Ada" as Name
-alias TypedDisplayName = text."Grace" as Name
-alias DemoTags = Tags.["types" "items" "lists"]
-alias EmptyTags = Tags.[]
-alias DemoJob = Job.{
-   Level.2
-   Title."Compiler engineer"
+alias DisplayName = Name "Ada"
+alias TypedDisplayName = Name "Grace"
+alias DemoTags = Tags ["types" "items" "lists"]
+alias EmptyTags = Tags []
+alias DemoJob = Job {
+   Level 2
+   Title "Compiler engineer"
 }
-alias DemoPerson = Person.{
+alias DemoPerson = Person {
    DemoTags
    DemoJob
-   Age.40
+   Age 40
    DisplayName
 }
 alias Team = [
    DemoPerson
-   Person.{
-      Name."Ro"
-      Age.41
+   Person {
+      Name "Ro"
+      Age 41
       EmptyTags
-      Job.{
-         Title."Language designer"
-         Level.5
+      Job {
+         Title "Language designer"
+         Level 5
    }  }
 ]
 
@@ -57,20 +57,20 @@ view Demo {
       Tile FirstTitle, FirstCount
       Tile SecondTitle, SecondCount
       ProfileCard DemoPerson
-      ProfileCard Person.{
-         Tags.["runtime" "mobile"]
-         Job.{
-            Level.3
-            Title."Runtime engineer"
+      ProfileCard Person: {
+         Tags ["runtime" "mobile"]
+         Job {
+            Level 3
+            Title "Runtime engineer"
          }
-         Age.29
-         Name."Kai"
+         Age 29
+         Name "Kai"
       }
-      SummaryLine Count.2, "People in the team"
+      SummaryLine Count: 2, "People in the team"
       MemberLine DemoPerson.Job.Title, DemoPerson.Name
       TeamList Team
       TextValue TypedDisplayName
-      TextValue text."Constructed primitive text"
+      TextValue "Constructed primitive text"
 }  }
 
 layout Stack {
@@ -79,7 +79,7 @@ layout Stack {
    ```
 }
 
-view Tile text as Title, number as Count {
+view Tile Title is text, Count is number {
    render inject Title, Count ```ts
       return <RN.Text>{Title}: {Count}</RN.Text>
    ```
@@ -93,37 +93,37 @@ view ProfileCard Person {
       TagList Person.Tags
 }  }
 
-view MemberLine Job.Title as RoleTitle, Name {
+view MemberLine RoleTitle is Job.Title, Name {
    render Stack {
       TextValue Name
       TextValue RoleTitle
 }  }
 
-view SummaryLine text as Label, Count {
+view SummaryLine Label is text, Count {
    render inject Label, Count ```ts
       return <RN.Text>{Label}: {Count}</RN.Text>
    ```
 }
 
-view TextValue text as Value {
+view TextValue Value is text {
    render inject Value ```ts
       return <RN.Text>{Value}</RN.Text>
    ```
 }
 
-view NumberValue number as Value {
+view NumberValue Value is number {
    render inject Value ```ts
       return <RN.Text>{Value}</RN.Text>
    ```
 }
 
-view TagList list as Values {
+view TagList Values is list {
    render inject Values ```ts
       return <RN.Text>{Values.join(', ')}</RN.Text>
    ```
 }
 
-view TeamList list as People {
+view TeamList People is list {
    render inject People ```ts
       return <RN.Text>{People.length} team member(s)</RN.Text>
    ```

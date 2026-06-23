@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Exercise positive behavior for view-local state, named and inline actions, action parameters, `set`, `do`, compound state updates, state-derived aliases, Button action binding, and reactive rerendering.
+Exercise positive behavior for view-local state, named and inline actions, parameters is action, `set`, `do`, compound state updates, state-derived aliases, Button action binding, and reactive rerendering.
 
 ## Belongs Here
 
