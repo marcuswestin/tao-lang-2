@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from './validation'
 
@@ -19,18 +18,18 @@ export const testValidationMessages = {
 
 /** validateTests validates v0 Tao test declarations. */
 export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const test of ASTUtils.streamAllContents(file).filter(AST.isTestDeclaration)) {
+  for (const test of AST.streamAllContents(file).filter(AST.isTestDeclaration)) {
     validateTest(test, ctx)
   }
-  for (const check of ASTUtils.streamAllContents(file).filter(AST.isCheckDeclaration)) {
+  for (const check of AST.streamAllContents(file).filter(AST.isCheckDeclaration)) {
     validateCheck(check, ctx)
   }
-  for (const run of ASTUtils.streamAllContents(file).filter(AST.isRunStep)) {
+  for (const run of AST.streamAllContents(file).filter(AST.isRunStep)) {
     if (!AST.isCheckDeclaration(blockOwner(run))) {
       ctx.error(testValidationMessages.runPlacement, run)
     }
   }
-  for (const expectation of ASTUtils.streamAllContents(file).filter(AST.isExpectTextStep)) {
+  for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
     if (!AST.isCheckDeclaration(blockOwner(expectation))) {
       ctx.error(testValidationMessages.expectationPlacement, expectation)
     }

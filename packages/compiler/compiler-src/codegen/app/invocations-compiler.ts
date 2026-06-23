@@ -1,7 +1,7 @@
-import ASTUtils from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type Compiled, gen, genJoin, genName, genScopeName } from '../codegen-util'
+import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
@@ -24,36 +24,43 @@ export default {
     const invocation = ASTUtils.resolveRenderInvocation(render)
     const view = invocation.view
     Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
+    Assert(invocation.diagnostics.length === 0, 'validated render invocation has no binding diagnostics')
 
     const renderArguments = Compile.RenderArguments(invocation)
+    const taoProps = Compile.RenderTaoProps(render)
     const block = render.block
-    const children = block?.statements ?? []
+    const children = AST.statementsOf(block)
     if (children.length === 0) {
-      return gen`<${genScopeName(view)}${renderArguments} />`
+      return gen`<${gen.scopeName(view)}${renderArguments}${taoProps} />`
     }
-    Assert.defined(block, 'render with child statements has a block')
+    Assert.defined(block, 'render with child statements has a child block')
 
     return gen`
-      <${genScopeName(view)}${renderArguments}>
+      <${gen.scopeName(view)}${renderArguments}${taoProps}>
         {TR.BlockScope(_Scope, _Scope => {
           ${Compile.RenderBlockBody(block)}
         })}
-      </${genScopeName(view)}>
+      </${gen.scopeName(view)}>
     `
   },
 
   /** RenderArguments compiles render invocation arguments into JSX props. */
   RenderArguments(invocation: ASTUtils.ResolvedRenderInvocation): Compiled {
-    return genJoin(invocation.pairs, Compile.InvocationArgument, { separator: '' })
+    return gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })
   },
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
   InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen` ${genName(pair.parameter)}={${Compile.Argument(pair.argument)}}`
+    return gen` ${gen.name({ name: Type.parameterName(pair.parameter) })}={${Compile.Argument(pair.argument)}}`
   },
 
   /** Argument compiles a Tao render argument into a runtime value expression. */
   Argument(argument: AST.Argument): Compiled {
-    return Compile.Expression(argument.value)
+    if (argument.type && AST.isItemLiteral(argument.value)) {
+      return Compile.ItemLiteral(argument.value, argument.type)
+    }
+    const value = argument.value
+    Assert.is(value, AST.isExpression, 'validated argument value is an expression')
+    return Compile.Expression(value)
   },
 } as const

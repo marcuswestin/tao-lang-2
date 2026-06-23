@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Time } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { formatAgentHelpText } from '../dev-src/commands/agent-help'
 import type { UsageProviderSummary } from '../dev-src/commands/ai-usage-normalizer'
@@ -267,7 +267,7 @@ Describe('reviewer JSONL extraction', () => {
 
   Test('prefers the Cursor createPlan tool call body over the preamble result', () => {
     const jsonl = [
-      '{"type":"thinking","subtype":"delta","delta":{"text":"Reviewing..."}}',
+      '{"type":"thinking","subtype":"delta","delta":{"text":"Reviewing.. "}}',
       '{"type":"tool_call","subtype":"completed","tool_call":{"createPlanToolCall":{"args":{"plan":"# API Boundary Review\\n\\nNo blockers."}}}}',
       '{"type":"result","subtype":"success","result":"Reviewing the diff against live code."}',
     ].join('\n')
@@ -646,7 +646,7 @@ Describe('review streaming runner', () => {
         stderrPath,
         stdoutPath,
       })
-      await new Promise(resolve => setTimeout(resolve, 150))
+      await Time.sleep(150)
       Expect(await FS.readText(stdoutPath)).toContain('start')
       Expect(await FS.readText(statusPath)).toContain('"status": "running"')
 

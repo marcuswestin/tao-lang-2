@@ -4,7 +4,7 @@ import { type Diagnostic, Diagnostics } from '@shared'
 import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typir-langium'
 import { type TaoSpecifics, TaoTypeSystem, type TaoTypirServices } from './type-system'
 import { Validate } from './Validate'
-import { collectValidationDiagnostics, createValidationContext, type ValidationRunContext } from './validation'
+import { Validation, type ValidationRunContext } from './validation'
 
 const codeProjectRoot = '/__tao__'
 
@@ -36,8 +36,8 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
 
   // Linker errors don't gate structural validation: the AST shape is intact and
   // validators tolerate unresolved references.
-  const validationDiagnostics = collectValidationDiagnostics()
-  const ctx = createValidationContext(validationDiagnostics.accept, {
+  const validationDiagnostics = Validation.collectDiagnostics()
+  const ctx = Validation.createContext(validationDiagnostics.accept, {
     entryFilePath: context.entryFilePath,
     packagesContext: context.packagesContext,
     typir: context.typir,

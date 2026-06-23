@@ -19,7 +19,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 ## Safety
 
 - Multiple agents may work in this repo in parallel. Treat changes you did not make as expected peer work; do not overwrite or revert them without explicit direction.
-- Do not stage, unstage, reset staged files, stash, pop, apply, drop, or otherwise affect Git index or stash state unless Ro explicitly asks. If a task requires it, ask first.
+- NEVER ADD OR REMOVE CHANGES TO OR FROM THE GIT INDEX/STAGE unless Ro explicitly instructs that in the current request. Ro relies on incrementally staged changes throughout review processes, so treat the index as Ro-owned state. Do not run `git add`, `git restore --staged`, `git reset`, `git mv`, stash/pop/apply/drop, or any command that changes staged content unless explicitly instructed. A request to edit, validate, review, or prepare is not staging permission; if a task seems to require changing the index, ask first.
 - Create a `feat/<name>` branch only for project-sized work that needs review and merge. Small edits, instruction updates, and one-off commits stay on the current branch unless Ro asks otherwise.
 - Always let the IDE soft-wrap lines.
 - Always remove stale instructions and code encountered in the scope of your task.
@@ -46,13 +46,15 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 ## Quality
 
 - Prefer minimal, readable, well-organized code with clear ownership.
+- For repo-owned TypeScript modules, prefer the main named const export convention described in `packages/AGENTS.md` over default exports or scattered function exports.
 - Prefer behavior tests over API-shape tests and trivial tests.
 - Write intended demo Tao code and/or automated tests before implementing language/compiler/CLI behavior.
-- Use `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` during research and planning when target syntax or functionality should change.
-- As functionality is implemented, copy relevant implemented target code into `Apps/Kitchen Sink/Kitchen Sink.tao`; it is the executable Kitchen Sink used for testing.
+- Record intended-but-not-yet-executable Tao examples in roadmap task docs or test app purpose docs, not Kitchen Sink.
+- As functionality is implemented, add relevant executable coverage to `Apps/Kitchen Sink/Kitchen Sink.tao`; it is the Kitchen Sink used for testing.
 - Test implemented functionality and encountered edge cases through `Apps/Test Apps/*` and `packages/<package>/tests/*` as appropriate.
 - Do not test generated compiled TypeScript with substring or regex assertions. Test through Tao AST, validator diagnostics, runtime/e2e behavior, or compilation success for positive fixture coverage.
 - Keep `Roadmap.md` to current tasks and status. Put implementation details in tests, app purpose docs, code docs, commit messages, PR summaries, or roadmap research/plan docs when Ro asks for them.
+- Usually leave `Roadmap/Archive/*` documents unchanged. Archive documents should reflect the project state when they were archived, not be rewritten to match later repo changes; update them only when Ro explicitly asks or when an archived document still functions as current instructions.
 
 ## Repo Map
 
@@ -74,7 +76,7 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 
 ## Git And Validation
 
-- Run `./agent just prep` before commits and as the final validation command; do not use `check` as the handoff or commit validation shortcut.
+- Run `./agent just verify` before commits and as the final validation command; do not use `check` as the handoff or commit validation shortcut.
 - Commit message format: `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`.
 - Squash-merge into `main` with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`.
 - When merged into `main`, rename the branch to `merged/...` and sync that with origin.

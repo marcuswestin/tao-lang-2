@@ -636,7 +636,7 @@ Describe('fixSource', () => {
     try {
       await FS.writeText(
         FS.resolvePath('Local.tao', { cwd: tmpDir }),
-        'publish view LocalText Value text { }\n',
+        'publish view LocalText Value is text { }\n',
       )
       const document = await parseRawDocumentAt(
         `${

@@ -4,13 +4,14 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## MVP Roadmap
 
-- [ ] Add item/list/custom type MVP
+- [x] Add item/list/custom type MVP
   - Item/object literals, list literals, typed item constructors, simple custom type declarations, and field/member validation.
+  - Plan: `Roadmap/Add item list custom type MVP/Plan - Add item list custom type MVP.md`
 
-- [ ] Add layout/style arguments and app-shell baseline
+- [x] Add layout clauses and app-shell baseline
   - `[gap 8, pad 12, width fill]`, runtime layout lowering, safe default app frame, safe area/keyboard basics, and deterministic cross-platform behavior.
 
-- [ ] Add state and action MVP
+- [x] Add state and action MVP
   - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
 
 - [ ] Expand core expression/value language
@@ -69,13 +70,26 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - One navigable app demonstrating every shipped v1 feature, separate from focused Test Apps.
 
 - [ ] Complete canonical app and v1 hardening
-  - Build the selected real app end to end, close gaps, tighten diagnostics/docs, remove stale roadmap/spec drift, and validate `prep`.
+  - Build the selected real app end to end, close gaps, tighten diagnostics/docs, remove stale roadmap/spec drift, and validate `verify`.
 
 ## Ro's STACK
 
 - [ ] Add actions to kitchen sink tests
   - [ ] And switch other test apps to use tao testing rather than ts
+- [ ] Change argument order of `ValidationContext.error`/etc
+- [ ] Require type of lists: `view TagText Tags is list {`
+- [ ] Implement boolean operators, requiring `EXPRESSION is OPERATOR EXPRESSION`, e.g `Age is < 10`
+- [x] Replace render child blocks with angle blocks: `render VIEW ... < ... VIEW < .. > .. >`
+- [ ] Allow `TYPE Value` in general, e.g `alias TYPENAME value literal`, `VIEW TYPEVALUE, TYPENAMEItemInThisCase { Foo 1, Bar 2 } < VIEW RENDER BODY >`
+- [ ] Update all spec files to reflect new implementations (e.g <..> for rendering; type parameters, etc)
+- [ ] Implement all of `Tao Layout and UI.md`
+- [ ] /refactor all test files that are getting really big
+- [ ] Implement Dev menu etc in tao
+- [ ] Review all validator file structure; and consider simplifying
 - [ ] Create "validators" directory for all the "*-validator.ts" files
+- [ ] Cleanup TR package inter-dependencies and general structure for cleanliness
+- [ ] Go through each TR/ file, and review them slowly, and simplify and cleanup code where possible.
+- [ ] Update validator code to walk through the tree once, as opposed to filtering out odes and validating them in order of type.
 - [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
@@ -84,18 +98,20 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
 - [x] Wire the formatter into the IDE extension language server and add repo-wide `tao fmt`/`tao fix`/`tao check` (tao-cli), run by `just fmt`/`fix`/`check`
 - [x] Add LSP/IDE source actions: `Tao: Organize Use Statements` (source.organizeImports), unused/out-of-section import warnings with quick fixes, command-palette entries prefixed `Tao:`, a move-render-last quick fix, and `tao fix` applying all source fixes (run by `just fix`)
-- [ ] Consider only allowing state inside view declarations. App state maybe should be a datasource, that could be persisted to disk
 - [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
-  - Plan: `Roadmap/Inject typed TS values/Plan - Inject typed TS values.md`
-- [ ] Add layout/style arguments and default app-shell UI baseline
-  - Import previous-repo layout modifiers such as `[gap 8, pad 12, width fill]`, runtime `__tao.layout` forwarding, app-shell content frame, and deterministic default styling for stdlib primitives.
+  - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
+- [x] Add layout clauses and default app-shell UI baseline
+  - Import previous-repo layout modifiers as Tao-owned clauses such as `[gap 8, pad 12, width fill]`, runtime `__tao.layout` forwarding, app-shell content frame, and deterministic default layout for stdlib primitives.
 - [ ] Remove magical strings
-- [ ] Add state/actions/control mini slice
-  - Import `state`, `action`, action parameters/values, inline `action {}`, `set`, `do`, `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
+- [ ] Add remaining control mini slice
+  - Import `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
 - [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
-- [ ] Update target kitchen sink to have lots of intended parts featured
+- [ ] Apply the main named const export pattern across the rest of the repo
+  - Prefer `export const ModuleName = { ... }` over default exports or many free function exports. Keep existing filenames while converting existing modules.
+- [ ] Rename existing TypeScript module files to match their main named const exports
+  - Do this in one coordinated sweep after current projects have merged, rather than inside each active feature branch.
 - [ ] Add generic compiled-add test declarations
   - Should this map to test writing for the actual apps?
 - [ ] Enable over-the-network dev app running for ios device
@@ -113,8 +129,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - Copy/fill spec
 - Apps
   - Kitchen Sink
-    - Target: intended Tao syntax/functionality written during research and planning when the target should change
-    - Current: executable Tao app used by tests; copy in target slices only after that functionality is implemented
+    - Executable Tao app used by tests; add slices only after that functionality is implemented
 
 ## Minimal Port: Kitchen Sink Current
 
@@ -155,7 +170,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [x] Implement proper inject statement
   - [x] Remove hard-coded kitchen sink stuff
   - [x] Add validator, type system, and IDE diagnostics
-    - Plan: `Roadmap/Add validator and type system/Plan - Add validator and type system.md`
+    - Plan: `Roadmap/Archive/Add validator and type system/Plan - Add validator and type system.md`
   - [x] Add runtime TR object, create instructions for minimizing generated code and maximizing functionality existing in the runtime
 - 26-06-13
 - [x] Port over scope functionality
@@ -180,4 +195,4 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
     - 'e' to build and install the ide extension
     - 'f' to fix
     - 'c' to clean, reinstall deps, quit, and reload
-    - 'p' to run prep
+    - 'v' to run verify

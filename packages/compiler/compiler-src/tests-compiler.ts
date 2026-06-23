@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, type DiagnosticRange, Diagnostics } from '@shared'
 import type { ValidationResult } from '@validator'
@@ -94,7 +93,7 @@ function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation
 
 function sourceLocation(node: AST.Node): TaoTestSourceLocation {
   return {
-    filePath: ASTUtils.getDocument(node).uri.path,
+    filePath: AST.getDocument(node).uri.path,
     range: node.$cstNode?.range,
   }
 }

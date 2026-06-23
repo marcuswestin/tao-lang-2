@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from './validation'
 
@@ -20,7 +19,7 @@ export function validateProject(file: AST.TaoFile, ctx: ValidationContext): void
     ctx.error(projectValidationMessages.duplicateProject(), project)
   }
 
-  for (const project of ASTUtils.streamAllContents(file).filter(AST.isProjectDeclaration)) {
+  for (const project of AST.streamAllContents(file).filter(AST.isProjectDeclaration)) {
     if (!AST.isTaoFile(project.$container)) {
       ctx.error(projectValidationMessages.topLevelOnly(), project)
     }
@@ -29,10 +28,10 @@ export function validateProject(file: AST.TaoFile, ctx: ValidationContext): void
 }
 
 function validateProjectBlock(project: AST.ProjectDeclaration, ctx: ValidationContext): void {
-  const names = project.block.statements.filter(AST.isProjectName)
-  const remotes = project.block.statements.filter(AST.isProjectRemote)
-  const licenses = project.block.statements.filter(AST.isProjectLicense)
-  const requires = project.block.statements.filter(AST.isProjectRequires)
+  const names = AST.blockStatementOf(project, { filter: AST.isProjectName })
+  const remotes = AST.blockStatementOf(project, { filter: AST.isProjectRemote })
+  const licenses = AST.blockStatementOf(project, { filter: AST.isProjectLicense })
+  const requires = AST.blockStatementOf(project, { filter: AST.isProjectRequires })
 
   if (names.length === 0) {
     ctx.error(projectValidationMessages.requiredName(), project)

@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import { type Compiled, gen, genList, genTextLines } from '../codegen-util'
+import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 type TaoFileCompileOptions = {
@@ -16,16 +16,18 @@ export default {
     const exportLines = opts.exportedNames?.map(name => `export const ${name} = _Scope.${name}`).join('\n') ?? ''
     return gen`
       import React from 'react'
-      import * as RN from 'react-native'
       import TR from '@runtime/TR'
-      ${genTextLines(importLines)}
 
-      TR.setReactNativeRuntime(RN)
+      // @ts-ignore RN is available to Tao inject blocks
+      import * as RN from 'react-native'
+
+      ${gen.textLines(importLines)}
+
       const _Scope: any = {}
-      ${genTextLines(scopeBindings)}
+      ${gen.textLines(scopeBindings)}
 
-      ${genList(taoFile.statements, Compile.Statement, { newLines: 2 })}
-      ${genTextLines(exportLines)}
+      ${gen.list(taoFile.statements, Compile.Statement, { newLines: 2 })}
+      ${gen.textLines(exportLines)}
     `
   },
 } as const

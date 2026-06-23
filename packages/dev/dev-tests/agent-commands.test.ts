@@ -8,19 +8,27 @@ import {
   extractRoadmapCandidates,
   formatMergeFeaturePreflightReport,
 } from '../dev-src/commands/merge-feature-preflight'
+import { ExpoRunner } from '../dev-src/dev-loop/expo-runner/ExpoRunner'
+import { AppSwitchChoices } from '../dev-src/dev-loop/keyboard-input/AppSwitchChoices'
+import Commands from '../dev-src/dev-loop/keyboard-input/Commands'
 
 Describe('agent just command helpers', () => {
   Test('classifies streamed and quiet just invocations', () => {
     Expect(shouldStreamJustOutput([])).toBe(true)
     Expect(shouldStreamJustOutput(['help'])).toBe(true)
     Expect(shouldStreamJustOutput(['dev'])).toBe(true)
-    Expect(shouldStreamJustOutput(['prep'])).toBe(false)
+    Expect(shouldStreamJustOutput(['verify'])).toBe(false)
   })
 
   Test('formats quiet success summaries with parsed test counts', () => {
     Expect(parseJustSuccessSummary(' 27 pass\n 0 fail\nTests: 12 passed, 12 total\n')).toBe('39 tests passed')
     Expect(formatJustSuccessLine(['test'], 'Tests: 12 passed, 12 total', 1_234))
       .toBe('[just]: test ok in 1.2s (12 tests passed)')
+  })
+
+  Test('recognizes the verify dev-loop shortcut key', () => {
+    Expect(Commands.isCommandKey('v')).toBe(true)
+    Expect(Commands.isCommandKey('p')).toBe(false)
   })
 })
 
@@ -75,6 +83,86 @@ Describe('agent artifact helpers', () => {
     Expect(formatArtifactRunId(new Date(2026, 5, 6, 2, 55, 55, 123))).toMatch(
       /^20260606-025555\.123-[a-z0-9]{6}$/,
     )
+  })
+})
+
+Describe('dev loop port helpers', () => {
+  Test('formats lsof field output for listening processes', () => {
+    const listeners = ExpoRunner.portDiagnostics.formatLsofListeners({
+      exitCode: 0,
+      stderr: '',
+      stdout: [
+        'p1234',
+        'cnode',
+        'n127.0.0.1:8081',
+        'p5678',
+        'cexpo',
+        'n*:8081',
+        'p1234',
+        'cnode',
+        'n127.0.0.1:8081',
+      ].join('\n'),
+    })
+
+    Expect(listeners).toEqual([
+      { command: 'node', name: '127.0.0.1:8081', pid: 1234 },
+      { command: 'expo', name: '*:8081', pid: 5678 },
+    ])
+  })
+
+  Test('formats port listeners for prompts', () => {
+    Expect(ExpoRunner.portDiagnostics.formatListeners([
+      { command: 'node', name: '127.0.0.1:8081', pid: 1234 },
+      { command: 'expo', pid: 5678 },
+    ])).toBe('node pid 1234 (127.0.0.1:8081), expo pid 5678')
+  })
+
+  Test('uses parsed lsof listeners even when lsof exits nonzero with warnings', () => {
+    const listeners = ExpoRunner.portDiagnostics.formatLsofListeners({
+      exitCode: 1,
+      stderr: 'lsof: warning: incomplete information',
+      stdout: ['p1234', 'cnode', 'n127.0.0.1:8081'].join('\n'),
+    })
+
+    Expect(listeners).toEqual([
+      { command: 'node', name: '127.0.0.1:8081', pid: 1234 },
+    ])
+  })
+
+  Test('treats blank nonzero lsof output as no listeners', () => {
+    const listeners = ExpoRunner.portDiagnostics.formatLsofListeners({
+      exitCode: 1,
+      stderr: '',
+      stdout: '',
+    })
+
+    Expect(listeners).toEqual([])
+  })
+})
+
+Describe('dev loop app switch helpers', () => {
+  Test('maps single digit app switch keys to displayed app choices', () => {
+    const choices = [
+      { label: 'First', value: '/repo/Apps/First/First.tao' },
+      { label: 'Second', value: '/repo/Apps/Second/Second.tao' },
+    ]
+
+    Expect(AppSwitchChoices.actionForKey(choices, '1')).toEqual({
+      kind: 'choose',
+      appPath: '/repo/Apps/First/First.tao',
+    })
+    Expect(AppSwitchChoices.actionForKey(choices, '2')).toEqual({
+      kind: 'choose',
+      appPath: '/repo/Apps/Second/Second.tao',
+    })
+    Expect(AppSwitchChoices.actionForKey(choices, '0')).toEqual({ kind: 'invalid' })
+    Expect(AppSwitchChoices.actionForKey(choices, '9')).toEqual({ kind: 'invalid' })
+    Expect(AppSwitchChoices.actionForKey(choices, '')).toEqual({ kind: 'invalid' })
+    Expect(AppSwitchChoices.actionForKey(choices, 'x')).toEqual({ kind: 'invalid' })
+    Expect(AppSwitchChoices.actionForKey(choices, '\u001b[A')).toEqual({ kind: 'invalid' })
+    Expect(AppSwitchChoices.actionForKey(choices, 'q')).toEqual({ kind: 'cancel' })
+    Expect(AppSwitchChoices.actionForKey(choices, '\u001b')).toEqual({ kind: 'cancel' })
+    Expect(AppSwitchChoices.actionForKey(choices, '\u0003')).toEqual({ kind: 'exit', exitCode: 130 })
   })
 })
 

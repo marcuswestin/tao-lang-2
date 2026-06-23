@@ -1,7 +1,9 @@
 grammar TaoExpressions
 
 import "./aliases"
+import "./actions"
 import "./blocks"
+import "./types"
 import "./terminals"
 
 entry ExpressionsGrammarEntrypoint:
@@ -11,10 +13,37 @@ ArgumentList:
     arguments+=Argument (',' arguments+=Argument)*;
 
 Argument:
-    value=Expression;
+    (type=TypeReference ':' value=TypedArgumentValue) | value=ArgumentValue;
+
+TypedArgumentValue:
+    ItemLiteral | Expression;
+
+ArgumentValue:
+    MemberAccessExpression | StringLiteral | NumberLiteral | ActionExpression | ValueReference;
 
 Expression:
-    StringLiteral | NumberLiteral | ValueReference;
+    ActionExpression | TypedConstructor | PrimaryExpression;
+
+PrimaryExpression:
+    ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | ValueReference;
+
+TypedConstructor:
+    type=ConstructorTypeReference value=TypedConstructorValue;
+
+TypedConstructorValue:
+    StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;
+
+ListLiteral:
+    '[' elements+=Expression* ']';
+
+ItemLiteral:
+    '{' properties+=ItemProperty* '}';
+
+ItemProperty:
+    value=Expression;
+
+MemberAccessExpression:
+    target=[ValueDeclaration:ID] '.' members+=ID ('.' members+=ID)*;
 
 StringLiteral:
     value=STRING;
@@ -25,4 +54,4 @@ NumberLiteral:
 ValueReference:
     target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration;
+type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration;

@@ -44,9 +44,12 @@ Use this for Tao architecture review before implementation or after implementati
 - For broad or high-risk work, add focused reviewers for language semantics, runtime/codegen, roadmap sequencing, docs/ADRs, or old-repo precedent by editing the generated manifest or running a targeted follow-up. Let `./agent review plan` choose Codex Spark for narrow focused lenses when normal Codex session budget is low and Spark windows have room.
 - Give each reviewer a narrow prompt with the mode, scope, relevant instructions, current architecture summary, and the specific review axis.
 - For Gemini in plan mode, assume it may not run shell commands and may not read ignored `.artifacts` paths. Pass the scope and key diff excerpts inline in the prompt instead of asking Gemini to inspect an artifact path or run `git diff` itself.
+- When accepted architecture findings cause code or docs changes, rerun at least the affected architecture/conformance lens against the final scoped diff before final handoff.
+- Count only substantive reviewer artifacts. A command that exits successfully but writes an empty or near-empty review is not a completed review; keep the artifact as evidence and launch a replacement reviewer.
+- Do not leave reviewer sessions running after enough substantive reviews have completed. Collect usable outputs, interrupt or otherwise close stalled extras, and mention failed, empty, or interrupted reviewers separately from reviewers used for conclusions.
 - Treat reviewer output as evidence, not truth. The main agent reconciles findings and decides which risks, alternatives, and recommendations are valid.
 
-## Reviewer Gotchas
+## Review Runner Gotchas
 
 - Do not count an artifact as a usable independent review just because the command exits zero. Check the review text first; empty or near-empty artifacts and "I cannot inspect the repo" responses need a replacement reviewer.
 - For staged-only changes, plan-mode reviewers may not be able to run shell commands even when the prompt asks them to inspect `git diff --cached`. If a reviewer reports missing tools, rerun with a concrete `--scope-file` containing the staged status, stat, diff, and any critical context snippets.
@@ -54,6 +57,11 @@ Use this for Tao architecture review before implementation or after implementati
 - Gemini plan mode can return quickly but may be unable to inspect the workspace unless the diff/context is included directly in the prompt or `--scope-file`; do not treat that as a repo-grounded review.
 - Antigravity through `agy --sandbox --model "Gemini 3.5 Flash (High)" --print-timeout ...` can hang past the requested timeout. Use a shorter timeout for review fanout, and cancel/fallback if it produces no output after the budget.
 - When trying to keep reviewers finishing in the same window, lower the slow reviewer first: medium effort for Codex, Cursor `composer-2.5` only when it has recently produced substantive output, Gemini with explicit scope context, and Antigravity with a bounded timeout.
+- `codexbar usage` can exit nonzero while still printing useful provider JSON mixed with unavailable-provider errors. Use the usable provider entries instead of treating the command as fatal.
+- The repo-owned `./agent review` runner is useful for architecture passes: create a run with `./agent review new --slug <slug>`, then use lenses such as `architecture` and `api-boundary`.
+- Count only substantive reviewer output as coverage. Empty files, one-byte files, or metadata with `status: empty` are failed coverage even if the wrapper exits successfully.
+- Time-box reviewers that stall without artifacts. Stop long-running wrappers before final handoff so no review command is left running.
+- If external reviewers return empty or stall, fall back to available read-only subagents and report that limitation clearly; still reconcile findings yourself.
 
 ## Output
 
@@ -68,5 +76,5 @@ Use this for Tao architecture review before implementation or after implementati
 - Reviewers stay read-only, but the orchestrating agent does not stop at reporting. After presenting the summary, recommendation, and action items, go ahead and act on the findings as you see fit: implement the ones you judge correct and in-scope, defer or skip the rest, and say which you did and why.
 - Acting on findings never relaxes the reviewer contract: reviewers remain strictly read-only; only the orchestrating agent edits after local verification.
 - Do not act blindly. Verify each finding against live repo truth (root/nested instructions, existing patterns, tests, the actual diff) before changing anything; a confident reviewer is evidence, not proof. Drop or downgrade findings the code, docs, or established conventions refute, and note when repo truth resolves an earlier open question.
-- When acting, follow the usual edit, validation, and Git-safety rules: make minimal coherent edits, run `./agent just prep` or the relevant targeted checks, and never touch Git index or stash state without Ro's go-ahead.
+- When acting, follow the usual edit, validation, and Git-safety rules: make minimal coherent edits, run `./agent just verify` or the relevant targeted checks, and never touch Git index or stash state without Ro's go-ahead.
 - Escalate to Ro instead of acting when a finding implies a language-design decision, roadmap reprioritization, destructive operation, or any choice that cannot be derived safely from the repo.

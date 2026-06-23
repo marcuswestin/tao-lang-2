@@ -2,8 +2,8 @@ import { Langium } from './langium-exports'
 import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
 
-/** TaoValueScopeProvider resolves value references through Tao alias and parameter visibility. */
-export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
+/** ValueScopeProvider resolves value references through Tao alias and parameter visibility. */
+export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   constructor(
     private readonly coreServices: Langium.LangiumCoreServices,
     private readonly packages: PackageResolver,
@@ -13,7 +13,13 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
 
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
+    if (context.property === 'target' && AST.isSetStatement(context.container)) {
+      return this.createStateScope(context.container)
+    }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
+      return this.createValueScope(context.container)
+    }
+    if (context.property === 'target' && AST.isMemberAccessExpression(context.container)) {
       return this.createValueScope(context.container)
     }
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
@@ -31,29 +37,47 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     return super.getScope(context)
   }
 
-  private createValueScope(reference: AST.ValueReference): Langium.Scope {
-    const root = findRoot(reference)
+  private createValueScope(reference: AST.Node): Langium.Scope {
+    const root = AST.findRoot(reference)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
 
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isAliasDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isAliasDeclaration), scope)
+    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root))
+    scope = this.createScopeForNodes(
+      this.importedDeclarations(reference, AST.isImportableValueDeclaration),
+      scope,
+    )
 
-    const owningView = findOwningView(reference)
+    const owningView = AST.findOwningView(reference)
     if (owningView) {
-      scope = this.createScopeForNodes(owningView.parameterList?.parameters ?? [], scope)
+      scope = this.createScopeForParameters(owningView, scope)
     }
 
-    for (const block of ancestorBlocks(reference).reverse()) {
-      scope = this.createScopeForNodes(aliasesOwnedByBlock(block), scope)
+    for (const block of AST.ancestorBlocks(reference).reverse()) {
+      scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(block), scope)
+    }
+
+    const owningAction = AST.findOwningAction(reference)
+    if (owningAction) {
+      scope = this.createScopeForParameters(owningAction, scope)
+    }
+
+    return scope
+  }
+
+  private createStateScope(setStatement: AST.SetStatement): Langium.Scope {
+    let scope = this.createScopeForNodes([])
+
+    for (const block of AST.ancestorBlocks(setStatement).reverse()) {
+      scope = this.createScopeForNodes(statesOwnedByBlock(block), scope)
     }
 
     return scope
   }
 
   private createViewScope(render: AST.Render): Langium.Scope {
-    const root = findRoot(render)
+    const root = AST.findRoot(render)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
@@ -63,7 +87,7 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createAppViewScope(appView: AST.AppView): Langium.Scope {
-    const root = findRoot(appView)
+    const root = AST.findRoot(appView)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
@@ -73,7 +97,7 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createRunAppScope(run: AST.RunStep): Langium.Scope {
-    const root = findRoot(run)
+    const root = AST.findRoot(run)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
@@ -86,15 +110,32 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
   }
 
+  private createScopeForParameters(
+    declaration: AST.RenderableDeclaration | AST.ActionDeclaration,
+    outerScope: Langium.Scope,
+  ): Langium.Scope {
+    const parameters = AST.parametersOf(declaration)
+    const firstParameter = parameters[0]
+    if (!firstParameter) {
+      return outerScope
+    }
+    const document = AST.getDocument(firstParameter)
+    const descriptions = parameters.flatMap(parameter => {
+      const name = parameterValueName(parameter)
+      return name ? [this.descriptions.createDescription(parameter, name, document)] : []
+    })
+    return this.createScope(descriptions, outerScope)
+  }
+
   private importedDeclarations<DeclarationT extends AST.Declaration>(
     node: AST.Node,
     isDeclaration: (node: AST.Node) => node is DeclarationT,
   ): DeclarationT[] {
-    const root = findRoot(node)
+    const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return []
     }
-    const document = Langium.AstUtils.getDocument(node)
+    const document = AST.getDocument(node)
     const currentPath = document.uri.path
 
     const declarations: DeclarationT[] = []
@@ -110,7 +151,7 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private collectTargetDeclarations(useStatement: AST.UseStatement, currentPath?: string): AST.Declaration[] {
-    const path = currentPath ?? Langium.AstUtils.getDocument(useStatement).uri.path
+    const path = currentPath ?? AST.getDocument(useStatement).uri.path
     const allFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)
       .filter(AST.isTaoFile)
@@ -121,37 +162,17 @@ export class TaoValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 }
 
-function findOwningView(node: AST.Node): AST.RenderableDeclaration | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isRenderableDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+function statesOwnedByBlock(block: AST.Block): AST.StateDeclaration[] {
+  return block.statements.filter(AST.isStateDeclaration)
 }
 
-function findRoot(node: AST.Node): AST.Node {
-  let current = node
-  while (current.$container) {
-    current = current.$container
+function parameterValueName(parameter: AST.ParameterDeclaration): string | undefined {
+  if (parameter.inlineType) {
+    return parameter.inlineType.name
   }
-  return current
-}
-
-function ancestorBlocks(node: AST.Node): AST.Block[] {
-  const blocks: AST.Block[] = []
-  let current = node.$container
-  while (current) {
-    if (AST.isBlock(current)) {
-      blocks.push(current)
-    }
-    current = current.$container
+  if (!parameter.type) {
+    return undefined
   }
-  return blocks
-}
-
-function aliasesOwnedByBlock(block: AST.Block): AST.AliasDeclaration[] {
-  return block.statements.filter(AST.isAliasDeclaration)
+  const lastMember = parameter.type.members.at(-1)
+  return lastMember ?? parameter.type.root
 }

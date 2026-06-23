@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": [
-      "ES2022"
+      "ES2023"
     ],
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -25,6 +25,9 @@
       ],
       "@shared/test": [
         "./shared/shared-src/Test-Bun.ts"
+      ],
+      "@shared/core": [
+        "./shared/shared-src/core/shared-core.ts"
       ],
       "@shared/*": [
         "./shared/shared-src/*"

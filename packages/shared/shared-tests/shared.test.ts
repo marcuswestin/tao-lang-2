@@ -1,3 +1,4 @@
+import { Switch as CoreSwitch } from '@shared/core'
 import { AfterEach, Describe, Expect, Test } from '@shared/test'
 import {
   Assert,
@@ -492,18 +493,27 @@ Describe('Errors, Assert, and Switch', () => {
     Expect(() => Assert(false, 'truthy')).toThrow(Errors.UnexpectedBehaviorError)
   })
 
-  Test('switches exhaustively by value, type, and property', () => {
+  Test('switches exhaustively by value, type, kind, and property', () => {
     type Item =
       | { $type: 'text'; value: string; state: 'ready' }
       | { $type: 'count'; value: number; state: 'empty' }
 
-    const item: Item = { $type: 'text', value: 'hello', state: 'ready' }
+    type Status =
+      | { kind: 'ready'; value: string }
+      | { kind: 'empty'; value: number }
 
-    const selectedValue = Switch.value<'a' | 'b', number>('a', {
+    const item: Item = { $type: 'text', value: 'hello', state: 'ready' }
+    const status: Status = { kind: 'ready', value: 'hello' }
+
+    const selectedValue = Switch<'a' | 'b', number>('a', {
       a: () => 1,
       b: () => 2,
     })
-    const selectedOptionalValue = Switch.value<'raw' | undefined, string>(undefined, {
+    const selectedCallableValue = Switch<'a' | 'b', number>('b', {
+      a: () => 1,
+      b: () => 2,
+    })
+    const selectedOptionalValue = Switch<'raw' | undefined, string>(undefined, {
       raw: () => 'raw',
       undefined: () => 'normal',
     })
@@ -511,15 +521,41 @@ Describe('Errors, Assert, and Switch', () => {
       text: text => text.value,
       count: count => count.value.toString(),
     })
+    const selectedOptionalType = Switch.typeMaybe<Item | undefined, string>(undefined, {
+      text: (text): string => text.value,
+      count: count => count.value.toString(),
+      undefined: () => 'missing',
+    })
+    const selectedKind = Switch.kind<Status, string>(status, {
+      ready: ready => ready.value,
+      empty: empty => empty.value.toString(),
+    })
+    const selectedOptionalKind = Switch.kindMaybe<Status | undefined, string>(undefined, {
+      ready: ready => ready.value,
+      empty: empty => empty.value.toString(),
+      undefined: () => 'missing',
+    })
     const selectedProperty = Switch.property<Item, 'state', string>(item, 'state', {
       ready: () => 'Ready',
       empty: () => 'Empty',
     })
 
     Expect(selectedValue).toBe(1)
+    Expect(selectedCallableValue).toBe(2)
     Expect(selectedOptionalValue).toBe('normal')
     Expect(selectedType).toBe('hello')
+    Expect(selectedOptionalType).toBe('missing')
+    Expect(selectedKind).toBe('hello')
+    Expect(selectedOptionalKind).toBe('missing')
     Expect(selectedProperty).toBe('Ready')
+  })
+
+  Test('exports Switch through the environment-safe core entrypoint', () => {
+    Expect(CoreSwitch<'a' | 'b', number>('b', {
+      a: () => 1,
+      b: () => 2,
+    })).toBe(2)
+    Expect(CoreSwitch).toBe(Switch)
   })
 })
 

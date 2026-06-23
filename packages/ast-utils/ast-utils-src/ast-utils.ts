@@ -1,30 +1,39 @@
 import { injectionArgumentName } from './injections'
 import {
-  type RenderInvocationPair as RenderInvocationPairData,
-  type ResolvedRenderInvocation as ResolvedRenderInvocationData,
+  resolveActionInvocation,
+  resolveActionTarget,
+  resolveItemPropertyBindings,
   resolveRenderInvocation,
 } from './invocations'
+import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
-import { getDocument, isNode, streamAllContents } from './traversal'
+import { Type } from './Type'
 
-/** ASTUtils exposes shared semantic helpers for Tao AST consumers. */
-const ASTUtils = {
-  getDocument,
+export { Packages, Type }
+
+/** ASTUtils groups shared semantic helpers for Tao AST consumers. */
+export const ASTUtils = {
   injectionArgumentName,
-  isNode,
+  layoutEntryValues,
+  layoutTermValue,
   referencedNames,
+  resolveActionInvocation,
+  resolveActionTarget,
+  resolveItemPropertyBindings,
   resolveRenderInvocation,
-  streamAllContents,
+} as const
+
+export namespace ASTUtils {
+  export type ActionInvocationPair = import('./invocations').ActionInvocationPair
+  export type ArgumentBindingDiagnostic = import('./invocations').ArgumentBindingDiagnostic
+  export type ItemPropertyBindingDiagnostic = import('./invocations').ItemPropertyBindingDiagnostic
+  export type ItemPropertyBindingPair = import('./invocations').ItemPropertyBindingPair
+  export type ItemPropertyBindingResult = import('./invocations').ItemPropertyBindingResult
+  export type LayoutTermValue = import('./layouts').LayoutTermValue
+  export type RenderInvocationPair = import('./invocations').RenderInvocationPair
+  export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
+  export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
+  export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
+  export type TaoType = import('./Type').TaoType
 }
-
-namespace ASTUtils {
-  /** RenderInvocationPair declares one positional render argument-to-parameter pairing. */
-  export type RenderInvocationPair = RenderInvocationPairData
-
-  /** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
-  export type ResolvedRenderInvocation = ResolvedRenderInvocationData
-}
-
-export { Packages }
-export default ASTUtils

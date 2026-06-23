@@ -19,7 +19,7 @@ Describe('Tao injection runtime', () => {
             render Text "Hello"
         }
 
-        view Text Value text {
+        view Text Value is text {
             render inject Value, Name UserName, Count \`\`\`ts
                 return <RN.Text>{Value + " " + Name + " " + Count}</RN.Text>
             \`\`\`

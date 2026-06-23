@@ -1,0 +1,130 @@
+app ItemListCustomTypeMVP {
+   view Demo
+}
+
+type Name is text
+
+type Age is number
+
+type Count is number
+
+type Tags is list
+
+type Job is {
+   Title is text
+   Level is number
+}
+
+type Person is {
+   Name
+   Age
+   Tags
+   Job
+}
+
+alias FirstTitle = "Open"
+alias FirstCount = 1
+alias SecondTitle = "Done"
+alias SecondCount = 2
+alias DisplayName = Name "Ada"
+alias TypedDisplayName = Name "Grace"
+alias DemoTags = Tags ["types" "items" "lists"]
+alias EmptyTags = Tags []
+alias DemoJob = Job {
+   Level 2
+   Title "Compiler engineer"
+}
+alias DemoPerson = Person {
+   DemoTags
+   DemoJob
+   Age 40
+   DisplayName
+}
+alias Team = [
+   DemoPerson
+   Person {
+      Name "Ro"
+      Age 41
+      EmptyTags
+      Job {
+         Title "Language designer"
+         Level 5
+   }  }
+]
+
+view Demo {
+   render Stack {
+      Tile FirstTitle, FirstCount
+      Tile SecondTitle, SecondCount
+      ProfileCard DemoPerson
+      ProfileCard Person: {
+         Tags ["runtime" "mobile"]
+         Job {
+            Level 3
+            Title "Runtime engineer"
+         }
+         Age 29
+         Name "Kai"
+      }
+      SummaryLine Count: 2, "People in the team"
+      MemberLine DemoPerson.Job.Title, DemoPerson.Name
+      TeamList Team
+      TextValue TypedDisplayName
+      TextValue "Constructed primitive text"
+}  }
+
+layout Stack {
+   render inject ```ts
+      return <>{_ViewProps.children}</>
+   ```
+}
+
+view Tile Title is text, Count is number {
+   render inject Title, Count ```ts
+      return <RN.Text>{Title}: {Count}</RN.Text>
+   ```
+}
+
+view ProfileCard Person {
+   render Stack {
+      TextValue Person.Name
+      NumberValue Person.Age
+      TextValue Person.Job.Title
+      TagList Person.Tags
+}  }
+
+view MemberLine RoleTitle is Job.Title, Name {
+   render Stack {
+      TextValue Name
+      TextValue RoleTitle
+}  }
+
+view SummaryLine Label is text, Count {
+   render inject Label, Count ```ts
+      return <RN.Text>{Label}: {Count}</RN.Text>
+   ```
+}
+
+view TextValue Value is text {
+   render inject Value ```ts
+      return <RN.Text>{Value}</RN.Text>
+   ```
+}
+
+view NumberValue Value is number {
+   render inject Value ```ts
+      return <RN.Text>{Value}</RN.Text>
+   ```
+}
+
+view TagList Values is list {
+   render inject Values ```ts
+      return <RN.Text>{Values.join(', ')}</RN.Text>
+   ```
+}
+
+view TeamList People is list {
+   render inject People ```ts
+      return <RN.Text>{People.length} team member(s)</RN.Text>
+   ```
+}

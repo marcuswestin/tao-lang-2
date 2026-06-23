@@ -1,6 +1,6 @@
 import { createInterface as createNodeReadlineInterface } from 'node:readline/promises'
 import type { Readable, Writable } from 'node:stream'
-import { UserInputError } from './Errors'
+import { UserInputError } from './core/Errors'
 import { runtimeProcess } from './Platform'
 
 type TerminalStreams = {
@@ -51,7 +51,7 @@ const PROCESS_COLORS: Record<string, ProcessColor> = {
   fix: yellow,
   just: yellow,
   parser: green,
-  prep: blue,
+  verify: blue,
   test: green,
 }
 

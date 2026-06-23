@@ -1,145 +1,184 @@
-import ASTUtils from '@ast-utils'
+import { Type } from '@ast-utils'
 import { AST } from '@parser'
+import { DeclarationOrder } from './DeclarationOrder'
 import type { ValidationContext } from './validation'
 
+type NamedValueDeclaration =
+  | NamedFileValueDeclaration
+  | AST.ParameterDeclaration
+  | AST.StateDeclaration
+type NamedFileValueDeclaration =
+  | AST.ActionDeclaration
+  | AST.AliasDeclaration
+  | AST.AppDeclaration
+  | AST.RenderableDeclaration
+type NamedDeclaration = NamedValueDeclaration | AST.TypeDeclaration
+type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
+
 /** aliasValidationMessages declares name and alias-reference diagnostics. */
-export const aliasValidationMessages = {
+const aliasValidationMessages = {
   duplicateName: (name: string) => `Duplicate name '${name}'.`,
   aliasUsedBeforeDeclaration: (alias: string, value: string) =>
     `Alias '${alias}' cannot reference '${value}' because it is not declared before the alias.`,
   usedBeforeDeclaration: (name: string) => `Name '${name}' is used before it is declared.`,
 } as const
 
+/** AliasesValidator validates alias names and declaration order. */
+export const AliasesValidator = {
+  messages: aliasValidationMessages,
+  validate,
+}
+
 /** validateAliases validates duplicate names and alias reference order. */
-export function validateAliases(file: AST.TaoFile, ctx: ValidationContext): void {
-  const fileDeclarations = file.statements.filter(AST.isDeclaration)
-  reportDuplicateNames(fileDeclarations, new Map(), ctx)
+function validate(file: AST.TaoFile, ctx: ValidationContext): void {
+  const fileValueDeclarations = file.statements.filter(isFileValueDeclaration)
+  const fileTypeDeclarations = file.statements.filter(AST.isTypeDeclaration)
+  reportDuplicateNames(fileValueDeclarations, new Map(), ctx)
+  reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
   reportAliasReferenceOrder(allAliases(file), ctx)
   reportLocalValueReferenceOrder(file, ctx)
 
   const fileRenderables = file.statements.filter(AST.isRenderableDeclaration)
-  for (const view of ASTUtils.streamAllContents(file).filter(AST.isRenderableDeclaration)) {
-    const parameters = view.parameterList?.parameters ?? []
+  for (const view of AST.streamAllContents(file).filter(AST.isRenderableDeclaration)) {
+    const parameters = AST.parametersOf(view)
     reportNameConflicts(parameters, visibleDeclarations(fileRenderables), ctx)
     for (const block of blocksOwnedByView(view)) {
       const blockNames = visibleDeclarations([...fileRenderables, ...parameters])
-      reportDuplicateNames(aliasesOwnedByBlock(block), blockNames, ctx)
+      reportDuplicateNames(AST.valueDeclarationsOwnedByBlock(block), blockNames, ctx)
     }
   }
 }
 
 function reportDuplicateNames(
-  declarations: readonly AST.NamedDeclaration[],
-  visible: Map<string, AST.NamedDeclaration>,
+  declarations: readonly NamedDeclaration[],
+  visible: Map<string, NamedDeclaration>,
   ctx: ValidationContext,
 ): void {
   for (const declaration of declarations) {
-    if (visible.has(declaration.name)) {
-      ctx.error(aliasValidationMessages.duplicateName(declaration.name), declaration)
+    const name = Type.declarationName(declaration)
+    if (visible.has(name)) {
+      ctx.error(aliasValidationMessages.duplicateName(name), declaration)
       continue
     }
-    visible.set(declaration.name, declaration)
+    visible.set(name, declaration)
   }
 }
 
 function reportNameConflicts(
-  declarations: readonly AST.NamedDeclaration[],
-  visible: Map<string, AST.NamedDeclaration>,
+  declarations: readonly NamedDeclaration[],
+  visible: Map<string, NamedDeclaration>,
   ctx: ValidationContext,
 ): void {
   for (const declaration of declarations) {
-    if (visible.has(declaration.name)) {
-      ctx.error(aliasValidationMessages.duplicateName(declaration.name), declaration)
+    const name = Type.declarationName(declaration)
+    if (visible.has(name)) {
+      ctx.error(aliasValidationMessages.duplicateName(name), declaration)
     }
   }
 }
 
-function visibleDeclarations(declarations: readonly AST.NamedDeclaration[]): Map<string, AST.NamedDeclaration> {
-  return new Map(declarations.map(declaration => [declaration.name, declaration] as const))
+function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<string, NamedDeclaration> {
+  return new Map(declarations.map(declaration => [Type.declarationName(declaration), declaration] as const))
 }
 
 function allAliases(file: AST.TaoFile): AST.AliasDeclaration[] {
-  return ASTUtils.streamAllContents(file).filter(AST.isAliasDeclaration)
+  return AST.streamAllContents(file).filter(AST.isAliasDeclaration)
 }
 
 function reportAliasReferenceOrder(aliases: readonly AST.AliasDeclaration[], ctx: ValidationContext): void {
   for (const alias of aliases) {
     for (const reference of aliasValueReferences(alias)) {
       const target = reference.target.ref
-      if (target && !isDeclaredBefore(target, alias)) {
-        ctx.error(aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, target.name), reference)
+      if (isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
+        ctx.error(
+          aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, Type.declarationName(target)),
+          reference,
+        )
       }
     }
   }
 }
 
 function reportLocalValueReferenceOrder(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const reference of ASTUtils.streamAllContents(file).filter(AST.isValueReference)) {
-    if (findOwningAlias(reference)) {
+  for (const reference of AST.streamAllContents(file).filter(isValueReferenceLike)) {
+    if (isReferenceInAliasOrStateInitializer(reference)) {
       continue
     }
     const target = reference.target.ref
-    if (target && AST.isAliasDeclaration(target) && findOwningView(target) && !isDeclaredBefore(target, reference)) {
-      ctx.error(aliasValidationMessages.usedBeforeDeclaration(target.name), reference)
+    if (isInvalidLocalValueReferenceOrder(target, reference)) {
+      ctx.error(aliasValidationMessages.usedBeforeDeclaration(Type.declarationName(target)), reference)
     }
   }
 }
 
-function aliasValueReferences(alias: AST.AliasDeclaration): AST.ValueReference[] {
-  if (AST.isValueReference(alias.value)) {
+function aliasValueReferences(alias: AST.AliasDeclaration): ValueReferenceLike[] {
+  if (AST.isValueReference(alias.value) || AST.isMemberAccessExpression(alias.value)) {
     return [alias.value]
   }
-  return ASTUtils.streamAllContents(alias.value).filter(AST.isValueReference)
+  return AST.streamAllContents(alias.value).filter(isValueReferenceLike)
 }
 
-function isDeclaredBefore(declaration: AST.ValueDeclaration, use: AST.Node): boolean {
-  // Imported declarations initialize with their own module before this file's body runs,
-  // so source-order rules only apply within one document.
-  if (ASTUtils.getDocument(declaration) !== ASTUtils.getDocument(use)) {
-    return true
-  }
-  const declarationOffset = declaration.$cstNode?.offset
-  const useOffset = use.$cstNode?.offset
-  return declarationOffset !== undefined && useOffset !== undefined && declarationOffset < useOffset
+function isReferenceInAliasOrStateInitializer(reference: ValueReferenceLike): boolean {
+  return AST.findOwningAlias(reference) !== undefined
+    || AST.findOwningState(reference) !== undefined
 }
 
-function blocksOwnedByView(view: AST.RenderableDeclaration): AST.Block[] {
-  const blocks: AST.Block[] = []
-  collectRenderBlocks(view.block, blocks)
+function isInvalidAliasInitializerReferenceOrder(
+  declaration: AST.ValueDeclaration | undefined,
+  reference: ValueReferenceLike,
+  alias: AST.AliasDeclaration,
+): declaration is AST.ValueDeclaration {
+  return isInitializerReferenceOrderSensitive(declaration, alias)
+    && !DeclarationOrder.allowsForwardActionReference(declaration, reference)
+    && DeclarationOrder.isUsedBeforeDeclaration(declaration, alias)
+}
+
+function isInitializerReferenceOrderSensitive(
+  declaration: AST.ValueDeclaration | undefined,
+  initializer: AST.AliasDeclaration,
+): declaration is AST.ValueDeclaration {
+  return declaration !== undefined
+    && (
+      DeclarationOrder.isViewOwnedValueDeclaration(declaration)
+      || AST.findOwningView(initializer) === undefined
+    )
+}
+
+function isInvalidLocalValueReferenceOrder(
+  declaration: AST.ValueDeclaration | undefined,
+  reference: ValueReferenceLike,
+): declaration is AST.ValueDeclaration {
+  return declaration !== undefined
+    && DeclarationOrder.isLocalValueDeclaration(declaration)
+    && DeclarationOrder.isViewOwnedValueDeclaration(declaration)
+    && !DeclarationOrder.allowsForwardActionReference(declaration, reference)
+    && DeclarationOrder.isUsedBeforeDeclaration(declaration, reference)
+}
+
+type ViewOwnedBlock = AST.Block
+
+function blocksOwnedByView(view: AST.RenderableDeclaration): ViewOwnedBlock[] {
+  const blocks: ViewOwnedBlock[] = []
+  collectRenderChildBlocks(view.block, blocks)
   return blocks
 }
 
-function collectRenderBlocks(block: AST.Block, blocks: AST.Block[]): void {
+function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[]): void {
   blocks.push(block)
   for (const statement of block.statements) {
     if (AST.isRender(statement) && statement.block) {
-      collectRenderBlocks(statement.block, blocks)
+      collectRenderChildBlocks(statement.block, blocks)
     }
   }
 }
 
-function aliasesOwnedByBlock(block: AST.Block): AST.AliasDeclaration[] {
-  return block.statements.filter(AST.isAliasDeclaration)
+function isValueReferenceLike(node: AST.Node): node is ValueReferenceLike {
+  return AST.isValueReference(node) || AST.isMemberAccessExpression(node)
 }
 
-function findOwningView(node: AST.Node): AST.RenderableDeclaration | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isRenderableDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
-}
-
-function findOwningAlias(node: AST.Node): AST.AliasDeclaration | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isAliasDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclaration {
+  return AST.isActionDeclaration(node)
+    || AST.isAliasDeclaration(node)
+    || AST.isAppDeclaration(node)
+    || AST.isRenderableDeclaration(node)
 }

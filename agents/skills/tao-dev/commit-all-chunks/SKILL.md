@@ -15,11 +15,11 @@ Commit message bullet lists must use one bullet per line with no blank lines bet
 
 ## Process:
 
-First run `./agent just prep`, then:
+First run `./agent just verify`, then:
 
 1. Determine the smallest next chunk to commit
 2. Stage it
 3. Commit it
 4. Repeat until done
 
-Do not run `./agent just prep` again between chunk commits when no files have changed since the initial validation. If any command or workflow step changes files before the next commit, run `./agent just prep` again before committing those changed files.
+Do not run `./agent just verify` again between chunk commits when no files have changed since the initial validation. If any command or workflow step changes files before the next commit, run `./agent just verify` again before committing those changed files.

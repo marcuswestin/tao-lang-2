@@ -1,26 +1,34 @@
-import ASTUtils from '@ast-utils'
+import { Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import { viewValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
-export const viewValidationMessages = {
+const viewValidationMessages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this view.`,
   reservedParameter: (name: string) => `Parameter name '${name}' is reserved for generated view props.`,
   renderCount: (name: string) => `Renderable declaration '${name}' must declare exactly one render statement.`,
   renderLast: '`render` must be the last statement in a view or layout body.',
-  viewBody: 'Only alias and render statements are allowed in view and layout bodies.',
-  renderBlock: 'Only alias, render, and view invocation statements are allowed in render blocks.',
+  viewBody: 'Only alias, state, action, and render statements are allowed in view bodies.',
+  layoutBody: 'Only alias and render statements are allowed in layout bodies.',
+  renderBlock: 'Only alias, render, and view invocation statements are allowed in render child blocks.',
   renderBlockAliasPlacement: 'Aliases in render blocks must be declared before child view invocations.',
   renderTarget: '`render` must target a view or inject block.',
-  renderInjectPlacement: '`render inject` must be the only statement in a view body.',
+  renderInjectPlacement: '`render inject` must be the only statement in a view or layout body.',
 } as const
 
 const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao'])
 
+/** ViewsValidator validates renderable declarations and render blocks. */
+export const ViewsValidator = {
+  messages: viewValidationMessages,
+  validate,
+}
+
 /** validateViews validates view declarations and view-body structure. */
-export function validateViews(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const view of ASTUtils.streamAllContents(file).filter(AST.isRenderableDeclaration)) {
+function validate(file: AST.TaoFile, ctx: ValidationContext): void {
+  for (const view of AST.streamAllContents(file).filter(AST.isRenderableDeclaration)) {
     validateViewDeclaration(view, ctx)
   }
 }
@@ -29,40 +37,65 @@ function validateViewDeclaration(view: AST.RenderableDeclaration, ctx: Validatio
   validateDuplicateParameters(view, ctx)
   validateRenderCount(view, ctx)
   validateRenderLast(view, ctx)
-  validateViewBodyBlock(view.block, ctx)
+  validateRenderableBodyBlock(view, ctx)
 }
 
 function validateDuplicateParameters(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
   const seen = new Set<string>()
-  for (const parameter of view.parameterList?.parameters ?? []) {
-    if (reservedParameterNames.has(parameter.name)) {
-      ctx.error(viewValidationMessages.reservedParameter(parameter.name), parameter)
+  for (const parameter of AST.parametersOf(view)) {
+    const name = Type.parameterName(parameter)
+    if (reservedParameterNames.has(name)) {
+      ctx.error(viewValidationMessages.reservedParameter(name), parameter)
     }
-    if (seen.has(parameter.name)) {
-      ctx.error(viewValidationMessages.duplicateParameter(parameter.name), parameter)
+    if (seen.has(name)) {
+      ctx.error(viewValidationMessages.duplicateParameter(name), parameter)
       continue
     }
-    seen.add(parameter.name)
+    seen.add(name)
   }
 }
 
 function validateRenderCount(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
-  const renderCount = view.block.statements.filter(AST.isRenderStatement).length
+  const renderCount = AST.blockStatementOf(view, { filter: AST.isRenderStatement }).length
   if (renderCount !== 1) {
     ctx.error(viewValidationMessages.renderCount(view.name), view)
   }
 }
 
 function validateRenderLast(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
-  const renderIndex = view.block.statements.findIndex(AST.isRenderStatement)
-  if (renderIndex >= 0 && renderIndex !== view.block.statements.length - 1) {
-    ctx.error(viewValidationMessages.renderLast, view.block.statements[renderIndex]!, {
+  const statements = AST.blockStatements(view)
+  const renderIndex = statements.findIndex(AST.isRenderStatement)
+  if (renderIndex >= 0 && renderIndex !== statements.length - 1) {
+    ctx.error(viewValidationMessages.renderLast, statements[renderIndex]!, {
       code: viewValidationCodes.renderNotLast,
     })
   }
 }
 
+function validateRenderableBodyBlock(view: AST.RenderableDeclaration, ctx: ValidationContext): void {
+  Switch.type(view, {
+    LayoutDeclaration: layout => validateLayoutBodyBlock(layout.block, ctx),
+    ViewDeclaration: viewDeclaration => validateViewBodyBlock(viewDeclaration.block, ctx),
+  })
+}
+
 function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
+  for (const statement of block.statements) {
+    if (AST.isAliasDeclaration(statement) || AST.isStateDeclaration(statement) || AST.isActionDeclaration(statement)) {
+      continue
+    }
+    if (AST.isRenderStatement(statement)) {
+      validateRender(statement, block, ctx)
+      if (statement.block) {
+        validateRenderBlock(statement.block, ctx)
+      }
+      continue
+    }
+    ctx.error(viewValidationMessages.viewBody, statement)
+  }
+}
+
+function validateLayoutBodyBlock(block: AST.Block, ctx: ValidationContext): void {
   for (const statement of block.statements) {
     if (AST.isAliasDeclaration(statement)) {
       continue
@@ -74,7 +107,7 @@ function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
       }
       continue
     }
-    ctx.error(viewValidationMessages.viewBody, statement)
+    ctx.error(viewValidationMessages.layoutBody, statement)
   }
 }
 
@@ -101,7 +134,11 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
   }
 }
 
-function validateRender(render: AST.RenderStatement, owningBlock: AST.Block, ctx: ValidationContext): void {
+function validateRender(
+  render: AST.RenderStatement,
+  owningBlock: AST.Block,
+  ctx: ValidationContext,
+): void {
   if (render.view === undefined && render.injection === undefined) {
     ctx.error(viewValidationMessages.renderTarget, render)
   }

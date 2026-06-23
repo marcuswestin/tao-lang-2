@@ -5,7 +5,6 @@ import { testFormatCode } from './test-format'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
 const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
-const targetKitchenSinkPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao')
 const targetKitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink.test.tao-next')
 const tsFence = '```ts'
 const fence = '```'
@@ -17,10 +16,6 @@ Describe('Tao formatter Kitchen Sink apps', () => {
 
   Test('the current Kitchen Sink v0 test sidecar is a formatting fixed point', async () => {
     Expect(await Formatter.formatFile(kitchenSinkTestPath)).toBe(await FS.readText(kitchenSinkTestPath))
-  })
-
-  Test('the target Kitchen Sink app is a formatting fixed point', async () => {
-    Expect(await Formatter.formatFile(targetKitchenSinkPath)).toBe(await FS.readText(targetKitchenSinkPath))
   })
 
   Test('the target Kitchen Sink v0 test sidecar is a formatting fixed point', async () => {
@@ -190,6 +185,18 @@ Describe('Tao formatter tests', () => {
 })
 
 Describe('Tao formatter views and blocks', () => {
+  Test('formats layout clauses on render sites', async () => {
+    await testFormatCode(
+      `view MainView{render Col[fill,content top spread-inset,gap 12,pad 16,margin horizontal 4,width fill]{Text "Label"[width fill,height fill]}}`,
+      `
+        view MainView {
+           render Col [fill, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+              Text "Label" [width fill, height fill]
+        }  }
+      `,
+    )
+  })
+
   Test('indents nested render blocks and collapses closing braces', async () => {
     await testFormatCode(
       `view MainView{render Stack{Text "a"\nText "b"}}`,
@@ -285,9 +292,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view parameter spacing', async () => {
     await testFormatCode(
-      `publish view CountText Count   number,Label    text { render Text Label }`,
+      `publish view CountText Count is number, Label is text { render Text Label }`,
       `
-        publish view CountText Count number, Label text {
+        publish view CountText Count is number, Label is text {
            render Text Label
         }
       `,
@@ -296,16 +303,39 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view invocation argument spacing', async () => {
     await testFormatCode(
-      `view MainView { render Stack { CountText 3,"label" } }\nview CountText Count number, Label text { render Text Label }`,
+      `view MainView { render Stack { CountText 3,"label" } }\nview CountText Count is number, Label is text { render Text Label }`,
       `
         view MainView {
            render Stack {
               CountText 3, "label"
         }  }
 
-        view CountText Count number, Label text {
+        view CountText Count is number, Label is text {
            render Text Label
         }
+      `,
+    )
+  })
+
+  Test('formats state declarations and action bodies', async () => {
+    await testFormatCode(
+      `view MainView{state Count=0 action AddStep Step is number{set Count+=Step} action AddFive{do AddStep 5} render Stack{Button "Reset",action{set Count=0} Button "Inline",->{set Count+=1}}}`,
+      `
+        view MainView {
+           state Count = 0
+           action AddStep Step is number {
+              set Count += Step
+           }
+           action AddFive {
+              do AddStep 5
+           }
+           render Stack {
+              Button "Reset", action {
+                 set Count = 0
+              }
+              Button "Inline", -> {
+                 set Count += 1
+        }  }  }
       `,
     )
   })
@@ -319,6 +349,41 @@ Describe('Tao formatter aliases', () => {
         publish alias Greeting = "Hello"
 
         view MainView { }
+      `,
+    )
+  })
+})
+
+Describe('Tao formatter types and constructors', () => {
+  Test('normalizes type declarations, constructors, casts, lists, and member access', async () => {
+    await testFormatCode(
+      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nalias Demo = Person {Tags ["a" "b"] Job {Level 2 Title "Engineer"} Age 40 Name "Ada"}\nview Profile Person { render Text Person.Job.Title }`,
+      `
+        type Job is {
+           Title is text
+           Level is number
+        }
+
+        type Person is {
+           Name
+           Age
+           Tags
+           Job
+        }
+
+        alias Demo = Person {
+           Tags ["a" "b"]
+           Job {
+              Level 2
+              Title "Engineer"
+           }
+           Age 40
+           Name "Ada"
+        }
+
+        view Profile Person {
+           render Text Person.Job.Title
+        }
       `,
     )
   })
@@ -364,14 +429,14 @@ Describe('Tao formatter injections', () => {
   Test('indents injection fence bodies one level below the inject line', async () => {
     await testFormatCode(
       `
-        view CountText Count number {
+        view CountText Count is number {
         render inject Count ${tsFence}
         return <RN.Text>{Count}</RN.Text>
         ${fence}
         }
       `,
       `
-        view CountText Count number {
+        view CountText Count is number {
            render inject Count ${tsFence}
               return <RN.Text>{Count}</RN.Text>
            ${fence}

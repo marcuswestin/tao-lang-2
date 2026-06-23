@@ -148,7 +148,7 @@ function batchedTestAppFiles(): Record<string, string> {
          render Text "Hello from sidecar tao test"
       }
 
-      view Text Value text {
+      view Text Value is text {
          render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
          ${fence}
@@ -171,7 +171,7 @@ function batchedTestAppFiles(): Record<string, string> {
          render Text "Hello from inline tao test"
       }
 
-      view Text Value text {
+      view Text Value is text {
          render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
          ${fence}
@@ -206,7 +206,7 @@ function failingCheckAppFiles(): Record<string, string> {
          render Text "Present"
       }
 
-      view Text Value text {
+      view Text Value is text {
          render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
          ${fence}

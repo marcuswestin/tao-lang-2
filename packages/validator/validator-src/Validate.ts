@@ -1,26 +1,33 @@
-import ASTUtils from '@ast-utils'
 import { AST } from '@parser'
-import { validateAliases } from './aliases-validator'
-import { validateApp } from './app-validator'
-import { validateTypirProblems } from './expressions-validator'
+import { ActionsValidator } from './ActionsValidator'
+import { AliasesValidator } from './aliases-validator'
+import { AppValidator } from './app-validator'
+import { ExpressionsValidator } from './expressions-validator'
 import { validateInjections } from './injections-validator'
-import { validateInvocations } from './invocations-validator'
+import { InvocationsValidator } from './invocations-validator'
+import { LayoutValidator } from './layout-validator'
 import { validateProject } from './project-validator'
+import { StateValidator } from './StateValidator'
 import { validateTests } from './tests-validator'
+import { validateTypes } from './types-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './use-validator'
 import type { ValidationContext } from './validation'
-import { validateViews } from './views-validator'
+import { ViewsValidator } from './views-validator'
 
 function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
-  validateApp(file, ctx)
+  AppValidator.validate(file, ctx)
   validateProject(file, ctx)
-  validateViews(file, ctx)
-  validateAliases(file, ctx)
+  ViewsValidator.validate(file, ctx)
+  ActionsValidator.validate(file, ctx)
+  StateValidator.validate(file, ctx)
+  AliasesValidator.validate(file, ctx)
+  LayoutValidator.validate(file, ctx)
   validateInjections(file, ctx)
-  validateInvocations(file, ctx)
   validateTests(file, ctx)
+  validateTypes(file, ctx)
+  InvocationsValidator.validate(file, ctx)
 
-  const document = ASTUtils.getDocument(file)
+  const document = AST.getDocument(file)
   if (document.uri.scheme === 'file') {
     validateVisibleDeclarations(ctx, file)
     validateUseStatements(file, ctx)
@@ -29,15 +36,19 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
 
 /** Validate exposes Tao AST validation passes. */
 export const Validate = {
-  Aliases: validateAliases,
-  App: validateApp,
+  Aliases: AliasesValidator.validate,
+  App: AppValidator.validate,
+  Actions: ActionsValidator.validate,
   Injections: validateInjections,
-  Invocations: validateInvocations,
+  Invocations: InvocationsValidator.validate,
+  Layouts: LayoutValidator.validate,
   Project: validateProject,
+  States: StateValidator.validate,
   TaoFile: validateTaoFile,
   Tests: validateTests,
-  TypirProblems: validateTypirProblems,
+  Types: validateTypes,
+  TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,
   VisibleDeclarations: validateVisibleDeclarations,
-  Views: validateViews,
+  Views: ViewsValidator.validate,
 } as const

@@ -41,7 +41,7 @@ test "optional description" {
    alias Foo "ASD"
 
    check "optional description" {
-      render ViewName Foo, Cats.1 with UserName."Henry" { }
+      render ViewName Foo, Cats 1 with UserName "Henry" { }
 
       expect text "Henry has 1 cat"
       press text "Add cat"
@@ -79,7 +79,7 @@ Some things to notice:
 
 - `alias Foo "ASD"` and `app AppNameStage = ...` are test-local helper declarations visible to checks in the same `test`.
 - Each `check` starts its own app or focused render subject. Checks do not share runtime state.
-- `render ViewName Foo, Cats.1 with UserName."Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
+- `render ViewName Foo, Cats 1 with UserName "Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
 - `run AppName with { ... }` launches a one-off app expression without requiring a named staging app.
 - `run AppNameStage` launches a named app variant declared by applying `with { ... }` to an app object.
 - `expect text "..."`, `press text "..."`, `write "..."`, and later focused selectors operate through rendered UI and accessibility-visible behavior.
@@ -87,7 +87,7 @@ Some things to notice:
 The test runner should report each check with enough context to identify the suite, check, launch subject, and result. A focused render check can be displayed in a shape like:
 
 ```text
-test "optional description" check "optional description" render ViewName Foo, Cats.1 with UserName."Henry" { } passed
+test "optional description" check "optional description" render ViewName Foo, Cats 1 with UserName "Henry" { } passed
 ```
 
 Inline tests share the file's normal scope and are stripped from app builds and publishes:
@@ -235,13 +235,13 @@ The `run ... with { ... }` block is an app expression overlay. It is useful when
 ```tao
 test "focused UI behavior" {
    check "renders validation message" {
-      render ViewX ParamA."abc", ParamB."asd" { }
+      render ViewX ParamA "abc", ParamB "asd" { }
 
       expect text "asd"
    }
 
    check "disabled save button ignores presses" {
-      render SaveControls ItemId."task-1" with CanSave.false { }
+      render SaveControls ItemId "task-1" with CanSave.false { }
 
       expect text "Save"
       press text "Save"
@@ -249,7 +249,7 @@ test "focused UI behavior" {
    }
 
    check "task row renders staging data" {
-      render TaskRow TaskId."task-1" using app TodoStaging { }
+      render TaskRow TaskId "task-1" using app TodoStaging { }
 
       expect text "Book dentist"
    }
@@ -328,7 +328,7 @@ test "Todo datasource behavior" {
 
 Draft meanings:
 
-- `data` declares items, item properties, and item relationships.
+- `data` declares items, properties is item, and item relationships.
 - `datasource` selects the data schema and says how that schema is fetched, written, watched, authenticated, and configured.
 - `app` selects the datasource capability it should run with.
 - A check targets the app or app variant whose datasource configuration is appropriate for the test.
@@ -435,7 +435,7 @@ Recommended direction: use a render ID prefix for authored Tao UI, and compile i
 
 ```tao
 NameInput: TextInput Name
-SaveButton: Button "Save"
+SaveButton: Button "Save", Save
 ```
 
 Then tests target it explicitly:
@@ -489,13 +489,13 @@ Named render slots still need their own spec. This testing spec only owns the bo
 Render slot direction from old repo work:
 
 ```tao
-view Button text as Label {
+view Button Label is text, Press is action {
    Row {
       @icon
       Text Label
 }  }
 
-Button "Foo" {
+Button "Foo", Save {
    @icon Image SaveIcon
 }
 ```
@@ -504,7 +504,7 @@ Render IDs name concrete rendered nodes:
 
 ```tao
 NameInput: TextInput Name
-SaveButton: Button "Save"
+SaveButton: Button "Save", Save
 ```
 
 The distinction:

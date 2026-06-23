@@ -30,12 +30,6 @@ type AuditPattern = {
 
 const AUDIT_PATTERNS: readonly AuditPattern[] = [
   {
-    id: 'stale-prep-commit',
-    level: 'warn',
-    message: 'Use `./agent just prep` for handoff and commit validation.',
-    regex: /\bprep-commit\b/g,
-  },
-  {
     id: 'blanket-clarification',
     level: 'warn',
     message: 'Prefer inspect-first autonomy over blanket clarification.',

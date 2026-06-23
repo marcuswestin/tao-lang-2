@@ -1,4 +1,3 @@
-import ASTUtils from '@ast-utils'
 import { AST, Langium } from '@parser'
 import { type Diagnostic, type DiagnosticSeverity, Switch } from '@shared'
 
@@ -10,7 +9,7 @@ export function validatorDiagnostic(
   opts: { code?: string } = {},
 ): Diagnostic {
   return {
-    filePath: ASTUtils.getDocument(node).uri.path,
+    filePath: AST.getDocument(node).uri.path,
     message,
     severity: validatorSeverity(severity),
     source: 'validator',
@@ -21,7 +20,7 @@ export function validatorDiagnostic(
 }
 
 function validatorSeverity(severity: Parameters<Langium.ValidationAcceptor>[0]): DiagnosticSeverity {
-  return Switch.value(severity, {
+  return Switch(severity, {
     error: () => 'error',
     warning: () => 'warning',
     info: () => 'information',

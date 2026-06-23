@@ -15,13 +15,13 @@ Review implemented work before merge preparation.
 - Use `subagents-review` for the implemented changes with the plan, task docs named in the review scope, and initial parent commit hash.
 - Ask reviewers to focus on bugs, regressions, missed requirements, missing tests, unused exported code/APIs, stale docs, and unclear generated/runtime behavior.
 - Verify generated Tao TS stayed minimal and uses default `TR` from `@runtime/TR` for reusable runtime functionality where practical.
-- For Kitchen Sink changes, verify target-only code stayed in `Apps/Kitchen Sink - Target/Kitchen Sink - Target.tao` until implemented, and implemented target slices were copied into `Apps/Kitchen Sink/Kitchen Sink.tao` with validation.
+- For Kitchen Sink changes, verify only implemented, executable slices were added to `Apps/Kitchen Sink/Kitchen Sink.tao` with validation.
 - For test-app changes, verify each touched app has `Apps/Test Apps/<App Name>/Purpose.md` and that new Tao code fits that purpose or the purpose file was updated.
 - Treat reviewer output as evidence, not truth. Verify findings before editing.
 - Fix only confirmed issues. Preserve unrelated work and ask before expanding scope.
 - Record valid deferred work in the task doc and `Roadmap.md`.
 - Ignore weak, duplicate, out-of-scope, or speculative findings.
-- Run relevant validation after fixes, then `./agent just prep` before final handoff or review-fix commits.
+- Run relevant validation after fixes, then `./agent just verify` before final handoff or review-fix commits.
 - Run another review pass only when accepted fixes have been applied and only if the previous pass found meaningful issues.
 
 ## Output

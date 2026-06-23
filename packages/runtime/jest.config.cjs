@@ -88,6 +88,7 @@ module.exports = {
     '^@runtime/TR$': '<rootDir>/TaoRuntime-src/TR.ts',
     '^@runtime/(.*)$': '<rootDir>/runtime-src/$1',
     '^@shared$': '<rootDir>/../shared/shared-src/shared.ts',
+    '^@shared/core$': '<rootDir>/../shared/shared-src/core/shared-core.ts',
     '^@shared/test$': '<rootDir>/../shared/shared-src/Test-Jest.ts',
     '^@shared/(.*)$': '<rootDir>/../shared/shared-src/$1',
     '^@validator$': 'tao-validator',
@@ -102,6 +103,7 @@ module.exports = {
     '^react/jsx-dev-runtime$': '<rootDir>/node_modules/react/jsx-dev-runtime',
     '^react/jsx-runtime$': '<rootDir>/node_modules/react/jsx-runtime',
     '^react-native$': '<rootDir>/node_modules/react-native',
+    '^react-native-safe-area-context$': '<rootDir>/runtime-tests/safe-area-context-mock.tsx',
   },
   transformIgnorePatterns: [],
 }

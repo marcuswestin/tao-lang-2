@@ -1,6 +1,5 @@
 import { AST, type PackageResolver } from '@parser'
 import { FS } from '@shared'
-import { getDocument } from './traversal'
 
 /** Packages exposes Tao package discovery, import resolution, and visibility helpers. */
 export namespace Packages {
@@ -71,7 +70,11 @@ export namespace Packages {
             workspaceFilePaths,
           })
         )
-        return targetFiles.flatMap(file => file.statements.filter(AST.isDeclaration))
+        return targetFiles.flatMap(file =>
+          file.statements
+            .filter(AST.isDeclaration)
+            .filter(declaration => isDeclarationImportableFromUse(declaration, resolution, request.fromFilePath))
+        )
       },
       async candidateFilePaths(useStatement, request) {
         return await candidateFilePaths(resolveUse(context, useStatement, request.fromFilePath))
@@ -391,6 +394,18 @@ export namespace Packages {
     return !resolution.importPath?.startsWith('@')
   }
 
+  function isDeclarationImportableFromUse(
+    declaration: AST.Declaration,
+    resolution: Resolution,
+    fromFilePath: string,
+  ): boolean {
+    if (AST.isAppDeclaration(declaration)) {
+      return isTestSourcePath(fromFilePath)
+        && (resolution.relation === 'same-file' || resolution.relation === 'same-directory')
+    }
+    return isVisible(visibilityOf(declaration), resolution)
+  }
+
   /** isTestSourcePath returns whether a path names a Tao sidecar test file. */
   export function isTestSourcePath(filePath: string): boolean {
     return FS.basename(filePath).endsWith('.test.tao')
@@ -448,6 +463,6 @@ export namespace Packages {
   }
 
   function workspaceFilePath(file: AST.TaoFile): string {
-    return getDocument(file).uri.path
+    return AST.getDocument(file).uri.path
   }
 }

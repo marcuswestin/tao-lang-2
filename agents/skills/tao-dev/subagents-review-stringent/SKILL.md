@@ -82,6 +82,6 @@ Every reviewer prompt must include the scoped diff summary, changed files, relev
 ## Validate And Report
 
 - Run focused tests first when a confirmed finding touches a narrow subsystem.
-- Run `./agent just prep` as the final validation unless Ro requested a broader workflow.
+- Run `./agent just verify` as the final validation unless Ro requested a broader workflow.
 - Final response must report reviewers used, artifact directory, accepted fixes, rejected or deferred findings with rationale, validation result, rerun rationale/result, index-safety status, and remaining risks.
 - Stop before staging or committing. Do not hand off to any commit workflow until Ro explicitly approves.

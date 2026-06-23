@@ -1,4 +1,4 @@
-import { CommandExecutionError } from './Errors'
+import { CommandExecutionError } from './core/Errors'
 import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
