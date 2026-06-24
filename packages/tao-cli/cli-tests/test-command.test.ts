@@ -19,10 +19,10 @@ Describe('tao test', () => {
 
         view MainView { }
       `),
+      'Commented.tao': 'test /* hidden comment */ "Commented" { }\n',
       'nested/Beta.test.tao': 'test "Beta" { }\n',
       'nested/Beta.tao': '',
       'NotATaoTest.test.tao': '// test "Comment only" { }\n',
-      '_gen_tao-app/Ignored.test.tao': 'test "Ignored" { }\n',
       '.artifacts/Ignored.test.tao': 'test "Ignored" { }\n',
       'node_modules/pkg/Ignored.test.tao': 'test "Ignored" { }\n',
       'Pods/Ignored.test.tao': 'test "Ignored" { }\n',
@@ -32,9 +32,23 @@ Describe('tao test', () => {
 
       Expect(found.map(path => FS.relativePath(rootDir, path))).toEqual([
         'Alpha.test.tao',
+        'Commented.tao',
         'Inline.tao',
         'nested/Beta.test.tao',
       ])
+    })
+  })
+
+  Test('finds an explicitly named Tao test file', async () => {
+    await withTaoFixture({
+      'Main.test.tao': 'test "Main" { }\n',
+      'Other.test.tao': 'test "Other" { }\n',
+    }, async (rootDir) => {
+      const explicitPath = FS.resolvePath('Main.test.tao', { cwd: rootDir })
+
+      const found = await findTaoTestFiles(explicitPath)
+
+      Expect(found).toEqual([explicitPath])
     })
   })
 

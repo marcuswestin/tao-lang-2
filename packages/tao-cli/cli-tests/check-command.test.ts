@@ -43,14 +43,26 @@ Describe('tao check', () => {
     await withTaoFixture({
       'canonical.tao': 'view MainView { }\n',
       'node_modules/pkg/ignored.tao': 'view   Ignored { }',
-      '_gen_tao-app/ignored.tao': 'view   Ignored { }',
       '.artifacts/ignored.tao': 'view   Ignored { }',
+      '.custom-hidden/ignored.tao': 'view   Ignored { }',
+      'Android/ignored.tao': 'view   Ignored { }',
+      'IOS/ignored.tao': 'view   Ignored { }',
       'Pods/ignored.tao': 'view   Ignored { }',
       'pods/ignored.tao': 'view   Ignored { }',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'canonical.tao': 'unchanged' })
+    })
+  })
+
+  Test('skips an explicitly named ignored directory', async () => {
+    await withTaoFixture({
+      'node_modules/pkg/ignored.tao': 'view   Ignored { }',
+    }, async (rootDir) => {
+      const directory = FS.resolvePath('node_modules', { cwd: rootDir })
+
+      Expect(await runCheck(directory)).toEqual([])
     })
   })
 

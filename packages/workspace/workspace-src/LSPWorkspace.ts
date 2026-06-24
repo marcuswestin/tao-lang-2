@@ -1,3 +1,4 @@
+import { Packages } from '@ast-utils'
 import { Langium } from '@parser'
 import { FS } from '@shared'
 import {
@@ -45,7 +46,7 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
     for await (
       const path of FS.walk(this.root, {
         extensions: ['.tao'],
-        excludeDirectory: shouldSkipWorkspaceDirectory,
+        excludeDirectory: Packages.shouldSkipTaoDirectory,
       })
     ) {
       documentPaths.push(path)
@@ -61,19 +62,4 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
       documents.addDocument(await factory.fromUri(uri))
     }
   }
-}
-
-const WORKSPACE_DOCUMENT_IGNORE_DIRS = new Set([
-  'node_modules',
-  '.git',
-  '.artifacts',
-  '.direnv',
-  '.devenv',
-  '.expo',
-  'ios',
-  'android',
-])
-
-function shouldSkipWorkspaceDirectory(name: string): boolean {
-  return name.startsWith('_gen_') || WORKSPACE_DOCUMENT_IGNORE_DIRS.has(name)
 }

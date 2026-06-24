@@ -92,11 +92,15 @@ async function fileDeclaresTaoTests(path: string): Promise<boolean> {
     return false
   }
   const source = await FS.readText(path)
-  if (!/\btest\s+"/.test(source)) {
+  if (!mayDeclareTaoTests(source)) {
     return false
   }
   const parsed = await Workspace.parse(path)
   return parsed.entry.ast.statements.some(AST.isTestDeclaration)
+}
+
+function mayDeclareTaoTests(source: string): boolean {
+  return /\btest(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n\r]*(?:\r?\n|$))*"/.test(source)
 }
 
 async function testNodePath(): Promise<string> {

@@ -82,7 +82,7 @@ export namespace Packages {
     }
   }
 
-  const SCAN_IGNORE_DIRS = new Set([
+  const TAO_DIRECTORY_IGNORE_NAMES = new Set([
     'node_modules',
     '.git',
     '.artifacts',
@@ -91,6 +91,7 @@ export namespace Packages {
     '.expo',
     'ios',
     'android',
+    'pods',
   ])
 
   /** createContext creates shared package lookup state for one project root. */
@@ -114,6 +115,12 @@ export namespace Packages {
     return { projectRoot: resolvedRoot, packages }
   }
 
+  /** shouldSkipTaoDirectory returns whether Tao source discovery should ignore a directory name. */
+  export function shouldSkipTaoDirectory(name: string): boolean {
+    return name.startsWith('.')
+      || TAO_DIRECTORY_IGNORE_NAMES.has(name.toLowerCase())
+  }
+
   async function collectDirectories(directoryPath: string, packages: Map<string, string[]>): Promise<void> {
     for (const name of await FS.listDir(directoryPath)) {
       if (shouldSkipScanDirectory(name)) {
@@ -133,7 +140,7 @@ export namespace Packages {
   }
 
   function shouldSkipScanDirectory(name: string): boolean {
-    return name.startsWith('.') || name.startsWith('_gen_') || SCAN_IGNORE_DIRS.has(name)
+    return shouldSkipTaoDirectory(name)
   }
 
   function isDirectoryName(name: string): boolean {
