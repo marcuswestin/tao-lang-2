@@ -1,7 +1,8 @@
 grammar TaoTerminals
 
 entry TerminalsGrammarEntrypoint:
-    value=(TS_CODE_BLOCK | STRING | NUMBER | ID);
+    // Includes terminals consumed from imported grammar modules so Langium marks them reachable.
+    value=(TS_CODE_BLOCK | STRING | NUMBER | ID | USE_IMPORT_PATH);
 
 terminal TS_CODE_BLOCK: '```ts' -> '```';
 terminal STRING: /"([^"\\]|\\.)*"/;

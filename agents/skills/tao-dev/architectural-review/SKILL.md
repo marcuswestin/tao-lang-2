@@ -51,6 +51,12 @@ Use this for Tao architecture review before implementation or after implementati
 
 ## Review Runner Gotchas
 
+- Do not count an artifact as a usable independent review just because the command exits zero. Check the review text first; empty or near-empty artifacts and "I cannot inspect the repo" responses need a replacement reviewer.
+- For staged-only changes, plan-mode reviewers may not be able to run shell commands even when the prompt asks them to inspect `git diff --cached`. If a reviewer reports missing tools, rerun with a concrete `--scope-file` containing the staged status, stat, diff, and any critical context snippets.
+- Cursor `composer-2.5` at medium effort can take about as long as a high-effort Codex review and may still return an empty artifact. Verify output promptly and replace it rather than waiting for multiple retries.
+- Gemini plan mode can return quickly but may be unable to inspect the workspace unless the diff/context is included directly in the prompt or `--scope-file`; do not treat that as a repo-grounded review.
+- Antigravity through `agy --sandbox --model "Gemini 3.5 Flash (High)" --print-timeout ...` can hang past the requested timeout. Use a shorter timeout for review fanout, and cancel/fallback if it produces no output after the budget.
+- When trying to keep reviewers finishing in the same window, lower the slow reviewer first: medium effort for Codex, Cursor `composer-2.5` only when it has recently produced substantive output, Gemini with explicit scope context, and Antigravity with a bounded timeout.
 - `codexbar usage` can exit nonzero while still printing useful provider JSON mixed with unavailable-provider errors. Use the usable provider entries instead of treating the command as fatal.
 - The repo-owned `./agent review` runner is useful for architecture passes: create a run with `./agent review new --slug <slug>`, then use lenses such as `architecture` and `api-boundary`.
 - Count only substantive reviewer output as coverage. Empty files, one-byte files, or metadata with `status: empty` are failed coverage even if the wrapper exits successfully.

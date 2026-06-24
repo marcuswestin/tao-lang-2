@@ -115,6 +115,34 @@ Describe('FS', () => {
     ])
   })
 
+  Test('walk follows symlinked directories only when requested', async () => {
+    const root = await tmpDir()
+    const externalDir = await tmpDir()
+    const linkPath = FS.resolvePath('linked', { cwd: root })
+
+    await FS.writeText(FS.resolvePath('local.ts', { cwd: root }), 'local')
+    await FS.writeText(FS.resolvePath('external.ts', { cwd: externalDir }), 'external')
+    await FS.symlink(externalDir, linkPath)
+
+    const defaultWalked = await walkRelative(root)
+    const symlinkWalked = await walkRelative(root, { followSymlinks: true })
+
+    Expect(defaultWalked).toEqual(['local.ts'])
+    Expect(symlinkWalked).toEqual(['linked/external.ts', 'local.ts'])
+  })
+
+  Test('walk prevents cycles while following symlinked directories', async () => {
+    const root = await tmpDir()
+    const childDir = FS.resolvePath('child', { cwd: root })
+
+    await FS.writeText(FS.resolvePath('child/file.ts', { cwd: root }), 'child')
+    await FS.symlink(root, FS.resolvePath('loop', { cwd: childDir }))
+
+    const walked = await walkRelative(root, { followSymlinks: true })
+
+    Expect(walked).toEqual(['child/file.ts'])
+  })
+
   Test('does not swallow read or list errors', async () => {
     const root = await tmpDir()
 
@@ -122,6 +150,14 @@ Describe('FS', () => {
     await Expect(FS.listDir(FS.resolvePath('missing', { cwd: root }))).rejects.toThrow()
   })
 })
+
+async function walkRelative(root: string, options: FS.WalkOptions = {}): Promise<string[]> {
+  const walked: string[] = []
+  for await (const path of FS.walk(root, { extensions: ['.ts'], ...options })) {
+    walked.push(FS.relativePath(root, path))
+  }
+  return walked.sort()
+}
 
 Describe('HCI', () => {
   Test('writes messages to selected output streams', () => {

@@ -1,3 +1,4 @@
+import { AST } from '@parser'
 import { findInjectionFenceCloseIndex, type FormatHandlers, isInjectionFenceOpenLine } from '../formatting'
 
 export default {
@@ -5,6 +6,15 @@ export default {
   Block(f) {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.statements)
+    if (AST.isTestDeclaration(f.node.$container)) {
+      f.separateIndentedLines(f.node.statements, () => 2)
+    }
+    if (AST.isCheckDeclaration(f.node.$container)) {
+      f.separateIndentedLines(
+        f.node.statements,
+        (previous, next) => AST.isRunStep(previous) && AST.isExpectTextStep(next) ? 2 : 1,
+      )
+    }
   },
 
   /** ParameterList formats comma-separated parameter declarations. */
@@ -54,6 +64,11 @@ export function collapseClosingBraces(text: string): string {
       runEnd++
     }
     if (runEnd > index) {
+      if (isTestClosingBraceRun(lines, index)) {
+        result.push(lines[index]!)
+        index++
+        continue
+      }
       const indent = lines[runEnd]!.match(/^[ \t]*/)![0]
       const delimiters = lines.slice(index, runEnd + 1).map(closingDelimiter)
       result.push(indent + delimiters.join('  '))
@@ -72,6 +87,22 @@ function isClosingDelimiterLine(line: string): boolean {
 
 function closingDelimiter(line: string): string {
   return line.trim()
+}
+
+function isTestClosingBraceRun(lines: readonly string[], index: number): boolean {
+  const previous = previousNonEmptyLine(lines, index)
+  return previous !== undefined && /^[ \t]*(expect|run)\b/.test(previous)
+}
+
+function previousNonEmptyLine(lines: readonly string[], index: number): string | undefined {
+  for (let lineIndex = index - 1; lineIndex >= 0; lineIndex--) {
+    const line = lines[lineIndex]!
+    const trimmed = line.trim()
+    if (trimmed !== '' && !trimmed.startsWith('//')) {
+      return line
+    }
+  }
+  return undefined
 }
 
 function scanBlockCommentLine(

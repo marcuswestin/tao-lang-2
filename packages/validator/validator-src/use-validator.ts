@@ -139,12 +139,16 @@ function validateImportedName(
     ctx.error(useValidationMessages.missingImport(importedName, importLabel(useStatement)), useStatement)
     return
   }
-  const importableMatches = matches.filter(declaration => declaration.kind !== AST.AppDeclaration.$type)
+  const importableMatches = matches.filter(declaration =>
+    declaration.kind !== AST.AppDeclaration.$type || canImportApp(useStatement, resolution)
+  )
   if (importableMatches.length === 0 && matches.some(declaration => declaration.kind === AST.AppDeclaration.$type)) {
     ctx.error(useValidationMessages.appImport(importedName), useStatement)
     return
   }
-  const visibleMatches = importableMatches.filter(declaration => Packages.isVisible(declaration.visibility, resolution))
+  const visibleMatches = importableMatches.filter(declaration =>
+    importedDeclarationIsVisible(declaration, resolution, useStatement)
+  )
   if (visibleMatches.length === 0) {
     ctx.error(useValidationMessages.notVisible(importedName), useStatement)
     return
@@ -174,6 +178,29 @@ function validateImportedName(
       seen.previouslyImportedNames.add(key)
     }
   }
+}
+
+function importedDeclarationIsVisible(
+  declaration: DeclarationRecord,
+  resolution: Packages.Resolution,
+  useStatement: AST.UseStatement,
+): boolean {
+  if (declaration.kind === AST.AppDeclaration.$type) {
+    return canImportApp(useStatement, resolution)
+  }
+  return Packages.isVisible(declaration.visibility, resolution)
+}
+
+function canImportApp(useStatement: AST.UseStatement, resolution: Packages.Resolution): boolean {
+  return useBelongsToTestSidecar(useStatement)
+    && (resolution.relation === 'same-file' || resolution.relation === 'same-directory')
+}
+
+function useBelongsToTestSidecar(useStatement: AST.UseStatement): boolean {
+  if (!AST.isTaoFile(useStatement.$container)) {
+    return false
+  }
+  return Packages.isTestSourcePath(AST.getDocument(useStatement.$container).uri.path)
 }
 
 function importLabel(useStatement: AST.UseStatement): string {

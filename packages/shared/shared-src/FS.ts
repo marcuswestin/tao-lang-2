@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
@@ -7,8 +8,13 @@ import * as Repo from './Repo'
 export type WalkOptions = {
   includeDirectories?: boolean
   includeHidden?: boolean
+  followSymlinks?: boolean
   extensions?: readonly string[]
   excludeDirectory?: (name: string) => boolean
+}
+
+type WalkContext = {
+  openedDirectories: Set<string>
 }
 
 /** FileHandle declares an opened filesystem handle. */
@@ -178,6 +184,12 @@ export async function move(fromPath: string, toPath: string): Promise<void> {
   await nodeFs.rename(fromPath, toPath)
 }
 
+/** symlink creates a filesystem symlink, creating the destination parent directory. */
+export async function symlink(targetPath: string, linkPath: string): Promise<void> {
+  await mkdir(dirname(linkPath))
+  await nodeFs.symlink(targetPath, linkPath)
+}
+
 /** listDir lists direct child names for a directory, sorted for platform-independent order. */
 export async function listDir(inputPath: string): Promise<string[]> {
   return (await nodeFs.readdir(inputPath)).sort()
@@ -186,10 +198,10 @@ export async function listDir(inputPath: string): Promise<string[]> {
 /** walk yields files under a path according to the provided filters. */
 export async function* walk(inputPath: string, options: WalkOptions = {}): AsyncGenerator<string> {
   const absolutePath = resolvePath(inputPath)
-  const stats = await nodeFs.stat(absolutePath)
+  const stats = options.followSymlinks === true ? await nodeFs.stat(absolutePath) : await nodeFs.lstat(absolutePath)
 
   if (stats.isDirectory()) {
-    yield* walkDirectory(absolutePath, options)
+    yield* walkDirectory(absolutePath, options, createWalkContext())
     return
   }
 
@@ -198,7 +210,17 @@ export async function* walk(inputPath: string, options: WalkOptions = {}): Async
   }
 }
 
-async function* walkDirectory(directoryPath: string, options: WalkOptions): AsyncGenerator<string> {
+async function* walkDirectory(
+  directoryPath: string,
+  options: WalkOptions,
+  context: WalkContext,
+): AsyncGenerator<string> {
+  const realDirectoryPath = await nodeFs.realpath(directoryPath)
+  if (context.openedDirectories.has(realDirectoryPath)) {
+    return
+  }
+  context.openedDirectories.add(realDirectoryPath)
+
   const dir = await nodeFs.opendir(directoryPath)
   try {
     while (true) {
@@ -208,17 +230,36 @@ async function* walkDirectory(directoryPath: string, options: WalkOptions): Asyn
       }
 
       const entryPath = resolvePath(entry.name, { cwd: directoryPath })
-      const isDirectoryEntry = entry.isDirectory()
+      const isDirectoryEntry = entry.isDirectory() || await isFollowedSymlinkDirectory(entry, entryPath, options)
 
       if (shouldYield(entryPath, isDirectoryEntry, options)) {
         yield entryPath
       }
       if (isDirectoryEntry && shouldWalkDirectory(entry.name, options)) {
-        yield* walkDirectory(entryPath, options)
+        yield* walkDirectory(entryPath, options, context)
       }
     }
   } finally {
     await dir.close()
+  }
+}
+
+function createWalkContext(): WalkContext {
+  return { openedDirectories: new Set() }
+}
+
+async function isFollowedSymlinkDirectory(
+  entry: Dirent,
+  entryPath: string,
+  options: WalkOptions,
+): Promise<boolean> {
+  if (options.followSymlinks !== true || !entry.isSymbolicLink()) {
+    return false
+  }
+  try {
+    return (await nodeFs.stat(entryPath)).isDirectory()
+  } catch {
+    return false
   }
 }
 

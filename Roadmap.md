@@ -33,11 +33,11 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Define canonical buildable app target and acceptance bar
   - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
 
-- [ ] Implement Tao-native testing v0
-  - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness.
+- [x] Implement Tao-native testing v0
+  - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
 
-- [ ] Add `tao test` and migrate Test Apps to Tao-authored behavior tests
-  - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures.
+- [ ] Migrate Test Apps to Tao-authored behavior tests and harden `tao test`
+  - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures; add filters, watch/CI output, richer failure reporting, and broader runtime coverage.
 
 - [ ] Add interaction event MVP
   - Press/change/submit/focus behavior for built-in controls, event-to-action binding, disabled/loading behavior, and testable event semantics.
@@ -74,6 +74,11 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
+- [ ] Implement styling
+- [ ] Actions
+  - [ ] Add `on press` etc
+  - [ ] Add actions to kitchen sink tests
+    - [ ] And switch other test apps to use tao testing rather than ts
 - [ ] Change argument order of `ValidationContext.error`/etc
 - [ ] Require type of lists: `view TagText Tags is list {`
 - [ ] Implement boolean operators, requiring `EXPRESSION is OPERATOR EXPRESSION`, e.g `Age is < 10`
@@ -96,7 +101,6 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
 - [x] Wire the formatter into the IDE extension language server and add repo-wide `tao fmt`/`tao fix`/`tao check` (tao-cli), run by `just fmt`/`fix`/`check`
 - [x] Add LSP/IDE source actions: `Tao: Organize Use Statements` (source.organizeImports), unused/out-of-section import warnings with quick fixes, command-palette entries prefixed `Tao:`, a move-render-last quick fix, and `tao fix` applying all source fixes (run by `just fix`)
-- [ ] Figure out tao testing story. How are tests stated? Datasource injection, Initial data, actions and checks, etc ...
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
 - [x] Add layout clauses and default app-shell UI baseline

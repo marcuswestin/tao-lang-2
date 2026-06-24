@@ -1,4 +1,4 @@
-import Compiler, { type CompileResult } from '@compiler'
+import Compiler, { type CompileResult, type TaoTestPlan } from '@compiler'
 import { Langium, Parser, type ParseResult } from '@parser'
 import { Assert, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
@@ -30,6 +30,12 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   static async compile(entryFile: string): Promise<CompileResult> {
     const { entryPath, workspace } = await Workspace.openForEntry(entryFile)
     return await workspace.compile(entryPath)
+  }
+
+  /** compileTestPlan opens a Workspace around `entryFile` and compiles v0 Tao tests. */
+  static async compileTestPlan(entryFile: string): Promise<TaoTestPlan> {
+    const { entryPath, workspace } = await Workspace.openForEntry(entryFile)
+    return await workspace.compileTestPlan(entryPath)
   }
 
   private static async openForEntry(entryFile: string): Promise<{ entryPath: string; workspace: Workspace }> {
@@ -72,6 +78,12 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   async compile(entryFile: string): Promise<CompileResult> {
     const validationResult = await this.validate(entryFile)
     return Compiler.compileValidated(validationResult, this.compilerContext())
+  }
+
+  /** compileTestPlan compiles v0 Tao tests for an entry file. */
+  async compileTestPlan(entryFile: string): Promise<TaoTestPlan> {
+    const validationResult = await this.validate(entryFile)
+    return Compiler.compileTestPlan(validationResult, this.compilerContext())
   }
 
   private parserContext(): Parser.Context {

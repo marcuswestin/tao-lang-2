@@ -44,12 +44,18 @@ Describe('tao fmt', () => {
 
   Test('formats an explicitly named file that directory walks would skip', async () => {
     await withTaoFixture({
-      '.hidden.tao': 'view   MainView { }',
+      '.hidden.tao': 'view   HiddenFile { }',
+      '.hidden-dir/skipped.tao': 'view   Skipped { }',
+      'node_modules/.hidden.tao': 'view   MainView { }',
     }, async (rootDir) => {
-      const path = FS.resolvePath('.hidden.tao', { cwd: rootDir })
+      const path = FS.resolvePath('node_modules/.hidden.tao', { cwd: rootDir })
 
       Expect((await runFmt(rootDir)).length).toBe(0)
       Expect((await runFmt(path)).map(result => result.status)).toEqual(['changed'])
+      Expect(await FS.readText(FS.resolvePath('.hidden.tao', { cwd: rootDir }))).toBe('view   HiddenFile { }')
+      Expect(await FS.readText(FS.resolvePath('.hidden-dir/skipped.tao', { cwd: rootDir }))).toBe(
+        'view   Skipped { }',
+      )
       Expect(await FS.readText(path)).toBe('view MainView { }\n')
     })
   })

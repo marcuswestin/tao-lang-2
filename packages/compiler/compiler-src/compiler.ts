@@ -3,6 +3,16 @@ import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import RuntimeGen from './codegen/app/runtime-gen'
+import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
+
+export type {
+  TaoTestCheck,
+  TaoTestExpectation,
+  TaoTestPlan,
+  TaoTestRun,
+  TaoTestSourceLocation,
+  TaoTestSuite,
+} from './tests-compiler'
 
 const codeProjectRoot = '/__tao__'
 
@@ -59,12 +69,15 @@ function compileValidated(validationResult: ValidationResult, context: CompilerC
 const Compiler = {
   createContext,
   compileCode,
+  compileTestPlan,
   compileValidated,
 } as const
 
 namespace Compiler {
   /** Context declares compiler invocation state. */
   export type Context = CompilerContext
+  /** TestPlan declares compiled Tao v0 test-plan IR. */
+  export type TestPlan = TaoTestPlan
 }
 
 export default Compiler

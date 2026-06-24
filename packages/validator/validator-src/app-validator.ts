@@ -1,3 +1,4 @@
+import { Packages } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import type { ValidationContext } from './validation'
@@ -5,7 +6,7 @@ import type { ValidationContext } from './validation'
 /** appValidationMessages declares structural diagnostics for Tao app placement. */
 const appValidationMessages = {
   topLevel:
-    'Only project, app, view, layout, alias, action, type declarations, and use statements are allowed at file level.',
+    'Only project, app, view, layout, alias, action, type, test declarations, and use statements are allowed at file level.',
   appCount: (count: number) => `Tao file must declare at most one app, found ${count}.`,
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
@@ -42,7 +43,7 @@ function validateAppPlacement(app: AST.AppDeclaration, file: AST.TaoFile, ctx: V
     ctx.error(appValidationMessages.appPackage(app.name), app)
     return
   }
-  if (filePath !== ctx.entryFilePath) {
+  if (filePath !== ctx.entryFilePath && !isTestCompanionAppFile(filePath, ctx)) {
     ctx.error(appValidationMessages.appEntryFile(app.name), app)
   }
 }
@@ -90,6 +91,10 @@ function isInsidePackage(filePath: string, ctx: ValidationContext): boolean {
     }
   }
   return false
+}
+
+function isTestCompanionAppFile(filePath: string, ctx: ValidationContext): boolean {
+  return Packages.isTestSourcePath(ctx.entryFilePath) && FS.dirname(filePath) === FS.dirname(ctx.entryFilePath)
 }
 
 function pathIsWithin(path: string, directoryPath: string): boolean {

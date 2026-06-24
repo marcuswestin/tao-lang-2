@@ -4,7 +4,8 @@ import "./visibility"
 import "./terminals"
 
 entry TypesGrammarEntrypoint:
-    TypeDeclaration;
+    // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
+    TypeDeclaration | ParameterTypeDeclaration | ConstructorTypeReference;
 
 TypeDeclaration:
     visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;

@@ -8,6 +8,7 @@ import "./actions"
 import "./expressions"
 import "./injections"
 import "./project"
+import "./tests"
 import "./types"
 import "./terminals"
 

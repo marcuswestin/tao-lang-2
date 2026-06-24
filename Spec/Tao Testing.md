@@ -1,6 +1,6 @@
 # Tao Testing
 
-Status: future design draft. This document records intended Tao app testing behavior, not current implementation. The current repo has package tests and an Expo runtime render harness, but no Tao-native `test` or `check` declarations, `tao test` command, `run`/`render` test runner, state/action test runner, datasource test seeding, or provider test adapter yet.
+Status: design draft with an initial v0 implementation in progress. The current repo has package tests, an Expo runtime render harness, and a minimal Tao-native app smoke-test slice: `test`, `check`, `run <AppName>`, `expect text`, `expect missing text`, test-plan IR, and `tao test [path]`. It does not have `render` test subjects, state/action test steps, datasource test seeding, provider test adapters, or the richer CLI options described below yet.
 
 This design starts with app and UI behavior tests. Tests can live in regular `.tao` files or sidecar `.test.tao` files. Package testing is deferred until Tao package semantics and app/UI testing are stable.
 
@@ -626,7 +626,7 @@ CLI behavior:
 - `--fail-fast` stops after the first failing check.
 - Failure output includes the test name, check name, failing step, source location, selected runtime, rendered UI summary, and artifacts where the runtime supports them.
 
-The current repo does not have `tao test`. Until it exists, early Tao-authored checks can be wired into the existing runtime Jest workflow, and the CLI can come after the parser, compiler, runtime, and command support are ready.
+The current v0 implementation exposes `tao test [path]` for Tao files with inline or sidecar test declarations. It still delegates execution to the runtime Jest harness; richer CLI filtering, watch mode, JSON output, artifacts, and alternate runtimes remain future work.
 
 ## First Implementation Slice
 
@@ -635,7 +635,7 @@ This spec should not block useful Test App coverage on the full CLI and runtime-
 - Parse a minimal test subset: inline `test`, sidecar `.test.tao`, nested `check`, `run <AppName>`, `expect text`, and `expect missing text`.
 - Compile those checks to a small test-plan IR with source locations.
 - Execute app-subject checks through the existing Expo runtime Jest harness in `packages/runtime/runtime-tests/test-compile-app.tsx`, especially `compileAndRenderApp` and `testCompileApp`.
-- Defer `render`, `run ... with { ... }`, input actions, datasource-specific setup/reset, focused non-app subjects, and `tao test` until after rendered smoke checks are running for `Apps/Test Apps/*`.
+- Defer `render`, `run ... with { ... }`, input actions, datasource-specific setup/reset, focused non-app subjects, and richer `tao test` options until after rendered smoke checks are running for `Apps/Test Apps/*`.
 
 That path lets Test Apps start gaining Tao-authored behavior checks while preserving the broader design.
 

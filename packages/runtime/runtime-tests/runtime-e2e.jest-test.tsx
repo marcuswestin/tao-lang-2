@@ -1,6 +1,7 @@
+import { runTaoTestPlan } from '@runtime/testing/tao-test-plan'
 import TR from '@runtime/TR'
 import { FS } from '@shared'
-import { AfterEach, Describe, Expect, Test } from '@shared/test'
+import { AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, type ReactNode, useState } from 'react'
 import * as RN from 'react-native'
@@ -42,6 +43,171 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('2 team member(s)')
     ExpectScreen(screen).toHaveText('Grace')
     ExpectScreen(screen).toHaveText('Constructed primitive text')
+  })
+
+  Test('runs Tao-authored Kitchen Sink smoke tests', async () => {
+    const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
+
+    await runTaoTestPlan(kitchenSinkTestPath)
+  })
+
+  Test('runs Tao text expectations with duplicate rendered text', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use DuplicateTextApp from ./
+
+        test "Duplicate text" {
+          check "matches at least one text node" {
+            run DuplicateTextApp
+            expect text "Repeated"
+          }
+        }
+      `,
+        'Main.tao': `
+        app DuplicateTextApp { view MainView }
+        view MainView {
+          render Stack {
+            Text "Repeated"
+            Text "Repeated"
+          }
+        }
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('reports Tao suite and check context for failed text expectations', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use BrokenTextApp from ./
+
+        test "Broken text" {
+          check "misses expected text" {
+            run BrokenTextApp
+            expect text "Expected"
+          }
+        }
+      `,
+        'Main.tao': `
+        app BrokenTextApp { view MainView }
+        view MainView {
+          render Text "Actual"
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await Expect(runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /Tao check failed: Broken text > misses expected text[\s\S]*expect text "Expected"[\s\S]*Main\.test\.tao:/,
+        )
+      },
+    )
+  })
+
+  Test('reports Tao suite and check context for failed missing text expectations', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use BrokenTextApp from ./
+
+        test "Broken missing text" {
+          check "still renders unexpected text" {
+            run BrokenTextApp
+            expect missing text "Actual"
+          }
+        }
+      `,
+        'Main.tao': `
+        app BrokenTextApp { view MainView }
+        view MainView {
+          render Text "Actual"
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await Expect(runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /Tao check failed: Broken missing text > still renders unexpected text[\s\S]*expect missing text "Actual"[\s\S]*Main\.test\.tao:/,
+        )
+      },
+    )
+  })
+
+  Test('runs multiple Tao suites and cleans up rendered apps between Tao checks', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use FirstApp, SecondApp from ./
+
+        test "First isolated suite" {
+          check "first app" {
+            run FirstApp
+            expect text "First"
+          }
+        }
+
+        test "Second isolated suite" {
+          check "second app" {
+            run SecondApp
+            expect missing text "First"
+            expect text "Second"
+          }
+        }
+      `,
+        'First.tao': `
+        app FirstApp { view MainView }
+        view MainView {
+          render Text "First"
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+        'Second.tao': `
+        app SecondApp { view MainView }
+        view MainView {
+          render Text "Second"
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
   })
 
   Test('compiles and renders runtime stdlib imports', async () => {

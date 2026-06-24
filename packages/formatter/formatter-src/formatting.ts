@@ -37,6 +37,11 @@ export type NodeFormat<NodeT extends AST.Node> = {
     items: readonly ItemT[],
     linesBetween: (previous: ItemT, next: ItemT) => LineSeparation,
   ): void
+  /** separateIndentedLines is separateLines for brace-block children one indent below the current node. */
+  separateIndentedLines<ItemT extends AST.Node>(
+    items: readonly ItemT[],
+    linesBetween: (previous: ItemT, next: ItemT) => LineSeparation,
+  ): void
 }
 
 // Concrete node types are the map entries whose `$type` equals their key; union aliases such as
@@ -118,25 +123,37 @@ export function createNodeFormat<NodeT extends AST.Node>(
       close.prepend(Formatting.newLine())
     },
     separateLines(items, linesBetween) {
-      if (items.length < 2) {
-        return
-      }
-      const leaves = Langium.CstUtils.flattenCst(items[0]!.$cstNode!.root).toArray()
-      for (let index = 1; index < items.length; index++) {
-        const previous = items[index - 1]!
-        const next = items[index]!
-        const separation = newLinesAction(linesBetween(previous, next))
-        // The separation goes above the item's leading comments so they stay attached below it.
-        const comments = leadingCommentLeaves(next, leaves)
-        if (comments.length === 0) {
-          formatter.node(next).prepend(separation)
-          continue
-        }
-        formatter.cst([comments[0]!]).prepend(separation)
-        formatter.cst(comments.slice(1)).prepend(Langium.Formatting.newLines(1))
-        formatter.node(next).prepend(Langium.Formatting.newLines(1))
-      }
+      separateLines(formatter, items, linesBetween, 0)
     },
+    separateIndentedLines(items, linesBetween) {
+      separateLines(formatter, items, linesBetween, 1)
+    },
+  }
+}
+
+function separateLines<ItemT extends AST.Node>(
+  formatter: Langium.NodeFormatter<AST.Node>,
+  items: readonly ItemT[],
+  linesBetween: (previous: ItemT, next: ItemT) => LineSeparation,
+  tabs: number,
+): void {
+  if (items.length < 2) {
+    return
+  }
+  const leaves = Langium.CstUtils.flattenCst(items[0]!.$cstNode!.root).toArray()
+  for (let index = 1; index < items.length; index++) {
+    const previous = items[index - 1]!
+    const next = items[index]!
+    const separation = newLinesAction(linesBetween(previous, next), tabs)
+    // The separation goes above the item's leading comments so they stay attached below it.
+    const comments = leadingCommentLeaves(next, leaves)
+    if (comments.length === 0) {
+      formatter.node(next).prepend(separation)
+      continue
+    }
+    formatter.cst([comments[0]!]).prepend(separation)
+    formatter.cst(comments.slice(1)).prepend(newLinesAction(1, tabs))
+    formatter.node(next).prepend(newLinesAction(1, tabs))
   }
 }
 
@@ -161,12 +178,16 @@ function leadingCommentLeaves(item: AST.Node, leaves: readonly Langium.CstNode[]
 }
 
 // A min/max range fits the existing newline count when it is within the range and clamps it otherwise.
-function newLinesAction(separation: LineSeparation): Langium.FormattingAction {
+function newLinesAction(separation: LineSeparation, tabs = 0): Langium.FormattingAction {
   if (typeof separation === 'number') {
-    return Langium.Formatting.newLines(separation)
+    return newLinesWithTabs(separation, tabs)
   }
   const counts = Array.from({ length: separation.max - separation.min + 1 }, (_, step) => separation.min + step)
-  return Langium.Formatting.fit(...counts.map(count => Langium.Formatting.newLines(count)))
+  return Langium.Formatting.fit(...counts.map(count => newLinesWithTabs(count, tabs)))
+}
+
+function newLinesWithTabs(lines: number, tabs: number): Langium.FormattingAction {
+  return tabs === 0 ? Langium.Formatting.newLines(lines) : { options: {}, moves: [{ lines, tabs }] }
 }
 
 /** isInjectionFenceOpenLine returns true when a line opens a multiline inject TS fence. */

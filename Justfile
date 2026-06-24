@@ -86,8 +86,8 @@ _typecheck:
   bunx tsc --build packages/*/tsconfig.json
 
 _test PATTERN="":
-  bun test packages/*/*-tests/*.test.ts --test-name-pattern='{{PATTERN}}'
-  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --runInBand --watchman=false --testNamePattern="{{PATTERN}}"
+  bun test packages/*/*-tests/*.test.ts --reporter=dot --test-name-pattern='{{PATTERN}}'
+  cd packages/runtime && "{{DEVENV_NODE}}" node_modules/jest/bin/jest.js --testNamePattern="{{PATTERN}}"
 
 _android-emulator:
   ./dev android-emulator

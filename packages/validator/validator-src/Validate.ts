@@ -8,6 +8,7 @@ import { InvocationsValidator } from './invocations-validator'
 import { LayoutValidator } from './layout-validator'
 import { validateProject } from './project-validator'
 import { StateValidator } from './StateValidator'
+import { validateTests } from './tests-validator'
 import { validateTypes } from './types-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './use-validator'
 import type { ValidationContext } from './validation'
@@ -22,6 +23,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   AliasesValidator.validate(file, ctx)
   LayoutValidator.validate(file, ctx)
   validateInjections(file, ctx)
+  validateTests(file, ctx)
   validateTypes(file, ctx)
   InvocationsValidator.validate(file, ctx)
 
@@ -43,6 +45,7 @@ export const Validate = {
   Project: validateProject,
   States: StateValidator.validate,
   TaoFile: validateTaoFile,
+  Tests: validateTests,
   Types: validateTypes,
   TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,

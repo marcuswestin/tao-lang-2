@@ -73,7 +73,7 @@ export namespace Packages {
         return targetFiles.flatMap(file =>
           file.statements
             .filter(AST.isDeclaration)
-            .filter(declaration => isVisible(visibilityOf(declaration), resolution))
+            .filter(declaration => isDeclarationImportableFromUse(declaration, resolution, request.fromFilePath))
         )
       },
       async candidateFilePaths(useStatement, request) {
@@ -82,7 +82,7 @@ export namespace Packages {
     }
   }
 
-  const SCAN_IGNORE_DIRS = new Set([
+  const TAO_DIRECTORY_IGNORE_NAMES = new Set([
     'node_modules',
     '.git',
     '.artifacts',
@@ -91,6 +91,7 @@ export namespace Packages {
     '.expo',
     'ios',
     'android',
+    'pods',
   ])
 
   /** createContext creates shared package lookup state for one project root. */
@@ -114,6 +115,12 @@ export namespace Packages {
     return { projectRoot: resolvedRoot, packages }
   }
 
+  /** shouldSkipTaoDirectory returns whether Tao source discovery should ignore a directory name. */
+  export function shouldSkipTaoDirectory(name: string): boolean {
+    return name.startsWith('.')
+      || TAO_DIRECTORY_IGNORE_NAMES.has(name.toLowerCase())
+  }
+
   async function collectDirectories(directoryPath: string, packages: Map<string, string[]>): Promise<void> {
     for (const name of await FS.listDir(directoryPath)) {
       if (shouldSkipScanDirectory(name)) {
@@ -133,7 +140,7 @@ export namespace Packages {
   }
 
   function shouldSkipScanDirectory(name: string): boolean {
-    return name.startsWith('.') || name.startsWith('_gen_') || SCAN_IGNORE_DIRS.has(name)
+    return shouldSkipTaoDirectory(name)
   }
 
   function isDirectoryName(name: string): boolean {
@@ -300,10 +307,10 @@ export namespace Packages {
       return []
     }
     if (await FS.isFile(targetPath)) {
-      return canUseFileCandidate(resolution) && FS.extname(targetPath) === '.tao' ? [targetPath] : []
+      return canUseFileCandidate(resolution) && isImportableTaoSourcePath(targetPath) ? [targetPath] : []
     }
     const fileCandidate = `${targetPath}.tao`
-    if (canUseFileCandidate(resolution) && await FS.isFile(fileCandidate)) {
+    if (canUseFileCandidate(resolution) && isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)) {
       return [fileCandidate]
     }
     if (!await FS.isDirectory(targetPath)) {
@@ -311,7 +318,7 @@ export namespace Packages {
     }
     const names = await FS.listDir(targetPath)
     return names
-      .filter(name => FS.extname(name) === '.tao')
+      .filter(isImportableTaoSourceName)
       .map(name => FS.resolvePath(name, { cwd: targetPath }))
   }
 
@@ -328,10 +335,10 @@ export namespace Packages {
 
   async function recursiveCandidateFiles(targetPath: string): Promise<string[]> {
     if (await FS.isFile(targetPath)) {
-      return FS.extname(targetPath) === '.tao' ? [targetPath] : []
+      return isImportableTaoSourcePath(targetPath) ? [targetPath] : []
     }
     const fileCandidate = `${targetPath}.tao`
-    if (await FS.isFile(fileCandidate)) {
+    if (isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)) {
       return [fileCandidate]
     }
     if (!await FS.isDirectory(targetPath)) {
@@ -352,7 +359,7 @@ export namespace Packages {
         await collectTaoFiles(rootPath, path, files)
         continue
       }
-      if (FS.extname(name) === '.tao') {
+      if (isImportableTaoSourceName(name)) {
         files.push(path)
       }
     }
@@ -361,6 +368,9 @@ export namespace Packages {
   /** targetMatches returns whether a resolution target includes a Tao file path. */
   export function targetMatches(resolution: Resolution, request: TargetMatchRequest): boolean {
     if (resolution.relation === 'invalid' || !resolution.targetPath) {
+      return false
+    }
+    if (isTestSourcePath(request.filePath)) {
       return false
     }
     if (resolution.candidateMode === 'recursive') {
@@ -389,6 +399,31 @@ export namespace Packages {
 
   function canUseFileCandidate(resolution: Resolution): boolean {
     return !resolution.importPath?.startsWith('@')
+  }
+
+  function isDeclarationImportableFromUse(
+    declaration: AST.Declaration,
+    resolution: Resolution,
+    fromFilePath: string,
+  ): boolean {
+    if (AST.isAppDeclaration(declaration)) {
+      return isTestSourcePath(fromFilePath)
+        && (resolution.relation === 'same-file' || resolution.relation === 'same-directory')
+    }
+    return isVisible(visibilityOf(declaration), resolution)
+  }
+
+  /** isTestSourcePath returns whether a path names a Tao sidecar test file. */
+  export function isTestSourcePath(filePath: string): boolean {
+    return FS.basename(filePath).endsWith('.test.tao')
+  }
+
+  function isImportableTaoSourceName(name: string): boolean {
+    return FS.extname(name) === '.tao' && !isTestSourcePath(name)
+  }
+
+  function isImportableTaoSourcePath(filePath: string): boolean {
+    return FS.extname(filePath) === '.tao' && !isTestSourcePath(filePath)
   }
 
   function recursiveTargetMatches(targetPath: string, filePath: string): boolean {

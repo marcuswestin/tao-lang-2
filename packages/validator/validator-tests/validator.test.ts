@@ -14,6 +14,7 @@ import { InvocationsValidator } from '../validator-src/invocations-validator'
 import { LayoutValidator } from '../validator-src/layout-validator'
 import { projectValidationMessages } from '../validator-src/project-validator'
 import { StateValidator } from '../validator-src/StateValidator'
+import { testValidationMessages } from '../validator-src/tests-validator'
 import { typeValidationMessages } from '../validator-src/types-validator'
 import { useValidationMessages, validateVisibleDeclarations } from '../validator-src/use-validator'
 import { Validation } from '../validator-src/validation'
@@ -3012,6 +3013,227 @@ Describe('Tao validator structural diagnostics', () => {
         Expect(validationErrorMessages(result)).toContain(useValidationMessages.appImport('OtherApp'))
       },
     )
+  })
+
+  Test('allows test files to import apps from the same directory', async () => {
+    await withValidatedFiles(
+      'Main.test.tao',
+      {
+        'Main.test.tao': `
+        use MyApp from ./
+
+        test "Smoke" {
+          check "renders" {
+            run MyApp
+            expect text "Hello"
+          }
+        }
+      `,
+        'Main.tao': `
+        app MyApp { view MainView }
+        view MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+      },
+    )
+  })
+
+  Test('does not let inline tests import app declarations outside the entry file', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        app MyApp { view MainView }
+        use OtherView from ./Other.tao
+        view MainView {
+          render OtherView
+        }
+        test "inline smoke" {
+          check "renders" {
+            run MyApp
+            expect text "Hello"
+          }
+        }
+      `,
+        'Other.tao': `
+        app OtherApp { view OtherView }
+        project view OtherView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appEntryFile('OtherApp'))
+      },
+    )
+  })
+
+  Test('does not let test sidecars relax app placement outside their directory', async () => {
+    await withValidatedFiles(
+      'Main.test.tao',
+      {
+        'Main.test.tao': `
+        use MyApp from ./
+        use OtherView from ./nested/Other.tao
+
+        test "sidecar smoke" {
+          check "renders" {
+            run MyApp
+            expect text "Hello"
+          }
+        }
+      `,
+        'Main.tao': `
+        app MyApp { view MainView }
+        view MainView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+        'nested/Other.tao': `
+        app OtherApp { view OtherView }
+        project view OtherView {
+          render inject ${tsFence}
+            return null
+          ${fence}
+        }
+      `,
+      },
+      async result => {
+        Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appEntryFile('OtherApp'))
+      },
+    )
+  })
+
+  Test('validates v0 test check run structure', async () => {
+    const missingCheck = await testValidateCodeWithErrors(`
+      test "Smoke" { }
+    `)
+    const missingRun = await testValidateCodeWithErrors(`
+      test "Smoke" {
+        check "missing run" {
+          expect text "Hello"
+        }
+      }
+    `)
+    const duplicateRun = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Smoke" {
+        check "duplicate run" {
+          run MyApp
+          run MyApp
+        }
+      }
+    `)
+    const expectationBeforeRun = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Smoke" {
+        check "ordered run" {
+          expect text "Hello"
+          run MyApp
+        }
+      }
+    `)
+    const nonAppRun = await testValidateCodeWithErrors(`
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Smoke" {
+        check "non app" {
+          run MainView
+        }
+      }
+    `)
+
+    Expect(validationErrorMessages(missingCheck)).toContain(testValidationMessages.missingCheck('Smoke'))
+    const missingRunMessages = validationErrorMessages(missingRun)
+    Expect(missingRunMessages).toContain(testValidationMessages.missingRun('missing run'))
+    Expect(missingRunMessages).not.toContain(testValidationMessages.expectationBeforeRun)
+    Expect(validationErrorMessages(duplicateRun)).toContain(testValidationMessages.duplicateRun('duplicate run'))
+    Expect(validationErrorMessages(expectationBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
+    const nonAppRunMessages = validationErrorMessages(nonAppRun)
+    Expect(nonAppRunMessages.some(message => message.includes('AppDeclaration') && message.includes('MainView'))).toBe(
+      true,
+    )
+    Expect(nonAppRunMessages).not.toContain(testValidationMessages.runTarget('MainView'))
+  })
+
+  Test('validates v0 test statement placement', async () => {
+    const checkAtTopLevel = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      check "orphan" {
+        run MyApp
+      }
+    `)
+    const runInTestBlock = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Smoke" {
+        run MyApp
+      }
+    `)
+    const expectationAtTopLevel = await testValidateCodeWithErrors(`
+      expect text "Hello"
+    `)
+    const aliasInCheckBlock = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Smoke" {
+        check "renders" {
+          alias Message = "Hello"
+          run MyApp
+        }
+      }
+    `)
+    const nestedTest = await testValidateCodeWithErrors(`
+      test "Outer" {
+        test "Inner" { }
+      }
+    `)
+
+    Expect(validationErrorMessages(checkAtTopLevel)).toContain(testValidationMessages.checkPlacement)
+    const runInTestMessages = validationErrorMessages(runInTestBlock)
+    Expect(runInTestMessages).toContain(testValidationMessages.testBlock('Smoke'))
+    Expect(runInTestMessages).not.toContain(testValidationMessages.runPlacement)
+    Expect(validationErrorMessages(expectationAtTopLevel)).toContain(testValidationMessages.expectationPlacement)
+    Expect(validationErrorMessages(aliasInCheckBlock)).toContain(testValidationMessages.checkBlock('renders'))
+    const nestedTestMessages = validationErrorMessages(nestedTest)
+    Expect(nestedTestMessages).toContain(testValidationMessages.testPlacement)
+    Expect(nestedTestMessages).toContain(testValidationMessages.testBlock('Outer'))
   })
 
   Test('rejects app declarations outside the entry file', async () => {
