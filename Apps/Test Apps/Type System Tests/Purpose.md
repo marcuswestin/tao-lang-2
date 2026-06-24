@@ -4,7 +4,6 @@
 
 Exercise Tao type-system behavior through a small UI that passes typed values into views.
 This app must stay valid Tao; invalid type and validation cases belong in validator unit tests.
-`Item List Custom Type MVP.tao-next` is the non-executable acceptance sketch that preceded this slice; `Type System Tests.tao` is the executable fixture that mirrors its implemented examples.
 
 ## Belongs Here
 

@@ -24,7 +24,6 @@ Implement compile-time Tao type declarations, list/item literals, typed construc
 
 - Parser, validator, compiler, formatter, CLI, IDE, workspace, runtime, and app fixture tests cover the implemented syntax.
 - `Apps/Test Apps/Type System Tests/Type System Tests.tao` is the executable acceptance fixture.
-- `Apps/Test Apps/Type System Tests/Item List Custom Type MVP.tao-next` remains as the non-executable acceptance sketch that mirrors the implemented examples.
 - Final handoff validation is `./agent just verify`.
 
 ## Deferrals

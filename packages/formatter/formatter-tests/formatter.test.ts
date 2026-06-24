@@ -5,7 +5,6 @@ import { testFormatCode } from './test-format'
 
 const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
 const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
-const targetKitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink - Target/Kitchen Sink.test.tao-next')
 const tsFence = '```ts'
 const fence = '```'
 
@@ -16,11 +15,6 @@ Describe('Tao formatter Kitchen Sink apps', () => {
 
   Test('the current Kitchen Sink v0 test sidecar is a formatting fixed point', async () => {
     Expect(await Formatter.formatFile(kitchenSinkTestPath)).toBe(await FS.readText(kitchenSinkTestPath))
-  })
-
-  Test('the target Kitchen Sink v0 test sidecar is a formatting fixed point', async () => {
-    const targetSource = await FS.readText(targetKitchenSinkTestPath)
-    Expect(await Formatter.formatCode(targetSource)).toBe(targetSource)
   })
 })
 
