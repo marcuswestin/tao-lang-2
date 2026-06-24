@@ -39,17 +39,14 @@ Describe('tao check', () => {
     })
   })
 
-  Test('uses the nearest gitignore for directory walks', async () => {
+  Test('skips common generated and vendored directories for directory walks', async () => {
     await withTaoFixture({
-      '.gitignore': Text.stripIndent(`
-        node_modules
-        _gen_*
-        packages/old-fixtures
-      `),
       'canonical.tao': 'view MainView { }\n',
       'node_modules/pkg/ignored.tao': 'view   Ignored { }',
       '_gen_tao-app/ignored.tao': 'view   Ignored { }',
-      'packages/old-fixtures/ignored.tao': 'view   Ignored { }',
+      '.artifacts/ignored.tao': 'view   Ignored { }',
+      'Pods/ignored.tao': 'view   Ignored { }',
+      'pods/ignored.tao': 'view   Ignored { }',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 

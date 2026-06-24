@@ -9,11 +9,6 @@ const fence = '```'
 Describe('tao test', () => {
   Test('finds .tao files with Tao test declarations below a directory', async () => {
     await withTaoFixture({
-      '.gitignore': Text.stripIndent(`
-        node_modules
-        _gen_*
-        old-fixtures
-      `),
       'Alpha.test.tao': 'test "Alpha" { }\n',
       'Inline.tao': Text.stripIndent(`
         app InlineApp {
@@ -28,8 +23,10 @@ Describe('tao test', () => {
       'nested/Beta.tao': '',
       'NotATaoTest.test.tao': '// test "Comment only" { }\n',
       '_gen_tao-app/Ignored.test.tao': 'test "Ignored" { }\n',
+      '.artifacts/Ignored.test.tao': 'test "Ignored" { }\n',
       'node_modules/pkg/Ignored.test.tao': 'test "Ignored" { }\n',
-      'old-fixtures/Ignored.test.tao': 'test "Ignored" { }\n',
+      'Pods/Ignored.test.tao': 'test "Ignored" { }\n',
+      'pods/Ignored.test.tao': 'test "Ignored" { }\n',
     }, async (rootDir) => {
       const found = await findTaoTestFiles(rootDir)
 

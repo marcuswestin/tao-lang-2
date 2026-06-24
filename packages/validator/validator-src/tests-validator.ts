@@ -25,12 +25,12 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
     validateCheck(check, ctx)
   }
   for (const run of AST.streamAllContents(file).filter(AST.isRunStep)) {
-    if (!AST.isCheckDeclaration(blockOwner(run))) {
+    if (statementNeedsStepPlacementDiagnostic(run)) {
       ctx.error(testValidationMessages.runPlacement, run)
     }
   }
   for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
-    if (!AST.isCheckDeclaration(blockOwner(expectation))) {
+    if (statementNeedsStepPlacementDiagnostic(expectation)) {
       ctx.error(testValidationMessages.expectationPlacement, expectation)
     }
   }
@@ -96,4 +96,9 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
 function blockOwner(node: AST.Node): AST.Node | undefined {
   const parent = node.$container
   return AST.isBlock(parent) ? parent.$container : undefined
+}
+
+function statementNeedsStepPlacementDiagnostic(statement: AST.RunStep | AST.ExpectTextStep): boolean {
+  const owner = blockOwner(statement)
+  return !AST.isCheckDeclaration(owner) && !AST.isTestDeclaration(owner)
 }

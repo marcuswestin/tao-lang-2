@@ -4,6 +4,7 @@ import "./visibility"
 import "./terminals"
 
 entry TypesGrammarEntrypoint:
+    // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
     TypeDeclaration | ParameterTypeDeclaration | ConstructorTypeReference;
 
 TypeDeclaration:

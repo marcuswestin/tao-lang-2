@@ -3228,7 +3228,7 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(checkAtTopLevel)).toContain(testValidationMessages.checkPlacement)
     const runInTestMessages = validationErrorMessages(runInTestBlock)
     Expect(runInTestMessages).toContain(testValidationMessages.testBlock('Smoke'))
-    Expect(runInTestMessages).toContain(testValidationMessages.runPlacement)
+    Expect(runInTestMessages).not.toContain(testValidationMessages.runPlacement)
     Expect(validationErrorMessages(expectationAtTopLevel)).toContain(testValidationMessages.expectationPlacement)
     Expect(validationErrorMessages(aliasInCheckBlock)).toContain(testValidationMessages.checkBlock('renders'))
     const nestedTestMessages = validationErrorMessages(nestedTest)
