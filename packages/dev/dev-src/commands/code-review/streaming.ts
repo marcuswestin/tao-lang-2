@@ -12,6 +12,7 @@ export type StreamingRunOptions = {
   heartbeatMs?: number
   label: string
   lens?: string
+  logHeartbeat?: boolean
   model?: string
   outputFormat: 'jsonl' | 'text'
   reviewer: Reviewer
@@ -168,12 +169,14 @@ export async function runStreamingInvocation(options: StreamingRunOptions): Prom
     const lastOutputAgeMs = lastOutputAt === undefined ? undefined : Date.now() - lastOutputAt
     appendEvent({ elapsedMs, event: 'heartbeat', lastOutputAgeMs })
     writeStatus('running')
-    HCI.logProcessInfo(
-      'review',
-      `${options.label} running ${formatDuration(elapsedMs)}${
-        lastOutputAgeMs === undefined ? ', no output yet' : `, last output ${formatDuration(lastOutputAgeMs)} ago`
-      }`,
-    )
+    if (options.logHeartbeat !== false) {
+      HCI.logProcessInfo(
+        'reviews',
+        `${options.label} running ${formatDuration(elapsedMs)}${
+          lastOutputAgeMs === undefined ? ', no output yet' : `, last output ${formatDuration(lastOutputAgeMs)} ago`
+        }`,
+      )
+    }
   }, heartbeatMs)
 
   let killTimer: ReturnType<typeof setTimeout> | undefined
