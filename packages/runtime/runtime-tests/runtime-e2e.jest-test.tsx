@@ -1,3 +1,4 @@
+import { runTaoTestPlan } from '@runtime/testing/tao-test-plan'
 import TR from '@runtime/TR'
 import { FS } from '@shared'
 import { AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
@@ -5,7 +6,6 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, type ReactNode, useState } from 'react'
 import * as RN from 'react-native'
 import { compileAndRenderApp, ExpectScreen, testCompileApp, testCompileFiles } from './test-compile-app'
-import { runTaoTestPlan } from './test-tao-test-plan'
 
 AfterEach(() => {
   cleanup()
@@ -125,19 +125,55 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('cleans up rendered apps between Tao checks', async () => {
+  Test('reports Tao suite and check context for failed missing text expectations', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use BrokenTextApp from ./
+
+        test "Broken missing text" {
+          check "still renders unexpected text" {
+            run BrokenTextApp
+            expect missing text "Actual"
+          }
+        }
+      `,
+        'Main.tao': `
+        app BrokenTextApp { view MainView }
+        view MainView {
+          render Text "Actual"
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await Expect(runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /Tao check failed: Broken missing text > still renders unexpected text[\s\S]*expect missing text "Actual"[\s\S]*Main\.test\.tao:/,
+        )
+      },
+    )
+  })
+
+  Test('runs multiple Tao suites and cleans up rendered apps between Tao checks', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',
       {
         'Main.test.tao': `
         use FirstApp, SecondApp from ./
 
-        test "Isolated checks" {
+        test "First isolated suite" {
           check "first app" {
             run FirstApp
             expect text "First"
           }
+        }
 
+        test "Second isolated suite" {
           check "second app" {
             run SecondApp
             expect missing text "First"

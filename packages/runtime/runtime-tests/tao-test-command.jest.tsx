@@ -1,7 +1,7 @@
+import { createTaoTestRuntimeContext, runTaoTestPlan } from '@runtime/testing/tao-test-plan'
 import { FS, Platform } from '@shared'
 import { AfterEach, Describe, Test } from '@shared/test'
 import { cleanup } from '@testing-library/react-native'
-import { createTaoTestRuntimeContext, runTaoTestPlan } from './test-tao-test-plan'
 
 const TEST_PLAN_ENV = 'TAO_TEST_PLAN_PATHS'
 const runtimeContext = createTaoTestRuntimeContext()

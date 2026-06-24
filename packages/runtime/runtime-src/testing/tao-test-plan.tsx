@@ -6,7 +6,7 @@ import {
   type CompiledRuntimeApp,
   renderCompiledApp,
   type RuntimeScreen,
-} from './test-compile-app'
+} from './compile-app'
 
 type CompiledTestPlan = Awaited<ReturnType<typeof Workspace.compileTestPlan>>
 type CompiledTestSuite = CompiledTestPlan['suites'][number]
