@@ -15,6 +15,7 @@ export const StatementsCompiler = {
       ExpectTextStep: Compile.ExpectTextStep,
       Injection: Compile.Injection,
       LayoutDeclaration: Compile.LayoutDeclaration,
+      PressTextStep: Compile.PressTextStep,
       ProjectDeclaration: Compile.ProjectDeclaration,
       RenderStatement: Compile.RenderStatement,
       RunStep: Compile.RunStep,

@@ -1,17 +1,37 @@
-import Compiler, { type CompileResult, type TaoTestPlan } from '@compiler'
+import Compiler, { type CompileResult } from '@compiler'
 import { Langium, Parser, type ParseResult } from '@parser'
 import { Assert, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { createWorkspaceServices, type WorkspaceServices } from './langium-services'
 import { createProjectContext, pathIsWithin, type ProjectContext } from './workspace-utils'
 
+type CompileTestPlanOptions = {
+  skipValidation?: boolean
+}
+
 /** Workspace coordinates project-rooted parsing, validation, and compilation. */
 export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> {
+  private static readonly sharedWorkspaces = new Map<string, Promise<Workspace>>()
+
   protected constructor(protected readonly project: ProjectContext<ServicesT>) {}
 
   /** open creates a Workspace rooted at `directoryPath`. */
   static async open(directoryPath: string): Promise<Workspace> {
     return new Workspace(await createProjectContext(directoryPath, createWorkspaceServices))
+  }
+
+  /** shared returns a process-shared Workspace rooted at `directoryPath`. */
+  static async shared(directoryPath: string): Promise<Workspace> {
+    const root = FS.resolvePath(directoryPath)
+    let workspace = Workspace.sharedWorkspaces.get(root)
+    if (workspace === undefined) {
+      workspace = Workspace.open(root).catch(error => {
+        Workspace.sharedWorkspaces.delete(root)
+        throw error
+      })
+      Workspace.sharedWorkspaces.set(root, workspace)
+    }
+    return await workspace
   }
 
   /** parse opens a Workspace around `entryFile` and parses it. */
@@ -33,9 +53,9 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   /** compileTestPlan opens a Workspace around `entryFile` and compiles v0 Tao tests. */
-  static async compileTestPlan(entryFile: string): Promise<TaoTestPlan> {
+  static async compileTestPlan(entryFile: string, options: CompileTestPlanOptions = {}): Promise<Compiler.TestPlan> {
     const { entryPath, workspace } = await Workspace.openForEntry(entryFile)
-    return await workspace.compileTestPlan(entryPath)
+    return await workspace.compileTestPlan(entryPath, options)
   }
 
   private static async openForEntry(entryFile: string): Promise<{ entryPath: string; workspace: Workspace }> {
@@ -81,9 +101,9 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   /** compileTestPlan compiles v0 Tao tests for an entry file. */
-  async compileTestPlan(entryFile: string): Promise<TaoTestPlan> {
-    const validationResult = await this.validate(entryFile)
-    return Compiler.compileTestPlan(validationResult, this.compilerContext())
+  async compileTestPlan(entryFile: string, options: CompileTestPlanOptions = {}): Promise<Compiler.TestPlan> {
+    const result = options.skipValidation ? await this.parse(entryFile) : await this.validate(entryFile)
+    return Compiler.compileTestPlan(result, this.compilerContext())
   }
 
   private parserContext(): Parser.Context {
@@ -110,7 +130,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   private resolveInsideRoot(path: string): string {
-    const resolvedPath = FS.resolvePath(path, { cwd: this.project.root })
+    const resolvedPath = FS.resolvePath(path, this.project.root)
     Assert(pathIsWithin(resolvedPath, this.project.root), 'workspace path is inside the workspace root', {
       path: resolvedPath,
       root: this.project.root,

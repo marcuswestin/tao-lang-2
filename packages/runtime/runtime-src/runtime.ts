@@ -1,7 +1,8 @@
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { Workspace } from '@workspace'
 
 type GenerateAppOptions = {
+  cwd?: string
   runtimePackageRoot?: string
 }
 
@@ -14,9 +15,9 @@ type GeneratedApp = {
 /** generateApp generates the runtime app module from a Tao app file. */
 async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Promise<GeneratedApp> {
   const runtimePackageRoot = opts.runtimePackageRoot ?? defaultRuntimePackageRoot()
-  const sourcePath = FS.resolvePath(appPath)
-  const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', { cwd: runtimePackageRoot })
-  const generatedAppRoot = FS.resolvePath('_gen_tao-app', { cwd: runtimePackageRoot })
+  const sourcePath = FS.resolvePath(appPath, opts.cwd)
+  const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', runtimePackageRoot)
+  const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
   const compiled = await Workspace.compile(sourcePath)
 
   await writeGeneratedFiles(generatedAppRoot, compiled.files)
@@ -36,7 +37,7 @@ const Runtime = {
 export default Runtime
 
 function defaultRuntimePackageRoot(): string {
-  return FS.repoPath('packages/runtime')
+  return Repo.resolvePath('packages/runtime')
 }
 
 async function writeGeneratedFiles(
@@ -45,7 +46,7 @@ async function writeGeneratedFiles(
 ): Promise<void> {
   await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)))
   for (const file of files) {
-    await writeGeneratedApp(FS.resolvePath(file.relativePath, { cwd: outputRoot }), file.code)
+    await writeGeneratedApp(FS.resolvePath(file.relativePath, outputRoot), file.code)
   }
   await removeEmptyGeneratedDirectories(outputRoot)
 }

@@ -5,15 +5,6 @@ import Validator, { type ValidationResult } from '@validator'
 import RuntimeGen from './codegen/app/runtime-gen'
 import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
 
-export type {
-  TaoTestCheck,
-  TaoTestExpectation,
-  TaoTestPlan,
-  TaoTestRun,
-  TaoTestSourceLocation,
-  TaoTestSuite,
-} from './tests-compiler'
-
 const codeProjectRoot = '/__tao__'
 
 /** CompiledFile declares one generated TypeScript output file. */

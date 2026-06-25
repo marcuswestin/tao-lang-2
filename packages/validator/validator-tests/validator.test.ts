@@ -1,7 +1,7 @@
 import { Packages, Type } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
-import { Diagnostics, FS, Text } from '@shared'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { Diagnostics, FS, Repo, Text } from '@shared'
+import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { ValidationResult } from '@validator'
 import { Workspace } from '@workspace'
 import { ActionsValidator } from '../validator-src/ActionsValidator'
@@ -22,10 +22,10 @@ import Validator from '../validator-src/validator'
 import { ViewsValidator } from '../validator-src/views-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
-const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
-const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
-const stateActionMvpPath = FS.repoPath('Apps/Test Apps/State Action MVP/State Action MVP.tao')
+const kitchenSinkPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
+const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
+const stateActionMvpPath = Repo.resolvePath('Apps/Test Apps/State Action MVP/State Action MVP.tao')
 const tsFence = '```ts'
 const fence = '```'
 const aliasValidationMessages = AliasesValidator.messages
@@ -40,9 +40,9 @@ async function withValidationParse<T>(
     workspace: Workspace
   }) => T | Promise<T>,
 ): Promise<T> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-validator-parse-', { cwd: FS.tmpdir() }))
+  const rootDir = await mkTestDir('tao-validator-parse-')
   try {
-    const sourcePath = FS.resolvePath('Source.tao', { cwd: rootDir })
+    const sourcePath = FS.resolvePath('Source.tao', rootDir)
     await FS.writeText(sourcePath, Text.stripIndent(source))
     const workspace = await Workspace.open(rootDir)
     const validated = await workspace.validate(sourcePath)
@@ -3153,6 +3153,20 @@ Describe('Tao validator structural diagnostics', () => {
         }
       }
     `)
+    const pressBeforeRun = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Smoke" {
+        check "ordered press" {
+          press text "Add"
+          run MyApp
+        }
+      }
+    `)
     const nonAppRun = await testValidateCodeWithErrors(`
       view MainView {
         render inject ${tsFence}
@@ -3165,6 +3179,21 @@ Describe('Tao validator structural diagnostics', () => {
         }
       }
     `)
+    const unsupportedSelector = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Smoke" {
+        check "selectors" {
+          run MyApp
+          expect role "Add"
+          press role "Add"
+        }
+      }
+    `)
 
     Expect(validationErrorMessages(missingCheck)).toContain(testValidationMessages.missingCheck('Smoke'))
     const missingRunMessages = validationErrorMessages(missingRun)
@@ -3172,11 +3201,15 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(missingRunMessages).not.toContain(testValidationMessages.expectationBeforeRun)
     Expect(validationErrorMessages(duplicateRun)).toContain(testValidationMessages.duplicateRun('duplicate run'))
     Expect(validationErrorMessages(expectationBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
+    Expect(validationErrorMessages(pressBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
     const nonAppRunMessages = validationErrorMessages(nonAppRun)
     Expect(nonAppRunMessages.some(message => message.includes('AppDeclaration') && message.includes('MainView'))).toBe(
       true,
     )
     Expect(nonAppRunMessages).not.toContain(testValidationMessages.runTarget('MainView'))
+    const selectorMessages = validationErrorMessages(unsupportedSelector)
+    Expect(selectorMessages).toContain(testValidationMessages.selector('role'))
+    Expect(selectorMessages.filter(message => message === testValidationMessages.selector('role'))).toHaveLength(2)
   })
 
   Test('validates v0 test statement placement', async () => {
@@ -3205,6 +3238,9 @@ Describe('Tao validator structural diagnostics', () => {
     const expectationAtTopLevel = await testValidateCodeWithErrors(`
       expect text "Hello"
     `)
+    const pressAtTopLevel = await testValidateCodeWithErrors(`
+      press text "Add"
+    `)
     const aliasInCheckBlock = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
@@ -3230,6 +3266,7 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(runInTestMessages).toContain(testValidationMessages.testBlock('Smoke'))
     Expect(runInTestMessages).not.toContain(testValidationMessages.runPlacement)
     Expect(validationErrorMessages(expectationAtTopLevel)).toContain(testValidationMessages.expectationPlacement)
+    Expect(validationErrorMessages(pressAtTopLevel)).toContain(testValidationMessages.pressPlacement)
     Expect(validationErrorMessages(aliasInCheckBlock)).toContain(testValidationMessages.checkBlock('renders'))
     const nestedTestMessages = validationErrorMessages(nestedTest)
     Expect(nestedTestMessages).toContain(testValidationMessages.testPlacement)

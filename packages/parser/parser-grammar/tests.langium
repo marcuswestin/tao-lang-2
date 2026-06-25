@@ -13,10 +13,16 @@ TestDeclaration:
 CheckDeclaration:
     'check' name=STRING block=Block;
 
-type CheckStep = RunStep | ExpectTextStep;
+type CheckStep = RunStep | PressTextStep | ExpectTextStep;
 
 RunStep:
     'run' app=[AppDeclaration:ID];
 
+PressTextStep:
+    'press' selector=TestSelector text=STRING;
+
 ExpectTextStep:
-    'expect' missing?='missing'? 'text' text=STRING;
+    'expect' missing?='missing'? selector=TestSelector text=STRING;
+
+TestSelector returns string:
+    ID | 'text';
