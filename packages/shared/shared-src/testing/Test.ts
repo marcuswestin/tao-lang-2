@@ -1,9 +1,12 @@
-import { Assert } from './core/Assert'
-import * as Text from './core/Text'
-import * as FS from './FS'
+import { Assert } from '../core/Assert'
+import * as Text from '../core/Text'
+import * as FS from '../FS'
 
 /** AfterEach wraps the active test runner's afterEach hook. */
 export const AfterEach = createTestRunnerFunction('afterEach')
+
+/** AfterAll wraps the active test runner's afterAll hook. */
+export const AfterAll = createTestRunnerFunction('afterAll')
 
 /** Describe wraps the active test runner's describe grouping API. */
 export const Describe = createTestRunnerFunction('describe')
@@ -21,20 +24,25 @@ export const Jest: JestApi = {
 /** Test wraps the active test runner's test case API. */
 export const Test = createTestRunnerFunction('test')
 
+/** mkTestDir creates a unique temporary directory under the host temp directory. */
+export async function mkTestDir(prefix: string): Promise<string> {
+  return await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir()))
+}
+
 /** withTaoFiles creates temporary Tao source files for a test and removes them afterward. */
 export async function withTaoFiles<const Files extends Record<string, string>>(
   prefix: string,
   files: Files,
   testFunction: (paths: { [Path in keyof Files]: string }, rootDir: string) => Promise<void> | void,
 ): Promise<void> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath(prefix, { cwd: FS.tmpdir() }))
+  const rootDir = await mkTestDir(prefix)
   const paths = {} as { [Path in keyof Files]: string }
 
   try {
     for (const relativePath of Object.keys(files) as Array<keyof Files & string>) {
       const source = files[relativePath]
       Assert.defined(source, 'Tao test fixture source exists', { relativePath })
-      const path = FS.resolvePath(relativePath, { cwd: rootDir })
+      const path = FS.resolvePath(relativePath, rootDir)
       await FS.writeText(path, Text.stripIndent(source))
       paths[relativePath] = path
     }
@@ -48,6 +56,7 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
 /** setTestRuntime configures the active runner used by Tao test wrappers. */
 export function setTestRuntime(nextRuntime: TestRuntime): void {
   testRuntime = nextRuntime
+  copyFunctionProperties(AfterAll, nextRuntime.afterAll)
   copyFunctionProperties(AfterEach, nextRuntime.afterEach)
   copyFunctionProperties(Describe, nextRuntime.describe)
   copyFunctionProperties(Expect, nextRuntime.expect)
@@ -70,6 +79,7 @@ export type JestApi = {
 
 /** TestRuntime provides the active test runner functions for shared Tao test wrappers. */
 export type TestRuntime = {
+  afterAll: TestRunnerFunction
   afterEach: TestRunnerFunction
   describe: TestRunnerFunction
   expect: TestRunnerExpect
@@ -93,7 +103,7 @@ function createExpectFunction(): TestRunnerExpect {
   return ((...args: any[]) => getTestRuntime().expect(...args)) as TestRunnerExpect
 }
 
-function createTestRunnerFunction(key: 'afterEach' | 'describe' | 'test'): TestRunnerFunction {
+function createTestRunnerFunction(key: 'afterAll' | 'afterEach' | 'describe' | 'test'): TestRunnerFunction {
   return ((...args: any[]) => getTestRuntime()[key](...args)) as TestRunnerFunction
 }
 

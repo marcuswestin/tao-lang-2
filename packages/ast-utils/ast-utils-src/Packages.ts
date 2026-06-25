@@ -1,5 +1,5 @@
 import { AST, type PackageResolver } from '@parser'
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 
 /** Packages exposes Tao package discovery, import resolution, and visibility helpers. */
 export namespace Packages {
@@ -82,18 +82,6 @@ export namespace Packages {
     }
   }
 
-  const TAO_DIRECTORY_IGNORE_NAMES = new Set([
-    'node_modules',
-    '.git',
-    '.artifacts',
-    '.direnv',
-    '.devenv',
-    '.expo',
-    'ios',
-    'android',
-    'pods',
-  ])
-
   /** createContext creates shared package lookup state for one project root. */
   export async function createContext(projectRoot: string): Promise<Context> {
     const resolvedProjectRoot = FS.resolvePath(projectRoot)
@@ -107,44 +95,17 @@ export namespace Packages {
     const resolvedRoot = FS.resolvePath(projectRoot)
     const packages = new Map<string, string[]>()
     if (await FS.isDirectory(resolvedRoot)) {
-      await collectDirectories(resolvedRoot, packages)
+      for (const path of await Repo.directoriesUnder(resolvedRoot, { namePrefix: '@' })) {
+        const name = FS.basename(path)
+        const paths = packages.get(name) ?? []
+        paths.push(path)
+        packages.set(name, paths)
+      }
     }
     for (const paths of packages.values()) {
       paths.sort()
     }
     return { projectRoot: resolvedRoot, packages }
-  }
-
-  /** shouldSkipTaoDirectory returns whether Tao source discovery should ignore a directory name. */
-  export function shouldSkipTaoDirectory(name: string): boolean {
-    return name.startsWith('.')
-      || TAO_DIRECTORY_IGNORE_NAMES.has(name.toLowerCase())
-  }
-
-  async function collectDirectories(directoryPath: string, packages: Map<string, string[]>): Promise<void> {
-    for (const name of await FS.listDir(directoryPath)) {
-      if (shouldSkipScanDirectory(name)) {
-        continue
-      }
-      const path = FS.resolvePath(name, { cwd: directoryPath })
-      if (!await FS.isDirectory(path)) {
-        continue
-      }
-      if (isDirectoryName(name)) {
-        const paths = packages.get(name) ?? []
-        paths.push(path)
-        packages.set(name, paths)
-      }
-      await collectDirectories(path, packages)
-    }
-  }
-
-  function shouldSkipScanDirectory(name: string): boolean {
-    return shouldSkipTaoDirectory(name)
-  }
-
-  function isDirectoryName(name: string): boolean {
-    return name.startsWith('@') && name.length > 1
   }
 
   /** resolve resolves a Tao use path using local packages, relative paths, and the stdlib root. */
@@ -160,7 +121,7 @@ export namespace Packages {
       return {
         importPath,
         relation: 'stdlib',
-        targetPath: FS.resolvePath(importPath.slice(1), { cwd: defaultStdLibRoot() }),
+        targetPath: FS.resolvePath(importPath.slice(1), defaultStdLibRoot()),
         candidateMode: 'direct',
       }
     }
@@ -213,7 +174,7 @@ export namespace Packages {
 
     const packagePath = packagePaths[0]!
     const subpath = importPath === packageName ? '' : importPath.slice(packageName.length + 1)
-    const targetPath = subpath ? FS.resolvePath(subpath, { cwd: packagePath }) : packagePath
+    const targetPath = subpath ? FS.resolvePath(subpath, packagePath) : packagePath
     const containingPackage = containingPath(request.fromFilePath, context.index)
     return {
       importPath,
@@ -234,7 +195,7 @@ export namespace Packages {
     request: ResolveRequest,
   ): Resolution {
     const fromDirectory = FS.dirname(request.fromFilePath)
-    const targetPath = FS.resolvePath(importPath, { cwd: fromDirectory })
+    const targetPath = FS.resolvePath(importPath, fromDirectory)
     const sourcePackage = containingPath(request.fromFilePath, context.index)
     const targetPackage = containingPath(targetPath, context.index)
 
@@ -298,7 +259,7 @@ export namespace Packages {
   }
 
   function defaultStdLibRoot(): string {
-    return FS.repoPath('packages/runtime/tao-stdlib')
+    return Repo.resolvePath('packages/runtime/tao-stdlib')
   }
 
   async function directCandidateFilePaths(resolution: Resolution): Promise<string[]> {
@@ -319,7 +280,7 @@ export namespace Packages {
     const names = await FS.listDir(targetPath)
     return names
       .filter(isImportableTaoSourceName)
-      .map(name => FS.resolvePath(name, { cwd: targetPath }))
+      .map(name => FS.resolvePath(name, targetPath))
   }
 
   /** candidateFilePaths returns Tao source paths selected by an import resolution. */
@@ -344,25 +305,9 @@ export namespace Packages {
     if (!await FS.isDirectory(targetPath)) {
       return []
     }
-    const files: string[] = []
-    await collectTaoFiles(targetPath, targetPath, files)
-    return files.sort()
-  }
-
-  async function collectTaoFiles(rootPath: string, directoryPath: string, files: string[]): Promise<void> {
-    for (const name of await FS.listDir(directoryPath)) {
-      if (shouldSkipScanDirectory(name) || isDirectoryName(name)) {
-        continue
-      }
-      const path = FS.resolvePath(name, { cwd: directoryPath })
-      if (await FS.isDirectory(path)) {
-        await collectTaoFiles(rootPath, path, files)
-        continue
-      }
-      if (isImportableTaoSourceName(name)) {
-        files.push(path)
-      }
-    }
+    return (await Repo.filesUnder(targetPath, { extensions: ['.tao'] }))
+      .filter(isImportableTaoSourcePath)
+      .filter(path => !pathCrossesPackageDirectory(targetPath, path))
   }
 
   /** targetMatches returns whether a resolution target includes a Tao file path. */
@@ -437,9 +382,16 @@ export namespace Packages {
     if (relativeDirectory === '.') {
       return true
     }
-    return relativeDirectory.split('/').every(segment =>
-      segment.length > 0 && !shouldSkipScanDirectory(segment) && !isDirectoryName(segment)
-    )
+    return relativeDirectory.split('/').every(segment => segment.length > 0 && !isPackageDirectoryName(segment))
+  }
+
+  function pathCrossesPackageDirectory(rootPath: string, filePath: string): boolean {
+    const relativeDirectory = FS.dirname(FS.relativePath(rootPath, filePath))
+    return relativeDirectory !== '.' && relativeDirectory.split('/').some(isPackageDirectoryName)
+  }
+
+  function isPackageDirectoryName(name: string): boolean {
+    return name.startsWith('@') && name.length > 1
   }
 
   /** isVisible returns whether a declaration visibility is accessible through a resolved relation. */

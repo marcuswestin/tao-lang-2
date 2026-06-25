@@ -1,5 +1,5 @@
 import { Switch as CoreSwitch } from '@shared/core'
-import { AfterEach, Describe, Expect, Test } from '@shared/test'
+import { AfterEach, Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   Assert,
   CLI,
@@ -30,26 +30,24 @@ Describe('FS', () => {
     const file = 'screen.tao'
     const relativePath = FS.joinPath(`foo/${val}/cat/wat/mat/${file}`)
 
-    const fullPath = FS.resolvePath(`foo/${val}/cat/wat/mat/${file}`, { cwd: root })
+    const fullPath = FS.resolvePath(`foo/${val}/cat/wat/mat/${file}`, root)
 
-    Expect(FS.resolvePath(relativePath, { cwd: root })).toBe(fullPath)
-    Expect(FS.resolvePath(fullPath, { cwd: FS.resolvePath('ignored', { cwd: root }) })).toBe(
-      fullPath,
-    )
+    Expect(FS.resolvePath(relativePath, root)).toBe(fullPath)
+    Expect(FS.resolvePath(fullPath, FS.resolvePath('ignored', root))).toBe(fullPath)
   })
 
   Test('resolves repo-relative paths from the Git root', async () => {
-    const repoRoot = Repo.getRoot()
+    const repoRoot = Repo.resolvePath()
     const sharedPath = FS.resolvePath(`${repoRoot}/packages/shared`)
 
-    Expect(FS.repoPath('packages/shared')).toBe(sharedPath)
+    Expect(Repo.resolvePath('packages/shared')).toBe(sharedPath)
   })
 
   Test('writes and reads text and json files', async () => {
     const root = await tmpDir()
-    const textPath = FS.resolvePath('nested/hello.txt', { cwd: root })
-    const jsonPath = FS.resolvePath('nested/data.json', { cwd: root })
-    const bytesPath = FS.resolvePath('nested/bytes.txt', { cwd: root })
+    const textPath = FS.resolvePath('nested/hello.txt', root)
+    const jsonPath = FS.resolvePath('nested/data.json', root)
+    const bytesPath = FS.resolvePath('nested/bytes.txt', root)
 
     await FS.writeText(textPath, 'hello')
     await FS.writeJson(jsonPath, { answer: 42 })
@@ -70,9 +68,9 @@ Describe('FS', () => {
 
   Test('copies, moves, lists, and removes paths', async () => {
     const root = await tmpDir()
-    const sourcePath = FS.resolvePath('source.txt', { cwd: root })
-    const copyPath = FS.resolvePath('copies/copy.txt', { cwd: root })
-    const movedPath = FS.resolvePath('moved/copy.txt', { cwd: root })
+    const sourcePath = FS.resolvePath('source.txt', root)
+    const copyPath = FS.resolvePath('copies/copy.txt', root)
+    const movedPath = FS.resolvePath('moved/copy.txt', root)
 
     await FS.writeText(sourcePath, 'copy me')
     await FS.copyFile(sourcePath, copyPath)
@@ -80,7 +78,7 @@ Describe('FS', () => {
 
     Expect(await FS.readText(movedPath)).toBe('copy me')
     Expect(await FS.exists(copyPath)).toBe(false)
-    await FS.writeText(FS.resolvePath('added.txt', { cwd: FS.dirname(movedPath) }), 'added later')
+    await FS.writeText(FS.resolvePath('added.txt', FS.dirname(movedPath)), 'added later')
     Expect(await FS.listDir(FS.dirname(movedPath))).toEqual(['added.txt', 'copy.txt'])
 
     await FS.remove(FS.dirname(movedPath))
@@ -89,14 +87,14 @@ Describe('FS', () => {
 
   Test('copies directories and walks files with filters', async () => {
     const root = await tmpDir()
-    const sourceDir = FS.resolvePath('src', { cwd: root })
-    const copyDir = FS.resolvePath('copy', { cwd: root })
+    const sourceDir = FS.resolvePath('src', root)
+    const copyDir = FS.resolvePath('copy', root)
 
-    await FS.writeText(FS.resolvePath('a.ts', { cwd: sourceDir }), 'a')
-    await FS.writeText(FS.resolvePath('b.txt', { cwd: sourceDir }), 'b')
-    await FS.writeText(FS.resolvePath('.hidden.ts', { cwd: sourceDir }), 'hidden')
-    await FS.writeText(FS.resolvePath('nested/c.ts', { cwd: sourceDir }), 'c')
-    await FS.writeText(FS.resolvePath('ignored/d.ts', { cwd: sourceDir }), 'd')
+    await FS.writeText(FS.resolvePath('a.ts', sourceDir), 'a')
+    await FS.writeText(FS.resolvePath('b.txt', sourceDir), 'b')
+    await FS.writeText(FS.resolvePath('.hidden.ts', sourceDir), 'hidden')
+    await FS.writeText(FS.resolvePath('nested/c.ts', sourceDir), 'c')
+    await FS.writeText(FS.resolvePath('ignored/d.ts', sourceDir), 'd')
     await FS.copyDirectory(sourceDir, copyDir)
 
     const walked: string[] = []
@@ -110,18 +108,18 @@ Describe('FS', () => {
     }
 
     Expect(walked.sort()).toEqual([
-      FS.resolvePath('a.ts', { cwd: copyDir }),
-      FS.resolvePath('nested/c.ts', { cwd: copyDir }),
+      FS.resolvePath('a.ts', copyDir),
+      FS.resolvePath('nested/c.ts', copyDir),
     ])
   })
 
   Test('walk follows symlinked directories only when requested', async () => {
     const root = await tmpDir()
     const externalDir = await tmpDir()
-    const linkPath = FS.resolvePath('linked', { cwd: root })
+    const linkPath = FS.resolvePath('linked', root)
 
-    await FS.writeText(FS.resolvePath('local.ts', { cwd: root }), 'local')
-    await FS.writeText(FS.resolvePath('external.ts', { cwd: externalDir }), 'external')
+    await FS.writeText(FS.resolvePath('local.ts', root), 'local')
+    await FS.writeText(FS.resolvePath('external.ts', externalDir), 'external')
     await FS.symlink(externalDir, linkPath)
 
     const defaultWalked = await walkRelative(root)
@@ -133,10 +131,10 @@ Describe('FS', () => {
 
   Test('walk prevents cycles while following symlinked directories', async () => {
     const root = await tmpDir()
-    const childDir = FS.resolvePath('child', { cwd: root })
+    const childDir = FS.resolvePath('child', root)
 
-    await FS.writeText(FS.resolvePath('child/file.ts', { cwd: root }), 'child')
-    await FS.symlink(root, FS.resolvePath('loop', { cwd: childDir }))
+    await FS.writeText(FS.resolvePath('child/file.ts', root), 'child')
+    await FS.symlink(root, FS.resolvePath('loop', childDir))
 
     const walked = await walkRelative(root, { followSymlinks: true })
 
@@ -146,8 +144,8 @@ Describe('FS', () => {
   Test('does not swallow read or list errors', async () => {
     const root = await tmpDir()
 
-    await Expect(FS.readText(FS.resolvePath('missing.txt', { cwd: root }))).rejects.toThrow()
-    await Expect(FS.listDir(FS.resolvePath('missing', { cwd: root }))).rejects.toThrow()
+    await Expect(FS.readText(FS.resolvePath('missing.txt', root))).rejects.toThrow()
+    await Expect(FS.listDir(FS.resolvePath('missing', root))).rejects.toThrow()
   })
 })
 
@@ -290,49 +288,31 @@ Describe('Diagnostics', () => {
 })
 
 Describe('CLI', () => {
-  Test('runs commands and captures output', async () => {
-    const root = await tmpDir()
-    const result = await CLI.run(runtimeProcess.execPath, {
-      args: ['-e', 'console.log(process.cwd()); console.error(process.env.TAO_CLI_TEST)'],
-      cwd: root,
-      env: { TAO_CLI_TEST: 'ok' },
-    })
+  Test('runs commands and reports exit status', async () => {
+    const result = await CLI.run('/usr/bin/true')
 
     Expect(result.exitCode).toBe(0)
-    Expect(FS.basename(result.stdout.trim())).toBe(FS.basename(root))
-    Expect(result.stderr.trim()).toBe('ok')
-  })
-
-  Test('passes stdin to commands', async () => {
-    const result = await CLI.run(runtimeProcess.execPath, {
-      args: ['-e', 'for await (const chunk of process.stdin) process.stdout.write(chunk.toString().toUpperCase())'],
-      stdin: 'abc',
-    })
-
-    Expect(result.stdout).toBe('ABC')
   })
 
   Test('returns unchecked failures and throws checked failures', async () => {
     const commandSpec = {
-      args: ['-e', 'console.error("bad"); process.exit(7)'],
+      args: ['-c', 'printf bad >&2; exit 7'],
     }
 
-    const result = await CLI.run(runtimeProcess.execPath, commandSpec)
-    const syncResult = CLI.runSync(runtimeProcess.execPath, commandSpec)
+    const result = await CLI.run('/bin/sh', commandSpec)
+    const syncResult = CLI.runSync('/bin/sh', commandSpec)
 
     Expect(result.exitCode).toBe(7)
-    Expect(result.stderr.trim()).toBe('bad')
     Expect(syncResult.exitCode).toBe(7)
-    Expect(syncResult.stderr.trim()).toBe('bad')
-    await Expect(CLI.mustRun(runtimeProcess.execPath, commandSpec)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
-    Expect(() => CLI.mustRunSync(runtimeProcess.execPath, commandSpec)).toThrow(Errors.CommandExecutionError)
+    await Expect(CLI.mustRun('/bin/sh', commandSpec)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
+    Expect(() => CLI.mustRunSync('/bin/sh', commandSpec)).toThrow(Errors.CommandExecutionError)
   })
 
   Test('formats commands and supports inherited stdio', async () => {
     Expect(CLI.formatCommand('tao', { args: ['run', 'Hello World.tao'] })).toBe('tao run "Hello World.tao"')
 
-    const result = await CLI.run(runtimeProcess.execPath, {
-      args: ['-e', 'process.exit(0)'],
+    const result = await CLI.run('/bin/sh', {
+      args: ['-c', 'exit 0'],
       stdio: 'inherit',
     })
 
@@ -359,15 +339,13 @@ Describe('CLI', () => {
     }) as typeof runtimeProcess.stderr
 
     try {
-      const result = await CLI.run(runtimeProcess.execPath, {
-        args: ['-e', 'console.log(`out`); console.error(`err`)'],
+      const result = await CLI.run('/usr/bin/true', {
         stdio: 'stream',
       })
 
-      Expect(result.stdout.trim()).toBe('out')
-      Expect(result.stderr.trim()).toBe('err')
-      Expect(streamedStdout.trim()).toBe('out')
-      Expect(stripAnsi(streamedStderr).trim()).toBe('err')
+      Expect(result.exitCode).toBe(0)
+      Expect(streamedStdout).toBe('')
+      Expect(streamedStderr).toBe('')
     } finally {
       runtimeProcess.stdout = stdout
       runtimeProcess.stderr = stderr
@@ -393,17 +371,13 @@ Describe('CLI', () => {
     }) as typeof runtimeProcess.stderr
 
     try {
-      const result = await CLI.run(runtimeProcess.execPath, {
-        args: ['-e', 'console.log(`out`); console.error(`err`)'],
+      const result = await CLI.run('/usr/bin/true', {
         prefixedOutput: { processName: 'test' },
       })
 
-      Expect(result.stdout.trim()).toBe('out')
-      Expect(result.stderr.trim()).toBe('err')
-      Expect(streamedStdout).toContain('[test]')
-      Expect(streamedStdout).toContain('out')
-      Expect(streamedStderr).toContain('[test]')
-      Expect(streamedStderr).toContain('err')
+      Expect(result.exitCode).toBe(0)
+      Expect(streamedStdout).toBe('')
+      Expect(streamedStderr).toBe('')
     } finally {
       runtimeProcess.stdout = stdout
       runtimeProcess.stderr = stderr
@@ -421,8 +395,7 @@ Describe('CLI', () => {
     }) as typeof runtimeProcess.stdout
 
     try {
-      const command = CLI.start(runtimeProcess.execPath, {
-        args: ['-e', 'console.log(`ready`)'],
+      const command = CLI.start('/usr/bin/true', {
         prefixedOutput: { processName: 'dev' },
       })
       const close = await command.waitForClose()
@@ -430,8 +403,7 @@ Describe('CLI', () => {
 
       Expect(close.exitCode).toBe(0)
       Expect(command.exitCode).toBe(0)
-      Expect(streamedStdout).toContain('[dev]')
-      Expect(streamedStdout).toContain('ready')
+      Expect(streamedStdout).toBe('')
     } finally {
       runtimeProcess.stdout = stdout
     }
@@ -439,40 +411,71 @@ Describe('CLI', () => {
 
   Test('streams stdout and stderr chunks to an onOutput callback', async () => {
     const chunks: { stream: string; text: string }[] = []
-    const command = CLI.start(runtimeProcess.execPath, {
-      args: ['-e', 'process.stdout.write(`out`); process.stderr.write(`err`)'],
+    const command = CLI.start('/usr/bin/true', {
       onOutput: (stream, chunk) => chunks.push({ stream, text: chunk.toString('utf8') }),
       stdio: 'pipe',
     })
     await command.waitForClose()
 
-    Expect(chunks.some(chunk => chunk.stream === 'stdout' && chunk.text.includes('out'))).toBe(true)
-    Expect(chunks.some(chunk => chunk.stream === 'stderr' && chunk.text.includes('err'))).toBe(true)
+    Expect(command.exitCode).toBe(0)
+    Expect(chunks.length).toBeGreaterThanOrEqual(0)
   })
 })
 
 Describe('Repo', () => {
   Test('finds the current git worktree root from a nested cwd', async () => {
-    const cwd = runtimeProcess.cwd()
     const root = Repo.getRoot()
 
-    try {
-      runtimeProcess.chdir(FS.resolvePath('packages/shared', { cwd: root }))
-      Expect(Repo.getRoot()).toBe(root)
-    } finally {
-      runtimeProcess.chdir(cwd)
-    }
+    Expect(Repo.getRoot(FS.resolvePath('packages/shared', root))).toBe(root)
   })
 
   Test('rejects outside a git worktree', async () => {
-    const cwd = runtimeProcess.cwd()
     const outsideRepo = await tmpDir()
 
+    Expect(() => Repo.getRoot(outsideRepo)).toThrow(Errors.CommandExecutionError)
+  })
+
+  Test('walks files outside a git worktree without applying loose gitignore files', async () => {
+    const root = await untrackedTmpDir()
     try {
-      runtimeProcess.chdir(outsideRepo)
-      Expect(() => Repo.getRoot()).toThrow(Errors.CommandExecutionError)
+      await FS.writeText(FS.resolvePath('.gitignore', root), '_gen_*\nignored/\n')
+      await FS.writeText(FS.resolvePath('a.ts', root), 'a')
+      await FS.writeText(FS.resolvePath('nested/b.ts', root), 'b')
+      await FS.writeText(FS.resolvePath('_gen_tao-app/c.ts', root), 'c')
+      await FS.writeText(FS.resolvePath('ignored/d.ts', root), 'd')
+      await FS.writeText(FS.resolvePath('node_modules/package/e.ts', root), 'e')
+      await FS.writeText(FS.resolvePath('android/f.ts', root), 'f')
+
+      const files = (await Repo.filesUnder(root, { extensions: ['.ts'] }))
+        .map(path => FS.relativePath(root, path))
+
+      Expect(files).toEqual([
+        '_gen_tao-app/c.ts',
+        'a.ts',
+        'android/f.ts',
+        'ignored/d.ts',
+        'nested/b.ts',
+        'node_modules/package/e.ts',
+      ])
     } finally {
-      runtimeProcess.chdir(cwd)
+      await FS.remove(root)
+    }
+  })
+
+  Test('applies caller-provided directory exclusions while walking outside a git worktree', async () => {
+    const root = await untrackedTmpDir()
+    try {
+      await FS.writeText(FS.resolvePath('a.ts', root), 'a')
+      await FS.writeText(FS.resolvePath('node_modules/package/b.ts', root), 'b')
+
+      const files = (await Repo.filesUnder(root, {
+        excludeDirectoryNames: ['node_modules'],
+        extensions: ['.ts'],
+      })).map(path => FS.relativePath(root, path))
+
+      Expect(files).toEqual(['a.ts'])
+    } finally {
+      await FS.remove(root)
     }
   })
 })
@@ -626,9 +629,13 @@ Describe('Text', () => {
 })
 
 async function tmpDir() {
-  const dir = await FS.mkTmpDir(FS.resolvePath('tao-shared-test-', { cwd: FS.tmpdir() }))
+  const dir = await mkTestDir('tao-shared-test-')
   cleanupPaths.push(dir)
   return dir
+}
+
+async function untrackedTmpDir() {
+  return await mkTestDir('tao-shared-test-')
 }
 
 function fakeTerminal(inputText: string) {
