@@ -1,6 +1,7 @@
-import { FS, HCI } from '@shared'
+import { FS, Repo } from '@shared'
 import chokidar from 'chokidar'
 import CommandRunner from './CommandRunner'
+import { TUI } from './TUI'
 
 const WATCH_DEBOUNCE_MS = 250
 
@@ -37,18 +38,18 @@ function startDebouncedWatcher(
     ignored: shouldIgnoreWatchPath,
   })
   watcher.on('all', (event, path) => {
-    HCI.logProcessInfo('dev', `${spec.label} ${event}: ${path}`)
+    TUI.logDevLoop('watch', `${spec.label} ${event}: ${path}`)
     if (timer) {
       clearTimeout(timer)
       timer = undefined
     }
     if (CommandRunner.isCommandRunning()) {
-      HCI.logProcessInfo('dev', `Command running; ignored ${spec.label} change.`)
+      TUI.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
       return
     }
     timer = setTimeout(() => {
       if (CommandRunner.isCommandRunning()) {
-        HCI.logProcessInfo('dev', `Command running; ignored ${spec.label} change.`)
+        TUI.logDevLoop('watch', `Command running; ignored ${spec.label} change.`)
         return
       }
       onChange(spec.shouldRunParserGen)
@@ -74,8 +75,8 @@ function watcherSpecs(appPath: string): DevWatcherSpec[] {
     {
       label: 'grammar',
       paths: [
-        FS.repoPath('packages/parser/langium-config.json'),
-        FS.repoPath('packages/parser/parser-grammar'),
+        Repo.resolvePath('packages/parser/langium-config.json'),
+        Repo.resolvePath('packages/parser/parser-grammar'),
       ],
       shouldRunParserGen: true,
     },
@@ -83,15 +84,15 @@ function watcherSpecs(appPath: string): DevWatcherSpec[] {
       label: 'compile',
       paths: [
         appRoot,
-        FS.repoPath('Justfile'),
-        FS.repoPath('packages/ast-utils'),
-        FS.repoPath('packages/compiler'),
-        FS.repoPath('packages/dev'),
-        FS.repoPath('packages/parser/parser-src'),
-        FS.repoPath('packages/runtime'),
-        FS.repoPath('packages/shared/shared-src'),
-        FS.repoPath('packages/tsconfig.base.json'),
-        FS.repoPath('packages/validator'),
+        Repo.resolvePath('Justfile'),
+        Repo.resolvePath('packages/ast-utils'),
+        Repo.resolvePath('packages/compiler'),
+        Repo.resolvePath('packages/dev'),
+        Repo.resolvePath('packages/parser/parser-src'),
+        Repo.resolvePath('packages/runtime'),
+        Repo.resolvePath('packages/shared/shared-src'),
+        Repo.resolvePath('packages/tsconfig.base.json'),
+        Repo.resolvePath('packages/validator'),
       ],
       shouldRunParserGen: false,
     },

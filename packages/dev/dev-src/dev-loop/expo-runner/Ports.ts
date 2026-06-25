@@ -1,4 +1,5 @@
 import { CLI, Errors, HCI, Time } from '@shared'
+import { TUI } from '../TUI'
 
 const RELEASE_TIMEOUT_MS = 5_000
 const RELEASE_POLL_MS = 250
@@ -33,7 +34,7 @@ async function ensureFree(port: number): Promise<boolean> {
     return true
   }
 
-  HCI.logProcessWarn('dev', `Port ${port} is already in use by ${formatListeners(listeners)}.`)
+  TUI.logDevLoop('dev', `Port ${port} is already in use by ${formatListeners(listeners)}.`, 'warn')
   const shouldKill = await HCI.askConfirm({
     defaultValue: true,
     message: `Kill ${formatListenerSubject(listeners)} and continue`,
@@ -48,7 +49,7 @@ async function ensureFree(port: number): Promise<boolean> {
 
   await terminateListeners(listeners)
   await waitForRelease(port)
-  HCI.logProcessInfo('dev', `Port ${port} is free.`)
+  TUI.logDevLoop('dev', `Port ${port} is free.`)
   return true
 }
 
@@ -120,9 +121,9 @@ async function findListeners(port: number): Promise<Listener[] | undefined> {
     return listeners
   }
   if (result.error !== undefined) {
-    HCI.logProcessWarn('dev', `Could not inspect port ${port}: ${result.error.message}`)
+    TUI.logDevLoop('dev', `Could not inspect port ${port}: ${result.error.message}`, 'warn')
   } else {
-    HCI.logProcessWarn('dev', `Could not inspect port ${port}: ${result.stderr.trim() || 'lsof failed'}`)
+    TUI.logDevLoop('dev', `Could not inspect port ${port}: ${result.stderr.trim() || 'lsof failed'}`, 'warn')
   }
   return undefined
 }
@@ -131,11 +132,11 @@ async function terminateListeners(listeners: readonly Listener[]): Promise<void>
   const pids = listeners.map(listener => String(listener.pid))
   const result = await CLI.run('kill', { args: ['-TERM', ...pids] })
   if (result.exitCode === 0 && result.error === undefined) {
-    HCI.logProcessInfo('dev', `Sent SIGTERM to ${formatListenerSubject(listeners)}.`)
+    TUI.logDevLoop('dev', `Sent SIGTERM to ${formatListenerSubject(listeners)}.`)
     return
   }
   if (await listenersHaveExited(listeners)) {
-    HCI.logProcessInfo('dev', `${formatListenerSubject(listeners)} already exited.`)
+    TUI.logDevLoop('dev', `${formatListenerSubject(listeners)} already exited.`)
     return
   }
 

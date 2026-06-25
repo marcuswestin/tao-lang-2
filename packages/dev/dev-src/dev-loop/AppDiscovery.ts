@@ -10,13 +10,13 @@ export async function discoverSwitchableAppPaths(appsRoot: string): Promise<stri
     if (entry === TEST_APPS_DIR) {
       continue
     }
-    await collectAppInDirectory(FS.resolvePath(entry, { cwd: appsRoot }), appPaths)
+    await collectAppInDirectory(FS.resolvePath(entry, appsRoot), appPaths)
   }
 
-  const testAppsRoot = FS.resolvePath(TEST_APPS_DIR, { cwd: appsRoot })
+  const testAppsRoot = FS.resolvePath(TEST_APPS_DIR, appsRoot)
   if (await FS.isDirectory(testAppsRoot)) {
     for (const entry of await FS.listDir(testAppsRoot)) {
-      await collectAppInDirectory(FS.resolvePath(entry, { cwd: testAppsRoot }), appPaths)
+      await collectAppInDirectory(FS.resolvePath(entry, testAppsRoot), appPaths)
     }
   }
 
@@ -29,7 +29,7 @@ async function collectAppInDirectory(appDirectory: string, appPaths: string[]): 
   }
 
   const appName = FS.basename(appDirectory)
-  const appPath = FS.resolvePath(`${appName}.tao`, { cwd: appDirectory })
+  const appPath = FS.resolvePath(`${appName}.tao`, appDirectory)
   if (await FS.isFile(appPath)) {
     appPaths.push(appPath)
   }

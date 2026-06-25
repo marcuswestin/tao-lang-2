@@ -1,5 +1,6 @@
-import { Errors, HCI } from '@shared'
+import { Errors } from '@shared'
 import Commands from './keyboard-input/Commands'
+import { TUI } from './TUI'
 
 let commandRunning = false
 
@@ -35,15 +36,15 @@ async function runNonInteractiveCommand(
   fn: () => Promise<boolean | void>,
 ): Promise<void> {
   if (!beginCommand()) {
-    HCI.logProcessInfo('dev', `Command already running; ignored ${label}.`)
+    TUI.logDevLoop('dev', `Command already running; ignored ${label}.`)
     return
   }
-  HCI.writeLine(`\n${HCI.formatProcessPrefix('dev')} ${label}`)
+  TUI.logDevLoop('dev', label)
   try {
     const didRun = await fn()
-    HCI.logProcessInfo('dev', `${label} ${didRun === false ? 'skipped' : 'done'}`)
+    TUI.logDevLoop('dev', `${label} ${didRun === false ? 'skipped' : 'done'}`)
   } catch (error) {
-    HCI.writeErrorLine(Errors.formatForLog(error))
+    TUI.logDevLoop('dev', Errors.formatForLog(error), 'error')
   } finally {
     endCommand()
     Commands.printControls()

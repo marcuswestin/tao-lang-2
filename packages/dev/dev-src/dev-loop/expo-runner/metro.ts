@@ -1,4 +1,5 @@
-import { Errors, HCI, Time } from '@shared'
+import { Errors, Time } from '@shared'
+import { TUI } from '../TUI'
 import { ExpoConfig, type ExpoPlatform } from './expo-config'
 import { Ports } from './Ports'
 
@@ -25,9 +26,9 @@ async function reloadExpoApps(): Promise<void> {
   await waitForMetro()
   const response = await fetch(`${ExpoConfig.EXPO_ORIGIN}/message?method=reload`)
   if (response.ok) {
-    HCI.logProcessInfo('dev', 'sent Expo reload')
+    TUI.logDevLoop('dev', 'sent Expo reload')
   } else {
-    HCI.logProcessWarn('dev', `Expo reload failed: ${response.status} ${await response.text()}`)
+    TUI.logDevLoop('dev', `Expo reload failed: ${response.status} ${await response.text()}`, 'warn')
   }
 }
 
@@ -83,10 +84,10 @@ async function expoOpenEndpoint(platform: ExpoPlatform): Promise<OpenEndpointRes
     }
 
     if (!response.ok && response.status !== 404) {
-      HCI.logProcessWarn('dev', `could not resolve Expo URL for ${platform}: ${response.status} ${responseText}`)
+      TUI.logDevLoop('dev', `could not resolve Expo URL for ${platform}: ${response.status} ${responseText}`, 'warn')
     }
   } catch (error) {
-    HCI.logProcessWarn('dev', `could not resolve Expo URL for ${platform}: ${Errors.formatForUser(error)}`)
+    TUI.logDevLoop('dev', `could not resolve Expo URL for ${platform}: ${Errors.formatForUser(error)}`, 'warn')
   }
   return undefined
 }

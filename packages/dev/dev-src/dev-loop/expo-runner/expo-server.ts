@@ -1,4 +1,5 @@
-import { CLI, FS, HCI, Time } from '@shared'
+import { CLI, FS, Repo, Time } from '@shared'
+import { TUI } from '../TUI'
 import { ExpoConfig } from './expo-config'
 
 /** ExpoServer owns the Expo CLI process and its log output. */
@@ -16,26 +17,29 @@ export class ExpoServer {
   }
 
   async start(): Promise<void> {
-    const logPath = FS.repoPath('.artifacts/dev/expo.log')
+    const logPath = Repo.resolvePath('.artifacts/dev/expo.log')
     await FS.mkdir(FS.dirname(logPath))
     this.logFile = await FS.openAppend(logPath)
     this.child = CLI.start('bunx', {
       args: ExpoConfig.EXPO_START_ARGS,
       cwd: this.runtimeRoot,
       env: ExpoConfig.EXPO_START_ENV,
-      prefixedOutput: { logFile: this.logFile, processName: 'expo' },
+      onOutput: (stream, chunk) => {
+        TUI.writeDevLoopOutput('expo', stream, chunk)
+        void this.logFile?.write(chunk)
+      },
     })
     this.child.onceClose((exitCode, signal) => {
       void this.closeOutputAndLog()
       if (!this.stopping) {
-        HCI.logProcessWarn('dev', `Expo exited with code=${exitCode} signal=${signal}. See ${logPath}.`)
+        TUI.logDevLoop('dev', `Expo exited with code=${exitCode} signal=${signal}. See ${logPath}.`, 'warn')
         this.unexpectedExit?.()
       }
     })
     this.child.onceError(error => {
-      HCI.logProcessError('dev', `Failed to start Expo: ${error.message}`)
+      TUI.logDevLoop('dev', `Failed to start Expo: ${error.message}`, 'error')
     })
-    HCI.logProcessInfo('dev', `Expo log: ${logPath}`)
+    TUI.logDevLoop('dev', `Expo log: ${logPath}`)
   }
 
   async stop(): Promise<void> {

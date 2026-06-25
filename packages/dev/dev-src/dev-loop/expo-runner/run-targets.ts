@@ -1,5 +1,6 @@
-import { CLI, Errors, HCI, Platform, Time } from '@shared'
+import { CLI, Errors, Platform, Time } from '@shared'
 import betterOpen from 'better-opn'
+import { TUI } from '../TUI'
 import { Android } from './android'
 import { ExpoConfig } from './expo-config'
 import { ExpoMetro } from './metro'
@@ -31,10 +32,10 @@ async function openAndroid(): Promise<boolean> {
     await Android.ensureExpoGo()
     const endpoint = await ExpoMetro.expoOpenEndpoint('android')
     await openPreparedAndroid(ExpoMetro.endpointUrl(endpoint))
-    HCI.logProcessInfo('dev', `opened Android${ExpoMetro.formatOpenedRuntime(endpoint)}`)
+    TUI.logDevLoop('dev', `opened Android${ExpoMetro.formatOpenedRuntime(endpoint)}`)
     return true
   } catch (error) {
-    HCI.logProcessWarn('dev', `Could not open Android: ${Errors.formatForUser(error)}`)
+    TUI.logDevLoop('dev', `Could not open Android: ${Errors.formatForUser(error)}`, 'warn')
     return false
   }
 }
@@ -60,12 +61,13 @@ async function openIosSimulator(shouldStop: () => boolean = () => false): Promis
   }
   const result = await CLI.run('xcrun', { args: ['simctl', 'openurl', simulator.udid, link] })
   if (result.exitCode === 0 && result.error === undefined) {
-    HCI.logProcessInfo('dev', `opened iOS Simulator (${simulator.name})`)
+    TUI.logDevLoop('dev', `opened iOS Simulator (${simulator.name})`)
     return true
   }
-  HCI.logProcessWarn(
+  TUI.logDevLoop(
     'dev',
     `Could not open iOS Simulator URL: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
+    'warn',
   )
   return false
 }
@@ -83,7 +85,7 @@ async function openStartupTargets(shouldStop: () => boolean = () => false): Prom
     try {
       await open()
     } catch (error) {
-      HCI.logProcessWarn('dev', `skipped ${label} launch: ${Errors.formatForUser(error)}`)
+      TUI.logDevLoop('dev', `skipped ${label} launch: ${Errors.formatForUser(error)}`, 'warn')
     }
   }))
 }
@@ -97,7 +99,7 @@ async function openAvailableAndroid(): Promise<boolean> {
   if (await Android.prepareAvailableExpoGo()) {
     const endpoint = await ExpoMetro.expoOpenEndpoint('android')
     await openPreparedAndroid(ExpoMetro.endpointUrl(endpoint))
-    HCI.logProcessInfo('dev', `opened Android${ExpoMetro.formatOpenedRuntime(endpoint)}`)
+    TUI.logDevLoop('dev', `opened Android${ExpoMetro.formatOpenedRuntime(endpoint)}`)
     return true
   }
   return false
@@ -110,7 +112,7 @@ async function commandExists(command: string): Promise<boolean> {
 
 async function ensureIosSimulator(shouldStop: () => boolean): Promise<IosSimulator | undefined> {
   if (!await commandExists('xcrun')) {
-    HCI.logProcessInfo('dev', 'xcrun not found; skipping iOS Simulator launch.')
+    TUI.logDevLoop('dev', 'xcrun not found; skipping iOS Simulator launch.')
     return undefined
   }
   if (shouldStop()) {
@@ -118,7 +120,7 @@ async function ensureIosSimulator(shouldStop: () => boolean): Promise<IosSimulat
   }
   const simulator = await selectIosSimulator()
   if (!simulator) {
-    HCI.logProcessWarn('dev', 'No available iOS Simulator found.')
+    TUI.logDevLoop('dev', 'No available iOS Simulator found.', 'warn')
     return undefined
   }
   await openSimulatorApp(simulator.udid)
@@ -130,7 +132,7 @@ async function ensureIosSimulator(shouldStop: () => boolean): Promise<IosSimulat
   }
   if (!await waitForIosSimulatorBoot(simulator.udid, shouldStop)) {
     if (!shouldStop()) {
-      HCI.logProcessWarn('dev', `iOS Simulator did not finish booting: ${simulator.name}`)
+      TUI.logDevLoop('dev', `iOS Simulator did not finish booting: ${simulator.name}`, 'warn')
     }
     return undefined
   }
@@ -151,9 +153,10 @@ async function selectIosSimulator(): Promise<IosSimulator | undefined> {
 async function listIosSimulators(): Promise<IosSimulator[]> {
   const result = await CLI.run('xcrun', { args: ['simctl', 'list', 'devices', '--json', 'available'] })
   if (result.exitCode !== 0 || result.error !== undefined) {
-    HCI.logProcessWarn(
+    TUI.logDevLoop(
       'dev',
       `Could not list iOS Simulators: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
+      'warn',
     )
     return []
   }
@@ -175,15 +178,16 @@ async function openSimulatorApp(udid: string): Promise<void> {
   }
   const result = await CLI.run('open', { args: ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid] })
   if (result.exitCode !== 0 || result.error !== undefined) {
-    HCI.logProcessWarn(
+    TUI.logDevLoop(
       'dev',
       `Could not open Simulator app: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
+      'warn',
     )
   }
 }
 
 async function bootIosSimulator(udid: string): Promise<boolean> {
-  HCI.logProcessInfo('dev', 'booting iOS Simulator')
+  TUI.logDevLoop('dev', 'booting iOS Simulator')
   const result = await CLI.run('xcrun', { args: ['simctl', 'boot', udid] })
   if (
     result.exitCode === 0
@@ -191,9 +195,10 @@ async function bootIosSimulator(udid: string): Promise<boolean> {
   ) {
     return true
   }
-  HCI.logProcessWarn(
+  TUI.logDevLoop(
     'dev',
     `Could not boot iOS Simulator: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
+    'warn',
   )
   return false
 }
@@ -223,14 +228,15 @@ function parseJson<T>(text: string): T | undefined {
 async function openChromeWebUrl(url: string): Promise<boolean> {
   try {
     await withChromeOpenEnv(() => betterOpen(url))
-    HCI.logProcessInfo('dev', `opened web in ${ExpoConfig.WEB_BROWSER_APP_NAME}`)
+    TUI.logDevLoop('dev', `opened web in ${ExpoConfig.WEB_BROWSER_APP_NAME}`)
     return true
   } catch (error) {
-    HCI.logProcessWarn(
+    TUI.logDevLoop(
       'dev',
       `Could not open web in ${ExpoConfig.WEB_BROWSER_APP_NAME}: ${Errors.formatForUser(error)}`,
+      'warn',
     )
-    HCI.logProcessWarn('dev', `Open ${url} manually.`)
+    TUI.logDevLoop('dev', `Open ${url} manually.`, 'warn')
     return false
   }
 }
