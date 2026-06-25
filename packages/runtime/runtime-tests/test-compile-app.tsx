@@ -1,15 +1,10 @@
-import {
-  compileAndRenderApp,
-  compileAppForTest,
-  type CompiledRuntimeApp,
-  renderCompiledApp,
-  type RuntimeScreen,
-} from '@runtime/testing/compile-app'
+import { RuntimeTesting } from '@runtime/testing/runtime-testing'
 import { FS, Text } from '@shared'
-import { Expect } from '@shared/test'
+import { Expect, mkTestDir } from '@shared/test'
 
-export { compileAndRenderApp, compileAppForTest, renderCompiledApp }
-export type { CompiledRuntimeApp, RuntimeScreen }
+/** compileAndRenderApp exposes the shared runtime compile/render helper to local Jest tests. */
+export const compileAndRenderApp = RuntimeTesting.compileAndRenderApp
+export type RuntimeScreen = RuntimeTesting.Screen
 
 type RuntimeFiles = Record<string, string>
 type RuntimeScreenAssertions = (screen: RuntimeScreen) => void | Promise<void>
@@ -37,14 +32,14 @@ export async function testCompileFiles(
   files: RuntimeFiles,
   testsFunction: RuntimeScreenAssertions,
 ): Promise<void> {
-  const appDir = await FS.mkTmpDir(FS.resolvePath('tao-runtime-e2e-', { cwd: FS.tmpdir() }))
-  const appPath = FS.resolvePath(entryFile, { cwd: appDir })
+  const appDir = await mkTestDir('tao-runtime-e2e-')
+  const appPath = FS.resolvePath(entryFile, appDir)
 
   try {
     for (const [relativePath, source] of Object.entries(files)) {
-      await FS.writeText(FS.resolvePath(relativePath, { cwd: appDir }), Text.stripIndent(source))
+      await FS.writeText(FS.resolvePath(relativePath, appDir), Text.stripIndent(source))
     }
-    const screen = await compileAndRenderApp(appPath)
+    const screen = await RuntimeTesting.compileAndRenderApp(appPath)
 
     await testsFunction(screen)
   } finally {

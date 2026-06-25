@@ -50,7 +50,7 @@ export function registerReviewCommand(commands: Command): void {
     .option('--stringent', 'Create the run under the stringent review artifact root.')
     .action(async (options: { slug?: string; stringent?: boolean }) => {
       const kind = options.stringent === true ? 'stringent' : 'standard'
-      const runDir = FS.repoPath(`${reviewRunRoot(kind)}/${formatReviewRunDir(options.slug, new Date())}`)
+      const runDir = Repo.resolvePath(`${reviewRunRoot(kind)}/${formatReviewRunDir(options.slug, new Date())}`)
       await FS.mkdir(runDir)
       await captureUsageForRun(runDir, Repo.getRoot())
       HCI.writeLine(runDir)
@@ -157,9 +157,9 @@ async function runReviewCommand(options: ReviewRunOptions): Promise<number> {
 async function runFanoutCommand(options: { run: string; manifest: string; json?: boolean }): Promise<number> {
   const repoRoot = Repo.getRoot()
   const runDir = resolveReviewRunDir(options.run, repoRoot)
-  const entries = parseManifest(await FS.readJson(FS.resolvePath(options.manifest, { cwd: repoRoot })))
+  const entries = parseManifest(await FS.readJson(FS.resolvePath(options.manifest, repoRoot)))
   const metas = await Promise.all(entries.map(entry => launchReviewer(entry, { runDir, repoRoot })))
-  await FS.writeJson(FS.resolvePath('fanout.json', { cwd: runDir }), metas)
+  await FS.writeJson(FS.resolvePath('fanout.json', runDir), metas)
   HCI.write(options.json === true ? `${JSON.stringify(metas, null, 2)}\n` : formatFanoutReport(metas))
   return metas.some(meta => !isUsableReview(meta)) ? 1 : 0
 }
@@ -171,8 +171,8 @@ async function runPlanCommand(options: ReviewPlanOptions): Promise<number> {
   const repoRoot = Repo.getRoot()
   const runDir = resolveReviewRunDir(options.run, repoRoot)
   const { budgetPath, providers } = await readBudgetProviders(runDir)
-  const planPath = FS.resolvePath('review-plan.json', { cwd: runDir })
-  const manifestPath = FS.resolvePath('manifest.recommended.json', { cwd: runDir })
+  const planPath = FS.resolvePath('review-plan.json', runDir)
+  const manifestPath = FS.resolvePath('manifest.recommended.json', runDir)
   const plan = planReviewers({
     budgetPath,
     generatedAt: new Date(),
@@ -241,7 +241,7 @@ async function runCollectCommand(options: { run: string; maxBytes?: string; json
     return 1
   }
   const digest = await buildReviewDigest(metas, maxBytes)
-  const digestPath = FS.resolvePath('digest.md', { cwd: runDir })
+  const digestPath = FS.resolvePath('digest.md', runDir)
   await FS.writeText(digestPath, digest.markdown)
   if (options.json === true) {
     HCI.writeLine(JSON.stringify({ digestPath, index: digest.index }, null, 2))
@@ -255,7 +255,7 @@ async function runCollectCommand(options: { run: string; maxBytes?: string; json
 }
 
 async function captureUsageForRun(runDir: string, repoRoot: string): Promise<void> {
-  const existing = FS.resolvePath('codexbar-budget.json', { cwd: runDir })
+  const existing = FS.resolvePath('codexbar-budget.json', runDir)
   if (await FS.exists(existing)) {
     return
   }
@@ -268,7 +268,7 @@ async function captureUsageForRun(runDir: string, repoRoot: string): Promise<voi
 async function readBudgetProviders(
   runDir: string,
 ): Promise<{ budgetPath?: string; providers?: UsageProviderSummary[] }> {
-  const budgetPath = FS.resolvePath('codexbar-budget.json', { cwd: runDir })
+  const budgetPath = FS.resolvePath('codexbar-budget.json', runDir)
   if (!await FS.exists(budgetPath)) {
     return {}
   }

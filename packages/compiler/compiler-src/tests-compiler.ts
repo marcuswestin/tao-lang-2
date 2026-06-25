@@ -1,7 +1,9 @@
-import { AST } from '@parser'
-import { Assert, type DiagnosticRange, Diagnostics } from '@shared'
+import { AST, type ParseResult } from '@parser'
+import { Assert, type DiagnosticRange, Diagnostics, Switch } from '@shared'
 import type { ValidationResult } from '@validator'
 import type { CompilerContext } from './compiler'
+
+type TaoTestPlanInput = ParseResult | ValidationResult
 
 /** TaoTestSourceLocation declares where a compiled test-plan item came from. */
 export type TaoTestSourceLocation = {
@@ -16,19 +18,32 @@ export type TaoTestRun = {
   source: TaoTestSourceLocation
 }
 
-/** TaoTestExpectation declares one v0 rendered-text assertion. */
+/** TaoTestExpectation declares one v0 selector-targeted assertion. */
 export type TaoTestExpectation = {
-  kind: 'text' | 'missingText'
+  kind: 'expect'
+  missing: boolean
+  selector: string
   text: string
   source: TaoTestSourceLocation
 }
+
+/** TaoTestPressStep declares one v0 selector-targeted press action. */
+export type TaoTestPressStep = {
+  kind: 'press'
+  selector: string
+  text: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
+export type TaoTestStep = TaoTestExpectation | TaoTestPressStep
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
 export type TaoTestCheck = {
   name: string
   source: TaoTestSourceLocation
   run: TaoTestRun
-  expectations: TaoTestExpectation[]
+  steps: TaoTestStep[]
 }
 
 /** TaoTestSuite declares one Tao test suite. */
@@ -44,13 +59,13 @@ export type TaoTestPlan = {
   suites: TaoTestSuite[]
 }
 
-/** compileTestPlan compiles validated v0 Tao test declarations into structured test-plan IR. */
-export function compileTestPlan(validationResult: ValidationResult, _context: CompilerContext): TaoTestPlan {
-  const errors = Diagnostics.errorMessages(validationResult.diagnostics)
+/** compileTestPlan compiles parsed v0 Tao test declarations into structured test-plan IR. */
+export function compileTestPlan(input: TaoTestPlanInput, _context: CompilerContext): TaoTestPlan {
+  const errors = Diagnostics.errorMessages(input.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao tests with validation errors: ${errors.join('; ')}`, { errors })
   return {
-    sourcePath: validationResult.entry.path,
-    suites: validationResult.entry.ast.statements.filter(AST.isTestDeclaration).map(compileSuite),
+    sourcePath: input.entry.path,
+    suites: input.entry.ast.statements.filter(AST.isTestDeclaration).map(compileSuite),
   }
 }
 
@@ -65,11 +80,12 @@ function compileSuite(suite: AST.TestDeclaration): TaoTestSuite {
 function compileCheck(check: AST.CheckDeclaration): TaoTestCheck {
   const run = check.block.statements.find(AST.isRunStep)
   Assert.defined(run, 'validated check has one run step', { checkName: check.name })
+  const steps = check.block.statements.filter(AST.isCheckStep).filter(isRunnableTestStep).map(compileStep)
   return {
     name: check.name,
     source: sourceLocation(check),
     run: compileRun(run),
-    expectations: check.block.statements.filter(AST.isExpectTextStep).map(compileExpectation),
+    steps,
   }
 }
 
@@ -85,10 +101,32 @@ function compileRun(run: AST.RunStep): TaoTestRun {
 
 function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation {
   return {
-    kind: expectation.missing ? 'missingText' : 'text',
+    kind: 'expect',
+    missing: expectation.missing,
+    selector: expectation.selector,
     text: expectation.text,
     source: sourceLocation(expectation),
   }
+}
+
+function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
+  return Switch.type(step, {
+    ExpectTextStep: compileExpectation,
+    PressTextStep: compilePressTextStep,
+  })
+}
+
+function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
+  return {
+    kind: 'press',
+    selector: press.selector,
+    text: press.text,
+    source: sourceLocation(press),
+  }
+}
+
+function isRunnableTestStep(step: AST.CheckStep): step is Exclude<AST.CheckStep, AST.RunStep> {
+  return !AST.isRunStep(step)
 }
 
 function sourceLocation(node: AST.Node): TaoTestSourceLocation {

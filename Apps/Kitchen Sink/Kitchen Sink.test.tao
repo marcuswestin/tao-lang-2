@@ -7,6 +7,10 @@ test "Kitchen Sink" {
       expect text "Hello, World!"
       expect text "Text from a local alias"
       expect text "Nested scope greeting"
+      expect text "Hello World"
+      expect text "Fixed Kitchen type"
+      expect text "Typed Kitchen"
+      expect text "item, list, type"
    }
 
    check "renders launch count" {
@@ -19,5 +23,16 @@ test "Kitchen Sink" {
       run KitchenSink
 
       expect missing text "Loading"
+   }
+
+   check "presses button text" {
+      run KitchenSink
+
+      expect text "0"
+      press text "Add kitchen count"
+      expect text "1"
+      press text "Add kitchen count"
+      press text "Add kitchen count"
+      expect text "3"
    }
 }

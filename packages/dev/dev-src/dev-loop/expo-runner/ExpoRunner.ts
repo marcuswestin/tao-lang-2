@@ -1,4 +1,5 @@
-import { CLI, Errors, FS, HCI } from '@shared'
+import { CLI, Errors, Repo } from '@shared'
+import { TUI } from '../TUI'
 import { Android } from './android'
 import { ExpoConfig } from './expo-config'
 import { ExpoServer } from './expo-server'
@@ -38,13 +39,13 @@ function createServer(runtimeRoot: string): ExpoServerProcess {
 
 /** startExpo starts the Expo runtime and opens it on Android once Metro is ready. */
 async function startExpo(): Promise<void> {
-  const runtimePackageRoot = FS.repoPath(ExpoConfig.RUNTIME_PACKAGE_PATH)
-  void ExpoTargets.openPreparedAndroid().catch(error => HCI.writeErrorLine(Errors.formatForUser(error)))
+  const runtimePackageRoot = Repo.resolvePath(ExpoConfig.RUNTIME_PACKAGE_PATH)
+  void ExpoTargets.openPreparedAndroid().catch(error => TUI.logDevLoop('dev', Errors.formatForUser(error), 'error'))
   const result = await CLI.run('bunx', {
     args: ExpoConfig.EXPO_START_ARGS,
     cwd: runtimePackageRoot,
     env: ExpoConfig.EXPO_START_ENV,
-    stdio: 'stream',
+    onOutput: TUI.devLoopOutputHandler('expo'),
   })
   if (result.error || result.exitCode !== 0) {
     throw new Errors.CommandExecutionError(result)

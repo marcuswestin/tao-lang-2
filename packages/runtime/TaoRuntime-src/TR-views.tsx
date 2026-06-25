@@ -1,3 +1,4 @@
+import { Switch } from '@shared/core'
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { ParentDirectionContext } from './TR-parent-direction'
@@ -75,18 +76,11 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
 }
 
 function nativeComponent(runtime: ReactNativeRuntime, kind: TaoPrimitiveKind): React.ElementType {
-  switch (kind) {
-    case 'Pressable':
-      return runtime.Pressable
-    case 'Text':
-      return runtime.Text
-    case 'View':
-      return runtime.View
-    default: {
-      const exhaustive: never = kind
-      return exhaustive
-    }
-  }
+  return Switch<TaoPrimitiveKind, React.ElementType>(kind, {
+    Pressable: () => runtime.Pressable,
+    Text: () => runtime.Text,
+    View: () => runtime.View,
+  })
 }
 
 function nativeChildren(

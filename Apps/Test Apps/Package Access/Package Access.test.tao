@@ -1,0 +1,14 @@
+use PackageAccess from ./
+
+test "Package Access" {
+   check "renders local package imports" {
+      run PackageAccess
+
+      expect text "Package access works"
+      expect text "Package sibling file works"
+      expect text "Package sibling folder works"
+      expect text "Package child folder works"
+      expect text "Project alias works"
+      expect text "Project view works"
+   }
+}

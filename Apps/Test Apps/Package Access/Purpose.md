@@ -25,7 +25,7 @@ Exercise positive behavior for local project package access, package-indexed imp
 
 ## Behavior Test Notes
 
-- `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx` renders this app and asserts the visible output.
+- `Package Access.test.tao` renders this app and asserts the visible output.
 - Expected visible output:
   - `Package access works`
   - `Package sibling file works`

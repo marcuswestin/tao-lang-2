@@ -1,0 +1,26 @@
+use StateActionMVP from ./
+
+test "State Action MVP" {
+   check "presses action buttons and rerenders count" {
+      run StateActionMVP
+
+      expect text "State/action MVP"
+      expect text "0"
+      press text "Add twice"
+      expect text "2"
+      press text "Reset"
+      expect text "0"
+      press text "Inline add one"
+      expect text "1"
+      press text "Add five"
+      expect text "6"
+      press text "Double"
+      expect text "12"
+      press text "Halve"
+      expect text "6"
+      press text "Decrement"
+      expect text "5"
+      press text "Reset"
+      expect text "0"
+   }
+}

@@ -1,5 +1,6 @@
-import { FS, Platform } from '@shared'
+import { Platform, Repo } from '@shared'
 import { registerAgentHelpCommand } from './commands/agent-help'
+import { registerAgentTestCommand } from './commands/agent-test'
 import { registerAiUsageCommand } from './commands/ai-usage'
 import { registerAuditInstructionsCommand } from './commands/audit-instructions'
 import { registerReviewCommand } from './commands/code-review'
@@ -26,7 +27,7 @@ const AGENT_SHELL_COMMANDS: readonly string[] = [
 const command = Platform.runtimeProcess.argv[2]
 
 if (command && AGENT_SHELL_COMMANDS.includes(command)) {
-  const commandPath = command === 'tao' ? FS.repoPath('tao') : command
+  const commandPath = command === 'tao' ? Repo.resolvePath('tao') : command
   const exitCode = await runCommand(commandPath, Platform.runtimeProcess.argv.slice(3))
   Platform.runtimeProcess.exit(exitCode)
 }
@@ -40,6 +41,7 @@ await runWithCommands(commands => {
 
   const helpListedCommands = [...AGENT_SHELL_COMMANDS, 'just']
   registerAgentHelpCommand(commands, { allowlistedCommands: helpListedCommands })
+  registerAgentTestCommand(commands)
   registerAiUsageCommand(commands)
   registerAuditInstructionsCommand(commands)
   registerJustCommand(commands)

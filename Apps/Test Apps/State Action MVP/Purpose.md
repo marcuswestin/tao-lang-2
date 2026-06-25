@@ -25,4 +25,4 @@ Exercise positive behavior for view-local state, named and inline actions, param
 
 ## Behavior Test Notes
 
-- `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx` renders this app, presses buttons, and asserts visible counter updates.
+- `State Action MVP.test.tao` renders this app, presses buttons, and asserts visible counter updates.

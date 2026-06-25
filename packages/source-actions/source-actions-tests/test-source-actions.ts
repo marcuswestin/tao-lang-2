@@ -1,18 +1,21 @@
 import { type AST, Langium } from '@parser'
-import { FS, Text } from '@shared'
+import { FS, Repo, Text } from '@shared'
 import { Expect } from '@shared/test'
 import { Workspace } from '@workspace'
 import SourceActions, { type SourceActionOptions } from '../source-actions-src/source-actions'
 
+const rawDocumentRoot = import.meta.dir
+const rawDocumentPath = FS.resolvePath('__source.tao', rawDocumentRoot)
+
 /** parseRawDocument parses exact Tao source text into a linked document for source-action tests. */
 export async function parseRawDocument(text: string): Promise<AST.Document> {
-  const workspace = await Workspace.open(FS.repoPath('.'))
-  return (await workspace.parseSource(text, Langium.URI.file('/__tao__/source.tao'))).entry.document
+  const workspace = await Workspace.shared(rawDocumentRoot)
+  return (await workspace.parseSource(text, Langium.URI.file(rawDocumentPath))).entry.document
 }
 
 /** parseRawDocumentAt parses exact Tao source text with a concrete source URI. */
 export async function parseRawDocumentAt(text: string, path: string): Promise<AST.Document> {
-  const workspace = await Workspace.open(FS.dirname(path))
+  const workspace = await Workspace.shared(FS.dirname(path))
   return (await workspace.parseSource(text, Langium.URI.file(path))).entry.document
 }
 
@@ -36,8 +39,8 @@ export async function testOrganizeSourceUnchanged(source: string): Promise<void>
 
 /** sourceActionOptionsFor returns package-aware reparse options for a source-action document. */
 export async function sourceActionOptionsFor(document: AST.Document): Promise<SourceActionOptions> {
-  const directory = document.uri.scheme === 'file' ? FS.dirname(document.uri.path) : FS.repoPath('.')
-  const workspace = await Workspace.open(await FS.isDirectory(directory) ? directory : FS.repoPath('.'))
+  const directory = document.uri.scheme === 'file' ? FS.dirname(document.uri.path) : Repo.resolvePath('.')
+  const workspace = await Workspace.shared(await FS.isDirectory(directory) ? directory : Repo.resolvePath('.'))
   return {
     parseUpdatedDocument: async (updatedDocument, text) => {
       return (await workspace.parseSource(text, updatedDocument.uri)).entry.document

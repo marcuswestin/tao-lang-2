@@ -1,0 +1,22 @@
+use TypeSystemTests from ./
+
+test "Type System Tests" {
+   check "renders typed values through views" {
+      run TypeSystemTests
+
+      expect text "Open: 1"
+      expect text "Done: 2"
+      expect text "Ada"
+      expect text "40"
+      expect text "Compiler engineer"
+      expect text "types, items, lists"
+      expect text "Kai"
+      expect text "29"
+      expect text "Runtime engineer"
+      expect text "runtime, mobile"
+      expect text "People in the team: 2"
+      expect text "2 team member(s)"
+      expect text "Grace"
+      expect text "Constructed primitive text"
+   }
+}

@@ -1,11 +1,15 @@
-import { runTaoTestPlan } from '@runtime/testing/tao-test-plan'
+import { RuntimeTesting } from '@runtime/testing/runtime-testing'
 import TR from '@runtime/TR'
-import { FS } from '@shared'
-import { AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { Repo } from '@shared'
+import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, type ReactNode, useState } from 'react'
 import * as RN from 'react-native'
 import { compileAndRenderApp, ExpectScreen, testCompileApp, testCompileFiles } from './test-compile-app'
+
+AfterAll(async () => {
+  await RuntimeTesting.stopTestCompiler()
+})
 
 AfterEach(() => {
   cleanup()
@@ -13,44 +17,6 @@ AfterEach(() => {
 })
 
 Describe('Expo runtime', () => {
-  Test('compiles and renders Kitchen Sink scoped aliases and inject arguments', async () => {
-    const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-    const screen = await compileAndRenderApp(kitchenSinkPath)
-
-    ExpectScreen(screen).toHaveText('Hello, World!')
-    ExpectScreen(screen).toHaveText('Text from a local alias')
-    ExpectScreen(screen).toHaveText('Nested scope greeting')
-    ExpectScreen(screen).toHaveText('Hello World')
-    ExpectScreen(screen).toHaveText('Launch count: 3')
-    ExpectScreen(screen).toHaveText('Fixed Kitchen type')
-    ExpectScreen(screen).toHaveText('Typed Kitchen')
-    ExpectScreen(screen).toHaveText('item, list, type')
-    ExpectScreen(screen).toHaveText('0')
-    ExpectScreen(screen).toHaveText('Add kitchen count')
-  })
-
-  Test('compiles and renders Type System Tests custom values', async () => {
-    const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
-    const screen = await compileAndRenderApp(typeSystemTestsPath)
-
-    ExpectScreen(screen).toHaveText('Open: 1')
-    ExpectScreen(screen).toHaveText('Done: 2')
-    Expect(screen.getAllByText('Ada').length).toBeGreaterThan(0)
-    ExpectScreen(screen).toHaveText('40')
-    Expect(screen.getAllByText('Compiler engineer').length).toBeGreaterThan(0)
-    ExpectScreen(screen).toHaveText('types, items, lists')
-    ExpectScreen(screen).toHaveText('People in the team: 2')
-    ExpectScreen(screen).toHaveText('2 team member(s)')
-    ExpectScreen(screen).toHaveText('Grace')
-    ExpectScreen(screen).toHaveText('Constructed primitive text')
-  })
-
-  Test('runs Tao-authored Kitchen Sink smoke tests', async () => {
-    const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
-
-    await runTaoTestPlan(kitchenSinkTestPath)
-  })
-
   Test('runs Tao text expectations with duplicate rendered text', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',
@@ -86,7 +52,62 @@ Describe('Expo runtime', () => {
       `,
       },
       async paths => {
-        await runTaoTestPlan(paths['Main.test.tao']!)
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('runs Tao press text steps before later expectations', async () => {
+    await withTaoFiles(
+      'tao-runtime-test-plan-',
+      {
+        'Main.test.tao': `
+        use PressTextApp from ./
+
+        test "Press text" {
+          check "updates rendered state" {
+            run PressTextApp
+            expect text "0"
+            press text "Add"
+            expect text "1"
+          }
+        }
+      `,
+        'Main.tao': `
+        app PressTextApp { view MainView }
+        view MainView {
+          state Count = 0
+          action AddOne {
+            set Count += 1
+          }
+          render Stack {
+            NativeButton "Add", AddOne
+            Number Count
+          }
+        }
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+        view NativeButton Title is text, Action is action {
+          render inject Title, Action \`\`\`ts
+            return (
+              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
+                <RN.Text>{Title}</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+        view Number Value is number {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
       },
     )
   })
@@ -118,7 +139,7 @@ Describe('Expo runtime', () => {
       `,
       },
       async paths => {
-        await Expect(runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
           /Tao check failed: Broken text > misses expected text[\s\S]*expect text "Expected"[\s\S]*Main\.test\.tao:/,
         )
       },
@@ -152,7 +173,7 @@ Describe('Expo runtime', () => {
       `,
       },
       async paths => {
-        await Expect(runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
           /Tao check failed: Broken missing text > still renders unexpected text[\s\S]*expect missing text "Actual"[\s\S]*Main\.test\.tao:/,
         )
       },
@@ -205,13 +226,13 @@ Describe('Expo runtime', () => {
       `,
       },
       async paths => {
-        await runTaoTestPlan(paths['Main.test.tao']!)
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
       },
     )
   })
 
   Test('compiles and renders runtime stdlib imports', async () => {
-    const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
+    const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
     const screen = await compileAndRenderApp(runtimeStdlibTestsPath)
 
     ExpectScreen(screen).toHaveText('Runtime stdlib smoke')
@@ -235,38 +256,6 @@ Describe('Expo runtime', () => {
     Expect(screen.getByText('Wrapped').props.ellipsizeMode).toBeUndefined()
     Expect(screen.getByText('Wrapped').props.numberOfLines).toBeUndefined()
     Expect(ancestorProp(screen.getByText('Tap me'), 'accessibilityRole')).toBe('button')
-  })
-
-  Test('runs state actions from Button presses and rerenders stateful values', async () => {
-    const stateActionMvpPath = FS.repoPath('Apps/Test Apps/State Action MVP/State Action MVP.tao')
-    const screen = await compileAndRenderApp(stateActionMvpPath)
-
-    ExpectScreen(screen).toHaveText('State/action MVP')
-    ExpectScreen(screen).toHaveText('0')
-
-    fireEvent.press(screen.getByText('Add twice'))
-    ExpectScreen(screen).toHaveText('2')
-
-    fireEvent.press(screen.getByText('Reset'))
-    ExpectScreen(screen).toHaveText('0')
-
-    fireEvent.press(screen.getByText('Inline add one'))
-    ExpectScreen(screen).toHaveText('1')
-
-    fireEvent.press(screen.getByText('Add five'))
-    ExpectScreen(screen).toHaveText('6')
-
-    fireEvent.press(screen.getByText('Double'))
-    ExpectScreen(screen).toHaveText('12')
-
-    fireEvent.press(screen.getByText('Halve'))
-    ExpectScreen(screen).toHaveText('6')
-
-    fireEvent.press(screen.getByText('Decrement'))
-    ExpectScreen(screen).toHaveText('5')
-
-    fireEvent.press(screen.getByText('Reset'))
-    ExpectScreen(screen).toHaveText('0')
   })
 
   Test('passes action values through render inject arguments', async () => {
@@ -488,7 +477,7 @@ Describe('Expo runtime', () => {
   })
 
   Test('compiles and renders the Layout and App Shell app', async () => {
-    const layoutAppPath = FS.repoPath('Apps/Test Apps/Layout and App Shell/Layout and App Shell.tao')
+    const layoutAppPath = Repo.resolvePath('Apps/Test Apps/Layout and App Shell/Layout and App Shell.tao')
     const screen = await compileAndRenderApp(layoutAppPath)
     const viewStyles = screen.UNSAFE_getAllByType(RN.View)
       .map(view => RN.StyleSheet.flatten(view.props.style))
@@ -1163,18 +1152,6 @@ Describe('Expo runtime', () => {
         Expect(localRowStyle?.flexDirection).toBeUndefined()
       },
     )
-  })
-
-  Test('compiles and renders local package access', async () => {
-    const packageAccessPath = FS.repoPath('Apps/Test Apps/Package Access/Package Access.tao')
-    const screen = await compileAndRenderApp(packageAccessPath)
-
-    ExpectScreen(screen).toHaveText('Package access works')
-    ExpectScreen(screen).toHaveText('Package sibling file works')
-    ExpectScreen(screen).toHaveText('Package sibling folder works')
-    ExpectScreen(screen).toHaveText('Package child folder works')
-    ExpectScreen(screen).toHaveText('Project alias works')
-    ExpectScreen(screen).toHaveText('Project view works')
   })
 
   Test('renders imported alias references through circular module imports', async () => {

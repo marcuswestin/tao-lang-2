@@ -19,9 +19,9 @@ export async function launchReviewer(entry: ReviewerManifestEntry, ctx: LaunchCo
   const kind = ctx.kind ?? 'review'
   const timeoutSeconds = entry.timeoutSeconds ?? defaultTimeoutSeconds(entry)
   const promptText = await resolvePromptText(entry, ctx)
-  const artifactDir = FS.resolvePath(entry.label, { cwd: ctx.runDir })
-  const debugFile = FS.resolvePath('debug.log', { cwd: artifactDir })
-  const finalFile = FS.resolvePath('final.txt', { cwd: artifactDir })
+  const artifactDir = FS.resolvePath(entry.label, ctx.runDir)
+  const debugFile = FS.resolvePath('debug.log', artifactDir)
+  const finalFile = FS.resolvePath('final.txt', artifactDir)
   const invocation = buildReviewerInvocation({
     reviewer: entry.reviewer,
     promptText,
@@ -32,13 +32,11 @@ export async function launchReviewer(entry: ReviewerManifestEntry, ctx: LaunchCo
     timeoutSeconds,
   })
 
-  const stdoutPath = FS.resolvePath(invocation.outputFormat === 'jsonl' ? 'stdout.jsonl' : 'stdout.log', {
-    cwd: artifactDir,
-  })
-  const stderrPath = FS.resolvePath('stderr.log', { cwd: artifactDir })
-  const eventsPath = FS.resolvePath('events.jsonl', { cwd: artifactDir })
-  const statusPath = FS.resolvePath('status.json', { cwd: artifactDir })
-  const reviewPath = FS.resolvePath('review.md', { cwd: artifactDir })
+  const stdoutPath = FS.resolvePath(invocation.outputFormat === 'jsonl' ? 'stdout.jsonl' : 'stdout.log', artifactDir)
+  const stderrPath = FS.resolvePath('stderr.log', artifactDir)
+  const eventsPath = FS.resolvePath('events.jsonl', artifactDir)
+  const statusPath = FS.resolvePath('status.json', artifactDir)
+  const reviewPath = FS.resolvePath('review.md', artifactDir)
   await resetReviewerArtifacts({
     artifactDir,
     debugFile,
@@ -97,20 +95,20 @@ export async function launchReviewer(entry: ReviewerManifestEntry, ctx: LaunchCo
     timedOut: result.timedOut,
   }
   await updateFinalStatus(statusPath, meta)
-  await FS.writeJson(FS.resolvePath(`${entry.label}.meta.json`, { cwd: ctx.runDir }), meta)
+  await FS.writeJson(FS.resolvePath(`${entry.label}.meta.json`, ctx.runDir), meta)
   await appendRuntimeMetric(meta, ctx)
   return meta
 }
 
 async function resolvePromptText(entry: ReviewerManifestEntry, ctx: LaunchContext): Promise<string> {
   if (entry.promptFile !== undefined) {
-    return FS.readText(FS.resolvePath(entry.promptFile, { cwd: ctx.repoRoot }))
+    return FS.readText(FS.resolvePath(entry.promptFile, ctx.repoRoot))
   }
   const scope = entry.scope ?? (entry.scopeFile === undefined
     ? undefined
-    : await FS.readText(FS.resolvePath(entry.scopeFile, { cwd: ctx.repoRoot })))
+    : await FS.readText(FS.resolvePath(entry.scopeFile, ctx.repoRoot)))
   const promptText = buildReviewPrompt({ repoRoot: ctx.repoRoot, scope, lensKey: entry.lens })
-  await FS.writeText(FS.resolvePath(`prompt-${entry.label}.md`, { cwd: ctx.runDir }), promptText)
+  await FS.writeText(FS.resolvePath(`prompt-${entry.label}.md`, ctx.runDir), promptText)
   return promptText
 }
 
@@ -132,7 +130,7 @@ export async function readRunMetas(runDir: string): Promise<ReviewMeta[]> {
   const metas: ReviewMeta[] = []
   for (const name of await FS.listDir(runDir)) {
     if (name.endsWith('.meta.json')) {
-      metas.push(await FS.readJson<ReviewMeta>(FS.resolvePath(name, { cwd: runDir })))
+      metas.push(await FS.readJson<ReviewMeta>(FS.resolvePath(name, runDir)))
     }
   }
   return metas.sort((left, right) => left.label.localeCompare(right.label))
@@ -200,7 +198,7 @@ async function resetReviewerArtifacts(paths: {
     FS.remove(paths.statusPath),
     FS.remove(paths.stderrPath),
     FS.remove(paths.stdoutPath),
-    FS.remove(FS.resolvePath('stdout.jsonl', { cwd: paths.artifactDir })),
-    FS.remove(FS.resolvePath('stdout.log', { cwd: paths.artifactDir })),
+    FS.remove(FS.resolvePath('stdout.jsonl', paths.artifactDir)),
+    FS.remove(FS.resolvePath('stdout.log', paths.artifactDir)),
   ])
 }

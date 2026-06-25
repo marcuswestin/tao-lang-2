@@ -1,6 +1,11 @@
-import { AfterEach, Describe, Test } from '@shared/test'
+import { RuntimeTesting } from '@runtime/testing/runtime-testing'
+import { AfterAll, AfterEach, Describe, Test } from '@shared/test'
 import { cleanup } from '@testing-library/react-native'
 import { ExpectScreen, testCompileApp } from './test-compile-app'
+
+AfterAll(async () => {
+  await RuntimeTesting.stopTestCompiler()
+})
 
 AfterEach(() => cleanup())
 

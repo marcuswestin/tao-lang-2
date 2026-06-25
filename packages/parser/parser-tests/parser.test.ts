@@ -1,14 +1,14 @@
 import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import { testParseCode, testParseSyntax } from './test-parse'
 
-const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
-const typeSystemTestsPath = FS.repoPath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
-const runtimeStdlibTestsPath = FS.repoPath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
+const kitchenSinkPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const kitchenSinkTestPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
+const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
+const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 
 Describe('minimal Tao parser', () => {
   Test('parses the current Kitchen Sink app', async () => {
@@ -397,6 +397,7 @@ Describe('minimal Tao parser', () => {
           run MyApp
 
           expect text "Hello"
+          press text "Add"
           expect missing text "Loading"
         }
       }
@@ -408,13 +409,18 @@ Describe('minimal Tao parser', () => {
     const [check] = test.block.statements
     Expect.Is(check, AST.isCheckDeclaration)
     Expect(check.name).toBe('renders text')
-    const [run, expectedText, missingText] = check.block.statements
+    const [run, expectedText, pressText, missingText] = check.block.statements
     Expect.Is(run, AST.isRunStep)
     Expect(run.app.ref?.name).toBe('MyApp')
     Expect.Is(expectedText, AST.isExpectTextStep)
+    Expect(expectedText.selector).toBe('text')
     Expect(expectedText.text).toBe('Hello')
     Expect(expectedText.missing).toBe(false)
+    Expect.Is(pressText, AST.isPressTextStep)
+    Expect(pressText.selector).toBe('text')
+    Expect(pressText.text).toBe('Add')
     Expect.Is(missingText, AST.isExpectTextStep)
+    Expect(missingText.selector).toBe('text')
     Expect(missingText.text).toBe('Loading')
     Expect(missingText.missing).toBe(true)
   })
@@ -427,7 +433,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(useStatement, AST.isUseStatement)
     Expect(useStatement.importedDeclarations[0]?.ref?.name).toBe('KitchenSink')
     Expect.Is(test, AST.isTestDeclaration)
-    Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(3)
+    Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(4)
   })
 
   Test('does not discover test sidecars from app directory imports', async () => {

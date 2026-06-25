@@ -1,18 +1,24 @@
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
+
+const supportedSelectors = ['text'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
   testPlacement: 'Test declarations are only allowed at file level.',
   testBlock: (name: string) => `Only check declarations are allowed in test '${name}'.`,
   checkPlacement: 'Check declarations are only allowed inside test blocks.',
-  checkBlock: (name: string) => `Only run and expect text statements are allowed in check '${name}'.`,
+  checkBlock: (name: string) => `Only run, press, and expect statements are allowed in check '${name}'.`,
   runPlacement: 'Run steps are only allowed inside check blocks.',
+  pressPlacement: 'Press steps are only allowed inside check blocks.',
   expectationPlacement: 'Expectations are only allowed inside check blocks.',
+  selector: (selector: string) =>
+    `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
   missingCheck: (name: string) => `Test '${name}' must declare at least one check.`,
   missingRun: (name: string) => `Check '${name}' must start exactly one app with run.`,
   duplicateRun: (name: string) => `Check '${name}' must not declare more than one run step.`,
-  expectationBeforeRun: 'Expectations must come after the run step.',
+  expectationBeforeRun: 'Check steps must come after the run step.',
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
 } as const
 
@@ -29,10 +35,17 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(testValidationMessages.runPlacement, run)
     }
   }
+  for (const press of AST.streamAllContents(file).filter(AST.isPressTextStep)) {
+    if (statementNeedsStepPlacementDiagnostic(press)) {
+      ctx.error(testValidationMessages.pressPlacement, press)
+    }
+    validateSelector(press, ctx)
+  }
   for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
     if (statementNeedsStepPlacementDiagnostic(expectation)) {
       ctx.error(testValidationMessages.expectationPlacement, expectation)
     }
+    validateSelector(expectation, ctx)
   }
 }
 
@@ -73,12 +86,18 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
   }
 
   let hasRun = false
-  for (const step of check.block.statements) {
-    if (AST.isRunStep(step)) {
-      hasRun = true
-      continue
-    }
-    if (!hasRun && AST.isExpectTextStep(step)) {
+  for (const step of check.block.statements.filter(AST.isCheckStep)) {
+    Switch.type(step, {
+      ExpectTextStep: checkStepOrder,
+      PressTextStep: checkStepOrder,
+      RunStep: () => {
+        hasRun = true
+      },
+    })
+  }
+
+  function checkStepOrder(step: AST.ExpectTextStep | AST.PressTextStep): void {
+    if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
     }
   }
@@ -93,12 +112,18 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
   }
 }
 
+function validateSelector(step: AST.ExpectTextStep | AST.PressTextStep, ctx: ValidationContext): void {
+  if (!supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])) {
+    ctx.error(testValidationMessages.selector(step.selector), step)
+  }
+}
+
 function blockOwner(node: AST.Node): AST.Node | undefined {
   const parent = node.$container
   return AST.isBlock(parent) ? parent.$container : undefined
 }
 
-function statementNeedsStepPlacementDiagnostic(statement: AST.RunStep | AST.ExpectTextStep): boolean {
+function statementNeedsStepPlacementDiagnostic(statement: AST.CheckStep): boolean {
   const owner = blockOwner(statement)
   return !AST.isCheckDeclaration(owner) && !AST.isTestDeclaration(owner)
 }

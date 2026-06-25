@@ -24,4 +24,4 @@ This app verifies bracketed layout clauses and the default app-shell baseline. `
 
 ## Behavior Test Notes
 
-Runtime behavior tests compile the executable app and assert rendered text for the layout/app-shell smoke content. Style-specific behavior is covered in runtime tests for `TR.Layout` and `TR.AppShell`.
+`Layout and App Shell.test.tao` asserts rendered text for the layout/app-shell smoke content. Style-specific behavior is covered in runtime tests for `TR.Layout` and `TR.AppShell`.

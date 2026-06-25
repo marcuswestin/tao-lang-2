@@ -1,4 +1,5 @@
-import { CLI, Errors, FS, HCI, Platform, Text, Time } from '@shared'
+import { CLI, Errors, FS, Platform, Repo, Text, Time } from '@shared'
+import { TUI } from '../TUI'
 import { ExpoConfig } from './expo-config'
 import { ExpoMetro } from './metro'
 
@@ -44,7 +45,7 @@ async function ensureEmulator(): Promise<void> {
       'Android sdkmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
     )
     await requireAndroidSdkPackage(ANDROID_SYSTEM_IMAGE)
-    HCI.writeLine(`No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
+    TUI.logDevLoop('dev', `No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
     await CLI.mustRun('avdmanager', {
       args: [
         'create',
@@ -68,14 +69,14 @@ async function ensureEmulator(): Promise<void> {
   if (avdName === ANDROID_AVD_NAME) {
     await ensureAvdConfig(avdName)
   }
-  const logPath = FS.resolvePath('tao-android-emulator.log', { cwd: FS.tmpdir() })
+  const logPath = FS.resolvePath('tao-android-emulator.log', FS.tmpdir())
   const runningSerial = await findRunningEmulator()
   if (runningSerial) {
     if (await isEmulatorBooted(runningSerial)) {
-      HCI.writeLine(`Android emulator ${runningSerial} is already booted.`)
+      TUI.logDevLoop('dev', `Android emulator ${runningSerial} is already booted.`)
       return
     }
-    HCI.writeLine(`Android emulator ${runningSerial} is starting.`)
+    TUI.logDevLoop('dev', `Android emulator ${runningSerial} is starting.`)
     await waitForBootedEmulator(logPath)
   } else {
     await startEmulator(avdName, logPath)
@@ -87,12 +88,12 @@ async function ensureExpoGo(): Promise<void> {
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
   const serial = await requireBootedEmulator()
   if (await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
-    HCI.writeLine(`Expo Go is already installed on ${serial}.`)
+    TUI.logDevLoop('dev', `Expo Go is already installed on ${serial}.`)
     return
   }
 
   const apkPath = await downloadExpoGoApk()
-  HCI.writeLine(`Installing Expo Go on ${serial}.`)
+  TUI.logDevLoop('dev', `Installing Expo Go on ${serial}.`)
   await CLI.mustRun('adb', {
     args: ['-s', serial, 'install', '-r', '-d', '--user', EXPO_ADB_USER, apkPath],
     stdio: 'inherit',
@@ -103,11 +104,11 @@ async function prepareAvailableExpoGo(): Promise<boolean> {
   await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
   const serial = await findRunningEmulator()
   if (!serial || !await isEmulatorBooted(serial)) {
-    HCI.logProcessInfo('dev', 'No booted Android emulator found; skipping Android launch.')
+    TUI.logDevLoop('dev', 'No booted Android emulator found; skipping Android launch.')
     return false
   }
   if (!await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
-    HCI.logProcessInfo(
+    TUI.logDevLoop(
       'dev',
       `Expo Go is not installed on ${serial}; run ./dev android-expo-go before opening Android.`,
     )
@@ -146,7 +147,7 @@ async function requireAndroidSdkPackage(sdkPackage: string): Promise<void> {
 }
 
 async function ensureAvdConfig(avdName: string): Promise<void> {
-  const configPath = FS.resolvePath(`${avdName}.avd/config.ini`, { cwd: avdHome() })
+  const configPath = FS.resolvePath(`${avdName}.avd/config.ini`, avdHome())
   if (!await FS.exists(configPath)) {
     return
   }
@@ -163,8 +164,8 @@ async function ensureAvdConfig(avdName: string): Promise<void> {
 
 function avdHome(): string {
   const androidUserHome = Platform.runtimeProcess.env['ANDROID_USER_HOME']
-    ?? FS.resolvePath('.android', { cwd: FS.homeDir() })
-  return Platform.runtimeProcess.env['ANDROID_AVD_HOME'] ?? FS.resolvePath('avd', { cwd: androidUserHome })
+    ?? FS.resolvePath('.android', FS.homeDir())
+  return Platform.runtimeProcess.env['ANDROID_AVD_HOME'] ?? FS.resolvePath('avd', androidUserHome)
 }
 
 function upsertAvdConfigValue(config: string, key: string, value: string): string {
@@ -203,7 +204,7 @@ async function isEmulatorBooted(serial: string): Promise<boolean> {
 }
 
 async function startEmulator(avdName: string, logPath: string): Promise<void> {
-  HCI.writeLine(`Starting Android emulator ${avdName}.`)
+  TUI.logDevLoop('dev', `Starting Android emulator ${avdName}.`)
   const logFile = await FS.openAppend(logPath)
   try {
     const emulator = CLI.start('emulator', {
@@ -212,7 +213,7 @@ async function startEmulator(avdName: string, logPath: string): Promise<void> {
       stdio: ['ignore', logFile.fd, logFile.fd],
       unref: true,
     })
-    emulator.onceError(error => HCI.writeErrorLine(`Failed to start Android emulator: ${error.message}`))
+    emulator.onceError(error => TUI.logDevLoop('dev', `Failed to start Android emulator: ${error.message}`, 'error'))
   } finally {
     await logFile.close()
   }
@@ -223,7 +224,7 @@ async function waitForBootedEmulator(logPath: string): Promise<void> {
   while (Date.now() < deadline) {
     const serial = await findRunningEmulator()
     if (serial && await isEmulatorBooted(serial)) {
-      HCI.writeLine(`Android emulator ${serial} is booted.`)
+      TUI.logDevLoop('dev', `Android emulator ${serial} is booted.`)
       return
     }
     await Time.sleep(EMULATOR_BOOT_POLL_MS)
@@ -253,14 +254,14 @@ async function isPackageInstalled(serial: string, appId: string): Promise<boolea
 async function downloadExpoGoApk(): Promise<string> {
   const url = await getExpoGoApkUrl()
   const filename = FS.basename(new URL(url).pathname)
-  const outputDir = FS.repoPath(EXPO_GO_APK_CACHE_DIR)
-  const outputPath = FS.resolvePath(filename, { cwd: outputDir })
+  const outputDir = Repo.resolvePath(EXPO_GO_APK_CACHE_DIR)
+  const outputPath = FS.resolvePath(filename, outputDir)
   if (await FS.exists(outputPath)) {
     return outputPath
   }
 
   await FS.mkdir(FS.dirname(outputPath))
-  HCI.writeLine(`Downloading Expo Go for SDK ${EXPO_GO_SDK_VERSION}.`)
+  TUI.logDevLoop('dev', `Downloading Expo Go for SDK ${EXPO_GO_SDK_VERSION}.`)
   const response = await fetch(url)
   if (!response.ok) {
     Errors.throwUserInput(`Failed to download Expo Go APK: ${response.status} ${response.statusText}`)
@@ -292,7 +293,7 @@ async function openExpoGoWhenMetroIsReady(url: string = ExpoConfig.EXPO_GO_URL):
   await ExpoMetro.waitForMetro()
   const serial = await requireBootedEmulator()
   await reverseMetroPort(serial)
-  HCI.writeLine(`Opening ${url} on ${serial}.`)
+  TUI.logDevLoop('dev', `Opening ${url} on ${serial}.`)
   await CLI.mustRun('adb', {
     args: [
       '-s',

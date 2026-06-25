@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { TaoFormatter } from 'tao-formatter'
 import { AST, Langium } from 'tao-parser'
 import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
@@ -9,7 +9,7 @@ import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-gr
 Describe('Tao IDE extension smoke', () => {
   Test('declares extension and language server entrypoint build inputs', async () => {
     const packageJson = await FS.readJson<IdeExtensionPackageJson>(
-      FS.resolvePath('../package.json', { cwd: import.meta.dir }),
+      FS.resolvePath('../package.json', import.meta.dir),
     )
     Expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
 
@@ -20,24 +20,24 @@ Describe('Tao IDE extension smoke', () => {
       '../language-configuration.json',
     ]
     for (const entrypoint of entrypoints) {
-      Expect(await FS.isFile(FS.resolvePath(entrypoint, { cwd: import.meta.dir }))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath(entrypoint, import.meta.dir))).toBe(true)
     }
   })
 
   Test('generates the TextMate grammar for VS Code', async () => {
     const grammarPath = FS.resolvePath(
       '../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
-      { cwd: import.meta.dir },
+      import.meta.dir,
     )
     Expect(await FS.isFile(grammarPath)).toBe(true)
   })
 
   Test('merges Tao syntax highlighting with embedded TypeScript fences', async () => {
     const generatedGrammar = await FS.readJson<Record<string, unknown>>(
-      FS.resolvePath('../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', { cwd: import.meta.dir }),
+      FS.resolvePath('../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', import.meta.dir),
     )
     const overlayGrammar = await FS.readJson<Record<string, unknown>>(
-      FS.resolvePath('../ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json', { cwd: import.meta.dir }),
+      FS.resolvePath('../ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json', import.meta.dir),
     )
     const merged = mergeTaoTextMateGrammar(generatedGrammar, overlayGrammar)
 
@@ -50,7 +50,7 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('contributes Tao command-palette source actions', async () => {
     const packageJson = await FS.readJson<IdeExtensionPackageJson>(
-      FS.resolvePath('../package.json', { cwd: import.meta.dir }),
+      FS.resolvePath('../package.json', import.meta.dir),
     )
     const commands = packageJson.contributes.commands.map(command => command.title)
 
@@ -233,12 +233,12 @@ async function buildCodeActionFixture(source: string): Promise<{
   document: AST.Document
   cleanup: () => Promise<void>
 }> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-actions-', { cwd: FS.tmpdir() }))
+  const rootDir = await mkTestDir('tao-ide-actions-')
   const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
     lspCodeActionProvider: () => new TaoCodeActionProvider(),
   })
   const services = workspace.services
-  const uri = Langium.URI.file(FS.resolvePath(`ide-actions-${++codeActionFixtureId}.tao`, { cwd: rootDir }))
+  const uri = Langium.URI.file(FS.resolvePath(`ide-actions-${++codeActionFixtureId}.tao`, rootDir))
   const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
   services.shared.workspace.LangiumDocuments.addDocument(document)
   await services.shared.workspace.DocumentBuilder.build([document], {
@@ -255,12 +255,12 @@ async function buildFormatterFixture(source: string): Promise<{
   document: AST.Document
   cleanup: () => Promise<void>
 }> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-format-', { cwd: FS.tmpdir() }))
+  const rootDir = await mkTestDir('tao-ide-format-')
   const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
     lspFormatter: () => new TaoFormatter(),
   })
   const services = workspace.services
-  const uri = Langium.URI.file(FS.resolvePath('ide-format.tao', { cwd: rootDir }))
+  const uri = Langium.URI.file(FS.resolvePath('ide-format.tao', rootDir))
   const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
   services.shared.workspace.LangiumDocuments.addDocument(document)
   await services.shared.workspace.DocumentBuilder.build([document], {
@@ -298,11 +298,11 @@ function applyEdits(document: AST.Document, edits: readonly Langium.TextEdit[]):
 }
 
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  const rootDir = await mkTestDir('tao-ide-lsp-')
   try {
     const workspace = await LSPWorkspace.open(rootDir)
     const services = workspace.services
-    const uri = Langium.URI.file(FS.resolvePath('ide-smoke.tao', { cwd: rootDir }))
+    const uri = Langium.URI.file(FS.resolvePath('ide-smoke.tao', rootDir))
     const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
     services.shared.workspace.LangiumDocuments.addDocument(document)
 
@@ -318,14 +318,14 @@ async function validateWithLanguageServerServices(source: string): Promise<strin
 }
 
 async function validateFilesWithLanguageServerServices(sources: Record<string, string>): Promise<string[]> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  const rootDir = await mkTestDir('tao-ide-lsp-')
   try {
     const workspace = await LSPWorkspace.open(rootDir)
     const services = workspace.services
     const documents = Object.entries(sources).map(([path, source]) => {
       const workspacePath = path.startsWith('/__tao__/')
-        ? FS.resolvePath(path.slice('/__tao__/'.length), { cwd: rootDir })
-        : FS.resolvePath(path, { cwd: rootDir })
+        ? FS.resolvePath(path.slice('/__tao__/'.length), rootDir)
+        : FS.resolvePath(path, rootDir)
       const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
         source,
         Langium.URI.file(workspacePath),
@@ -349,14 +349,14 @@ async function validateOnDiskFileWithLanguageServerServices(
   entryFile: string,
   sources: Record<string, string>,
 ): Promise<string[]> {
-  const rootDir = await FS.mkTmpDir(FS.resolvePath('tao-ide-lsp-', { cwd: FS.tmpdir() }))
+  const rootDir = await mkTestDir('tao-ide-lsp-')
   try {
     for (const [path, source] of Object.entries(sources)) {
-      await FS.writeText(FS.resolvePath(path, { cwd: rootDir }), source)
+      await FS.writeText(FS.resolvePath(path, rootDir), source)
     }
     const workspace = await LSPWorkspace.open(rootDir)
     const services = workspace.services
-    const entryPath = FS.resolvePath(entryFile, { cwd: rootDir })
+    const entryPath = FS.resolvePath(entryFile, rootDir)
     const document = Array.from(services.shared.workspace.LangiumDocuments.all)
       .find(document => document.uri.path === entryPath) as AST.Document | undefined
 

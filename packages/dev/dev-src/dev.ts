@@ -1,7 +1,16 @@
-import { Errors, HCI, Platform } from '@shared'
+import { Errors, HCI, Platform, Switch } from '@shared'
 import { runWithCommands } from './commands/commands'
 import { runDevLoop } from './dev-loop/dev-loop'
 import { ExpoRunner } from './dev-loop/expo-runner/ExpoRunner'
+import { TestRunner } from './dev-loop/test-runner/TestRunner'
+import { TUI } from './dev-loop/TUI'
+
+type TestOutputMode = 'lines' | 'tui'
+
+type TestCommandOptions = {
+  jobs?: string
+  output?: string
+}
 
 await runWithCommands(commands => {
   commands
@@ -11,6 +20,26 @@ await runWithCommands(commands => {
       try {
         const devLoop = await runDevLoop(appPath)
         Platform.runtimeProcess.exit(devLoop)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('test')
+    .description('Run package tests in parallel.')
+    .argument('[pattern]', 'Optional test name pattern.')
+    .option('--output <mode>', 'Output mode: tui or lines.', 'tui')
+    .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
+    .action(async (pattern = '', options: TestCommandOptions = {}) => {
+      try {
+        Platform.runtimeProcess.exit(
+          await runTests(pattern, {
+            jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
+            outputMode: parseTestOutputMode(options.output ?? 'tui'),
+          }),
+        )
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
@@ -38,3 +67,31 @@ await runWithCommands(commands => {
       await ExpoRunner.startExpo()
     })
 })
+
+async function runTests(
+  pattern: string,
+  options: { jobs?: number; outputMode: TestOutputMode },
+): Promise<number> {
+  return await Switch<TestOutputMode, Promise<number>>(options.outputMode, {
+    lines: () => TestRunner.runSuitesInterleaved(pattern, { jobs: options.jobs }),
+    tui: () => TUI.runTestSuites(pattern, { jobs: options.jobs }),
+  })
+}
+
+function parseTestOutputMode(value: string): TestOutputMode {
+  if (value === 'lines' || value === 'tui') {
+    return value
+  }
+  Errors.throwUserInput(`Unknown test output mode '${value}'. Use 'tui' or 'lines'.`)
+}
+
+function parseOptionalPositiveInteger(value: string | undefined, label: string): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  const parsed = Number(value)
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed
+  }
+  Errors.throwUserInput(`${label} must be a positive integer.`)
+}

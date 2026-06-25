@@ -1,8 +1,7 @@
-import type { Dirent } from 'node:fs'
+import { type Dirent, existsSync as nodeExistsSync } from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
-import * as Repo from './Repo'
 
 /** WalkOptions declares filters for recursive file walking. */
 export type WalkOptions = {
@@ -22,21 +21,14 @@ export type FileHandle = Awaited<ReturnType<typeof nodeFs.open>>
 
 /**
  * resolvePath resolves a slash-separated path into an absolute host path.
- * Without options.cwd, relative paths resolve from the current process cwd.
- * When options.cwd is provided, relative paths resolve from it and absolute paths ignore it.
+ * Without cwd, relative paths resolve from the current process cwd.
+ * When cwd is provided, relative paths resolve from it and absolute paths ignore it.
  * Use this for full filesystem locations; use joinPath only for ungrounded path fragments.
  */
-export function resolvePath(inputPath: string, options?: { cwd?: string }): string {
-  return options?.cwd === undefined
+export function resolvePath(inputPath: string, cwd?: string): string {
+  return cwd === undefined
     ? nodePath.resolve(normalizePathPart(inputPath))
-    : nodePath.resolve(normalizePathPart(options.cwd), normalizePathPart(inputPath))
-}
-
-/**
- * repoPath resolves a slash-separated path from the Git repo root by default.
- */
-export function repoPath(inputPath?: string): string {
-  return resolvePath(inputPath ?? '.', { cwd: Repo.getRoot() })
+    : nodePath.resolve(normalizePathPart(cwd), normalizePathPart(inputPath))
 }
 
 /**
@@ -82,6 +74,11 @@ export async function exists(inputPath: string): Promise<boolean> {
   }
 }
 
+/** existsSync checks whether a path exists without leaving sync-only callers to import node:fs. */
+export function existsSync(inputPath: string): boolean {
+  return nodeExistsSync(inputPath)
+}
+
 /** isFile checks whether a path exists and is a file. */
 export async function isFile(inputPath: string): Promise<boolean> {
   try {
@@ -98,6 +95,11 @@ export async function isDirectory(inputPath: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** realPath resolves symlinks and filesystem indirections for an existing path. */
+export async function realPath(inputPath: string): Promise<string> {
+  return nodeFs.realpath(inputPath)
 }
 
 /** isEmptyDirectory checks whether a directory contains any entries. */
@@ -229,7 +231,7 @@ async function* walkDirectory(
         break
       }
 
-      const entryPath = resolvePath(entry.name, { cwd: directoryPath })
+      const entryPath = resolvePath(entry.name, directoryPath)
       const isDirectoryEntry = entry.isDirectory() || await isFollowedSymlinkDirectory(entry, entryPath, options)
 
       if (shouldYield(entryPath, isDirectoryEntry, options)) {

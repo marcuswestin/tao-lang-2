@@ -1,10 +1,11 @@
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, Platform, Repo } from '@shared'
 import { DevFileWatcher } from './DevFileWatcher'
 import { ExpoRunner } from './expo-runner/ExpoRunner'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
 import Commands from './keyboard-input/Commands'
 import { RawKeyInput } from './keyboard-input/RawKeyInput'
 import Run from './Run'
+import { TUI } from './TUI'
 
 const DEFAULT_APP_PATH = 'Apps/Kitchen Sink/Kitchen Sink.tao'
 const RUNTIME_PACKAGE_PATH = 'packages/runtime'
@@ -13,8 +14,9 @@ const RUNTIME_PACKAGE_PATH = 'packages/runtime'
 export async function runDevLoop(appPathInput?: string): Promise<number> {
   const repoRoot = Repo.getRoot()
   const appPath = await resolveDevAppPath(appPathInput)
-  const runtimeRoot = FS.repoPath(RUNTIME_PACKAGE_PATH)
+  const runtimeRoot = Repo.resolvePath(RUNTIME_PACKAGE_PATH)
   const expoServer = ExpoRunner.createServer(runtimeRoot)
+  const output = TUI.startDevLoopOutput()
   let keyInput: RawKeyInput | undefined
   let watcher: DevFileWatcher | undefined
   let finished = false
@@ -63,7 +65,6 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
   const requestFinish = (exitCode: number) => {
     if (finished) {
       Platform.runtimeProcess.exit(exitCode)
-      return
     }
     void finish(exitCode)
   }
@@ -80,7 +81,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
   })
 
   try {
-    HCI.logProcessInfo('dev', `Tao dev app: ${appPath}`)
+    TUI.logDevLoop('dev', `Tao dev app: ${appPath}`)
     const initialCompileSucceeded = await Run.compileApp(repoRoot, appPath, 'initial compile', true)
     if (shouldStop()) {
       return await done
@@ -107,7 +108,7 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
     }
     Commands.printControls()
     if (!keyInput.start()) {
-      HCI.logProcessInfo('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
+      TUI.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
     void ExpoRunner.openStartupTargets(shouldStop)
     return await done
@@ -115,12 +116,13 @@ export async function runDevLoop(appPathInput?: string): Promise<number> {
     removeSigint()
     removeSigterm()
     await cleanup()
+    await output?.stop()
   }
 }
 
 async function resolveDevAppPath(appPath: string | undefined): Promise<string> {
   const resolvedPath = appPath === undefined || appPath.trim() === ''
-    ? FS.repoPath(DEFAULT_APP_PATH)
+    ? Repo.resolvePath(DEFAULT_APP_PATH)
     : FS.resolvePath(appPath)
 
   if (!await FS.isFile(resolvedPath)) {

@@ -1,5 +1,5 @@
 import { type Diagnostic, Diagnostics, FS } from '@shared'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 
 const tsFence = '```ts'
@@ -83,6 +83,43 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  Test('can reuse a process-shared workspace by resolved root', async () => {
+    await withTaoFiles(
+      'tao-workspace-shared-',
+      {
+        'Main.tao': 'view MainView { }\n',
+      },
+      async (_paths, rootDir) => {
+        const fresh = await Workspace.open(rootDir)
+        const shared = await Workspace.shared(rootDir)
+        const sameShared = await Workspace.shared(FS.resolvePath('.', rootDir))
+
+        Expect(fresh).not.toBe(shared)
+        Expect(shared).toBe(sameShared)
+      },
+    )
+  })
+
+  Test('can compile test plans without rerunning semantic validation', async () => {
+    await withTaoFiles(
+      'tao-workspace-test-plan-skip-validation-',
+      {
+        'Main.test.tao': 'test "Empty" { }\n',
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+
+        await Expect(workspace.compileTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          "Test 'Empty' must declare at least one check.",
+        )
+        const plan = await workspace.compileTestPlan(paths['Main.test.tao']!, { skipValidation: true })
+
+        Expect(plan.suites[0]?.name).toBe('Empty')
+        Expect(plan.suites[0]?.checks).toEqual([])
+      },
+    )
+  })
+
   Test('rejects entry files outside the workspace root', async () => {
     await withTaoFiles(
       'tao-workspace-root-',
@@ -93,7 +130,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         `,
       },
       async (paths) => {
-        const outsideRoot = await FS.mkTmpDir(FS.resolvePath('tao-workspace-outside-', { cwd: FS.tmpdir() }))
+        const outsideRoot = await mkTestDir('tao-workspace-outside-')
         try {
           const workspace = await Workspace.open(outsideRoot)
           await Expect(workspace.parse(paths['Main.tao']!)).rejects.toThrow(
