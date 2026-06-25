@@ -1,3 +1,4 @@
+import { Switch } from '@shared'
 import {
   findUsageProvider,
   findUsageWindow,
@@ -308,7 +309,17 @@ function expandCandidates(
   candidates: readonly PlanCandidate[],
   providers: readonly UsageProviderSummary[],
 ): ReviewPlanProvider[] {
-  return candidates.flatMap(candidate => candidate === 'codex-best' ? codexPreferenceOrder(providers) : [candidate])
+  return candidates.flatMap(candidate =>
+    Switch<PlanCandidate, ReviewPlanProvider[]>(candidate, {
+      agy: () => ['agy'],
+      claude: () => ['claude'],
+      codex: () => ['codex'],
+      'codex-best': () => codexPreferenceOrder(providers),
+      'codex-spark': () => ['codex-spark'],
+      cursor: () => ['cursor'],
+      gemini: () => ['gemini'],
+    })
+  )
 }
 
 function codexPreferenceOrder(providers: readonly UsageProviderSummary[]): ReviewPlanProvider[] {
@@ -327,25 +338,12 @@ function providerAvailability(
   providers: readonly UsageProviderSummary[],
   provider: ReviewPlanProvider,
 ): ProviderAvailability {
-  const usageProvider = findUsageProvider(providers, provider === 'codex-spark' ? 'codex' : provider)
+  const usageProvider = findUsageProvider(providers, usageProviderName(provider))
   if (usageProvider === undefined) {
     return { status: 'unknown', reason: 'budget unknown; selected conservatively if needed' }
   }
   if (!usageProvider.ok) {
-    if (provider !== 'codex' && provider !== 'codex-spark') {
-      return {
-        status: 'unknown',
-        reason: usageProvider.error === undefined
-          ? 'provider budget unavailable; selected conservatively if needed'
-          : `provider budget unavailable (${usageProvider.error}); selected conservatively if needed`,
-      }
-    }
-    return {
-      status: 'failed',
-      reason: usageProvider.error === undefined
-        ? 'provider budget unavailable'
-        : `provider budget unavailable: ${usageProvider.error}`,
-    }
+    return unavailableProviderAvailability(provider, usageProvider)
   }
   const remainingPercent = providerRemainingPercent(usageProvider, provider)
   if (remainingPercent === undefined) {
@@ -369,12 +367,49 @@ function providerRemainingPercent(
   provider: UsageProviderSummary,
   reviewerProvider: ReviewPlanProvider,
 ): number | undefined {
-  if (reviewerProvider === 'codex') {
-    return findUsageWindow(provider, 'primary')?.remainingPercent
+  return Switch<ReviewPlanProvider, number | undefined>(reviewerProvider, {
+    agy: () => reportedProviderRemainingPercent(provider),
+    claude: () => reportedProviderRemainingPercent(provider),
+    codex: () => findUsageWindow(provider, 'primary')?.remainingPercent,
+    'codex-spark': () => findUsageWindow(provider, 'codex-spark')?.remainingPercent,
+    cursor: () => reportedProviderRemainingPercent(provider),
+    gemini: () => reportedProviderRemainingPercent(provider),
+  })
+}
+
+function unavailableProviderAvailability(
+  provider: ReviewPlanProvider,
+  usageProvider: UsageProviderSummary,
+): ProviderAvailability {
+  return Switch<ReviewPlanProvider, ProviderAvailability>(provider, {
+    agy: () => unknownProviderAvailability(usageProvider),
+    claude: () => unknownProviderAvailability(usageProvider),
+    codex: () => failedProviderAvailability(usageProvider),
+    'codex-spark': () => failedProviderAvailability(usageProvider),
+    cursor: () => unknownProviderAvailability(usageProvider),
+    gemini: () => unknownProviderAvailability(usageProvider),
+  })
+}
+
+function unknownProviderAvailability(usageProvider: UsageProviderSummary): ProviderAvailability {
+  return {
+    status: 'unknown',
+    reason: usageProvider.error === undefined
+      ? 'provider budget unavailable; selected conservatively if needed'
+      : `provider budget unavailable (${usageProvider.error}); selected conservatively if needed`,
   }
-  if (reviewerProvider === 'codex-spark') {
-    return findUsageWindow(provider, 'codex-spark')?.remainingPercent
+}
+
+function failedProviderAvailability(usageProvider: UsageProviderSummary): ProviderAvailability {
+  return {
+    status: 'failed',
+    reason: usageProvider.error === undefined
+      ? 'provider budget unavailable'
+      : `provider budget unavailable: ${usageProvider.error}`,
   }
+}
+
+function reportedProviderRemainingPercent(provider: UsageProviderSummary): number | undefined {
   const primary = findUsageWindow(provider, 'primary')?.remainingPercent
   if (primary !== undefined) {
     return primary
@@ -383,6 +418,17 @@ function providerRemainingPercent(
     .map(window => window.remainingPercent)
     .filter((value): value is number => value !== undefined && Number.isFinite(value))
   return reported.length === 0 ? undefined : Math.max(...reported)
+}
+
+function usageProviderName(provider: ReviewPlanProvider): string {
+  return Switch<ReviewPlanProvider, string>(provider, {
+    agy: () => 'agy',
+    claude: () => 'claude',
+    codex: () => 'codex',
+    'codex-spark': () => 'codex',
+    cursor: () => 'cursor',
+    gemini: () => 'gemini',
+  })
 }
 
 function manifestEntryForProvider(
@@ -403,27 +449,36 @@ function manifestEntryForProvider(
 }
 
 function reviewerForProvider(provider: ReviewPlanProvider): Reviewer {
-  return provider === 'codex-spark' ? 'codex' : provider
+  return Switch<ReviewPlanProvider, Reviewer>(provider, {
+    agy: () => 'agy',
+    claude: () => 'claude',
+    codex: () => 'codex',
+    'codex-spark': () => 'codex',
+    cursor: () => 'cursor',
+    gemini: () => 'gemini',
+  })
 }
 
 function modelForProvider(provider: ReviewPlanProvider): string | undefined {
-  switch (provider) {
-    case 'agy':
-      return DEFAULT_AGY_MODEL
-    case 'codex-spark':
-      return CODEX_SPARK_MODEL
-    case 'cursor':
-      return DEFAULT_CURSOR_MODEL
-    case 'gemini':
-      return DEFAULT_GEMINI_MODEL
-    case 'claude':
-    case 'codex':
-      return undefined
-  }
+  return Switch<ReviewPlanProvider, string | undefined>(provider, {
+    agy: () => DEFAULT_AGY_MODEL,
+    claude: () => undefined,
+    codex: () => undefined,
+    'codex-spark': () => CODEX_SPARK_MODEL,
+    cursor: () => DEFAULT_CURSOR_MODEL,
+    gemini: () => DEFAULT_GEMINI_MODEL,
+  })
 }
 
 function timeoutForProvider(provider: ReviewPlanProvider): number {
-  return provider === 'agy' ? 480 : 900
+  return Switch<ReviewPlanProvider, number>(provider, {
+    agy: () => 480,
+    claude: () => 900,
+    codex: () => 900,
+    'codex-spark': () => 900,
+    cursor: () => 900,
+    gemini: () => 900,
+  })
 }
 
 function skippedProvider(

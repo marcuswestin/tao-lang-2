@@ -108,14 +108,14 @@ async function collectInstructionFiles(repoRoot: string): Promise<InstructionAud
   const paths = new Set<string>()
 
   for (const path of knownPaths) {
-    const absolutePath = FS.resolvePath(path, { cwd: repoRoot })
+    const absolutePath = FS.resolvePath(path, repoRoot)
     if (await FS.exists(absolutePath)) {
       paths.add(absolutePath)
     }
   }
 
-  const agentsRoot = FS.resolvePath('agents', { cwd: repoRoot })
-  for await (const path of FS.walk(agentsRoot, { extensions: ['.md'] })) {
+  const agentsRoot = FS.resolvePath('agents', repoRoot)
+  for (const path of await Repo.filesUnder(agentsRoot, { extensions: ['.md'] })) {
     paths.add(path)
   }
 

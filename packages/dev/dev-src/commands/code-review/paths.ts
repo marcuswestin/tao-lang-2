@@ -10,7 +10,7 @@ export function reviewRunRoot(kind: ReviewRunKind): string {
 
 /** resolveReviewRunDir resolves review run directories from the repo root. */
 export function resolveReviewRunDir(run: string, repoRoot = Repo.getRoot()): string {
-  return FS.resolvePath(run, { cwd: repoRoot })
+  return FS.resolvePath(run, repoRoot)
 }
 
 /** reviewMetricsPath returns the runtime metrics JSONL path for the skill owning a run directory. */
@@ -19,7 +19,7 @@ export function reviewMetricsPath(runDir: string, repoRoot = Repo.getRoot()): st
   const parts = relativeRunDir.split('/')
   const skillsIndex = parts.findIndex((part, index) => part === 'skills' && parts[index - 1] === '.artifacts')
   const skillName = skillsIndex === -1 ? 'subagents-review' : parts[skillsIndex + 1] ?? 'subagents-review'
-  return FS.resolvePath(`.artifacts/skills/${skillName}/metrics/reviewer-runtimes.jsonl`, { cwd: repoRoot })
+  return FS.resolvePath(`.artifacts/skills/${skillName}/metrics/reviewer-runtimes.jsonl`, repoRoot)
 }
 
 /** formatReviewRunDir builds a sortable, human-readable run directory name. */
