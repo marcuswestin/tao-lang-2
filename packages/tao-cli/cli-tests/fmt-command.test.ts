@@ -1,6 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { runFmt } from '../cli-src/fmt-command'
+import { runFmt } from '../cli-src/source-commands'
 import { statusByFile, withTaoFixture } from './test-cli-files'
 
 Describe('tao fmt', () => {
@@ -16,8 +16,8 @@ Describe('tao fmt', () => {
         'unformatted.tao': 'changed',
         'nested/formatted.tao': 'unchanged',
       })
-      Expect(await FS.readText(FS.resolvePath('unformatted.tao', { cwd: rootDir }))).toBe('view MainView { }\n')
-      Expect(await FS.readText(FS.resolvePath('ignored.txt', { cwd: rootDir }))).toBe('view   Ignored    {   }')
+      Expect(await FS.readText(FS.resolvePath('unformatted.tao', rootDir))).toBe('view MainView { }\n')
+      Expect(await FS.readText(FS.resolvePath('ignored.txt', rootDir))).toBe('view   Ignored    {   }')
     })
   })
 
@@ -34,7 +34,7 @@ Describe('tao fmt', () => {
       })
       const broken = results.find(result => result.status === 'error')
       Expect(broken?.error).toContain('Tao source without syntax errors')
-      Expect(await FS.readText(FS.resolvePath('broken.tao', { cwd: rootDir }))).toBe('view Broken {')
+      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe('view Broken {')
     })
   })
 
@@ -48,12 +48,12 @@ Describe('tao fmt', () => {
       '.hidden-dir/skipped.tao': 'view   Skipped { }',
       'node_modules/.hidden.tao': 'view   MainView { }',
     }, async (rootDir) => {
-      const path = FS.resolvePath('node_modules/.hidden.tao', { cwd: rootDir })
+      const path = FS.resolvePath('node_modules/.hidden.tao', rootDir)
 
       Expect((await runFmt(rootDir)).length).toBe(0)
       Expect((await runFmt(path)).map(result => result.status)).toEqual(['changed'])
-      Expect(await FS.readText(FS.resolvePath('.hidden.tao', { cwd: rootDir }))).toBe('view   HiddenFile { }')
-      Expect(await FS.readText(FS.resolvePath('.hidden-dir/skipped.tao', { cwd: rootDir }))).toBe(
+      Expect(await FS.readText(FS.resolvePath('.hidden.tao', rootDir))).toBe('view   HiddenFile { }')
+      Expect(await FS.readText(FS.resolvePath('.hidden-dir/skipped.tao', rootDir))).toBe(
         'view   Skipped { }',
       )
       Expect(await FS.readText(path)).toBe('view MainView { }\n')
@@ -64,7 +64,7 @@ Describe('tao fmt', () => {
     await withTaoFixture({
       'app.tao': 'app   MyApp { view MainView }\nview MainView { }\n',
     }, async (rootDir) => {
-      const path = FS.resolvePath('app.tao', { cwd: rootDir })
+      const path = FS.resolvePath('app.tao', rootDir)
       const results = await runFmt(path)
 
       Expect(results.map(result => result.status)).toEqual(['changed'])

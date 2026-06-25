@@ -1,29 +1,64 @@
 import { Errors, FS } from '@shared'
 import { findTaoFiles } from './tao-files'
 
-/** InPlaceFileResult declares the outcome of one in-place Tao file operation. */
-export type InPlaceFileResult = {
-  path: string
-  status: 'changed' | 'unchanged' | 'error'
-  error?: string
+/** InPlace groups shared Tao CLI in-place file processing types. */
+export namespace InPlace {
+  /** Result declares the outcome of one in-place Tao file operation. */
+  export type Result = {
+    path: string
+    status: 'changed' | 'unchanged' | 'error'
+    error?: string
+  }
+
+  /** PathOptions configures path resolution for in-place Tao file commands. */
+  export type PathOptions = {
+    cwd?: string
+  }
+
+  /** ProcessOptions configures how an in-place file transform applies its output. */
+  export type ProcessOptions = {
+    write: boolean
+  }
+
+  /** Operation processes one Tao file and returns its in-place result. */
+  export type Operation = (filePath: string) => Promise<Result>
 }
 
+/** inPlace owns common Tao CLI in-place file processing helpers. */
+export const inPlace = {
+  processFile,
+  runOnTaoFiles,
+  workspaceRootForPath,
+} as const
+
 /** runOnTaoFiles runs an in-place operation over every .tao file at or under `path`. */
-export async function runOnTaoFiles(
-  path: string,
-  operation: (filePath: string) => Promise<InPlaceFileResult>,
-): Promise<InPlaceFileResult[]> {
-  const results: InPlaceFileResult[] = []
+async function runOnTaoFiles(path: string, operation: InPlace.Operation): Promise<InPlace.Result[]> {
+  const results: InPlace.Result[] = []
   for (const filePath of await findTaoFiles(path)) {
     results.push(await operation(filePath))
   }
   return results
 }
 
-/** workspaceRootForInPlacePath returns the package-aware workspace root for an in-place command root. */
-export async function workspaceRootForInPlacePath(path: string): Promise<string> {
-  const root = FS.resolvePath(path)
-  const cwd = FS.resolvePath('.')
+/** processFile reads a file, transforms it, and writes or checks the result. */
+async function processFile(
+  path: string,
+  transform: (before: string) => Promise<string>,
+  options: InPlace.ProcessOptions,
+): Promise<InPlace.Result> {
+  try {
+    const before = await FS.readText(path)
+    const after = await transform(before)
+    return options.write ? await writeWhenChanged(path, before, after) : compareOnly(path, before, after)
+  } catch (error) {
+    return inPlaceError(path, error)
+  }
+}
+
+/** workspaceRootForPath returns the package-aware workspace root for an in-place command root. */
+async function workspaceRootForPath(path: string, options: InPlace.PathOptions = {}): Promise<string> {
+  const root = FS.resolvePath(path, options.cwd)
+  const cwd = FS.resolvePath('.', options.cwd)
   if (pathIsWithin(root, cwd)) {
     return packageContainerRoot(cwd) ?? cwd
   }
@@ -31,12 +66,12 @@ export async function workspaceRootForInPlacePath(path: string): Promise<string>
 }
 
 /** compareOnly reports whether `after` differs from `before` without writing the file. */
-export function compareOnly(path: string, before: string, after: string): InPlaceFileResult {
+function compareOnly(path: string, before: string, after: string): InPlace.Result {
   return { path, status: after === before ? 'unchanged' : 'changed' }
 }
 
 /** writeWhenChanged writes `after` over the file at `path` when it differs from `before`. */
-export async function writeWhenChanged(path: string, before: string, after: string): Promise<InPlaceFileResult> {
+async function writeWhenChanged(path: string, before: string, after: string): Promise<InPlace.Result> {
   if (after === before) {
     return { path, status: 'unchanged' }
   }
@@ -45,7 +80,7 @@ export async function writeWhenChanged(path: string, before: string, after: stri
 }
 
 /** inPlaceError returns an error result for one in-place file operation. */
-export function inPlaceError(path: string, error: unknown): InPlaceFileResult {
+function inPlaceError(path: string, error: unknown): InPlace.Result {
   return { path, status: 'error', error: Errors.formatForUser(error) }
 }
 
