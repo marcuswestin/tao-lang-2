@@ -1,0 +1,128 @@
+// Recommended rank 7 of 7.
+// Syntax Family F: Generated semantic components.
+//
+// Generated variants are useful later, but they should not become the first
+// source of truth. The generated layer is still backed by ordinary [] modifier
+// collections.
+
+use Badge, Box, Button, Checkbox, Col, IconButton, Link, Row, Screen, Text, TextInput from @tao/ui
+
+app TodoApp {
+   design TodoDesign
+   view MainScreen
+}
+
+design TodoDesign {
+   primary #3b82f6
+   danger #dc2626
+   ink #0f172a
+   muted #64748b
+   canvas #f8fafc
+   surface white
+   border #e2e8f0
+   focus #93c5fd
+
+   display [size 32, weight bold, text ink, line 38]
+   title [size 22, weight semibold, text ink, line 28]
+   body [size 16, text ink, line 22]
+   label [size 15, weight semibold, text ink, line 20]
+   caption [size 13, text muted, line 18]
+
+   screen [fill, bg canvas, text ink]
+   page [fill, pad xl, gap lg]
+   card [stack, gap md, bg surface, border border, radius lg, pad lg]
+   task [row, bg surface, border border, radius lg, pad md]
+   completedTask [task, text muted, opacity 60%]
+   primaryAction [rowCenter, bg primary, text white, radius md, pad md, minTap 44]
+   secondaryAction [rowCenter, bg surface, text ink, border border, radius md, pad md, minTap 44]
+   destructiveAction [rowCenter, bg danger, text white, radius md, pad md, minTap 44]
+   input [bg surface, text ink, border border, radius md, pad md, minTap 44]
+   warning [row, gap sm, bg #fef3c7, text #92400e, border #f59e0b, radius md, pad md]
+   homeBadge [bg #dbeafe, text #1d4ed8, radius pill, pad sm]
+   workBadge [bg #ede9fe, text #6d28d9, radius pill, pad sm]
+
+   generate variants {
+      AppScreen = Screen [screen]
+      Page = Col [page]
+      DisplayTitle = Text [display]
+      Title = Text [title]
+      Body = Text [body]
+      Caption = Text [caption]
+      Card = Col [card]
+      TaskFrame = Row [task]
+      CompletedTaskFrame = Row [completedTask]
+      Warning = Box [warning]
+      PrimaryButton = Button [primaryAction]
+      SecondaryButton = Button [secondaryAction]
+      DestructiveButton = Button [destructiveAction]
+      PrimaryLink = Link [text primary, underline true]
+      SearchInput = TextInput [input]
+      HomeBadge = Badge [homeBadge]
+      WorkBadge = Badge [workBadge]
+      ButtonLikeText = Text [primaryAction]
+   }
+
+   generate gallery {
+      controls Button states normal pressed disabled
+      inputs TextInput states normal focused disabled
+      surfaces Card Warning TaskFrame
+      typography DisplayTitle Title Body Caption
+   }
+}
+
+view MainScreen {
+   state DraftTitle = ""
+   state SyncPaused = true
+
+   render AppScreen {
+      Page {
+         Row [content spaceBetween center] {
+            Col [gap xs] {
+               DisplayTitle "Today's Tasks"
+               Caption "Three open tasks"
+            }
+            IconButton "settings" [secondaryAction]
+         }
+
+         Card {
+            Title "Quick add"
+            Row [gap sm] {
+               SearchInput DraftTitle [width fill]
+               PrimaryButton "Add", action saveDraft
+            }
+         }
+
+         Warning when SyncPaused {
+            Body "Offline changes will sync later."
+            PrimaryLink "Retry now", action retrySync
+         }
+
+         Row [gap sm] {
+            SecondaryButton "All"
+            PrimaryButton "Open"
+            SecondaryButton "Completed"
+         }
+
+         TaskRow "Buy oat milk" "Barista blend if available" "home" false
+         TaskRow "Send design notes" "Send the shortlist" "work" false
+
+         ButtonLikeText "Not pressable"
+      }
+   }
+}
+
+view TaskRow TitleText is text, Notes is text, Priority is text, Done is boolean {
+   render Done ? CompletedTaskFrame : TaskFrame [gap md, content center stretch] {
+      Checkbox Done
+      Col [width fill, gap xs] {
+         Body TitleText
+         Caption Notes
+         PriorityBadge Priority
+      }
+      DestructiveButton "Delete"
+   }
+}
+
+view PriorityBadge Priority is text {
+   render Priority == "work" ? WorkBadge Priority : HomeBadge Priority
+}

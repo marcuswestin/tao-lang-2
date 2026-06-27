@@ -45,6 +45,10 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Add render IDs and minimal accessibility semantics
   - Stable test/accessibility identifiers, labels, roles for built-ins, useful TextInput/Button semantics, and validator guidance.
 
+- [ ] Add Tao design system MVP
+  - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level design application, runtime lowering, and first design diagnostics.
+  - Plan: `Roadmap/Add Tao design system MVP/Plan - Add Tao design system MVP.md`
+
 - [ ] Add forms and inputs MVP
   - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
 

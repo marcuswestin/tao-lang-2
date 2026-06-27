@@ -1,0 +1,108 @@
+// Recommended rank 5 of 7.
+// Syntax Family G: Modifier clauses only, no variants.
+//
+// This is the conservative MVP shape: no app-specific variants and no named
+// presentation collections. Render sites carry the full combined [] modifiers.
+
+use Badge, Box, Button, Checkbox, Col, Divider, IconButton, Link, Row, Screen, Text, TextInput from @tao/ui
+
+app TodoApp {
+   design TodoDesign
+   view MainScreen
+}
+
+design TodoDesign {
+   xs 4px
+   sm 8px
+   md 12px
+   lg 20px
+   xl 28px
+   pill 999px
+
+   primary #3b82f6
+   danger #dc2626
+   ink #0f172a
+   muted #64748b
+   canvas #f8fafc
+   surface white
+   border #e2e8f0
+   focus #93c5fd
+
+   display [size 32, weight bold, text ink, line 38]
+   title [size 22, weight semibold, text ink, line 28]
+   body [size 16, text ink, line 22]
+   label [size 15, weight semibold, text ink, line 20]
+   caption [size 13, text muted, line 18]
+}
+
+view MainScreen {
+   state DraftTitle = ""
+   state SyncPaused = true
+
+   render Screen [fill, bg canvas, text ink] {
+      Col [fill, pad xl, gap lg] {
+         Row [content spaceBetween center] {
+            Col [gap xs] {
+               Text "Today's Tasks" [display]
+               Text "Three open tasks" [caption]
+            }
+            IconButton "settings" [rowCenter, bg surface, text ink, border border, radius md, pad md, minTap 44]
+         }
+
+         Box [stack, gap md, bg surface, border border, radius lg, pad lg] {
+            Text "Quick add" [title]
+            Row [gap sm] {
+               TextInput DraftTitle [bg surface, text ink, border border, radius md, pad md, minTap 44, width fill]
+               Button "Add" [rowCenter, bg primary, text white, radius md, pad md, minTap 44], action saveDraft
+            }
+            Text "Press enter or tap Add to save." [caption]
+         }
+
+         Box [row, gap sm, content center stretch, bg #fef3c7, text #92400e, border #f59e0b, radius md, pad md] when SyncPaused {
+            Text "Offline changes will sync later." [body]
+            Link "Retry" [text primary, underline true], action retrySync
+         }
+
+         Row [gap sm] {
+            Button "All" [rowCenter, bg surface, text ink, border border, radius md, pad md, minTap 44]
+            Button "Open" [rowCenter, bg primary, text white, radius md, pad md, minTap 44]
+            Button "Completed" [rowCenter, bg surface, text ink, border border, radius md, pad md, minTap 44]
+         }
+
+         TaskRow "Buy oat milk" "Barista blend if available" "home" false
+         TaskRow "Send design notes" "Send the shortlist" "work" false
+
+         Divider [border border]
+         Text "Not pressable" [rowCenter, bg primary, text white, radius md, pad md, minTap 44]
+      }
+   }
+}
+
+view TaskRow TitleText is text, Notes is text, Priority is text, Done is boolean {
+   render Row [
+      row,
+      gap md,
+      content center stretch,
+      bg surface,
+      border border,
+      radius lg,
+      pad md,
+      Done ? opacity 60% : opacity 100%
+   ] {
+      Checkbox Done
+      Col [width fill, gap xs] {
+         Text TitleText [body]
+         Text Notes [caption]
+         Row [gap sm] {
+            Text "Due today" [caption]
+            Badge Priority [
+               Priority == "work" ? bg #ede9fe : bg #dbeafe,
+               Priority == "work" ? text #6d28d9 : text #1d4ed8,
+               radius pill,
+               pad sm
+            ]
+         }
+      }
+      Button "Delete" [rowCenter, bg danger, text white, radius md, pad md, minTap 44]
+   }
+}

@@ -1,0 +1,160 @@
+// Recommended rank 3 of 7.
+// Syntax Family E: Recipes.
+//
+// Recipes are a structured layer for component-specific roles, sizes, intents,
+// and states. They still apply through [] at render sites.
+
+use Badge, Box, Button, Checkbox, Col, Divider, Row, Screen, Text, TextInput from @tao/ui
+
+app TodoApp {
+   design TodoDesign
+   view MainScreen
+}
+
+design TodoDesign {
+   primary #3b82f6
+   primaryPress #2563eb
+   danger #dc2626
+   ink #0f172a
+   muted #64748b
+   canvas #f8fafc
+   surface white
+   border #e2e8f0
+   focus #93c5fd
+
+   xs 4px
+   sm 8px
+   md 12px
+   lg 20px
+   xl 28px
+   pill 999px
+
+   type display [size 32, weight bold, text ink, line 38]
+   type title [size 22, weight semibold, text ink, line 28]
+   type body [size 16, text ink, line 22]
+   type label [size 15, weight semibold, text ink, line 20]
+   type caption [size 13, text muted, line 18]
+
+   look cardChrome [bg surface, border border, radius lg, pad lg]
+   look alertChrome [bg #fef3c7, text #92400e, border #f59e0b, radius md, pad md]
+   look dangerChrome [bg #fee2e2, text #991b1b, border #fecaca, radius md, pad md]
+}
+
+recipe Screen {
+   role app [fill, bg canvas, text ink]
+   default [app]
+}
+
+recipe Text {
+   role display [type display]
+   role title [type title]
+   role body [type body]
+   role caption [type caption]
+   role label [type label]
+   tone normal [text ink]
+   tone muted [text muted]
+   tone danger [text danger]
+   default [body, normal]
+}
+
+recipe Button {
+   base [rowCenter, radius md, minTap 44, type label]
+   size sm [pad sm]
+   size md [pad md]
+   size lg [pad lg]
+   intent primary [bg primary, text white]
+   intent secondary [bg surface, text ink, border border]
+   intent destructive [bg danger, text white]
+   state pressed [bg primaryPress, scale 98%]
+   state disabled [opacity 45%]
+   default [primary, md]
+}
+
+recipe TextInput {
+   base [bg surface, text ink, border border, radius md, pad md, minTap 44]
+   density compact [pad sm]
+   density roomy [pad lg]
+   state focused [border focus, ring focus]
+   state disabled [opacity 50%]
+   default [roomy]
+}
+
+recipe Card {
+   base [stack, gap md, cardChrome]
+   tone normal [bg surface]
+   tone warning [alertChrome]
+   tone danger [dangerChrome]
+   state pressed [shadow sm, scale 99%]
+   default [normal]
+}
+
+recipe ListItem {
+   base [row, bg surface, border border, radius md, pad md]
+   density compact [pad sm]
+   density roomy [pad md]
+   state selected [border primary, bg #eff6ff]
+   state disabled [opacity 50%]
+   default [roomy]
+}
+
+recipe Badge {
+   base [radius pill, pad horizontal sm vertical xs, type caption]
+   intent home [bg #dbeafe, text #1d4ed8]
+   intent work [bg #ede9fe, text #6d28d9]
+   intent blocked [bg #fee2e2, text #991b1b]
+   default [home]
+}
+
+variant PrimaryButton = Button [primary]
+variant SecondaryButton = Button [secondary]
+variant DestructiveButton = Button [destructive]
+variant CardPanel = Card [normal]
+variant WarningPanel = Card [warning]
+
+view MainScreen {
+   state DraftTitle = ""
+   state Filter = "open"
+
+   render Screen [app] {
+      Col [fill, pad xl, gap lg] {
+         Text "Today's Tasks" [display]
+         Text "Three open tasks" [caption, muted]
+
+         Card [normal] {
+            Text "Quick add" [title]
+            Row [gap sm] {
+               TextInput DraftTitle [roomy, width fill]
+               Button "Add" [primary, lg], action saveDraft
+            }
+         }
+
+         Card [warning] {
+            Text "Offline changes are queued." [body]
+         }
+
+         Row [gap sm] {
+            Button "All" [Filter == "all" ? primary : secondary, sm]
+            Button "Open" [Filter == "open" ? primary : secondary, sm]
+            Button "Blocked" [Filter == "blocked" ? destructive : secondary, sm]
+         }
+
+         TaskRow "Buy oat milk" "home" false
+         TaskRow "Send design notes" "work" false
+         TaskRow "Fix contrast warning" "blocked" false
+
+         Divider
+         Text "Compact filters keep the list scannable." [caption, muted]
+      }
+   }
+}
+
+view TaskRow TitleText is text, Priority is text, Done is boolean {
+   render ListItem [Done ? disabled : roomy, gap md, content center stretch] {
+      Checkbox Done
+      Col [width fill, gap xs] {
+         Text TitleText [body]
+         Text "Due today" [caption, muted]
+      }
+      Badge Priority [Priority]
+   }
+}

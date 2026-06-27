@@ -1,0 +1,118 @@
+// Recommended rank 6 of 7.
+// Syntax Family D: Everything is a variant, with a style-only escape hatch.
+//
+// This gives app code a nice surface, but "variant" carries too many meanings:
+// component vocabulary, wrappers, and presentation-only roles.
+
+use Badge, Box, Button, Checkbox, Col, IconButton, Link, Row, Screen, Text, TextInput from @tao/ui
+
+app TodoApp {
+   design TodoDesign
+   view MainScreen
+}
+
+design TodoDesign {
+   primary #3b82f6
+   danger #dc2626
+   ink #0f172a
+   muted #64748b
+   canvas #f8fafc
+   surface white
+   border #e2e8f0
+   focus #93c5fd
+
+   style screenChrome [fill, bg canvas, text ink]
+   style pageChrome [fill, pad xl, gap lg]
+   style displayText [size 32, weight bold, text ink, line 38]
+   style titleText [size 22, weight semibold, text ink, line 28]
+   style bodyText [size 16, text ink, line 22]
+   style labelText [size 15, weight semibold, text ink, line 20]
+   style captionText [size 13, text muted, line 18]
+   style cardChrome [stack, gap md, bg surface, border border, radius lg, pad lg]
+   style taskChrome [row, bg surface, border border, radius lg, pad md]
+   style completedTaskChrome [taskChrome, text muted, opacity 60%]
+   style primaryAction [rowCenter, bg primary, text white, radius md, pad md, minTap 44]
+   style secondaryAction [rowCenter, bg surface, text ink, border border, radius md, pad md, minTap 44]
+   style dangerAction [rowCenter, bg danger, text white, radius md, pad md, minTap 44]
+   style inputChrome [bg surface, text ink, border border, radius md, pad md, minTap 44]
+   style warningChrome [row, gap sm, bg #fef3c7, text #92400e, border #f59e0b, radius md, pad md]
+   style homeBadgeChrome [bg #dbeafe, text #1d4ed8, radius pill, pad sm]
+   style workBadgeChrome [bg #ede9fe, text #6d28d9, radius pill, pad sm]
+}
+
+variant AppScreen = Screen [screenChrome]
+variant Page = Col [pageChrome]
+variant DisplayTitle = Text [displayText]
+variant Title = Text [titleText]
+variant Body = Text [bodyText]
+variant Caption = Text [captionText]
+variant Label = Text [labelText]
+variant Card = Col [cardChrome]
+variant TaskFrame = Row [taskChrome]
+variant CompletedTaskFrame = Row [completedTaskChrome]
+variant Warning = Box [warningChrome]
+variant PrimaryButton = Button [primaryAction]
+variant SecondaryButton = Button [secondaryAction]
+variant DestructiveButton = Button [dangerAction]
+variant PrimaryLink = Link [text primary, underline true]
+variant SearchInput = TextInput [inputChrome]
+variant HomeBadge = Badge [homeBadgeChrome]
+variant WorkBadge = Badge [workBadgeChrome]
+variant ButtonLikeText = Text [primaryAction]
+
+view MainScreen {
+   state DraftTitle = ""
+   state SyncPaused = true
+
+   render AppScreen {
+      Page {
+         Row [content spaceBetween center] {
+            Col [gap xs] {
+               DisplayTitle "Today's Tasks"
+               Caption "Three open tasks"
+            }
+            IconButton "settings" [secondaryAction]
+         }
+
+         Card {
+            Title "Quick add"
+            Row [gap sm] {
+               SearchInput DraftTitle [width fill]
+               PrimaryButton "Add", action saveDraft
+            }
+         }
+
+         Warning when SyncPaused {
+            Body "Offline changes will sync later."
+            PrimaryLink "Retry now", action retrySync
+         }
+
+         Row [gap sm] {
+            SecondaryButton "All"
+            PrimaryButton "Open"
+            SecondaryButton "Completed"
+         }
+
+         TaskRow "Buy oat milk" "Barista blend if available" "home" false
+         TaskRow "Send design notes" "Send the shortlist" "work" false
+
+         ButtonLikeText "Not pressable"
+      }
+   }
+}
+
+view TaskRow TitleText is text, Notes is text, Priority is text, Done is boolean {
+   render Done ? CompletedTaskFrame : TaskFrame [gap md, content center stretch] {
+      Checkbox Done
+      Col [width fill, gap xs] {
+         Body TitleText
+         Caption Notes
+         PriorityBadge Priority
+      }
+      DestructiveButton "Delete"
+   }
+}
+
+view PriorityBadge Priority is text {
+   render Priority == "work" ? WorkBadge Priority : HomeBadge Priority
+}
