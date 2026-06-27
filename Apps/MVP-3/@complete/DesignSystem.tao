@@ -1,0 +1,85 @@
+use Button from @tao/ui
+use StillDesign from @ui
+
+project design StillCompleteDesign extends StillDesign {
+   tokens semantic {
+      color.intent.info primary
+      color.intent.warning honey
+      color.intent.danger danger
+      space.control.inline sm
+   }
+
+   recipe ButtonRecipe for Button {
+      base [primaryAction]
+      variant quiet [quietAction]
+      variant danger [dangerAction]
+      state disabled [opacity 45%]
+      state pressed [press scale 98%]
+   }
+
+   pattern EmptyPattern {
+      root [empty]
+      icon [badge]
+      message [body]
+   }
+
+   rules {
+      contrast minimum AA
+      raw values forbid except tokens
+      duplicate styles warn
+      token drift fail
+   }
+
+   diagnostics {
+      source tao design check
+      fix tao design fix --safe
+      lockfile "StillDesign.lock"
+      provenance generated
+   }
+
+   import DTCG from "./tokens.json"
+   export DTCG to "./dist/tokens.json"
+   import Figma from env.FIGMA_FILE
+   export Figma to env.FIGMA_FILE
+
+   preset starter "calm-local"
+
+   platform ios {
+      density comfortable
+   }
+
+   platform web {
+      density compact
+   }
+
+   motion reduce {
+      press none
+      transition none
+   }
+
+   input touch {
+      minTap lg
+   }
+
+   input pointer {
+      minTap md
+   }
+
+   adaptive container width < 420 {
+      shell [pad md]
+   }
+
+   dark mode {
+      canvas #101418
+      surface #171d22
+      ink #f6f7f3
+   }
+
+   scenario compactWidth width 360
+   scenario largeText fontScale 1.4
+   screenshot "settings-runtime" screen Settings
+   visual diff baseline "still-complete"
+   lab enabled
+   ai assist design iteration allowed
+   mcp context expose tokens, recipes, scenarios
+}

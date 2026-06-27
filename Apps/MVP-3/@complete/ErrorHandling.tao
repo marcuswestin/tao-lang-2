@@ -1,0 +1,81 @@
+use Button, Stack, Text from @tao/ui
+
+type FileError is item {
+   Message text
+   Cause text optional
+   Recoverable boolean default true
+}
+
+type ExportResult is result text, FileError
+
+project error policy StillErrorPolicy {
+   errors as values for datasource, bridge, filesystem
+   throws only across bridge boundaries
+   require handling release
+   wrap with cause
+   finally always runs
+   boundary preserves previous content
+}
+
+action ReadLatestExport {
+   try {
+      ExportText = try File.read "exports/latest.txt"
+      return ok ExportText
+   } catch Error FileError {
+      return error FileError {
+         Message "Could not read latest export."
+         Cause Error.Message
+      }
+   } finally {
+      do File.closeAll "exports"
+   }
+}
+
+action SaveExport Value text {
+   case File.write "exports/latest.txt", Value do
+      ok Path text -> {
+         LastExportPath = Path
+      }
+      error Reason FileError -> {
+         LastExportError = Reason.Message
+      }
+   end
+}
+
+project boundary SyncBoundary {
+   catch loading -> {
+      preserve previous
+      show Text "Syncing..." [quiet]
+   }
+
+   catch missing -> {
+      show Text "Nothing to sync." [quiet]
+   }
+
+   catch error -> Error FileError {
+      show Stack [error] {
+         Text Error.Message [body]
+         Button "Retry", .Label "Retry sync", [secondaryAction]
+            on press -> { do RetrySync }
+      }
+   }
+}
+
+project view ErrorHandlingShowcase {
+   state ExportStatus = "Ready"
+
+   render SyncBoundary {
+      Stack [section] {
+         Text "Error boundaries" [title]
+         Text ExportStatus [body]
+         Button "Read latest export", .Label "Read latest export", [primaryAction]
+            on press -> {
+               do ReadLatestExport {
+                  on ok -> Value text { ExportStatus = Value }
+                  on error -> Error FileError { ExportStatus = Error.Message }
+               }
+            }
+      }
+   }
+}
+

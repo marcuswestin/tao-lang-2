@@ -1,0 +1,51 @@
+type Duration is number with units {
+   ns base
+   ms = 1_000_000.ns
+   second = 1_000.ms
+   seconds = second
+   minute = 60.seconds
+   minutes = minute
+   hour = 60.minutes
+   hours = hour
+   day = 24.hours
+   days = day
+}
+
+type Percent is number with units {
+   percent base
+   ratio = 100.percent
+}
+
+type CurrencyCode is enum {
+   "USD",
+   "EUR",
+   "JPY",
+}
+
+type Money is item {
+   Amount number
+   Currency CurrencyCode default "USD"
+}
+
+type Email is text matching "email"
+type Url is text matching "url"
+type DeviceId is text opaque
+
+alias ZeroDuration = Duration 0.ms
+alias StandardDelay = Duration 220.ms
+alias SecretCode = random text with length [8, 16]
+alias PositiveNumber = random number with value >= 0
+alias UploadSample = random Percent with value >= 0 and value <= 100
+alias InvoiceTotal = Money {
+   Amount 19.99
+   Currency "USD"
+}
+
+function DelayLabel Delay Duration {
+   match Delay {
+      0.ms -> "Instant"
+      < 200.ms -> "Fast"
+      otherwise -> "Measured"
+   }
+}
+

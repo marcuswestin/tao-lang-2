@@ -1,0 +1,40 @@
+use StillData from @data
+
+datasource StillInstantDatasource {
+   data StillData
+   provider InstantDB
+   appId env.INSTANT_APP_ID
+   auth userToken
+   reset strategy testOnly
+   seed {
+      StillData.Workspace {
+         Title StillData.Workspace.Title "Seeded inbox"
+         Summary StillData.Workspace.Summary "Created by datasource seed data."
+         Slug StillData.Workspace.Slug "seeded"
+         Ordering StillData.Workspace.Ordering 2
+      }
+   }
+}
+
+datasource StillProductionDatasource {
+   data StillData
+   provider InstantDB
+   appId env.INSTANT_PRODUCTION_APP_ID
+   auth userToken
+   production optIn true
+   adapter providerNeutralIR
+}
+
+datasource StillStagingDatasource {
+   data StillData
+   provider Memory
+   appId "still-mvp-staging"
+   ci {
+      reset beforeEach
+      seed StillInstantDatasource.seed
+   }
+}
+
+action DeleteCompletedTask Task StillData.Task {
+   delete Task
+}

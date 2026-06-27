@@ -1,0 +1,97 @@
+use StillAssets from @assets
+use StillDesign from @ui
+use StillStrings, StillLocale from ./Capabilities
+use StillMotion from ./Motion
+
+project accessibility StillAccessibilityPolicy {
+   defaults {
+      roles infer for Button, Link, TextInput, Image, List, Modal
+      labels require for IconButton, ImageInput, Pressable, destructiveAction
+      hints require for externalLink, destructiveAction, irreversibleAction
+      state mirror disabled, selected, checked, busy, expanded, invalid
+      value expose for Progress, Slider, Stepper, Rating
+      announcements polite for routeChange, saveComplete, syncQueued
+      announcements assertive for destructiveFailure, authExpired
+      minTap 44
+      focus order render
+      focus movement keyboard, screenReader, tv, gamepad
+      identifiers derive from renderId, slot, rowKey
+      rowKey require stableId otherwise warning
+   }
+
+   settings {
+      screenReader enabled -> [semanticText, extraLabels]
+      boldText enabled -> [type weight bold]
+      highContrast enabled -> [contrast AAA, border strong]
+      invertColors enabled -> [asset preserveInvertSensitive]
+      reduceTransparency enabled -> [surface solid]
+      reducedMotion enabled -> StillMotion.reduced
+      largerText scale -> StillDesign.textScale scale
+   }
+
+   diagnostics {
+      missingLabel error release
+      missingHint warning release
+      unstableRowKey warning development, error release
+      physicalDirection warning library
+      hitTarget warning development, error release
+      inaccessibleGesture error release
+   }
+}
+
+project strings StillFullStrings extends StillStrings {
+   namespace capture {
+      draft_count Count number {
+         plural Count {
+            one "1 draft"
+            other "${ Count } drafts"
+         }
+      }
+
+      saved_rich {
+         text "Saved to "
+         strong "Still"
+         text "."
+      }
+   }
+
+   namespace legal {
+      fixed_brand "Still"
+      untranslated_debug "DEBUG_LOCAL_ONLY"
+   }
+
+   raw strings warning development, error release
+   missing translation fallback StillLocale.fallback, warning development, error release
+   userVisible strings require key except brand, legal, developerOnly
+}
+
+project locale StillFullLocale extends StillLocale {
+   direction ltr default
+   direction rtl for ar, he, fa
+   mirror icons back, forward, chevronLeft, chevronRight
+   layout prefer start, end in libraries
+   format currency USD "compact"
+   format duration "short"
+   format unit "narrow"
+
+   assets {
+      StillAssets.HeroImage for default
+      StillAssets.HeroImageRtl for direction rtl
+      StillAssets.HeroImageEs for locale es-US
+   }
+}
+
+project policy StillReleasePolicy {
+   warnings allow development
+   warnings accessibility error release
+   warnings internationalization error release
+   warnings localization.missingTranslation error release
+   warnings adaptation warning development, error release
+   warnings data.loading warning development, error release
+   warnings data.error warning development, error release
+
+   allow warning localization.untranslated {
+      reason "Brand and legal strings are intentionally fixed."
+      scope StillFullStrings.legal
+   }
+}

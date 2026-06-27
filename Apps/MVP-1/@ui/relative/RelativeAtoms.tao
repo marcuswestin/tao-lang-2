@@ -1,0 +1,12 @@
+use Badge, Icon, Row, Text from @tao/ui
+
+project view RelativeAccent Label text {
+   render Row [relativePill, aligned baseline] {
+      Icon "dot" [tinyIcon]
+      Text Label [quiet]
+   }
+}
+
+project view RelativePackageMark {
+   render Badge "relative import" [badgeMuted]
+}

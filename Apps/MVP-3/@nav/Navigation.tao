@@ -1,0 +1,53 @@
+use DashboardScreen, CaptureScreen, WorkspaceScreen, NoteDetailScreen, TaskEditScreen, SettingsScreen from @ui
+use StillData from @data
+
+project navigator StillRootNavigation {
+   stack {
+      screen MainTabs HomeTabs {
+         title "Still"
+         path "/"
+         presentation root
+      }
+
+      screen WorkspaceDetail WorkspaceScreen {
+         title "Workspace"
+         path "/workspace/:Workspace"
+         param Workspace StillData.Workspace
+         transition sharedAxis
+      }
+
+      screen NoteDetail NoteDetailScreen {
+         title "Note"
+         path "/note/:Note"
+         param Note StillData.Note
+         transition lift
+      }
+
+      screen TaskEdit TaskEditScreen {
+         title "Edit task"
+         path "/task/:Task/edit"
+         param Task StillData.Task
+         presentation sheet
+      }
+   }
+}
+
+project navigator HomeTabs {
+   tabs {
+      tab Today DashboardScreen {
+         title "Today"
+         icon system sunrise
+      }
+
+      tab Capture CaptureScreen {
+         title "Capture"
+         icon system plus.circle
+         preferredAction true
+      }
+
+      tab Settings SettingsScreen {
+         title "Settings"
+         icon system sliders
+      }
+   }
+}

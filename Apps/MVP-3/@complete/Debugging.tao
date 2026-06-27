@@ -1,0 +1,38 @@
+project debug StillDebugging {
+   sourcemap dual authored, generated
+   sourcemap mode authored default
+   sourcemap mode generated when env.TAO_SOURCE_MAP_MODE = "tsx"
+   sources include "Apps", "_gen_tao-app"
+   sources paths repoRelative
+   step policy statement
+   breakpoint map tao, tsx
+   segment density statement, expression
+   names preserve action, view, state, query
+   native Hermes symbolication planned
+   web Chrome DevTools
+   log perModule when env.TAO_DEBUG_MAP_CHAIN = true
+}
+
+project devtools StillDevtools {
+   panel appTree
+   panel dataQueries
+   panel layoutBounds
+   panel designTokens
+   panel events
+   panel motion
+   inspect renderId, slot, rowKey, sourceLocation
+   replay action direct, event synthetic, network failure
+}
+
+test "debug map preserves authored and generated sources" {
+   check "keeps both source layers" {
+      compile StillFullMVP with {
+         debug StillDebugging
+      }
+
+      expect sourcemap source "Apps/MVP-3/MVP.tao"
+      expect sourcemap source "_gen_tao-app/MVP.tsx"
+      expect sourcemap step action ReadLatestExport line exact
+   }
+}
+

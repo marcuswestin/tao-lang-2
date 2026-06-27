@@ -1,0 +1,11 @@
+function WorkloadScore OpenTasks number, RecentNotes number {
+   return ((OpenTasks + RecentNotes) * 2 - 1) / 3
+}
+
+function UploadProgress Completed number, Total number {
+   return Completed / Total
+}
+
+function DeltaLabel Before number, After number {
+   return "${ After - Before } change"
+}

@@ -1,0 +1,37 @@
+use Icon, Pressable, Row, Stack, Text from @tao/ui
+use RelativeAccent, RelativePackageMark from ../relative/RelativeAtoms
+
+project layout FeatureFrame Title text, Tone text = "Ready" {
+   @icon default {
+      Icon "sparkles" [slotIcon]
+   }
+
+   @meta default {
+      RelativeAccent Tone
+   }
+
+   render Pressable [featureFrame, merge slots @icon @meta] {
+      Row [featureRow, aligned baseline] {
+         @icon [slotIcon, nudge left -2 top 1, rigid]
+         Stack [gap xs, width fill] {
+            Text Title [label]
+            @@content
+         }
+         @meta [slotMeta, aligned right]
+      }
+   }
+}
+
+project view SlotFillExample {
+   render FeatureFrame "Slots compose layout", "Merged" {
+      @icon [slotIcon, nudge y -1] {
+         Icon "layers" [badge]
+      }
+
+      @meta [slotMeta, aligned baseline] {
+         RelativePackageMark
+      }
+
+      Text "Named slots have defaults, callers can fill them, and slot layout merges with the receiving frame." [body]
+   }
+}

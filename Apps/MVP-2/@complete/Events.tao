@@ -1,0 +1,20 @@
+use Text from @tao/ui
+use AppShell from @ui
+
+project automation StillClock {
+   every 1.second {
+      emit Tick now()
+   }
+}
+
+project screen EventShowcaseScreen {
+   state Seconds = 0
+
+   on Tick -> CurrentTime number {
+      Seconds += 1
+   }
+
+   render AppShell "Events", "Automation" {
+      Text "Elapsed ${ Seconds }" [body]
+   }
+}

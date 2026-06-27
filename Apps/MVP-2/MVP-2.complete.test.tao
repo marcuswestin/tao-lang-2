@@ -1,0 +1,63 @@
+use StillMVP
+use Icon from @tao/ui
+use RuntimeShowcase from @ui/showcase
+use FeatureFrame, SlotFillExample from @ui/showcase/SlotViews
+use PriorityLabel, HasOffline, CaptureDefaults from @complete/Values
+
+using app StillMVP
+
+test "Still MVP complete feature surface" {
+   check "renders a focused slot component" {
+      render RuntimeShowcase
+      expect visible text "Runtime primitives"
+      expect count text "Runtime primitives" 1
+      expect role "button" name "Open runtime preview"
+   }
+
+   check "renders with state overrides and child content" {
+      render FeatureFrame "Override title", "Test" with {
+         @icon {
+            Icon "test" [badge]
+         }
+         Text "Child content supplied from render test." [body]
+      }
+
+      expect text "Override title"
+      expect text "Child content supplied from render test."
+   }
+
+   check "renders named slots" {
+      render SlotFillExample
+      expect text "relative import"
+      expect visible text "Named slots have defaults"
+   }
+
+   check "uses richer selectors and artifacts" {
+      run StillMVP with {
+         datasource.appId "still-mvp-complete-selectors"
+      }
+
+      press role "tab" name strings.home.capture
+      write into row text "Profile label" placeholder "Profile label" "Operator"
+      expect visible text "Operator"
+      expect count text "Runtime Surface" 1
+      expect role "tab" name strings.home.capture selected
+      screenshot "settings-runtime"
+      record video "settings-runtime-flow"
+   }
+
+   check "navigates every route" {
+      run StillMVP
+      route "/"
+      expect text "Make the day readable"
+      route "/today"
+      expect text "Workspaces"
+      route "/capture/task"
+      expect text "Capture"
+   }
+
+   check "tests value-level functions" {
+      expect call PriorityLabel "high" equals "High"
+      expect call HasOffline CaptureDefaults equals true
+   }
+}

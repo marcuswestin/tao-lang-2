@@ -1,0 +1,6 @@
+project theme StillTheme {
+   mode light
+   accent primary
+   density comfortable
+   motion calm
+}

@@ -1,0 +1,55 @@
+use Button, Row, Stack, Text, TextInput, Toggle from @tao/ui
+use StillData from @data
+use AppShell, ErrorState, LoadingState
+
+project screen TaskEditScreen Task {
+   query Task as CurrentTask {
+      Title, Done, Status, Intent,
+      Workspace {
+         Title,
+      }
+   }
+
+   state EditTitle = CurrentTask.Title
+   state EditDone = CurrentTask.Done
+   state EditIntent = CurrentTask.Intent
+
+   alias CanSaveTask = EditTitle != StillData.Task.Title ""
+
+   action SaveTask {
+      if CanSaveTask {
+         update CurrentTask {
+            Title EditTitle,
+            Done EditDone,
+            Status when EditDone -> "done" otherwise -> "open",
+            Intent EditIntent,
+            UpdatedAt now(),
+         }
+         navigation pop
+      }
+   }
+
+   guard CurrentTask when
+      loading -> AppShell "Edit task", "Loading" {
+         LoadingState "Loading task editor..."
+      }
+      missing -> AppShell "Edit task", "Missing" {
+         ErrorState "That task is not available anymore.", -> navigation tab Today
+      }
+
+   render AppShell "Edit task", CurrentTask.Workspace.Title {
+      Stack [captureForm] {
+         TaskTitleInput: TextInput EditTitle, .Label "Task title", [textField, width fill]
+            on submit -> Value text { EditTitle = StillData.Task.Title Value }
+         TextInput EditIntent, .Label "Task intent", .Placeholder "next, follow-up, waiting", [textField, width fill]
+            on submit -> Value text { EditIntent = StillData.Task.Intent Value }
+         Row [rowSpread] {
+            Text when EditDone -> "This task will be marked done." otherwise -> "This task will stay open." [body]
+            Toggle EditDone, .Label "Toggle task done", [badge]
+               on change -> Value boolean { EditDone = Value }
+         }
+         Button "Save task", .Label "Save task", [primaryAction, disabled not CanSaveTask, width fill]
+            on press -> { do SaveTask }
+      }
+   }
+}

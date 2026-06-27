@@ -1,0 +1,76 @@
+use Badge, Icon, List, Row, Stack, Text from @tao/ui
+use StillData from @data
+
+project layout SmartList Items [StillData.Task] {
+   @key Item StillData.Task -> Item.id
+
+   @row Item StillData.Task default {
+      Row [listRow, aligned baseline] {
+         Text Item.Title [body]
+         Badge Item.Intent [badgeMuted]
+      }
+   }
+
+   @empty default {
+      Row [empty, centered] {
+         Icon "inbox" [badge]
+         Text "Nothing here yet." [quiet]
+      }
+   }
+
+   @header optional
+   @footer optional
+   @@children
+
+   render Stack [gap sm, width fill] {
+      @header
+
+      List Items [height fill, overflow auto] {
+         key Item -> @key Item
+         empty -> @empty
+         item Item StillData.Task -> @row Item
+      }
+
+      @@children
+      @footer
+   }
+}
+
+project view RendererSlotShowcase Tasks [StillData.Task] {
+   render SmartList Tasks {
+      @header {
+         Text "Renderer slots" [title]
+      }
+
+      @key Task -> Task.id
+
+      @row Task -> Row [listRow, aligned baseline] {
+         Icon "check" [badge]
+         Text Task.Title [body]
+         Badge Task.Intent [badgeMuted]
+      }
+
+      @empty -> Text "No task rows were supplied." [quiet]
+
+      @footer {
+         Text "Rows, keys, empty states, and extra children all share one render surface." [quiet]
+      }
+
+      Text "Variadic child content lands in @@children." [body]
+   }
+}
+
+project layout FixedFrame {
+   @header required
+   @body required
+   @footer required
+
+   children exactly 3
+
+   render Stack [card, gap md] {
+      @header
+      @body
+      @footer
+   }
+}
+

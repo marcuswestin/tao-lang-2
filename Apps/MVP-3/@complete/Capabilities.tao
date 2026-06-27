@@ -1,0 +1,57 @@
+use StillProductionDatasource, StillStagingDatasource from ./DataProviders
+
+project strings StillStrings {
+   namespace home {
+      empty "Nothing captured yet."
+      capture "Capture"
+      runtime "Runtime Surface"
+   }
+
+   namespace errors {
+      offline "Still is offline. Local changes will sync later."
+   }
+}
+
+project locale StillLocale {
+   default en-US
+   supported en-US, es-US, fr-FR
+   fallback en-US
+
+   format number "compact"
+   format date "medium"
+}
+
+project runtime target ProductionTarget {
+   environment production
+   platform ios, android, web
+   datasource StillProductionDatasource
+   secrets StillSecrets
+}
+
+project runtime target StagingTarget {
+   environment staging
+   platform ios, android, web
+   datasource StillStagingDatasource
+   secrets StillSecrets
+}
+
+project build profile AppStoreBuild {
+   runtime ProductionTarget
+   minify true
+   sourcemaps hidden
+   distribution appStore
+}
+
+project build profile PreviewBuild {
+   runtime StagingTarget
+   minify false
+   sourcemaps public
+   distribution internal
+}
+
+project secrets StillSecrets {
+   public EXPO_PUBLIC_STILL_CHANNEL
+   server INSTANT_APP_ADMIN_TOKEN
+   device LOCAL_ENCRYPTION_KEY
+   policy noClientServerSecrets
+}

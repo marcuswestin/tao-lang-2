@@ -1,0 +1,113 @@
+use Badge, Button, Row, Stack, Text, TextArea, TextInput from @tao/ui
+use DefaultWorkspaceSlug, StillData from @data
+use AppShell, CaptureActionTitle, DraftEditLabel, EmptyState, HeroPanel, LoadingState
+
+project screen CaptureScreen {
+   state DraftKind = StillData.CaptureKind "note"
+   state DraftTaskTitle = StillData.Task.Title ""
+   state DraftNoteTitle = StillData.Note.Title ""
+   state DraftBody = StillData.Note.Body ""
+   state DraftEdits = 0
+   state IsSaving = false
+
+   query StillData.Workspaces as Workspaces {
+      Title, Slug, Focus,
+      Tasks {
+         Title,
+      },
+      where Slug = DefaultWorkspaceSlug
+   }
+
+   alias DraftIsTask = DraftKind = "task"
+   alias CurrentDraftTitle = when DraftIsTask -> DraftTaskTitle otherwise -> DraftNoteTitle
+   alias HasDraftTitle = when DraftIsTask -> DraftTaskTitle != StillData.Task.Title "" otherwise -> DraftNoteTitle != StillData.Note.Title ""
+   alias CanCapture = HasDraftTitle and not IsSaving and not Workspaces.Empty
+   alias CaptureTitle = call CaptureActionTitle DraftKind
+   alias DraftStatus = call DraftEditLabel DraftEdits
+
+   action CaptureDraft {
+      if CanCapture {
+         set IsSaving = true
+         if DraftIsTask {
+            create StillData.Task {
+               Workspace Workspaces.First,
+               Title DraftTaskTitle,
+               Ordering Workspaces.First.Tasks.count + 1,
+               CreatedAt now(),
+               UpdatedAt now(),
+            }
+         } else {
+            create StillData.Note {
+               Workspace Workspaces.First,
+               Title DraftNoteTitle,
+               Body DraftBody,
+               Mood "clear",
+               Pinned false,
+               Archived false,
+               CreatedAt now(),
+               UpdatedAt now(),
+            }
+         }
+         set DraftTaskTitle = StillData.Task.Title ""
+         set DraftNoteTitle = StillData.Note.Title ""
+         set DraftBody = StillData.Note.Body ""
+         set DraftEdits = 0
+         set IsSaving = false
+         navigation tab Today
+      }
+   }
+
+   guard Workspaces when
+      loading -> AppShell "Capture", "Quick add" {
+         LoadingState "Preparing the capture form..."
+      }
+
+   render AppShell "Capture", "Quick add" {
+      HeroPanel {
+         Text "One clean inbox" [section]
+         Text "Save one quiet thought or one next action. Still keeps both close to the workspace they belong to." [body]
+      }
+
+      Row [modeRail] {
+         Button "Note", .Label "Capture note mode", [DraftKind = "note" ? modeSelected : mode]
+            on press -> { DraftKind = "note" }
+         Button "Task", .Label "Capture task mode", [DraftKind = "task" ? modeSelected : mode]
+            on press -> {
+               DraftKind = "task"
+               DraftBody = StillData.Note.Body ""
+            }
+      }
+
+      if Workspaces.Empty {
+         EmptyState "Create the inbox workspace from Today before capturing items."
+      } else {
+         Stack [captureForm] {
+            CaptureTitleInput: TextInput CurrentDraftTitle, .Label "Capture title", .Placeholder "A thing worth remembering", [textField, width fill]
+               on submit -> Value text {
+                  if DraftIsTask {
+                     DraftTaskTitle = StillData.Task.Title Value
+                  } else {
+                     DraftNoteTitle = StillData.Note.Title Value
+                  }
+                  DraftEdits += 1
+               }
+            Row [rowSpread] {
+               Badge DraftStatus [badgeMuted]
+               Badge Workspaces.First.Focus [badgeMuted]
+            }
+            if DraftIsTask {
+               Text "This will become an open task." [body]
+            } else {
+               CaptureBodyInput: TextArea DraftBody, .Label "Capture body", .Placeholder "Optional context", [textArea, width fill]
+                  on submit -> Value text {
+                     DraftBody = StillData.Note.Body Value
+                     DraftEdits += 1
+                  }
+               Text "This will become a note." [body]
+            }
+            Button CaptureTitle, .Label "Save capture", .Loading IsSaving, [primaryAction, disabled not CanCapture, width fill]
+               on press -> { do CaptureDraft }
+         }
+      }
+   }
+}

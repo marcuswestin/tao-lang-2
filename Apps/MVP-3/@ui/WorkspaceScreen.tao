@@ -1,0 +1,61 @@
+use Badge, Row, Stack, Text from @tao/ui
+use AppShell, EmptyState, ErrorState, HeroPanel, LoadingState, NoteRow, Section, TaskRow
+
+project screen WorkspaceScreen Workspace {
+   query Workspace as CurrentWorkspace {
+      Title, Summary, Focus,
+      Notes {
+         Title, Body, Mood, Pinned, Archived, UpdatedAt,
+         where Archived = false
+         order by UpdatedAt desc
+      },
+      Tasks {
+         Title, Done, Status, Intent, Ordering,
+         order by Ordering asc
+      }
+   }
+
+   guard CurrentWorkspace when
+      loading -> AppShell "Workspace", "Opening" {
+         LoadingState "Opening workspace..."
+      }
+      missing -> AppShell "Workspace", "Missing" {
+         ErrorState "That workspace is not available anymore.", -> navigation tab Today
+      }
+
+   render AppShell CurrentWorkspace.Title, "Workspace" {
+      HeroPanel {
+         Row [rowSpread] {
+            Stack [gap sm, width fill] {
+               Text CurrentWorkspace.Focus [section]
+               Text CurrentWorkspace.Summary [body]
+            }
+            Badge "${ CurrentWorkspace.Notes.count } notes" [badge]
+         }
+      }
+
+      Section "Notes" {
+         if CurrentWorkspace.Notes.Empty {
+            EmptyState "No notes in this workspace yet."
+         } else {
+            Stack [sectionStack] {
+               for Note in CurrentWorkspace.Notes {
+                  NoteRow Note
+               }
+            }
+         }
+      }
+
+      Section "Tasks" {
+         if CurrentWorkspace.Tasks.Empty {
+            EmptyState "No tasks in this workspace yet."
+         } else {
+            Stack [sectionStack] {
+               for Task in CurrentWorkspace.Tasks {
+                  TaskRow Task
+               }
+            }
+         }
+      }
+   }
+}

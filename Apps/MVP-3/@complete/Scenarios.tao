@@ -1,0 +1,63 @@
+use StillData from @data
+use DashboardScreen, NoteDetailScreen, SettingsScreen from @ui
+use StillInstantDatasource from ./DataProviders
+
+scenario LoadingDashboard {
+   screen DashboardScreen
+   state Workspaces loading
+}
+
+scenario EmptyDashboard {
+   screen DashboardScreen
+   datasource empty
+}
+
+scenario NormalDashboard {
+   screen DashboardScreen
+   datasource seed StillInstantDatasource.seed
+}
+
+scenario LongTextNote {
+   screen NoteDetailScreen
+   param Note {
+      Title StillData.Note.Title "A very long note title that should wrap cleanly across several lines"
+      Body StillData.Note.Body "A long body that checks line height, wrapping, and overflow handling."
+   }
+}
+
+scenario ManyItems {
+   screen DashboardScreen
+   datasource repeat StillData.Task 80
+}
+
+scenario ErrorState {
+   screen DashboardScreen
+   datasource error network
+}
+
+scenario OfflineState {
+   screen DashboardScreen
+   network offline
+}
+
+scenario LargeText {
+   screen SettingsScreen
+   fontScale 1.6
+}
+
+scenario CompactWidth {
+   screen SettingsScreen
+   width 320
+}
+
+project scenario check StillScenarioCheck {
+   run LoadingDashboard
+   run EmptyDashboard
+   run NormalDashboard
+   run LongTextNote
+   run ManyItems
+   run ErrorState
+   run OfflineState
+   run LargeText
+   run CompactWidth
+}
