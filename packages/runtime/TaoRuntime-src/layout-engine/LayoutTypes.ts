@@ -21,6 +21,7 @@ export type TaoLayoutBareEntry =
   | readonly ['hug']
   | readonly ['rigid']
 export type TaoLayoutAlignedEntry = readonly ['aligned', TaoLayoutAlignmentTerm]
+export type TaoLayoutClaimEntry = readonly ['claim', number]
 export type TaoLayoutContentEntry =
   | readonly ['content', TaoLayoutContentTerm]
   | readonly ['content', TaoLayoutContentTerm, TaoLayoutContentTerm]
@@ -47,6 +48,7 @@ export type TaoLayoutSpacingEntry<HeadT extends 'margin' | 'pad' = 'margin' | 'p
 export type TaoLayoutEntry =
   | TaoLayoutAlignedEntry
   | TaoLayoutBareEntry
+  | TaoLayoutClaimEntry
   | TaoLayoutContentEntry
   | TaoLayoutDimensionEntry
   | TaoLayoutGapEntry

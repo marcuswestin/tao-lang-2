@@ -2,6 +2,7 @@ import { Switch } from '@shared/core'
 import { LayoutTerms } from './LayoutTerms'
 import type {
   TaoLayoutAlignedEntry,
+  TaoLayoutClaimEntry,
   TaoLayoutContentEntry,
   TaoLayoutContentTerm,
   TaoLayoutDimensionEntry,
@@ -45,6 +46,7 @@ function applyEntry(style: TaoResolvedLayoutStyle, entry: TaoLayoutEntry, contex
     centered: () => {
       style['alignSelf'] = 'center'
     },
+    claim: () => applyClaim(style, entry as TaoLayoutClaimEntry),
     compress: () => {
       style['flexShrink'] = 1
     },
@@ -118,6 +120,10 @@ function applyContent(
 
 function applyGap(style: TaoResolvedLayoutStyle, entry: TaoLayoutGapEntry): void {
   style['gap'] = entry[1]
+}
+
+function applyClaim(style: TaoResolvedLayoutStyle, entry: TaoLayoutClaimEntry): void {
+  style['flexGrow'] = entry[1]
 }
 
 function applySpacing(

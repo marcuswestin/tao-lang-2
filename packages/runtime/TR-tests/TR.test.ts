@@ -290,6 +290,13 @@ Describe('TR.Layout', () => {
       alignSelf: 'stretch',
       flexGrow: 0,
     })
+    Expect(TR.Layout.resolve({
+      entries: [
+        ['claim', 2],
+      ],
+    })).toEqual({
+      flexGrow: 2,
+    })
   })
 
   Test('exposes only generated-code layout controls', () => {
@@ -317,6 +324,23 @@ Describe('TR.Layout', () => {
       flexGrow: 1,
       gap: 8,
       justifyContent: 'flex-end',
+    })
+
+    const claimedRowLayout = TR.Layout.merge(
+      TR.Layout.create([['content', 'baseline', 'left'], ['fill']]),
+      TR.Layout.create([['claim', 2]]),
+      { direction: 'row' },
+    )
+
+    Expect(TR.Layout.resolve({
+      direction: 'row',
+      entries: layoutEntries(claimedRowLayout),
+    })).toEqual({
+      alignItems: 'baseline',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      flexGrow: 2,
+      justifyContent: 'flex-start',
     })
 
     const spacingLayout = TR.Layout.merge(

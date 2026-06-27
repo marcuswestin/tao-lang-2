@@ -1054,7 +1054,7 @@ Describe('Expo runtime', () => {
         use Row, Text from @tao/ui
 
         view MainView {
-            render Row [content right, gap 4] {
+            render Row [content right, gap 4, claim 2] {
                 Text "Explicit row"
             }
         }
@@ -1069,7 +1069,7 @@ Describe('Expo runtime', () => {
           alignItems: 'baseline',
           alignSelf: 'stretch',
           flexDirection: 'row',
-          flexGrow: 1,
+          flexGrow: 2,
           gap: 4,
           justifyContent: 'flex-end',
         })

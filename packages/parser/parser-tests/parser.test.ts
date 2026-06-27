@@ -72,12 +72,13 @@ Describe('minimal Tao parser', () => {
     Expect.Is(blockGreetingAlias, AST.isAliasDeclaration)
     Expect(blockGreetingAlias.name).toBe('Greeting')
     const childInvocations = AST.statementsOf(mainRender.block).filter(AST.isViewRender)
-    Expect(childInvocations).toHaveLength(10)
+    Expect(childInvocations).toHaveLength(11)
     const [
       outerText,
       shadowedText,
       nestedText,
       literalText,
+      claimedText,
       countText,
       fixedNameText,
       profileNameText,
@@ -89,6 +90,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(shadowedText, AST.isViewRender)
     Expect.Is(nestedText, AST.isViewRender)
     Expect.Is(literalText, AST.isViewRender)
+    Expect.Is(claimedText, AST.isViewRender)
     Expect.Is(countText, AST.isViewRender)
     Expect.Is(fixedNameText, AST.isViewRender)
     Expect.Is(profileNameText, AST.isViewRender)
@@ -99,6 +101,7 @@ Describe('minimal Tao parser', () => {
     Expect(shadowedText.view.ref?.name).toBe('Text')
     Expect(nestedText.view.ref?.name).toBe('Text')
     Expect(literalText.view.ref?.name).toBe('Text')
+    Expect(claimedText.view.ref?.name).toBe('Text')
     Expect(countText.view.ref?.name).toBe('CountText')
     Expect(fixedNameText.view.ref?.name).toBe('Text')
     Expect(profileNameText.view.ref?.name).toBe('Text')
@@ -111,6 +114,7 @@ Describe('minimal Tao parser', () => {
       shadowArg,
       nestedArg,
       literalArg,
+      claimedArg,
       countArg,
       fixedNameArg,
       profileNameArg,
@@ -122,6 +126,7 @@ Describe('minimal Tao parser', () => {
       AST.argumentsOf(shadowedText)[0]?.value,
       AST.argumentsOf(nestedText)[0]?.value,
       AST.argumentsOf(literalText)[0]?.value,
+      AST.argumentsOf(claimedText)[0]?.value,
       AST.argumentsOf(countText)[0]?.value,
       AST.argumentsOf(fixedNameText)[0]?.value,
       AST.argumentsOf(profileNameText)[0]?.value,
@@ -133,6 +138,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(shadowArg, AST.isValueReference)
     Expect.Is(nestedArg, AST.isValueReference)
     Expect.Is(literalArg, AST.isStringLiteral)
+    Expect.Is(claimedArg, AST.isStringLiteral)
     Expect.Is(countArg, AST.isValueReference)
     Expect.Is(fixedNameArg, AST.isValueReference)
     Expect.Is(profileNameArg, AST.isMemberAccessExpression)
@@ -143,6 +149,10 @@ Describe('minimal Tao parser', () => {
     Expect(valueDeclarationName(shadowArg.target.ref)).toBe('LocalText')
     Expect(valueDeclarationName(nestedArg.target.ref)).toBe('Greeting')
     Expect(literalArg.value).toBe('Hello World')
+    Expect(claimedArg.value).toBe('Claimed space')
+    Expect(AST.layoutEntriesOf(claimedText.layoutClause).map(layoutEntryTerms)).toEqual([
+      ['claim', 2],
+    ])
     Expect(valueDeclarationName(countArg.target.ref)).toBe('LaunchCount')
     Expect(valueDeclarationName(fixedNameArg.target.ref)).toBe('FixedSinkName')
     Expect(valueDeclarationName(profileNameArg.target.ref)).toBe('SinkProfileValue')
@@ -215,7 +225,7 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Col [fill, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+        render Col [claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
           Text "Label" [width fill, height fill]
         }
       }
@@ -239,7 +249,7 @@ Describe('minimal Tao parser', () => {
     Expect(AST.argumentsOf(render)).toHaveLength(0)
     const entries = AST.layoutEntriesOf(render.layoutClause)
     Expect(entries).toHaveLength(6)
-    Expect(layoutEntryTerms(entries[0]!)).toEqual(['fill'])
+    Expect(layoutEntryTerms(entries[0]!)).toEqual(['claim', 2])
     Expect(layoutEntryTerms(entries[1]!)).toEqual(['content', 'top', 'spread-inset'])
     Expect(layoutEntryTerms(entries[2]!)).toEqual(['gap', 12])
     Expect(layoutEntryTerms(entries[3]!)).toEqual(['pad', 16])

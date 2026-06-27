@@ -44,6 +44,7 @@ function mergeEntry(
   return Switch<TaoLayoutEntryHead, void>(overlayEntry[0], {
     aligned: () => entries.push(overlayEntry),
     centered: () => entries.push(overlayEntry),
+    claim: () => entries.push(overlayEntry),
     compress: () => entries.push(overlayEntry),
     content: () => mergeContentEntry(entries, overlayEntry as TaoLayoutContentEntry, direction),
     fill: () => entries.push(overlayEntry),
