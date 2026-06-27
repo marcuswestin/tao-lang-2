@@ -35,4 +35,3 @@ test "debug map preserves authored and generated sources" {
       expect sourcemap step action ReadLatestExport line exact
    }
 }
-

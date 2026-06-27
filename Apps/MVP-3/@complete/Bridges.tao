@@ -85,4 +85,3 @@ action SaveWithHaptic {
    do ExpoHaptics.impact "medium"
    do NativeShare.share "Saved in Still"
 }
-

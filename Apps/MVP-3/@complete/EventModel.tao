@@ -104,4 +104,3 @@ project view GestureSurface {
       Text GestureStatus [body]
    }
 }
-

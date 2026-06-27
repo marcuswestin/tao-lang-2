@@ -48,4 +48,3 @@ function DelayLabel Delay Duration {
       otherwise -> "Measured"
    }
 }
-
