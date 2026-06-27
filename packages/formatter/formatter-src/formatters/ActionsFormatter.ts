@@ -1,9 +1,14 @@
+import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
 
 export const ActionsFormatter = {
   /** ActionBlock formats action bodies with one indented statement per line. */
   ActionBlock(f) {
     f.oneSpaceBefore('{')
+    if (AST.isActionExpression(f.node.$container) && f.node.statements.length === 1) {
+      f.singleLineBraceBlock(f.node.statements[0]!)
+      return
+    }
     f.indentedBraceBlock(f.node.statements)
   },
 

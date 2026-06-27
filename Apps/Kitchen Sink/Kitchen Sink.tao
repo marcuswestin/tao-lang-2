@@ -37,9 +37,8 @@ view MainView {
       Text SinkProfileValue.SinkName
       TagText SinkProfileValue.SinkTags
       Number KitchenCount
-      Button "Add kitchen count", action {
-         set KitchenCount += 1
-}  }  }
+      Button "Add kitchen count", action { set KitchenCount += 1 }
+}  }
 
 view CountText Count is number {
    render inject Count ```ts

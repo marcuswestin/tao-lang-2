@@ -324,12 +324,9 @@ Describe('Tao formatter views and blocks', () => {
               do AddStep 5
            }
            render Stack {
-              Button "Reset", action {
-                 set Count = 0
-              }
-              Button "Inline", -> {
-                 set Count += 1
-        }  }  }
+              Button "Reset", action { set Count = 0 }
+              Button "Inline", -> { set Count += 1 }
+        }  }
       `,
     )
   })
