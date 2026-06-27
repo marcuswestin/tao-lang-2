@@ -5,6 +5,10 @@ const TAO_FILE_DISCOVERY_EXCLUDED_DIRECTORY_NAMES = [
   'ios',
   'android',
   'pods',
+  'MVP-1',
+  'MVP-2',
+  'MVP-3',
+  'Syntax Sketches',
 ] as const
 
 /** findTaoFiles finds `.tao` files at or under `path`, respecting Git ignore rules. */
