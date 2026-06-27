@@ -6,9 +6,15 @@ import {
   type SpawnSyncOptions as NodeSpawnSyncOptions,
   type SpawnSyncReturns,
 } from 'node:child_process'
+import { availableParallelism } from 'node:os'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
+
+/** cpuCount returns the number of CPUs available to this process. */
+export function cpuCount(): number {
+  return Math.max(1, availableParallelism())
+}
 
 /** SpawnOptions declares options for starting a child process. */
 export type SpawnOptions = Omit<NodeSpawnOptions, 'env'> & {
@@ -72,7 +78,10 @@ export const runtimeProcess = {
   cwd: process.cwd.bind(process),
   env: process.env,
   execPath: process.execPath,
-  exit: process.exit.bind(process),
+  exit(exitCode?: number | string | null): never {
+    process.exit(exitCode)
+    throw new Error(`process.exit(${exitCode ?? 0}) returned unexpectedly.`)
+  },
   setExitCode(exitCode: number) {
     process.exitCode = exitCode
   },

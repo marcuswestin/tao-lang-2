@@ -15,7 +15,7 @@ entry BlocksGrammarEntrypoint:
     Block;
 
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | ExpectTextStep | AppView | StateDeclaration | Injection | RenderStatement | ViewRender;
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | AppView | StateDeclaration | Injection | RenderStatement | ViewRender;
 
 Declaration:
     AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration;

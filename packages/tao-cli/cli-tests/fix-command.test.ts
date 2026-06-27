@@ -1,7 +1,7 @@
 import { FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { runFix } from '../cli-src/fix-command'
-import { statusByBasename, statusByFile, withCwd, withTaoFixture } from './test-cli-files'
+import { runFix } from '../cli-src/source-commands'
+import { statusByBasename, statusByFile, withTaoFixture } from './test-cli-files'
 
 Describe('tao fix', () => {
   Test('applies render moves, import organization, and formatting in place', async () => {
@@ -15,7 +15,7 @@ Describe('tao fix', () => {
         }
       `),
     }, async (rootDir) => {
-      const path = FS.resolvePath('app.tao', { cwd: rootDir })
+      const path = FS.resolvePath('app.tao', rootDir)
       const results = await runFix(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'app.tao': 'changed' })
@@ -47,7 +47,7 @@ Describe('tao fix', () => {
         'canonical.tao': 'unchanged',
         'broken.tao': 'error',
       })
-      Expect(await FS.readText(FS.resolvePath('broken.tao', { cwd: rootDir }))).toBe('view Broken {')
+      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe('view Broken {')
     })
   })
 
@@ -60,7 +60,7 @@ Describe('tao fix', () => {
       `),
       'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
     }, async (rootDir) => {
-      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
+      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
       const results = await runFix(path)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'Packages/@cards/screens/Main.tao': 'changed' })
@@ -83,8 +83,8 @@ Describe('tao fix', () => {
       `),
       'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
     }, async (rootDir) => {
-      const directory = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
-      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', { cwd: rootDir })
+      const directory = FS.resolvePath('Packages/@cards/screens', rootDir)
+      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
       const results = await runFix(directory)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'Packages/@cards/screens/Main.tao': 'changed' })
@@ -115,18 +115,14 @@ Describe('tao fix', () => {
       'Packages/@cards/screens/Main.tao': originalSource,
       'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
     }, async (rootDir) => {
-      const cwd = FS.resolvePath('Packages/@cards/screens', { cwd: rootDir })
-      const path = FS.resolvePath('Main.tao', { cwd })
+      const cwd = FS.resolvePath('Packages/@cards/screens', rootDir)
+      const path = FS.resolvePath('Main.tao', cwd)
 
-      await withCwd(cwd, async () => {
-        Expect(statusByBasename(await runFix('.'))).toEqual({ 'Main.tao': 'changed' })
-      })
+      Expect(statusByBasename(await runFix('.', { cwd }))).toEqual({ 'Main.tao': 'changed' })
       Expect(await FS.readText(path)).toBe(fixedSource)
 
       await FS.writeText(path, originalSource)
-      await withCwd(cwd, async () => {
-        Expect(statusByBasename(await runFix('Main.tao'))).toEqual({ 'Main.tao': 'changed' })
-      })
+      Expect(statusByBasename(await runFix('Main.tao', { cwd }))).toEqual({ 'Main.tao': 'changed' })
       Expect(await FS.readText(path)).toBe(fixedSource)
     })
   })

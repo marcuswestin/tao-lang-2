@@ -1,3 +1,4 @@
+import { Switch } from '@shared'
 import {
   CODEX_SERVICE_TIER,
   DEFAULT_AGY_MODEL,
@@ -19,53 +20,51 @@ export function buildReviewerInvocation(params: {
   timeoutSeconds?: number
 }): ReviewerInvocation {
   const { reviewer, promptText, effort, model } = params
-  switch (reviewer) {
-    case 'claude':
-      return {
-        command: 'claude',
-        args: [
-          '-p',
-          '--verbose',
-          '--effort',
-          mapClaudeEffort(effort),
-          '--permission-mode',
-          'plan',
-          '--no-session-persistence',
-          '--output-format',
-          'stream-json',
-          '--include-partial-messages',
-          '--include-hook-events',
-          '--debug-file',
-          params.debugFile,
-          ...(model === undefined ? [] : ['--model', model]),
-          promptText,
-        ],
-        outputFormat: 'jsonl',
-      }
-    case 'codex':
-      return {
-        command: 'codex',
-        args: [
-          'exec',
-          '-C',
-          '.',
-          '--sandbox',
-          'read-only',
-          '--ephemeral',
-          ...(model === undefined ? [] : ['-m', model]),
-          '-c',
-          `service_tier="${CODEX_SERVICE_TIER}"`,
-          '-c',
-          `model_reasoning_effort=${mapCodexEffort(effort)}`,
-          '--json',
-          ...(params.finalFile === undefined ? [] : ['--output-last-message', params.finalFile]),
-          '-',
-        ],
-        stdin: promptText,
-        finalPath: params.finalFile,
-        outputFormat: 'jsonl',
-      }
-    case 'agy':
+  return Switch<Reviewer, ReviewerInvocation>(reviewer, {
+    claude: () => ({
+      command: 'claude',
+      args: [
+        '-p',
+        '--verbose',
+        '--effort',
+        mapClaudeEffort(effort),
+        '--permission-mode',
+        'plan',
+        '--no-session-persistence',
+        '--output-format',
+        'stream-json',
+        '--include-partial-messages',
+        '--include-hook-events',
+        '--debug-file',
+        params.debugFile,
+        ...(model === undefined ? [] : ['--model', model]),
+        promptText,
+      ],
+      outputFormat: 'jsonl',
+    }),
+    codex: () => ({
+      command: 'codex',
+      args: [
+        'exec',
+        '-C',
+        '.',
+        '--sandbox',
+        'read-only',
+        '--ephemeral',
+        ...(model === undefined ? [] : ['-m', model]),
+        '-c',
+        `service_tier="${CODEX_SERVICE_TIER}"`,
+        '-c',
+        `model_reasoning_effort=${mapCodexEffort(effort)}`,
+        '--json',
+        ...(params.finalFile === undefined ? [] : ['--output-last-message', params.finalFile]),
+        '-',
+      ],
+      stdin: promptText,
+      finalPath: params.finalFile,
+      outputFormat: 'jsonl',
+    }),
+    agy: () => {
       if (model !== undefined && !isAgyGoogleModel(model)) {
         throw new Error(`Antigravity reviewer model must be a Google Gemini model, got "${model}".`)
       }
@@ -84,42 +83,41 @@ export function buildReviewerInvocation(params: {
         ],
         outputFormat: 'text',
       }
-    case 'cursor':
-      return {
-        command: 'cursor',
-        args: [
-          'agent',
-          '--print',
-          '--mode=plan',
-          '--sandbox',
-          'enabled',
-          '--trust',
-          '--output-format',
-          'stream-json',
-          '--stream-partial-output',
-          '--model',
-          model ?? DEFAULT_CURSOR_MODEL,
-          promptText,
-        ],
-        outputFormat: 'jsonl',
-      }
-    case 'gemini':
-      return {
-        command: 'gemini',
-        args: [
-          '--skip-trust',
-          '--approval-mode',
-          'plan',
-          '--model',
-          model ?? DEFAULT_GEMINI_MODEL,
-          '--output-format',
-          'stream-json',
-          '--prompt',
-          promptText,
-        ],
-        outputFormat: 'jsonl',
-      }
-  }
+    },
+    cursor: () => ({
+      command: 'cursor',
+      args: [
+        'agent',
+        '--print',
+        '--mode=plan',
+        '--sandbox',
+        'enabled',
+        '--trust',
+        '--output-format',
+        'stream-json',
+        '--stream-partial-output',
+        '--model',
+        model ?? DEFAULT_CURSOR_MODEL,
+        promptText,
+      ],
+      outputFormat: 'jsonl',
+    }),
+    gemini: () => ({
+      command: 'gemini',
+      args: [
+        '--skip-trust',
+        '--approval-mode',
+        'plan',
+        '--model',
+        model ?? DEFAULT_GEMINI_MODEL,
+        '--output-format',
+        'stream-json',
+        '--prompt',
+        promptText,
+      ],
+      outputFormat: 'jsonl',
+    }),
+  })
 }
 
 function mapClaudeEffort(effort: ReviewEffort): string {
@@ -203,18 +201,13 @@ export function extractReviewerResultText(reviewer: Reviewer, stdout: string, fi
   if (finalText !== undefined && finalText.trim().length > 0) {
     return finalText.trim()
   }
-  switch (reviewer) {
-    case 'claude':
-      return extractClaudeResultText(stdout)
-    case 'codex':
-      return extractCodexResultText(stdout)
-    case 'cursor':
-      return extractCursorResultText(stdout)
-    case 'gemini':
-      return extractGenericJsonlText(stdout)
-    case 'agy':
-      return stdout.trim().length > 0 ? stdout : undefined
-  }
+  return Switch<Reviewer, string | undefined>(reviewer, {
+    agy: () => stdout.trim().length > 0 ? stdout : undefined,
+    claude: () => extractClaudeResultText(stdout),
+    codex: () => extractCodexResultText(stdout),
+    cursor: () => extractCursorResultText(stdout),
+    gemini: () => extractGenericJsonlText(stdout),
+  })
 }
 
 function exitPlanModeText(message: unknown): string | undefined {

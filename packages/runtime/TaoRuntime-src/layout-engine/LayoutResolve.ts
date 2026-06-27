@@ -1,3 +1,4 @@
+import { Switch } from '@shared/core'
 import { LayoutTerms } from './LayoutTerms'
 import type {
   TaoLayoutAlignedEntry,
@@ -39,49 +40,31 @@ function resolve(spec: TaoLayoutSpec): TaoResolvedLayoutStyle {
 }
 
 function applyEntry(style: TaoResolvedLayoutStyle, entry: TaoLayoutEntry, context: LayoutContext): void {
-  switch (entry[0]) {
-    case 'aligned':
-      applyAligned(style, entry)
-      break
-    case 'centered':
+  return Switch<TaoLayoutEntry[0], void>(entry[0], {
+    aligned: () => applyAligned(style, entry as TaoLayoutAlignedEntry),
+    centered: () => {
       style['alignSelf'] = 'center'
-      break
-    case 'compress':
+    },
+    compress: () => {
       style['flexShrink'] = 1
-      break
-    case 'content':
-      applyContent(style, entry, context.direction)
-      break
-    case 'fill':
+    },
+    content: () => applyContent(style, entry as TaoLayoutContentEntry, context.direction),
+    fill: () => {
       style['alignSelf'] = 'stretch'
       style['flexGrow'] = 1
-      break
-    case 'gap':
-      applyGap(style, entry)
-      break
-    case 'height':
-      applyDimension(style, entry, context.parentDirection, 'column')
-      break
-    case 'hug':
+    },
+    gap: () => applyGap(style, entry as TaoLayoutGapEntry),
+    height: () => applyDimension(style, entry as TaoLayoutDimensionEntry, context.parentDirection, 'column'),
+    hug: () => {
       style['flexGrow'] = 0
-      break
-    case 'margin':
-      applySpacing(style, 'margin', entry)
-      break
-    case 'pad':
-      applySpacing(style, 'padding', entry)
-      break
-    case 'rigid':
+    },
+    margin: () => applySpacing(style, 'margin', entry as TaoLayoutSpacingEntry),
+    pad: () => applySpacing(style, 'padding', entry as TaoLayoutSpacingEntry),
+    rigid: () => {
       style['flexShrink'] = 0
-      break
-    case 'width':
-      applyDimension(style, entry, context.parentDirection, 'row')
-      break
-    default: {
-      const exhaustive: never = entry
-      return exhaustive
-    }
-  }
+    },
+    width: () => applyDimension(style, entry as TaoLayoutDimensionEntry, context.parentDirection, 'row'),
+  })
 }
 
 function applyContent(

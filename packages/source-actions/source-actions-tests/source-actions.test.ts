@@ -1,5 +1,5 @@
 import { FS, Text } from '@shared'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import SourceActions from '../source-actions-src/source-actions'
 import {
   parseDocument,
@@ -632,10 +632,10 @@ Describe('fixSource', () => {
   })
 
   Test('uses the source file URI when fixing files with relative imports after render moves', async () => {
-    const tmpDir = await FS.mkTmpDir(FS.resolvePath('tao-source-actions-', { cwd: FS.tmpdir() }))
+    const tmpDir = await mkTestDir('tao-source-actions-')
     try {
       await FS.writeText(
-        FS.resolvePath('Local.tao', { cwd: tmpDir }),
+        FS.resolvePath('Local.tao', tmpDir),
         'publish view LocalText Value is text { }\n',
       )
       const document = await parseRawDocumentAt(
@@ -649,7 +649,7 @@ Describe('fixSource', () => {
           }
         `)
         }\n`,
-        FS.resolvePath('Main.tao', { cwd: tmpDir }),
+        FS.resolvePath('Main.tao', tmpDir),
       )
 
       Expect(await SourceActions.fixSource(document, await sourceActionOptionsFor(document))).toBe(`${

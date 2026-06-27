@@ -27,5 +27,5 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 
 ## Behavior Test Notes
 
-- `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx` renders this app and asserts the visible output.
+- `Runtime Stdlib Tests.test.tao` renders this app, presses the no-op button, and asserts the visible output.
 - Expected visible output: `Runtime stdlib smoke`, `3`, `Tap me`, `Label`, and `Wrapped`.

@@ -1,10 +1,10 @@
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import Formatter from '../formatter-src/formatter'
 import { testFormatCode } from './test-format'
 
-const kitchenSinkPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const kitchenSinkTestPath = FS.repoPath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
+const kitchenSinkPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const kitchenSinkTestPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
 const tsFence = '```ts'
 const fence = '```'
 
@@ -145,7 +145,7 @@ Describe('Tao formatter use statements', () => {
 Describe('Tao formatter tests', () => {
   Test('formats v0 Tao test declarations', async () => {
     await testFormatCode(
-      `use KitchenSink from ./\ntest   "Kitchen Sink"{check "renders"{run   KitchenSink\nexpect   text "Hello"\nexpect missing   text "Loading"}}`,
+      `use KitchenSink from ./\ntest   "Kitchen Sink"{check "renders"{run   KitchenSink\nexpect   text "Hello"\npress   role "Add"\nexpect missing   label "Loading"}}`,
       `
         use KitchenSink from ./
 
@@ -154,7 +154,8 @@ Describe('Tao formatter tests', () => {
               run KitchenSink
 
               expect text "Hello"
-              expect missing text "Loading"
+              press role "Add"
+              expect missing label "Loading"
            }
         }
       `,

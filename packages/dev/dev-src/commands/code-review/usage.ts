@@ -28,8 +28,8 @@ export type CodexBudgetSummary = {
 /** captureCodexBarUsage writes raw Codex Bar usage and a normalized budget summary for a review run. */
 export async function captureCodexBarUsage(runDir: string, repoRoot: string): Promise<CodexBudgetSummary> {
   await FS.mkdir(runDir)
-  const rawPath = FS.resolvePath('codexbar-usage.json', { cwd: runDir })
-  const stderrPath = FS.resolvePath('codexbar-usage.stderr.log', { cwd: runDir })
+  const rawPath = FS.resolvePath('codexbar-usage.json', runDir)
+  const stderrPath = FS.resolvePath('codexbar-usage.stderr.log', runDir)
   const args = ['usage', '--provider', 'all', '--source', 'oauth', '--format', 'json', '--pretty']
   const result = await CLI.run('codexbar', { args, cwd: repoRoot })
   await FS.writeText(rawPath, result.stdout)
@@ -50,7 +50,7 @@ export async function captureCodexBarUsage(runDir: string, repoRoot: string): Pr
         ?? `codexbar exited ${result.exitCode ?? 'unknown'}`,
       status: 'failed',
     }
-  await FS.writeJson(FS.resolvePath('codexbar-budget.json', { cwd: runDir }), summary)
+  await FS.writeJson(FS.resolvePath('codexbar-budget.json', runDir), summary)
   return summary
 }
 

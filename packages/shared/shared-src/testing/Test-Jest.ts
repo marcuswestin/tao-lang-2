@@ -1,9 +1,11 @@
 import {
+  AfterAll,
   AfterEach,
   Describe,
   Expect,
   Jest,
   type JestApi,
+  mkTestDir,
   setTestRuntime,
   Test,
   type TestRuntime,
@@ -14,13 +16,14 @@ const testGlobals = globalThis as unknown as Partial<TestRuntime>
 
 setTestRuntime({
   afterEach: getTestRuntime('afterEach'),
+  afterAll: getTestRuntime('afterAll'),
   describe: getTestRuntime('describe'),
   expect: getTestRuntime('expect'),
   jest: getJest(),
   test: getTestRuntime('test'),
 })
 
-export { AfterEach, Describe, Expect, Jest, Test, withTaoFiles }
+export { AfterAll, AfterEach, Describe, Expect, Jest, mkTestDir, Test, withTaoFiles }
 
 function getTestRuntime<Key extends keyof Omit<TestRuntime, 'jest'>>(key: Key): TestRuntime[Key] {
   const value = testGlobals[key]

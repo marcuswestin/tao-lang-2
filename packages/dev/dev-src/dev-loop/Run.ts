@@ -1,14 +1,15 @@
-import { CLI, Errors, FS, HCI } from '@shared'
+import { CLI, Errors, Repo } from '@shared'
 import CommandRunner from './CommandRunner'
 import { ExpoRunner } from './expo-runner/ExpoRunner'
+import { TUI } from './TUI'
 
 /** runJust runs a repo-root Just recipe with prefixed output. */
 async function runJust(args: readonly string[]): Promise<void> {
   const recipe = args[0]
   const processLabel = recipe ? JUST_LABELS[recipe] ?? 'just' : 'just'
   const result = await CLI.run('just', {
-    prefixedOutput: { processName: processLabel },
-    args: ['--justfile', FS.repoPath('Justfile'), ...args],
+    args: ['--justfile', Repo.resolvePath('Justfile'), ...args],
+    onOutput: TUI.devLoopOutputHandler(processLabel),
   })
   if (result.exitCode !== 0 || result.error !== undefined) {
     throw new Errors.CommandExecutionError(result)
@@ -16,6 +17,7 @@ async function runJust(args: readonly string[]): Promise<void> {
 }
 
 const JUST_LABELS: Record<string, string> = {
+  '_compile-kitchen-sink-app': 'compile',
   '_parser-gen': 'parser',
   'clean': 'clean',
   'deps': 'deps',
@@ -23,6 +25,19 @@ const JUST_LABELS: Record<string, string> = {
   'install-ide-extension': 'extension',
   'verify': 'verify',
   'test': 'test',
+}
+
+/** runTests runs the dev test runner in line-output mode for the dev-loop TUI. */
+async function runTests(repoRoot: string): Promise<void> {
+  await runJust(['_compile-kitchen-sink-app'])
+  const result = await CLI.run('bun', {
+    args: ['run', Repo.resolvePath('packages/dev/dev-src/dev.ts'), 'test', '--output', 'lines'],
+    cwd: repoRoot,
+    onOutput: TUI.devLoopOutputHandler('test'),
+  })
+  if (result.exitCode !== 0 || result.error !== undefined) {
+    throw new Errors.CommandExecutionError(result)
+  }
 }
 
 /** compileApp runs parser generation when needed and compiles the selected Tao app, returning success. */
@@ -33,7 +48,7 @@ async function compileApp(
   shouldRunParserGen: boolean,
 ): Promise<boolean> {
   if (!CommandRunner.beginCommand()) {
-    HCI.logProcessInfo('dev', `Command running; ignored compile (${reason}).`)
+    TUI.logDevLoop('dev', `Command running; ignored compile (${reason}).`)
     return true
   }
 
@@ -51,26 +66,26 @@ async function compileAppWithoutCommandLock(
   reason: string,
   shouldRunParserGen: boolean,
 ): Promise<boolean> {
-  HCI.logProcessInfo('dev', `compiling (${reason})`)
+  TUI.logDevLoop('dev', `compiling (${reason})`)
   try {
     if (shouldRunParserGen) {
       await runJust(['_parser-gen'])
     }
-    const result = await CLI.run(FS.repoPath('tao'), {
+    const result = await CLI.run(Repo.resolvePath('tao'), {
       args: ['compile', appPath],
-      prefixedOutput: { processName: 'compile' },
       cwd: repoRoot,
+      onOutput: TUI.devLoopOutputHandler('compile'),
     })
     if (result.exitCode !== 0 || result.error !== undefined) {
-      HCI.logProcessError('compile', `compile failed for ${appPath}`)
+      TUI.logDevLoop('compile', `compile failed for ${appPath}`, 'error')
       return false
     }
     if (!result.stdout.trim()) {
-      HCI.logProcessInfo('compile', 'compiled')
+      TUI.logDevLoop('compile', 'compiled')
     }
     return true
   } catch (error) {
-    HCI.writeErrorLine(Errors.formatForLog(error))
+    TUI.logDevLoop('compile', Errors.formatForLog(error), 'error')
     return false
   }
 }
@@ -90,6 +105,7 @@ const Run = {
   compileApp,
   recompileAndReload,
   runJust,
+  runTests,
 }
 
 export default Run

@@ -67,10 +67,13 @@ export type StartedCommand = {
   readonly exitCode: number | null
   readonly signalCode: Platform.ProcessSignal | null
   closeOutput: () => Promise<void>
+  dispose: () => void
+  endStdin: () => void
   kill: (signal?: Platform.ProcessSignal) => boolean
   onceClose: (listener: CommandCloseListener) => void
   onceError: (listener: (error: Error) => void) => void
   waitForClose: () => Promise<CommandCloseResult>
+  writeStdin: (chunk: string | Uint8Array) => boolean
 }
 
 type StartedCommandInternal = StartedCommand & {
@@ -175,6 +178,15 @@ function startCommand(
     args,
     command,
     cwd: spec.cwd,
+    dispose: () => {
+      child.stdin?.destroy()
+      child.stdout?.destroy()
+      child.stderr?.destroy()
+      child.removeAllListeners()
+    },
+    endStdin: () => {
+      child.stdin?.end()
+    },
     stderrChunks,
     stdoutChunks,
     closeOutput: () => prefixedOutput?.close() ?? Promise.resolve(),
@@ -195,6 +207,7 @@ function startCommand(
       child.once('error', listener)
     },
     waitForClose: () => closePromise,
+    writeStdin: chunk => child.stdin?.write(chunk) ?? false,
   }
 }
 
@@ -202,7 +215,7 @@ function startCommand(
 export function runSync(command: string, spec: CommandSyncSpec = {}): CommandResult {
   const args = [...(spec.args ?? [])]
   const stdio = resolveCommandStdio(spec, {
-    captureOutput: false,
+    captureOutput: true,
     prefixedOutput: false,
   })
   const result = Platform.spawnSync(command, {
@@ -248,15 +261,13 @@ function resolveCommandStdio(
   const pipeOutput = options.captureOutput || streamOutput || options.prefixedOutput || stdioMode === 'pipe'
 
   return {
-    stdio: customStdio ?? (
-      stdioMode
-        ? [
-          inheritStdin ? 'inherit' : spec.stdin === undefined ? 'ignore' : 'pipe',
-          inheritOutput ? 'inherit' : pipeOutput ? 'pipe' : 'ignore',
-          inheritOutput ? 'inherit' : pipeOutput ? 'pipe' : 'ignore',
-        ]
-        : undefined
-    ),
+    stdio: customStdio ?? (stdioMode || pipeOutput
+      ? [
+        inheritStdin ? 'inherit' : spec.stdin === undefined ? 'ignore' : 'pipe',
+        inheritOutput ? 'inherit' : pipeOutput ? 'pipe' : 'ignore',
+        inheritOutput ? 'inherit' : pipeOutput ? 'pipe' : 'ignore',
+      ]
+      : undefined),
     streamOutput,
   }
 }

@@ -16,8 +16,15 @@ export default {
     f.oneSpaceAfter('run')
   },
 
-  /** ExpectTextStep formats v0 text expectations. */
+  /** PressTextStep formats selector-targeted press steps. */
+  PressTextStep(f) {
+    f.oneSpaceAfter('press')
+    f.oneSpaceBetweenProperties('selector', 'text')
+  },
+
+  /** ExpectTextStep formats v0 selector-targeted expectations. */
   ExpectTextStep(f) {
-    f.oneSpaceAfter('expect', 'missing', 'text')
+    f.oneSpaceAfter('expect', 'missing')
+    f.oneSpaceBetweenProperties('selector', 'text')
   },
 } satisfies Partial<FormatHandlers>

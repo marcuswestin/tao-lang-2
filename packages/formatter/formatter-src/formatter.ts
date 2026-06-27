@@ -5,18 +5,37 @@ import { TaoFormatter } from './langium-formatting'
 
 export { TaoFormatter } from './langium-formatting'
 
+/** FormatterSession reuses parser services while formatting multiple independent Tao sources. */
+export type FormatterSession = {
+  formatCode(code: string): Promise<string>
+  formatFile(path: string): Promise<string>
+}
+
 /** formatCode formats Tao source code and returns the formatted text. */
 async function formatCode(code: string): Promise<string> {
-  return await formatParsed(await Parser.parseCode(code, { validation: false }))
+  return await Formatter.createSession().formatCode(code)
 }
 
 /** formatFile formats the Tao file at `path` and returns the formatted text without writing it. */
 async function formatFile(path: string): Promise<string> {
-  return await formatParsed(
-    await Parser.parse(Parser.createContext(), Langium.URI.file(path), {
-      validation: false,
-    }),
-  )
+  return await Formatter.createSession().formatFile(path)
+}
+
+/** createSession creates a reusable formatter context for batch formatting. */
+function createSession(): FormatterSession {
+  const parserContext = Parser.createContext()
+  return {
+    async formatCode(code: string): Promise<string> {
+      return await formatParsed(await Parser.parseSource(parserContext, code, { validation: false }))
+    },
+    async formatFile(path: string): Promise<string> {
+      return await formatParsed(
+        await Parser.parse(parserContext, Langium.URI.file(path), {
+          validation: false,
+        }),
+      )
+    },
+  }
 }
 
 /** formatParsed formats an existing parser result and returns the formatted text. */
@@ -38,6 +57,7 @@ function assertFormattable(parsed: ParseResult): void {
 
 /** Formatter exposes Tao source formatting functions. */
 const Formatter = {
+  createSession,
   formatCode,
   formatFile,
   formatParsed,

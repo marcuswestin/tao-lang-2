@@ -1,26 +1,8 @@
-import { HCI } from '@shared'
-
-type ControlKey = 'a' | 'c' | 'd' | 'e' | 'f' | 'i' | 'v' | 'q' | 'r' | 's' | 't' | 'w'
+import { TUI } from '../TUI'
 
 /** printControls writes the interactive dev-loop key list. */
 function printControls(): void {
-  HCI.writeLine(`
-  ${formatControl('q', 'quit')}
-  ${formatControl('d', 'reload dev process')}
-  ${formatControl('r', 'recompile and reload Expo app')}
-  ${formatControl('w', 'open web')}
-  ${formatControl('i', 'open iOS simulator')}
-  ${formatControl('a', 'open Android')}
-  ${formatControl('s', 'switch app')}
-  ${formatControl('c', 'clean, install deps, and reload')}
-  ${formatControl('f', 'fix')}
-  ${formatControl('t', 'test')}
-  ${formatControl('v', 'verify')}
-  ${formatControl('e', 'install IDE extension')}`)
-}
-
-function formatControl(key: ControlKey, label: string): string {
-  return `${HCI.dim('›')} ${HCI.bold(HCI.white(`Press ${key}`))} ${HCI.dim('│')} ${label}`
+  TUI.printDevLoopControls()
 }
 
 const COMMAND_KEYS = ['\u0003', 'q', 'r', 'd', 'w', 'i', 'c', 'f', 't', 'v', 'e', 'a', 's'] as const

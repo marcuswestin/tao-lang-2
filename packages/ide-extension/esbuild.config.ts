@@ -4,21 +4,17 @@ import { writeMergedTaoTextMateGrammar } from './ide-extension-src/syntax/textma
 
 const watch = Platform.runtimeProcess.argv.includes('--watch')
 const minify = Platform.runtimeProcess.argv.includes('--minify')
-const generatedTaoTextMateGrammar = FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', {
-  cwd: import.meta.dir,
-})
-const taoTextMateGrammarOverlay = FS.resolvePath('ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json', {
-  cwd: import.meta.dir,
-})
-const dprintTypescriptWasm = FS.resolvePath('../formatter/node_modules/@dprint/typescript/plugin.wasm', {
-  cwd: import.meta.dir,
-})
-const bundledDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/language/plugin.wasm', {
-  cwd: import.meta.dir,
-})
-const bundledExtensionDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/extension/plugin.wasm', {
-  cwd: import.meta.dir,
-})
+const generatedTaoTextMateGrammar = FS.resolvePath(
+  'ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+  import.meta.dir,
+)
+const taoTextMateGrammarOverlay = FS.resolvePath(
+  'ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json',
+  import.meta.dir,
+)
+const dprintTypescriptWasm = FS.resolvePath('../formatter/node_modules/@dprint/typescript/plugin.wasm', import.meta.dir)
+const bundledDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/language/plugin.wasm', import.meta.dir)
+const bundledExtensionDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/extension/plugin.wasm', import.meta.dir)
 
 const ctx = await context({
   entryPoints: [

@@ -6,7 +6,7 @@
   "module": "runtime-src/runtime.ts",
   "exports": {
     ".": "./runtime-src/runtime.ts",
-    "./testing/tao-test-plan": "./runtime-src/testing/tao-test-plan.tsx"
+    "./testing/runtime-testing": "./runtime-src/testing/runtime-testing.ts"
   },
   "dependencies": {
     "tao-shared": "workspace:*",

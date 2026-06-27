@@ -1,12 +1,10 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings'
 import { Errors, FS, HCI, Platform } from '@shared'
-import { runCheck } from './check-command'
 import { runCompile } from './compile-command'
-import { runFix } from './fix-command'
-import { runFmt } from './fmt-command'
-import type { InPlaceFileResult } from './in-place-files'
-import { findTaoTestFiles, runTest, type TaoTestValidationError, validateTaoTestFiles } from './test-command'
+import type { InPlace } from './in-place-files'
+import { runCheck, runFix, runFmt } from './source-commands'
+import { runTestCommand } from './test-command'
 
 type InPlaceLabels = {
   /** changed labels per-file and summary output, e.g. `formatted`. */
@@ -19,94 +17,86 @@ type InPlaceLabels = {
   failOnChanged?: boolean
 }
 
-const commands = new Command()
-  .name('tao')
-  .description('Tao language CLI.')
+await runTaoCliWhenExecutedDirectly(import.meta)
 
-commands
-  .command('compile')
-  .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
-  .description('Compile a Tao app into the local runtime package.')
-  .action(async (appPath: string) => {
-    try {
-      const compiled = await runCompile(appPath)
-      HCI.writeSuccess(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}\n`)
-    } catch (error) {
-      HCI.writeErrorLine(Errors.formatForUser(error))
-      Platform.runtimeProcess.exit(1)
-    }
-  })
+type ExecutableImportMeta = ImportMeta & {
+  main?: boolean
+}
 
-commands
-  .command('fmt')
-  .argument('[paths...]', 'Tao files or directories to format. Defaults to the current directory.')
-  .description('Format .tao files in place.')
-  .action(async (paths: string[]) => {
-    await runInPlaceCommand(paths, runFmt, { changed: 'formatted', changedLine: 'Formatted', failedVerb: 'format' })
-  })
+async function runTaoCliWhenExecutedDirectly(meta: ExecutableImportMeta): Promise<void> {
+  // Bun sets import.meta.main only for directly executed modules; tests import this file without running the CLI.
+  if (meta.main === true) {
+    await runTaoCli()
+  }
+}
 
-commands
-  .command('fix')
-  .argument('[paths...]', 'Tao files or directories to fix. Defaults to the current directory.')
-  .description('Apply all Tao source fixes in place: renders last, organized use statements, formatting.')
-  .action(async (paths: string[]) => {
-    await runInPlaceCommand(paths, runFix, { changed: 'fixed', changedLine: 'Fixed', failedVerb: 'fix' })
-  })
+/** runTaoCli runs the Tao CLI for the provided argv. */
+export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<void> {
+  await createCommands().parseAsync(argv, { from: 'node' })
+}
 
-commands
-  .command('check')
-  .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
-  .description('Check .tao files for the full canonical source form without writing.')
-  .action(async (paths: string[]) => {
-    await runInPlaceCommand(paths, runCheck, {
-      changed: 'noncanonical',
-      changedLine: 'Needs fixes',
-      failedVerb: 'check',
-      failOnChanged: true,
+function createCommands(): Command {
+  const commands = new Command()
+    .name('tao')
+    .description('Tao language CLI.')
+
+  commands
+    .command('compile')
+    .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
+    .description('Compile a Tao app into the local runtime package.')
+    .action(async (appPath: string) => {
+      try {
+        const compiled = await runCompile(appPath)
+        HCI.writeSuccess(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}\n`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
     })
-  })
 
-commands
-  .command('test')
-  .argument('[path]', 'Tao test file or directory to search. Defaults to the current directory.', '.')
-  .description('Run Tao tests declared in .tao files at or under a path.')
-  .action(async (path: string) => {
-    try {
-      const root = FS.resolvePath(path)
-      HCI.logProcessInfo('test', `Finding Tao tests under ${displayPath(root)}`)
-      const testPaths = await findTaoTestFiles(root)
-      if (testPaths.length === 0) {
-        HCI.writeLine(`No Tao tests found under ${displayPath(root)}`)
-        return
-      }
-      HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
-      HCI.logProcessInfo('test', 'Validating Tao test files')
-      const validationErrors = await validateTaoTestFiles(testPaths)
-      if (validationErrors.length > 0) {
-        writeTaoTestValidationErrors(validationErrors)
-        Platform.runtimeProcess.exit(1)
-      }
-      HCI.logProcessInfo('test', 'Compiling apps and running Tao tests')
-      const result = await runTest(root, { stdio: 'inherit', testPaths, skipValidation: true })
-      const commandResult = result.commandResult
-      if (!commandResult || commandResult.error || commandResult.exitCode !== 0) {
-        if (commandResult?.error) {
-          HCI.writeErrorLine(Errors.formatForUser(commandResult.error))
-        }
-        Platform.runtimeProcess.exit(1)
-      }
-      HCI.logProcessInfo('test', 'Tao tests finished')
-    } catch (error) {
-      HCI.writeErrorLine(Errors.formatForUser(error))
-      Platform.runtimeProcess.exit(1)
-    }
-  })
+  commands
+    .command('fmt')
+    .argument('[paths...]', 'Tao files or directories to format. Defaults to the current directory.')
+    .description('Format .tao files in place.')
+    .action(async (paths: string[]) => {
+      await runInPlaceCommand(paths, runFmt, { changed: 'formatted', changedLine: 'Formatted', failedVerb: 'format' })
+    })
 
-await commands.parseAsync(Platform.runtimeProcess.argv, { from: 'node' })
+  commands
+    .command('fix')
+    .argument('[paths...]', 'Tao files or directories to fix. Defaults to the current directory.')
+    .description('Apply all Tao source fixes in place: renders last, organized use statements, formatting.')
+    .action(async (paths: string[]) => {
+      await runInPlaceCommand(paths, runFix, { changed: 'fixed', changedLine: 'Fixed', failedVerb: 'fix' })
+    })
+
+  commands
+    .command('check')
+    .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
+    .description('Check .tao files for the full canonical source form without writing.')
+    .action(async (paths: string[]) => {
+      await runInPlaceCommand(paths, runCheck, {
+        changed: 'noncanonical',
+        changedLine: 'Needs fixes',
+        failedVerb: 'check',
+        failOnChanged: true,
+      })
+    })
+
+  commands
+    .command('test')
+    .argument('[path]', 'Tao test file or directory to search. Defaults to the current directory.', '.')
+    .description('Run Tao tests declared in .tao files at or under a path.')
+    .action(async (path: string) => {
+      await runTestCommand(path)
+    })
+
+  return commands
+}
 
 async function runInPlaceCommand(
   paths: string[],
-  run: (root: string) => Promise<InPlaceFileResult[]>,
+  run: (root: string) => Promise<InPlace.Result[]>,
   labels: InPlaceLabels,
 ): Promise<void> {
   try {
@@ -117,7 +107,7 @@ async function runInPlaceCommand(
         Errors.throwUserInput(`No file or directory found at ${root}`)
       }
     }
-    const results: InPlaceFileResult[] = []
+    const results: InPlace.Result[] = []
     for (const root of roots) {
       results.push(...await run(root))
     }
@@ -146,7 +136,7 @@ async function runInPlaceCommand(
   }
 }
 
-function writeChangedResults(results: readonly InPlaceFileResult[], labels: InPlaceLabels): void {
+function writeChangedResults(results: readonly InPlace.Result[], labels: InPlaceLabels): void {
   for (const result of results) {
     const line = `${labels.changedLine} ${displayPath(result.path)}`
     if (labels.failOnChanged) {
@@ -160,12 +150,4 @@ function writeChangedResults(results: readonly InPlaceFileResult[], labels: InPl
 function displayPath(path: string): string {
   const relative = FS.relativePath(FS.resolvePath('.'), path)
   return relative === '' ? '.' : relative
-}
-
-function writeTaoTestValidationErrors(errors: readonly TaoTestValidationError[]): void {
-  for (const error of errors) {
-    for (const message of error.messages) {
-      HCI.writeErrorLine(`${displayPath(error.path)}: ${message}`)
-    }
-  }
 }

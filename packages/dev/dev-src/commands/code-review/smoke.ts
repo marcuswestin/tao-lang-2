@@ -52,9 +52,10 @@ export async function runProviderSmokeChecks(options: {
   timeoutSeconds?: number
 }): Promise<{ results: SmokeResult[]; runDir: string }> {
   const providers = parseSmokeProviders(options.provider)
-  const runDir = FS.resolvePath(`${STANDARD_RUN_ROOT}/smoke/${formatReviewRunDir('providers', new Date())}`, {
-    cwd: options.repoRoot,
-  })
+  const runDir = FS.resolvePath(
+    `${STANDARD_RUN_ROOT}/smoke/${formatReviewRunDir('providers', new Date())}`,
+    options.repoRoot,
+  )
   await FS.mkdir(runDir)
   const results: SmokeResult[] = []
   for (const provider of providers) {
@@ -75,7 +76,7 @@ export async function runProviderSmokeChecks(options: {
       })
     }
   }
-  await FS.writeJson(FS.resolvePath('smoke-results.json', { cwd: runDir }), results)
+  await FS.writeJson(FS.resolvePath('smoke-results.json', runDir), results)
   return { results, runDir }
 }
 
@@ -87,7 +88,7 @@ async function runOneSmokeProvider(
     return runCodexBarSmoke(ctx)
   }
   const prompt = `Return exactly this text and nothing else: ${markerFor(provider)}`
-  const promptPath = FS.resolvePath(`prompt-${provider}.md`, { cwd: ctx.runDir })
+  const promptPath = FS.resolvePath(`prompt-${provider}.md`, ctx.runDir)
   await FS.writeText(promptPath, prompt)
   const entry = smokeManifestEntry(provider, promptPath, ctx.timeoutSeconds)
   const meta = await launchReviewer(entry, { kind: 'smoke', repoRoot: ctx.repoRoot, runDir: ctx.runDir })

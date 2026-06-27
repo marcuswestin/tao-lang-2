@@ -32,6 +32,6 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 
 ## Behavior Test Notes
 
-- Behavior automation is not wired yet.
+- `Type System Tests.test.tao` asserts the visible type-system output.
 - Expected visible output includes `Open: 1`, `Done: 2`, `Ada`, `40`, `Compiler engineer`, `types, items, lists`, `Kai`, `29`, `Runtime engineer`, `runtime, mobile`, `People in the team: 2`, `2 team member(s)`, `Grace`, and `Constructed primitive text`.
 - Future behavior metadata can live in this section without changing the app layout.

@@ -22,7 +22,7 @@ export function registerJustCommand(commands: Command): void {
 
 /** runJust runs Just from the repo root with output filtering for successful commands. */
 async function runJust(args: readonly string[]): Promise<number> {
-  const commandArgs = ['--justfile', FS.repoPath('Justfile'), ...args]
+  const commandArgs = ['--justfile', Repo.resolvePath('Justfile'), ...args]
   const repoRoot = Repo.getRoot()
 
   if (shouldStreamJustOutput(args)) {
@@ -99,12 +99,12 @@ async function writeJustFailureLogs(
 ): Promise<string> {
   const logDir = FS.resolvePath(
     `.artifacts/logs/agent/${formatArtifactRunId()}-just-${sanitizeLogName(formatJustRecipe(args))}`,
-    { cwd: options.repoRoot },
+    options.repoRoot,
   )
   await FS.mkdir(logDir)
-  await FS.writeText(FS.resolvePath('command.txt', { cwd: logDir }), formatFailureCommand(result, options.elapsedMs))
-  await FS.writeText(FS.resolvePath('stdout.log', { cwd: logDir }), result.stdout)
-  await FS.writeText(FS.resolvePath('stderr.log', { cwd: logDir }), result.stderr)
+  await FS.writeText(FS.resolvePath('command.txt', logDir), formatFailureCommand(result, options.elapsedMs))
+  await FS.writeText(FS.resolvePath('stdout.log', logDir), result.stdout)
+  await FS.writeText(FS.resolvePath('stderr.log', logDir), result.stderr)
   return logDir
 }
 

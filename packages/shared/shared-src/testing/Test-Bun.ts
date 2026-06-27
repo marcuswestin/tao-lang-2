@@ -1,7 +1,19 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { AfterEach, Describe, Expect, Jest, type JestApi, setTestRuntime, Test, withTaoFiles } from './Test'
+import { afterAll, afterEach, describe, expect, test } from 'bun:test'
+import {
+  AfterAll,
+  AfterEach,
+  Describe,
+  Expect,
+  Jest,
+  type JestApi,
+  mkTestDir,
+  setTestRuntime,
+  Test,
+  withTaoFiles,
+} from './Test'
 
 setTestRuntime({
+  afterAll,
   afterEach,
   describe,
   expect,
@@ -13,7 +25,7 @@ setTestRuntime({
   test,
 })
 
-export { AfterEach, Describe, Expect, Jest, Test, withTaoFiles }
+export { AfterAll, AfterEach, Describe, Expect, Jest, mkTestDir, Test, withTaoFiles }
 
 function getJest(): JestApi {
   const value = (globalThis as unknown as { jest?: JestApi }).jest

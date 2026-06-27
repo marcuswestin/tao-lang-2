@@ -1,8 +1,9 @@
-import { Errors, FS, HCI, Platform } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Switch } from '@shared'
 import { discoverSwitchableAppPaths } from '../AppDiscovery'
 import CommandRunner from '../CommandRunner'
 import { ExpoRunner } from '../expo-runner/ExpoRunner'
 import Run from '../Run'
+import { TUI } from '../TUI'
 import { AppSwitchChoices } from './AppSwitchChoices'
 import Commands, { type CommandKey } from './Commands'
 import type { RawKeyInput } from './RawKeyInput'
@@ -40,7 +41,7 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
   }
 
   if (CommandRunner.isCommandRunning()) {
-    HCI.logProcessInfo('dev', `Command already running; ignored ${formatCommandKey(key)}.`)
+    TUI.logDevLoop('dev', `Command already running; ignored ${formatCommandKey(key)}.`)
     return
   }
 
@@ -63,7 +64,7 @@ const COMMAND_HANDLERS = {
       () => cleanInstallDepsAndReload(context),
     ),
   f: () => CommandRunner.runNonInteractiveCommand('fix', () => Run.runJust(['fix'])),
-  t: () => CommandRunner.runNonInteractiveCommand('test', () => Run.runJust(['test'])),
+  t: context => CommandRunner.runNonInteractiveCommand('test', () => Run.runTests(context.repoRoot)),
   v: () =>
     CommandRunner.runNonInteractiveCommand(
       'verify',
@@ -84,7 +85,7 @@ async function cleanInstallDepsAndReload(context: CommandKeyContext): Promise<bo
     await Run.runJust(['clean'])
     await Run.runJust(['deps'])
   } catch (error) {
-    HCI.writeErrorLine(Errors.formatForLog(error))
+    TUI.logDevLoop('dev', Errors.formatForLog(error), 'error')
     await context.finish(1)
     return false
   }
@@ -96,25 +97,26 @@ async function switchAppAndReload(context: CommandKeyContext): Promise<void> {
   let shouldRestartInput = true
   try {
     const choice = await askForAppPath(context.appPath)
-    if (choice.kind === 'cancel') {
-      HCI.logProcessInfo('dev', 'App switch cancelled.')
-      return
-    }
-    if (choice.kind === 'exit') {
-      shouldRestartInput = false
-      await context.finish(choice.exitCode)
-      return
-    }
-    if (choice.appPath === context.appPath) {
-      HCI.logProcessInfo('dev', 'App unchanged.')
-      return
-    }
-
-    shouldRestartInput = false
-    await FS.writeText(FS.repoPath(NEXT_APP_PATH), choice.appPath)
-    HCI.logProcessInfo('dev', `switching app to ${choice.appPath}`)
-    await context.stopServices()
-    await context.finish(DEV_RELOAD_EXIT_CODE)
+    await Switch.kind<AppPathChoice, Promise<void>>(choice, {
+      cancel: async () => {
+        TUI.logDevLoop('dev', 'App switch cancelled.')
+      },
+      exit: async exitChoice => {
+        shouldRestartInput = false
+        await context.finish(exitChoice.exitCode)
+      },
+      selected: async selectedChoice => {
+        if (selectedChoice.appPath === context.appPath) {
+          TUI.logDevLoop('dev', 'App unchanged.')
+          return
+        }
+        shouldRestartInput = false
+        await FS.writeText(Repo.resolvePath(NEXT_APP_PATH), selectedChoice.appPath)
+        TUI.logDevLoop('dev', `switching app to ${selectedChoice.appPath}`)
+        await context.stopServices()
+        await context.finish(DEV_RELOAD_EXIT_CODE)
+      },
+    })
   } finally {
     if (shouldRestartInput) {
       context.keyInput.start()
@@ -124,23 +126,26 @@ async function switchAppAndReload(context: CommandKeyContext): Promise<void> {
 
 async function askForAppPath(currentAppPath: string): Promise<AppPathChoice> {
   const choices = (await appChoices()).slice(0, MAX_SINGLE_KEY_APP_CHOICES)
-  writeAppChoices(choices, currentAppPath)
+  TUI.printDevLoopAppChoices(choices, currentAppPath)
   while (true) {
     const key = await readSingleAppChoiceKey()
-    HCI.writeLine(key)
+    TUI.logDevLoop('dev', key)
     const action = AppSwitchChoices.actionForKey(choices, key)
-    if (action.kind === 'choose') {
-      return { kind: 'selected', appPath: action.appPath }
+    const choice = Switch.kind<typeof action, AppPathChoice | undefined>(action, {
+      cancel: cancel => cancel,
+      choose: choose => ({ kind: 'selected', appPath: choose.appPath }),
+      exit: exit => exit,
+      invalid: () => undefined,
+    })
+    if (choice !== undefined) {
+      return choice
     }
-    if (action.kind === 'cancel' || action.kind === 'exit') {
-      return action
-    }
-    HCI.logProcessInfo('dev', `Choose an app with 1-${choices.length}.`)
+    TUI.logDevLoop('dev', `Choose an app with 1-${choices.length}.`)
   }
 }
 
 async function appChoices(): Promise<AppChoice[]> {
-  const appsRoot = FS.repoPath('Apps')
+  const appsRoot = Repo.resolvePath('Apps')
   const appPaths = await discoverSwitchableAppPaths(appsRoot)
   const choices: AppChoice[] = appPaths.map(appPath => ({
     label: formatAppChoiceLabel(appsRoot, appPath),
@@ -155,16 +160,6 @@ async function appChoices(): Promise<AppChoice[]> {
 
 function formatAppChoiceLabel(appsRoot: string, appPath: string): string {
   return FS.slashPath(appPath.slice(appsRoot.length + 1)).replace(/\.tao$/, '')
-}
-
-function writeAppChoices(choices: readonly AppChoice[], currentAppPath: string): void {
-  HCI.writeLine()
-  HCI.writeLine(`${HCI.formatProcessPrefix('dev')} Switch app`)
-  choices.forEach((choice, index) => {
-    const currentLabel = choice.value === currentAppPath ? ` ${HCI.dim('(current)')}` : ''
-    HCI.writeLine(`${HCI.dim('›')} ${HCI.bold(HCI.white(String(index + 1)))} ${choice.label}${currentLabel}`)
-  })
-  HCI.write(`${HCI.formatProcessPrefix('dev')} Press 1-${choices.length}, q, or Esc: `)
 }
 
 async function readSingleAppChoiceKey(): Promise<string> {

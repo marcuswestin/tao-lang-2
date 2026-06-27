@@ -1,6 +1,5 @@
-import { Packages } from '@ast-utils'
 import { Langium } from '@parser'
-import { FS } from '@shared'
+import { Repo } from '@shared'
 import {
   createWorkspaceLspServices,
   type WorkspaceLspContributions,
@@ -42,19 +41,9 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
   }
 
   private async loadWorkspaceDocuments(): Promise<void> {
-    const documentPaths: string[] = []
-    for await (
-      const path of FS.walk(this.root, {
-        extensions: ['.tao'],
-        excludeDirectory: Packages.shouldSkipTaoDirectory,
-      })
-    ) {
-      documentPaths.push(path)
-    }
-
     const documents = this.services.shared.workspace.LangiumDocuments
     const factory = this.services.shared.workspace.LangiumDocumentFactory
-    for (const path of documentPaths.sort()) {
+    for (const path of await Repo.filesUnder(this.root, { extensions: ['.tao'] })) {
       const uri = Langium.URI.file(path)
       if (documents.hasDocument(uri)) {
         continue

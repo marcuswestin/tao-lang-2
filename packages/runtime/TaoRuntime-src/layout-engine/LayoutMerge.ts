@@ -1,3 +1,4 @@
+import { Switch } from '@shared/core'
 import { LayoutTerms } from './LayoutTerms'
 import type {
   TaoLayout,
@@ -40,38 +41,20 @@ function mergeEntry(
   overlayEntry: TaoLayoutEntry,
   direction: TaoLayoutDirection | undefined,
 ): void {
-  switch (overlayEntry[0]) {
-    case 'content':
-      mergeContentEntry(entries, overlayEntry, direction)
-      break
-    case 'gap':
-      replaceEntry(entries, overlayEntry, 'gap')
-      break
-    case 'height':
-      replaceEntry(entries, overlayEntry, 'height')
-      break
-    case 'margin':
-      mergeSpacingEntry(entries, overlayEntry, 'margin')
-      break
-    case 'pad':
-      mergeSpacingEntry(entries, overlayEntry, 'pad')
-      break
-    case 'width':
-      replaceEntry(entries, overlayEntry, 'width')
-      break
-    case 'aligned':
-    case 'centered':
-    case 'compress':
-    case 'fill':
-    case 'hug':
-    case 'rigid':
-      entries.push(overlayEntry)
-      break
-    default: {
-      const exhaustive: never = overlayEntry
-      return exhaustive
-    }
-  }
+  return Switch<TaoLayoutEntryHead, void>(overlayEntry[0], {
+    aligned: () => entries.push(overlayEntry),
+    centered: () => entries.push(overlayEntry),
+    compress: () => entries.push(overlayEntry),
+    content: () => mergeContentEntry(entries, overlayEntry as TaoLayoutContentEntry, direction),
+    fill: () => entries.push(overlayEntry),
+    gap: () => replaceEntry(entries, overlayEntry as TaoLayoutEntryOfHead<'gap'>, 'gap'),
+    height: () => replaceEntry(entries, overlayEntry as TaoLayoutEntryOfHead<'height'>, 'height'),
+    hug: () => entries.push(overlayEntry),
+    margin: () => mergeSpacingEntry(entries, overlayEntry as TaoLayoutSpacingEntry<'margin'>, 'margin'),
+    pad: () => mergeSpacingEntry(entries, overlayEntry as TaoLayoutSpacingEntry<'pad'>, 'pad'),
+    rigid: () => entries.push(overlayEntry),
+    width: () => replaceEntry(entries, overlayEntry as TaoLayoutEntryOfHead<'width'>, 'width'),
+  })
 }
 
 function replaceEntry<HeadT extends TaoLayoutEntryHead>(

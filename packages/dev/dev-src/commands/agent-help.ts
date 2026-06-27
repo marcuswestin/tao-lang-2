@@ -1,5 +1,5 @@
 import type { Command } from '@commander-js/extra-typings'
-import { CLI, FS, HCI, Platform, Repo, Text } from '@shared'
+import { CLI, HCI, Platform, Repo, Text } from '@shared'
 
 /** AgentHelpOptions declares the command names printed by agent help. */
 type AgentHelpOptions = {
@@ -22,7 +22,7 @@ export function registerAgentHelpCommand(commands: Command, opts: AgentHelpOptio
 async function printAgentHelp(allowlistedCommands: readonly string[]): Promise<number> {
   const repoRoot = Repo.getRoot()
   const justList = await CLI.run('just', {
-    args: ['--justfile', FS.repoPath('Justfile'), '--list'],
+    args: ['--justfile', Repo.resolvePath('Justfile'), '--list'],
     cwd: repoRoot,
   })
 
@@ -41,6 +41,7 @@ export function formatAgentHelpText(justList: string, allowlistedCommands: reado
   const lines = [`
 Usage:
   ./agent help
+  ./agent test [pattern]
   ./agent just <recipe> [args...]
   ./agent ai-usage [--provider <name>] [--source <source>] [--json]
   ./agent audit-instructions [--strict] [--json]
@@ -57,6 +58,7 @@ Behavior:
   - use shell cd or tool workdir before invoking ./agent when you need another cwd.
 
 Examples:
+  ./agent test
   ./agent just verify
   ./agent just test
   ./agent ai-usage --provider all --json
