@@ -118,6 +118,7 @@
       "dependencies": {
         "@commander-js/extra-typings": "^14.0.0",
         "commander": "^14.0.0",
+        "tao-ast-utils": "workspace:*",
         "tao-formatter": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-runtime": "workspace:*",
