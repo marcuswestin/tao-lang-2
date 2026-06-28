@@ -18,4 +18,30 @@ Describe('Tao package discovery', () => {
       await FS.remove(root)
     }
   })
+
+  Test('skips future Tao sketch directories during recursive package discovery', async () => {
+    const root = await mkTestDir('tao-packages-sketches-')
+    try {
+      const packageRoot = FS.resolvePath('@cards', root)
+      await FS.writeText(FS.resolvePath('Main.tao', root), '')
+      await FS.writeText(FS.resolvePath('Main.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('Rows.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('MVP-triage/Future.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('Syntax Sketches/Future.tao', packageRoot), '')
+
+      const context = await Packages.createContext(root)
+      const resolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', packageRoot),
+      })
+      const candidates = (await Packages.candidateFilePaths(resolution))
+        .map(path => FS.relativePath(root, path))
+
+      Expect(candidates).toEqual([
+        '@cards/Main.tao',
+        '@cards/Rows.tao',
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })

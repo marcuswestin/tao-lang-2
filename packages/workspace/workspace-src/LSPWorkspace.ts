@@ -1,5 +1,5 @@
 import { Langium } from '@parser'
-import { Repo } from '@shared'
+import { Repo, TaoFiles } from '@shared'
 import {
   createWorkspaceLspServices,
   type WorkspaceLspContributions,
@@ -43,7 +43,12 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
   private async loadWorkspaceDocuments(): Promise<void> {
     const documents = this.services.shared.workspace.LangiumDocuments
     const factory = this.services.shared.workspace.LangiumDocumentFactory
-    for (const path of await Repo.filesUnder(this.root, { extensions: ['.tao'] })) {
+    for (
+      const path of await Repo.filesUnder(this.root, {
+        excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
+        extensions: ['.tao'],
+      })
+    ) {
       const uri = Langium.URI.file(path)
       if (documents.hasDocument(uri)) {
         continue

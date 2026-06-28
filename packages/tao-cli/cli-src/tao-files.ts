@@ -1,16 +1,4 @@
-import { Errors, FS, Repo } from '@shared'
-
-const TAO_FILE_DISCOVERY_EXCLUDED_DIRECTORY_NAMES = [
-  'node_modules',
-  'ios',
-  'android',
-  'pods',
-  'MVP-1',
-  'MVP-2',
-  'MVP-3',
-  'MVP-triage',
-  'Syntax Sketches',
-] as const
+import { Errors, FS, Repo, TaoFiles } from '@shared'
 
 /** findTaoFiles finds `.tao` files at or under `path`, respecting Git ignore rules. */
 export async function findTaoFiles(path: string): Promise<string[]> {
@@ -19,7 +7,7 @@ export async function findTaoFiles(path: string): Promise<string[]> {
     Errors.throwUserInput(`No file or directory found at ${root}`)
   }
   return await Repo.filesUnder(root, {
-    excludeDirectoryNames: TAO_FILE_DISCOVERY_EXCLUDED_DIRECTORY_NAMES,
+    excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
     extensions: ['.tao'],
   })
 }
