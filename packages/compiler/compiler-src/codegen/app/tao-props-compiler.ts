@@ -19,7 +19,7 @@ function createTaoPropsLayout(clause: AST.LayoutClause | undefined): Compiled {
     return gen`undefined`
   }
   const entries = clause.entries.map(ASTUtils.layoutEntryValues)
-  return gen`TR.Layout.create(${JSON.stringify(entries)})`
+  return gen`TR.Layout.create(${gen.jsLiteral(entries)})`
 }
 
 function compileTaoPropsForRenderStatement(layout: Compiled, render: AST.RenderStatement): Compiled {

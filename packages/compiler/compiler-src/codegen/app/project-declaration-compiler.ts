@@ -13,7 +13,7 @@ export default {
 function formatProjectStatement(statement: AST.ProjectStatement): string {
   return Switch.type(statement, {
     ProjectLicense: projectLicense => `license ${projectLicense.value}`,
-    ProjectName: projectName => `name ${JSON.stringify(projectName.value)}`,
+    ProjectName: projectName => `name ${gen.jsLiteral(projectName.value)}`,
     ProjectRemote: () => 'remote none',
     ProjectRequires: projectRequires => `requires ${projectRequires.value}`,
   })

@@ -51,7 +51,7 @@ export default {
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
   InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen` ${gen.name({ name: Type.parameterName(pair.parameter) })}={${Compile.Argument(pair.argument)}}`
+    return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${Compile.Argument(pair.argument)}}`
   },
 
   /** Argument compiles a Tao render argument into a runtime value expression. */
