@@ -1,5 +1,6 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -22,22 +23,23 @@ export const ViewsCompiler = {
 
   /** ParameterDeclaration compiles one Tao parameter into a generated React prop. */
   ParameterDeclaration(param: AST.ParameterDeclaration): Compiled {
-    return gen`${gen.name({ name: Type.parameterName(param) })}: ${Compile.ParameterType(param)}`
+    return gen`${gen.Name({ name: Type.parameterName(param) })}: ${Compile.ParameterType(param)}`
   },
 
   /** ParameterType returns the generated runtime value type for a Tao parameter. */
   ParameterType(param: AST.ParameterDeclaration): Compiled {
     const type = Type.ofParameter(param)
-    if (type.kind === 'primitive') {
-      if (type.primitive === 'action') {
-        return gen`TR.Action`
-      }
-      return type.primitive === 'number' ? gen`TR.Value<number>` : gen`TR.Value<string>`
-    }
-    if (type.kind === 'list') {
-      return gen`TR.Value<any[]>`
-    }
-    return gen`TR.Value<Record<string, any>>`
+    return Switch.kind(type, {
+      primitive: type =>
+        Switch(type.primitive, {
+          action: () => gen`TR.Action`,
+          number: () => gen`TR.Value<number>`,
+          text: () => gen`TR.Value<string>`,
+        }),
+      list: () => gen`TR.Value<any[]>`,
+      item: () => gen`TR.Value<Record<string, any>>`,
+      unresolved: () => gen`TR.Value<Record<string, any>>`,
+    })
   },
 
   /** RenderBlockBody compiles render child setup statements followed by JSX children. */
@@ -55,14 +57,14 @@ export const ViewsCompiler = {
   /** ViewParameterBinding compiles one view parameter into the current generated scope. */
   ViewParameterBinding(parameter: AST.ParameterDeclaration): Compiled {
     const name = { name: Type.parameterName(parameter) }
-    return gen`${gen.scopeName(name)} = _ViewProps.${gen.name(name)}`
+    return gen`${gen.scopeName(name)} = _ViewProps.${gen.Name(name)}`
   },
 } as const
 
 function ViewDeclaration(renderable: AST.RenderableDeclaration): Compiled {
   const parameterList = Compile.ViewParameterList(renderable)
   return gen`
-    ${gen.scopeName(renderable)} = function ${gen.name(renderable)}(_ViewProps: ${parameterList}) {
+    ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
         ${gen.block(renderable, Compile.Statement)}

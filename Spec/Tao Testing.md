@@ -115,7 +115,6 @@ Larger suites can live in sidecar `<Name>.test.tao` files:
 Apps/Test Apps/TODOs/
   TODOs.tao
   TODOs.test.tao
-  Purpose.md
 ```
 
 ```tao
@@ -702,9 +701,9 @@ Source locations in this IR are illustrative. Implementations should carry preci
 
 ## Test Apps Path
 
-`Apps/Test Apps/*/Purpose.md` remains the contract for each test app.
+`Apps/Test Apps/README.md` remains the contract for each test app.
 
-When Tao-native behavior tests exist, `Behavior Test Notes` should name the inline tests or sidecar `.test.tao` file and summarize the rendered behavior asserted by them:
+When Tao-native behavior tests exist, each app's `Behavior Test Notes` section should name the inline tests or sidecar `.test.tao` file and summarize the rendered behavior asserted by them:
 
 ```md
 ## Behavior Test Notes

@@ -72,7 +72,7 @@ function actionParameters(action: AST.ActionDeclaration): ActionParameter[] {
 }
 
 function actionRuntimeParameterName(index: number): Compiled {
-  return gen.name({ name: `_TaoActionArg${index}` })
+  return gen.Name({ name: `_TaoActionArg${index}` })
 }
 
 function actionInvocationArguments(invocation: AST.DoStatement): AST.Argument[] {

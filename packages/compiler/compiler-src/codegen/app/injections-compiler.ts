@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Text } from '@shared'
+import { Switch, Text } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -26,7 +26,7 @@ export const InjectionsCompiler = {
 
 function CompileInjectionParameter(argument: AST.InjectionArgument): Compiled {
   const name = ASTUtils.injectionArgumentName(argument)
-  return gen`${gen.name({ name })}: ${CompileExpressionJsType(argument.value)}`
+  return gen`${gen.Name({ name })}: ${CompileExpressionJsType(argument.value)}`
 }
 
 function CompileInjectionValue(argument: AST.InjectionArgument): Compiled {
@@ -35,16 +35,17 @@ function CompileInjectionValue(argument: AST.InjectionArgument): Compiled {
 
 function CompileExpressionJsType(expression: AST.Expression): Compiled {
   const type = Type.ofExpression(expression)
-  if (type.kind === 'primitive') {
-    if (type.primitive === 'action') {
-      return gen`TR.ActionValue`
-    }
-    return type.primitive === 'number' ? gen`number` : gen`string`
-  }
-  if (type.kind === 'list') {
-    return gen`any[]`
-  }
-  return gen`any`
+  return Switch.kind(type, {
+    primitive: type =>
+      Switch(type.primitive, {
+        action: () => gen`TR.ActionValue`,
+        number: () => gen`number`,
+        text: () => gen`string`,
+      }),
+    list: () => gen`any[]`,
+    item: () => gen`any`,
+    unresolved: () => gen`any`,
+  })
 }
 
 function stripTsFence(code: string): string {

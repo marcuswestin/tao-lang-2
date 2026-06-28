@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -11,16 +12,21 @@ export const StateCompiler = {
   /** SetStatement compiles Tao state mutation. */
   SetStatement(setStatement: AST.SetStatement): Compiled {
     const state = resolveRef(setStatement.target)
-    if (setStatement.operator === '=') {
-      return gen`TR.Set(${gen.scopeName(state)}, () => ${Compile.Expression(setStatement.value)})`
-    }
-    return gen`
-      TR.Set(
-        ${gen.scopeName(state)},
-        () => TR.CompoundSet(${gen.scopeName(state)}, ${JSON.stringify(setStatement.operator)}, ${
-      Compile.Expression(setStatement.value)
-    }),
-      )
-    `
+    const compileCompoundSet = (operator: AST.SetOperator) =>
+      gen`
+        TR.Set(
+          ${gen.scopeName(state)},
+          () => TR.CompoundSet(${gen.scopeName(state)}, ${gen.jsLiteral(operator)}, ${
+        Compile.Expression(setStatement.value)
+      }),
+        )
+      `
+    return Switch(setStatement.operator, {
+      '=': () => gen`TR.Set(${gen.scopeName(state)}, () => ${Compile.Expression(setStatement.value)})`,
+      '+=': compileCompoundSet,
+      '-=': compileCompoundSet,
+      '*=': compileCompoundSet,
+      '/=': compileCompoundSet,
+    })
   },
 } as const

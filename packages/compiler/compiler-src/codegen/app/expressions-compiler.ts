@@ -20,12 +20,12 @@ export const ExpressionsCompiler = {
 
   /** StringLiteral compiles a Tao string literal into a Tao text value. */
   StringLiteral(str: AST.StringLiteral): Compiled {
-    return gen`TR.Value(${JSON.stringify(str.value)})`
+    return gen`TR.Value(${gen.jsLiteral(str.value)})`
   },
 
   /** NumberLiteral compiles a Tao number literal into a Tao number value. */
   NumberLiteral(num: AST.NumberLiteral): Compiled {
-    return gen`TR.Value(${JSON.stringify(num.value)})`
+    return gen`TR.Value(${gen.jsLiteral(num.value)})`
   },
 
   /** ListLiteral compiles a Tao list literal into a runtime value wrapper. */
@@ -63,7 +63,7 @@ export const ExpressionsCompiler = {
   MemberAccessExpression(reference: AST.MemberAccessExpression): Compiled {
     const target = resolveRef(reference.target)
     const root = Compile.ValueDeclarationReference(target)
-    const path = reference.members.map(member => `[${JSON.stringify(member)}]`).join('')
+    const path = reference.members.map(member => `[${gen.jsLiteral(member)}]`).join('')
     return gen`TR.Value(${root}.jsValue${path})`
   },
 

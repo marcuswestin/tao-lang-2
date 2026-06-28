@@ -18,17 +18,23 @@ type GenJoinOptions = {
 }
 
 type AnyBlockStatement = AST.ActionStatement | AST.ProjectStatement | AST.Statement
-type GenTemplate = (staticParts: TemplateStringsArray, ...substitutions: GenValue[]) => Compiled
-type Gen = GenTemplate & {
-  block: typeof genBlock
-  comment: typeof genComment
-  join: typeof genJoin
-  list: typeof genList
-  name: typeof genName
-  nameLiteral: typeof genNameLiteral
-  noop: typeof genNoop
-  scopeName: typeof genScopeName
-  textLines: typeof genTextLines
+type JsLiteralValue = string | number | readonly JsLiteralValue[]
+type GenBlock = {
+  (
+    owner: AST.ActionDeclaration | AST.ActionExpression,
+    compileStatement: (statement: AST.ActionStatement) => GenValue,
+    options?: GenListOptions,
+  ): Compiled
+  (
+    owner: AST.AppDeclaration | AST.Render | AST.RenderableDeclaration,
+    compileStatement: (statement: AST.Statement) => GenValue,
+    options?: GenListOptions,
+  ): Compiled
+  (
+    owner: AST.ProjectDeclaration,
+    compileStatement: (statement: AST.ProjectStatement) => GenValue,
+    options?: GenListOptions,
+  ): Compiled
 }
 
 /** NamedNode declares an AST node or semantic value with a source-level name. */
@@ -36,47 +42,72 @@ type NamedNode = {
   name: string
 }
 
-/** genTemplate expands source templates. */
-function genTemplate(staticParts: TemplateStringsArray, ...substitutions: GenValue[]): Compiled {
+let _gen = {} as {
+  tag: (staticParts: TemplateStringsArray, ...substitutions: GenValue[]) => Compiled
+  template: (staticParts: TemplateStringsArray, ...substitutions: GenValue[]) => Compiled
+  noop: () => Compiled
+  comment: (text: string) => Compiled
+  Name: (node: NamedNode) => Compiled
+  scopeName: (node: NamedNode) => Compiled
+  jsLiteral: (value: JsLiteralValue) => string
+  nameLiteral: (node: NamedNode) => Compiled
+  textLines: (text: string) => GenValue
+  join: <ItemT>(
+    items: Iterable<ItemT>,
+    compileItem: (item: ItemT) => GenValue,
+    options?: GenJoinOptions,
+  ) => Compiled
+  list: <ItemT>(
+    items: Iterable<ItemT>,
+    compileItem: (item: ItemT) => GenValue,
+    options?: GenListOptions,
+  ) => Compiled
+  block: GenBlock
+}
+
+_gen.tag = function genTag(staticParts: TemplateStringsArray, ...substitutions: GenValue[]): Compiled {
+  return _gen.template(staticParts, ...substitutions)
+}
+
+_gen.template = function genTemplate(staticParts: TemplateStringsArray, ...substitutions: GenValue[]): Compiled {
   return Langium.expandToNode(staticParts, ...substitutions)
 }
 
-/** genNoop returns an empty structured generator node. */
-function genNoop(): Compiled {
+_gen.noop = function genNoop(): Compiled {
   return new Langium.CompositeGeneratorNode()
 }
 
-/** genComment compiles one line comment into a structured generator node. */
-function genComment(text: string): Compiled {
-  return gen`// ${text}`
+_gen.comment = function genComment(text: string): Compiled {
+  return _gen.tag`// ${text}`
 }
 
-/** genName compiles a named node's name as a generated code name token. */
-function genName(node: NamedNode): Compiled {
-  return gen`${node.name}`
+_gen.Name = function genName(node: NamedNode): Compiled {
+  return _gen.tag`${node.name}`
 }
 
-/** genScopeName compiles a named value declaration as a generated scope property. */
-function genScopeName(node: NamedNode): Compiled {
-  return gen`_Scope.${genName(node)}`
+_gen.scopeName = function genScopeName(node: NamedNode): Compiled {
+  return _gen.tag`_Scope.${_gen.Name(node)}`
 }
 
-/** genNameLiteral compiles a named node's name as a JavaScript string literal. */
-function genNameLiteral(node: NamedNode): Compiled {
-  return gen`${JSON.stringify(node.name)}`
+_gen.jsLiteral = function genJsLiteral(value: JsLiteralValue): string {
+  const literal = JSON.stringify(value)
+  Assert.defined(literal, 'codegen JavaScript literal is serializable', { value })
+  return literal
 }
 
-/** genTextLines expands raw multiline generator lines. */
-function genTextLines(text: string): GenValue {
+_gen.nameLiteral = function genNameLiteral(node: NamedNode): Compiled {
+  return _gen.tag`${_gen.jsLiteral(node.name)}`
+}
+
+_gen.textLines = function genTextLines(text: string): GenValue {
   return Langium.joinToNode(
     text.split('\n'),
-    line => gen`${line}`,
+    line => _gen.tag`${line}`,
     { appendNewLineIfNotEmpty: true },
   )
 }
 
-/** genJoin compiles item lists into a generator node separated by a short separator. */
-function genJoin<ItemT>(
+_gen.join = function genJoin<ItemT>(
   items: Iterable<ItemT>,
   compileItem: (item: ItemT) => GenValue,
   options: GenJoinOptions = {},
@@ -84,65 +115,47 @@ function genJoin<ItemT>(
   const itemList = Array.from(items)
   return Langium.joinToNode(
     itemList,
-    item => gen`${compileItem(item)}`,
+    item => _gen.tag`${compileItem(item)}`,
     { separator: options.separator ?? ', ' },
-  ) ?? genNoop()
+  ) ?? _gen.noop()
 }
 
-/** genList compiles item lists into a generator node with non-empty items separated by new lines. */
-function genList<ItemT>(
+_gen.list = function genList<ItemT>(
   items: Iterable<ItemT>,
   compileItem: (item: ItemT) => GenValue,
   options: GenListOptions = {},
 ): Compiled {
   return Langium.joinToNode(
     items,
-    item => gen`${compileItem(item)}`,
+    item => _gen.tag`${compileItem(item)}`,
     { appendNewLineIfNotEmpty: options.newLines ?? true },
-  ) ?? genNoop()
+  ) ?? _gen.noop()
 }
 
-function genBlock(
-  owner: AST.ActionDeclaration | AST.ActionExpression,
-  compileStatement: (statement: AST.ActionStatement) => GenValue,
-  options?: GenListOptions,
-): Compiled
-function genBlock(
-  owner: AST.AppDeclaration | AST.Render | AST.RenderableDeclaration,
-  compileStatement: (statement: AST.Statement) => GenValue,
-  options?: GenListOptions,
-): Compiled
-function genBlock(
-  owner: AST.ProjectDeclaration,
-  compileStatement: (statement: AST.ProjectStatement) => GenValue,
-  options?: GenListOptions,
-): Compiled
-/** genBlock compiles statements from a node-owned Tao block with statement-type-safe compilers. */
-function genBlock(
+_gen.block = (function genBlock(
   owner: AST.BlockStatementOwner,
   compileStatement: (statement: never) => GenValue,
   options?: GenListOptions,
 ): Compiled {
   const statements = AST.blockStatements(owner) as AnyBlockStatement[]
   const compileBlockStatement = compileStatement as (statement: AnyBlockStatement) => GenValue
-  return genList(statements, compileBlockStatement, options)
-}
-
-const genWithHelpers = genTemplate as Gen
-Object.defineProperties(genWithHelpers, {
-  block: { value: genBlock },
-  comment: { value: genComment },
-  join: { value: genJoin },
-  list: { value: genList },
-  name: { value: genName },
-  nameLiteral: { value: genNameLiteral },
-  noop: { value: genNoop },
-  scopeName: { value: genScopeName },
-  textLines: { value: genTextLines },
-})
+  return _gen.list(statements, compileBlockStatement, options)
+}) as GenBlock
 
 /** gen expands source templates and owns generator helper functions. */
-export const gen = genWithHelpers
+export const gen = Object.assign(_gen.tag, {
+  template: _gen.template,
+  noop: _gen.noop,
+  comment: _gen.comment,
+  Name: _gen.Name,
+  scopeName: _gen.scopeName,
+  jsLiteral: _gen.jsLiteral,
+  nameLiteral: _gen.nameLiteral,
+  textLines: _gen.textLines,
+  join: _gen.join,
+  list: _gen.list,
+  block: _gen.block,
+})
 
 /** resolveRef returns a linked cross-reference target from a validated AST. */
 export function resolveRef<T extends AST.Node>(ref: Langium.Reference<T>): T {

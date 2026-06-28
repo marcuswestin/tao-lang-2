@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import type { TaoTypirServices } from './TypeSystemHelpers'
 import type { ValidationContext } from './validation'
 
@@ -42,42 +43,45 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
   if (!invocation.view) {
     return
   }
+  const view = invocation.view
   for (const diagnostic of invocation.diagnostics) {
-    if (diagnostic.kind === 'missing-argument') {
-      ctx.error(
-        invocationValidationMessages.missingArgument(invocation.view.name, Type.parameterName(diagnostic.parameter)),
-        render,
-      )
-      continue
-    }
-    if (diagnostic.kind === 'unmatched-argument') {
-      ctx.error(invocationValidationMessages.unmatchedArgument(invocation.view.name), diagnostic.argument)
-      continue
-    }
-    if (diagnostic.kind === 'ambiguous-argument') {
-      ctx.error(
-        invocationValidationMessages.ambiguousArgument(invocation.view.name, diagnostic.parameters),
-        diagnostic.argument,
-      )
-      continue
-    }
-    if (diagnostic.kind === 'ambiguous-parameter') {
-      ctx.error(
-        invocationValidationMessages.ambiguousParameter(invocation.view.name, Type.parameterName(diagnostic.parameter)),
-        render,
-      )
-      continue
-    }
-    if (diagnostic.kind === 'duplicate-argument-type') {
-      ctx.error(invocationValidationMessages.duplicateArgumentType(invocation.view.name), diagnostic.argument)
-      continue
-    }
-    ctx.error(
-      invocationValidationMessages.duplicateParameterType(
-        invocation.view.name,
-        Type.parameterName(diagnostic.parameter),
-      ),
-      render,
-    )
+    Switch.kind(diagnostic, {
+      'missing-argument': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.missingArgument(view.name, Type.parameterName(diagnostic.parameter)),
+          render,
+        )
+      },
+      'unmatched-argument': diagnostic => {
+        ctx.error(invocationValidationMessages.unmatchedArgument(view.name), diagnostic.argument)
+      },
+      'ambiguous-argument': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.ambiguousArgument(view.name, diagnostic.parameters),
+          diagnostic.argument,
+        )
+      },
+      'ambiguous-parameter': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.ambiguousParameter(
+            view.name,
+            Type.parameterName(diagnostic.parameter),
+          ),
+          render,
+        )
+      },
+      'duplicate-argument-type': diagnostic => {
+        ctx.error(invocationValidationMessages.duplicateArgumentType(view.name), diagnostic.argument)
+      },
+      'duplicate-parameter-type': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.duplicateParameterType(
+            view.name,
+            Type.parameterName(diagnostic.parameter),
+          ),
+          render,
+        )
+      },
+    })
   }
 }

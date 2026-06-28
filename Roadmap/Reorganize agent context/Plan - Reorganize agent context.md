@@ -82,7 +82,7 @@ Add only if app rules grow beyond Test Apps.
 Possible ownership:
 
 - Kitchen Sink is executable showcase coverage and should only include implemented behavior.
-- Test Apps are positive examples with `Purpose.md` contracts.
+- Test Apps are positive examples with `Apps/Test Apps/README.md` contracts.
 - app behavior tests should live in Tao where possible.
 
 If added, keep `Apps/Test Apps/AGENTS.md` as the more specific file.

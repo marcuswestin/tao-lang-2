@@ -90,7 +90,7 @@ Status note: this report describes the current uncommitted working-tree shape as
 
 - Prefer Tao-authored behavior tests for user-facing app behavior.
 - Keep parser, validator, formatter, formatting, and internal code-shape coverage in TypeScript where that is the direct thing being tested.
-- Put intended examples into Test Apps/Purpose docs or roadmap task docs, not into Kitchen Sink until implemented.
+- Put intended examples into `Apps/Test Apps/README.md` or roadmap task docs, not into Kitchen Sink until implemented.
 - Instance in this patch: Test Apps gained Tao test files for implemented behavior, while package tests continue to cover parser/compiler/validator/CLI mechanics.
 
 ### Validation And Git Safety
