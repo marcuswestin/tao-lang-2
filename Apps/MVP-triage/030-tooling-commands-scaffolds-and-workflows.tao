@@ -1,0 +1,13 @@
+// decision: tooling commands, scaffolds, and workflows
+// depends on: all previous decision files
+// status: waiting
+// waiting for 001-project-package-and-visibility, 003-app-capability-declarations, 014-design-token-recipe-and-rule-model, 027-testing-syntax-selectors-and-runtime-flags
+
+// option 1: MVP-local Justfile demonstrates commands once syntax settles
+// waiting for accepted app, design, test, publish, bridge, schema, and debug surfaces
+
+// option 2: `tao create` scaffolds a default project layout
+// waiting for project/package/app shape
+
+// option 3: `tao dev` owns app switching and preview workflows
+// waiting for app capability and runtime target decisions

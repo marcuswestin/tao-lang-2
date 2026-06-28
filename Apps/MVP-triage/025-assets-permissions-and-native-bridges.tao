@@ -1,0 +1,48 @@
+// decision: assets, permissions, and native/TypeScript bridges
+// depends on: 003-app-capability-declarations, 016-ui-primitives-and-component-boundaries
+// status: open
+
+// option 1: separate assets, permissions, and bridge declarations
+// This mirrors MVP-3 and keeps platform boundaries visible.
+project assets StillAssets {
+   image hero "./assets/hero.png" scale 1x, 2x, 3x
+   image heroRTL "./assets/hero-rtl.png" locale rtl
+}
+
+project permissions StillPermissions {
+   camera optional reason "Attach images to notes"
+   notifications optional reason "Remind me about pinned work"
+}
+
+project bridge ExpoHaptics from npm "expo-haptics" {
+   function impact Style text returns void
+   platform ios, android
+   headless fallback noop
+}
+
+project bridges StillBridgeManifest {
+   includes ExpoHaptics
+   lockfile "StillBridge.lock"
+}
+
+// option 2: app capability block owns assets/permissions/bridges
+// This is compact for app authors, but less reusable for packages.
+project app StillTriageApp {
+   assets {
+      image hero "./assets/hero.png"
+   }
+
+   permissions {
+      camera optional reason "Attach images to notes"
+   }
+
+   bridge ExpoHaptics from npm "expo-haptics"
+}
+
+// option 3: bridge generation is tooling-only
+// Source imports generated Tao declarations from bridge manifests.
+use ExpoHaptics from @generated/bridges
+
+action SaveWithHaptic {
+   do ExpoHaptics.impact "medium"
+}

@@ -1,0 +1,50 @@
+// decision: project, package, and visibility shape
+// depends on: none
+// status: open
+
+// option 1: keep MVP-3 project forms as explicit top-level declarations
+// Project metadata, apps, packages, and visibility all stay readable as source-level nouns.
+project {
+   name "Still"
+   version "0.3.0"
+   owner "ro"
+}
+
+project app StillTriageApp {
+   view DashboardScreen
+   design StillDesign
+   datasource StillLocalDatasource
+}
+
+publish package StillTriageKit {
+   exposes DashboardScreen, TaskRow, StillDesign
+}
+
+// option 2: make app/package declarations the primary units and nest metadata inside them
+// This reduces top-level ceremony, but package/app metadata becomes less uniform.
+app StillTriageApp {
+   name "Still"
+   version "0.3.0"
+   owner "ro"
+   view DashboardScreen
+   design StillDesign
+   datasource StillLocalDatasource
+}
+
+package StillTriageKit publish {
+   exposes DashboardScreen, TaskRow, StillDesign
+}
+
+// option 3: use visibility prefixes on declarations instead of publish blocks
+// This makes visibility local to each symbol, but publishing shape is spread across files.
+public project app StillTriageApp {
+   view DashboardScreen
+}
+
+public project view DashboardScreen {
+   render Screen [screen]
+}
+
+package project view InternalRow {
+   render Row [rowSpread]
+}

@@ -1,0 +1,43 @@
+// decision: layout controls, overflow, scroll, wrapping, and alignment
+// depends on: 013-combined-style-layout-specs, 016-ui-primitives-and-component-boundaries
+// status: open
+
+// option 1: keep layout tokens inside unified specs
+// Layout reads as composable tokens: frame, margin, height, hug, compress, rigid, aligned.
+project design LayoutDesign {
+   showcaseScroll [scroll vertical, scroll indicators auto, overscroll contain, height 620, width fill, overflow auto]
+   relativePill [row, gap xs, hug, compress, aligned baseline]
+   slotMeta [hug, rigid, aligned right]
+   wrapLine [wrap, wrap lines 2, wrap balance, overflow fade right, gap xs, width fill]
+   alignmentShowcase [row, gap sm, width fill, aligned stretch]
+}
+
+project view LayoutShowcase {
+   render ScrollView [showcaseScroll] {
+      Row [alignmentShowcase] {
+         Text "Baseline" [relativePill]
+         Text "Right" [slotMeta]
+      }
+      WrappingRow [wrapLine] {
+         Text "One" [badge]
+         Text "Two" [badge]
+         Text "Three" [badge]
+      }
+   }
+}
+
+// option 2: use dedicated layout clauses for hard-to-merge behavior
+// This gives layout its own validation path but splits modifier syntax.
+project view LayoutClauseShowcase {
+   render ScrollView [showcaseFrame] layout {
+      scroll vertical
+      indicators auto
+      overflow auto
+      height 620
+   } {
+      Row [card] layout aligned baseline
+   }
+}
+
+// option 3: wait for combined style/layout decision
+// waiting for 013-combined-style-layout-specs

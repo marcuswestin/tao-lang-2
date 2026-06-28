@@ -1,0 +1,40 @@
+// decision: typed constructors and literal inference
+// depends on: 004-type-declarations-and-enums
+// status: open
+
+// option 1: space-applied typed constructors everywhere
+// This is the current preferred MVP style: type first, literal second, no dot separator.
+state DraftTitle = StillData.Task.Title "Capture something"
+state DefaultMood = StillData.Note.Mood "clear"
+
+create StillData.Task {
+   Workspace CurrentWorkspace
+   Title DraftTitle
+   Intent "next"
+   CreatedAt now()
+   UpdatedAt now()
+}
+
+// option 2: allow bare literals when the target type is known
+// This minimizes noise in create/update blocks, but depends heavily on contextual typing.
+state DraftTitle = StillData.Task.Title "Capture something"
+
+create StillData.Task {
+   Workspace CurrentWorkspace
+   Title DraftTitle
+   Intent "next"
+   CreatedAt now()
+   UpdatedAt now()
+}
+
+// option 3: use cast-like constructors only when context is missing
+// This keeps local declarations readable but reintroduces `as` for ambiguous positions.
+state DraftTitle = "Capture something" as StillData.Task.Title
+
+create StillData.Task {
+   Workspace CurrentWorkspace
+   Title DraftTitle
+   Intent "next"
+   CreatedAt now()
+   UpdatedAt now()
+}

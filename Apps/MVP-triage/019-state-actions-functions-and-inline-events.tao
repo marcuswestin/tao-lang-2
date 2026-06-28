@@ -1,0 +1,42 @@
+// decision: state, actions, functions, and inline event syntax
+// depends on: 005-typed-constructors-and-literal-inference, 011-view-screen-layout-declarations
+// status: open
+
+// option 1: field-typed state and one-line inline actions for simple events
+// This is the current preferred MVP style.
+state DraftTitle = StillData.Task.Title ""
+
+function WorkloadScore OpenTasks number, RecentNotes number {
+   return OpenTasks * 2 + RecentNotes
+}
+
+action CreateTask Title StillData.Task.Title {
+   create StillData.Task {
+      Workspace CurrentWorkspace
+      Title
+      CreatedAt now()
+      UpdatedAt now()
+   }
+}
+
+TextInput DraftTitle, .Label "Task title", [textField]
+   on submit -> Value text { DraftTitle = StillData.Task.Title Value }
+
+Button "Create", .Label "Create task", [primaryAction]
+   on press -> { do CreateTask DraftTitle }
+
+// option 2: named actions for every event handler
+// This makes behavior reusable and testable, but small handlers become noisy.
+action UpdateDraftTitle Value text {
+   DraftTitle = StillData.Task.Title Value
+}
+
+TextInput DraftTitle, .Label "Task title", [textField]
+   on submit -> UpdateDraftTitle
+
+// option 3: expression-bodied actions for simple assignments
+// This is concise but may make multi-step behavior less visually distinct.
+action UpdateDraftTitle Value text -> DraftTitle = StillData.Task.Title Value
+
+TextInput DraftTitle, .Label "Task title", [textField]
+   on submit -> UpdateDraftTitle

@@ -1,0 +1,46 @@
+// decision: navigation, routing, deep links, and runtime mapping
+// depends on: 001-project-package-and-visibility, 011-view-screen-layout-declarations
+// status: open
+
+// option 1: project navigator declarations with screens, tabs, params, and metadata
+// This matches MVP-3 and keeps navigation app-facing.
+project navigator StillRootNavigation {
+   stack Root {
+      screen HomeTabs path "/"
+      screen WorkspaceScreen path "/workspace/:Workspace" {
+         param Workspace StillData.Workspace
+         title Workspace.Title
+      }
+      screen TaskEditScreen path "/task/:Task" presentation modal {
+         param Task StillData.Task
+         title "Edit task"
+      }
+   }
+}
+
+navigation push WorkspaceScreen {
+   Workspace CurrentWorkspace
+}
+
+// option 2: route declarations separate from navigator structure
+// This can help deep-link tooling, but splits path metadata from navigator shape.
+project route WorkspaceRoute {
+   path "/workspace/:Workspace"
+   screen WorkspaceScreen
+   param Workspace StillData.Workspace
+}
+
+project navigator StillRootNavigation {
+   stack Root {
+      route WorkspaceRoute
+   }
+}
+
+// option 3: generated React Navigation config stays hidden
+// Tao only declares intent; compiler owns all runtime details.
+project navigator StillRootNavigation {
+   tab HomeTabs {
+      tab Dashboard icon "home" screen DashboardScreen
+      tab Capture icon "plus" screen CaptureScreen
+   }
+}

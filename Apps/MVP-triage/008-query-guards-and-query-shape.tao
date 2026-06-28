@@ -1,0 +1,44 @@
+// decision: query shape, aliases, and guard syntax
+// depends on: 007-data-schema-fields-and-relationships
+// status: open
+
+// option 1: named query blocks with grouped `guard ... when`
+// This keeps exceptional states adjacent to the value being guarded.
+query StillData.Tasks as OpenTasks Workspace {
+   Title, Intent, Done, UpdatedAt
+   where Workspace = Workspace
+   where Done = false
+   order by UpdatedAt desc
+}
+
+view TaskList Workspace {
+   guard OpenTasks when
+      loading -> LoadingState "Loading tasks"
+      missing -> EmptyState "No tasks yet"
+      error Error -> ErrorState Error.Message, RetryTasks
+
+   for Task in OpenTasks {
+      TaskRow Task
+   }
+}
+
+// option 2: attach guard branches to the query declaration
+// This makes query state reusable, but couples data declarations to UI decisions.
+query StillData.Tasks as OpenTasks Workspace {
+   Title, Intent, Done, UpdatedAt
+   where Workspace = Workspace
+   order by UpdatedAt desc
+
+   when loading -> LoadingState "Loading tasks"
+   when missing -> EmptyState "No tasks yet"
+   when error Error -> ErrorState Error.Message, RetryTasks
+}
+
+// option 3: use case matching on query state
+// This unifies queries with result/error values, but is more verbose in views.
+case OpenTasks do
+   loading -> LoadingState "Loading tasks"
+   missing -> EmptyState "No tasks yet"
+   error Error -> ErrorState Error.Message, RetryTasks
+   value Tasks -> for Task in Tasks { TaskRow Task }
+end

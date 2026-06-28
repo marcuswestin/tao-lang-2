@@ -1,0 +1,31 @@
+// decision: render invocation, block syntax, and elision
+// depends on: 011-view-screen-layout-declarations, 013-combined-style-layout-specs
+// status: open
+
+// option 1: brace render blocks with explicit `render`
+// This is the current MVP-3 default and fits existing Tao block syntax.
+project view BraceRenderExample Hidden boolean {
+   render when Hidden -> <none> otherwise -> Row [rowSpread] {
+      Icon "check" [badge]
+      Text "Visible row" [body]
+   }
+}
+
+// option 2: angle render blocks for compact visual structure
+// This visually resembles markup but introduces another block grammar.
+project view AngleRenderExample Hidden boolean {
+   render when Hidden -> <none> otherwise ->
+      <Row [rowSpread]>
+         <Icon "check" [badge] />
+         <Text "Visible row" [body] />
+      </Row>
+}
+
+// option 3: render elision inside view bodies
+// This is concise for simple views, but the parser must distinguish UI calls from statements.
+project view ElidedRenderExample Hidden boolean {
+   when Hidden -> <none> otherwise -> Row [rowSpread] {
+      Icon "check" [badge]
+      Text "Visible row" [body]
+   }
+}

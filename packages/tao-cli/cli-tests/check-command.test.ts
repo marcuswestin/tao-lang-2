@@ -57,6 +57,21 @@ Describe('tao check', () => {
     })
   })
 
+  Test('skips future Tao sketch directories during root discovery', async () => {
+    await withTaoFixture({
+      'canonical.tao': 'view MainView { }\n',
+      'Apps/MVP-1/Future.tao': 'project app FutureMVP {',
+      'Apps/MVP-2/Future.tao': 'project app FutureMVP {',
+      'Apps/MVP-3/Future.tao': 'project app FutureMVP {',
+      'Apps/MVP-triage/Future.tao': 'project app FutureMVP {',
+      'Roadmap/Feature/Syntax Sketches/Future.tao': 'render Screen [futureCombinedToken] {',
+    }, async (rootDir) => {
+      const results = await runCheck(rootDir)
+
+      Expect(statusByFile(results, rootDir)).toEqual({ 'canonical.tao': 'unchanged' })
+    })
+  })
+
   Test('skips an explicitly named ignored directory', async () => {
     await withTaoFixture({
       '.gitignore': 'node_modules\n',

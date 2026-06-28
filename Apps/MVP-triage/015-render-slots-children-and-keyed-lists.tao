@@ -1,0 +1,46 @@
+// decision: render slots, child content, and keyed list syntax
+// depends on: 011-view-screen-layout-declarations, 012-render-invocation-blocks-and-elision
+// status: open
+
+// option 1: MVP-3 named slots with defaults and arrows
+// Slots are explicit and can carry renderer or value semantics.
+project layout SmartList Items [StillData.Task] {
+   @key Item StillData.Task -> Item.id
+
+   @row Item StillData.Task default {
+      Row [listRow] {
+         Text Item.Title [body]
+      }
+   }
+
+   @empty default {
+      Text "Nothing here yet." [quiet]
+   }
+
+   @header optional
+   @@children
+
+   render Stack [gap sm] {
+      @header
+      List Items [height fill, overflow auto] {
+         key Item -> @key Item
+         empty -> @empty
+         item Item StillData.Task -> @row Item
+      }
+      @@children
+   }
+}
+
+// option 2: slot fills only at invocation sites
+// This is simpler for consumers, but less self-documenting in layout declarations.
+project view SlotFillExample Tasks [StillData.Task] {
+   render SmartList Tasks {
+      @header { Text "Tasks" [title] }
+      @row Task -> TaskRow Task
+      @key Task -> Task.id
+      Text "Extra child" [quiet]
+   }
+}
+
+// option 3: wait until render block shape is settled
+// waiting for 012-render-invocation-blocks-and-elision

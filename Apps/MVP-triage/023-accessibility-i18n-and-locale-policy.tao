@@ -1,0 +1,42 @@
+// decision: accessibility, i18n, locale, and release policy
+// depends on: 003-app-capability-declarations, 016-ui-primitives-and-component-boundaries
+// status: open
+
+// option 1: first-class project policies for accessibility, strings, and locale
+// This matches MVP-3 and makes release gates explicit.
+project accessibility StillAccessibilityPolicy {
+   labels required for interactive controls
+   hints required when action not obvious
+   roles required for status, alert, navigation
+   focus order source
+   stable ids from render ids, slots, row keys
+   highContrast adapt
+   largerText adapt
+}
+
+project strings StillStrings {
+   home.capture "Capture"
+   task.count one "{count} task"
+   task.count other "{count} tasks"
+}
+
+project locale StillLocale {
+   default "en-US"
+   fallback "en"
+   rtl mirror icons, navigation
+   format date, duration, currency, unit
+}
+
+project policy StillReleasePolicy {
+   warnings as errors release
+   missing translations fail release
+}
+
+// option 2: metadata lives on UI declarations and strings are simple aliases
+// This is lightweight, but release policy becomes a separate tooling convention.
+alias CaptureLabel = strings.home.capture
+
+Button CaptureLabel, .Label CaptureLabel, .Hint "Create a new note or task", [primaryAction]
+
+// option 3: wait for capability declaration style
+// waiting for 003-app-capability-declarations

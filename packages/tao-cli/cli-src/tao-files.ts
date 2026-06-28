@@ -8,6 +8,7 @@ const TAO_FILE_DISCOVERY_EXCLUDED_DIRECTORY_NAMES = [
   'MVP-1',
   'MVP-2',
   'MVP-3',
+  'MVP-triage',
   'Syntax Sketches',
 ] as const
 
