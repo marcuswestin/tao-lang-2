@@ -74,39 +74,56 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
-- [ ] Consider removing the Purpose.md files from the Test Apps.
-- [ ] Create langium types for Statement, such that we have e.g ViewStatement, ProjectStatement, FileStatement, etc
-  - [ ] And add comments to the Statement rule, to seperate ones that are in one context only (e.g test statements).
-  - [ ] Consider adding `check` statements to the language, as asserts
-- [ ] Change validator structure, to go away from walking the tree multiple times and filtering for type; and instead walking each node once, and validating it based on its type.
+- [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
+  - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
 - [ ] Reorganize agent context
   - Reports and plan: `Roadmap/Reorganize agent context/`
 - [ ] Improve imports/exports structure. Decide whether namespaces are used commonly. See if possible to have types and values exported at the same time, keyed off from the same default export.
-- [ ] Find all direct usages of JSON.* and see if they should be put in e.g shared.
-- [ ] Update vscode so that "o/O" etc insert list/todo/etc prefixes the same way that "enter" in insert mode does.
 - [ ] Review all tests, remove uneccessary test surfaces, remove test surface overlaps; favor e2e testing that covers the underlying packages. For each test, justify why we should test it (vs assuming the underlying functionality works). Where to be thorough, where to smoke test
-- [ ] Use Switch* over switch/if/else/branching over typed/enum-like values
 - [ ] Ensure that a project doesn't have multiple project definitions inside it - only in the root directory.
   - [ ] Then ensure that a workspace only looks inside its root folder for packages; and have the ide extension manage multiple workspaces (one for each project folder); and stop requiring a tao project to have a git repo at its root, as long as it is inside a git repo (to allow for multiple tao projects in a single repo)
 - [ ] Implement styling
 - [ ] Actions
   - [ ] Add `on press` etc
-  - [x] Add actions to kitchen sink tests
-    - [ ] And switch other test apps to use tao testing rather than ts
+  - [ ] Switch other test apps to use tao testing rather than ts
 - [ ] Change argument order of `ValidationContext.error`/etc
 - [ ] Require type of lists: `view TagText Tags is list {`
 - [ ] Implement boolean operators, requiring `EXPRESSION is OPERATOR EXPRESSION`, e.g `Age is < 10`
-- [x] Replace render child blocks with angle blocks: `render VIEW ... < ... VIEW < .. > .. >`
 - [ ] Allow `TYPE Value` in general, e.g `alias TYPENAME value literal`, `VIEW TYPEVALUE, TYPENAMEItemInThisCase { Foo 1, Bar 2 } < VIEW RENDER BODY >`
-- [ ] Update all spec files to reflect new implementations (e.g <..> for rendering; type parameters, etc)
 - [ ] Implement all of `Tao Layout and UI.md`
 - [ ] /refactor all test files that are getting really big
-- [ ] Implement Dev menu etc in tao
 - [ ] Review all validator file structure; and consider simplifying
 - [ ] Create "validators" directory for all the "*-validator.ts" files
 - [ ] Cleanup TR package inter-dependencies and general structure for cleanliness
 - [ ] Go through each TR/ file, and review them slowly, and simplify and cleanup code where possible.
 - [ ] Update validator code to walk through the tree once, as opposed to filtering out odes and validating them in order of type.
+- [ ] Change validator structure, to go away from walking the tree multiple times and filtering for type; and instead walking each node once, and validating it based on its type.
+- [ ] Remove magical strings
+- [ ] Add remaining control mini slice
+  - Import `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
+- [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
+- [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
+- [ ] Rename all `gen` helper properties to capitalized names, e.g. `gen.Comment`, `gen.Block`, and `gen.List`.
+- [ ] Apply the main named const export pattern across the rest of the repo
+  - Prefer `export const ModuleName = { ... }` over default exports or many free function exports. Keep existing filenames while converting existing modules.
+- [ ] Rename existing TypeScript module files to match their main named const exports
+  - Do this in one coordinated sweep after current projects have merged, rather than inside each active feature branch.
+- [ ] Add generic compiled-add test declarations
+  - Should this map to test writing for the actual apps?
+- [ ] Enable over-the-network dev app running for ios device
+
+### Ro's STACK Archive
+
+- [x] Update Roadmap.md, to move all completed STACK items to the Archive section.
+- [x] Consolidate Test App purpose contracts into `Apps/Test Apps/README.md`.
+- [x] Create langium types for Statement, such that we have e.g ViewStatement, ProjectStatement, FileStatement, etc
+  - [x] And add comments to the Statement rule, to separate ones that are in one context only (e.g test statements).
+  - [x] Consider adding `check` statements to the language, as asserts
+- [x] Find all direct usages of JSON.* and see if they should be put in e.g shared.
+- [x] Use Switch* over clear production typed/enum-like branch sites handled by this spike, leaving guard and narrowing checks alone.
+- [x] Add actions to kitchen sink tests
+- [x] Replace render child blocks with angle blocks: `render VIEW ... < ... VIEW < .. > .. >`
+- [x] Implement Dev menu etc in tao
 - [x] Port over scope functionality
   - E.g: `aliasesOwnedByView`, reportAliasReferenceOrder/isDeclaredBefore - S should simply detect if there are duplicate identifiers, but then add the aspect of scope.
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
@@ -115,22 +132,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add formatter package: feature-sliced `Format` handlers over a succinct `NodeFormat` helper layer, injection-fence re-indenting, and Kitchen Sink fixed-point tests
 - [x] Wire the formatter into the IDE extension language server and add repo-wide `tao fmt`/`tao fix`/`tao check` (tao-cli), run by `just fmt`/`fix`/`check`
 - [x] Add LSP/IDE source actions: `Tao: Organize Use Statements` (source.organizeImports), unused/out-of-section import warnings with quick fixes, command-palette entries prefixed `Tao:`, a move-render-last quick fix, and `tao fix` applying all source fixes (run by `just fix`)
-- [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
-  - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
 - [x] Add layout clauses and default app-shell UI baseline
   - Import previous-repo layout modifiers as Tao-owned clauses such as `[gap 8, pad 12, width fill]`, runtime `__tao.layout` forwarding, app-shell content frame, and deterministic default layout for stdlib primitives.
-- [ ] Remove magical strings
-- [ ] Add remaining control mini slice
-  - Import `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
-- [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
-- [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
-- [ ] Apply the main named const export pattern across the rest of the repo
-  - Prefer `export const ModuleName = { ... }` over default exports or many free function exports. Keep existing filenames while converting existing modules.
-- [ ] Rename existing TypeScript module files to match their main named const exports
-  - Do this in one coordinated sweep after current projects have merged, rather than inside each active feature branch.
-- [ ] Add generic compiled-add test declarations
-  - Should this map to test writing for the actual apps?
-- [ ] Enable over-the-network dev app running for ios device
 
 - Add followups for later:
   - Formatter: keep standalone comments attached to the following top-level declaration when separating with blank lines
