@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
 
 /** typeValidationMessages declares diagnostics for custom types, constructors is item, and member access. */
@@ -187,10 +188,12 @@ function validateTypedItemLiteral(item: AST.ItemLiteral, type: AST.TypeReference
 }
 
 function constructorLiteralKind(type: ASTUtils.TaoType): string {
-  if (type.kind === 'primitive') {
-    return type.primitive
-  }
-  return type.kind
+  return Switch.kind(type, {
+    primitive: type => type.primitive,
+    list: () => 'list',
+    item: () => 'item',
+    unresolved: () => 'unresolved',
+  })
 }
 
 function validateConstructorKind(
@@ -214,30 +217,29 @@ function validateItemConstructor(
 ): void {
   const result = ASTUtils.resolveItemPropertyBindings(expected.properties, item.properties)
   for (const diagnostic of result.diagnostics) {
-    if (diagnostic.kind === 'missing-property') {
-      ctx.error(typeValidationMessages.missingProperty(diagnostic.expected.name), item)
-      continue
-    }
-    if (diagnostic.kind === 'unmatched-property') {
-      ctx.error(typeValidationMessages.unmatchedProperty, diagnostic.property)
-      continue
-    }
-    if (diagnostic.kind === 'ambiguous-property') {
-      ctx.error(
-        typeValidationMessages.ambiguousProperty(diagnostic.expected.map(property => property.name)),
-        diagnostic.property,
-      )
-      continue
-    }
-    if (diagnostic.kind === 'ambiguous-field') {
-      ctx.error(typeValidationMessages.ambiguousField(diagnostic.expected.name), item)
-      continue
-    }
-    if (diagnostic.kind === 'duplicate-provided-property-type') {
-      ctx.error(typeValidationMessages.duplicateProvidedPropertyType, diagnostic.property)
-      continue
-    }
-    ctx.error(typeValidationMessages.duplicatePropertyType(diagnostic.expected.name), item)
+    Switch.kind(diagnostic, {
+      'missing-property': diagnostic => {
+        ctx.error(typeValidationMessages.missingProperty(diagnostic.expected.name), item)
+      },
+      'unmatched-property': diagnostic => {
+        ctx.error(typeValidationMessages.unmatchedProperty, diagnostic.property)
+      },
+      'ambiguous-property': diagnostic => {
+        ctx.error(
+          typeValidationMessages.ambiguousProperty(diagnostic.expected.map(property => property.name)),
+          diagnostic.property,
+        )
+      },
+      'ambiguous-field': diagnostic => {
+        ctx.error(typeValidationMessages.ambiguousField(diagnostic.expected.name), item)
+      },
+      'duplicate-provided-property-type': diagnostic => {
+        ctx.error(typeValidationMessages.duplicateProvidedPropertyType, diagnostic.property)
+      },
+      'duplicate-property-type': diagnostic => {
+        ctx.error(typeValidationMessages.duplicatePropertyType(diagnostic.expected.name), item)
+      },
+    })
   }
 }
 
@@ -338,17 +340,11 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
 }
 
 function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtils.TaoType {
-  if (AST.isParameterDeclaration(declaration)) {
-    return Type.ofParameter(declaration)
-  }
-  if (AST.isAliasDeclaration(declaration)) {
-    return Type.ofExpression(declaration.value)
-  }
-  if (AST.isStateDeclaration(declaration)) {
-    return Type.ofExpression(declaration.value)
-  }
-  if (AST.isActionDeclaration(declaration)) {
-    return { kind: 'primitive', primitive: 'action' }
-  }
-  return { kind: 'unresolved' }
+  return Switch.typeMaybe<AST.ValueDeclaration | undefined, ASTUtils.TaoType>(declaration, {
+    ParameterDeclaration: Type.ofParameter,
+    AliasDeclaration: declaration => Type.ofExpression(declaration.value),
+    StateDeclaration: declaration => Type.ofExpression(declaration.value),
+    ActionDeclaration: () => ({ kind: 'primitive', primitive: 'action' }),
+    undefined: () => ({ kind: 'unresolved' }),
+  })
 }

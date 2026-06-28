@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import { isType, type Type as TypirType } from 'typir'
 import type { TypirLangiumServices, TypirLangiumSpecifics } from 'typir-langium'
 
@@ -44,16 +45,21 @@ function taoPrimitiveType(
 
 /** taoType returns the Typir type matching a statically resolved Tao type. */
 function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | undefined {
-  if (type.kind === 'unresolved') {
-    return undefined
-  }
-  if (type.nominal) {
-    return ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
-  }
-  if (type.kind === 'primitive') {
-    return taoPrimitiveType(type.primitive, typir)
-  }
-  return taoPrimitiveType(type.kind, typir)
+  return Switch.kind(type, {
+    unresolved: () => undefined,
+    primitive: type =>
+      type.nominal
+        ? ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
+        : taoPrimitiveType(type.primitive, typir),
+    item: type =>
+      type.nominal
+        ? ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
+        : taoPrimitiveType(type.kind, typir),
+    list: type =>
+      type.nominal
+        ? ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
+        : taoPrimitiveType(type.kind, typir),
+  })
 }
 
 /** ensurePrimitive returns an existing Typir primitive or creates it for nominal Tao types. */
