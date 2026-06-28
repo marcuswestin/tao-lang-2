@@ -55,9 +55,9 @@ Best classification:
 Current responsibilities:
 
 - Defines Test Apps as positive examples for implemented behavior.
-- Requires each app folder to include `<App Name>.tao` and `Purpose.md`.
-- Defines required `Purpose.md` sections.
-- Says to update `Purpose.md` first when app scope changes.
+- Requires each app folder to include `<App Name>.tao` and `<App Name>.test.tao`.
+- Defines the `Apps/Test Apps/README.md` contract sections.
+- Says to update the app's `README.md` entry first when app scope changes.
 
 Best classification:
 
@@ -210,7 +210,7 @@ These should remain always visible:
 These should stay nested or skill-loaded:
 
 - Package TypeScript conventions: `packages/AGENTS.md`.
-- Test App purpose and scope rules: `Apps/Test Apps/AGENTS.md`.
+- Test App purpose and scope rules: `Apps/Test Apps/AGENTS.md` and `Apps/Test Apps/README.md`.
 - Runtime/generated-code rules: `runtime-codegen` now, possibly future runtime nested AGENTS.
 - Dev automation details: `dev-automation` now, possibly future `packages/dev/AGENTS.md`.
 - Langium scoping rules: `langium-scoping`.
