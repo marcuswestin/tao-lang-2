@@ -105,6 +105,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-lsp-sketches-',
       {
         'Main.tao': 'view MainView { }\n',
+        'Apps/MVP-4/Future.tao': 'project app FutureMVP {',
         'Apps/MVP-triage/Future.tao': 'project app FutureMVP {',
         'Roadmap/Feature/Syntax Sketches/Future.tao': 'render Screen [futureCombinedToken] {',
       },

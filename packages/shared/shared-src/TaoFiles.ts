@@ -8,6 +8,7 @@ export const TaoFiles = {
     'MVP-1',
     'MVP-2',
     'MVP-3',
+    'MVP-4',
     'MVP-triage',
     'Syntax Sketches',
   ],

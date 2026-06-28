@@ -63,6 +63,7 @@ Describe('tao check', () => {
       'Apps/MVP-1/Future.tao': 'project app FutureMVP {',
       'Apps/MVP-2/Future.tao': 'project app FutureMVP {',
       'Apps/MVP-3/Future.tao': 'project app FutureMVP {',
+      'Apps/MVP-4/Future.tao': 'project app FutureMVP {',
       'Apps/MVP-triage/Future.tao': 'project app FutureMVP {',
       'Roadmap/Feature/Syntax Sketches/Future.tao': 'render Screen [futureCombinedToken] {',
     }, async (rootDir) => {

@@ -43,6 +43,7 @@ Describe('tao test', () => {
       'Apps/MVP-1/MVP.test.tao': 'test "Future" {',
       'Apps/MVP-2/MVP.test.tao': 'test "Future" {',
       'Apps/MVP-3/MVP.test.tao': 'test "Future" {',
+      'Apps/MVP-4/MVP.test.tao': 'test "Future" {',
       'Apps/MVP-triage/MVP.test.tao': 'test "Future" {',
       'Roadmap/Feature/Syntax Sketches/Future.test.tao': 'test "Future" {',
     }, async (rootDir) => {

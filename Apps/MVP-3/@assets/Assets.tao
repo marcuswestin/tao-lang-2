@@ -1,3 +1,32 @@
+/* DESIGN DECISIONS:
+
+Assets are referenced by path, just like in `use`. However, other assets than tao files need their extension included in the path.
+
+   ./<path>.<ext>
+   ../<path>.<ext>
+   @<package>/<path>.<ext>
+
+These are all literals of type `path`
+
+Example use in an image
+
+   render Image ./images/still-hero.png, .Label "Still preview image"
+
+STILL TODO: decide on properties:
+
+  .Label "Still workspace preview",
+  .Decorative false,
+  .DirectionVariant rtl "./images/still-hero-rtl.png",
+  .LocaleVariant es-US "./images/still-hero-es.png",
+  [frame 16/9, fit cover, focal center]
+
+And expression of locale variant specific paths, e.g:
+
+   for direction rtl, use path <different path>
+   for locale es-US, use path <different path>
+
+*/
+
 project assets StillAssets {
    image HeroImage from "./images/still-hero.png" {
       alt "Still workspace preview"

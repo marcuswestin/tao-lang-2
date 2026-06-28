@@ -26,6 +26,7 @@ Describe('Tao package discovery', () => {
       await FS.writeText(FS.resolvePath('Main.tao', root), '')
       await FS.writeText(FS.resolvePath('Main.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('Rows.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('MVP-4/Future.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('MVP-triage/Future.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('Syntax Sketches/Future.tao', packageRoot), '')
 
