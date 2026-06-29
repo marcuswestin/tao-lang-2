@@ -80,3 +80,12 @@ You work with Ro, the project lead and language designer. Ro is the authoritativ
 - Commit message format: `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>`.
 - Squash-merge into `main` with message `<Summary line>\n\n<Bullet list of changes, one bullet per line with no blank lines between bullets>\n\n<Git's default squash-merge list of commits and messages>`.
 - When merged into `main`, rename the branch to `merged/...` and sync that with origin.
+
+## Cursor Cloud specific instructions
+
+The Cursor Cloud VM does not use nix/direnv/devenv. The expected toolchain is installed directly on the system `PATH` and persists in the VM snapshot, so the "Start Here" `direnv allow` step does not apply here and `TAO_DEVENV` is unset.
+
+- Toolchain in this environment: `bun`, `just` (pinned to 1.50.0), `dprint`, and `zsh` on `PATH`; Node 24 lives at `/opt/node24` and the Justfile's `DEVENV_NODE` (`.devenv/profile/bin/node`) is a symlink to it. The default `node` on `PATH` is 22 (from `/exec-daemon`); only Expo/Metro uses it and that is fine. If `.devenv/profile/bin/node` is ever missing, recreate it with `ln -sf /opt/node24/bin/node .devenv/profile/bin/node` (Langium parser-gen and Jest invoke it directly).
+- Validate with `./agent just verify` (the mandated command; ~16s, runs fix + compile Kitchen Sink + IDE build + typecheck + all 488 tests). The standard wrappers (`./agent`, `./tao`, `./dev`) and recipes work as documented.
+- `./agent just check` currently fails only at `_dprint-check`, because that recipe runs bare `just --check`, which modern `just` (1.42+) rejects in favor of `just --fmt --check`. This is an upstream `just` CLI change, not a repo bug — do not "fix" the Justfile for it. For the lint/format signal use `verify` plus `dprint check --incremental=false` and `./agent just _tao-check`.
+- Run the app on web (no Android/iOS here — no emulator/Xcode): `cd packages/runtime && bunx expo start --localhost --port 8081`, then open `http://localhost:8081`. The interactive `./dev` TUI needs a real raw-input TTY, so in the cloud prefer launching Expo directly (e.g. inside tmux). Recompile a Tao app with `./agent just compile-app "<path>"` (default demo app: `Apps/Kitchen Sink/Kitchen Sink.tao`).
