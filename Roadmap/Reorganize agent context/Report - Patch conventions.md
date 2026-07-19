@@ -6,7 +6,7 @@
 - The surrounding chat thread for review feedback and convention corrections.
 - Root and package instructions that were read or updated during the patch.
 
-Status note: this report describes the current uncommitted working-tree shape as evidence for conventions to preserve. Before encoding a convention as a durable instruction, re-check that the underlying code outcome is still present in the final patch.
+Status note: this report records the source patch and review context that motivated the instruction reset. Re-check the final repository before treating a listed convention as durable current guidance.
 
 ## Conventions Applied Or Strengthened
 
@@ -95,10 +95,10 @@ Status note: this report describes the current uncommitted working-tree shape as
 
 ### Validation And Git Safety
 
-- Use `./agent` for repo commands.
+- Use direct shell commands inside the platform sandbox and `./agent` for common repository workflows and specialized automation. Shared workflow definitions and human developer commands remain in `Justfile`.
 - Do not touch the Git index unless Ro explicitly asks in the current request.
-- Use `./agent just verify` as final validation after code/instruction/workflow changes.
-- Instance in this patch: validation was repeatedly run through `./agent`; index state was left Ro-owned even when file moves made staged status look awkward.
+- Use `./agent verify` as final validation after code/instruction/workflow changes.
+- Instance in this patch: validation used the repository recipe while index state remained Ro-owned even when file moves made staged status look awkward.
 
 ## Conventions That Should Become Stronger Instructions Or Automation
 

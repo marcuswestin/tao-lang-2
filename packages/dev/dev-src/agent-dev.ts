@@ -1,36 +1,11 @@
-import { Platform, Repo } from '@shared'
+import { CLI, Platform, Repo } from '@shared'
 import { registerAgentHelpCommand } from './commands/agent-help'
-import { registerAgentTestCommand } from './commands/agent-test'
 import { registerAiUsageCommand } from './commands/ai-usage'
-import { registerAuditInstructionsCommand } from './commands/audit-instructions'
 import { registerReviewCommand } from './commands/code-review'
-import { runCommand, runWithCommands } from './commands/commands'
-import { registerJustCommand } from './commands/just'
+import { runWithCommands } from './commands/commands-utils'
 import { registerMergeFeaturePreflightCommand } from './commands/merge-feature-preflight'
 
-const AGENT_CLIS: readonly string[] = ['codex', 'claude', 'agy', 'cursor', 'gemini', 'codexbar']
-const AGENT_SHELL_COMMANDS: readonly string[] = [
-  'ls',
-  'rg',
-  'nl',
-  'cat',
-  'sed',
-  'git',
-  'cp',
-  'mv',
-  'rm',
-  'tao',
-  'bun',
-  'find',
-  ...AGENT_CLIS,
-]
-const command = Platform.runtimeProcess.argv[2]
-
-if (command && AGENT_SHELL_COMMANDS.includes(command)) {
-  const commandPath = command === 'tao' ? Repo.resolvePath('tao') : command
-  const exitCode = await runCommand(commandPath, Platform.runtimeProcess.argv.slice(3))
-  Platform.runtimeProcess.exit(exitCode)
-}
+const JUST_COMMANDS = ['check', 'fix', 'fmt', 'test', 'verify'] as const
 
 await runWithCommands(commands => {
   commands
@@ -39,12 +14,23 @@ await runWithCommands(commands => {
     .helpCommand(false)
     .enablePositionalOptions()
 
-  const helpListedCommands = [...AGENT_SHELL_COMMANDS, 'just']
-  registerAgentHelpCommand(commands, { allowlistedCommands: helpListedCommands })
-  registerAgentTestCommand(commands)
+  registerAgentHelpCommand(commands, JUST_COMMANDS)
+  for (const command of JUST_COMMANDS) {
+    commands
+      .command(`${command} [args...]`)
+      .allowUnknownOption(true)
+      .helpOption(false)
+      .passThroughOptions()
+      .action(async (args: string[] = []) => {
+        const result = await CLI.run('just', {
+          args: [command, ...args],
+          cwd: Repo.getRoot(),
+          stdio: 'inherit',
+        })
+        Platform.runtimeProcess.setExitCode(result.error === undefined ? result.exitCode ?? 1 : 1)
+      })
+  }
   registerAiUsageCommand(commands)
-  registerAuditInstructionsCommand(commands)
-  registerJustCommand(commands)
   registerMergeFeaturePreflightCommand(commands)
   registerReviewCommand(commands)
 })

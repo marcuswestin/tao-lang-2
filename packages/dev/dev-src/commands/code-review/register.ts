@@ -41,7 +41,7 @@ type ReviewPlanOptions = {
 export function registerReviewCommand(commands: Command): void {
   const review = commands
     .command('review')
-    .description('Launch and collect adversarial multi-agent reviews (see the subagents-review skill).')
+    .description('Plan, launch, and collect adversarial read-only reviews.')
 
   review
     .command('new')

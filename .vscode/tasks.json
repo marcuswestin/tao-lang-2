@@ -4,7 +4,7 @@
     {
       "label": "install-ide-extension",
       "type": "shell",
-      "command": "./agent just install-ide-extension",
+      "command": "just install-ide-extension",
       "options": {
         "cwd": "${workspaceFolder}",
         "shell": {

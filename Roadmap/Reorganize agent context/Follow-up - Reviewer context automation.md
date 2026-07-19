@@ -32,4 +32,4 @@ This is intentionally separate from the first agent-context reorganization. The 
 - Generated reviewer context is smaller than loading all review skills directly.
 - Each reviewer receives the safety rules and local code rules needed for its scope.
 - The generated context is reproducible from repo files and changed-file lists.
-- The automation is covered by targeted dev tests and final `./agent just verify`.
+- The automation is covered by targeted dev tests and final `./agent verify`.

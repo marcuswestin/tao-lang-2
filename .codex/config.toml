@@ -1,11 +1,9 @@
-# Repo-local Codex settings for Tao development.
+# Repo-local filesystem protections for Tao development.
 
-[approval_policy.granular]
-  sandbox_approval = true
-  rules = true
-  mcp_elicitations = true
-  request_permissions = true
-  skill_approval = true
+default_permissions = "tao-workspace"
 
-[permissions.workspace.filesystem]
-":project_roots" = { "." = "write", ".env" = "none", ".env.local" = "none", ".env.development" = "none", ".env.production" = "none", ".env.test" = "none" }
+[permissions.tao-workspace]
+extends = ":workspace"
+
+[permissions.tao-workspace.filesystem.":workspace_roots"]
+"**/.env*" = "deny"

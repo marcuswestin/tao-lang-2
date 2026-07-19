@@ -107,6 +107,7 @@ _gen.textLines = function genTextLines(text: string): GenValue {
   )
 }
 
+/** gen.join compiles separated iterable items and emits no output when the iterable is empty. */
 _gen.join = function genJoin<ItemT>(
   items: Iterable<ItemT>,
   compileItem: (item: ItemT) => GenValue,
@@ -120,6 +121,7 @@ _gen.join = function genJoin<ItemT>(
   ) ?? _gen.noop()
 }
 
+/** gen.list compiles iterable items as lines and emits no output when the iterable is empty. */
 _gen.list = function genList<ItemT>(
   items: Iterable<ItemT>,
   compileItem: (item: ItemT) => GenValue,

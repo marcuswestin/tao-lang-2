@@ -19,7 +19,7 @@ dev app_path="":
 deps:
     bun install
 
-# Run all tests
+# Run all tests, optionally filtered by test name
 test PATTERN="": _compile-kitchen-sink-app
     just _test '{{ PATTERN }}'
 
