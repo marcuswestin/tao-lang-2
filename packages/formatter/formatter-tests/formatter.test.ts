@@ -62,14 +62,14 @@ Describe('Tao formatter top-level statements', () => {
       `
         use Text from @tao/ui
         use Stack from @tao/ui
-        view MainView { render Text "hi" }
+        view MainView { render Text("hi") }
       `,
       `
         use Text from @tao/ui
         use Stack from @tao/ui
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -182,11 +182,11 @@ Describe('Tao formatter tests', () => {
 Describe('Tao formatter views and blocks', () => {
   Test('formats layout clauses on render sites', async () => {
     await testFormatCode(
-      `view MainView{render Col[claim 2,content top spread-inset,gap 12,pad 16,margin horizontal 4,width fill]{Text "Label"[width fill,height fill]}}`,
+      `view MainView{render Col()[claim 2,content top spread-inset,gap 12,pad 16,margin horizontal 4,width fill]{Text("Label")[width fill,height fill]}}`,
       `
         view MainView {
-           render Col [claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
-              Text "Label" [width fill, height fill]
+           render Col() [claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+              Text("Label") [width fill, height fill]
         }  }
       `,
     )
@@ -194,12 +194,12 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('indents nested render blocks and collapses closing braces', async () => {
     await testFormatCode(
-      `view MainView{render Stack{Text "a"\nText "b"}}`,
+      `view MainView{render Stack(){Text( "a")\nText( "b")}}`,
       `
         view MainView {
-           render Stack {
-              Text "a"
-              Text "b"
+           render Stack() {
+              Text("a")
+              Text("b")
         }  }
       `,
     )
@@ -207,13 +207,13 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('collapses deep closing brace runs onto one line at the outermost indentation', async () => {
     await testFormatCode(
-      `view MainView{render Stack{Text "a"{Text "b"{Text "c"}}}}`,
+      `view MainView{render Stack() {Text("a") {Text("b") {Text("c")}}}}`,
       `
         view MainView {
-           render Stack {
-              Text "a" {
-                 Text "b" {
-                    Text "c"
+           render Stack() {
+              Text("a") {
+                 Text("b") {
+                    Text("c")
         }  }  }  }
       `,
     )
@@ -221,14 +221,14 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('keeps a closing brace on its own line when statements follow it', async () => {
     await testFormatCode(
-      `view MainView{render Stack{Text "a"{Text "b"}\nText "c"}}`,
+      `view MainView{render Stack() {Text("a") {Text("b")}\nText( "c")}}`,
       `
         view MainView {
-           render Stack {
-              Text "a" {
-                 Text "b"
+           render Stack() {
+              Text("a") {
+                 Text("b")
               }
-              Text "c"
+              Text("c")
         }  }
       `,
     )
@@ -238,23 +238,23 @@ Describe('Tao formatter views and blocks', () => {
     await testFormatCode(
       `
         view MainView {
-        render Stack {
+        render Stack() {
         /*
         }
         }
         */
-        Text "a"
+        Text("a")
         }
         }
       `,
       `
         view MainView {
-           render Stack {
+           render Stack() {
               /*
               }
               }
               */
-              Text "a"
+              Text("a")
         }  }
       `,
     )
@@ -262,12 +262,12 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('does not treat block-comment markers inside strings as block comments', async () => {
     await testFormatCode(
-      `view MainView { render Stack { Text "/*" { Text "hi" } } }`,
+      `view MainView { render Stack() { Text("/*") { Text("hi") } } }`,
       `
         view MainView {
-           render Stack {
-              Text "/*" {
-                 Text "hi"
+           render Stack() {
+              Text("/*") {
+                 Text("hi")
         }  }  }
       `,
     )
@@ -275,11 +275,11 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats empty blocks as braces with one interior space', async () => {
     await testFormatCode(
-      `view MainView {render Stack{Text "a"{   }}}`,
+      `view MainView {render Stack() {Text("a") {   }}}`,
       `
         view MainView {
-           render Stack {
-              Text "a" { }
+           render Stack() {
+              Text("a") { }
         }  }
       `,
     )
@@ -287,10 +287,10 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view parameter spacing', async () => {
     await testFormatCode(
-      `publish view CountText Count is number, Label is text { render Text Label }`,
+      `publish view CountText Count is number, Label is text { render Text(Label) }`,
       `
         publish view CountText Count is number, Label is text {
-           render Text Label
+           render Text(Label)
         }
       `,
     )
@@ -298,15 +298,15 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view invocation argument spacing', async () => {
     await testFormatCode(
-      `view MainView { render Stack { CountText 3,"label" } }\nview CountText Count is number, Label is text { render Text Label }`,
+      `view MainView { render Stack() { CountText(3,"label") } }\nview CountText Count is number, Label is text { render Text(Label) }`,
       `
         view MainView {
-           render Stack {
-              CountText 3, "label"
+           render Stack() {
+              CountText(3, "label")
         }  }
 
         view CountText Count is number, Label is text {
-           render Text Label
+           render Text(Label)
         }
       `,
     )
@@ -314,10 +314,10 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes named invocation and input-test step spacing', async () => {
     await testFormatCode(
-      `view MainView{render Field .Value   "Draft",.Disabled false}\ntest "Form"{check "entry"{run MyApp enter "Hello"  into label  "Title" submit id  "field"}}`,
+      `view MainView{render Field(.Value   "Draft",.Disabled false)}\ntest "Form"{check "entry"{run MyApp enter "Hello"  into label  "Title" submit id  "field"}}`,
       `
         view MainView {
-           render Field .Value "Draft", .Disabled false
+           render Field(.Value "Draft", .Disabled false)
         }
 
         test "Form" {
@@ -332,7 +332,7 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats data schemas, queries, writes, and provider status steps', async () => {
     await testFormatCode(
-      `project data Tasks memory{Groups Group{Name text}Items Item{Title text Done boolean Group Group}}\nproject view MainView{query Tasks . Items as OpenItems{where Done==false order by Title desc}action Add{create Tasks . Item{Title "Draft" Done false Group "Group-1"}}render Stack{for Item in OpenItems{Button "Delete",action{delete Item}}}}\ntest "Data"{check "status"{run DataApp data Tasks error "Offline" data Tasks ready}}`,
+      `project data Tasks memory{Groups Group{Name text}Items Item{Title text Done boolean Group Group}}\nproject view MainView{query Tasks . Items as OpenItems{where Done==false order by Title desc}action Add{create Tasks . Item{Title "Draft" Done false Group "Group-1"}}render Stack() {for Item in OpenItems{Button("Delete",action{delete Item})}}}\ntest "Data"{check "status"{run DataApp data Tasks error "Offline" data Tasks ready}}`,
       `
         project data Tasks memory {
            Groups Group {
@@ -355,9 +355,9 @@ Describe('Tao formatter views and blocks', () => {
                  Done false
                  Group "Group-1"
            }  }
-           render Stack {
+           render Stack() {
               for Item in OpenItems {
-                 Button "Delete", action { delete Item }
+                 Button("Delete", action { delete Item })
         }  }  }
 
         test "Data" {
@@ -372,7 +372,7 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats stack declarations and navigation actions', async () => {
     await testFormatCode(
-      `project stack Main{initial Home destination Home destination Detail}\napp Demo{stack Main}\nview Home{action Open{present Main . Detail .Name "Item"}render Text "Home"}\nview Detail Name is text{action Close{back Main}render Text Name}`,
+      `project stack Main{initial Home destination Home destination Detail}\napp Demo{stack Main}\nview Home{action Open{present Main . Detail .Name "Item"}render Text("Home")}\nview Detail Name is text{action Close{back Main}render Text(Name)}`,
       `
         project stack Main {
            initial Home
@@ -388,14 +388,14 @@ Describe('Tao formatter views and blocks', () => {
            action Open {
               present Main.Detail .Name "Item"
            }
-           render Text "Home"
+           render Text("Home")
         }
 
         view Detail Name is text {
            action Close {
               back Main
            }
-           render Text Name
+           render Text(Name)
         }
       `,
     )
@@ -403,7 +403,7 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats state declarations and action bodies', async () => {
     await testFormatCode(
-      `view MainView{state Count=0 action AddStep Step is number{set Count+=Step} action AddFive{do AddStep 5} render Stack{Button "Reset",action{set Count=0} Button "Inline",->{set Count+=1}}}`,
+      `view MainView{state Count=0 action AddStep Step is number{set Count+=Step} action AddFive{do AddStep(5)} render Stack() {Button("Reset",action{set Count=0}) Button("Inline",->{set Count+=1})}}`,
       `
         view MainView {
            state Count = 0
@@ -411,11 +411,11 @@ Describe('Tao formatter views and blocks', () => {
               set Count += Step
            }
            action AddFive {
-              do AddStep 5
+              do AddStep(5)
            }
-           render Stack {
-              Button "Reset", action { set Count = 0 }
-              Button "Inline", -> { set Count += 1 }
+           render Stack() {
+              Button("Reset", action { set Count = 0 })
+              Button("Inline", -> { set Count += 1 })
         }  }
       `,
     )
@@ -423,32 +423,32 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('keeps commented inline actions multiline', async () => {
     await testFormatCode(
-      `view MainView { state Count = 0 render Stack {
-        Button "Leading", action {
+      `view MainView { state Count = 0 render Stack() {
+        Button("Leading", action {
           // before
           set Count = 1
-        }
-        Button "Trailing", action {
+        })
+        Button("Trailing", action {
           set Count = 2 // after
-        }
-        Button "Block", action { /* explanation */ set Count = 3 }
-        Button "Compact", action { set Count = 4 }
+        })
+        Button("Block", action { /* explanation */ set Count = 3 })
+        Button("Compact", action { set Count = 4 })
       } }`,
       `
         view MainView {
            state Count = 0
-           render Stack {
-              Button "Leading", action {
+           render Stack() {
+              Button("Leading", action {
                  // before
                  set Count = 1
-              }
-              Button "Trailing", action {
+              })
+              Button("Trailing", action {
                  set Count = 2 // after
-              }
-              Button "Block", action { /* explanation */
+              })
+              Button("Block", action { /* explanation */
                  set Count = 3
-              }
-              Button "Compact", action { set Count = 4 }
+              })
+              Button("Compact", action { set Count = 4 })
         }  }
       `,
     )
@@ -471,7 +471,7 @@ Describe('Tao formatter aliases', () => {
 Describe('Tao formatter types and constructors', () => {
   Test('normalizes type declarations, constructors, casts, lists, and member access', async () => {
     await testFormatCode(
-      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nalias Demo = Person {Tags ["a" "b"] Job {Level 2 Title "Engineer"} Age 40 Name "Ada"}\nview Profile Person { render Text Person.Job.Title }`,
+      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nalias Demo = Person {Tags ["a" "b"] Job {Level 2 Title "Engineer"} Age 40 Name "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
       `
         type Job is {
            Title is text
@@ -496,7 +496,7 @@ Describe('Tao formatter types and constructors', () => {
         }
 
         view Profile Person {
-           render Text Person.Job.Title
+           render Text(Person.Job.Title)
         }
       `,
     )
@@ -726,14 +726,14 @@ Describe('Tao formatter comments', () => {
         alias Greeting = "hi"
 
         // the main view
-        view MainView { render Text Greeting }
+        view MainView { render Text(Greeting) }
       `,
       `
         alias Greeting = "hi"
 
         // the main view
         view MainView {
-           render Text Greeting
+           render Text(Greeting)
         }
       `,
     )
@@ -745,14 +745,14 @@ Describe('Tao formatter comments', () => {
         view MainView {
         // local greeting
         alias G = "hi"
-        render Text G
+        render Text(G)
         }
       `,
       `
         view MainView {
            // local greeting
            alias G = "hi"
-           render Text G
+           render Text(G)
         }
       `,
     )

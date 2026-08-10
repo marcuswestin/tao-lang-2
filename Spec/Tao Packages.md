@@ -40,18 +40,18 @@ app ChatApp {
 ui ThreadListUi {
    query Chat.Messages { Text }
 
-   render Col {
-      List Messages {
-         Text Message.Text
+   render Col() {
+      List(Messages) {
+         Text(Message.Text)
          on select -> Message { present ThreadUi Message }
       }
    }
 }
 
 ui ThreadUi Message Chat.Message {
-   render Col {
-      Text Message.Text
-      Button "Open thread", on press -> { present ThreadUi Message }
+   render Col() {
+      Text(Message.Text)
+      Button("Open thread", on press -> { present ThreadUi Message })
    }
 }
 ```

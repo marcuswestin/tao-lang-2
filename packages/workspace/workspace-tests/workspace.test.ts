@@ -25,7 +25,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         'Packages/@cards/screens/Main.tao': `
           use Title
           project view MainView {
-            render Text Title
+            render Text(Title)
           }
           view Text Value is text {
             render inject Value ${tsFence}

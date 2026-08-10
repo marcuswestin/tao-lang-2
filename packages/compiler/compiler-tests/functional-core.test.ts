@@ -8,14 +8,14 @@ Describe('functional core compiler', () => {
       function HasCount Count is number returns boolean = Count > 0
       function Label Count is number returns text = interpolate "Count: ", Count
       view Main {
-        render Stack {
+        render Stack(){
           if HasCount(2) {
-            Text Label(2)
+            Text(Label(2))
           } else {
-            Text "Empty"
+            Text("Empty")
           }
           for Name in ["Inbox" "Today"] {
-            Text Name
+            Text(Name)
           }
         }
       }

@@ -17,17 +17,17 @@ view MainView {
       set Submitted = Draft
       set Submitting = true
    }
-   render Col [gap 10, pad 16] {
-      Text "New task"
-      TextInput .Value Draft, .Change ChangeDraft, .Submit Submit, .Label "Task title", .Placeholder "Capture something", .Id "task-title", .Disabled false
+   render Col() [gap 10, pad 16] {
+      Text("New task")
+      TextInput(.Value Draft, .Change ChangeDraft, .Submit Submit, .Label "Task title", .Placeholder "Capture something", .Id "task-title", .Disabled false)
       if (Draft.Empty) {
-         Text "Title is required"
+         Text("Title is required")
       } else {
-         Text Draft
+         Text(Draft)
       }
-      FormButton .Title "Save", .Press Submit, .Id "save", .Disabled Draft.Empty, .Submitting Submitting
+      FormButton(.Title "Save", .Press Submit, .Id "save", .Disabled Draft.Empty, .Submitting Submitting)
       if (not Submitted.Empty) {
-         Text SubmittedLabel(Submitted)
+         Text(SubmittedLabel(Submitted))
       } else {
-         Text ""
+         Text("")
 }  }  }

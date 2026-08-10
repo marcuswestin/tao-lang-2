@@ -20,8 +20,8 @@ Describe('organizeSource use statements', () => {
       }
 
       view MainView {
-         render Stack {
-            Text "hi"
+         render Stack() {
+            Text("hi")
       }  }
     `)
   })
@@ -33,16 +33,16 @@ Describe('organizeSource use statements', () => {
         use Row from @tao/ui
         use Text from @tao/ui
         view MainView {
-           render Row {
-              Text "hi"
+           render Row() {
+              Text("hi")
         }  }
       `,
       `
         use Row, Text from @tao/ui
 
         view MainView {
-           render Row {
-              Text "hi"
+           render Row() {
+              Text("hi")
         }  }
       `,
     )
@@ -53,14 +53,14 @@ Describe('organizeSource use statements', () => {
       `
         use Text, Row, Button from @tao/ui
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
       `
         use Text from @tao/ui
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -87,7 +87,7 @@ Describe('organizeSource use statements', () => {
         alias First = One
         alias Second = Two
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
       `
@@ -99,7 +99,7 @@ Describe('organizeSource use statements', () => {
         alias Second = Two
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -110,18 +110,18 @@ Describe('organizeSource use statements', () => {
       `
         use Text, Stack, Row from @tao/ui
         view MainView {
-           render Stack {
-              Row {
-                 Text "hi"
+           render Stack() {
+              Row() {
+                 Text("hi")
         }  }  }
       `,
       `
         use Row, Stack, Text from @tao/ui
 
         view MainView {
-           render Stack {
-              Row {
-                 Text "hi"
+           render Stack() {
+              Row() {
+                 Text("hi")
         }  }  }
       `,
     )
@@ -151,7 +151,7 @@ Describe('organizeSource canonical statement order', () => {
         }
         use Text from @tao/ui
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
       `
@@ -162,7 +162,7 @@ Describe('organizeSource canonical statement order', () => {
         }
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -177,7 +177,7 @@ Describe('organizeSource canonical statement order', () => {
         }
         use Text from @tao/ui
         view MainView {
-           render Text Greeting
+           render Text(Greeting)
         }
       `,
       `
@@ -190,7 +190,7 @@ Describe('organizeSource canonical statement order', () => {
         alias Greeting = "hi"
 
         view MainView {
-           render Text Greeting
+           render Text(Greeting)
         }
       `,
     )
@@ -200,7 +200,7 @@ Describe('organizeSource canonical statement order', () => {
     await testOrganizeSource(
       `
         app MyApp { view MainView }
-        view MainView { render Text "hi" }
+        view MainView { render Text("hi") }
         use Text from @tao/ui
         project {
            name "My App"
@@ -222,7 +222,7 @@ Describe('organizeSource canonical statement order', () => {
         }
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -234,7 +234,7 @@ Describe('organizeSource canonical statement order', () => {
         alias Second = First
         app MyApp { view MainView }
         alias First = "1"
-        view MainView { render Text First }
+        view MainView { render Text(First) }
         use Text from @tao/ui
       `,
       `
@@ -248,7 +248,7 @@ Describe('organizeSource canonical statement order', () => {
         alias First = "1"
 
         view MainView {
-           render Text First
+           render Text(First)
         }
       `,
     )
@@ -262,7 +262,7 @@ Describe('organizeSource canonical statement order', () => {
         // @tao/ui imports
         use Text from @tao/ui
         // the main view
-        view MainView { render Text "hi" }
+        view MainView { render Text("hi") }
       `,
       `
         // @tao/ui imports
@@ -275,7 +275,7 @@ Describe('organizeSource canonical statement order', () => {
 
         // the main view
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -289,7 +289,7 @@ Describe('organizeSource canonical statement order', () => {
         // rendered text import
         use Text from @tao/ui
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
       `
@@ -297,7 +297,7 @@ Describe('organizeSource canonical statement order', () => {
         use Text from @tao/ui
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -309,14 +309,14 @@ Describe('organizeSource canonical statement order', () => {
         // unused button import
         use Text, Button from @tao/ui
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
       `
         use Text from @tao/ui
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -327,7 +327,7 @@ Describe('organizeSource canonical statement order', () => {
       `
         app MyApp { view MainView }
         use Text from @tao/ui
-        view MainView { render Text "hi" }
+        view MainView { render Text("hi") }
         // footer note
       `,
       `
@@ -338,7 +338,7 @@ Describe('organizeSource canonical statement order', () => {
         }
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
 
         // footer note
@@ -348,7 +348,7 @@ Describe('organizeSource canonical statement order', () => {
 
   Test('splits same-line top-level statements safely when organizing', async () => {
     await testOrganizeSource(
-      `app MyApp { view MainView } use Text from @tao/ui view MainView { render Text "hi" }`,
+      `app MyApp { view MainView } use Text from @tao/ui view MainView { render Text("hi") }`,
       `
         use Text from @tao/ui
 
@@ -357,7 +357,7 @@ Describe('organizeSource canonical statement order', () => {
         }
 
         view MainView {
-           render Text "hi"
+           render Text("hi")
         }
       `,
     )
@@ -376,8 +376,8 @@ Describe('removeUnusedImports', () => {
       use Two from ./local
       use Text, Button from @tao/ui
       view MainView {
-         Two
-         render Text "hi"
+         Two()
+         render Text("hi")
       }
     `)
 
@@ -387,8 +387,8 @@ Describe('removeUnusedImports', () => {
       use Text from @tao/ui
 
       view MainView {
-         Two
-         render Text "hi"
+         Two()
+         render Text("hi")
       }
     `)
     }\n`)
@@ -399,7 +399,7 @@ Describe('removeUnusedImports', () => {
       use Text from @tao/ui
 
       view MainView {
-         render Text "hi"
+         render Text("hi")
       }
     `)
 
@@ -467,7 +467,7 @@ Describe('removeUnusedImports', () => {
       // kept import
       use Text from @tao/ui
       view MainView {
-         render Text "hi"
+         render Text("hi")
       }
     `)
 
@@ -477,7 +477,7 @@ Describe('removeUnusedImports', () => {
       use Text from @tao/ui
 
       view MainView {
-         render Text "hi"
+         render Text("hi")
       }
     `)
     }\n`)
@@ -488,7 +488,7 @@ Describe('removeUnusedImports', () => {
       // unused button import
       use Text, Button from @tao/ui
       view MainView {
-         render Text "hi"
+         render Text("hi")
       }
     `)
 
@@ -497,7 +497,7 @@ Describe('removeUnusedImports', () => {
       use Text from @tao/ui
 
       view MainView {
-         render Text "hi"
+         render Text("hi")
       }
     `)
     }\n`)
@@ -508,7 +508,7 @@ Describe('moveRendersLast', () => {
   Test('moves a render statement to the end of its view body', async () => {
     const document = await parseDocument(`
       view MainView {
-         render Text Greeting
+         render Text(Greeting)
          alias Greeting = "hi"
       }
     `)
@@ -517,20 +517,20 @@ Describe('moveRendersLast', () => {
       Text.stripIndent(`
       view MainView {
          alias Greeting = "hi"
-         render Text Greeting
+         render Text(Greeting)
       }
     `)
     }\n`)
   })
 
   Test('splits same-line view statements safely when moving renders', async () => {
-    const document = await parseRawDocument('view MainView { render Text Greeting alias Greeting = "hi" }')
+    const document = await parseRawDocument('view MainView { render Text(Greeting) alias Greeting = "hi" }')
 
     Expect(await SourceActions.moveRendersLast(document)).toBe(`${
       Text.stripIndent(`
       view MainView {
          alias Greeting = "hi"
-         render Text Greeting
+         render Text(Greeting)
       }
     `)
     }\n`)
@@ -540,7 +540,7 @@ Describe('moveRendersLast', () => {
     const document = await parseDocument(`
       view MainView {
          // render comment
-         render Text Greeting
+         render Text(Greeting)
          // alias comment
          alias Greeting = "hi"
       }
@@ -552,7 +552,7 @@ Describe('moveRendersLast', () => {
          // alias comment
          alias Greeting = "hi"
          // render comment
-         render Text Greeting
+         render Text(Greeting)
       }
     `)
     }\n`)
@@ -562,7 +562,7 @@ Describe('moveRendersLast', () => {
     const document = await parseDocument(`
       view MainView {
          // render { comment
-         render Text Greeting
+         render Text(Greeting)
          alias Greeting = "hi"
       }
     `)
@@ -572,7 +572,7 @@ Describe('moveRendersLast', () => {
       view MainView {
          alias Greeting = "hi"
          // render { comment
-         render Text Greeting
+         render Text(Greeting)
       }
     `)
     }\n`)
@@ -582,7 +582,7 @@ Describe('moveRendersLast', () => {
     const document = await parseDocument(`
       view MainView {
          alias Greeting = "hi"
-         render Text Greeting
+         render Text(Greeting)
       }
     `)
 
@@ -592,8 +592,8 @@ Describe('moveRendersLast', () => {
   Test('leaves views with multiple render statements to the validator', async () => {
     const document = await parseDocument(`
       view MainView {
-         render Text "one"
-         render Text "two"
+         render Text("one")
+         render Text("two")
       }
     `)
 
@@ -607,7 +607,7 @@ Describe('fixSource', () => {
       app   MyApp { view MainView }
       use Text,Button from @tao/ui
       view MainView {
-         render Text Greeting
+         render Text(Greeting)
          alias Greeting = "hi"
       }
     `)
@@ -623,7 +623,7 @@ Describe('fixSource', () => {
 
       view MainView {
          alias Greeting = "hi"
-         render Text Greeting
+         render Text(Greeting)
       }
     `)
     }\n`)
@@ -644,7 +644,7 @@ Describe('fixSource', () => {
           use Text from @tao/ui
           use LocalText, MissingLocal from ./Local
           view MainView {
-             render Text Greeting
+             render Text(Greeting)
              alias Greeting = "hi"
           }
         `)
@@ -659,7 +659,7 @@ Describe('fixSource', () => {
 
         view MainView {
            alias Greeting = "hi"
-           render Text Greeting
+           render Text(Greeting)
         }
       `)
       }\n`)

@@ -10,7 +10,7 @@ Describe('Tao injection compiler', () => {
       app MyApp { view MainView }
       alias UserName = "Ro"
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value, Name UserName, Count 3 ${tsFence}

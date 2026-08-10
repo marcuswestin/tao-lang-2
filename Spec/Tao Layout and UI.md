@@ -2,7 +2,7 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, runtime-backed `TextInput` and `FormButton` controls with labels/IDs/disabled and submitting state, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
+Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, runtime-backed `TextInput` and `FormButton` controls with labels/IDs/disabled and submitting state, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. Render arguments are always parenthesized, and layout remains a distinct following clause: `render View(args) [layout] { children }` or `View(args) [layout] { children }`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
 
 ## Layout Introduction
 
@@ -91,21 +91,21 @@ use Icon, Text, Box, Row from @tao/ui
 view Label Title text {
    @icon = empty
 
-   render Box {
+   render Box() {
       if @icon {
          @icon [centered, pad 2] { }
       }
-      Box [content center, gap 2, pad horizontal 4 vertical 2] {
-         Text Title
+      Box() [content center, gap 2, pad horizontal 4 vertical 2] {
+         Text(Title)
       }
    }
 }
 
-render Row {
-   Label "Info" {
-      @icon Icon "info" // Renders Label with an icon
+render Row() {
+   Label("Info") {
+      @icon Icon("info") // Renders Label with an icon
    }
-   Label "..." { }
+   Label("...") { }
 }
 ```
 
@@ -117,7 +117,7 @@ When `frame` and `layout` UI render, they get to choose where to render it using
 frame Card {
    @title = empty
 
-   render Stack [content top stretch, gap 8, pad 16, background white, radius 2, shadow gray] {
+   render Stack() [content top stretch, gap 8, pad 16, background white, radius 2, shadow gray] {
       @title [pad 2]
       @@content
    }
@@ -130,16 +130,16 @@ Declaration properties use the owner-qualified binding rules in `Tao Type System
 
 ```tao
 view Profile User {
-   render Text User.Name
+   render Text(User.Name)
 }
 
 view ProfileLonghand {
    User User
-   render Text User.Name
+   render Text(User.Name)
 }
 
-render Profile User
-render ProfileLonghand { User User }
+render Profile(User)
+render ProfileLonghand() { User User }
 ```
 
 Properties, unnamed render children, and named render slots are distinct channels:
@@ -161,17 +161,17 @@ frame UserCard {
    User User
    @actions = empty
 
-   render Stack {
-      Text User.Name
+   render Stack() {
+      Text(User.Name)
       @@content
       @actions
    }
 }
 
-render UserCard {
+render UserCard() {
    User CurrentUser       // property
-   Text "Recent activity" // unnamed child
-   @actions Button "Edit" // named render slot
+   Text("Recent activity") // unnamed child
+   @actions Button("Edit") // named render slot
 }
 ```
 
@@ -231,58 +231,58 @@ If we want a row with three icons aligned to its right edge and vertically cente
 ```tao
 use Row, Icon from @tao/ui
 
-render Row [content right center] {
-   Icon "info"
-   Icon "hide"
-   Icon "settings"
+render Row() [content right center] {
+   Icon("info")
+   Icon("hide")
+   Icon("settings")
 }
 ```
 
 ```tao
-Row [content bottom left] {
-   Text "Total"
-   Text "$42"
+Row() [content bottom left] {
+   Text("Total")
+   Text("$42")
 }
 
-Row [content spread center] {
-   Text "Left"
-   Text "Right"
+Row() [content spread center] {
+   Text("Left")
+   Text("Right")
 }
 
-Col [content top stretch] {
-   Text "fills the column width"
-   Button "Continue", Continue
+Col() [content top stretch] {
+   Text("fills the column width")
+   Button("Continue", Continue)
 }
 ```
 
 Or, if we want to:
 
 - Spread out the icons, and align with the bottom:
-  - `Row [content spread bottom] { ... }`
+  - `Row() [content spread bottom] { ... }`
 - Align just the third icon to the bottom:
-  - `Icon "settings" [aligned bottom]`
+  - `Icon("settings") [aligned bottom]`
 - Make the row hug the icons vertically (i.e., it shrinks to fit its content):
-  - `Row [content spread, hug] { ... }`
+  - `Row() [content spread, hug] { ... }`
 - Make the row fill its parent, but also compress (i.e., it shrinks beyond the size of its content when under pressure):
-  - `Row [fill, compress] { ... }`
+  - `Row() [fill, compress] { ... }`
 - Make the row rigid (i.e., it never shrinks more than the minimum size of its content):
-  - `Row [rigid] { ... }`
+  - `Row() [rigid] { ... }`
 - Center icons vertically and horizontally, and add a gap between each one:
-  - `Row [content center, gap 2]`
+  - `Row() [content center, gap 2]`
 - Set the width and height of the row:
-  - `Row [height 20, width 320] { ... }`
+  - `Row() [height 20, width 320] { ... }`
 - Fill only the horizontal axis:
-  - `Text "Name" [width fill]`
+  - `Text("Name") [width fill]`
 
 ### Example: App Shell
 
 ```tao
 layout AppShell {
-   render Col [fill, content top stretch, gap 12, pad 16] {
-      Header [hug]
-      Row [fill, gap 16] {
-         Sidebar [width 280, rigid]
-         MainPane [width fill, compress]
+   render Col() [fill, content top stretch, gap 12, pad 16] {
+      Header() [hug]
+      Row() [fill, gap 16] {
+         Sidebar() [width 280, rigid]
+         MainPane() [width fill, compress]
       }
    }
 }
@@ -296,15 +296,15 @@ Here, the outer `Col` fills the screen. The header hugs its content. The body ro
 
 ```tao
 frame Card {
-   render Stack [content top stretch, gap 8, pad 16] {
+   render Stack() [content top stretch, gap 8, pad 16] {
       @@content
    }
 }
 
-render Col [gap 12] {
-   Card {
-      Text "Title"
-      Text "Body"
+render Col() [gap 12] {
+   Card() {
+      Text("Title")
+      Text("Body")
    }
 }
 ```
@@ -315,14 +315,14 @@ Caller container layout, such as `gap` and `content`, applies at the explicit co
 
 ```tao
 layout ToolbarArea {
-   render Row [content spread center, gap 12] {
+   render Row() [content spread center, gap 12] {
       @@content
    }
 }
 
-ToolbarArea [gap 8] {
-   Button "Cancel", Cancel
-   Button "Save", Save
+ToolbarArea() [gap 8] {
+   Button("Cancel", Cancel)
+   Button("Save", Save)
 }
 ```
 
@@ -330,10 +330,10 @@ If the declaration has fixed siblings and caller content, put `@@content` inside
 
 ```tao
 frame LabeledSection text Label {
-   render Stack [gap 12, pad 16] {
-      Text Label
+   render Stack() [gap 12, pad 16] {
+      Text(Label)
 
-      Stack [gap 8] {
+      Stack() [gap 8] {
          @@content
       }
    }
@@ -356,13 +356,13 @@ Tao uses named text views to describe the common pressure behaviors:
 - `TextMultiline ..., Lines N`: multiline text with a line limit.
 
 ```tao
-Row [content baseline left, gap 8] {
-   TextFrame StatusCode
-   Text Order.Title [fill, compress]
+Row() [content baseline left, gap 8] {
+   TextFrame(StatusCode)
+   Text(Order.Title) [fill, compress]
 }
 
-TextMultiline Article.Summary
-TextMultiline Article.Summary, Lines 3
+TextMultiline(Article.Summary)
+TextMultiline(Article.Summary, Lines 3)
 ```
 
 This keeps text pressure visible in the view being rendered. A layout clause should not have to say "this text is multiline" or "this label clips instead of ellipsizing." That is part of the text view's job.
@@ -372,11 +372,11 @@ This keeps text pressure visible in the view being rendered. A layout clause sho
 Use `WrappingRow` when wrapping is part of the design.
 
 ```tao
-WrappingRow [content top left, gap 8] {
-   Tag "Design"
-   Tag "Compiler"
-   Tag "Runtime"
-   Tag "Mobile"
+WrappingRow() [content top left, gap 8] {
+   Tag("Design")
+   Tag("Compiler")
+   Tag("Runtime")
+   Tag("Mobile")
 }
 ```
 
@@ -385,10 +385,10 @@ The important part is not "turn flex wrap on." The important part is that the UI
 That is why Tao prefers a named container over a raw `[wrap]` flag:
 
 ```tao
-WrappingRow [gap 8] {
-   Tag "Offline"
-   Tag "Syncing"
-   Tag "Admin"
+WrappingRow() [gap 8] {
+   Tag("Offline")
+   Tag("Syncing")
+   Tag("Admin")
 }
 ```
 
@@ -402,10 +402,10 @@ Use a real scrolling view when the user should scroll:
 
 ```tao
 layout FeedPage {
-   render Col [fill] {
-      Header
-      ScrollView [fill] {
-         FeedItems
+   render Col() [fill] {
+      Header()
+      ScrollView() [fill] {
+         FeedItems()
       }
    }
 }
@@ -446,9 +446,9 @@ These are the layout values of Tao's stdlib containers, and the React Native sty
 A caller layout clause overlays the render site's defaults. Terms that target the same layout slot replace that default slot; unrelated defaults remain:
 
 ```tao
-Row [content spread center, compress] {
-   Text "Name"
-   Button "Edit", Edit
+Row() [content spread center, compress] {
+   Text("Name")
+   Button("Edit", Edit)
 }
 ```
 

@@ -1,29 +1,36 @@
 # Tao MVP Applications
 
-This folder separates the product target from the currently executable integration app.
+`Current/Still.tao` is the executable functional MVP and the integrated product reference for the language surface implemented in this repository. `Current/Still.test.tao` exercises its primary behavior through the normal Tao test runtime.
 
-## Target
+## Current MVP
 
-`.tao-future/` is the single authoritative full-target Still app. It uses intended Tao syntax that is not executable yet. Tao discovery already skips every dot-prefixed path segment; `.tao-future` is a repository convention, not a Tao language or CLI feature. Move files into a normal source directory as their complete surface becomes executable.
+Still is authored entirely in Tao and demonstrates:
 
-`Design` and `Datasource` are required target capabilities, even though earlier implementation milestones omit them.
+- a project and app-owned typed stack with list/detail presentation and back behavior;
+- durable local workspace and related-task data, with deterministic in-memory isolation in tests;
+- reactive queries, filtering, ordering, relationship cascade deletion, and create/update/delete writes;
+- controlled text inputs, submit/press actions, validation, disabled controls, labels, and stable IDs;
+- loading, provider-error, empty, populated, open-task, and completed-task UI states;
+- pure functions, interpolation, expressions, `if/else`, and `for` rendering;
+- mandatory invocation delimiters: `render View(args) [layout] { children }`, `View(args) [layout] { children }`, `do Action(args)`, and `Function(args)`.
 
-The target should evolve in place. Git history replaces numbered whole-app snapshots.
+Focused feature coverage remains in `Apps/Test Apps/*` and the owning package tests.
 
-## Current
+## Run And Verify
 
-`Current/` is the rolling integration app. It may use only implemented Tao behavior, must remain discoverable, and must pass its Tao behavior test. Each implementation project advances this app only after its feature works end to end.
+From the repository root:
 
-Focused parser, validator, compiler, runtime, and behavior cases belong in package tests and `Apps/Test Apps/*`; they do not require another copy of the integration app.
+```sh
+./tao check "Apps/MVP/Current/Still.tao"
+./tao test "Apps/MVP/Current"
+./tao compile "Apps/MVP/Current/Still.tao"
+./dev "Apps/MVP/Current/Still.tao"
+```
 
-## Coverage
+The first three commands are automated verification paths. The final command launches the Expo development path for interactive use.
 
-| Capability family                                                                        | Target source                                        | Current executable coverage                   | Focused ownership                            |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| Project, app, imports, UI, types, layout, state, actions, and tests                      | `.tao-future/Still.tao`, `.tao-future/@ui/ui.tao`    | `Current/Still.tao`, `Current/Still.test.tao` | Existing package tests and Test Apps         |
-| Navigation and presentation                                                              | `.tao-future/Still.tao`; navigation roadmap examples | Pending foundation implementation             | `Roadmap/Add navigation and routing MVP/`    |
-| Datasource, schema, query, and mutation                                                  | `.tao-future/Still.tao`, `.tao-future/@ui/ui.tao`    | Not yet implemented in Current                | Datasource roadmap projects                  |
-| Design tokens and combined specs                                                         | `.tao-future/@ui/ui.tao`                             | Implemented layout entries only               | `Roadmap/Add Tao design system MVP/`         |
-| Packages, capabilities, advanced UI, accessibility, motion, errors, bridges, and tooling | Target extensions as decisions settle                | Feature-specific tests when implemented       | `Roadmap/Deferred Tao language decisions.md` |
+## Historical Design Seed
 
-Specifications contain minimal normative examples. Larger non-executable subsystem examples live with the roadmap project that owns their decisions, so they cannot be mistaken for runnable applications.
+`.tao-future/` preserves an earlier non-executable product sketch. It is excluded from Tao discovery because it is dot-prefixed and is no longer authoritative for implemented behavior or syntax. Its remaining ideas are inputs to later language-design work, not MVP requirements.
+
+Design tokens, advanced navigation containers, remote sync, authentication, collaboration, production deployment, and the broader future package/UI surfaces remain deliberately outside this functional MVP.

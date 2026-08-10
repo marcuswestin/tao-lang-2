@@ -62,53 +62,53 @@ project view MainView {
       set NextOrdering += 1
       set TaskDraft = ""
    }
-   render Col [gap 10, pad 16] {
-      Text "Data MVP"
+   render Col() [gap 10, pad 16] {
+      Text("Data MVP")
       if (Workspaces.Loading) {
-         Text "Loading local data…"
+         Text("Loading local data…")
       } else {
          if (not Workspaces.Error.Empty) {
-            Text Workspaces.Error
+            Text(Workspaces.Error)
          } else {
-            TextInput .Value WorkspaceDraft, .Change ChangeWorkspaceDraft, .Submit AddWorkspace, .Label "Workspace name", .Placeholder "Home", .Id "workspace-name", .Disabled false
-            FormButton .Title "Add workspace", .Press AddWorkspace, .Id "add-workspace", .Disabled WorkspaceDraft.Empty, .Submitting false
+            TextInput(.Value WorkspaceDraft, .Change ChangeWorkspaceDraft, .Submit AddWorkspace, .Label "Workspace name", .Placeholder "Home", .Id "workspace-name", .Disabled false)
+            FormButton(.Title "Add workspace", .Press AddWorkspace, .Id "add-workspace", .Disabled WorkspaceDraft.Empty, .Submitting false)
             if (Workspaces.Empty) {
-               Text "No workspaces yet"
+               Text("No workspaces yet")
             } else {
                for Workspace in Workspaces {
-                  Text Workspace.Name
-                  FormButton .Title "Open workspace", .Press action {
+                  Text(Workspace.Name)
+                  FormButton(.Title "Open workspace", .Press action {
                      set CurrentWorkspace = Workspace.Id
                      set CurrentWorkspaceName = Workspace.Name
-                  }, .Id Workspace.Id, .Disabled false, .Submitting false
-                  FormButton .Title "Delete workspace", .Press action {
+                  }, .Id Workspace.Id, .Disabled false, .Submitting false)
+                  FormButton(.Title "Delete workspace", .Press action {
                      delete Workspace
                      set CurrentWorkspace = ""
                      set CurrentWorkspaceName = ""
-                  }, .Id "delete-workspace", .Disabled false, .Submitting false
+                  }, .Id "delete-workspace", .Disabled false, .Submitting false)
             }  }
             if (CurrentWorkspace.Empty) {
-               Text "Choose a workspace"
+               Text("Choose a workspace")
             } else {
-               Text SelectedLabel(CurrentWorkspaceName)
-               TextInput .Value TaskDraft, .Change ChangeTaskDraft, .Submit AddTask, .Label "Task title", .Placeholder "Next task", .Id "task-title", .Disabled false
-               FormButton .Title "Add task", .Press AddTask, .Id "add-task", .Disabled TaskDraft.Empty, .Submitting false
+               Text(SelectedLabel(CurrentWorkspaceName))
+               TextInput(.Value TaskDraft, .Change ChangeTaskDraft, .Submit AddTask, .Label "Task title", .Placeholder "Next task", .Id "task-title", .Disabled false)
+               FormButton(.Title "Add task", .Press AddTask, .Id "add-task", .Disabled TaskDraft.Empty, .Submitting false)
                if (OpenTasks.Empty) {
-                  Text "No open tasks"
+                  Text("No open tasks")
                } else {
                   for Task in OpenTasks {
-                     Text Task.Title
-                     FormButton .Title "Rename task", .Press action { update Task {
+                     Text(Task.Title)
+                     FormButton(.Title "Rename task", .Press action { update Task {
                         Title "Updated task"
-                     } }, .Id "rename-task", .Disabled false, .Submitting false
-                     FormButton .Title "Complete task", .Press action { update Task {
+                     } }, .Id "rename-task", .Disabled false, .Submitting false)
+                     FormButton(.Title "Complete task", .Press action { update Task {
                         Done true
-                     } }, .Id "complete-task", .Disabled false, .Submitting false
+                     } }, .Id "complete-task", .Disabled false, .Submitting false)
                }  }
                if (CompletedTasks.Empty) {
-                  Text "No completed tasks"
+                  Text("No completed tasks")
                } else {
                   for Task in CompletedTasks {
-                     Text Task.Title
-                     FormButton .Title "Delete task", .Press action { delete Task }, .Id "delete-task", .Disabled false, .Submitting false
+                     Text(Task.Title)
+                     FormButton(.Title "Delete task", .Press action { delete Task }, .Id "delete-task", .Disabled false, .Submitting false)
 }  }  }  }  }  }  }

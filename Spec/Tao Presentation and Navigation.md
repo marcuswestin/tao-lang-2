@@ -22,11 +22,11 @@ Each `destination` references a `view`. The destination inherits that view's par
 
 ```tao
 project view WorkspaceList {
-   render Text "Workspaces"
+   render Text("Workspaces")
 }
 
 project view WorkspaceDetail WorkspaceId is text {
-   render Text WorkspaceId
+   render Text(WorkspaceId)
 }
 ```
 

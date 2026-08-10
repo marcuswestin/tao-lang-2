@@ -21,8 +21,8 @@ The MVP must add one integrated path for:
 2. [x] **Interaction and forms.** Add event bindings for press/change/submit, runtime-backed text input, field labels and identifiers, validation patterns, and Tao test steps for entering and submitting text.
 3. [x] **Data.** Add Tao schemas and entity handles, provider-neutral query/mutation IR, a durable local provider, filtering/order, relationships, reactive consistency, and deterministic loading/error controls.
 4. [x] **Navigation.** Add an app-owned stack, destination declarations with typed arguments, present/back actions, deterministic runtime state, and test steps that exercise navigation.
-5. **Still.** Advance `Apps/MVP/Current/Still.tao` into the forcing app; cover workspace/task CRUD, completion, forms, filtering/order, loading/empty/error/populated states, and list/detail navigation in Tao behavior tests.
-6. **Agreement and hardening.** Align active specifications, roadmap status, Test Apps, MVP README, formatter/diagnostics, and tool commands; remove stale executable claims; run final verification and audit branch cleanliness.
+5. [x] **Still.** Advance `Apps/MVP/Current/Still.tao` into the forcing app; cover workspace/task CRUD, completion, forms, filtering/order, loading/empty/error/populated states, and list/detail navigation in Tao behavior tests.
+6. [x] **Agreement and hardening.** Align active specifications, roadmap status, Test Apps, MVP README, formatter/diagnostics, and tool commands; remove stale executable claims; run final verification and audit branch cleanliness.
 
 ## Decision log
 
@@ -43,6 +43,7 @@ The MVP must add one integrated path for:
 - **2026-08-10 — Isolate and control data in Tao tests.** Every check gets a fresh memory store even for a `local` schema. `data Schema loading|ready|error "…"` synchronously drives provider states without touching durable developer data.
 - **2026-08-10 — Let destinations inherit view signatures.** `destination WorkspaceDetail` references the view directly, so its parameter list is the navigation contract instead of being duplicated in a route declaration. `present Stack.WorkspaceDetail .WorkspaceId Id` reuses ordinary argument binding and diagnostics.
 - **2026-08-10 — Keep navigation to one app-owned stack.** A stack has one argument-free initial destination, pushes one occurrence per `present`, and safely no-ops when `back` reaches the root. Native hardware back dispatches the same reducer operation; tests reset history before each check.
+- **2026-08-10 — Delimit every invocation.** Rendering, action `do`, and function calls require parentheses, including zero-argument calls. Render layout and children remain separate following clauses: `render View(args) [layout] { children }` and `View(args) [layout] { children }`; actions use `do Action(args)` and pure functions use `Function(args)`.
 
 The data slice adds `expo-file-system` as a direct runtime dependency so the local provider can persist in Expo; it was already present transitively in the Expo toolchain. Any later dependency must be justified here before it is committed.
 
@@ -57,13 +58,13 @@ The data slice adds `expo-file-system` as a direct runtime dependency so the loc
 
 ## Success checklist
 
-- [ ] `feat/autonomous-language-mvp` contains intentional committed work only and is clean, unpushed, and unmerged.
-- [ ] `Apps/MVP/Current/Still.tao` is executable through the normal dev/runtime path.
-- [ ] Still persists related data and supports CRUD, completion, forms, filtering/order, and reactive updates.
-- [ ] Still visibly covers loading, empty, validation-error, provider-error, and populated states.
-- [ ] Still has deterministic list/detail navigation and back behavior.
-- [ ] Primary Still journeys are covered by Tao-authored behavior tests.
-- [ ] Expressions, control flow, collections, interaction, data, forms, and navigation compose without app-specific TypeScript business logic.
-- [ ] Common invalid usage has actionable diagnostics and accepted syntax formats deterministically.
-- [ ] Active specifications, roadmap, Test Apps, and MVP documentation agree with the implementation.
-- [ ] Focused tests and final `./agent verify` pass at the branch head.
+- [x] `feat/autonomous-language-mvp` contains intentional committed work only and is clean, unpushed, and unmerged.
+- [x] `Apps/MVP/Current/Still.tao` is executable through the normal dev/runtime path.
+- [x] Still persists related data and supports CRUD, completion, forms, filtering/order, and reactive updates.
+- [x] Still visibly covers loading, empty, validation-error, provider-error, and populated states.
+- [x] Still has deterministic list/detail navigation and back behavior.
+- [x] Primary Still journeys are covered by Tao-authored behavior tests.
+- [x] Expressions, control flow, collections, interaction, data, forms, and navigation compose without app-specific TypeScript business logic.
+- [x] Common invalid usage has actionable diagnostics and accepted syntax formats deterministically.
+- [x] Active specifications, roadmap, Test Apps, and MVP documentation agree with the implementation.
+- [x] Focused tests and final `./agent verify` pass at the branch head.

@@ -28,7 +28,9 @@ export const ActionsFormatter = {
   /** DoStatement formats action invocation spacing. */
   DoStatement(f) {
     f.oneSpaceAfter('do')
-    f.oneSpaceBeforeProperty('argumentList')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
   },
 } satisfies Partial<FormatHandlers>
 

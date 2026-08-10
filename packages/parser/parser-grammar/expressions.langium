@@ -20,16 +20,8 @@ Argument:
 TypedArgumentValue:
     ItemLiteral | Expression;
 
-// Direct render/action/function arguments exclude an unlabelled TypedConstructor because
-// `Text Value { }` must keep parsing `{ }` as the render child block. Parentheses admit
-// any otherwise ambiguous expression without weakening that shipped boundary.
 ArgumentValue infers Expression:
-    '(' Expression ')' | ConditionalExpression | ArgumentUnaryExpression | ActionExpression
-    | MemberAccessExpression | FunctionCallExpression | InterpolationExpression | StringLiteral | NumberLiteral
-    | BooleanLiteral | NoneLiteral | ValueReference;
-
-ArgumentUnaryExpression infers Expression:
-    {infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression;
+    Expression;
 
 FunctionDeclaration:
     visibility=DeclarationVisibility? 'function' name=ID parameterList=ParameterList? 'returns' returnType=TypeReference '=' value=Expression;

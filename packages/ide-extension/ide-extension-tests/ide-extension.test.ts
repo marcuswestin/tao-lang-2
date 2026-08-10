@@ -69,10 +69,10 @@ Describe('Tao IDE extension smoke', () => {
     const diagnostics = await validateWithLanguageServerServices(`
       alias Greeting = "Hello"
       app Demo {
-        render Greeting
+        render Greeting()
       }
       view Counter Count is number {
-        render Text Count
+        render Text(Count)
       }
       view Text Value is text {
         render inject \`\`\`ts
@@ -97,7 +97,7 @@ Describe('Tao IDE extension smoke', () => {
       alias First = Second
       alias Second = First
       view MainView {
-        render Text First
+        render Text(First)
       }
       view Text Value is text { }
     `)
@@ -108,7 +108,7 @@ Describe('Tao IDE extension smoke', () => {
   })
 
   Test('formats documents with canonical Tao indentation regardless of editor tab size', async () => {
-    const { formatter, document, cleanup } = await buildFormatterFixture('view   MainView {  render  Stack {   } }')
+    const { formatter, document, cleanup } = await buildFormatterFixture('view   MainView {  render  Stack(){   } }')
     try {
       Expect(formatter).toBeInstanceOf(TaoFormatter)
       const edits = await formatter!.formatDocument(document, {
@@ -116,7 +116,7 @@ Describe('Tao IDE extension smoke', () => {
         options: { tabSize: 4, insertSpaces: true },
       })
 
-      Expect(applyEdits(document, edits)).toBe('view MainView {\n   render Stack { }\n}\n')
+      Expect(applyEdits(document, edits)).toBe('view MainView {\n   render Stack() { }\n}\n')
     } finally {
       await cleanup()
     }
@@ -148,7 +148,7 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('serves the organize use statements source action through the language server', async () => {
     const fixture = await buildCodeActionFixture(
-      'app MyApp { view MainView }\nuse Text from @tao/ui\nview MainView { render Text "hi" }\n',
+      'app MyApp { view MainView }\nuse Text from @tao/ui\nview MainView { render Text("hi") }\n',
     )
     try {
       const { provider, document } = fixture
@@ -162,7 +162,7 @@ Describe('Tao IDE extension smoke', () => {
       Expect(organize && 'kind' in organize ? organize.kind : undefined).toBe('source.organizeImports')
       const edits = organize && 'edit' in organize ? organize.edit?.changes?.[document.textDocument.uri] : undefined
       Expect(edits?.[0]?.newText).toBe(
-        'use Text from @tao/ui\n\napp MyApp {\n   view MainView\n}\n\nview MainView {\n   render Text "hi"\n}\n',
+        'use Text from @tao/ui\n\napp MyApp {\n   view MainView\n}\n\nview MainView {\n   render Text("hi")\n}\n',
       )
     } finally {
       await fixture.cleanup()
@@ -171,7 +171,7 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('serves the move-render quick fix for render-not-last diagnostics', async () => {
     const fixture = await buildCodeActionFixture(
-      'view MainView {\n   render Text Greeting\n   alias Greeting = "hi"\n}\n',
+      'view MainView {\n   render Text(Greeting)   alias Greeting = "hi"\n}\n',
     )
     try {
       const { provider, document } = fixture
@@ -188,7 +188,7 @@ Describe('Tao IDE extension smoke', () => {
       const edits = moveRender && 'edit' in moveRender
         ? moveRender.edit?.changes?.[document.textDocument.uri]
         : undefined
-      Expect(edits?.[0]?.newText).toBe('view MainView {\n   alias Greeting = "hi"\n   render Text Greeting\n}\n')
+      Expect(edits?.[0]?.newText).toBe('view MainView {\n   alias Greeting = "hi"\n   render Text(Greeting)\n}\n')
     } finally {
       await fixture.cleanup()
     }

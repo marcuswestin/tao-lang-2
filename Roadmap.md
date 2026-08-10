@@ -4,7 +4,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## MVP Roadmap
 
-- [ ] Complete the autonomous functional-language MVP experiment
+- [x] Complete the autonomous functional-language MVP experiment
   - Integrate the smallest coherent expression, control-flow, interaction, data, navigation, and presentation surface required by the executable Still app.
   - Project record: `Roadmap/Autonomous language MVP/Project.md`
 
@@ -20,6 +20,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 - [x] Expand core expression/value language
   - Boolean and `none` values, `interpolate`, arithmetic/comparison/boolean expressions, pure function calls, collection/text members, and focused diagnostics.
+  - Rendering, action `do`, and function calls use mandatory `Name(args)` delimiters; render layout remains outside the call as `Name(args) [layout]`.
 
 - [x] Add control flow and collection rendering MVP
   - Expression-bodied pure functions, value and render `if/else`, `.Empty`/`.Count`, and `for` over typed lists with formatter/compiler/runtime support.
@@ -34,8 +35,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add navigation and routing MVP
   - The autonomous MVP branch implements one app-owned stack with destination views, typed `present`, deterministic history, Tao `back`, and native hardware-back reconciliation. Selection, split, overlays, restoration, and public routing remain deferred.
 
-- [ ] Define canonical buildable app target and acceptance bar
-  - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
+- [x] Define canonical buildable app target and acceptance bar
+  - `Apps/MVP/Current/Still.tao` is the executable forcing app: local related data, empty/error/loading/populated states, create/update/delete flows, navigation, forms, and Tao behavior tests.
 
 - [x] Implement Tao-native testing v0
   - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
@@ -57,7 +58,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
 
 - [x] Add loading, empty, and error-state MVP
-  - Practical `guard`/boundary semantics, app-visible failure states, provider/runtime errors, and canonical patterns for first apps.
+  - Reactive query `Loading`/`Error` members, explicit Tao `if/else` branches, app-visible provider failures, and canonical empty/populated patterns for first apps.
 
 - [ ] Add beautiful app defaults mini slice
   - Polished default text/input/button styles, seeded accent, neutral palette, app-shell content frame, empty/error/loading surfaces.

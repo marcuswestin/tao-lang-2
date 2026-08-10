@@ -189,10 +189,10 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Stack {
+        render Stack(){
           alias Local = "Inside"
-          Text Local { }
-          Text "Literal"
+          Text(Local) { }
+          Text("Literal")
         }
       }
       layout Stack {
@@ -225,8 +225,8 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Col [claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
-          Text "Label" [width fill, height fill]
+        render Col()[claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+          Text("Label") [width fill, height fill]
         }
       }
       layout Col {
@@ -270,7 +270,7 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Col []
+        render Col()[]
       }
       layout Col {
         render inject \`\`\`ts
@@ -298,8 +298,8 @@ Describe('minimal Tao parser', () => {
       view StatTile Label is text, Count is number { }
       view MainView Label is text {
         alias LocalLabel = Label
-        render Text LocalLabel { }
-        render StatTile Greeting, LaunchCount { }
+        render Text(LocalLabel) { }
+        render StatTile(Greeting, LaunchCount) { }
       }
     `)
 
@@ -352,15 +352,15 @@ Describe('minimal Tao parser', () => {
         }
 
         action AddFive {
-          do AddStep 5
+          do AddStep(5)
         }
 
-        render Button "Add five", action {
+        render Button("Add five", action {
           set Count = 0
-        }
-        render Button "Inline", -> {
+        })
+        render Button("Inline", -> {
           set Count *= 2
-        }
+        })
       }
     `)
 
@@ -448,7 +448,7 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       view Field Value is text, Change is action, Disabled is boolean { }
       view MainView Draft is text, ChangeDraft is action {
-        render Field .Disabled false, .Change ChangeDraft, .Value Draft
+        render Field(.Disabled false, .Change ChangeDraft, .Value Draft)
       }
     `)
 
@@ -482,10 +482,10 @@ Describe('minimal Tao parser', () => {
         action Add {
           create Tasks.Item { Title "Draft" Done false Ordering 1 Group "Group-1" }
         }
-        render Stack {
+        render Stack(){
           for Item in OpenItems {
-            Button "Update", action { update Item { Done true } }
-            Button "Delete", action { delete Item }
+            Button("Update", action { update Item { Done true } })
+            Button("Delete", action { delete Item })
           }
         }
       }
@@ -523,7 +523,7 @@ Describe('minimal Tao parser', () => {
       app NavigationApp { stack MainStack }
       view Home {
         action Open { present MainStack.Detail .Name "Workspace" }
-        render Detail "Inline"
+        render Detail("Inline")
       }
       view Detail Name is text {
         action GoBack { back MainStack }
@@ -565,7 +565,7 @@ Describe('minimal Tao parser', () => {
         app MyApp { view MainView }
         use SharedView from ./
         view MainView {
-          render SharedView
+          render SharedView()
         }
       `,
         'Shared.tao': `
@@ -611,14 +611,14 @@ Describe('minimal Tao parser', () => {
       view MainView Label is text {
         alias Greeting = "View"
         alias LabelAlias = Label
-        render Stack {
+        render Stack(){
           alias Greeting = "Block"
-          Text Greeting
-          Stack {
+          Text(Greeting)
+          Stack(){
             alias Greeting = "Nested"
-            Text Greeting
+            Text(Greeting)
           }
-          Text LabelAlias
+          Text(LabelAlias)
         }
       }
     `)
@@ -695,7 +695,7 @@ Describe('minimal Tao parser', () => {
       alias DemoPerson = Person { DisplayName DemoTags DemoJob }
 
       view Profile Person {
-        render Text Person.Job.Title
+        render Text(Person.Job.Title)
       }
       view Text Value is text { }
     `)
@@ -792,8 +792,8 @@ Describe('minimal Tao parser', () => {
       use Text, Stack from ./
       project alias Greeting = "Hello"
       project view MainView {
-        render Stack {
-          Text Greeting
+        render Stack(){
+          Text(Greeting)
         }
       }
       project layout Stack {

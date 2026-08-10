@@ -1,6 +1,5 @@
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { AST } from '../parser-src/parser'
 import { lexCodeWithErrors, parseCodeWithErrors, testParseCode } from './test-parse'
 
 Describe('minimal Tao parser diagnostics', () => {
@@ -10,14 +9,11 @@ Describe('minimal Tao parser diagnostics', () => {
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
 
-  Test('parses unknown leading identifiers for later validator checks', async () => {
+  Test('requires parentheses for child renders', async () => {
     const parseResult = await parseCodeWithErrors('Legacy { }')
 
-    Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
-    Expect.Is(parseResult.entry.ast.statements[0], AST.isViewRender)
-    Expect(Diagnostics.allFromSource(parseResult.diagnostics, 'linker')).toBe(true)
-    Expect(Diagnostics.allWithSeverity(parseResult.diagnostics, 'error')).toBe(true)
-    Expect(Diagnostics.hasMessageContaining(parseResult.diagnostics, 'Could not resolve reference')).toBe(true)
+    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
   })
 
   Test('reports parser errors for incomplete render statements', async () => {
@@ -27,6 +23,20 @@ Describe('minimal Tao parser diagnostics', () => {
     Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
     Expect(parseResult.diagnostics.length).toBeGreaterThan(0)
     Expect(parserDiagnostics.every(diagnostic => diagnostic.range !== undefined)).toBe(true)
+  })
+
+  Test('requires parentheses for explicit renders', async () => {
+    const parseResult = await parseCodeWithErrors('render Text "hello"')
+
+    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
+  })
+
+  Test('requires parentheses for action invocations', async () => {
+    const parseResult = await parseCodeWithErrors('action Save { } action Run { do Save }')
+
+    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
   })
 
   Test('parses nested declarations for later validator checks', async () => {
@@ -42,7 +52,7 @@ Describe('minimal Tao parser diagnostics', () => {
   })
 
   Test('parses top-level renders for later validator checks', async () => {
-    const parseResult = await testParseCode('render Text "hello" view Text Value is text { }')
+    const parseResult = await testParseCode('render Text("hello") { } view Text Value is text { }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
@@ -51,7 +61,7 @@ Describe('minimal Tao parser diagnostics', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MyView }
       view MyView Count is number {
-        render Text Count { }
+        render Text(Count) { }
       }
       view Text Value is text { }
     `)
@@ -73,8 +83,8 @@ Describe('minimal Tao parser diagnostics', () => {
         alias Local = Secret
       }
       view Target {
-        render Text Secret { }
-        render Text Local { }
+        render Text(Secret) { }
+        render Text(Local) { }
       }
     `)
 

@@ -43,7 +43,7 @@ test "optional description" {
    let Foo = Foo "ASD"
 
    check "optional description" {
-      render ViewName Foo, Cats 1 with UserName "Henry" { }
+      render ViewName(Foo, Cats 1) with UserName "Henry" { }
 
       expect text "Henry has 1 cat"
       press text "Add cat"
@@ -81,7 +81,7 @@ Some things to notice:
 
 - `let Foo = ...` and `let AppNameStage = ...` are immutable test-local helper bindings visible to checks in the same `test`.
 - Each `check` starts its own app or focused render subject. Checks do not share runtime state.
-- `render ViewName Foo, Cats 1 with UserName "Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
+- `render ViewName(Foo, Cats 1) with UserName "Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
 - `run AppName with { ... }` launches a one-off app expression without requiring a named staging app.
 - `run AppNameStage` launches a named app variant declared by applying `with { ... }` to an app object.
 - `expect text "..."`, `press text "..."`, `write "..."`, and later focused selectors operate through rendered UI and accessibility-visible behavior.
@@ -89,7 +89,7 @@ Some things to notice:
 The test runner should report each check with enough context to identify the suite, check, launch subject, and result. A focused render check can be displayed in a shape like:
 
 ```text
-test "optional description" check "optional description" render ViewName Foo, Cats 1 with UserName "Henry" { } passed
+test "optional description" check "optional description" render ViewName(Foo, Cats 1) with UserName "Henry" { } passed
 ```
 
 Inline tests share the file's normal scope and are stripped from app builds and publishes:
@@ -100,7 +100,7 @@ app RuntimeStdlibTests {
 }
 
 view MainView {
-   render Text "Runtime stdlib smoke"
+   render Text("Runtime stdlib smoke")
 }
 
 test "Runtime stdlib" {
@@ -236,13 +236,13 @@ The `run ... with { ... }` block is an app expression overlay. It is useful when
 ```tao
 test "focused UI behavior" {
    check "renders validation message" {
-      render ViewX ParamA "abc", ParamB "asd" { }
+      render ViewX(ParamA "abc", ParamB "asd") { }
 
       expect text "asd"
    }
 
    check "disabled save button ignores presses" {
-      render SaveControls ItemId "task-1" with CanSave.false { }
+      render SaveControls(ItemId "task-1") with CanSave.false { }
 
       expect text "Save"
       press text "Save"
@@ -250,15 +250,15 @@ test "focused UI behavior" {
    }
 
    check "task row renders staging data" {
-      render TaskRow TaskId "task-1" using app TodoStaging { }
+      render TaskRow(TaskId "task-1") using app TodoStaging { }
 
       expect text "Book dentist"
    }
 
    check "field row layout renders supplied controls" {
-      render FieldRow {
-         Text "Email"
-         TextInput Email
+      render FieldRow() {
+         Text("Email")
+         TextInput(Email)
       }
 
       expect text "Email"
@@ -268,9 +268,9 @@ test "focused UI behavior" {
 
 Render rules:
 
-- `render` uses the same Tao invocation shape as normal render code. The test language should not invent a separate parameter grammar.
+- `render` uses the same mandatory-parenthesis invocation shape as normal render code. Arguments end at `)`; any layout clause, test setup clause, or child block follows it.
 - If Tao accepts commas in render call sites, `render` checks should accept the same comma style.
-- `render <ViewName> <params> with <StateOverride>, ... { }` sets initial state for the mounted subject.
+- `render <ViewName>(<params>) with <StateOverride>, ... { }` sets initial state for the mounted subject.
 - State overrides must name existing state declarations on the rendered subject or its focused runtime context. They do not create new state.
 - The render block supplies child UI or named slot fills when the subject accepts them. An empty block is valid when there are no children or slots.
 - A focused render gets a minimal app shell and can optionally name an app capability context with `using app <AppName>`.
@@ -422,21 +422,21 @@ The spec should add a render-id syntax that compiles to React Native `testID` an
 Candidate syntaxes:
 
 ```tao
-NameInput: TextInput Name
-@NameInput TextInput Name
-TextInput Name @NameInput
-TextInput Name: NameInput
-TextInput Name {
+NameInput: TextInput(Name)
+@NameInput TextInput(Name)
+TextInput(Name) @NameInput
+TextInput(Name): NameInput
+TextInput(Name) {
    id NameInput
 }
-TextInput Name [id NameInput]
+TextInput(Name) [id NameInput]
 ```
 
 Recommended direction: use a render ID prefix for authored Tao UI, and compile it to runtime test/accessibility identifiers:
 
 ```tao
-NameInput: TextInput Name
-SaveButton: Button "Save", Save
+NameInput: TextInput(Name)
+SaveButton: Button("Save", Save)
 ```
 
 Then tests target it explicitly:
@@ -491,21 +491,21 @@ Render slot direction from old repo work:
 
 ```tao
 view Button Label text, Press action {
-   Row {
+   Row() {
       @icon
-      Text Label
+      Text(Label)
 }  }
 
-Button "Foo", Save {
-   @icon Image SaveIcon
+Button("Foo", Save) {
+   @icon Image(SaveIcon)
 }
 ```
 
 Render IDs name concrete rendered nodes:
 
 ```tao
-NameInput: TextInput Name
-SaveButton: Button "Save", Save
+NameInput: TextInput(Name)
+SaveButton: Button("Save", Save)
 ```
 
 The distinction:

@@ -17,17 +17,17 @@ view MainView {
    action HideCount {
       set Count = 0
    }
-   render Col [gap 8, pad 12] {
-      Text "Functional core"
-      Text PresenceLabel(true)
+   render Col() [gap 8, pad 12] {
+      Text("Functional core")
+      Text(PresenceLabel(true))
       if HasCount(Count) {
-         Text CountLabel(Count)
-         Text NextLabel(Count)
+         Text(CountLabel(Count))
+         Text(NextLabel(Count))
       } else {
-         Text "Empty"
+         Text("Empty")
       }
       for Label in ["Inbox" "Today"] {
-         Text Label
+         Text(Label)
       }
-      Button "Hide count", HideCount
+      Button("Hide count", HideCount)
 }  }

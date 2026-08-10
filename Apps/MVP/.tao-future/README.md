@@ -1,7 +1,5 @@
-# Still Target MVP
+# Historical Still Design Seed
 
-This is the sole full-target MVP application. Its `.tao` files intentionally use unimplemented language and platform features. Tao discovery skips this directory because `.tao-future` is dot-prefixed.
+These files preserve an earlier integrated-product sketch written with unimplemented Tao syntax. Tao discovery skips this directory because `.tao-future` is dot-prefixed.
 
-`.tao-future` is a repository convention, not Tao syntax or configuration. Move a file into a normal source directory when it becomes executable.
-
-The app remains authoritative for the intended integrated product. Focused roadmap examples may explore a subsystem more exhaustively, but they do not replace this target.
+The executable and authoritative functional MVP is `../Current/Still.tao`, with behavior coverage in `../Current/Still.test.tao`. Do not treat examples here as current syntax or as required MVP behavior; move a surviving idea into active specifications and executable source only after its language design is settled and implemented end to end.

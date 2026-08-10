@@ -11,7 +11,7 @@ Describe('Tao injection validator', () => {
       app MyApp { view MainView }
       alias UserName = "Ro"
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value, Name UserName, Count 3 ${tsFence}
@@ -25,7 +25,7 @@ Describe('Tao injection validator', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value, Value "Again" ${tsFence}

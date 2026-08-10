@@ -14,13 +14,13 @@ Describe('functional core validator', () => {
       function HasCount Count is number returns boolean = Count > 0 and not false
       function Label Count is number returns text = interpolate "Count: ", Count
       view Main {
-        render Stack {
+        render Stack(){
           if HasCount(2) {
-            Text Label(2)
+            Text(Label(2))
           } else {
-            Text "Empty"
+            Text("Empty")
           }
-          for Name in ["Inbox" "Today"] { Text Name }
+          for Name in ["Inbox" "Today"] { Text(Name) }
         }
       }
       ${runtimeViews}
@@ -32,9 +32,9 @@ Describe('functional core validator', () => {
       app BrokenApp { view Main }
       function Wrong Value is number returns boolean = Value + 1
       view Main {
-        render Stack {
-          if 1 { Text "Wrong condition" }
-          for Value in "not a list" { Text Value }
+        render Stack(){
+          if 1 { Text("Wrong condition") }
+          for Value in "not a list" { Text(Value) }
         }
       }
       ${runtimeViews}

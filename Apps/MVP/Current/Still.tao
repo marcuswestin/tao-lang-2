@@ -1,28 +1,164 @@
-use Button, Col, Number, Text from @tao/ui
+use Col, FormButton, Text, TextInput from @tao/ui
 
 project {
-   name "Still MVP Current"
+   name "Still"
    remote none
    license MIT
 }
 
-app StillCurrent {
-   view Home
+app Still {
+   stack StillNavigation
 }
 
-type WorkspaceName is text
-
-alias InboxName = WorkspaceName "Inbox"
-
-view Home {
-   state CaptureCount = 0
-   action Capture {
-      set CaptureCount += 1
+project data StillData local {
+   Workspaces Workspace {
+      Name text
+      Ordering number
    }
-   render Col [fill, gap 8, pad 12] {
-      Text "Still"
-      Text InboxName
-      Text "Capture what matters."
-      Number CaptureCount
-      Button "Capture", Capture
+   Tasks Task {
+      Title text
+      Done boolean
+      Ordering number
+      Workspace Workspace
 }  }
+
+project stack StillNavigation {
+   initial WorkspaceList
+   destination WorkspaceList
+   destination WorkspaceDetail
+}
+
+function WorkspaceHeading Name is text returns text = interpolate "Workspace: ", Name
+
+function OpenTaskCount Count is number returns text = interpolate "Open tasks: ", Count
+
+function RenameWorkspaceId Id is text returns text = interpolate "rename-workspace-", Id
+
+function DeleteWorkspaceId Id is text returns text = interpolate "delete-workspace-", Id
+
+function ClarifyTaskId Id is text returns text = interpolate "rename-task-", Id
+
+function CompleteTaskId Id is text returns text = interpolate "complete-task-", Id
+
+function DeleteOpenTaskId Id is text returns text = interpolate "delete-open-task-", Id
+
+function DeleteCompletedTaskId Id is text returns text = interpolate "delete-completed-task-", Id
+
+project view WorkspaceList {
+   state WorkspaceDraft = ""
+   state NextOrdering = 1
+   query StillData.Workspaces as Workspaces {
+      order by Ordering asc
+   }
+   action ChangeWorkspaceDraft Value is text {
+      set WorkspaceDraft = Value
+   }
+   action AddWorkspace {
+      create StillData.Workspace {
+         Name WorkspaceDraft
+         Ordering NextOrdering
+      }
+      set NextOrdering += 1
+      set WorkspaceDraft = ""
+   }
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      Text("Still")
+      Text("A quiet place for work that matters.")
+      if (Workspaces.Loading) {
+         Text("Loading workspaces…")
+      } else {
+         if (not Workspaces.Error.Empty) {
+            Text("Could not load Still")
+            Text(Workspaces.Error)
+         } else {
+            TextInput(.Value WorkspaceDraft, .Change ChangeWorkspaceDraft, .Submit AddWorkspace, .Label "Workspace name", .Placeholder "Home", .Id "workspace-name", .Disabled false)
+            if (WorkspaceDraft.Empty) {
+               Text("Workspace name is required")
+            } else {
+               Text(WorkspaceDraft)
+            }
+            FormButton(.Title "Add workspace", .Press AddWorkspace, .Id "add-workspace", .Disabled WorkspaceDraft.Empty, .Submitting false)
+            if (Workspaces.Empty) {
+               Text("No workspaces yet")
+               Text("Create one to start capturing tasks.")
+            } else {
+               for Workspace in Workspaces {
+                  Col() [gap 6, pad 10] {
+                     Text(Workspace.Name)
+                     FormButton(.Title "Open workspace", .Press action { present StillNavigation.WorkspaceDetail .WorkspaceId Workspace.Id, .WorkspaceName Workspace.Name }, .Id Workspace.Id, .Disabled false, .Submitting false)
+                     FormButton(.Title "Rename workspace", .Press action { update Workspace {
+                        Name "Renamed workspace"
+                     } }, .Id RenameWorkspaceId(Workspace.Id), .Disabled false, .Submitting false)
+                     FormButton(.Title "Delete workspace", .Press action { delete Workspace }, .Id DeleteWorkspaceId(Workspace.Id), .Disabled false, .Submitting false)
+}  }  }  }  }  }  }
+
+project view WorkspaceDetail WorkspaceId is text, WorkspaceName is text {
+   state TaskDraft = ""
+   state NextOrdering = 1
+   query StillData.Tasks as OpenTasks {
+      where Workspace == WorkspaceId
+      where Done == false
+      order by Ordering asc
+   }
+   query StillData.Tasks as CompletedTasks {
+      where Workspace == WorkspaceId
+      where Done == true
+      order by Ordering asc
+   }
+   action ChangeTaskDraft Value is text {
+      set TaskDraft = Value
+   }
+   action AddTask {
+      create StillData.Task {
+         Title TaskDraft
+         Done false
+         Ordering NextOrdering
+         Workspace WorkspaceId
+      }
+      set NextOrdering += 1
+      set TaskDraft = ""
+   }
+   action ReturnToWorkspaces {
+      back StillNavigation
+   }
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      FormButton(.Title "Back to workspaces", .Press ReturnToWorkspaces, .Id "back", .Disabled false, .Submitting false)
+      Text(WorkspaceHeading(WorkspaceName))
+      Text(OpenTaskCount(OpenTasks.Count))
+      if (OpenTasks.Loading) {
+         Text("Loading tasks…")
+      } else {
+         if (not OpenTasks.Error.Empty) {
+            Text("Could not load tasks")
+            Text(OpenTasks.Error)
+         } else {
+            TextInput(.Value TaskDraft, .Change ChangeTaskDraft, .Submit AddTask, .Label "Task title", .Placeholder "Plan the next step", .Id "task-title", .Disabled false)
+            if (TaskDraft.Empty) {
+               Text("Task title is required")
+            } else {
+               Text(TaskDraft)
+            }
+            FormButton(.Title "Add task", .Press AddTask, .Id "add-task", .Disabled TaskDraft.Empty, .Submitting false)
+            if (OpenTasks.Empty) {
+               Text("No open tasks")
+            } else {
+               for Task in OpenTasks {
+                  Col() [gap 6, pad 10] {
+                     Text(Task.Title)
+                     FormButton(.Title "Clarify task", .Press action { update Task {
+                        Title "Clarified task"
+                     } }, .Id ClarifyTaskId(Task.Id), .Disabled false, .Submitting false)
+                     FormButton(.Title "Complete task", .Press action { update Task {
+                        Done true
+                     } }, .Id CompleteTaskId(Task.Id), .Disabled false, .Submitting false)
+                     FormButton(.Title "Delete task", .Press action { delete Task }, .Id DeleteOpenTaskId(Task.Id), .Disabled false, .Submitting false)
+            }  }  }
+            if (CompletedTasks.Empty) {
+               Text("No completed tasks")
+            } else {
+               Text("Completed")
+               for Task in CompletedTasks {
+                  Col() [gap 6, pad 10] {
+                     Text(Task.Title)
+                     FormButton(.Title "Delete completed task", .Press action { delete Task }, .Id DeleteCompletedTaskId(Task.Id), .Disabled false, .Submitting false)
+}  }  }  }  }  }  }

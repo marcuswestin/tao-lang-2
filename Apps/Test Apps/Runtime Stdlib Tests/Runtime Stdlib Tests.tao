@@ -8,15 +8,15 @@ alias LaunchCount = 3
 
 view MainView {
    action Ignore { }
-   render Stack {
-      Text "Runtime stdlib smoke"
-      Number LaunchCount
-      Button "Tap me", Ignore
-      Box {
-         Col {
-            TextFrame "Label"
+   render Stack() {
+      Text("Runtime stdlib smoke")
+      Number(LaunchCount)
+      Button("Tap me", Ignore)
+      Box() {
+         Col() {
+            TextFrame("Label")
       }  }
-      Row {
-         WrappingRow {
-            TextMultiline "Wrapped"
+      Row() {
+         WrappingRow() {
+            TextMultiline("Wrapped")
 }  }  }  }
