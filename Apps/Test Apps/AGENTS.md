@@ -1,21 +1,6 @@
 # Test Apps
 
-Test apps are valid, positive functionality examples for implemented Tao behavior. Put parser, compiler, validator, formatter, and diagnostic error cases in package unit tests instead.
-
-Each test app lives in its own folder:
-
-```text
-Apps/Test Apps/<App Name>/
-  <App Name>.tao
-  <App Name>.test.tao
-```
-
-`Apps/Test Apps/README.md` is the contract for each app. Use these sections for each app entry:
-
-- `Purpose`: the language/runtime behavior this app exists to exercise.
-- `Belongs Here`: functionality that should be added to this app.
-- `Does Not Belong Here`: nearby functionality that should get another app or package test instead.
-- `Edit When`: specific triggers for updating this app or its purpose.
-- `Behavior Test Notes`: planned or existing automated behavior checks. Keep this section even when it only says behavior automation is not wired yet.
-
-When adding functionality to a test app, update its `README.md` entry first if the new behavior changes the app's scope.
+- Test apps are positive executable examples of implemented Tao behavior. Put diagnostic and invalid-source cases in package tests.
+- Keep each app in `Apps/Test Apps/<App Name>/` with its Tao source and behavior test.
+- `Apps/Test Apps/README.md` owns each app's purpose and scope. Update its entry before expanding an app beyond the documented contract.
+- Add only behavior that belongs to that app; create focused package coverage or another app for unrelated cases.

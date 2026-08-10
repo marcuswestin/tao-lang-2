@@ -78,15 +78,14 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
-- [ ] Branch and remove all agent instructions. As opposed to structural descriptions. Then re-implement agent instructions for new models, best practices.
 - [ ] Add simulation mode with datasources kept locally (with simulated network delays), library states/state saving, demo renders
 - [ ] String interpolation syntax highlighting (did we accomplish this in old repo?)
-- [ ] Create langium types for Statement, such that we have e.g ViewStatement, ProjectStatement, FileStatement, etc
-  - [ ] And add comments to the Statement rule, to seperate ones that are in one context only (e.g test statements).
-  - [ ] Consider adding `check` statements to the language, as asserts
-- [ ] Change validator structure, to go away from walking the tree multiple times and filtering for type; and instead walking each node once, and validating it based on its type.
-- [ ] Reorganize agent context
-  - Reports and plan: `Roadmap/Reorganize agent context/`
+- [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
+  - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
+- [x] Reorganize agent context
+  - Reports and plan: `Roadmap/Archive/Reorganize agent context/`
+- [ ] Simplify reviewer context automation
+  - Overview: `Roadmap/Reviewer context automation/Overview - Reviewer context automation.md`
 - [ ] Improve imports/exports structure. Decide whether namespaces are used commonly. See if possible to have types and values exported at the same time, keyed off from the same default export.
 - [ ] Review all tests, remove uneccessary test surfaces, remove test surface overlaps; favor e2e testing that covers the underlying packages. For each test, justify why we should test it (vs assuming the underlying functionality works). Where to be thorough, where to smoke test
 - [ ] Ensure that a project doesn't have multiple project definitions inside it - only in the root directory.
@@ -190,7 +189,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
     - [x] Compile app into ignored `packages/runtime/_gen_tao-app`
     - [x] Add dev-loop Expo launch to compile Kitchen Sink and start Expo web
     - [x] E2E render verifies `Hello, World!`
-    - [x] Verify `./agent just dev` starts Expo web
+    - [x] Verify `just dev` starts Expo web
     - [x] Ro review
 - 26-06-05
   - [x] Compiler: Create plain codegen wrapper and start using that

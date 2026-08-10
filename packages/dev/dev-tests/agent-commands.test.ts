@@ -1,8 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { formatAiUsageReport, summarizeAiUsage } from '../dev-src/commands/ai-usage'
 import { formatArtifactRunId } from '../dev-src/commands/artifacts'
-import { auditInstructionFiles, formatInstructionAuditReport } from '../dev-src/commands/audit-instructions'
-import { formatJustSuccessLine, parseJustSuccessSummary, shouldStreamJustOutput } from '../dev-src/commands/just'
 import {
   analyzeMergeFeaturePreflight,
   extractRoadmapCandidates,
@@ -12,20 +10,7 @@ import { ExpoRunner } from '../dev-src/dev-loop/expo-runner/ExpoRunner'
 import { AppSwitchChoices } from '../dev-src/dev-loop/keyboard-input/AppSwitchChoices'
 import Commands from '../dev-src/dev-loop/keyboard-input/Commands'
 
-Describe('agent just command helpers', () => {
-  Test('classifies streamed and quiet just invocations', () => {
-    Expect(shouldStreamJustOutput([])).toBe(true)
-    Expect(shouldStreamJustOutput(['help'])).toBe(true)
-    Expect(shouldStreamJustOutput(['dev'])).toBe(true)
-    Expect(shouldStreamJustOutput(['verify'])).toBe(false)
-  })
-
-  Test('formats quiet success summaries with parsed test counts', () => {
-    Expect(parseJustSuccessSummary(' 27 pass\n 0 fail\nTests: 12 passed, 12 total\n')).toBe('39 tests passed')
-    Expect(formatJustSuccessLine(['test'], 'Tests: 12 passed, 12 total', 1_234))
-      .toBe('[just]: test ok in 1.2s (12 tests passed)')
-  })
-
+Describe('dev loop command helpers', () => {
   Test('recognizes the verify dev-loop shortcut key', () => {
     Expect(Commands.isCommandKey('v')).toBe(true)
     Expect(Commands.isCommandKey('p')).toBe(false)
@@ -163,23 +148,6 @@ Describe('dev loop app switch helpers', () => {
     Expect(AppSwitchChoices.actionForKey(choices, 'q')).toEqual({ kind: 'cancel' })
     Expect(AppSwitchChoices.actionForKey(choices, '\u001b')).toEqual({ kind: 'cancel' })
     Expect(AppSwitchChoices.actionForKey(choices, '\u0003')).toEqual({ kind: 'exit', exitCode: 130 })
-  })
-})
-
-Describe('instruction audit helpers', () => {
-  Test('finds stale instruction mechanics', () => {
-    const findings = auditInstructionFiles([
-      {
-        path: 'agents/skills/example/SKILL.md',
-        text: '- First switch to PLAN mode\n- When in doubt, ask\n',
-      },
-    ])
-
-    Expect(findings.map(finding => finding.id)).toEqual(['blanket-clarification', 'plan-mode'])
-  })
-
-  Test('formats a clean audit report', () => {
-    Expect(formatInstructionAuditReport(3, [])).toBe('instruction audit ok: 3 files scanned.\n')
   })
 })
 

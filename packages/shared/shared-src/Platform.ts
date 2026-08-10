@@ -63,7 +63,7 @@ export function setStdinRawMode(rawMode: boolean): boolean {
   return true
 }
 
-/** runtimeConsole exposes console output through the shared runtime boundary. */
+/** runtimeConsole exposes low-level console output through the shared runtime boundary; use HCI for user-facing output. */
 export const runtimeConsole = {
   debug: console.debug.bind(console),
   error: console.error.bind(console),
@@ -71,7 +71,7 @@ export const runtimeConsole = {
   warn: console.warn.bind(console),
 }
 
-/** runtimeProcess exposes process state and streams through the shared runtime boundary. */
+/** runtimeProcess exposes low-level process state and streams through the shared runtime boundary; use HCI for user-facing I/O. */
 export const runtimeProcess = {
   argv: process.argv,
   chdir: process.chdir.bind(process),
