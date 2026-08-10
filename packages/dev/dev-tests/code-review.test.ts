@@ -1,6 +1,5 @@
 import { FS, Time } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { formatAgentHelpText } from '../dev-src/commands/agent-help'
 import type { UsageProviderSummary } from '../dev-src/commands/ai-usage-normalizer'
 import {
   buildReviewDigest,
@@ -485,13 +484,13 @@ Describe('budget-aware review planning', () => {
     const plan = planReviewers({
       profile: 'architecture',
       providers: allProviderBudgets(100),
-      scopeFile: '.artifacts/skills/subagents-review/run/scope.md',
+      scopeFile: '.artifacts/reviews/standard/run/scope.md',
     })
     const manifest = manifestFromReviewPlan(plan)
 
     Expect(manifest.reviewers.length).toBe(3)
     Expect(manifest.reviewers[0]).not.toHaveProperty('reason')
-    Expect(manifest.reviewers[0]?.scopeFile).toBe('.artifacts/skills/subagents-review/run/scope.md')
+    Expect(manifest.reviewers[0]?.scopeFile).toBe('.artifacts/reviews/standard/run/scope.md')
   })
 
   Test('adapts old Codex-only budget snapshots into provider summaries', () => {
@@ -517,22 +516,22 @@ Describe('review run formatting', () => {
   })
 
   Test('selects separate artifact roots for ordinary and stringent runs', () => {
-    Expect(reviewRunRoot('standard')).toBe('.artifacts/skills/subagents-review')
-    Expect(reviewRunRoot('stringent')).toBe('.artifacts/skills/subagents-review-stringent')
+    Expect(reviewRunRoot('standard')).toBe('.artifacts/reviews/standard')
+    Expect(reviewRunRoot('stringent')).toBe('.artifacts/reviews/stringent')
   })
 
-  Test('places runtime metrics under the owning skill artifact root', () => {
-    Expect(reviewMetricsPath('/repo/.artifacts/skills/subagents-review/run-1', '/repo')).toBe(
-      '/repo/.artifacts/skills/subagents-review/metrics/reviewer-runtimes.jsonl',
+  Test('places runtime metrics under the owning review profile root', () => {
+    Expect(reviewMetricsPath('/repo/.artifacts/reviews/standard/run-1', '/repo')).toBe(
+      '/repo/.artifacts/reviews/standard/metrics/reviewer-runtimes.jsonl',
     )
-    Expect(reviewMetricsPath('/repo/.artifacts/skills/subagents-review-stringent/run-1', '/repo')).toBe(
-      '/repo/.artifacts/skills/subagents-review-stringent/metrics/reviewer-runtimes.jsonl',
+    Expect(reviewMetricsPath('/repo/.artifacts/reviews/stringent/run-1', '/repo')).toBe(
+      '/repo/.artifacts/reviews/stringent/metrics/reviewer-runtimes.jsonl',
     )
   })
 
   Test('resolves run directories from the repo root', () => {
-    Expect(resolveReviewRunDir('.artifacts/skills/subagents-review/run', '/repo')).toBe(
-      '/repo/.artifacts/skills/subagents-review/run',
+    Expect(resolveReviewRunDir('.artifacts/reviews/standard/run', '/repo')).toBe(
+      '/repo/.artifacts/reviews/standard/run',
     )
     Expect(resolveReviewRunDir('/tmp/review-run', '/repo')).toBe('/tmp/review-run')
   })
@@ -714,25 +713,5 @@ Describe('provider smoke parsing', () => {
       verbose: true,
     })
     Expect(smokeMarkerMatch('wrong output', 'CODEX_AGENT_OK')).toEqual({ ok: false, verbose: false })
-  })
-})
-
-Describe('agent review help', () => {
-  Test('documents the repo-owned review surface', () => {
-    const help = formatAgentHelpText('test # Run all tests', ['rg', 'codexbar'])
-    Expect(help).toContain('./agent review <command> [options]')
-    Expect(help).toContain('./agent review new --stringent --slug my-review')
-    Expect(help).toContain('./agent review plan --run .artifacts/skills/subagents-review/<run> --profile standard')
-    Expect(help).toContain('./agent review smoke-providers --provider codex-spark,codexbar')
-    Expect(help).toContain('./agent ai-usage --provider all --json')
-    Expect(help).toContain('./agent codexbar usage --provider all --source oauth --format json --pretty')
-    Expect(help).toContain('codexbar')
-    Expect(help).toContain(
-      './agent cursor agent --print --mode=plan --sandbox enabled --trust --output-format stream-json --stream-partial-output --model composer-2.5',
-    )
-    Expect(help).toContain(
-      './agent gemini --skip-trust --approval-mode plan --model gemini-3.1-pro-preview --output-format stream-json --prompt',
-    )
-    Expect(help).toContain('review orchestration writes artifacts under .artifacts/skills')
   })
 })

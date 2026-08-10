@@ -1,5 +1,5 @@
 import { Errors, HCI, Platform, Switch } from '@shared'
-import { runWithCommands } from './commands/commands'
+import { runWithCommands } from './commands/commands-utils'
 import { runDevLoop } from './dev-loop/dev-loop'
 import { ExpoRunner } from './dev-loop/expo-runner/ExpoRunner'
 import { TestRunner } from './dev-loop/test-runner/TestRunner'

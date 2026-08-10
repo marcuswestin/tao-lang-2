@@ -64,12 +64,12 @@ const GENERAL_FOCUS =
 
 /** REVIEW_CONTRACT is the binding, reviewer-agnostic review contract. */
 export const REVIEW_CONTRACT = Text.stripIndent(`
-  Follow the subagents-review contract:
+  Follow this review contract:
   - Do not edit files, stage/unstage, reset, stash, or otherwise touch the Git index.
   - Do not run validation, builds, formatters, or destructive operations.
   - Inspect changed files, their direct callers, package exports, and tests for each touched subsystem.
   - Check at least one plausible negative path or edge case per major changed area.
-  - Treat Tao repo instructions (AGENTS.md, nested AGENTS.md, and skills) as binding; flag drift.
+  - Treat applicable Tao repository instructions and project skills as binding; flag drift.
   - Verify candidate findings against actual code behavior before surfacing them.
   - Avoid duplicate findings and style-only comments unless they hide a correctness, maintainability, or instruction-compliance risk.
   - Lead with findings ordered by severity (blocker, major, minor, nit) with file:line references.
