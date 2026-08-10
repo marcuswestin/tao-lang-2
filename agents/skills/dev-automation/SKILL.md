@@ -7,6 +7,7 @@ description: >-
 # Dev Automation
 
 - Keep common workflow definitions and human developer commands in `Justfile`; keep shell entrypoints and the `./tao` wrapper thin.
+- Keep Worktrunk's blocking `pre-start` hook routed through `direnv exec . just setup` so dependencies and generated agent adapters exist before a launched harness reads them. `./agent setup` remains the agent-facing fallback once the wrapper is available.
 - Expose formatting, fixing, testing, checking, and final validation as thin `./agent` passthroughs to the matching Just recipes.
 - Derive `./agent help` descriptions for passthrough commands from live `just help` output instead of duplicating recipe help.
 - Keep ordinary shell and Tao CLI commands outside `./agent`; run them directly or through `./tao`.

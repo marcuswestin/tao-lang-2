@@ -11,7 +11,8 @@ Before the reset, strong conventions were distributed across root and nested `AG
 - `Report - Patch conventions.md`: conventions and rule applications found in the source patch and chat thread that motivated this task.
 - `Report - Current instruction inventory.md`: live inventory of AGENTS files, project skills, agent types, Codex config, and instruction-audit automation.
 - `Plan - Reorganize agent context.md`: final structure, ownership boundaries, migration steps, and validation.
-- `Follow-up - Reviewer context automation.md`: separate follow-up for generated reviewer context, intentionally outside the first instruction-reorg pass.
+
+Reviewer context automation remains separate active roadmap work.
 
 ## Working Principles
 

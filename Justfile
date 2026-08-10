@@ -8,8 +8,8 @@ DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
 help:
     just --list
 
-# Setup the development environment
-setup: deps
+# Setup dependencies and generated agent adapters
+setup: deps _agent-config
 
 # Run the dev loop
 dev app_path="":
@@ -30,7 +30,7 @@ fmt: _parser-gen
     just --fmt
 
 # Fix and format all code
-fix: _parser-gen
+fix: _agent-config _parser-gen
     dprint fmt --incremental=false
     ./tao fix
 
@@ -65,6 +65,9 @@ verify: fix _compile-kitchen-sink-app _parallel-verify-check
 
 # Private
 #########
+
+_agent-config:
+    bun run scripts/generate-agent-config.ts
 
 [parallel]
 _parallel-check: _ide-extension-build _tao-check _dprint-check _typecheck _test

@@ -8,6 +8,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",
+    "rulesync": "14.0.1",
     "typescript": "5.9.3"
   }
 }

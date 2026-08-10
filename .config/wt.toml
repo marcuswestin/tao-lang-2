@@ -1,0 +1,4 @@
+# One-time local install: brew install worktrunk && wt config shell install
+# Generate dependencies and harness adapters before Worktrunk launches an agent.
+[pre-start]
+setup = "direnv allow && direnv exec . just setup"

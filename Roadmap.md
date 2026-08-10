@@ -78,6 +78,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
 - [x] Reorganize agent context
   - Reports and plan: `Roadmap/Reorganize agent context/`
+- [ ] Simplify reviewer context automation
+  - Overview: `Roadmap/Reviewer context automation/Overview - Reviewer context automation.md`
 - [ ] Improve imports/exports structure. Decide whether namespaces are used commonly. See if possible to have types and values exported at the same time, keyed off from the same default export.
 - [ ] Review all tests, remove uneccessary test surfaces, remove test surface overlaps; favor e2e testing that covers the underlying packages. For each test, justify why we should test it (vs assuming the underlying functionality works). Where to be thorough, where to smoke test
 - [ ] Ensure that a project doesn't have multiple project definitions inside it - only in the root directory.

@@ -5,7 +5,7 @@ import { registerReviewCommand } from './commands/code-review'
 import { runWithCommands } from './commands/commands-utils'
 import { registerMergeFeaturePreflightCommand } from './commands/merge-feature-preflight'
 
-const JUST_COMMANDS = ['check', 'fix', 'fmt', 'test', 'verify'] as const
+const JUST_COMMANDS = ['check', 'fix', 'fmt', 'setup', 'test', 'verify'] as const
 
 await runWithCommands(commands => {
   commands

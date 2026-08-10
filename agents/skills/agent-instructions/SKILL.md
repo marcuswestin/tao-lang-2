@@ -1,7 +1,7 @@
 ---
 name: agent-instructions
 description: >-
-  Consolidate Tao agent instructions, agent profiles, and project skills. Use when Ro asks to add, update, remove, place, or audit AGENTS.md, CLAUDE.md, agents/, tool discovery symlinks, or durable agent guidance.
+  Consolidate Tao agent instructions, subagent profiles, and project skills. Use when Ro asks to add, update, remove, place, or audit AGENTS.md, CLAUDE.md, .agents/skills, agents/, generated harness adapters, or durable agent guidance.
 ---
 
 # Agent Instructions
@@ -13,8 +13,8 @@ description: >-
 - Keep one owner for each rule. Remove stale, conflicting, or duplicated guidance in the same change.
 - State outcomes, hard constraints, success criteria, and important exceptions. Do not explain routine engineering steps the model can infer from repository evidence.
 - Keep skill directory and frontmatter names identical. Make descriptions concise and include the concrete phrases that should trigger the skill.
-- Keep canonical agent sources under `agents/`: project skills in `agents/skills/` and reusable custom-agent profiles in `agents/agent-types/`.
-- Keep `.claude/CLAUDE.md` as the root-instruction include. Point `.codex/skills` and `.claude/skills` at `agents/skills`; point `.codex/agents` at `agents/agent-types`.
-- Add tool-specific adapters only when the canonical format is compatible. Do not duplicate or independently edit files through discovery paths.
-- After edits, search active code and docs for removed names, paths, commands, and duplicated ownership. Leave archives historical unless they still act as current instructions.
+- Keep canonical agent sources under `agents/`: project skills in `agents/skills/` and reusable profiles in `agents/subagents/`.
+- Keep `.claude/CLAUDE.md` as the root-instruction include. Point `.agents/skills`, `.codex/skills`, and `.claude/skills` at `agents/skills`; point `.rulesync/subagents` at `agents/subagents`.
+- Generate tool-specific subagent adapters with `./agent setup`. Do not edit or commit generated `.codex/agents/` or `.claude/agents/` files.
+- After edits, search active code and docs for removed names, paths, commands, and duplicated ownership. Keep `Roadmap/Archive/` frozen after merge unless Ro explicitly asks; other `Roadmap/` documents remain live.
 - Run `./agent verify` after instruction or automation changes.

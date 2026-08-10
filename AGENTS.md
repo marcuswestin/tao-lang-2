@@ -6,9 +6,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Work
 
-- In a fresh worktree, run `direnv allow` before other repository commands.
+- Create agent worktrees with Worktrunk so its blocking setup runs before the harness starts. In other fresh worktrees, run `direnv allow` and `direnv exec . ./agent setup` before other repository commands.
 - Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common workflows and specialized automation; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
-- Inspect current files, tests, roadmap documents, command help, and Git state before deciding how to proceed.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely. Resolve routine implementation choices from repository evidence.
 - Language work usually crosses parser, validator, formatter or source actions, compiler, and runtime; `packages/AGENTS.md` owns those boundaries.
 
@@ -22,9 +21,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Read `packages/AGENTS.md` before editing `packages/`.
 - Read `Apps/Test Apps/AGENTS.md` before editing test apps.
-- Canonical agent sources live under `agents/`: reusable profiles in `agents/agent-types/` and project skills in `agents/skills/`. Tool-specific discovery paths only symlink compatible sources.
-- Use the relevant skill for project lifecycle, runtime codegen, Langium scoping, old-repo porting, dev automation, instruction maintenance, or commit-all-chunks work.
-- Read active roadmap task documents for planned work. Treat `Roadmap/Archive/` as historical unless Ro explicitly asks to change it.
+- Read active roadmap task documents for planned work. `Roadmap/Archive/` is frozen after merge; do not update archived task documents unless Ro explicitly asks. Other `Roadmap/` documents remain live.
 
 ## Validation
 
