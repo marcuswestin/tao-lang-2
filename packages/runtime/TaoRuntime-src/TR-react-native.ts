@@ -2,6 +2,9 @@ import type React from 'react'
 
 /** ReactNativeRuntime declares the RN component set used by Tao runtime rendering. */
 export type ReactNativeRuntime = {
+  BackHandler?: {
+    addEventListener(event: 'hardwareBackPress', handler: () => boolean): { remove(): void }
+  }
   Dimensions?: {
     get(name: string): { height?: number; width?: number }
   }

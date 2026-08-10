@@ -18,6 +18,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   let screen: RuntimeApp.Screen | undefined
   try {
     TR.Data.beginTest()
+    TR.Navigation.beginTest()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
     for (const step of check.steps) {
       runStep(screen, step)

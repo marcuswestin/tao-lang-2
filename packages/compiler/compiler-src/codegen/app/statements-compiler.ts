@@ -9,6 +9,7 @@ export const StatementsCompiler = {
     return Switch.type(statement, {
       AliasDeclaration: Compile.AliasDeclaration,
       AppDeclaration: Compile.App,
+      AppStack: Compile.AppStack,
       AppView: Compile.AppView,
       ActionDeclaration: Compile.ActionDeclaration,
       CheckDeclaration: Compile.CheckDeclaration,
@@ -27,6 +28,7 @@ export const StatementsCompiler = {
       RenderStatement: Compile.RenderStatement,
       RunStep: Compile.RunStep,
       StateDeclaration: Compile.StateDeclaration,
+      StackDeclaration: Compile.StackDeclaration,
       SubmitInputStep: Compile.SubmitInputStep,
       TestDeclaration: Compile.TestDeclaration,
       TypeDeclaration: Compile.TypeDeclaration,

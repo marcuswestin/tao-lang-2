@@ -704,13 +704,18 @@ function owningArgumentTypeReference(reference: AST.NamedTypeReference): AST.Arg
 }
 
 function invocationTargetDeclaration(
-  invocation: AST.Render | AST.DoStatement | AST.FunctionCallExpression,
+  invocation: AST.Render | AST.DoStatement | AST.FunctionCallExpression | AST.PresentStatement,
 ): AST.ParameterizedDeclaration | undefined {
   if (AST.isRender(invocation)) {
     return invocation.view?.ref
   }
   if (AST.isFunctionCallExpression(invocation)) {
     return invocation.function.ref
+  }
+  if (AST.isPresentStatement(invocation)) {
+    return invocation.stack.ref?.block.destinations.find(destination =>
+      destination.view.$refText === invocation.destinationName
+    )?.view.ref
   }
   const action = invocation.action
   if (!AST.isValueReference(action)) {

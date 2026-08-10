@@ -96,6 +96,33 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('TR.Data.Delete')
   })
 
+  Test('compiles app-owned stack destinations, presentation, and back behavior', async () => {
+    const compiled = await Compiler.compileCode(`
+      stack MainStack {
+        initial Home
+        destination Home
+        destination Detail
+      }
+      app NavigationApp { stack MainStack }
+      view Home {
+        action Open { present MainStack.Detail .Name "Workspace" }
+        render Detail "Inline"
+      }
+      view Detail Name is text {
+        action GoBack { back MainStack }
+        render Text Name
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Navigation.Stack')
+    Expect(compiled.code).toContain('TR.Navigation.Host')
+    Expect(compiled.code).toContain('TR.Navigation.Present')
+    Expect(compiled.code).toContain('TR.Navigation.Back')
+    Expect(compiled.code).toContain('Name={_NavigationArguments["Name"]}')
+  })
+
   Test('compiles dynamic action parameter invocations without arguments', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }

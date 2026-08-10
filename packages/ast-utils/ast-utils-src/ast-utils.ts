@@ -3,6 +3,7 @@ import {
   resolveActionInvocation,
   resolveActionTarget,
   resolveItemPropertyBindings,
+  resolveNavigationInvocation,
   resolveRenderInvocation,
 } from './invocations'
 import { layoutEntryValues, layoutTermValue } from './layouts'
@@ -21,6 +22,7 @@ export const ASTUtils = {
   resolveActionInvocation,
   resolveActionTarget,
   resolveItemPropertyBindings,
+  resolveNavigationInvocation,
   resolveRenderInvocation,
 } as const
 
@@ -34,6 +36,7 @@ export namespace ASTUtils {
   export type RenderInvocationPair = import('./invocations').RenderInvocationPair
   export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
+  export type ResolvedNavigationInvocation = import('./invocations').ResolvedNavigationInvocation
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
   export type TaoType = import('./Type').TaoType
 }

@@ -7,6 +7,7 @@ import FilesCompiler from './app/files-compiler'
 import { FunctionalCoreCompiler } from './app/FunctionalCoreCompiler'
 import { InjectionsCompiler } from './app/injections-compiler'
 import InvocationsCompiler from './app/invocations-compiler'
+import { NavigationCompiler } from './app/NavigationCompiler'
 import ProjectDeclarationCompiler from './app/project-declaration-compiler'
 import RenderStatementCompiler from './app/render-statement-compiler'
 import { StateCompiler } from './app/StateCompiler'
@@ -32,6 +33,7 @@ export const Compile = {
   ...UseStatementCompiler,
   ...ProjectDeclarationCompiler,
   ...InjectionsCompiler,
+  ...NavigationCompiler,
   ...FunctionalCoreCompiler,
   ...DataCompiler,
   ...ExpressionsCompiler,

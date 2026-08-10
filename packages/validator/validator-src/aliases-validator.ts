@@ -14,7 +14,9 @@ type NamedFileValueDeclaration =
   | AST.AliasDeclaration
   | AST.AppDeclaration
   | AST.FunctionDeclaration
+  | AST.DataDeclaration
   | AST.RenderableDeclaration
+  | AST.StackDeclaration
 type NamedDeclaration = NamedValueDeclaration | AST.TypeDeclaration
 type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
 
@@ -193,5 +195,7 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
     || AST.isAliasDeclaration(node)
     || AST.isAppDeclaration(node)
     || AST.isFunctionDeclaration(node)
+    || AST.isDataDeclaration(node)
     || AST.isRenderableDeclaration(node)
+    || AST.isStackDeclaration(node)
 }

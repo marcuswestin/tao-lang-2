@@ -7,6 +7,7 @@ import "./actions"
 import "./data"
 import "./injections"
 import "./imports"
+import "./navigation"
 import "./project"
 import "./tests"
 import "./types"
@@ -17,10 +18,10 @@ entry BlocksGrammarEntrypoint:
 
 // Statement stays broad so validators can report context-specific placement errors.
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | EnterTextStep | SubmitInputStep | DataStatusStep | AppView | StateDeclaration | QueryDeclaration | Injection | RenderStatement | ViewRender | IfStatement | ForStatement;
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | EnterTextStep | SubmitInputStep | DataStatusStep | AppView | AppStack | StateDeclaration | QueryDeclaration | Injection | RenderStatement | ViewRender | IfStatement | ForStatement;
 
 Declaration:
-    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration;
+    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration | StackDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
@@ -28,8 +29,8 @@ type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | TestD
 // View statements are the declarations and render sites accepted by view/layout bodies.
 type ViewStatement = AliasDeclaration | StateDeclaration | QueryDeclaration | ActionDeclaration | Render | IfStatement | ForStatement;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | QueryDeclaration | ForStatement;
-type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration;
-type EmittingRuntimeBinding = AliasDeclaration | RenderableDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration;
+type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration | StackDeclaration;
+type EmittingRuntimeBinding = AliasDeclaration | RenderableDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration | StackDeclaration;
 type ParameterizedDeclaration = RenderableDeclaration | ActionDeclaration | FunctionDeclaration;
 type BlockStatementOwner = AppDeclaration | ProjectDeclaration | RenderableDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;
 // OwnedBlockStatement includes test steps and other context-only statements for generic block traversal.

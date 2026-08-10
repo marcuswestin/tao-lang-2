@@ -34,6 +34,19 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
     }
+    if (context.property === 'view' && AST.isNavigationDestination(context.container)) {
+      return this.createAppViewScope(context.container)
+    }
+    if (
+      context.property === 'stack'
+      && (
+        AST.isAppStack(context.container)
+        || AST.isPresentStatement(context.container)
+        || AST.isBackStatement(context.container)
+      )
+    ) {
+      return this.createNavigationStackScope(context.container)
+    }
     if (context.property === 'app' && AST.isRunStep(context.container)) {
       return this.createRunAppScope(context.container)
     }
@@ -108,13 +121,23 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  private createAppViewScope(appView: AST.AppView): Langium.Scope {
-    const root = AST.findRoot(appView)
+  private createAppViewScope(node: AST.AppView | AST.NavigationDestination): Langium.Scope {
+    const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(root.statements.filter(AST.isViewDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(appView, AST.isViewDeclaration), scope)
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isViewDeclaration), scope)
+    return scope
+  }
+
+  private createNavigationStackScope(node: AST.AppStack | AST.PresentStatement | AST.BackStatement): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isStackDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isStackDeclaration), scope)
     return scope
   }
 

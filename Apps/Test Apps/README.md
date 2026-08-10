@@ -11,6 +11,29 @@ Apps/Test Apps/<App Name>/
   <App Name>.test.tao
 ```
 
+## Navigation MVP
+
+### Purpose
+
+Exercise an app-owned stack whose destinations inherit typed view parameters, with deterministic presentation and back behavior through executable Tao actions.
+
+### Belongs Here
+
+- `stack`, `initial`, and `destination` declarations.
+- A root `stack` selected by an `app`.
+- `present Stack.Destination …` with named typed arguments.
+- `back Stack`, including returning to the initial destination.
+
+### Does Not Belong Here
+
+- Tabs, split views, overlays, restoration, routes, deep links, or animated transition policy.
+- Invalid destination or argument diagnostics; package tests own those.
+- Still-specific data and product behavior.
+
+### Behavior Test Notes
+
+`Navigation MVP.test.tao` proves that a press presents a parameterized detail destination, hides the prior screen, and returns to the initial screen through stack history.
+
 ## Forms and Interaction MVP
 
 ### Purpose

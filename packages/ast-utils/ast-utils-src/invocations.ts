@@ -73,6 +73,16 @@ export type ResolvedActionInvocation = {
   diagnostics: ArgumentBindingDiagnostic[]
 }
 
+/** ResolvedNavigationInvocation declares one stack presentation and its destination bindings. */
+export type ResolvedNavigationInvocation = {
+  invocation: AST.PresentStatement
+  stack?: AST.StackDeclaration
+  destination?: AST.NavigationDestination
+  view?: AST.ViewDeclaration
+  pairs: RenderInvocationPair[]
+  diagnostics: ArgumentBindingDiagnostic[]
+}
+
 /** ResolvedActionTarget declares how an expression resolves as an action target. */
 export type ResolvedActionTarget =
   | { kind: 'named'; action: AST.ActionDeclaration }
@@ -223,6 +233,34 @@ export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedAc
   }
 }
 
+/** resolveNavigationInvocation resolves a stack destination and binds its typed view arguments. */
+export function resolveNavigationInvocation(invocation: AST.PresentStatement): ResolvedNavigationInvocation {
+  const stack = invocation.stack.ref
+  const destination = stack?.block.destinations.find(candidate =>
+    candidate.view.$refText === invocation.destinationName
+  )
+  const view = destination?.view.ref
+  if (!view) {
+    return {
+      invocation,
+      stack,
+      destination,
+      pairs: [],
+      diagnostics: [],
+    }
+  }
+
+  const bindings = resolveArgumentBindings(view, invocation)
+  return {
+    invocation,
+    stack,
+    destination,
+    view,
+    pairs: bindings.pairs,
+    diagnostics: bindings.diagnostics,
+  }
+}
+
 /** resolveActionTarget classifies an expression used as a Tao action value. */
 export function resolveActionTarget(expression: AST.Expression | undefined): ResolvedActionTarget {
   return resolveActionTargetWithSeenAliases(expression, new Set())
@@ -253,7 +291,7 @@ function reportDuplicatePropertyTypes(
 /** resolveArgumentBindings binds Tao arguments to parameters by exact type and unambiguous lineage. */
 function resolveArgumentBindings(
   declaration: AST.ParameterizedDeclaration,
-  invocation: AST.Render | AST.DoStatement,
+  invocation: AST.Render | AST.DoStatement | AST.PresentStatement,
 ): ArgumentBindingResult {
   const parameters = AST.parametersOf(declaration)
   const args = AST.argumentsOf(invocation)

@@ -88,7 +88,7 @@ Describe('tao test', () => {
       Expect(validationErrors).toEqual([
         {
           path: brokenPath,
-          messages: ['App BrokenApp must declare exactly one root view, found 0.'],
+          messages: ['App BrokenApp must declare exactly one root view or root stack, found 0.'],
         },
       ])
     })

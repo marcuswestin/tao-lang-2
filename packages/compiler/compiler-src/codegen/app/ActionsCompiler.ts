@@ -50,8 +50,10 @@ export const ActionsCompiler = {
   ActionStatement(statement: AST.ActionStatement): Compiled {
     return Switch.type(statement, {
       CreateStatement: Compile.CreateStatement,
+      BackStatement: Compile.BackStatement,
       DeleteStatement: Compile.DeleteStatement,
       DoStatement: Compile.DoStatement,
+      PresentStatement: Compile.PresentStatement,
       SetStatement: Compile.SetStatement,
       UpdateStatement: Compile.UpdateStatement,
     })

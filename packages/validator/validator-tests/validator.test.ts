@@ -13,6 +13,7 @@ import { ExpressionsValidator } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
 import { InvocationsValidator } from '../validator-src/invocations-validator'
 import { LayoutValidator } from '../validator-src/layout-validator'
+import { navigationValidationMessages } from '../validator-src/navigation-validator'
 import { projectValidationMessages } from '../validator-src/project-validator'
 import { StateValidator } from '../validator-src/StateValidator'
 import { testValidationMessages } from '../validator-src/tests-validator'
@@ -69,6 +70,52 @@ async function withValidatedFiles<
 }
 
 Describe('Tao validator structural diagnostics', () => {
+  Test('validates app-owned stack destinations and typed presentations', async () => {
+    await testValidateCode(`
+      stack MainStack {
+        initial Home
+        destination Home
+        destination Detail
+      }
+      app NavigationApp { stack MainStack }
+      view Home {
+        action Open { present MainStack.Detail .Name "Workspace" }
+        render Detail "Inline"
+      }
+      view Detail Name is text {
+        action GoBack { back MainStack }
+        render Text Name
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      stack BrokenStack {
+        initial Missing
+        destination Home
+        destination Home
+        destination Detail
+      }
+      app BrokenApp { stack BrokenStack }
+      view Home { render Detail "Inline" }
+      view Detail Name is text {
+        action Broken {
+          present BrokenStack.Unknown
+          present BrokenStack.Detail .Name false
+        }
+        render Text Name
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(navigationValidationMessages.missingInitial('BrokenStack', 'Missing'))
+    Expect(messages).toContain(navigationValidationMessages.duplicateDestination('BrokenStack', 'Home'))
+    Expect(messages).toContain(navigationValidationMessages.unknownDestination('BrokenStack', 'Unknown'))
+    Expect(messages).toContain(
+      navigationValidationMessages.namedArgumentType('Detail', 'Name', 'Detail.Name', 'boolean'),
+    )
+  })
+
   Test('validates data schemas, queries, relationships, and strict writes', async () => {
     await testValidateCode(`
       project data Tasks memory {

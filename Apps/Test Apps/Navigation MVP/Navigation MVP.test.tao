@@ -1,0 +1,16 @@
+use NavigationMVPApp from ./
+
+test "Navigation MVP" {
+   check "presents a typed destination and returns through stack history" {
+      run NavigationMVPApp
+
+      expect text "Navigation MVP"
+      press id "open-detail"
+      expect missing text "Navigation MVP"
+      expect text "Detail"
+      expect text "Typed workspace"
+      press id "back"
+      expect text "Navigation MVP"
+      expect missing text "Detail"
+   }
+}

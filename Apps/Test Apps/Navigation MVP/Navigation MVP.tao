@@ -1,0 +1,30 @@
+use Col, FormButton, Text from @tao/ui
+
+app NavigationMVPApp {
+   stack NavigationMVP
+}
+
+project stack NavigationMVP {
+   initial Home
+   destination Home
+   destination Detail
+}
+
+project view Home {
+   action OpenDetail {
+      present NavigationMVP.Detail .Name "Typed workspace"
+   }
+   render Col [gap 10, pad 16] {
+      Text "Navigation MVP"
+      FormButton .Title "Open detail", .Press OpenDetail, .Id "open-detail", .Disabled false, .Submitting false
+}  }
+
+project view Detail Name is text {
+   action GoBack {
+      back NavigationMVP
+   }
+   render Col [gap 10, pad 16] {
+      Text "Detail"
+      Text Name
+      FormButton .Title "Back", .Press GoBack, .Id "back", .Disabled false, .Submitting false
+}  }

@@ -21,4 +21,14 @@ export default {
       </TR.AppShell>
     `
   },
+
+  /** AppStack compiles an app-owned navigation stack into the generated app root. */
+  AppStack(appStack: AST.AppStack): Compiled {
+    const stack = resolveRef(appStack.stack)
+    return gen`
+      return <TR.AppShell>
+        <TR.Navigation.Host stack={${gen.scopeName(stack)}} />
+      </TR.AppShell>
+    `
+  },
 } as const

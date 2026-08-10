@@ -1,10 +1,10 @@
 # Tao Testing
 
-Status: design draft with an executable v0 implementation. The current repo has package tests, an Expo runtime render harness, and Tao-native app behavior steps: `test`, `check`, `run <AppName>`, `expect [missing] text`, `press text|label|id`, `enter "value" into text|label|id`, `submit text|label|id`, deterministic `data Schema loading|ready|error`, test-plan IR, and `tao test [path]`. It does not have `render` test subjects, datasource row seeding, remote-provider test adapters, or the richer CLI options described below yet.
+Status: design draft with an executable v0 implementation. The current repo has package tests, an Expo runtime render harness, and Tao-native app behavior steps: `test`, `check`, `run <AppName>`, `expect [missing] text|label|id`, `press text|label|id`, `enter "value" into text|label|id`, `submit text|label|id`, deterministic `data Schema loading|ready|error`, test-plan IR, and `tao test [path]`. Checks exercise navigation through ordinary controls and rendered assertions, with stack and data state reset before each check. It does not have focused `render` test subjects, datasource row seeding, remote-provider test adapters, or the richer CLI options described below yet.
 
 This design starts with app and UI behavior tests. Tests can live in regular `.tao` files or sidecar `.test.tao` files. Package testing is deferred until Tao package semantics and app/UI testing are stable.
 
-Examples that launch an app through the currently implemented root `view` reflect the transitional runtime. The navigation foundation migrates intended app values to required `Name` and `Navigator` properties and makes `run` accept complete configured app values, as specified in `Tao Presentation and Navigation.md`.
+`run` accepts a declared app whose block selects either one root `view` or one root `stack`, as specified in `Tao Presentation and Navigation.md`.
 
 ## Goals
 
@@ -767,7 +767,7 @@ test "Navigation foundation" {
       expect missing text "Foundation detail marker"
       press text "Open deterministic detail"
       expect text "Foundation detail marker"
-      back
+      press id "back"
       expect text "Foundation home marker"
       expect missing text "Foundation detail marker"
    }
@@ -776,7 +776,7 @@ test "Navigation foundation" {
 
 Invalid-target diagnostics use focused validator fixtures for statically impossible paths and a runtime harness that first unmounts an otherwise valid configured target before invoking it. The runtime check expects `navigation.target.not-found` and verifies that visible content is unchanged; it does not depend on a nonexistent control in the full Writer sketch.
 
-`expect diagnostic code ...` is planned syntax for structured development diagnostics. Tests should prefer stable diagnostic codes plus optional fields over matching prose. Navigation behavior follows `Tao Presentation and Navigation.md`: Tao statements reduce one semantic tree synchronously, while native back, selection, dismissal, and close events dispatch into that same reducer.
+`expect diagnostic code ...` remains planned syntax for structured development diagnostics. Static invalid destinations and arguments use focused validator fixtures. Navigation behavior follows `Tao Presentation and Navigation.md`: `present` and `back` synchronously update one runtime-owned stack, and native hardware back dispatches the same pop operation.
 
 ## Package Testing
 

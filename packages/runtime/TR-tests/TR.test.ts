@@ -489,6 +489,34 @@ Describe('TR.Data', () => {
   })
 })
 
+Describe('TR.Navigation', () => {
+  Test('owns deterministic stack history with root-safe back and test reset', () => {
+    const stack = TR.Navigation.Stack({
+      name: 'RuntimeNavigationTest',
+      initial: 'Home',
+      destinations: {
+        Home: { render: () => null },
+        Detail: { render: () => null },
+      },
+    })
+
+    Expect(stack.currentDestination).toBe('Home')
+    Expect(stack.depth).toBe(1)
+    Expect(stack.back()).toBe(false)
+
+    TR.Navigation.Present(stack, 'Detail', { Name: TR.Value('Workspace') })
+    Expect(stack.currentDestination).toBe('Detail')
+    Expect(stack.depth).toBe(2)
+    Expect(stack.back()).toBe(true)
+    Expect(stack.currentDestination).toBe('Home')
+
+    TR.Navigation.Present(stack, 'Detail', {})
+    TR.Navigation.beginTest()
+    Expect(stack.currentDestination).toBe('Home')
+    Expect(stack.depth).toBe(1)
+  })
+})
+
 Describe('TR.Dev', () => {
   Test('exposes only public hook-free diagnostic controls', () => {
     Expect(typeof TR.Dev.getMode).toBe('function')

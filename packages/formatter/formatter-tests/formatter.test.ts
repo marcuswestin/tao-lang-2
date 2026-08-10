@@ -370,6 +370,37 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('formats stack declarations and navigation actions', async () => {
+    await testFormatCode(
+      `project stack Main{initial Home destination Home destination Detail}\napp Demo{stack Main}\nview Home{action Open{present Main . Detail .Name "Item"}render Text "Home"}\nview Detail Name is text{action Close{back Main}render Text Name}`,
+      `
+        project stack Main {
+           initial Home
+           destination Home
+           destination Detail
+        }
+
+        app Demo {
+           stack Main
+        }
+
+        view Home {
+           action Open {
+              present Main.Detail .Name "Item"
+           }
+           render Text "Home"
+        }
+
+        view Detail Name is text {
+           action Close {
+              back Main
+           }
+           render Text Name
+        }
+      `,
+    )
+  })
+
   Test('formats state declarations and action bodies', async () => {
     await testFormatCode(
       `view MainView{state Count=0 action AddStep Step is number{set Count+=Step} action AddFive{do AddStep 5} render Stack{Button "Reset",action{set Count=0} Button "Inline",->{set Count+=1}}}`,

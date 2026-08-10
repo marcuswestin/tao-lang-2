@@ -513,6 +513,39 @@ Describe('minimal Tao parser', () => {
     Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isDataStatusStep)).toHaveLength(3)
   })
 
+  Test('parses app-owned stacks with typed presentation and back actions', async () => {
+    const parseResult = await testParseCode(`
+      stack MainStack {
+        initial Home
+        destination Home
+        destination Detail
+      }
+      app NavigationApp { stack MainStack }
+      view Home {
+        action Open { present MainStack.Detail .Name "Workspace" }
+        render Detail "Inline"
+      }
+      view Detail Name is text {
+        action GoBack { back MainStack }
+        render inject \`\`\`ts return null \`\`\`
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const stack = parseResult.entry.ast.statements.find(AST.isStackDeclaration)
+    Expect.Is(stack, AST.isStackDeclaration)
+    Expect(stack.block.initial.destinationName).toBe('Home')
+    Expect(stack.block.destinations.map(destination => destination.view.ref?.name)).toEqual(['Home', 'Detail'])
+    const appStack = AST.streamAllContents(parseResult.entry.ast).find(AST.isAppStack)
+    Expect.Is(appStack, AST.isAppStack)
+    Expect(appStack.stack.ref).toBe(stack)
+    const presentation = AST.streamAllContents(parseResult.entry.ast).find(AST.isPresentStatement)
+    Expect.Is(presentation, AST.isPresentStatement)
+    Expect(presentation.destinationName).toBe('Detail')
+    Expect(AST.argumentsOf(presentation)[0]?.parameterName).toBe('Name')
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isBackStatement)).toHaveLength(1)
+  })
+
   Test('parses the Kitchen Sink v0 Tao test sidecar', async () => {
     const parseResult = await Workspace.parse(kitchenSinkTestPath)
 

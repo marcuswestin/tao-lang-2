@@ -4,6 +4,7 @@ import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
 import { DataControls, type TaoDataSchema } from './TR-data'
 import { LayoutControls } from './TR-layout'
+import { NavigationControls, type TaoNavigationStack } from './TR-navigation'
 import * as TRTaoProps from './TR-TaoProps'
 import * as TRViews from './TR-views'
 
@@ -208,6 +209,9 @@ class TR {
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
 
+  /** Navigation exposes deterministic stack history, presentation, and back behavior. */
+  static readonly Navigation = NavigationControls
+
   /** Views exposes runtime-backed Tao stdlib primitives. */
   static readonly Views = TRViews.Views
 }
@@ -322,6 +326,8 @@ namespace TR {
   export type DevModeOptions = TaoDevModeOptions
   /** DataSchema declares one runtime-backed Tao data schema. */
   export type DataSchema = TaoDataSchema
+  /** NavigationStack declares one runtime-backed Tao application stack. */
+  export type NavigationStack = TaoNavigationStack
 }
 
 export default TR

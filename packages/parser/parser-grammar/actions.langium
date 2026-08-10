@@ -3,6 +3,7 @@ grammar TaoActions
 import "./expressions"
 import "./views"
 import "./data"
+import "./navigation"
 import "./terminals"
 
 entry ActionsGrammarEntrypoint:
@@ -21,7 +22,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | DoStatement | CreateStatement | UpdateStatement | DeleteStatement;
+    SetStatement | DoStatement | CreateStatement | UpdateStatement | DeleteStatement | PresentStatement | BackStatement;
 
 SetStatement:
     'set' target=[StateDeclaration:ID] operator=SetOperator value=Expression;

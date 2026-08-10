@@ -20,7 +20,7 @@ The MVP must add one integrated path for:
 1. [x] **Expressions and control.** Add boolean/absence literals, precedence-aware unary/binary expressions, interpolation, expression-bodied pure functions, `if` rendering, and `for` rendering. Cover parser, scope/type validation, formatter, compiler, runtime semantics, diagnostics, and a focused executable Test App.
 2. [x] **Interaction and forms.** Add event bindings for press/change/submit, runtime-backed text input, field labels and identifiers, validation patterns, and Tao test steps for entering and submitting text.
 3. [x] **Data.** Add Tao schemas and entity handles, provider-neutral query/mutation IR, a durable local provider, filtering/order, relationships, reactive consistency, and deterministic loading/error controls.
-4. **Navigation.** Add an app-owned stack, destination declarations with typed arguments, present/back actions, deterministic runtime state, and test steps that exercise navigation.
+4. [x] **Navigation.** Add an app-owned stack, destination declarations with typed arguments, present/back actions, deterministic runtime state, and test steps that exercise navigation.
 5. **Still.** Advance `Apps/MVP/Current/Still.tao` into the forcing app; cover workspace/task CRUD, completion, forms, filtering/order, loading/empty/error/populated states, and list/detail navigation in Tao behavior tests.
 6. **Agreement and hardening.** Align active specifications, roadmap status, Test Apps, MVP README, formatter/diagnostics, and tool commands; remove stale executable claims; run final verification and audit branch cleanliness.
 
@@ -41,6 +41,8 @@ The MVP must add one integrated path for:
 - **2026-08-10 — Keep writes strict and action-owned.** `create Schema.Entity { … }` requires every field, while `update Row { … }` and `delete Row` accept only query-produced row handles. Relationship values use stable row IDs, and deleting an owner cascades its directly related rows in the local MVP.
 - **2026-08-10 — Persist locally without a service.** `local` uses browser local storage or Expo FileSystem document storage; `memory` shares the provider contract. The direct `expo-file-system` runtime dependency formalizes the native persistence module already shipped transitively with Expo.
 - **2026-08-10 — Isolate and control data in Tao tests.** Every check gets a fresh memory store even for a `local` schema. `data Schema loading|ready|error "…"` synchronously drives provider states without touching durable developer data.
+- **2026-08-10 — Let destinations inherit view signatures.** `destination WorkspaceDetail` references the view directly, so its parameter list is the navigation contract instead of being duplicated in a route declaration. `present Stack.WorkspaceDetail .WorkspaceId Id` reuses ordinary argument binding and diagnostics.
+- **2026-08-10 — Keep navigation to one app-owned stack.** A stack has one argument-free initial destination, pushes one occurrence per `present`, and safely no-ops when `back` reaches the root. Native hardware back dispatches the same reducer operation; tests reset history before each check.
 
 The data slice adds `expo-file-system` as a direct runtime dependency so the local provider can persist in Expo; it was already present transitively in the Expo toolchain. Any later dependency must be justified here before it is committed.
 
