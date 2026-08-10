@@ -2,7 +2,7 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, and the first bracketed spec entries for `content`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
+Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
 
 ## Layout Introduction
 
@@ -195,11 +195,13 @@ To describe how to arrange content inside a container, use:
 To describe how a UI element resizes when necessary, use:
 
 - `fill` to expand on the parent container's main axis and fill the cross axis
+- `claim N` to claim weighted parent main-axis space with `flexGrow: N`
 - `hug` to avoid expanding on the parent container's main axis
 - `compress` to shrink beyond its content size when under pressure
 - `rigid` to resist shrinking
 - `width <positive number>` and `height <positive number>` to set physical dimensions directly
 - `width fill` and `height fill` to fill one physical axis; Tao lowers this at runtime using the actual parent container direction
+- Within one layout clause, bare `fill` cannot appear with `width` or `height`; use physical-axis sizing when per-axis control is needed.
 
 To specify how to align a single item in a container, use:
 
@@ -473,7 +475,6 @@ The main unresolved ownership questions:
 - When does outside spacing belong to the parent, and when does it belong to the child?
 - When can a reusable declaration expose layout of its private internals?
 - When do slots and caller content merge layout with the callee?
-- Should `frame` and `layout` be allowed to paint pixels directly?
 
 Those are language-design questions, not things this document should settle by accident.
 

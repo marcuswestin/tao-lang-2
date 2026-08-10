@@ -32,6 +32,7 @@ view MainView {
       Text LocalText
       Text Greeting
       Text "Hello World" [width fill]
+      Text "Claimed space" [claim 2]
       CountText LaunchCount
       Text FixedSinkName
       Text SinkProfileValue.SinkName

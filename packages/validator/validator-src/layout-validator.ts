@@ -1,6 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import { type LayoutConflictItem, LayoutConflictValidator } from './layout-conflict-validator'
 import type { ValidationContext } from './validation'
 
 /** layoutValidationMessages declares layout clause diagnostics. */
@@ -42,11 +43,14 @@ type LayoutConflictKey =
   | 'content'
   | 'gap'
   | 'height'
+  | 'height-axis-sizing'
   | 'main-size-pressure'
   | 'margin'
   | 'pad'
+  | 'rigid-weighted-claim'
   | 'self-alignment'
   | 'width'
+  | 'width-axis-sizing'
 
 /** LayoutValidator validates render-site layout clauses. */
 export const LayoutValidator = {
@@ -67,27 +71,10 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
 }
 
 function validateLayoutClause(layoutClause: AST.LayoutClause, ctx: ValidationContext): void {
-  const seen = new Map<LayoutConflictKey, AST.LayoutEntry>()
   for (const entry of layoutClause.entries) {
     validateLayoutEntry(entry, ctx)
-    const keys = layoutEntryConflictKeys(entry)
-    const conflictKey = keys.find(key => seen.has(key))
-    if (conflictKey) {
-      const existing = seen.get(conflictKey)!
-      const existingHead = layoutEntryHeadText(existing)
-      const head = layoutEntryHeadText(entry)
-      ctx.error(
-        existingHead === head
-          ? layoutValidationMessages.duplicateEntry(head)
-          : layoutValidationMessages.conflictingEntries(existingHead, head),
-        entry,
-      )
-      continue
-    }
-    for (const key of keys) {
-      seen.set(key, entry)
-    }
   }
+  LayoutConflictValidator.validate(layoutClause.entries.flatMap(layoutEntryConflictItem), ctx, layoutValidationMessages)
 }
 
 function validateLayoutEntry(
@@ -107,6 +94,7 @@ function validateLayoutEntry(
   }
 
   Switch(headValue, {
+    claim: () => validateSingleNumber(entry, ctx),
     content: () => validateContent(entry, ctx),
     gap: () => validateSingleNumber(entry, ctx),
     margin: () => validateSpacing(entry, ctx, 'margin'),
@@ -165,7 +153,7 @@ function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: '
     return
   }
 
-  const seenSides = new Set<PhysicalPadSide>()
+  const sideConflictItems: LayoutConflictItem<PhysicalPadSide>[] = []
   for (let index = 0; index < terms.length; index += 2) {
     const sideTerm = terms[index]
     const value = terms[index + 1]
@@ -176,13 +164,10 @@ function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: '
     }
     validatePositiveNumber(entry, value, ctx)
     for (const physicalSide of padPhysicalSides(side)) {
-      if (seenSides.has(physicalSide)) {
-        ctx.error(layoutValidationMessages.duplicateEntry(`${head} ${physicalSide}`), entry)
-        return
-      }
-      seenSides.add(physicalSide)
+      sideConflictItems.push({ keys: [physicalSide], label: `${head} ${physicalSide}`, node: entry })
     }
   }
+  LayoutConflictValidator.validate(sideConflictItems, ctx, layoutValidationMessages)
 }
 
 function validateDimension(entry: AST.LayoutEntry, ctx: ValidationContext): void {
@@ -243,19 +228,11 @@ function validateContentTermConflicts(
   terms: readonly ContentTerm[],
   ctx: ValidationContext,
 ): void {
-  const seen = new Map<ContentTermConflictKey, ContentTerm>()
-  for (const term of terms) {
-    const key = contentTermConflictKey(term)
-    const existing = seen.get(key)
-    if (existing) {
-      const message = existing === term
-        ? layoutValidationMessages.duplicateEntry(`content ${term}`)
-        : layoutValidationMessages.conflictingEntries(`content ${existing}`, `content ${term}`)
-      ctx.error(message, entry)
-      return
-    }
-    seen.set(key, term)
-  }
+  LayoutConflictValidator.validate(
+    terms.map(term => ({ keys: [contentTermConflictKey(term)], label: `content ${term}`, node: entry })),
+    ctx,
+    layoutValidationMessages,
+  )
 }
 
 function contentTermConflictKey(term: ContentTerm): ContentTermConflictKey {
@@ -273,31 +250,35 @@ function contentTermConflictKey(term: ContentTerm): ContentTermConflictKey {
   })
 }
 
-function layoutEntryConflictKeys(entry: AST.LayoutEntry): readonly LayoutConflictKey[] {
+function layoutEntryConflictItem(entry: AST.LayoutEntry): readonly LayoutConflictItem<LayoutConflictKey>[] {
   const head = layoutEntryHead(entry)
   const headValue = head ? layoutHeadValue(head) : undefined
   if (!headValue) {
     return []
   }
-  return Switch(headValue, {
-    'content': () => ['content'],
-    'gap': () => ['gap'],
-    'pad': () => ['pad'],
-    'margin': () => ['margin'],
-    'width': () => ['width'],
-    'height': () => ['height'],
-    'hug': () => ['main-size-pressure'],
-    'fill': () => ['main-size-pressure', 'self-alignment'],
-    'compress': () => ['compression-pressure'],
-    'rigid': () => ['compression-pressure'],
-    'aligned': () => ['self-alignment'],
-    'centered': () => ['self-alignment'],
-  })
+  return [{ keys: layoutConflictKeysByHead[headValue], label: layoutEntryHeadText(entry), node: entry }]
 }
+
+const layoutConflictKeysByHead = {
+  aligned: ['self-alignment'],
+  centered: ['self-alignment'],
+  claim: ['main-size-pressure', 'rigid-weighted-claim'],
+  compress: ['compression-pressure'],
+  content: ['content'],
+  fill: ['main-size-pressure', 'self-alignment', 'width-axis-sizing', 'height-axis-sizing'],
+  gap: ['gap'],
+  height: ['height', 'height-axis-sizing'],
+  hug: ['main-size-pressure'],
+  margin: ['margin'],
+  pad: ['pad'],
+  rigid: ['compression-pressure', 'rigid-weighted-claim'],
+  width: ['width', 'width-axis-sizing'],
+} as const satisfies Record<LayoutHead, readonly LayoutConflictKey[]>
 
 const layoutHeads = [
   'aligned',
   'centered',
+  'claim',
   'compress',
   'content',
   'fill',

@@ -16,7 +16,7 @@ Review implemented work before merge preparation.
 - Ask reviewers to focus on bugs, regressions, missed requirements, missing tests, unused exported code/APIs, stale docs, and unclear generated/runtime behavior.
 - Verify generated Tao TS stayed minimal and uses default `TR` from `@runtime/TR` for reusable runtime functionality where practical.
 - For Kitchen Sink changes, verify only implemented, executable slices were added to `Apps/Kitchen Sink/Kitchen Sink.tao` with validation.
-- For test-app changes, verify each touched app has `Apps/Test Apps/<App Name>/Purpose.md` and that new Tao code fits that purpose or the purpose file was updated.
+- For test-app changes, verify each touched app has an entry in `Apps/Test Apps/README.md` and that new Tao code fits that purpose or the README entry was updated.
 - Treat reviewer output as evidence, not truth. Verify findings before editing.
 - Fix only confirmed issues. Preserve unrelated work and ask before expanding scope.
 - Record valid deferred work in the task doc and `Roadmap.md`.

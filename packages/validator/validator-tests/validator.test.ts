@@ -1214,7 +1214,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, content top stretch, gap 12, pad 16, margin horizontal 4, width fill] {
+        render Col [claim 2, content top stretch, gap 12, pad 16, margin horizontal 4, width fill] {
           Text "Label" [width fill, height fill]
         }
       }
@@ -1309,6 +1309,17 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         render Col [gap fill]
+      }
+    `)
+    const malformedClaim = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [claim fill]
       }
     `)
     const unknownHead = await testValidateCodeWithErrors(`
@@ -1468,8 +1479,20 @@ Describe('Tao validator structural diagnostics', () => {
         render Col [height 0]
       }
     `)
+    const zeroClaim = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [claim 0]
+      }
+    `)
 
     Expect(validationErrorMessages(malformedGap)).toContain(layoutValidationMessages.malformedEntry('gap fill'))
+    Expect(validationErrorMessages(malformedClaim)).toContain(layoutValidationMessages.malformedEntry('claim fill'))
     Expect(validationErrorMessages(unknownHead)).toContain(layoutValidationMessages.unsupportedEntry('unknown 1'))
     Expect(validationErrorMessages(unknownContentTerm)).toContain(
       layoutValidationMessages.unsupportedTerm('content diagonal', 'diagonal'),
@@ -1495,6 +1518,7 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(zeroMargin)).toContain(layoutValidationMessages.positiveNumber('margin left 0'))
     Expect(validationErrorMessages(zeroWidth)).toContain(layoutValidationMessages.positiveNumber('width 0'))
     Expect(validationErrorMessages(zeroHeight)).toContain(layoutValidationMessages.positiveNumber('height 0'))
+    Expect(validationErrorMessages(zeroClaim)).toContain(layoutValidationMessages.positiveNumber('claim 0'))
   })
 
   Test('rejects duplicate and conflicting layout entries', async () => {
@@ -1507,6 +1531,17 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         render Col [gap 8, gap 12]
+      }
+    `)
+    const duplicateClaim = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [claim 1, claim 2]
       }
     `)
     const compressRigid = await testValidateCodeWithErrors(`
@@ -1529,6 +1564,75 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         render Col [fill, centered]
+      }
+    `)
+    const fillClaim = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [fill, claim 2]
+      }
+    `)
+    const fillWidth = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [fill, width fill]
+      }
+    `)
+    const fillHeight = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [fill, height fill]
+      }
+    `)
+    const claimRigid = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [claim 2, rigid]
+      }
+    `)
+    await testValidateCode(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [claim 2, compress]
+      }
+    `)
+    await testValidateCode(`
+      app MyApp { view MainView }
+      layout Col {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        render Col [fill, rigid]
+      }
+      view OtherView {
+        render Col [width fill, height fill]
       }
     `)
     const padSide = await testValidateCodeWithErrors(`
@@ -1587,11 +1691,24 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     Expect(validationErrorMessages(duplicateGap)).toContain(layoutValidationMessages.duplicateEntry('gap'))
+    Expect(validationErrorMessages(duplicateClaim)).toContain(layoutValidationMessages.duplicateEntry('claim'))
     Expect(validationErrorMessages(compressRigid)).toContain(
       layoutValidationMessages.conflictingEntries('compress', 'rigid'),
     )
     Expect(validationErrorMessages(fillAlignment)).toContain(
       layoutValidationMessages.conflictingEntries('fill', 'centered'),
+    )
+    Expect(validationErrorMessages(fillClaim)).toContain(
+      layoutValidationMessages.conflictingEntries('fill', 'claim'),
+    )
+    Expect(validationErrorMessages(fillWidth)).toContain(
+      layoutValidationMessages.conflictingEntries('fill', 'width'),
+    )
+    Expect(validationErrorMessages(fillHeight)).toContain(
+      layoutValidationMessages.conflictingEntries('fill', 'height'),
+    )
+    Expect(validationErrorMessages(claimRigid)).toContain(
+      layoutValidationMessages.conflictingEntries('claim', 'rigid'),
     )
     Expect(validationErrorMessages(padSide)).toContain(layoutValidationMessages.duplicateEntry('pad left'))
     Expect(validationErrorMessages(marginSide)).toContain(layoutValidationMessages.duplicateEntry('margin top'))

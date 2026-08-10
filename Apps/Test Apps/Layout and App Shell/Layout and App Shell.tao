@@ -27,7 +27,7 @@ view MainView {
       Col [content top stretch, gap 8, pad top 8 bottom 12 left 10 right 10, width fill, compress] {
          Text "Compressible body row below."
          Row [content left center, gap 8, width fill, compress] {
-            Text "Flexible text" [width fill, compress]
+            Text "Flexible text" [claim 2, compress]
             Button "Rigid", Noop [rigid]
       }  }
       WrappingRow [content top left, gap 8, pad 8, width fill, hug, compress] {

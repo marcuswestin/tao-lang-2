@@ -16,10 +16,10 @@ Convert settled research into implementation slices.
 - Include goals, non-goals, assumptions, numbered implementation steps, validation, and deferrals.
 - Make each numbered step a meaningful implementation slice, not a tiny checklist item and not the whole project.
 - For each step, include concrete work, likely commit units, validation, and exit criteria.
-- Express intended syntax and functionality changes in the plan and related test app purpose docs when useful.
+- Express intended syntax and functionality changes in the plan and related `Apps/Test Apps/README.md` entries when useful.
 - Plan when each implemented slice should be added to `Apps/Kitchen Sink/Kitchen Sink.tao` for executable testing.
 - When a plan changes generated Tao TS, include how generated code stays minimal and uses default `TR` from `@runtime/TR` instead of emitted reusable helpers.
-- Plan updates to each touched `Apps/Test Apps/<App Name>/Purpose.md`, including what functionality belongs in that app and what behavior-test metadata may be needed later.
+- Plan updates to each touched app's entry in `Apps/Test Apps/README.md`, including what functionality belongs in that app and what behavior-test metadata may be needed later.
 - Do not implement the plan in this step.
 
 ## Output

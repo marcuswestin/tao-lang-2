@@ -92,9 +92,9 @@ Describe('Tao compiler', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, content top stretch, gap 12, pad 16, width fill] {
+        render Col [fill, content top stretch, gap 12, pad 16] {
           Row [content spread-inset center, gap 8] {
-            Text "Layout" [width fill]
+            Text "Layout" [claim 2]
           }
           Screen [content center]
         }
