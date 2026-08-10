@@ -1,28 +1,196 @@
-use Button, Col, Number, Text from @tao/ui
+use Button, Col, Row, Text, TextInput from @tao/ui
 
 project {
-   name "Still MVP Current"
+   name "Still MVP"
    remote none
    license MIT
 }
 
-app StillCurrent {
-   view Home
+app Still {
+   view WorkspacesScreen
+   datasource StillData through Local
 }
 
-type WorkspaceName is text
-
-let InboxName = WorkspaceName "Inbox"
-
-view Home {
-   state CaptureCount = 0
-   action Capture {
-      set CaptureCount += 1
+data StillData {
+   Workspaces/Workspace {
+      Name text indexed
+      CreatedAt time default now()
    }
-   render Col() [fill, gap 8, pad 12] {
-      Text("Still")
-      Text(InboxName)
-      Text("Capture what matters.")
-      Number(CaptureCount)
-      Button("Capture", Capture)
+
+   Tasks/Task {
+      Title text indexed
+      Notes text
+      Done boolean default false
+      CreatedAt time default now()
+      Workspace
 }  }
+
+action Ignore { }
+
+// The row's parameter is named `Current` because inside a query clause a bare `Workspace` names
+// the queried entity's field, not the surrounding value.
+view WorkspaceRow Current is StillData.Workspace {
+   query WorkspaceTasks = StillData.Tasks where Workspace == Current.Id
+   render Row() [content spread center, gap 8, width fill] {
+      Text("{Current.Name}")
+      Text("{WorkspaceTasks.Count} tasks")
+      Button("Open {Current.Name}", Ignore)
+         on press -> {
+            present TasksScreen(Current)
+}  }  }
+
+view WorkspacesScreen {
+   state DraftName = ""
+   query Workspaces = StillData.Workspaces order CreatedAt asc
+   let NameMissing = DraftName.Empty
+   action AddWorkspace {
+      when
+         NameMissing -> { }
+         otherwise -> {
+            create StillData.Workspace { Name: DraftName }
+            set DraftName = ""
+   }  }
+   render Col() [fill, content top stretch, gap 12, pad 16] {
+      Text("Still")
+      Text("Workspaces")
+      when
+         Workspaces.Loading -> {
+            Text("Loading workspaces")
+         }
+         Workspaces.Failed -> {
+            Text("Workspaces are unavailable right now")
+         }
+         Workspaces.Empty -> {
+            Text("No workspaces yet. Add one to get started.")
+         }
+         otherwise -> {
+            for Workspace in Workspaces {
+               WorkspaceRow(Workspace)
+         }  }
+      TextInput(DraftName, Label: "Workspace name", Placeholder: "Name a workspace")
+         on change -> Value is text {
+            set DraftName = Value
+         }
+         on submit -> {
+            do AddWorkspace()
+         }
+      when
+         NameMissing -> {
+            Text("Enter a workspace name")
+         }
+         otherwise -> {
+            Text("Ready to add")
+         }
+      Button("Add workspace", AddWorkspace, Disabled: NameMissing)
+}  }
+
+view TaskRow Task is StillData.Task {
+   render Row() [content spread center, gap 8, width fill] {
+      Text("{Task.Title}")
+      when
+         Task.Done -> {
+            Text("done")
+         }
+         otherwise -> {
+            Text("open")
+         }
+      Button("Toggle {Task.Title}", Ignore)
+         on press -> {
+            update Task { Done: not Task.Done }
+         }
+      Button("Open {Task.Title}", Ignore)
+         on press -> {
+            present TaskScreen(Task)
+}  }  }
+
+view TasksScreen Current is StillData.Workspace {
+   state DraftTitle = ""
+   state ShowDone = true
+   query AllTasks = StillData.Tasks where Workspace == Current.Id order CreatedAt asc
+   query OpenTasks = StillData.Tasks where Done == false order CreatedAt asc
+   let TitleMissing = DraftTitle.Empty
+   action AddTask {
+      when
+         TitleMissing -> { }
+         otherwise -> {
+            create StillData.Task { Title: DraftTitle, Notes: "", Workspace: Current }
+            set DraftTitle = ""
+   }  }
+   action ToggleFilter {
+      toggle ShowDone
+   }
+   render Col() [fill, content top stretch, gap 12, pad 16] {
+      Text("{Current.Name}")
+      Text("{AllTasks.Count} tasks total")
+      when
+         AllTasks.Loading -> {
+            Text("Loading tasks")
+         }
+         AllTasks.Failed -> {
+            Text("Tasks are unavailable right now")
+         }
+         AllTasks.Empty -> {
+            Text("No tasks yet. Capture one below.")
+         }
+         ShowDone -> {
+            for Task in AllTasks {
+               TaskRow(Task)
+         }  }
+         otherwise -> {
+            for Task in OpenTasks {
+               TaskRow(Task)
+         }  }
+      Button("Toggle finished tasks", ToggleFilter)
+      when
+         ShowDone -> {
+            Text("Showing every task")
+         }
+         otherwise -> {
+            Text("Showing open tasks only")
+         }
+      TextInput(DraftTitle, Label: "Task title", Placeholder: "Capture what matters")
+         on change -> Value is text {
+            set DraftTitle = Value
+         }
+         on submit -> {
+            do AddTask()
+         }
+      when
+         TitleMissing -> {
+            Text("Enter a task title")
+         }
+         otherwise -> {
+            Text("Ready to capture")
+         }
+      Button("Add task", AddTask, Disabled: TitleMissing)
+}  }
+
+view TaskScreen Task is StillData.Task {
+   state DraftNotes = ""
+   render Col() [fill, content top stretch, gap 12, pad 16] {
+      Text("Task: {Task.Title}")
+      Text("Notes: {Task.Notes}")
+      when
+         Task.Done -> {
+            Text("Marked done")
+         }
+         otherwise -> {
+            Text("Still open")
+         }
+      TextInput(DraftNotes, Label: "Task notes", Placeholder: "Add a note")
+         on change -> Value is text {
+            set DraftNotes = Value
+         }
+      Button("Save notes", Ignore)
+         on press -> {
+            update Task { Notes: DraftNotes }
+         }
+      Button("Toggle done", Ignore)
+         on press -> {
+            update Task { Done: not Task.Done }
+         }
+      Button("Delete task", Ignore)
+         on press -> {
+            delete Task
+            dismiss
+}  }  }

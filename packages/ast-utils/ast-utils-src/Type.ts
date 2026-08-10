@@ -563,11 +563,11 @@ class TypeResolutionContext {
   }
 }
 
-// A field with no declared type names an entity in the same schema and stores its identifier.
+// A field with no declared type names an entity in the same schema and reads as that entity's
+// identifier, which is exactly what it stores. Traversing to the referenced row is deferred.
 function fieldType(field: AST.FieldDeclaration): TaoType {
   if (!field.type) {
-    const entity = referencedEntity(field)
-    return entity ? { kind: 'entity', entity } : unresolvedType()
+    return referencedEntity(field) ? withNominal(primitiveType('text'), field) : unresolvedType()
   }
   return withNominal(fieldBaseType(field.type), field)
 }

@@ -1,13 +1,133 @@
-use StillCurrent from ./
+use Still from ./
 
-test "Still current MVP" {
-   check "captures an item" {
-      run StillCurrent
+test "Still" {
+   check "opens on an empty workspace list" {
+      run Still
 
       expect text "Still"
-      expect text "Inbox"
-      expect text "0"
-      press text "Capture"
-      expect text "1"
+      expect text "No workspaces yet. Add one to get started."
+      expect text "Enter a workspace name"
+   }
+
+   check "shows the loading surface while data loads" {
+      run Still with { data loading }
+
+      expect text "Loading workspaces"
+      expect missing text "No workspaces yet. Add one to get started."
+   }
+
+   check "shows a recoverable error when data cannot load" {
+      run Still with { data failing }
+
+      expect text "Workspaces are unavailable right now"
+      expect missing text "Loading workspaces"
+   }
+
+   check "creates a workspace through the validated form" {
+      run Still
+      press text "Add workspace"
+      expect text "No workspaces yet. Add one to get started."
+      press label "Workspace name"
+      write "Personal"
+      expect text "Ready to add"
+      press text "Add workspace"
+      expect text "Personal"
+      expect text "0 tasks"
+      expect missing text "No workspaces yet. Add one to get started."
+      expect input label "Workspace name" value ""
+   }
+
+   check "captures tasks inside a workspace" {
+      run Still
+      press label "Workspace name"
+      write "Personal"
+      press text "Add workspace"
+      press text "Open Personal"
+      expect text "Personal"
+      expect text "No tasks yet. Capture one below."
+      press label "Task title"
+      write "Write the plan"
+      submit
+      expect text "Write the plan"
+      expect text "1 tasks total"
+      expect text "open"
+   }
+
+   check "completes a task and filters finished work out" {
+      run Still
+      press label "Workspace name"
+      write "Personal"
+      press text "Add workspace"
+      press text "Open Personal"
+      press label "Task title"
+      write "Write the plan"
+      submit
+      press text "Toggle Write the plan"
+      expect text "done"
+      press text "Toggle finished tasks"
+      expect text "Showing open tasks only"
+      expect missing text "Write the plan"
+      press text "Toggle finished tasks"
+      expect text "Showing every task"
+      expect text "Write the plan"
+   }
+
+   check "edits a task on its own screen and returns" {
+      run Still
+      press label "Workspace name"
+      write "Personal"
+      press text "Add workspace"
+      press text "Open Personal"
+      press label "Task title"
+      write "Write the plan"
+      submit
+      press text "Open Write the plan"
+      expect text "Task: Write the plan"
+      expect text "Still open"
+      press label "Task notes"
+      write "Draft the outline first"
+      press text "Save notes"
+      expect text "Notes: Draft the outline first"
+      press text "Toggle done"
+      expect text "Marked done"
+      back
+      expect text "1 tasks total"
+      expect text "done"
+   }
+
+   check "deletes a task and returns to the workspace" {
+      run Still
+      press label "Workspace name"
+      write "Personal"
+      press text "Add workspace"
+      press text "Open Personal"
+      press label "Task title"
+      write "Write the plan"
+      submit
+      press text "Open Write the plan"
+      press text "Delete task"
+      expect text "No tasks yet. Capture one below."
+      expect missing text "Task: Write the plan"
+   }
+
+   check "keeps workspaces separate and returns to the workspace list" {
+      run Still
+      press label "Workspace name"
+      write "Personal"
+      press text "Add workspace"
+      press label "Workspace name"
+      write "Work"
+      press text "Add workspace"
+      press text "Open Work"
+      press label "Task title"
+      write "Ship the slice"
+      submit
+      expect text "1 tasks total"
+      back
+      expect text "Personal"
+      expect text "Work"
+      expect text "1 tasks"
+      press text "Open Personal"
+      expect text "No tasks yet. Capture one below."
    }
 }

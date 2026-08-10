@@ -41,8 +41,8 @@ Each slice is a full vertical (grammar → scoping → validator/Typir → forma
 - [x] Slice 5 — `data` declarations, entity types, `TR.Data` store, queries, mutations, Memory provider — Data MVP test app
 - [x] Slice 6 — durable Local provider, loading/failure surfaces, `run … with { data … }`
 - [x] Slice 7 — navigation: `present`/`dismiss`, screen stack, back affordance — Navigation test app
-- [ ] Slice 8 — functions and visual styling entries
-- [ ] Slice 9 — Still assembly: full app + journey behavior tests
+- [ ] Slice 8 — functions and visual styling entries (deferred; see DEF-FMVP-017)
+- [x] Slice 9 — Still assembly: full app + journey behavior tests
 - [ ] Slice 10 — coherence: `Spec/Tao Data.md`, spec status updates, Roadmap/README agreement, final `./agent verify`
 
 ## Success criteria

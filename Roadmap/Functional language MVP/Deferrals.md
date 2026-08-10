@@ -17,4 +17,6 @@ Consciously omitted scope. Each entry is a deliberate deferral, not an implicit 
 - DEF-FMVP-013 — Function block bodies, `return`, recursion story, function values as arguments.
 - DEF-FMVP-014 — Test datasource seeding steps and richer selectors (`id`, role/state, `scroll until`, count assertions); journeys create data through the UI, provider states come from `run … with { data … }`. (LANG-027.)
 - DEF-FMVP-016 — Renaming the `AliasDeclaration` AST node and its per-layer files to `Let*`, and a `tao fix` source action rewriting `alias` to `let`. The keyword migration itself is done; only the internal naming and the automatic rewrite remain.
+- DEF-FMVP-017 — Expression-bodied `function` declarations with call expressions, and the visual styling entries (`bg`, `fg`, `size`, `weight`, `line`, `radius`, `border`, hex colors). The forcing app needs neither: derived values are expressed with `let`, and the existing layout system already gives deterministic, legible defaults. Styling remains owned by the design-system project (DEF-FMVP-009).
+- DEF-FMVP-018 — Relationship traversal (`Task.Workspace.Name`). A reference field reads as the target's identifier; screens receive the related entity as a parameter instead.
 - DEF-FMVP-015 — Persisted navigation/state restoration across process restarts (data persists via the Local provider; presentation state does not).

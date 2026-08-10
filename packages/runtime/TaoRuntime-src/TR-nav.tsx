@@ -1,4 +1,5 @@
 import React from 'react'
+import { revision as dataRevision, subscribeAll as subscribeAllData } from './TR-data'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { Views } from './TR-views'
 
@@ -59,6 +60,11 @@ function useStack(): readonly TaoScreen[] {
   return React.useSyncExternalStore(subscribe, () => stack, () => stack)
 }
 
+// A screen presented with an entity re-renders when that entity changes, without running a query.
+function useDataRevision(): number {
+  return React.useSyncExternalStore(subscribeAllData, dataRevision, dataRevision)
+}
+
 /**
  * Host renders the app's root view with any presented screens above it. Screens below the top stay
  * mounted but hidden, so returning to a screen finds the state it had when it was covered.
@@ -67,6 +73,7 @@ export function Host(
   props: { root: React.ComponentType<Record<string, unknown>>; __tao?: unknown },
 ): React.ReactElement {
   const screens = useStack()
+  useDataRevision()
   useAndroidBack(screens.length > 0)
   const Root = props.root
   // The app shell hands its child the root Tao props; every screen is an app root, so each level

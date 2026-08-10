@@ -1,4 +1,4 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
@@ -69,13 +69,13 @@ export const DataCompiler = {
   },
 } as const
 
-// A reference field stores the target entity's identifier, so a whole entity value contributes its Id.
+// A reference field stores an identifier, so a whole entity value contributes its Id and an
+// identifier is stored as written.
 function fieldValue(field: AST.FieldValue): Compiled {
-  const declaration = resolveRef(field.field)
   const compiled = Compile.Expression(field.value)
-  return declaration.type
-    ? gen`${compiled}.jsValue`
-    : gen`TR.Member(${compiled}, "Id").jsValue`
+  return Type.ofExpression(field.value).kind === 'entity'
+    ? gen`TR.Member(${compiled}, "Id").jsValue`
+    : gen`${compiled}.jsValue`
 }
 
 function dataStoreReference(reference: AST.NamedTypeReference): Compiled {
