@@ -4,7 +4,9 @@ These follow-ups originated in the documentation/navigation handoff review. The 
 
 ## 1. Preserve comments in compact inline actions
 
-The compact-action formatter behavior was introduced on this branch by `4abda990`. It currently collapses any one-statement `ActionExpression`, even when comments inside the block require multiline formatting.
+Status: completed in `c02dac8e`.
+
+The compact-action formatter behavior was introduced on this branch by `4abda990`. Its initial form collapsed any one-statement `ActionExpression`, even when comments inside the block required multiline formatting.
 
 Required behavior:
 

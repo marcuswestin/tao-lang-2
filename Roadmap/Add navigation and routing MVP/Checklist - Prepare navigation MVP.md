@@ -54,7 +54,7 @@
 - [x] Fix commented compact-action formatting in its own commit, following `Roadmap/Pre-merge MVP exploration follow-ups.md`.
 - [x] Defer project-ID implementation until stable navigation identity has its first runtime consumer; preserve the settled contract in the same document.
 - [x] Consolidate `Apps/MVP*` into one full target, one rolling executable integration app, and focused tests.
-- [ ] Merge current `main` and reconcile its layout/testing documentation changes without reverting them.
-- [ ] Rerun the final staged-scope audit and `./agent just verify`.
+- [x] Merge current `main` and reconcile its layout/testing documentation changes without reverting them.
+- [x] Rerun the final committed-scope audit and `./agent just verify`.
 
-The preparation initially left the Git index untouched. Ro subsequently staged the complete intended state, including the final `.tao-future` paths and owner-scoped `@` decision. The current commit must not be made from a mixed index/worktree snapshot.
+All required pre-merge changes are split into scoped commits. The final handoff requires a clean index and worktree after the conformance cleanup commit.

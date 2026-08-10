@@ -41,13 +41,13 @@ Describe('tao test', () => {
     await withTaoFixture({
       'Current.test.tao': 'test "Current" { }\n',
       'Apps/MVP/.tao-future/Future.test.tao': 'test "Future" {',
-      'Apps/MVP-4/Valid.test.tao': 'test "Valid MVP 4" { }\n',
+      'Apps/MVP/Current/Valid.test.tao': 'test "Valid current MVP" { }\n',
       'Roadmap/Feature/Syntax Sketches/Valid.test.tao': 'test "Valid syntax sketch" { }\n',
     }, async (rootDir) => {
       const found = await findTaoTestFiles(rootDir)
 
       Expect(found.map(path => FS.relativePath(rootDir, path))).toEqual([
-        'Apps/MVP-4/Valid.test.tao',
+        'Apps/MVP/Current/Valid.test.tao',
         'Current.test.tao',
         'Roadmap/Feature/Syntax Sketches/Valid.test.tao',
       ])

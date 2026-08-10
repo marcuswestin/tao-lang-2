@@ -106,7 +106,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       {
         'Main.tao': 'view MainView { }\n',
         'Apps/MVP/.tao-future/Future.tao': 'project app FutureMVP {',
-        'Apps/MVP-4/Valid.tao': 'view ValidMVP4 { }\n',
+        'Apps/MVP/Current/Valid.tao': 'view ValidCurrentMVP { }\n',
         'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
       },
       async (_paths, rootDir) => {
@@ -115,7 +115,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           .map(document => document.uri.fsPath)
 
         Expect(loadedPaths).toEqual([
-          FS.resolvePath('Apps/MVP-4/Valid.tao', rootDir),
+          FS.resolvePath('Apps/MVP/Current/Valid.tao', rootDir),
           FS.resolvePath('Main.tao', rootDir),
           FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
         ])

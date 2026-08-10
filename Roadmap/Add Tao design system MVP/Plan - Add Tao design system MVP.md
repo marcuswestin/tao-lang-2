@@ -29,7 +29,7 @@ Add executable coverage once the parser, validator, compiler, and runtime can su
 
 - `Apps/Test Apps/Design System MVP/` demonstrates tokens, semantic tokens, recipes, and one styled screen.
 - `Apps/Kitchen Sink/Kitchen Sink.tao` gains a compact design section after the first end-to-end slice compiles and renders.
-- `Apps/Test Apps/Design System MVP/Purpose.md` records the intended design feature scope and later behavior-test notes.
+- `Apps/Test Apps/README.md` records the Design System MVP app's intended scope and behavior-test notes before the app is added.
 
 ## Implementation steps
 

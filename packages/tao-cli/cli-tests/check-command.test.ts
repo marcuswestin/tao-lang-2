@@ -61,13 +61,13 @@ Describe('tao check', () => {
     await withTaoFixture({
       'canonical.tao': 'view MainView { }\n',
       'Apps/MVP/.tao-future/Future.tao': 'project app FutureMVP {',
-      'Apps/MVP-4/Valid.tao': 'view ValidMVP4 { }\n',
+      'Apps/MVP/Current/Valid.tao': 'view ValidCurrentMVP { }\n',
       'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({
-        'Apps/MVP-4/Valid.tao': 'unchanged',
+        'Apps/MVP/Current/Valid.tao': 'unchanged',
         'Roadmap/Feature/Syntax Sketches/Valid.tao': 'unchanged',
         'canonical.tao': 'unchanged',
       })
