@@ -16,6 +16,8 @@ export type NodeFormat<NodeT extends AST.Node> = {
   oneSpaceAfter(...keywords: string[]): void
   /** oneSpaceAround requests exactly one space on both sides of each present keyword. */
   oneSpaceAround(...keywords: string[]): void
+  /** parenthesizedArguments formats an invocation's `(` and `)` tight against the name and arguments. */
+  parenthesizedArguments(): void
   /** oneSpaceBeforeProperty requests exactly one space before each present property value. */
   oneSpaceBeforeProperty(...properties: Langium.Properties<NodeT>[]): void
   /** oneSpaceBetweenProperties requests exactly one space before the second property when both are present. */
@@ -79,6 +81,10 @@ export function createNodeFormat<NodeT extends AST.Node>(
     },
     oneSpaceAround(...keywords) {
       formatter.keywords(...keywords).surround(Formatting.oneSpace())
+    },
+    parenthesizedArguments() {
+      formatter.keyword('(').prepend(Formatting.noSpace()).append(Formatting.noSpace())
+      formatter.keyword(')').prepend(Formatting.noSpace())
     },
     oneSpaceBeforeProperty(...properties) {
       formatter.properties(...properties).prepend(Formatting.oneSpace())

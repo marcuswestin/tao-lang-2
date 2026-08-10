@@ -29,7 +29,7 @@ SetOperator returns string:
     '=' | '+=' | '-=' | '*=' | '/=';
 
 DoStatement:
-    'do' action=ActionTargetExpression argumentList=ArgumentList?;
+    'do' action=ActionTargetExpression InvocationArguments;
 
 ActionTargetExpression:
     ActionExpression | MemberAccessExpression | ValueReference;

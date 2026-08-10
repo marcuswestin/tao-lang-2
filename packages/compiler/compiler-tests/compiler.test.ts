@@ -12,7 +12,7 @@ Describe('Tao compiler', () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value ${tsFence}
@@ -45,8 +45,8 @@ Describe('Tao compiler', () => {
         action AddOne {
           set Count += 1
         }
-        render Button "Add", AddOne {
-          Number DisplayCount
+        render Button("Add", AddOne) {
+          Number(DisplayCount)
         }
       }
     `)
@@ -59,13 +59,13 @@ Describe('Tao compiler', () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
-        render Wrapper action { }
+        render Wrapper(action { })
       }
       view Wrapper Callback is action {
         action CallCallback {
-          do Callback
+          do Callback()
         }
-        render Text "Done"
+        render Text("Done")
       }
       view Text Value is text {
         render inject Value ${tsFence}
@@ -82,8 +82,8 @@ Describe('Tao compiler', () => {
       use Col, Row from @tao/ui
       app LayoutApp { view MainView }
       layout Screen {
-        render Col [gap 4] {
-          Text "Wrapped"
+        render Col() [gap 4] {
+          Text("Wrapped")
         }
       }
       view Text Value is text {
@@ -92,11 +92,11 @@ Describe('Tao compiler', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, content top stretch, gap 12, pad 16] {
-          Row [content spread-inset center, gap 8] {
-            Text "Layout" [claim 2]
+        render Col() [fill, content top stretch, gap 12, pad 16] {
+          Row() [content spread-inset center, gap 8] {
+            Text("Layout") [claim 2]
           }
-          Screen [content center]
+          Screen() [content center]
         }
       }
     `)
@@ -113,7 +113,7 @@ Describe('Tao compiler', () => {
         app MultiFile { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello from imports"
+          render Text("Hello from imports")
         }
       `,
         'Views.tao': `
@@ -139,7 +139,7 @@ Describe('Tao compiler', () => {
         app MyApp { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
@@ -178,7 +178,7 @@ Describe('Tao compiler', () => {
       `,
         'lib/nested/@bar/views/Main.tao': `
         project view MainView {
-          render Text "Package import"
+          render Text("Package import")
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -210,7 +210,7 @@ Describe('Tao compiler', () => {
         'feature/@foo/forms/Main.tao': `
         use PackageTitle
         project view MainView {
-          render Text PackageTitle
+          render Text(PackageTitle)
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -255,10 +255,10 @@ Describe('Tao compiler', () => {
       alias EmptyItem = item {}
       alias DemoCurrentJob = CurrentJob { Role "Engineer" }
       view MainView {
-        render Stack {
-          TextValue DemoPerson.Name
-          ListValue DemoPerson.Tags
-          ItemValue item: {}
+        render Stack() {
+          TextValue(DemoPerson.Name)
+          ListValue(DemoPerson.Tags)
+          ItemValue(item: {})
         }
       }
       layout Stack {
@@ -296,7 +296,7 @@ Describe('Tao compiler', () => {
         use Name from ./Types.tao
         alias Name = Name "Ada"
         view MainView {
-          render TextValue Name
+          render TextValue(Name)
         }
         view TextValue Value is text {
           render inject Value ${tsFence}
@@ -323,20 +323,20 @@ Describe('Tao compiler', () => {
         app CircularApp { view MainView }
         use AView from ./
         view MainView {
-          render AView
+          render AView()
         }
       `,
         'A.tao': `
         use BView from ./
         project alias SharedTitle = "Cycle"
         project view AView {
-          render BView
+          render BView()
         }
       `,
         'B.tao': `
         use SharedTitle from ./
         project view BView {
-          render Leaf SharedTitle
+          render Leaf(SharedTitle)
         }
         view Leaf Value is text {
           render inject Value ${tsFence}
@@ -369,7 +369,7 @@ Describe('Tao compiler', () => {
         use AText from ../liba
         use BText from ../libb
         view MainView {
-          render AText "Hello"
+          render AText("Hello")
         }
       `,
         'liba/Views.tao': sharedViewSource('AText'),
@@ -401,7 +401,7 @@ Describe('Tao compiler', () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value ${tsFence}

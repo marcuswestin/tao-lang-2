@@ -9,17 +9,18 @@ import "./terminals"
 entry ExpressionsGrammarEntrypoint:
     ArgumentList;
 
+// Invocation arguments are parenthesized everywhere, so any expression is a valid argument.
+fragment InvocationArguments:
+    (parenthesized?='(' argumentList=ArgumentList? ')')?;
+
 ArgumentList:
     arguments+=Argument (',' arguments+=Argument)*;
 
 Argument:
-    (type=TypeReference ':' value=TypedArgumentValue) | value=ArgumentValue;
+    (type=TypeReference ':' value=TypedArgumentValue) | value=Expression;
 
 TypedArgumentValue:
     ItemLiteral | Expression;
-
-ArgumentValue:
-    MemberAccessExpression | StringLiteral | NumberLiteral | ActionExpression | ValueReference;
 
 Expression:
     ActionExpression | TypedConstructor | PrimaryExpression;

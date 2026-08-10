@@ -20,9 +20,9 @@ type RenderableDeclaration = ViewDeclaration | LayoutDeclaration;
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
-        | view=[RenderableDeclaration:ID] (layoutClause=LayoutClause block=Block? | argumentList=ArgumentList layoutClause=LayoutClause? block=Block? | block=Block?));
+        | view=[RenderableDeclaration:ID] InvocationArguments layoutClause=LayoutClause? block=Block?);
 
 ViewRender:
-    view=[RenderableDeclaration:ID] (layoutClause=LayoutClause block=Block? | argumentList=ArgumentList layoutClause=LayoutClause? block=Block? | block=Block?);
+    view=[RenderableDeclaration:ID] InvocationArguments layoutClause=LayoutClause? block=Block?;
 
 type Render = RenderStatement | ViewRender;

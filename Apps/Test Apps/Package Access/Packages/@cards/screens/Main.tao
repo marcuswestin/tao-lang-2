@@ -3,13 +3,13 @@ use ProjectNotice from @copy
 use ProjectWidget from @copy/widgets
 
 project view MainView {
-   render Stack {
-      Text CardTitle
-      Text SiblingFileTitle
-      Text SiblingFolderTitle
-      Text ChildFolderTitle
-      Text ProjectNotice
-      ProjectWidget
+   render Stack() {
+      Text(CardTitle)
+      Text(SiblingFileTitle)
+      Text(SiblingFolderTitle)
+      Text(ChildFolderTitle)
+      Text(ProjectNotice)
+      ProjectWidget()
 }  }
 
 layout Stack {

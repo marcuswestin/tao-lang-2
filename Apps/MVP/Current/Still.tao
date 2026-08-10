@@ -19,10 +19,10 @@ view Home {
    action Capture {
       set CaptureCount += 1
    }
-   render Col [fill, gap 8, pad 12] {
-      Text "Still"
-      Text InboxName
-      Text "Capture what matters."
-      Number CaptureCount
-      Button "Capture", Capture
+   render Col() [fill, gap 8, pad 12] {
+      Text("Still")
+      Text(InboxName)
+      Text("Capture what matters.")
+      Number(CaptureCount)
+      Button("Capture", Capture)
 }  }

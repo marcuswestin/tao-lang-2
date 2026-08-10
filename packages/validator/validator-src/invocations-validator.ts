@@ -19,6 +19,7 @@ const invocationValidationMessages = {
   duplicateParameterType: (view: string, parameter: string) =>
     `Renderable ${view} has more than one parameter with the same type near '${parameter}'.`,
   duplicateArgumentType: (view: string) => `Render of ${view} has more than one argument with the same exact type.`,
+  missingParentheses: (view: string) => `Render of ${view} requires parentheses. Write \`${view}()\`.`,
 } as const
 
 /** InvocationsValidator validates render invocations through shared type-based binding diagnostics. */
@@ -44,6 +45,9 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
     return
   }
   const view = invocation.view
+  if (!render.parenthesized) {
+    ctx.error(invocationValidationMessages.missingParentheses(view.name), render)
+  }
   for (const diagnostic of invocation.diagnostics) {
     Switch.kind(diagnostic, {
       'missing-argument': diagnostic => {

@@ -23,6 +23,7 @@ const actionValidationMessages = {
     `Action ${action} has more than one parameter with the same type near '${parameter}'.`,
   duplicateArgumentType: (action: string) => `Action ${action} has more than one argument with the same exact type.`,
   dynamicActionArguments: 'Action values without a named declaration cannot receive arguments in this MVP.',
+  missingParentheses: (action: string) => `\`do ${action}\` requires parentheses. Write \`do ${action}()\`.`,
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
 }
 
@@ -102,6 +103,7 @@ function addDeclarationNames(visibleNames: Set<string>, declarations: readonly A
 
 function reportArity(invocation: AST.DoStatement, ctx: ValidationContext): void {
   const resolved = ASTUtils.resolveActionInvocation(invocation)
+  reportMissingParentheses(invocation, ctx)
   if (!resolved.action) {
     if (ASTUtils.resolveActionTarget(invocation.action).kind === 'dynamic') {
       reportDynamicActionArguments(invocation, ctx)
@@ -152,6 +154,20 @@ function reportActionBindingDiagnostic(
       )
     },
   })
+}
+
+// Inline action values are invoked in place, so only named action targets carry an argument list.
+function reportMissingParentheses(invocation: AST.DoStatement, ctx: ValidationContext): void {
+  if (invocation.parenthesized || AST.isActionExpression(invocation.action)) {
+    return
+  }
+  const target = invocation.action
+  const name = AST.isValueReference(target)
+    ? target.target.$refText
+    : AST.isMemberAccessExpression(target)
+    ? [target.target.$refText, ...target.members].join('.')
+    : 'action'
+  ctx.error(actionValidationMessages.missingParentheses(name), invocation)
 }
 
 function reportDynamicActionArguments(invocation: AST.DoStatement, ctx: ValidationContext): void {

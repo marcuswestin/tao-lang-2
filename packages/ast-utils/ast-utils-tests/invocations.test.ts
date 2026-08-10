@@ -7,7 +7,7 @@ Describe('Tao AST invocation resolution', () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
       view MainView {
-        render Tile "Open", 1
+        render Tile("Open", 1)
       }
       view Tile Title is text, Count is number { }
     `)
@@ -25,7 +25,7 @@ Describe('Tao AST invocation resolution', () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
       view MainView {
-        render Tile 1, "Open"
+        render Tile(1, "Open")
       }
       view Tile Title is text, Count is number { }
     `)
@@ -45,9 +45,9 @@ Describe('Tao AST invocation resolution', () => {
       view MainView {
         action Save Count is number, Label is text { }
         action CallSave {
-          do Save "Open", 1
+          do Save("Open", 1)
         }
-        render Text "Done"
+        render Text("Done")
       }
       view Text Value is text { }
     `)
@@ -72,9 +72,9 @@ Describe('Tao AST invocation resolution', () => {
       view MainView {
         action AddStep Step is number { }
         action CallAddStep {
-          do AddStep "wrong"
+          do AddStep("wrong")
         }
-        render Text "Done"
+        render Text("Done")
       }
       view Text Value is text { }
     `)
@@ -102,9 +102,9 @@ Describe('Tao AST invocation resolution', () => {
       alias SaveAlias = Save
       view MainView {
         action CallSave {
-          do SaveAlias
+          do SaveAlias()
         }
-        render Text "Done"
+        render Text("Done")
       }
       view Text Value is text { }
     `)
@@ -128,7 +128,7 @@ Describe('Tao AST invocation resolution', () => {
     const missingParseResult = await parseClean(`
       app MyApp { view MainView }
       view MainView {
-        render Tile "Open"
+        render Tile("Open")
       }
       view Tile Title is text, Count is number { }
     `)
@@ -139,7 +139,7 @@ Describe('Tao AST invocation resolution', () => {
     const extraParseResult = await parseClean(`
       app MyApp { view MainView }
       view MainView {
-        render Tile "Open", 1, "extra"
+        render Tile("Open", 1, "extra")
       }
       view Tile Title is text, Count is number { }
     `)
@@ -163,7 +163,7 @@ Describe('Tao AST invocation resolution', () => {
       type Middle is Base
       type Leaf is Middle
       view MainView {
-        render Pair Leaf: "Ada", Leaf: "Grace"
+        render Pair(Leaf: "Ada", Leaf: "Grace")
       }
       view Pair Base, Middle { }
     `)
@@ -187,7 +187,7 @@ Describe('Tao AST invocation resolution', () => {
       type Name is Base
       type Title is Base
       view MainView {
-        render Pair Name: "Ada", Title: "Grace"
+        render Pair(Name: "Ada", Title: "Grace")
       }
       view Pair Base { }
     `)
@@ -204,8 +204,8 @@ Describe('Tao AST invocation resolution', () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
       view MainView {
-        render Stack {
-          Tile "Open", 1
+        render Stack() {
+          Tile("Open", 1)
         }
       }
       layout Stack {

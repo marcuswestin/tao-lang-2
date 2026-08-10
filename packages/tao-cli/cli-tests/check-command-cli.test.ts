@@ -43,7 +43,7 @@ Describe('tao check CLI', () => {
   Test('accepts source produced by tao fix as canonical', async () => {
     await withTaoFixture({
       'app.tao':
-        'app MyApp { view MainView }\nuse Text, Button from @tao/ui\nview MainView { render Text Greeting alias Greeting = "hi" }\n',
+        'app MyApp { view MainView }\nuse Text, Button from @tao/ui\nview MainView { render Text(Greeting) alias Greeting = "hi" }\n',
     }, async (rootDir) => {
       const fix = await runTaoCliForTest(['fix', rootDir])
       const check = await runTaoCliForTest(['check', rootDir])

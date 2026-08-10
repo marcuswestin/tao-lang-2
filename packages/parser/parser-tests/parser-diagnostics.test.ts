@@ -42,7 +42,7 @@ Describe('minimal Tao parser diagnostics', () => {
   })
 
   Test('parses top-level renders for later validator checks', async () => {
-    const parseResult = await testParseCode('render Text "hello" view Text Value is text { }')
+    const parseResult = await testParseCode('render Text("hello") view Text Value is text { }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
@@ -51,7 +51,7 @@ Describe('minimal Tao parser diagnostics', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MyView }
       view MyView Count is number {
-        render Text Count { }
+        render Text(Count) { }
       }
       view Text Value is text { }
     `)
@@ -73,8 +73,8 @@ Describe('minimal Tao parser diagnostics', () => {
         alias Local = Secret
       }
       view Target {
-        render Text Secret { }
-        render Text Local { }
+        render Text(Secret) { }
+        render Text(Local) { }
       }
     `)
 

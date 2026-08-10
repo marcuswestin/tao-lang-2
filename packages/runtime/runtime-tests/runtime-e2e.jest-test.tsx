@@ -34,9 +34,9 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         app DuplicateTextApp { view MainView }
         view MainView {
-          render Stack {
-            Text "Repeated"
-            Text "Repeated"
+          render Stack() {
+            Text("Repeated")
+            Text("Repeated")
           }
         }
         layout Stack {
@@ -80,9 +80,9 @@ Describe('Expo runtime', () => {
           action AddOne {
             set Count += 1
           }
-          render Stack {
-            NativeButton "Add", AddOne
-            Number Count
+          render Stack() {
+            NativeButton("Add", AddOne)
+            Number(Count)
           }
         }
         layout Stack {
@@ -129,7 +129,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         app BrokenTextApp { view MainView }
         view MainView {
-          render Text "Actual"
+          render Text("Actual")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -163,7 +163,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         app BrokenTextApp { view MainView }
         view MainView {
-          render Text "Actual"
+          render Text("Actual")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -205,7 +205,7 @@ Describe('Expo runtime', () => {
         'First.tao': `
         app FirstApp { view MainView }
         view MainView {
-          render Text "First"
+          render Text("First")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -216,7 +216,7 @@ Describe('Expo runtime', () => {
         'Second.tao': `
         app SecondApp { view MainView }
         view MainView {
-          render Text "Second"
+          render Text("Second")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -270,9 +270,9 @@ Describe('Expo runtime', () => {
           action AddOne {
             set Count += 1
           }
-          render Stack {
-            NativeButton "Native add", AddOne
-            Number Count
+          render Stack() {
+            NativeButton("Native add", AddOne)
+            Number(Count)
           }
         }
 
@@ -320,11 +320,11 @@ Describe('Expo runtime', () => {
             set Count += Step
           }
           action RunAddTagged {
-            do AddTagged "tag", 3
+            do AddTagged("tag", 3)
           }
-          render Stack {
-            NativeButton "Run reordered action", RunAddTagged
-            Number Count
+          render Stack() {
+            NativeButton("Run reordered action", RunAddTagged)
+            Number(Count)
           }
         }
 
@@ -371,7 +371,7 @@ Describe('Expo runtime', () => {
           use Save from ./Actions.tao
 
           view MainView {
-            render Button "Imported action", Save
+            render Button("Imported action", Save)
           }
 
           view Button Title is text, Action is action {
@@ -407,7 +407,7 @@ Describe('Expo runtime', () => {
         alias Ada = Person { Age 40 Name "Ada" }
 
         view MainView {
-          render Keys Ada
+          render Keys(Ada)
         }
 
         view Keys Person {
@@ -439,9 +439,9 @@ Describe('Expo runtime', () => {
           action Rename {
             set Current = Person { Name "Grace" }
           }
-          render Stack {
-            Button "Rename", Rename
-            Text Current.Name
+          render Stack() {
+            Button("Rename", Rename)
+            Text(Current.Name)
           }
         }
 
@@ -534,7 +534,7 @@ Describe('Expo runtime', () => {
         use Text from @tao/ui
 
         view MainView {
-            render Text "Root width fill" [width fill]
+            render Text("Root width fill") [width fill]
         }
       `,
       screen => {
@@ -570,8 +570,8 @@ Describe('Expo runtime', () => {
         }
 
         view MainView {
-            render Screen [width fill] {
-                Text "Root injected fill"
+            render Screen() [width fill] {
+                Text("Root injected fill")
             }
         }
       `,
@@ -907,13 +907,13 @@ Describe('Expo runtime', () => {
         use Col, Text from @tao/ui
 
         layout Screen {
-            render Col {
-                Text "Wrapped center"
+            render Col() {
+                Text("Wrapped center")
             }
         }
 
         view MainView {
-            render Screen [content center]
+            render Screen() [content center]
         }
       `,
       screen => {
@@ -938,15 +938,15 @@ Describe('Expo runtime', () => {
         use Col, Row, Text from @tao/ui
 
         layout Card {
-            render Col {
-                render Row {
-                    Text "Nested render layout"
+            render Col() {
+                render Row() {
+                    Text("Nested render layout")
                 }
             }
         }
 
         view MainView {
-            render Card [gap 9]
+            render Card() [gap 9]
         }
       `,
       screen => {
@@ -974,11 +974,11 @@ Describe('Expo runtime', () => {
             set Count += _Scope
           }
           action AddOne {
-            do AddStep 1
+            do AddStep(1)
           }
-          render Stack {
-            NativeButton "Add with shadowed parameter", AddOne
-            Number Count
+          render Stack() {
+            NativeButton("Add with shadowed parameter", AddOne)
+            Number(Count)
           }
         }
 
@@ -1023,13 +1023,13 @@ Describe('Expo runtime', () => {
         use Row, Text from @tao/ui
 
         layout Screen {
-            render Row [gap 12, content spread center] {
-                Text "Wrapped gap"
+            render Row() [gap 12, content spread center] {
+                Text("Wrapped gap")
             }
         }
 
         view MainView {
-            render Screen [gap 8]
+            render Screen() [gap 8]
         }
       `,
       screen => {
@@ -1054,8 +1054,8 @@ Describe('Expo runtime', () => {
         use Row, Text from @tao/ui
 
         view MainView {
-            render Row [content right, gap 4, claim 2] {
-                Text "Explicit row"
+            render Row() [content right, gap 4, claim 2] {
+                Text("Explicit row")
             }
         }
       `,
@@ -1087,14 +1087,14 @@ Describe('Expo runtime', () => {
         use Box, Row, Text from @tao/ui
 
         layout Screen {
-            render Box [fill] {
-                Text "Root fill"
+            render Box() [fill] {
+                Text("Root fill")
             }
         }
 
         view MainView {
-            render Row [gap 3] {
-                Screen
+            render Row() [gap 3] {
+                Screen()
             }
         }
       `,
@@ -1137,8 +1137,8 @@ Describe('Expo runtime', () => {
         }
 
         view MainView {
-            render Row [gap 4] {
-                Text "Local row"
+            render Row() [gap 4] {
+                Text("Local row")
             }
         }
       `,
@@ -1166,7 +1166,7 @@ Describe('Expo runtime', () => {
           use AView from ./
 
           view MainView {
-              render AView
+              render AView()
           }
         `,
         'A.tao': `
@@ -1175,7 +1175,7 @@ Describe('Expo runtime', () => {
           project alias SharedTitle = "Circular alias"
 
           project view AView {
-              render BView
+              render BView()
           }
         `,
         'B.tao': `
@@ -1184,7 +1184,7 @@ Describe('Expo runtime', () => {
           alias ImportedTitle = SharedTitle
 
           project view BView {
-              render Text ImportedTitle
+              render Text(ImportedTitle)
           }
 
           view Text Value is text {
@@ -1211,7 +1211,7 @@ Describe('Expo runtime', () => {
         alias Greeting = Message
 
         view MainView {
-            render Text Greeting { }
+            render Text(Greeting) { }
         }
 
         view Text Value is text {
@@ -1237,10 +1237,10 @@ Describe('Expo runtime', () => {
 
         view MainView {
             alias OuterGreeting = Greeting
-            render Stack {
+            render Stack() {
                 alias Greeting = "Inner"
-                Text Greeting
-                Text OuterGreeting
+                Text(Greeting)
+                Text(OuterGreeting)
             }
         }
 

@@ -10,7 +10,7 @@ Describe('tao fix', () => {
         app   MyApp { view MainView }
         use Text,Button from @tao/ui
         view MainView {
-           render Text Greeting
+           render Text(Greeting)
            alias Greeting = "hi"
         }
       `),
@@ -29,7 +29,7 @@ Describe('tao fix', () => {
 
         view MainView {
            alias Greeting = "hi"
-           render Text Greeting
+           render Text(Greeting)
         }
       `)
       }\n`)
@@ -38,7 +38,7 @@ Describe('tao fix', () => {
 
   Test('leaves canonical files unchanged and reports broken files', async () => {
     await withTaoFixture({
-      'canonical.tao': 'use Text from @tao/ui\n\nview MainView {\n   render Text "hi"\n}\n',
+      'canonical.tao': 'use Text from @tao/ui\n\nview MainView {\n   render Text("hi")\n}\n',
       'broken.tao': 'view Broken {',
     }, async (rootDir) => {
       const results = await runFix(rootDir)

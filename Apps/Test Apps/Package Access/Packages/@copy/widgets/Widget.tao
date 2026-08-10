@@ -1,5 +1,5 @@
 project view ProjectWidget {
-   render Text "Project view works"
+   render Text("Project view works")
 }
 
 view Text Value is text {

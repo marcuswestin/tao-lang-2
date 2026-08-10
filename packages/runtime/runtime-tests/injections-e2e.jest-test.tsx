@@ -21,7 +21,7 @@ Describe('Tao injection runtime', () => {
         alias Count = 3
 
         view MainView {
-            render Text "Hello"
+            render Text("Hello")
         }
 
         view Text Value is text {

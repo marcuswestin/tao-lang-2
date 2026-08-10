@@ -74,6 +74,21 @@ Direct layout-clause entries only: `bg <color>`, `fg <color>`, `size N`, `weight
 
 Expression-bodied only: `function Name <params> = <Expression>` with inferred result type; calls are parenthesized expressions (`TaskLabel(Task)`, `now()`), keeping juxtaposition reserved for typed construction and render invocation. Block bodies and `return` are deferred until a real need appears.
 
+## DEC-FMVP-017 — Invocations are parenthesized (Ro directive)
+
+Ro directed mid-project: rendering, action `do`, and function invocations all require `<Name>(<Args>)`, with renders shaped `render View(<Args>) [<Layouts>] { … }`. Resolutions made under that directive:
+
+- Render invocations always carry parens, empty included: `Text("Still")`, `Col() [fill, gap 8] { … }`, child `CaptureForm()`. Layout clause and child block follow outside the parens.
+- `do` targets always carry parens: `do Capture()`, `do AddBy(5)`.
+- Function calls (slice 8) always carry parens: `now()`, `TaskLabel(Task)`.
+- A bare name in expression position stays a value reference; parens are what invoke.
+- `ArgumentValue` widens to any expression — the parens remove the earlier grammar restrictions (lists and typed constructors are now valid arguments).
+- Named argument/field binding uses the existing `Type: value` label syntax (`TextInput(Draft, Label: "Task title")`, `create …Task { Title: Draft }`), replacing the property-constructor juxtaposition planned in DEC-FMVP-007.
+- Typed constructors keep the single-literal juxtaposed form (`WorkspaceName "Inbox"`) — not in the directive's list and unambiguous; revisit if Ro extends the rule.
+- `render inject` is unchanged (already fence-delimited).
+- Parentheses are optional in the grammar and required by the validator, so a paren-less invocation reports `Render of X requires parentheses. Write \`X()\`.` instead of a raw parse error. An argument list without parentheses remains a parse error.
+- Executable sources (`Apps/**`, stdlib, package tests) migrated in this slice. `Spec/**` examples are migrated in the closing coherence slice, together with the other spec-status updates.
+
 ## DEC-FMVP-016 — List literals stay whitespace-separated
 
 `[1 2 3]` per the Type System spec. To keep `[1 -2]` unambiguous once operators exist, list elements are primary/unary expressions; a computed element needs parens (`[(1 - 2) 3]`).

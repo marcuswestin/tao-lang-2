@@ -26,19 +26,19 @@ view MainView {
    state KitchenCount = 0
    alias LocalText = "Text from a local alias"
    alias OuterGreeting = Greeting
-   render Stack [gap 8, pad 12, fill] {
+   render Stack() [gap 8, pad 12, fill] {
       alias Greeting = "Nested scope greeting"
-      Text OuterGreeting { }
-      Text LocalText
-      Text Greeting
-      Text "Hello World" [width fill]
-      Text "Claimed space" [claim 2]
-      CountText LaunchCount
-      Text FixedSinkName
-      Text SinkProfileValue.SinkName
-      TagText SinkProfileValue.SinkTags
-      Number KitchenCount
-      Button "Add kitchen count", action { set KitchenCount += 1 }
+      Text(OuterGreeting) { }
+      Text(LocalText)
+      Text(Greeting)
+      Text("Hello World") [width fill]
+      Text("Claimed space") [claim 2]
+      CountText(LaunchCount)
+      Text(FixedSinkName)
+      Text(SinkProfileValue.SinkName)
+      TagText(SinkProfileValue.SinkTags)
+      Number(KitchenCount)
+      Button("Add kitchen count", action { set KitchenCount += 1 })
 }  }
 
 view CountText Count is number {
