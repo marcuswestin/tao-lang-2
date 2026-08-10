@@ -22,9 +22,24 @@ export default {
     f.oneSpaceBetweenProperties('selector', 'text')
   },
 
-  /** ExpectTextStep formats v0 selector-targeted expectations. */
+  /** ExpectTextStep formats selector-targeted expectations. */
   ExpectTextStep(f) {
     f.oneSpaceAfter('expect', 'missing')
     f.oneSpaceBetweenProperties('selector', 'text')
   },
+
+  /** ExpectInputStep formats editable-control value expectations. */
+  ExpectInputStep(f) {
+    f.oneSpaceAfter('expect', 'input', 'value')
+    f.oneSpaceBetweenProperties('selector', 'text')
+    f.oneSpaceBefore('value')
+  },
+
+  /** WriteStep formats typing into the focused control. */
+  WriteStep(f) {
+    f.oneSpaceAfter('write')
+  },
+
+  /** SubmitStep is a single keyword with no interior formatting. */
+  SubmitStep() {},
 } satisfies Partial<FormatHandlers>

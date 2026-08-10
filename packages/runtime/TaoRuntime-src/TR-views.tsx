@@ -3,16 +3,24 @@ import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
-import { TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
+import { type TaoEvents, TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
+import { runtimeValue } from './TR-value'
 
 type TaoButtonProps = TaoViewProps & {
   action?: {
     invoke(): void
   }
+  disabled?: boolean
   title: string
 }
 
-type TaoPrimitiveKind = 'Pressable' | 'Text' | 'View'
+type TaoTextInputProps = TaoViewProps & {
+  value: string
+  label?: string
+  placeholder?: string
+}
+
+type TaoPrimitiveKind = 'Pressable' | 'Text' | 'TextInput' | 'View'
 
 type TaoPrimitiveElementProps = {
   readonly kind: TaoPrimitiveKind
@@ -44,11 +52,39 @@ export const Views = {
   },
 
   Pressable(props: TaoButtonProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    const events = TaoPropsControls.eventsOf(props.__tao)
     return React.createElement(TaoPrimitiveElement, {
       kind: 'Pressable',
-      nativePropOverrides: { onPress: () => props.action?.invoke() },
+      nativePropOverrides: {
+        accessibilityLabel: props.title,
+        disabled: props.disabled === true,
+        onPress: () => {
+          if (props.disabled === true) {
+            return
+          }
+          props.action?.invoke()
+          events.press?.invoke()
+        },
+      },
       pressableTitle: props.title,
       providesParentDirection: true,
+      runtimeProps,
+      viewProps: props,
+    })
+  },
+
+  TextInput(props: TaoTextInputProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    const events = TaoPropsControls.eventsOf(props.__tao)
+    return React.createElement(TaoPrimitiveElement, {
+      kind: 'TextInput',
+      nativePropOverrides: {
+        accessibilityLabel: props.label === '' ? undefined : props.label,
+        onChangeText: (text: string) => events.change?.invoke(runtimeValue(text)),
+        onSubmitEditing: () => events.submit?.invoke(),
+        placeholder: props.placeholder === '' ? undefined : props.placeholder,
+        value: props.value,
+      },
+      providesParentDirection: false,
       runtimeProps,
       viewProps: props,
     })
@@ -59,8 +95,10 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
   const runtime = requireReactNativeRuntime()
   const parentDirection = ParentDirectionContext.use()
   const merged = TaoPropsControls.mergeViewProps(props.viewProps, props.runtimeProps, parentDirection)
+  const events = TaoPropsControls.eventsOf(props.viewProps.__tao)
   const elementProps = {
     ...TaoPropsControls.nativePropsWithStyle(merged),
+    ...pressProps(props, events),
     ...props.nativePropOverrides,
   }
   const elementChildren = nativeChildren(runtime, props, merged.children)
@@ -69,17 +107,30 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
     : elementChildren
   return createReactElement(
     runtime,
-    nativeComponent(runtime, props.kind),
+    nativeComponent(runtime, props.kind, events.press !== undefined),
     elementProps,
     providedChildren,
   )
 }
 
-function nativeComponent(runtime: ReactNativeRuntime, kind: TaoPrimitiveKind): React.ElementType {
+// A container with a bound `on press` becomes pressable; text handles presses natively.
+function pressProps(props: TaoPrimitiveElementProps, events: TaoEvents): Record<string, unknown> {
+  if (props.kind === 'Pressable' || !events.press) {
+    return {}
+  }
+  return { accessibilityRole: 'button', onPress: () => events.press?.invoke() }
+}
+
+function nativeComponent(
+  runtime: ReactNativeRuntime,
+  kind: TaoPrimitiveKind,
+  pressable: boolean,
+): React.ElementType {
   return Switch<TaoPrimitiveKind, React.ElementType>(kind, {
     Pressable: () => runtime.Pressable,
     Text: () => runtime.Text,
-    View: () => runtime.View,
+    TextInput: () => runtime.TextInput,
+    View: () => pressable ? runtime.Pressable : runtime.View,
   })
 }
 

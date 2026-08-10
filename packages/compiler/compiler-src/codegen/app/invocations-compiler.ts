@@ -44,9 +44,22 @@ export default {
     `
   },
 
-  /** RenderArguments compiles render invocation arguments into JSX props. */
+  /** RenderArguments compiles render invocation arguments and defaulted parameters into JSX props. */
   RenderArguments(invocation: ASTUtils.ResolvedRenderInvocation): Compiled {
-    return gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })
+    const view = invocation.view
+    const defaults = view ? ASTUtils.unboundDefaultedParameters(view, invocation.pairs) : []
+    return gen`${gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })}${
+      gen.join(defaults, Compile.DefaultedParameterArgument, { separator: '' })
+    }`
+  },
+
+  /** DefaultedParameterArgument compiles one omitted parameter's default value into a JSX prop. */
+  DefaultedParameterArgument(parameter: AST.ParameterDeclaration): Compiled {
+    const defaultValue = ASTUtils.parameterDefaultValue(parameter)
+    Assert.defined(defaultValue, 'defaulted parameter has a default value', {
+      parameter: Type.parameterName(parameter),
+    })
+    return gen` ${gen.Name({ name: Type.parameterName(parameter) })}={${Compile.Expression(defaultValue)}}`
   },
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */

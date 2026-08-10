@@ -76,6 +76,22 @@ export type ResolvedActionTarget =
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
 
+/** parameterDefaultValue returns the default expression a parameter binds when it is omitted. */
+export function parameterDefaultValue(parameter: AST.ParameterDeclaration): AST.Expression | undefined {
+  return parameter.inlineType?.defaultValue
+}
+
+/** unboundDefaultedParameters returns declared parameters that fall back to their default value. */
+export function unboundDefaultedParameters(
+  declaration: AST.ParameterizedDeclaration,
+  pairs: readonly RenderInvocationPair[],
+): AST.ParameterDeclaration[] {
+  const bound = new Set(pairs.map(pair => pair.parameter))
+  return AST.parametersOf(declaration).filter(parameter =>
+    !bound.has(parameter) && parameterDefaultValue(parameter) !== undefined
+  )
+}
+
 /** resolveItemPropertyBindings binds item constructor property values to item type fields by type. */
 export function resolveItemPropertyBindings(
   expectedProperties: readonly AST.TypeProperty[],
@@ -262,10 +278,18 @@ function resolveArgumentBindings(
   reportDuplicateParameterTypes(parameters, diagnostics)
   const duplicateArgumentTypes = reportDuplicateArgumentTypes(args, diagnostics)
 
+  // An exact type match names its slot, so a defaulted parameter can still be bound explicitly.
   bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesExactlyMatch, duplicateArgumentTypes)
-  bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesAreAssignable, duplicateArgumentTypes)
+  // Beyond that, a defaulted parameter keeps its default rather than competing for a loose argument.
+  const requiredParameters = new Set(
+    Array.from(remainingParameters).filter(parameter => parameterDefaultValue(parameter) === undefined),
+  )
+  bindArguments(remainingArgs, requiredParameters, pairs, argumentTypesAreAssignable, duplicateArgumentTypes)
+  for (const pair of pairs) {
+    remainingParameters.delete(pair.parameter)
+  }
 
-  const matchGraph = argumentMatchGraph(remainingArgs, remainingParameters, duplicateArgumentTypes)
+  const matchGraph = argumentMatchGraph(remainingArgs, requiredParameters, duplicateArgumentTypes)
   const ambiguousArguments = new Set<AST.Argument>()
   const ambiguousParameters = new Set<AST.ParameterDeclaration>()
   let unresolvedArguments = 0
@@ -324,7 +348,7 @@ function resolveArgumentBindings(
   }
 
   for (const parameter of remainingParameters) {
-    if (ambiguousParameters.has(parameter)) {
+    if (ambiguousParameters.has(parameter) || parameterDefaultValue(parameter)) {
       continue
     }
     if (unresolvedArguments > 0) {

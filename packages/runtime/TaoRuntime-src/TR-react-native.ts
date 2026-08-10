@@ -11,6 +11,7 @@ export type ReactNativeRuntime = {
   View: React.ComponentType<any>
   Text: React.ComponentType<any>
   Pressable: React.ComponentType<any>
+  TextInput: React.ComponentType<any>
 }
 
 /** requireReactNativeRuntime returns the React Native module used by Tao runtime rendering. */

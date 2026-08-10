@@ -4,6 +4,7 @@ import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
 import { LayoutControls } from './TR-layout'
 import * as TRTaoProps from './TR-TaoProps'
+import { RuntimeValue } from './TR-value'
 import * as TRViews from './TR-views'
 
 /** TR exposes the generated-code runtime API used by generated apps. */
@@ -231,14 +232,6 @@ function parentDirectionFromProps(props: TR.TaoProps | undefined): TR.TaoProps['
     return undefined
   }
   return props.parentDirection ?? parentDirectionFromProps(props.callerProps)
-}
-
-class RuntimeValue<T> {
-  constructor(readonly jsValue: T) {}
-
-  evaluate(): RuntimeValue<T> {
-    return this
-  }
 }
 
 class RuntimeAlias<T> {

@@ -96,6 +96,34 @@ Exercise the Tao expression language: boolean values, arithmetic, comparison and
 
 `Expressions.test.tao` asserts rendered values for each operator family, then presses `Advance` and `Flip` to confirm derived aliases and `when` branches recompute from updated state.
 
+## Forms and Events
+
+### Purpose
+
+Exercise interaction events and the form surface: `on` clauses, text input, validation, disabled controls, and the input-oriented test steps.
+
+### Belongs Here
+
+- `on press`, `on change`, and `on submit` clauses on render invocations, including a typed event payload parameter.
+- `on press` bound to a container so a whole region is pressable.
+- The stdlib `TextInput` view with `Label` and `Placeholder`, and `Button` with `Disabled`.
+- Parameters with `default` values, and named arguments through the `Label: "..."` form.
+- Validation state derived from input contents, gating both the button and the submit action.
+
+### Does Not Belong Here
+
+- Selector and event diagnostics; those belong in validator tests.
+- Data-backed forms; those arrive with the data slices.
+
+### Edit When
+
+- The event vocabulary or event payload types change.
+- The stdlib input surface changes.
+
+### Behavior Test Notes
+
+`Forms and Events.test.tao` presses by `label` and `placeholder`, uses `write` and `submit`, and asserts control contents with `expect input ... value ...`, covering the empty/invalid state, typing, submitting, saving through a disabled-guarded button, and pressing a container.
+
 ## Layout and App Shell
 
 ### Purpose

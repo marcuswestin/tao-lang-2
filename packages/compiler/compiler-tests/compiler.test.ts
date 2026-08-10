@@ -118,6 +118,29 @@ Describe('Tao compiler', () => {
     Expect(source).toContain('TR.Interpolate(')
   })
 
+  Test('compiles event clauses and defaulted parameters', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      view Field Value is text, Label is text default "none" {
+        render inject Value, Label ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Draft = ""
+        render Field(Draft)
+          on change -> Value is text {
+            set Draft = Value
+          }
+      }
+    `)
+
+    const source = compiled.files[0]!.code
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(source).toContain('events: { change: TR.Action(')
+    Expect(source).toContain('Label={TR.Value("none")}')
+  })
+
   Test('compiles dynamic action parameter invocations without arguments', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
@@ -526,8 +549,8 @@ Describe('Tao compiler', () => {
         Expect(
           plan.suites[0]?.checks[0]?.steps.map(step => ({
             kind: step.kind,
-            selector: step.selector,
-            text: step.text,
+            selector: 'selector' in step ? step.selector : undefined,
+            text: 'text' in step ? step.text : undefined,
           })),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },

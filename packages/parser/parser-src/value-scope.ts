@@ -66,6 +66,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       scope = this.createScopeForParameters(owningAction, scope)
     }
 
+    // An event clause's payload parameter is visible only inside that clause's body.
+    const owningEventClause = AST.findOwningEventClause(reference)
+    if (owningEventClause) {
+      scope = this.createScopeForParameterList(owningEventClause.parameterList, scope)
+    }
+
     return scope
   }
 
@@ -113,11 +119,25 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
   }
 
+  private createScopeForParameterList(
+    parameterList: AST.ParameterList | undefined,
+    outerScope: Langium.Scope,
+  ): Langium.Scope {
+    return this.createScopeForParameterNodes(parameterList?.parameters ?? [], outerScope)
+  }
+
   private createScopeForParameters(
     declaration: AST.RenderableDeclaration | AST.ActionDeclaration,
     outerScope: Langium.Scope,
   ): Langium.Scope {
-    const parameters = AST.parametersOf(declaration)
+    return this.createScopeForParameterNodes(AST.parametersOf(declaration), outerScope)
+  }
+
+  // A parameter's value name comes from its inline type or named type, not from a `name` property.
+  private createScopeForParameterNodes(
+    parameters: readonly AST.ParameterDeclaration[],
+    outerScope: Langium.Scope,
+  ): Langium.Scope {
     const firstParameter = parameters[0]
     if (!firstParameter) {
       return outerScope

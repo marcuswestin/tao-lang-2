@@ -34,6 +34,19 @@ export const ActionsCompiler = {
     `
   },
 
+  /** EventAction compiles an `on` clause body into a runtime action value bound to its payload. */
+  EventAction(event: AST.EventClause): Compiled {
+    const parameters = (event.parameterList?.parameters ?? []).map((parameter, index) => ({ index, parameter }))
+    return gen`
+      TR.Action((${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
+        return TR.BlockScope(_Scope, _Scope => {
+          ${gen.list(parameters, Compile.ActionParameterBinding)}
+          ${gen.list(event.block.statements, Compile.ActionStatement)}
+        })
+      })
+    `
+  },
+
   /** ActionParameterBinding binds one runtime action argument into the action-local scope. */
   ActionParameterBinding(parameter: ActionParameter): Compiled {
     return gen`${gen.scopeName({ name: Type.parameterName(parameter.parameter) })} = ${

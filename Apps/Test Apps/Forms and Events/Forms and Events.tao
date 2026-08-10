@@ -1,0 +1,43 @@
+use Button, Col, Row, Text, TextInput from @tao/ui
+
+app FormsAndEvents {
+   view MainView
+}
+
+view MainView {
+   state Draft = ""
+   state Saved = ""
+   state Presses = 0
+   let Invalid = Draft.Empty
+   action Save {
+      when
+         Invalid -> { }
+         otherwise -> {
+            set Saved = Draft
+            set Draft = ""
+   }  }
+   render Col() [fill, gap 8, pad 12] {
+      Text("Forms and events")
+      Text("Saved: {Saved}")
+      Text("Presses: {Presses}")
+      when
+         Invalid -> {
+            Text("Title is required")
+         }
+         otherwise -> {
+            Text("Ready to save")
+         }
+      TextInput(Draft, Label: "Task title", Placeholder: "Capture something")
+         on change -> Value is text {
+            set Draft = Value
+         }
+         on submit -> {
+            do Save()
+         }
+      Button("Save", Save, Disabled: Invalid)
+      Row() [gap 8]
+         on press -> {
+            set Presses += 1
+         } {
+         Text("Press this row")
+}  }  }

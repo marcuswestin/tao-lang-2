@@ -35,8 +35,35 @@ export type TaoTestPressStep = {
   source: TaoTestSourceLocation
 }
 
-/** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
-export type TaoTestStep = TaoTestExpectation | TaoTestPressStep
+/** TaoTestInputExpectation declares one assertion about an editable control's value. */
+export type TaoTestInputExpectation = {
+  kind: 'expect-input'
+  selector: string
+  text: string
+  value: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestWriteStep declares typing text into the focused editable control. */
+export type TaoTestWriteStep = {
+  kind: 'write'
+  text: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestSubmitStep declares submitting the focused editable control. */
+export type TaoTestSubmitStep = {
+  kind: 'submit'
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestStep declares one ordered Tao test operation after the run step. */
+export type TaoTestStep =
+  | TaoTestExpectation
+  | TaoTestPressStep
+  | TaoTestInputExpectation
+  | TaoTestWriteStep
+  | TaoTestSubmitStep
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
 export type TaoTestCheck = {
@@ -112,8 +139,21 @@ function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
     ExpectTextStep: compileExpectation,
+    ExpectInputStep: compileInputExpectation,
     PressTextStep: compilePressTextStep,
+    SubmitStep: submit => ({ kind: 'submit', source: sourceLocation(submit) }),
+    WriteStep: write => ({ kind: 'write', text: write.text, source: sourceLocation(write) }),
   })
+}
+
+function compileInputExpectation(expectation: AST.ExpectInputStep): TaoTestInputExpectation {
+  return {
+    kind: 'expect-input',
+    selector: expectation.selector,
+    text: expectation.text,
+    value: expectation.value,
+    source: sourceLocation(expectation),
+  }
 }
 
 function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {

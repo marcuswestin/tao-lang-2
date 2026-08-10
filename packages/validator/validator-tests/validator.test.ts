@@ -2180,6 +2180,48 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(result)).toContain(ExpressionsValidator.messages.iterationCollection('text'))
   })
 
+  Test('accepts event clauses and omitted defaulted parameters', async () => {
+    const result = await testValidateCode(`
+      app MyApp { view MainView }
+      view Field Value is text, Label is text default "" {
+        render inject Value, Label ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Draft = ""
+        render Field(Draft)
+          on change -> Value is text {
+            set Draft = Value
+          }
+      }
+    `)
+
+    Expect(result.diagnostics).toEqual([])
+  })
+
+  Test('rejects unsupported test selectors', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Text("hi")
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      test "Selectors" {
+        check "uses an unknown selector" {
+          run MyApp
+          press role "Save"
+        }
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(testValidationMessages.selector('role'))
+  })
+
   Test('rejects toggling non-boolean state', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }

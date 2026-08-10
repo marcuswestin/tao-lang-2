@@ -18,9 +18,10 @@ export default {
     f.oneSpaceAround('is')
   },
 
-  /** ParameterTypeDeclaration formats scoped parameter type declarations. */
+  /** ParameterTypeDeclaration formats scoped parameter type declarations and default values. */
   ParameterTypeDeclaration(f) {
     f.oneSpaceAround('is')
+    f.oneSpaceAround('default')
   },
 
   /** Type references have no interior spacing. */

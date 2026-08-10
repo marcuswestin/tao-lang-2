@@ -520,7 +520,7 @@ Describe('TR.TaoProps', () => {
 
 Describe('TR.Views', () => {
   Test('exposes runtime-backed stdlib primitive views', () => {
-    Expect(Object.keys(TR.Views).sort()).toEqual(['Pressable', 'Text', 'View'])
+    Expect(Object.keys(TR.Views).sort()).toEqual(['Pressable', 'Text', 'TextInput', 'View'])
   })
 })
 

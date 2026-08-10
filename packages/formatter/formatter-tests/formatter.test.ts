@@ -374,6 +374,23 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('formats event clauses and defaulted parameters', async () => {
+    await testFormatCode(
+      `view Field Value is text,Label is text   default   "none"{ }
+view MainView{state Draft="" render Field(Draft)on change->Value is text{set Draft=Value}}`,
+      `
+        view Field Value is text, Label is text default "none" { }
+
+        view MainView {
+           state Draft = ""
+           render Field(Draft)
+              on change -> Value is text {
+                 set Draft = Value
+        }  }
+      `,
+    )
+  })
+
   Test('tightens invocation parentheses on renders, children, and actions', async () => {
     await testFormatCode(
       `view MainView{state Count = 0 action AddStep Step is number{set Count += Step} action Run{do AddStep ( 2 )} render Stack ( ) {CountText ( 3 , "label" ) [width fill]}}`,

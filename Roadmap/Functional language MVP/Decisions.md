@@ -28,11 +28,13 @@ A render statement iterating lists and (from the query slice) query results, key
 
 ## DEC-FMVP-006 — Event clauses
 
-`on press|change|submit -> [Name is Type] { … }` attaches to render invocations. `on press` is valid on any rendered view (the compiler wraps the element in a pressable region); `change` and `submit` are valid only on views that declare those events (stdlib `TextInput`). Positional action arguments (`Button "X", DoIt`) remain valid. `does`/`did` event declarations and `frame` are deferred.
+`on press|change|submit -> [Name is Type] { … }` attaches to a render invocation after its layout clause, and the formatter puts each clause on its own indented line. Handlers travel in the `__tao` props bag as invokable action values, so a view forwards its caller's handlers and the nearest binding wins. `on press` works on any view — the runtime renders a container with a press handler as a pressable and lets text handle presses natively. `change` and `submit` are delivered by input primitives; binding them to a view that never fires them is allowed and simply never runs (per-view declared events, the `does`/`did` pair, would tighten this and are deferred). Event payloads are wrapped as Tao values by the runtime before the generated handler binds them. Positional action arguments (`Button("X", DoIt)`) remain valid.
 
-## DEC-FMVP-007 — Named arguments are property constructors; parameters take `default`
+## DEC-FMVP-007 — Named arguments use the `Label:` form; parameters take `default`
 
-Following the Type System spec, `Label "Task title"` names a slot by constructing the parameter's owner-qualified nominal type; no new argument syntax is added (the `.Label` dot-form from the ui sketch is not implemented). Parameters gain `default <literal>` (e.g. `Placeholder is text default ""`); omitted defaulted parameters bind the default. `optional`/`none` are deferred.
+Named arguments use the existing invocation label syntax — `TextInput(Draft, Label: "Task title")` — which resolves through the callee's owner-qualified parameter type. No new argument syntax is added (the `.Label` dot-form from the ui sketch is not implemented, and DEC-FMVP-017's parentheses removed the need for the juxtaposed property-constructor form).
+
+Parameters gain `default <literal>` (`Placeholder is text default ""`). A defaulted parameter can still be bound explicitly by name (an exact type match), but it does **not** compete for unnamed arguments: without that rule, a view with two `text` parameters would make every bare text argument ambiguous, which is exactly the shape every form control has. Omitted defaulted parameters compile to their default value at the call site. `optional`/`none` are deferred.
 
 ## DEC-FMVP-008 — Data schema design
 

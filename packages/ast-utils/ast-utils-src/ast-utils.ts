@@ -6,10 +6,12 @@ import {
   visibleValueDeclaration,
 } from './interpolation'
 import {
+  parameterDefaultValue,
   resolveActionInvocation,
   resolveActionTarget,
   resolveItemPropertyBindings,
   resolveRenderInvocation,
+  unboundDefaultedParameters,
 } from './invocations'
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
@@ -32,6 +34,8 @@ export const ASTUtils = {
   resolveActionTarget,
   resolveItemPropertyBindings,
   resolveRenderInvocation,
+  parameterDefaultValue,
+  unboundDefaultedParameters,
 } as const
 
 export namespace ASTUtils {

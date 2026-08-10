@@ -190,6 +190,18 @@ export function findOwningView(node: AST.Node): AST.RenderableDeclaration | unde
   return undefined
 }
 
+/** findOwningEventClause returns the event clause whose body owns `node`, if any. */
+export function findOwningEventClause(node: AST.Node): AST.EventClause | undefined {
+  let current = node.$container
+  while (current) {
+    if (AST.isEventClause(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
 /** findOwningAction returns the action declaration that owns `node`, if any. */
 export function findOwningAction(node: AST.Node): AST.ActionDeclaration | undefined {
   let current = node.$container

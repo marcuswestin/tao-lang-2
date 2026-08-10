@@ -13,12 +13,21 @@ export default {
     f.oneSpaceAfter('render')
     f.parenthesizedArguments()
     f.oneSpaceBeforeProperty('layoutClause')
+    f.indentedLines(f.node.events)
   },
 
   /** ViewRender formats a child view invocation and its arguments. */
   ViewRender(f) {
     f.parenthesizedArguments()
     f.oneSpaceBeforeProperty('layoutClause')
+    f.indentedLines(f.node.events)
+  },
+
+  /** EventClause formats `on <event> -> { ... }` interaction bindings. */
+  EventClause(f) {
+    f.oneSpaceAfter('on')
+    f.oneSpaceBefore('->')
+    f.oneSpaceBeforeProperty('parameterList')
   },
 
   /** LayoutClause formats bracketed render layout entries. */

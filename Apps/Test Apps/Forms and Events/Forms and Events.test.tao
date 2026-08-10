@@ -1,0 +1,49 @@
+use FormsAndEvents from ./
+
+test "Forms and Events" {
+   check "starts empty and invalid" {
+      run FormsAndEvents
+
+      expect text "Forms and events"
+      expect text "Title is required"
+      expect missing text "Ready to save"
+      expect input label "Task title" value ""
+   }
+
+   check "writes into an input and validates while typing" {
+      run FormsAndEvents
+      press label "Task title"
+      write "Buy oat milk"
+      expect input label "Task title" value "Buy oat milk"
+      expect text "Ready to save"
+      expect missing text "Title is required"
+   }
+
+   check "submits the input to save and clear the draft" {
+      run FormsAndEvents
+      press placeholder "Capture something"
+      write "Write the plan"
+      submit
+      expect text "Saved: Write the plan"
+      expect input label "Task title" value ""
+      expect text "Title is required"
+   }
+
+   check "saves through the button and blocks it while invalid" {
+      run FormsAndEvents
+      press label "Task title"
+      write "Ship the slice"
+      press text "Save"
+      expect text "Saved: Ship the slice"
+      press text "Save"
+      expect text "Saved: Ship the slice"
+   }
+
+   check "presses a container through an on press clause" {
+      run FormsAndEvents
+
+      expect text "Presses: 0"
+      press text "Press this row"
+      expect text "Presses: 1"
+   }
+}

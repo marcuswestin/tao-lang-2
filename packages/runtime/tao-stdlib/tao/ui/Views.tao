@@ -80,11 +80,20 @@ publish view Number Value is number {
    ```
 }
 
-publish view Button Title is text, Action is action {
-   render inject Title, Action ```ts
+publish view Button Title is text, Action is action, Disabled is boolean default false {
+   render inject Title, Action, Disabled ```ts
       return TR.Views.Pressable(
-        { __tao: _ViewProps.__tao, title: Title, action: Action },
+        { __tao: _ViewProps.__tao, title: Title, action: Action, disabled: Disabled },
         { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view TextInput Value is text, Label is text default "", Placeholder is text default "" {
+   render inject Value, Label, Placeholder ```ts
+      return TR.Views.TextInput(
+        { __tao: _ViewProps.__tao, value: Value, label: Label, placeholder: Placeholder },
+        { nativeProps: {} },
       )
    ```
 }

@@ -1,5 +1,6 @@
 grammar TaoTypes
 
+import "./expressions"
 import "./visibility"
 import "./terminals"
 
@@ -19,8 +20,9 @@ ItemTypeExpression:
 TypeProperty:
     name=ID ('is' type=TypeReference)?;
 
+// A defaulted parameter may be omitted at call sites; the default value is bound instead.
 ParameterTypeDeclaration:
-    name=ID 'is' type=TypeExpression;
+    name=ID 'is' type=TypeExpression ('default' defaultValue=PrimaryExpression)?;
 
 TypeReference:
     PrimitiveTypeReference | NamedTypeReference;
