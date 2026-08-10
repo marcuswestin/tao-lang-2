@@ -37,19 +37,20 @@ Describe('tao test', () => {
     })
   })
 
-  Test('skips future Tao MVP and syntax sketch test files during root discovery', async () => {
+  Test('skips hidden future-source directories without reserving test directory names', async () => {
     await withTaoFixture({
       'Current.test.tao': 'test "Current" { }\n',
-      'Apps/MVP-1/MVP.test.tao': 'test "Future" {',
-      'Apps/MVP-2/MVP.test.tao': 'test "Future" {',
-      'Apps/MVP-3/MVP.test.tao': 'test "Future" {',
-      'Apps/MVP-4/MVP.test.tao': 'test "Future" {',
-      'Apps/MVP-triage/MVP.test.tao': 'test "Future" {',
-      'Roadmap/Feature/Syntax Sketches/Future.test.tao': 'test "Future" {',
+      'Apps/MVP/.tao-future/Future.test.tao': 'test "Future" {',
+      'Apps/MVP-4/Valid.test.tao': 'test "Valid MVP 4" { }\n',
+      'Roadmap/Feature/Syntax Sketches/Valid.test.tao': 'test "Valid syntax sketch" { }\n',
     }, async (rootDir) => {
       const found = await findTaoTestFiles(rootDir)
 
-      Expect(found.map(path => FS.relativePath(rootDir, path))).toEqual(['Current.test.tao'])
+      Expect(found.map(path => FS.relativePath(rootDir, path))).toEqual([
+        'Apps/MVP-4/Valid.test.tao',
+        'Current.test.tao',
+        'Roadmap/Feature/Syntax Sketches/Valid.test.tao',
+      ])
     })
   })
 

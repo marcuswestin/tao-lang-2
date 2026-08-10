@@ -19,16 +19,16 @@ Describe('Tao package discovery', () => {
     }
   })
 
-  Test('skips future Tao sketch directories during recursive package discovery', async () => {
+  Test('skips hidden future-source directories during recursive package discovery', async () => {
     const root = await mkTestDir('tao-packages-sketches-')
     try {
       const packageRoot = FS.resolvePath('@cards', root)
       await FS.writeText(FS.resolvePath('Main.tao', root), '')
       await FS.writeText(FS.resolvePath('Main.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('Rows.tao', packageRoot), '')
-      await FS.writeText(FS.resolvePath('MVP-4/Future.tao', packageRoot), '')
-      await FS.writeText(FS.resolvePath('MVP-triage/Future.tao', packageRoot), '')
-      await FS.writeText(FS.resolvePath('Syntax Sketches/Future.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('.tao-future/Ignored.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('MVP-4/Valid.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('Syntax Sketches/Valid.tao', packageRoot), '')
 
       const context = await Packages.createContext(root)
       const resolution = Packages.resolve(context, {
@@ -38,8 +38,10 @@ Describe('Tao package discovery', () => {
         .map(path => FS.relativePath(root, path))
 
       Expect(candidates).toEqual([
+        '@cards/MVP-4/Valid.tao',
         '@cards/Main.tao',
         '@cards/Rows.tao',
+        '@cards/Syntax Sketches/Valid.tao',
       ])
     } finally {
       await FS.remove(root)

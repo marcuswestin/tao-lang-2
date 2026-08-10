@@ -1,0 +1,131 @@
+use @tao/nav as Nav
+use Button, Col, List, Row, Text, TextInput from @tao/ui
+
+workspace design StillDesign {
+   whiteChalk #f6f7f3
+   ink #121826
+   action #2f6b4f
+
+   screen [fill, pad 24, bg whiteChalk]
+   stack [screen, gap 12]
+   title [size 34, weight 800, color ink]
+   body [size 16, line 22, color "#344054"]
+   primary [pad 12, radius 8, bg action, body]
+   secondary [pad 12, radius 8, bg white, body, border "#d0d5dd"]
+}
+
+// Still uses only the in-scope Slot/Stack composition. The full navigation contract lives with its roadmap examples.
+workspace let StillStack = Nav.StackNav { Initial Home }
+workspace let StillNavigator = Nav.SlotNav { Initial StillStack }
+
+workspace ui Home {
+   state DraftTitle = StillData.Task.Title ""
+   query StillData.Tasks { Title, Body, Done }
+
+   render Col [stack] {
+      Text "Still" [title]
+
+      TextInput DraftTitle, .Label "Task title", .Placeholder "Capture something", [secondary]
+         on submit -> Value text { set DraftTitle = StillData.Task.Title Value }
+
+      Row {
+         ActionButton "Add task" {
+            on press -> {
+               create StillData.Task { Title DraftTitle, Body "" }
+               set DraftTitle = StillData.Task.Title ""
+            }
+         }
+         Button "Capture", [secondary]
+            on press -> { present CaptureUi }
+      }
+
+      List Tasks {
+         TaskRow Task
+         on select -> Task { present TaskUi Task }
+      }
+   }
+}
+
+ui TaskUi {
+   Task StillData.Task
+   state DraftBody = StillData.Task.Body Task.Body
+
+   render Col [stack] {
+      Text Task.Title [title]
+      TextInput DraftBody, .Label "Notes", [secondary]
+         on submit -> Value text {
+            update Task { Body Value }
+         }
+      Button "Toggle complete", [secondary]
+         on press -> { toggle Task.Done }
+      Button "Back", [secondary]
+         on press -> { dismiss }
+   }
+}
+
+ui CaptureUi {
+   render Col [stack] {
+      Text "Capture" [title]
+      CaptureForm
+      Button "Done", [secondary]
+         on press -> { dismiss }
+   }
+}
+
+view TaskRow {
+   Task StillData.Task
+
+   render Row [content spread center] {
+      Text Task.Title [body]
+      Text when
+         Task.Done -> "Done"
+         otherwise -> "Open"
+   }
+}
+
+frame ActionButton {
+   Label text
+   does press
+
+   render Button Label, [primary]
+      on press -> { did press }
+}
+
+view CaptureForm {
+   state Title = StillData.Task.Title ""
+   state Body = StillData.Task.Body ""
+
+   render Col {
+      TextInput Title, .Label "Title", [secondary]
+         on submit -> Value text { set Title = StillData.Task.Title Value }
+      TextInput Body, .Label "Details", [secondary]
+         on submit -> Value text { set Body = StillData.Task.Body Value }
+      Button "Save", [primary]
+         on press -> {
+            // Defaulted fields are omitted from ordinary creation.
+            create StillData.Task { Title, Body }
+         }
+   }
+}
+
+// `file` is the default visibility. It is shown once here and normally omitted.
+file view FileVisibilityExample {
+   render Text "Visible only in this file"
+}
+
+package view PackageVisibilityExample {
+   render Text "Visible within @ui"
+}
+
+workspace view WorkspaceVisibilityExample {
+   render Text "Visible throughout this workspace, but not to published consumers"
+}
+
+public view PublishedCaptureCard {
+   render Col [stack] {
+      Text "Capture" [title]
+      CaptureForm
+   }
+}
+
+// `public` declarations become consumer API only when this workspace is distributed with `tao publish`.

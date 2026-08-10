@@ -1,0 +1,13 @@
+use StillCurrent from ./
+
+test "Still current MVP" {
+   check "captures an item" {
+      run StillCurrent
+
+      expect text "Still"
+      expect text "Inbox"
+      expect text "0"
+      press text "Capture"
+      expect text "1"
+   }
+}

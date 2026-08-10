@@ -57,19 +57,20 @@ Describe('tao check', () => {
     })
   })
 
-  Test('skips future Tao sketch directories during root discovery', async () => {
+  Test('skips hidden future-source directories without reserving user directory names', async () => {
     await withTaoFixture({
       'canonical.tao': 'view MainView { }\n',
-      'Apps/MVP-1/Future.tao': 'project app FutureMVP {',
-      'Apps/MVP-2/Future.tao': 'project app FutureMVP {',
-      'Apps/MVP-3/Future.tao': 'project app FutureMVP {',
-      'Apps/MVP-4/Future.tao': 'project app FutureMVP {',
-      'Apps/MVP-triage/Future.tao': 'project app FutureMVP {',
-      'Roadmap/Feature/Syntax Sketches/Future.tao': 'render Screen [futureCombinedToken] {',
+      'Apps/MVP/.tao-future/Future.tao': 'project app FutureMVP {',
+      'Apps/MVP-4/Valid.tao': 'view ValidMVP4 { }\n',
+      'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
-      Expect(statusByFile(results, rootDir)).toEqual({ 'canonical.tao': 'unchanged' })
+      Expect(statusByFile(results, rootDir)).toEqual({
+        'Apps/MVP-4/Valid.tao': 'unchanged',
+        'Roadmap/Feature/Syntax Sketches/Valid.tao': 'unchanged',
+        'canonical.tao': 'unchanged',
+      })
     })
   })
 

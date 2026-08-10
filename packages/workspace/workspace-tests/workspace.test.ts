@@ -100,21 +100,25 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
-  Test('skips future Tao sketch directories while preloading LSP documents', async () => {
+  Test('skips hidden future-source directories while preloading LSP documents', async () => {
     await withTaoFiles(
       'tao-workspace-lsp-sketches-',
       {
         'Main.tao': 'view MainView { }\n',
-        'Apps/MVP-4/Future.tao': 'project app FutureMVP {',
-        'Apps/MVP-triage/Future.tao': 'project app FutureMVP {',
-        'Roadmap/Feature/Syntax Sketches/Future.tao': 'render Screen [futureCombinedToken] {',
+        'Apps/MVP/.tao-future/Future.tao': 'project app FutureMVP {',
+        'Apps/MVP-4/Valid.tao': 'view ValidMVP4 { }\n',
+        'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
       },
       async (_paths, rootDir) => {
         const workspace = await LSPWorkspace.open(rootDir)
         const loadedPaths = Array.from(workspace.services.shared.workspace.LangiumDocuments.all)
           .map(document => document.uri.fsPath)
 
-        Expect(loadedPaths).toEqual([FS.resolvePath('Main.tao', rootDir)])
+        Expect(loadedPaths).toEqual([
+          FS.resolvePath('Apps/MVP-4/Valid.tao', rootDir),
+          FS.resolvePath('Main.tao', rootDir),
+          FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
+        ])
       },
     )
   })

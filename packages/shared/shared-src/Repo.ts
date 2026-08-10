@@ -117,6 +117,7 @@ function gitListFiles(gitRoot: string, pathspecs: readonly string[]): string[] {
     .split('\n')
     .filter(Boolean)
     .map(path => FS.resolvePath(path, gitRoot))
+    .filter(FS.existsSync)
     .sort()
 }
 
