@@ -17,7 +17,7 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Assumptions
 
-- Layout remains `[ ... ]`; visual design uses a separate source surface. The exact visual delimiter or declaration shape is confirmed in Step 1 before parser implementation.
+- Layout and visual design entries share one typed `[ ... ]` application surface. Step 1 settles only the design declaration and recipe shapes, not a second render-site delimiter.
 - The first runtime target is the existing Expo/React Native runtime.
 - Generated code imports default `TR` from `@runtime/TR` and delegates reusable design semantics to `TR.*` or generated design data consumed by `TR`.
 - The first implementation should update `Apps/Kitchen Sink/Kitchen Sink.tao` only after the slice is executable.
@@ -33,18 +33,18 @@ Add executable coverage once the parser, validator, compiler, and runtime can su
 
 ## Implementation steps
 
-### 1. Settle and parse the source design surface
+### 1. Settle and parse design declarations and combined entries
 
 Concrete work:
 
-- Decide the first public source shape for design declarations and visual application:
+- Decide the first public source shape for design declarations and combined spec application:
   - `design AppTheme { ... }` declarations and app selection;
   - token and semantic-token blocks;
   - recipe definitions or semantic variants;
-  - render-site visual clauses, if included in the first slice.
-- Resolve delimiter interaction between the proposed `< ... >` design clauses, current `{ ... }` render blocks, injection TSX fences, and any planned angle render blocks.
+  - visual entries and named combined specs applied through existing `[ ... ]` clauses.
+- Define typed merge and precedence rules between layout entries, visual entries, named specs, recipes, and caller overrides.
 - Extend parser grammar and AST for the chosen design declaration subset.
-- Add parser tests for positive design declarations, token references, recipe declarations, and rejected ambiguous delimiter cases.
+- Add parser tests for positive design declarations, token references, recipe declarations, combined entries, and ambiguous merge cases.
 - Add formatter support for the new declarations and clauses in the same slice if the parser accepts source files.
 
 Likely commit unit: parser grammar, generated parser artifacts, AST-facing tests, formatter handling for syntax introduced here.
@@ -94,7 +94,7 @@ Exit criteria: a Tao app can select a design and render at least Text, Button, a
 
 Concrete work:
 
-- Implement the first style-application surface from Step 1, such as render-site visual clauses, recipe variants, semantic component variants, or app default recipes.
+- Implement the first design-application surface from Step 1 through visual entries in combined specs, recipe variants, semantic component variants, or app default recipes.
 - Define precedence among stdlib defaults, app selected design defaults, recipe defaults, call-site variants, raw visual values, and native props from injected views.
 - Ensure current layout clauses still merge independently from visual styles.
 - Add focused compiler/runtime tests that inspect behavior through rendered output or runtime style resolution, not brittle generated-code substrings.

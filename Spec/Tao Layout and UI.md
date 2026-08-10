@@ -2,21 +2,19 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, and the first bracketed layout clauses for `content`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, style clauses, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
-
-Open design question: should `frame` and `layout` be allowed to paint pixels with `<style>`, or should visual styling be restricted to `view` declarations and view-like primitives? Disallowing style on containers may make the model clearer, but it may also make common framed surfaces awkward. This document does not settle that question yet.
+Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, and the first bracketed spec entries for `content`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
 
 ## Layout Introduction
 
-In Tao, styling and layout are separated.
+Styling and layout remain distinct typed concerns, but Tao combines both in one bracketed spec surface. Named specs may contain other named specs and may package layout and visual styling together.
 
 Layout describes how to arrange content on the screen - where it appears, and how it gets sized:
 
 `Row [content spread center, pad 2, rigid] { ... }`
 
-And styles describe visual appearance:
+Visual entries describe appearance in the same brackets:
 
-`Row <background black, border white, radius 2, shadow gray>`
+`Row [content spread center, background black, border white, radius 2, shadow gray]`
 
 ### UI Kinds
 
@@ -26,7 +24,15 @@ There are three UI kinds in Tao:
 - A `layout` container receives arbitrary content, expands into available space, and can compress when space gets tight. It is used for app regions like headers, lists, panes, and screens.
 - A `view` decides its own content instead of receiving arbitrary content, renders content on screen, and handles user interactions. While `frame` and `layout` are about arrangement, `view` is about actually displaying things on the screen.
 
-`frame`, `layout`, and `view` declarations can all take typed value parameters. `frame` and `layout` are additionally specialized by caller content, named render slots, and layout/style clauses.
+`frame`, `layout`, and `view` declarations can all take typed value parameters. `frame` and `layout` are additionally specialized by caller content, named render slots, and combined specs. Containers may paint backgrounds, borders, shadows, and other visual styles when their spec requests them.
+
+Presentation adds separate declaration roles without changing these visual roles:
+
+- `ui` is presentable content whose visual body follows the same render rules as a `view`.
+- `dialogue` is response-demanding content whose body follows the same render rules.
+- `nav` is a presentation container, not ordinary render content. A nav may be mounted only as an app navigator, app auxiliary, or child of another nav. Rendering a nav inside a `view` or `ui` is a validation error.
+
+See `Tao Presentation and Navigation.md` for presentation behavior.
 
 #### UI Containers: `frame` and `layout`
 
@@ -72,7 +78,8 @@ Basic transitional UI elements:
 
 - `Spinner`: a loading indicator.
 - `Progress`: a progress bar indicator.
-- `Modal`: a modal dialog.
+
+Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces are UI values presented into an overlay nav, while response-demanding modal conversations are dialogues invoked with `ask`; see `Tao Presentation and Navigation.md`. Visual portal and layer primitives remain a separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
@@ -81,7 +88,7 @@ When creating a UI element, you can allow for parts of the UI to be rendered by 
 ```tao
 use Icon, Text, Box, Row from @tao/ui
 
-view Label Title is text {
+view Label Title text {
    @icon = empty
 
    render Box {
@@ -110,12 +117,65 @@ When `frame` and `layout` UI render, they get to choose where to render it using
 frame Card {
    @title = empty
 
-   render Stack [content top stretch, gap 8, pad 16] <background white, radius 2, shadow gray> {
+   render Stack [content top stretch, gap 8, pad 16, background white, radius 2, shadow gray] {
       @title [pad 2]
       @@content
    }
 }
 ```
+
+### Declaration Properties, Children, And Slots
+
+Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header parameters are shorthand for the same public properties:
+
+```tao
+view Profile User {
+   render Text User.Name
+}
+
+view ProfileLonghand {
+   User User
+   render Text User.Name
+}
+
+render Profile User
+render ProfileLonghand { User User }
+```
+
+Properties, unnamed render children, and named render slots are distinct channels:
+
+- An explicit property constructor such as `User CurrentUser` binds a public declaration property.
+- Ordinary render expressions in a caller content block remain children. They are never consumed as properties solely because their types match.
+- `@name` fills a named render slot.
+- `@@content` places unnamed children inside a `frame` or `layout` implementation.
+- Keyed objects such as navigation `Items { @home ... }` are data properties, not visual render slots.
+
+`@name` consistently introduces or refers to an owner-scoped name. Render slots and keyed entries are different typed roles under that shared naming model: a render slot is declared by the reusable UI surface, while a keyed entry is declared in one configured value and may be targetable when its accepted entry type permits it.
+
+Direct `@name` entries share one namespace within their immediate configured owner. Nested configured values begin new namespaces. A direct name must resolve to exactly one declared render slot or compatible open keyed property; Tao gives neither role precedence. If more than one channel or keyed property could accept it, validation reports an ambiguity and the caller must write the property explicitly, such as `Items { @home { ... } }`. A duplicate direct name in one owner is invalid.
+
+Only a targetable keyed entry creates an owner-qualified target such as `Writer@home`. A render slot never becomes a navigation target merely because it uses `@`.
+
+```tao
+frame UserCard {
+   User User
+   @actions = empty
+
+   render Stack {
+      Text User.Name
+      @@content
+      @actions
+   }
+}
+
+render UserCard {
+   User CurrentUser       // property
+   Text "Recent activity" // unnamed child
+   @actions Button "Edit" // named render slot
+}
+```
+
+The compiler classifies each entry from syntax and the receiving declaration surface before type matching. A child cannot disappear into a same-typed property when a declaration evolves.
 
 ## Layout Properties
 
