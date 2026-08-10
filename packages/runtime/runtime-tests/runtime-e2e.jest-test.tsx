@@ -112,6 +112,71 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('runs Tao enter and submit steps through label and id selectors', async () => {
+    await withTaoFiles(
+      'tao-runtime-input-test-plan-',
+      {
+        'Main.test.tao': `
+        use InputApp from ./
+
+        test "Input" {
+          check "changes and submits" {
+            run InputApp
+            enter "Plan launch" into label "Task title"
+            expect text "Plan launch"
+            submit id "task-title"
+            expect text "Saved"
+          }
+        }
+      `,
+        'Main.tao': `
+        app InputApp { view MainView }
+        view MainView {
+          state Draft = ""
+          state Status = "Waiting"
+          action ChangeDraft Value is text {
+            set Draft = Value
+          }
+          action Submit {
+            set Status = "Saved"
+          }
+          render Stack {
+            NativeInput .Value Draft, .Change ChangeDraft, .Submit Submit, .Label "Task title", .Id "task-title"
+            Text Draft
+            Text Status
+          }
+        }
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+        view NativeInput Value is text, Change is action, Submit is action, Label is text, Id is text {
+          render inject Value, Change, Submit, Label, Id \`\`\`ts
+            return (
+              <RN.TextInput
+                accessibilityLabel={Label}
+                testID={Id}
+                value={Value}
+                onChangeText={value => Change.invoke(TR.Value(value))}
+                onSubmitEditing={() => Submit.invoke()}
+              />
+            )
+          \`\`\`
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
   Test('reports Tao suite and check context for failed text expectations', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',

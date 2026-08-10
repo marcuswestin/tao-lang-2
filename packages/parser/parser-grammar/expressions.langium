@@ -13,7 +13,9 @@ ArgumentList:
     arguments+=Argument (',' arguments+=Argument)*;
 
 Argument:
-    (type=TypeReference ':' value=TypedArgumentValue) | value=ArgumentValue;
+    ('.' parameterName=ID value=ArgumentValue)
+    | (type=TypeReference ':' value=TypedArgumentValue)
+    | value=ArgumentValue;
 
 TypedArgumentValue:
     ItemLiteral | Expression;

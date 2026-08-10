@@ -2257,6 +2257,40 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
+  Test('binds duplicate primitive parameter types by explicit argument name', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view MainView {
+        action Change Value is text { }
+        action Submit { }
+        render Field .Value "Draft", .Change Change, .Submit Submit, .Label "Title", .Disabled false
+      }
+      view Field Value is text, Change is action, Submit is action, Label is text, Disabled is boolean {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Field .Missing "Draft", .Value 3, .Value "Again"
+      }
+      view Field Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(invocationValidationMessages.unknownNamedArgument('Field', 'Missing'))
+    Expect(messages).toContain(
+      invocationValidationMessages.namedArgumentType('Field', 'Value', 'Field.Value', 'number'),
+    )
+    Expect(messages).toContain(invocationValidationMessages.duplicateNamedArgument('Field', 'Value'))
+  })
+
   Test('rejects ambiguous expected binding types', async () => {
     const ambiguousScopedParameters = await testValidateCodeWithErrors(`
       app MyApp { view MainView }

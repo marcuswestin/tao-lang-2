@@ -312,6 +312,24 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('normalizes named invocation and input-test step spacing', async () => {
+    await testFormatCode(
+      `view MainView{render Field .Value   "Draft",.Disabled false}\ntest "Form"{check "entry"{run MyApp enter "Hello"  into label  "Title" submit id  "field"}}`,
+      `
+        view MainView {
+           render Field .Value "Draft", .Disabled false
+        }
+
+        test "Form" {
+           check "entry" {
+              run MyApp
+              enter "Hello" into label "Title"
+              submit id "field"
+        }  }
+      `,
+    )
+  })
+
   Test('formats state declarations and action bodies', async () => {
     await testFormatCode(
       `view MainView{state Count=0 action AddStep Step is number{set Count+=Step} action AddFive{do AddStep 5} render Stack{Button "Reset",action{set Count=0} Button "Inline",->{set Count+=1}}}`,

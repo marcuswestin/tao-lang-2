@@ -13,6 +13,9 @@ export type ActionInvocationPair = RenderInvocationPair
 export type ArgumentBindingDiagnostic =
   | { kind: 'duplicate-parameter-type'; parameter: AST.ParameterDeclaration; type: string }
   | { kind: 'duplicate-argument-type'; argument: AST.Argument; type: string }
+  | { kind: 'unknown-named-argument'; argument: AST.Argument; name: string }
+  | { kind: 'duplicate-named-argument'; argument: AST.Argument; parameter: AST.ParameterDeclaration }
+  | { kind: 'named-argument-type'; argument: AST.Argument; parameter: AST.ParameterDeclaration }
   | {
     kind: 'ambiguous-argument'
     argument: AST.Argument
@@ -259,8 +262,9 @@ function resolveArgumentBindings(
   const remainingParameters = new Set(parameters)
   const remainingArgs = new Set(args)
 
-  reportDuplicateParameterTypes(parameters, diagnostics)
-  const duplicateArgumentTypes = reportDuplicateArgumentTypes(args, diagnostics)
+  bindNamedArguments(remainingArgs, remainingParameters, pairs, diagnostics)
+  reportDuplicateParameterTypes([...remainingParameters], diagnostics)
+  const duplicateArgumentTypes = reportDuplicateArgumentTypes([...remainingArgs], diagnostics)
 
   bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesExactlyMatch, duplicateArgumentTypes)
   bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesAreAssignable, duplicateArgumentTypes)
@@ -338,6 +342,43 @@ function resolveArgumentBindings(
   }
 
   return { pairs: pairsByParameterOrder(parameters, pairs), diagnostics }
+}
+
+function bindNamedArguments(
+  remainingArgs: Set<AST.Argument>,
+  remainingParameters: Set<AST.ParameterDeclaration>,
+  pairs: RenderInvocationPair[],
+  diagnostics: ArgumentBindingDiagnostic[],
+): void {
+  for (const argument of [...remainingArgs]) {
+    const name = argument.parameterName
+    if (!name) {
+      continue
+    }
+    const parameter = [...remainingParameters].find(candidate => Type.parameterName(candidate) === name)
+    if (!parameter) {
+      const declared = pairs.find(pair => Type.parameterName(pair.parameter) === name)?.parameter
+      diagnostics.push(
+        declared
+          ? { kind: 'duplicate-named-argument', argument, parameter: declared }
+          : { kind: 'unknown-named-argument', argument, name },
+      )
+      remainingArgs.delete(argument)
+      continue
+    }
+    const actual = Type.ofArgument(argument)
+    const expected = Type.ofParameter(parameter)
+    if (
+      actual.kind !== 'unresolved'
+      && expected.kind !== 'unresolved'
+      && !Type.isAssignable(actual, expected)
+    ) {
+      diagnostics.push({ kind: 'named-argument-type', argument, parameter })
+    }
+    pairs.push({ argument, parameter })
+    remainingArgs.delete(argument)
+    remainingParameters.delete(parameter)
+  }
 }
 
 function pairsByExpectedPropertyOrder(
@@ -544,6 +585,9 @@ function reportDuplicateArgumentTypes(
   const seen = new Set<string>()
   const duplicates = new Set<string>()
   for (const argument of args) {
+    if (argument.parameterName) {
+      continue
+    }
     const key = Type.identityKey(Type.ofArgument(argument))
     if (!key) {
       continue

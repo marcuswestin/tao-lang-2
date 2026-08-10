@@ -31,14 +31,15 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
 
 function runStep(screen: RuntimeApp.Screen, step: TestCompiler.Step): void {
   return Switch.kind<TestCompiler.Step, void>(step, {
+    enter: enter => enterStep(screen, enter),
     expect: expectation => assertExpectation(screen, expectation),
     press: press => pressStep(screen, press),
+    submit: submit => submitStep(screen, submit),
   })
 }
 
 function pressStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'press' }>): void {
-  assertTextSelector(step)
-  const matches = screen.queryAllByText(step.text)
+  const matches = querySelector(screen, step.selector, step.text)
   if (matches.length === 0) {
     throw new Error(
       `${formatStep(step)} expected pressable rendered text but found none.\n${formatSource(step.source)}`,
@@ -58,12 +59,21 @@ function pressStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, {
   fireEvent.press(match)
 }
 
+function enterStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'enter' }>): void {
+  const match = requireSingleMatch(screen, step, step.target, 'text input')
+  fireEvent.changeText(match, step.value)
+}
+
+function submitStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'submit' }>): void {
+  const match = requireSingleMatch(screen, step, step.target, 'submittable input')
+  fireEvent(match, 'submitEditing')
+}
+
 function assertExpectation(
   screen: RuntimeApp.Screen,
   expectation: Extract<TestCompiler.Step, { kind: 'expect' }>,
 ): void {
-  assertTextSelector(expectation)
-  const matches = screen.queryAllByText(expectation.text)
+  const matches = querySelector(screen, expectation.selector, expectation.text)
   if (!expectation.missing && matches.length === 0) {
     throw new Error(
       `${formatStep(expectation)} expected rendered text but found none.\n${formatSource(expectation.source)}`,
@@ -80,18 +90,44 @@ function assertExpectation(
 
 function formatStep(step: TestCompiler.Step): string {
   return Switch.kind<TestCompiler.Step, string>(step, {
+    enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
     expect: expectation =>
       expectation.missing
         ? `expect missing ${expectation.selector} "${expectation.text}"`
         : `expect ${expectation.selector} "${expectation.text}"`,
     press: press => `press ${press.selector} "${press.text}"`,
+    submit: submit => `submit ${submit.selector} "${submit.target}"`,
   })
 }
 
-function assertTextSelector(step: TestCompiler.Step): void {
-  if (step.selector !== 'text') {
-    throw new Error(`${formatStep(step)} has unsupported selector '${step.selector}'.`)
+function requireSingleMatch(
+  screen: RuntimeApp.Screen,
+  step: TestCompiler.Step,
+  target: string,
+  description: string,
+) {
+  const matches = querySelector(screen, step.selector, target)
+  if (matches.length !== 1) {
+    throw new Error(
+      `${formatStep(step)} expected one ${description} but found ${matches.length} matches.\n${
+        formatSource(step.source)
+      }`,
+    )
   }
+  return matches[0]!
+}
+
+function querySelector(screen: RuntimeApp.Screen, selector: string, target: string) {
+  if (selector === 'id') {
+    return screen.queryAllByTestId(target)
+  }
+  if (selector === 'label') {
+    return screen.queryAllByLabelText(target)
+  }
+  if (selector === 'text') {
+    return screen.queryAllByText(target)
+  }
+  throw new Error(`Unsupported test selector '${selector}'.`)
 }
 
 function formatSource(source: TestCompiler.Source): string {

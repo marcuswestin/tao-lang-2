@@ -408,6 +408,8 @@ Describe('minimal Tao parser', () => {
 
           expect text "Hello"
           press text "Add"
+          enter "Draft" into label "Title"
+          submit id "title-input"
           expect missing text "Loading"
         }
       }
@@ -419,7 +421,7 @@ Describe('minimal Tao parser', () => {
     const [check] = test.block.statements
     Expect.Is(check, AST.isCheckDeclaration)
     Expect(check.name).toBe('renders text')
-    const [run, expectedText, pressText, missingText] = check.block.statements
+    const [run, expectedText, pressText, enterText, submitInput, missingText] = check.block.statements
     Expect.Is(run, AST.isRunStep)
     Expect(run.app.ref?.name).toBe('MyApp')
     Expect.Is(expectedText, AST.isExpectTextStep)
@@ -429,10 +431,38 @@ Describe('minimal Tao parser', () => {
     Expect.Is(pressText, AST.isPressTextStep)
     Expect(pressText.selector).toBe('text')
     Expect(pressText.text).toBe('Add')
+    Expect.Is(enterText, AST.isEnterTextStep)
+    Expect(enterText.value).toBe('Draft')
+    Expect(enterText.selector).toBe('label')
+    Expect(enterText.target).toBe('Title')
+    Expect.Is(submitInput, AST.isSubmitInputStep)
+    Expect(submitInput.selector).toBe('id')
+    Expect(submitInput.target).toBe('title-input')
     Expect.Is(missingText, AST.isExpectTextStep)
     Expect(missingText.selector).toBe('text')
     Expect(missingText.text).toBe('Loading')
     Expect(missingText.missing).toBe(true)
+  })
+
+  Test('parses named invocation arguments', async () => {
+    const parseResult = await testParseCode(`
+      view Field Value is text, Change is action, Disabled is boolean { }
+      view MainView Draft is text, ChangeDraft is action {
+        render Field .Disabled false, .Change ChangeDraft, .Value Draft
+      }
+    `)
+
+    const mainView = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'MainView',
+    )
+    Expect.Is(mainView, AST.isViewDeclaration)
+    const render = AST.blockStatementOf(mainView, 0)
+    Expect.Is(render, AST.isRenderStatement)
+    Expect(AST.argumentsOf(render).map(argument => argument.parameterName)).toEqual([
+      'Disabled',
+      'Change',
+      'Value',
+    ])
   })
 
   Test('parses the Kitchen Sink v0 Tao test sidecar', async () => {

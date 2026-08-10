@@ -1,6 +1,6 @@
 # Tao Testing
 
-Status: design draft with an initial v0 implementation in progress. The current repo has package tests, an Expo runtime render harness, and a minimal Tao-native app smoke-test slice: `test`, `check`, `run <AppName>`, `expect text`, `expect missing text`, test-plan IR, and `tao test [path]`. It does not have `render` test subjects, state/action test steps, datasource test seeding, provider test adapters, or the richer CLI options described below yet.
+Status: design draft with an executable v0 implementation. The current repo has package tests, an Expo runtime render harness, and Tao-native app behavior steps: `test`, `check`, `run <AppName>`, `expect [missing] text`, `press text|label|id`, `enter "value" into text|label|id`, `submit text|label|id`, test-plan IR, and `tao test [path]`. It does not have `render` test subjects, datasource test seeding, provider test adapters, or the richer CLI options described below yet.
 
 This design starts with app and UI behavior tests. Tests can live in regular `.tao` files or sidecar `.test.tao` files. Package testing is deferred until Tao package semantics and app/UI testing are stable.
 
@@ -627,16 +627,16 @@ CLI behavior:
 - `--fail-fast` stops after the first failing check.
 - Failure output includes the test name, check name, failing step, source location, selected runtime, rendered UI summary, and artifacts where the runtime supports them.
 
-The current v0 implementation exposes `tao test [path]` for Tao files with inline or sidecar test declarations. It still delegates execution to the runtime Jest harness; richer CLI filtering, watch mode, JSON output, artifacts, and alternate runtimes remain future work.
+The current v0 implementation exposes `tao test [path]` for Tao files with inline or sidecar test declarations. Press, text entry, and input submission resolve exact rendered text, accessibility labels, or stable IDs through the runtime adapter. It still delegates execution to the runtime Jest harness; richer CLI filtering, watch mode, JSON output, artifacts, and alternate runtimes remain future work.
 
 ## First Implementation Slice
 
 This spec should not block useful Test App coverage on the full CLI and runtime-adapter design. The first repo slice can be much smaller:
 
-- Parse a minimal test subset: inline `test`, sidecar `.test.tao`, nested `check`, `run <AppName>`, `expect text`, and `expect missing text`.
+- Parse a minimal test subset: inline `test`, sidecar `.test.tao`, nested `check`, `run <AppName>`, `expect [missing] text`, `press`, `enter`, and `submit` with the shipped text/label/id selectors.
 - Compile those checks to a small test-plan IR with source locations.
 - Execute app-subject checks through the existing Expo runtime Jest harness in `packages/runtime/runtime-tests/test-compile-app.tsx`, especially `compileAndRenderApp` and `testCompileApp`.
-- Defer `render`, `run ... with { ... }`, input actions, datasource-specific setup/reset, focused non-app subjects, and richer `tao test` options until after rendered smoke checks are running for `Apps/Test Apps/*`.
+- Defer `render`, `run ... with { ... }`, focus/write sequences, datasource-specific setup/reset, focused non-app subjects, and richer `tao test` options until after the functional MVP.
 
 That path lets Test Apps start gaining Tao-authored behavior checks while preserving the broader design.
 

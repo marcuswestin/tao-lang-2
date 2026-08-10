@@ -13,7 +13,7 @@ TestDeclaration:
 CheckDeclaration:
     'check' name=STRING block=Block;
 
-type CheckStep = RunStep | PressTextStep | ExpectTextStep;
+type CheckStep = RunStep | PressTextStep | ExpectTextStep | EnterTextStep | SubmitInputStep;
 
 RunStep:
     'run' app=[AppDeclaration:ID];
@@ -24,5 +24,11 @@ PressTextStep:
 ExpectTextStep:
     'expect' missing?='missing'? selector=TestSelector text=STRING;
 
+EnterTextStep:
+    'enter' value=STRING 'into' selector=TestSelector target=STRING;
+
+SubmitInputStep:
+    'submit' selector=TestSelector target=STRING;
+
 TestSelector returns string:
-    ID | 'text';
+    ID | 'text' | 'label' | 'id';

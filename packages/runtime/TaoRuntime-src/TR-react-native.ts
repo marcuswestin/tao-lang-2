@@ -10,6 +10,7 @@ export type ReactNativeRuntime = {
   ScrollView: React.ComponentType<any>
   View: React.ComponentType<any>
   Text: React.ComponentType<any>
+  TextInput: React.ComponentType<any>
   Pressable: React.ComponentType<any>
 }
 

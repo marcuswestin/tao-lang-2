@@ -12,6 +12,16 @@ type TaoButtonProps = TaoViewProps & {
   title: string
 }
 
+type TaoTextInputProps = TaoViewProps & {
+  disabled?: boolean
+  id?: string
+  label: string
+  onChange?: (value: string) => void
+  onSubmit?: () => void
+  placeholder?: string
+  value: string
+}
+
 type TaoPrimitiveKind = 'Pressable' | 'Text' | 'View'
 
 type TaoPrimitiveElementProps = {
@@ -53,7 +63,56 @@ export const Views = {
       viewProps: props,
     })
   },
+
+  TextInput(props: TaoTextInputProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    return React.createElement(TaoTextInput, { props, runtimeProps })
+  },
 } as const
+
+function TaoTextInput({ props, runtimeProps }: {
+  props: TaoTextInputProps
+  runtimeProps: TaoViewRuntimeProps
+}): React.ReactElement {
+  const runtime = requireReactNativeRuntime()
+  const parentDirection = ParentDirectionContext.use()
+  const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
+  const input = createReactElement(runtime, runtime.TextInput, {
+    accessibilityLabel: props.label,
+    editable: !props.disabled,
+    onChangeText: props.onChange,
+    onSubmitEditing: props.onSubmit,
+    placeholder: props.placeholder,
+    style: {
+      borderColor: '#a8b0aa',
+      borderRadius: 8,
+      borderWidth: 1,
+      color: '#17201a',
+      fontSize: 16,
+      minHeight: 44,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    testID: props.id,
+    value: props.value,
+  })
+  const label = createReactElement(
+    runtime,
+    runtime.Text,
+    { style: { color: '#314238', fontSize: 14, fontWeight: '600' } },
+    props.label,
+  )
+  const children = React.createElement(React.Fragment, null, label, input)
+  const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
+  return createReactElement(
+    runtime,
+    runtime.View,
+    {
+      ...wrapperProps,
+      style: [wrapperProps['style'], { gap: 6, opacity: props.disabled ? 0.55 : 1 }],
+    },
+    children,
+  )
+}
 
 function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElement {
   const runtime = requireReactNativeRuntime()

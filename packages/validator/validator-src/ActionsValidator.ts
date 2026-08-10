@@ -22,6 +22,11 @@ const actionValidationMessages = {
   duplicateParameterType: (action: string, parameter: string) =>
     `Action ${action} has more than one parameter with the same type near '${parameter}'.`,
   duplicateArgumentType: (action: string) => `Action ${action} has more than one argument with the same exact type.`,
+  unknownNamedArgument: (action: string, name: string) => `Action ${action} has no parameter named '${name}'.`,
+  duplicateNamedArgument: (action: string, name: string) =>
+    `Action ${action} receives parameter '${name}' more than once.`,
+  namedArgumentType: (action: string, name: string, expected: string, actual: string) =>
+    `Named argument '.${name}' of action ${action} expects ${expected}, got ${actual}.`,
   dynamicActionArguments: 'Action values without a named declaration cannot receive arguments in this MVP.',
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
 }
@@ -149,6 +154,26 @@ function reportActionBindingDiagnostic(
       ctx.error(
         actionValidationMessages.duplicateParameterType(action.name, Type.parameterName(diagnostic.parameter)),
         invocation,
+      )
+    },
+    'unknown-named-argument': diagnostic => {
+      ctx.error(actionValidationMessages.unknownNamedArgument(action.name, diagnostic.name), diagnostic.argument)
+    },
+    'duplicate-named-argument': diagnostic => {
+      ctx.error(
+        actionValidationMessages.duplicateNamedArgument(action.name, Type.parameterName(diagnostic.parameter)),
+        diagnostic.argument,
+      )
+    },
+    'named-argument-type': diagnostic => {
+      ctx.error(
+        actionValidationMessages.namedArgumentType(
+          action.name,
+          Type.parameterName(diagnostic.parameter),
+          Type.displayName(Type.ofParameter(diagnostic.parameter)),
+          Type.displayName(Type.ofArgument(diagnostic.argument)),
+        ),
+        diagnostic.argument,
       )
     },
   })

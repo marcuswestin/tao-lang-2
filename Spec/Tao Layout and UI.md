@@ -2,7 +2,7 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
+Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, runtime-backed `TextInput` and `FormButton` controls with labels/IDs/disabled and submitting state, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
 
 ## Layout Introduction
 

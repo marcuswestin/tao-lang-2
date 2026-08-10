@@ -2,16 +2,18 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
 
-const supportedSelectors = ['text'] as const
+const supportedSelectors = ['text', 'label', 'id'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
   testPlacement: 'Test declarations are only allowed at file level.',
   testBlock: (name: string) => `Only check declarations are allowed in test '${name}'.`,
   checkPlacement: 'Check declarations are only allowed inside test blocks.',
-  checkBlock: (name: string) => `Only run, press, and expect statements are allowed in check '${name}'.`,
+  checkBlock: (name: string) => `Only run, press, enter, submit, and expect statements are allowed in check '${name}'.`,
   runPlacement: 'Run steps are only allowed inside check blocks.',
   pressPlacement: 'Press steps are only allowed inside check blocks.',
+  enterPlacement: 'Enter steps are only allowed inside check blocks.',
+  submitPlacement: 'Submit steps are only allowed inside check blocks.',
   expectationPlacement: 'Expectations are only allowed inside check blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
@@ -40,6 +42,18 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(testValidationMessages.pressPlacement, press)
     }
     validateSelector(press, ctx)
+  }
+  for (const enter of AST.streamAllContents(file).filter(AST.isEnterTextStep)) {
+    if (statementNeedsStepPlacementDiagnostic(enter)) {
+      ctx.error(testValidationMessages.enterPlacement, enter)
+    }
+    validateSelector(enter, ctx)
+  }
+  for (const submit of AST.streamAllContents(file).filter(AST.isSubmitInputStep)) {
+    if (statementNeedsStepPlacementDiagnostic(submit)) {
+      ctx.error(testValidationMessages.submitPlacement, submit)
+    }
+    validateSelector(submit, ctx)
   }
   for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
     if (statementNeedsStepPlacementDiagnostic(expectation)) {
@@ -88,15 +102,19 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
   let hasRun = false
   for (const step of check.block.statements.filter(AST.isCheckStep)) {
     Switch.type(step, {
+      EnterTextStep: checkStepOrder,
       ExpectTextStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
       },
+      SubmitInputStep: checkStepOrder,
     })
   }
 
-  function checkStepOrder(step: AST.ExpectTextStep | AST.PressTextStep): void {
+  function checkStepOrder(
+    step: AST.EnterTextStep | AST.ExpectTextStep | AST.PressTextStep | AST.SubmitInputStep,
+  ): void {
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
     }
@@ -112,7 +130,10 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
   }
 }
 
-function validateSelector(step: AST.ExpectTextStep | AST.PressTextStep, ctx: ValidationContext): void {
+function validateSelector(
+  step: AST.EnterTextStep | AST.ExpectTextStep | AST.PressTextStep | AST.SubmitInputStep,
+  ctx: ValidationContext,
+): void {
   if (!supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])) {
     ctx.error(testValidationMessages.selector(step.selector), step)
   }

@@ -7,8 +7,12 @@ export default {
     f.commaSpacedList()
   },
 
-  /** Argument formats an optional invocation type label and one value. */
+  /** Argument formats an optional invocation name or type label and one value. */
   Argument(f) {
+    if (f.node.parameterName) {
+      f.noSpaceAfter('.')
+      f.oneSpaceBeforeProperty('value')
+    }
     f.oneSpaceAfter(':')
   },
 

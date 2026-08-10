@@ -11,6 +11,31 @@ Apps/Test Apps/<App Name>/
   <App Name>.test.tao
 ```
 
+## Forms and Interaction MVP
+
+### Purpose
+
+Exercise controlled text input, named view arguments, change and submit events, form-button presses, disabled controls, validation feedback, and submitting feedback through executable Tao behavior tests.
+
+### Belongs Here
+
+- `TextInput` and `FormButton` from `@tao/ui`.
+- Named invocation arguments such as `.Value`, `.Change`, and `.Disabled`.
+- `enter … into label …`, `submit id …`, and `press id …` behavior-test steps.
+- Reactive form state, required-field feedback, disabled submit behavior, and visible submission progress.
+
+### Does Not Belong Here
+
+- Durable collections, relationships, filtering, or ordering.
+- Navigation and route restoration.
+- Invalid invocation, selector, or event diagnostics; package tests own those.
+
+### Behavior Test Notes
+
+`Forms and Interaction MVP.test.tao` proves both keyboard submission and button submission, including the disabled initial button and reactive validation/progress output.
+
+This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
+
 ## Functional Core MVP
 
 ### Purpose

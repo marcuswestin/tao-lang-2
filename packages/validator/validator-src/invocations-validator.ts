@@ -19,6 +19,11 @@ const invocationValidationMessages = {
   duplicateParameterType: (view: string, parameter: string) =>
     `Renderable ${view} has more than one parameter with the same type near '${parameter}'.`,
   duplicateArgumentType: (view: string) => `Render of ${view} has more than one argument with the same exact type.`,
+  unknownNamedArgument: (view: string, name: string) => `Renderable ${view} has no parameter named '${name}'.`,
+  duplicateNamedArgument: (view: string, name: string) =>
+    `Render of ${view} provides parameter '${name}' more than once.`,
+  namedArgumentType: (view: string, name: string, expected: string, actual: string) =>
+    `Named argument '.${name}' of ${view} expects ${expected}, got ${actual}.`,
 } as const
 
 /** InvocationsValidator validates render invocations through shared type-based binding diagnostics. */
@@ -80,6 +85,26 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
             Type.parameterName(diagnostic.parameter),
           ),
           render,
+        )
+      },
+      'unknown-named-argument': diagnostic => {
+        ctx.error(invocationValidationMessages.unknownNamedArgument(view.name, diagnostic.name), diagnostic.argument)
+      },
+      'duplicate-named-argument': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.duplicateNamedArgument(view.name, Type.parameterName(diagnostic.parameter)),
+          diagnostic.argument,
+        )
+      },
+      'named-argument-type': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.namedArgumentType(
+            view.name,
+            Type.parameterName(diagnostic.parameter),
+            Type.displayName(Type.ofParameter(diagnostic.parameter)),
+            Type.displayName(Type.ofArgument(diagnostic.argument)),
+          ),
+          diagnostic.argument,
         )
       },
     })

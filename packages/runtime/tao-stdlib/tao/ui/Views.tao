@@ -88,3 +88,48 @@ publish view Button Title is text, Action is action {
       )
    ```
 }
+
+publish view TextInput Value is text, Change is action, Submit is action, Label is text, Placeholder is text, Id is text, Disabled is boolean {
+   render inject Value, Change, Submit, Label, Placeholder, Id, Disabled ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          label: Label,
+          placeholder: Placeholder,
+          id: Id,
+          disabled: Disabled,
+          onChange: value => Change.invoke(TR.Value(value)),
+          onSubmit: () => Submit.invoke(),
+        },
+      )
+   ```
+}
+
+publish view FormButton Title is text, Press is action, Id is text, Disabled is boolean, Submitting is boolean {
+   render inject Title, Press, Id, Disabled, Submitting ```ts
+      return TR.Views.Pressable(
+        {
+          __tao: _ViewProps.__tao,
+          title: Submitting ? 'Saving…' : Title,
+          action: Press,
+        },
+        {
+          nativeProps: {
+            accessibilityRole: 'button',
+            accessibilityState: { busy: Submitting, disabled: Disabled },
+            disabled: Disabled,
+            style: {
+              alignItems: 'center',
+              backgroundColor: Disabled ? '#9aa49d' : '#2f6b4f',
+              borderRadius: 8,
+              minHeight: 44,
+              paddingHorizontal: 16,
+              paddingVertical: 11,
+            },
+            testID: Id,
+          },
+        },
+      )
+   ```
+}

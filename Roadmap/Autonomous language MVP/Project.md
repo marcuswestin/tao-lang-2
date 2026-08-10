@@ -18,7 +18,7 @@ The MVP must add one integrated path for:
 ## Numbered vertical slices
 
 1. [x] **Expressions and control.** Add boolean/absence literals, precedence-aware unary/binary expressions, interpolation, expression-bodied pure functions, `if` rendering, and `for` rendering. Cover parser, scope/type validation, formatter, compiler, runtime semantics, diagnostics, and a focused executable Test App.
-2. **Interaction and forms.** Add event bindings for press/change/submit, runtime-backed text input, field labels and identifiers, validation patterns, and Tao test steps for entering and submitting text.
+2. [x] **Interaction and forms.** Add event bindings for press/change/submit, runtime-backed text input, field labels and identifiers, validation patterns, and Tao test steps for entering and submitting text.
 3. **Data.** Add Tao schemas and entity handles, provider-neutral query/mutation IR, a durable local provider, filtering/order, relationships, reactive consistency, and deterministic loading/error controls.
 4. **Navigation.** Add an app-owned stack, destination declarations with typed arguments, present/back actions, deterministic runtime state, and test steps that exercise navigation.
 5. **Still.** Advance `Apps/MVP/Current/Still.tao` into the forcing app; cover workspace/task CRUD, completion, forms, filtering/order, loading/empty/error/populated states, and list/detail navigation in Tao behavior tests.
@@ -34,6 +34,9 @@ The MVP must add one integrated path for:
 - **2026-08-10 — Use explicit interpolation composition.** `interpolate "Count: ", Count` is the MVP text-composition form. It accepts text, number, boolean, and `none` parts, avoids a custom multi-mode lexer, and leaves `${…}` template sugar as a reversible future extension.
 - **2026-08-10 — Make functions positional and expression-bodied.** `function Label Count is number returns text = …` has a declared return type, positional `Label(Count)` calls, lexical parameter scope, and no side-effecting body statements.
 - **2026-08-10 — Keep control flow render-local.** `if/else` and `for … in` are valid inside render child blocks, where each branch/iteration gets a lexical child scope. Value conditionals use `if … then … else …`.
+- **2026-08-10 — Name ambiguous invocation inputs explicitly.** `.Value Draft` binds directly to the `Value` parameter before Tao's type-based matching runs. This makes duplicate primitive and action parameters practical for forms without making ordinary arguments positional.
+- **2026-08-10 — Keep interaction component-owned.** `TextInput` and `FormButton` expose change, submit, and press through action-valued parameters. Their runtime implementations own React Native event adaptation, stable IDs, labels, disabled state, and basic accessible defaults.
+- **2026-08-10 — Extend tests with direct semantic input steps.** The executable MVP uses `enter … into label|id …` and `submit label|id …`; the runtime adapter resolves accessibility-visible controls and fires the corresponding native events.
 
 No external dependencies have been added. Any later dependency must be justified here before it is committed.
 
