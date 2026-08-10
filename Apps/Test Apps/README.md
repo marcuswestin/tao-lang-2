@@ -13,6 +13,35 @@ Apps/Test Apps/<App Name>/
 
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
+## Expressions
+
+### Purpose
+
+Exercise the Tao expression language: boolean values, arithmetic, comparison and boolean operators, grouping, and the `when` conditional expression, including recomputation after state changes.
+
+### Belongs Here
+
+- `boolean` state and `true`/`false` literals.
+- Arithmetic (`+`, `-`, `*`, `/`), unary minus, decimal literals, and parenthesized grouping.
+- Text joining with `+`.
+- Comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) and boolean (`and`, `or`, `not`) operators.
+- `when` expressions selecting derived text, including conditions built from other operators.
+- `toggle` on boolean state, and derived values recomputing after `set`/`toggle`.
+
+### Does Not Belong Here
+
+- Operand-type and branch-type diagnostics; those belong in validator tests.
+- Conditional rendering statements, iteration, interpolation, forms, data, or navigation.
+
+### Edit When
+
+- The operator set or precedence changes in `Spec/Tao Type System.md`.
+- `when` expression semantics change.
+
+### Behavior Test Notes
+
+`Expressions.test.tao` asserts rendered values for each operator family, then presses `Advance` and `Flip` to confirm derived aliases and `when` branches recompute from updated state.
+
 ## Layout and App Shell
 
 ### Purpose

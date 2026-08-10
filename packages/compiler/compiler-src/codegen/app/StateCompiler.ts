@@ -9,6 +9,12 @@ export const StateCompiler = {
     return gen`${gen.scopeName(state)} = TR.State(() => ${Compile.Expression(state.value)})`
   },
 
+  /** ToggleStatement compiles boolean state inversion. */
+  ToggleStatement(toggle: AST.ToggleStatement): Compiled {
+    const state = resolveRef(toggle.target)
+    return gen`TR.Set(${gen.scopeName(state)}, () => TR.UnaryOperator("not", ${gen.scopeName(state)}.evaluate()))`
+  },
+
   /** SetStatement compiles Tao state mutation. */
   SetStatement(setStatement: AST.SetStatement): Compiled {
     const state = resolveRef(setStatement.target)

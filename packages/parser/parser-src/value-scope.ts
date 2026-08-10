@@ -13,7 +13,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
-    if (context.property === 'target' && AST.isSetStatement(context.container)) {
+    if (
+      context.property === 'target'
+      && (AST.isSetStatement(context.container) || AST.isToggleStatement(context.container))
+    ) {
       return this.createStateScope(context.container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
@@ -66,10 +69,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  private createStateScope(setStatement: AST.SetStatement): Langium.Scope {
+  private createStateScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
     let scope = this.createScopeForNodes([])
 
-    for (const block of AST.ancestorBlocks(setStatement).reverse()) {
+    for (const block of AST.ancestorBlocks(statement).reverse()) {
       scope = this.createScopeForNodes(statesOwnedByBlock(block), scope)
     }
 

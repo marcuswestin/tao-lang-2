@@ -25,6 +25,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   validateInjections(file, ctx)
   validateTests(file, ctx)
   validateTypes(file, ctx)
+  ExpressionsValidator.validate(file, ctx)
   InvocationsValidator.validate(file, ctx)
 
   const document = AST.getDocument(file)
@@ -39,6 +40,7 @@ export const Validate = {
   Aliases: AliasesValidator.validate,
   App: AppValidator.validate,
   Actions: ActionsValidator.validate,
+  Expressions: ExpressionsValidator.validate,
   Injections: validateInjections,
   Invocations: InvocationsValidator.validate,
   Layouts: LayoutValidator.validate,

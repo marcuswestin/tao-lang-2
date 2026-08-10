@@ -8,9 +8,9 @@ import {
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
-import { Type } from './Type'
+import { Operators, Type } from './Type'
 
-export { Packages, Type }
+export { Operators, Packages, Type }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {

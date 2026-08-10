@@ -16,12 +16,17 @@ export const DeclarationOrder = {
 function valueReferences(value: AST.Expression): ValueReferenceLike[] {
   return Switch.type(value, {
     ActionExpression: expressionValueReferences,
+    BinaryExpression: expressionValueReferences,
+    BooleanLiteral: expressionValueReferences,
     ListLiteral: expressionValueReferences,
     MemberAccessExpression: reference => [reference],
     NumberLiteral: expressionValueReferences,
+    ParenthesizedExpression: expressionValueReferences,
     StringLiteral: expressionValueReferences,
     TypedConstructor: expressionValueReferences,
+    UnaryOperation: expressionValueReferences,
     ValueReference: reference => [reference],
+    WhenExpression: expressionValueReferences,
   })
 }
 

@@ -47,6 +47,52 @@ class TR {
     })
   }
 
+  /** Operator applies a Tao binary operator to two evaluated runtime values. */
+  static Operator(
+    operator: TR.BinaryOperator,
+    left: TR.Evaluable,
+    right: TR.Evaluable,
+  ): TR.Value<any> {
+    const leftValue = left.evaluate().jsValue
+    const rightValue = right.evaluate().jsValue
+    return Switch(operator, {
+      '+': () => new RuntimeValue(leftValue + rightValue),
+      '-': () => new RuntimeValue(leftValue - rightValue),
+      '*': () => new RuntimeValue(leftValue * rightValue),
+      '/': () => new RuntimeValue(leftValue / rightValue),
+      '==': () => new RuntimeValue(leftValue === rightValue),
+      '!=': () => new RuntimeValue(leftValue !== rightValue),
+      '<': () => new RuntimeValue(leftValue < rightValue),
+      '<=': () => new RuntimeValue(leftValue <= rightValue),
+      '>': () => new RuntimeValue(leftValue > rightValue),
+      '>=': () => new RuntimeValue(leftValue >= rightValue),
+      and: () => new RuntimeValue(leftValue && rightValue),
+      or: () => new RuntimeValue(leftValue || rightValue),
+    })
+  }
+
+  /** UnaryOperator applies a Tao unary operator to one evaluated runtime value. */
+  static UnaryOperator(operator: TR.UnaryOperator, operand: TR.Evaluable): TR.Value<any> {
+    const value = operand.evaluate().jsValue
+    return Switch(operator, {
+      not: () => new RuntimeValue(!value),
+      '-': () => new RuntimeValue(-value),
+    })
+  }
+
+  /** When evaluates Tao conditional branches in order and returns the first matching value. */
+  static When<T>(
+    branches: readonly [() => TR.Evaluable, () => TR.Evaluable][],
+    otherwise: () => TR.Evaluable,
+  ): TR.Value<T> {
+    for (const [condition, value] of branches) {
+      if (condition().evaluate().jsValue) {
+        return value().evaluate() as TR.Value<T>
+      }
+    }
+    return otherwise().evaluate() as TR.Value<T>
+  }
+
   /** Do invokes a Tao action value with already-compiled runtime arguments. */
   static Do(action: TR.Action, ...args: any[]): void {
     action.evaluate().jsValue.invoke(...args)
@@ -180,6 +226,22 @@ namespace TR {
   export type Alias<T> = RuntimeAlias<T>
   /** AliasValue declares the evaluated runtime value for a Tao alias. */
   export type AliasValue<T> = T extends TR.Action ? TR.Action : TR.Value<T>
+  /** BinaryOperator declares the Tao binary operators lowered to runtime calls. */
+  export type BinaryOperator =
+    | '+'
+    | '-'
+    | '*'
+    | '/'
+    | '=='
+    | '!='
+    | '<'
+    | '<='
+    | '>'
+    | '>='
+    | 'and'
+    | 'or'
+  /** UnaryOperator declares the Tao unary operators lowered to runtime calls. */
+  export type UnaryOperator = 'not' | '-'
   /** CompoundSetOperator declares supported numeric compound state update operators. */
   export type CompoundSetOperator = '+=' | '-=' | '*=' | '/='
   /** Evaluable declares runtime values that can collapse to their current value. */

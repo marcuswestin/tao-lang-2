@@ -25,6 +25,11 @@ export const ActionsFormatter = {
   /** ActionExpression formats inline action bodies. */
   ActionExpression() {},
 
+  /** ToggleStatement formats boolean state inversion. */
+  ToggleStatement(f) {
+    f.oneSpaceAfter('toggle')
+  },
+
   /** DoStatement formats action invocation spacing. */
   DoStatement(f) {
     f.oneSpaceAfter('do')

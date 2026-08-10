@@ -89,6 +89,71 @@ Describe('TR.CompoundSet', () => {
   })
 })
 
+Describe('TR.Operator', () => {
+  Test('computes arithmetic and text joining', () => {
+    Expect(TR.Operator('+', TR.Value(2), TR.Value(3)).jsValue).toBe(5)
+    Expect(TR.Operator('+', TR.Value('a'), TR.Value('b')).jsValue).toBe('ab')
+    Expect(TR.Operator('-', TR.Value(5), TR.Value(2)).jsValue).toBe(3)
+    Expect(TR.Operator('*', TR.Value(5), TR.Value(2)).jsValue).toBe(10)
+    Expect(TR.Operator('/', TR.Value(5), TR.Value(2)).jsValue).toBe(2.5)
+  })
+
+  Test('computes comparisons and boolean logic', () => {
+    Expect(TR.Operator('==', TR.Value(2), TR.Value(2)).jsValue).toBe(true)
+    Expect(TR.Operator('!=', TR.Value(2), TR.Value(3)).jsValue).toBe(true)
+    Expect(TR.Operator('<', TR.Value(2), TR.Value(3)).jsValue).toBe(true)
+    Expect(TR.Operator('<=', TR.Value(3), TR.Value(3)).jsValue).toBe(true)
+    Expect(TR.Operator('>', TR.Value(2), TR.Value(3)).jsValue).toBe(false)
+    Expect(TR.Operator('>=', TR.Value(3), TR.Value(3)).jsValue).toBe(true)
+    Expect(TR.Operator('and', TR.Value(true), TR.Value(false)).jsValue).toBe(false)
+    Expect(TR.Operator('or', TR.Value(true), TR.Value(false)).jsValue).toBe(true)
+  })
+})
+
+Describe('TR.UnaryOperator', () => {
+  Test('negates numbers and inverts booleans', () => {
+    Expect(TR.UnaryOperator('-', TR.Value(4)).jsValue).toBe(-4)
+    Expect(TR.UnaryOperator('not', TR.Value(false)).jsValue).toBe(true)
+  })
+})
+
+Describe('TR.When', () => {
+  Test('returns the first matching branch value', () => {
+    const result = TR.When<string>(
+      [
+        [() => TR.Value(false), () => TR.Value('first')],
+        [() => TR.Value(true), () => TR.Value('second')],
+      ],
+      () => TR.Value('fallback'),
+    )
+
+    Expect(result.jsValue).toBe('second')
+  })
+
+  Test('returns the otherwise value when no branch matches', () => {
+    const result = TR.When<string>([[() => TR.Value(false), () => TR.Value('first')]], () => TR.Value('fallback'))
+
+    Expect(result.jsValue).toBe('fallback')
+  })
+
+  Test('evaluates only branches up to the first match', () => {
+    let evaluated = 0
+    const result = TR.When<number>(
+      [
+        [() => TR.Value(true), () => TR.Value(1)],
+        [() => TR.Value(true), () => {
+          evaluated += 1
+          return TR.Value(2)
+        }],
+      ],
+      () => TR.Value(3),
+    )
+
+    Expect(result.jsValue).toBe(1)
+    Expect(evaluated).toBe(0)
+  })
+})
+
 Describe('TR.BlockScope', () => {
   Test('creates child scopes that can shadow parent declarations', () => {
     const parent: TR.Scope = {

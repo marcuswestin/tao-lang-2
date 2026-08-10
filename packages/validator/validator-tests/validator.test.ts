@@ -1994,6 +1994,105 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
+  Test('rejects operator operands of the wrong type', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        state Count = 1
+        state Ready = false
+        alias BadArithmetic = Count - "two"
+        alias BadLogical = Count and Ready
+        alias BadOrdering = Ready > Count
+        alias BadNegation = -Ready
+        alias BadNot = not Count
+        alias BadComparison = Count == "one"
+        render Text("hi")
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const messages = validationErrorMessages(result)
+
+    Expect(messages).toContain(ExpressionsValidator.messages.operandType('-', 'number', 'text'))
+    Expect(messages).toContain(ExpressionsValidator.messages.operandType('and', 'boolean', 'number'))
+    Expect(messages).toContain(ExpressionsValidator.messages.operandType('>', 'number', 'boolean'))
+    Expect(messages).toContain(ExpressionsValidator.messages.operandType('-', 'number', 'boolean'))
+    Expect(messages).toContain(ExpressionsValidator.messages.operandType('not', 'boolean', 'number'))
+    Expect(messages).toContain(ExpressionsValidator.messages.comparisonOperands('==', 'number', 'text'))
+  })
+
+  Test('accepts number arithmetic, text joining, and boolean logic', async () => {
+    const result = await testValidateCode(`
+      app MyApp { view MainView }
+      view MainView {
+        state Count = 1
+        state Ready = false
+        alias Total = (Count + 2) * 3 / 2 - 1
+        alias Joined = "a" + "b"
+        alias Gate = Ready and Count >= 1 or not Ready
+        alias Label = when
+          Gate -> "on"
+          otherwise -> "off"
+        render Text(Label)
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(result.diagnostics).toEqual([])
+  })
+
+  Test('rejects non-boolean when conditions and mismatched branch types', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        state Count = 1
+        alias BadCondition = when
+          Count -> "one"
+          otherwise -> "other"
+        alias BadBranches = when
+          Count > 1 -> "many"
+          otherwise -> 0
+        render Text("hi")
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const messages = validationErrorMessages(result)
+
+    Expect(messages).toContain(ExpressionsValidator.messages.whenCondition('number'))
+    Expect(messages).toContain(ExpressionsValidator.messages.whenBranchType('text', 'number'))
+  })
+
+  Test('rejects toggling non-boolean state', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        state Count = 1
+        action Flip {
+          toggle Count
+        }
+        render Text("hi")
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.toggleStateType('Count', 'number'))
+  })
+
   Test('requires parentheses on render and child view invocations', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }

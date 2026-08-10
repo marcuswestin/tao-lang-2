@@ -17,7 +17,14 @@ export type TaoTypirServices = TypirLangiumServices<TaoSpecifics>
 const NO_DOCUMENT_ERROR = 'AST node has no document'
 
 const activeInferenceNodes = new WeakSet<AST.Node>()
-const primitiveTypes = ['text', 'number', 'action', 'item', 'list'] as const satisfies readonly AST.PrimitiveType[]
+const primitiveTypes = [
+  'text',
+  'number',
+  'boolean',
+  'action',
+  'item',
+  'list',
+] as const satisfies readonly AST.PrimitiveType[]
 
 /** TypeSystemHelpers groups Tao Typir helper functions. */
 export const TypeSystemHelpers = {

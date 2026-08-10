@@ -12,6 +12,8 @@ const stateValidationMessages = {
   stateActionType: (state: string) => `State '${state}' cannot store an action value in this MVP.`,
   compoundStateType: (state: string, operator: AST.SetOperator, actual: string) =>
     `Compound set '${operator}' requires state '${state}' to be number, got ${actual}.`,
+  toggleStateType: (state: string, actual: string) =>
+    `\`toggle\` requires state '${state}' to be boolean, got ${actual}.`,
 } as const
 
 /** StateValidator groups state validation and diagnostics. */
@@ -24,6 +26,23 @@ export const StateValidator = {
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   reportStateReferenceOrder(allStates(file), ctx)
   reportSetTargetReferenceOrder(file, ctx)
+  reportToggleTargets(file, ctx)
+}
+
+function reportToggleTargets(file: AST.TaoFile, ctx: ValidationContext): void {
+  for (const toggle of AST.streamAllContents(file).filter(AST.isToggleStatement)) {
+    const state = toggle.target.ref
+    if (!state) {
+      continue
+    }
+    const stateType = Type.ofExpression(state.value)
+    if (stateType.kind === 'unresolved') {
+      continue
+    }
+    if (stateType.kind !== 'primitive' || stateType.primitive !== 'boolean') {
+      ctx.error(stateValidationMessages.toggleStateType(state.name, Type.displayName(stateType)), toggle)
+    }
+  }
 }
 
 function registerTypeValidation(typir: TaoTypirServices): void {

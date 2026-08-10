@@ -9,13 +9,50 @@ export const ExpressionsCompiler = {
   Expression(expression: AST.Expression): Compiled {
     return Switch.type(expression, {
       ActionExpression: Compile.ActionExpression,
+      BinaryExpression: Compile.BinaryExpression,
+      BooleanLiteral: Compile.BooleanLiteral,
       NumberLiteral: Compile.NumberLiteral,
       StringLiteral: Compile.StringLiteral,
       ListLiteral: Compile.ListLiteral,
       MemberAccessExpression: Compile.MemberAccessExpression,
+      ParenthesizedExpression: Compile.ParenthesizedExpression,
       TypedConstructor: Compile.TypedConstructor,
+      UnaryOperation: Compile.UnaryOperation,
       ValueReference: Compile.ValueReference,
+      WhenExpression: Compile.WhenExpression,
     })
+  },
+
+  /** BooleanLiteral compiles a Tao boolean literal into a Tao boolean value. */
+  BooleanLiteral(literal: AST.BooleanLiteral): Compiled {
+    return gen`TR.Value(${literal.value === 'true'})`
+  },
+
+  /** BinaryExpression compiles a Tao binary operation through the runtime operator table. */
+  BinaryExpression(binary: AST.BinaryExpression): Compiled {
+    return gen`TR.Operator(${gen.jsLiteral(binary.operator)}, ${Compile.Expression(binary.left)}, ${
+      Compile.Expression(binary.right)
+    })`
+  },
+
+  /** UnaryOperation compiles a Tao unary operation through the runtime operator table. */
+  UnaryOperation(unary: AST.UnaryOperation): Compiled {
+    return gen`TR.UnaryOperator(${gen.jsLiteral(unary.operator)}, ${Compile.Expression(unary.operand)})`
+  },
+
+  /** ParenthesizedExpression compiles the grouped expression; grouping is source-level only. */
+  ParenthesizedExpression(parenthesized: AST.ParenthesizedExpression): Compiled {
+    return Compile.Expression(parenthesized.expression)
+  },
+
+  /** WhenExpression compiles branches into lazily evaluated runtime conditionals. */
+  WhenExpression(when: AST.WhenExpression): Compiled {
+    return gen`TR.When([${
+      gen.join(
+        when.branches,
+        branch => gen`[() => ${Compile.Expression(branch.condition)}, () => ${Compile.Expression(branch.value)}]`,
+      )
+    }], () => ${Compile.Expression(when.otherwise)})`
   },
 
   /** StringLiteral compiles a Tao string literal into a Tao text value. */

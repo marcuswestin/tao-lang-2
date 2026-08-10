@@ -33,6 +33,7 @@ export const ViewsCompiler = {
       primitive: type =>
         Switch(type.primitive, {
           action: () => gen`TR.Action`,
+          boolean: () => gen`TR.Value<boolean>`,
           number: () => gen`TR.Value<number>`,
           text: () => gen`TR.Value<string>`,
         }),

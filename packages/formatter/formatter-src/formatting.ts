@@ -16,6 +16,10 @@ export type NodeFormat<NodeT extends AST.Node> = {
   oneSpaceAfter(...keywords: string[]): void
   /** oneSpaceAround requests exactly one space on both sides of each present keyword. */
   oneSpaceAround(...keywords: string[]): void
+  /** noSpaceAfter requests no space after each present keyword. */
+  noSpaceAfter(...keywords: string[]): void
+  /** noSpaceBefore requests no space before each present keyword. */
+  noSpaceBefore(...keywords: string[]): void
   /** parenthesizedArguments formats an invocation's `(` and `)` tight against the name and arguments. */
   parenthesizedArguments(): void
   /** oneSpaceBeforeProperty requests exactly one space before each present property value. */
@@ -30,6 +34,10 @@ export type NodeFormat<NodeT extends AST.Node> = {
   spaceSeparatedList(items: readonly AST.Node[]): void
   /** lineSeparatedList formats adjacent nodes with one newline between them. */
   lineSeparatedList(items: readonly AST.Node[]): void
+  /** indentedLines starts each listed node on its own line, one indent below the current node. */
+  indentedLines(items: readonly AST.Node[]): void
+  /** indentedLine starts each present keyword on its own line, one indent below the current node. */
+  indentedLine(...keywords: string[]): void
   /** indentedBraceBlock formats braces as `{ }` when empty, or one indented item per line with `}` on its own line. */
   indentedBraceBlock(items: readonly AST.Node[]): void
   /** singleLineBraceBlock formats a one-statement brace block as `{ statement }`. */
@@ -82,6 +90,12 @@ export function createNodeFormat<NodeT extends AST.Node>(
     oneSpaceAround(...keywords) {
       formatter.keywords(...keywords).surround(Formatting.oneSpace())
     },
+    noSpaceAfter(...keywords) {
+      formatter.keywords(...keywords).append(Formatting.noSpace())
+    },
+    noSpaceBefore(...keywords) {
+      formatter.keywords(...keywords).prepend(Formatting.noSpace())
+    },
     parenthesizedArguments() {
       formatter.keyword('(').prepend(Formatting.noSpace()).append(Formatting.noSpace())
       formatter.keyword(')').prepend(Formatting.noSpace())
@@ -110,6 +124,14 @@ export function createNodeFormat<NodeT extends AST.Node>(
       for (const item of items.slice(1)) {
         formatter.node(item).prepend(Formatting.indent())
       }
+    },
+    indentedLines(items) {
+      for (const item of items) {
+        formatter.node(item).prepend(Formatting.indent())
+      }
+    },
+    indentedLine(...keywords) {
+      formatter.keywords(...keywords).prepend(Formatting.indent())
     },
     indentedBraceBlock(items) {
       const open = formatter.keyword('{')

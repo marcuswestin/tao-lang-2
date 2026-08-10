@@ -289,6 +289,54 @@ Describe('minimal Tao parser', () => {
     Expect(AST.layoutEntriesOf(render.layoutClause)).toHaveLength(0)
   })
 
+  Test('parses operators with standard precedence and when expressions', async () => {
+    const parseResult = await testParseCode(`
+      alias Total = 1 + 2 * 3
+      alias Grouped = (1 + 2) * 3
+      alias Decimal = 1.5
+      alias Negated = -2
+      alias Gate = true and not false
+      alias Label = when
+        Gate -> "on"
+        otherwise -> "off"
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const [total, grouped, decimal, negated, gate, label] = parseResult.entry.ast.statements
+    Expect.Is(total, AST.isAliasDeclaration)
+    Expect.Is(grouped, AST.isAliasDeclaration)
+    Expect.Is(decimal, AST.isAliasDeclaration)
+    Expect.Is(negated, AST.isAliasDeclaration)
+    Expect.Is(gate, AST.isAliasDeclaration)
+    Expect.Is(label, AST.isAliasDeclaration)
+
+    // `*` binds tighter than `+`, so the sum owns the product.
+    Expect.Is(total.value, AST.isBinaryExpression)
+    Expect(total.value.operator).toBe('+')
+    Expect.Is(total.value.right, AST.isBinaryExpression)
+    Expect(total.value.right.operator).toBe('*')
+
+    Expect.Is(grouped.value, AST.isBinaryExpression)
+    Expect(grouped.value.operator).toBe('*')
+    Expect.Is(grouped.value.left, AST.isParenthesizedExpression)
+
+    Expect.Is(decimal.value, AST.isNumberLiteral)
+    Expect(decimal.value.value).toBe(1.5)
+
+    Expect.Is(negated.value, AST.isUnaryOperation)
+    Expect(negated.value.operator).toBe('-')
+
+    Expect.Is(gate.value, AST.isBinaryExpression)
+    Expect(gate.value.operator).toBe('and')
+    Expect.Is(gate.value.left, AST.isBooleanLiteral)
+    Expect(gate.value.left.value).toBe('true')
+    Expect.Is(gate.value.right, AST.isUnaryOperation)
+
+    Expect.Is(label.value, AST.isWhenExpression)
+    Expect(label.value.branches).toHaveLength(1)
+    Expect.Is(label.value.otherwise, AST.isStringLiteral)
+  })
+
   Test('parses parenthesized invocations and marks paren-less ones for the validator', async () => {
     const parseResult = await testParseCode(`
       view Text Value is text { }

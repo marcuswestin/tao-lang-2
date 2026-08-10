@@ -8,7 +8,7 @@ import { InvocationsValidator } from './invocations-validator'
 import { StateValidator } from './StateValidator'
 import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
 
-const statefulPrimitiveTypes = ['text', 'number'] as const satisfies readonly AST.PrimitiveType[]
+const statefulPrimitiveTypes = ['text', 'number', 'boolean'] as const satisfies readonly AST.PrimitiveType[]
 
 export type { TaoSpecifics, TaoTypirServices } from './TypeSystemHelpers'
 
@@ -22,6 +22,10 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
 
     typir.factory.Primitives.create({ primitiveName: 'number' })
       .inferenceRule({ filter: AST.isNumberLiteral })
+      .finish()
+
+    typir.factory.Primitives.create({ primitiveName: 'boolean' })
+      .inferenceRule({ filter: AST.isBooleanLiteral })
       .finish()
 
     typir.factory.Primitives.create({ primitiveName: 'action' })
@@ -43,6 +47,14 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
     }
 
     typir.Inference.addInferenceRulesForAstNodes({
+      // Operator, grouping, and conditional expressions resolve through the shared static
+      // resolver so Typir and Tao diagnostics agree on one answer.
+      BinaryExpression: (node) =>
+        TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
+      UnaryOperation: (node) => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
+      ParenthesizedExpression: (node) =>
+        TypeSystemHelpers.safeInferType(typir, node.expression) ?? InferenceRuleNotApplicable,
+      WhenExpression: (node) => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
       MemberAccessExpression: (node) =>
         TypeSystemHelpers.taoType(Type.ofMemberAccess(node), typir)
           ?? InferenceRuleNotApplicable,

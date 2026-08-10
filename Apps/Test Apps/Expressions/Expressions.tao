@@ -1,0 +1,49 @@
+use Button, Col, Number, Text from @tao/ui
+
+app Expressions {
+   view MainView
+}
+
+view MainView {
+   state Count = 2
+   state Ready = false
+   alias Doubled = Count * 2
+   alias Total = Count + Doubled * 2 - 1
+   alias Half = Count / 4
+   alias Negated = -Count
+   alias Grouped = (Count + 1) * 5
+   alias Greeting = "Expr" + "essions"
+   alias Ordering = Count < 3 and Doubled >= 4
+   alias Either = Count == 99 or Ready
+   alias Blocked = not Ready
+   alias ReadyLabel = when
+      Ready -> "Ready"
+      otherwise -> "Waiting"
+   alias Size = when
+      Count > 4 -> "large"
+      Count > 1 -> "medium"
+      otherwise -> "small"
+   alias GateLabel = when
+      Blocked and Either -> "gated and either"
+      Blocked -> "gated"
+      otherwise -> "open"
+   action Advance {
+      set Count += 3
+   }
+   action Flip {
+      toggle Ready
+   }
+   render Col() [fill, gap 8, pad 12] {
+      Text("Operator MVP")
+      Text(Greeting)
+      Number(Doubled)
+      Number(Total)
+      Number(Half)
+      Number(Negated)
+      Number(Grouped)
+      Text(ReadyLabel)
+      Text(Size)
+      Text(GateLabel)
+      Button("Advance", Advance)
+      Button("Flip", Flip)
+}  }

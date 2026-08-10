@@ -3,7 +3,7 @@ import { Switch } from '@shared'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
 export type TaoType =
-  | { kind: 'primitive'; primitive: 'text' | 'number' | 'action'; nominal?: AST.TypeDefinition }
+  | { kind: 'primitive'; primitive: 'text' | 'number' | 'boolean' | 'action'; nominal?: AST.TypeDefinition }
   | { kind: 'list'; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
   | { kind: 'unresolved' }
@@ -15,6 +15,38 @@ export type TypeReferenceRoot = {
 }
 
 type AnyTypeReference = AST.TypeReference | AST.ConstructorTypeReference
+
+const booleanResultOperators = new Set<AST.BinaryExpression['operator']>([
+  '==',
+  '!=',
+  '<',
+  '<=',
+  '>',
+  '>=',
+  'and',
+  'or',
+])
+
+/** Operators declares the Tao operator groups shared by type resolution and validation. */
+export const Operators = {
+  /** booleanResult returns true when an operator always produces a boolean. */
+  booleanResult(operator: AST.BinaryExpression['operator']): boolean {
+    return booleanResultOperators.has(operator)
+  },
+  /** isComparison returns true for ordering and equality operators. */
+  isComparison(operator: AST.BinaryExpression['operator']): boolean {
+    return operator === '==' || operator === '!=' || operator === '<' || operator === '<='
+      || operator === '>' || operator === '>='
+  },
+  /** isOrdering returns true for operators that require number operands. */
+  isOrdering(operator: AST.BinaryExpression['operator']): boolean {
+    return operator === '<' || operator === '<=' || operator === '>' || operator === '>='
+  },
+  /** isLogical returns true for boolean-only operators. */
+  isLogical(operator: AST.BinaryExpression['operator']): boolean {
+    return operator === 'and' || operator === 'or'
+  },
+} as const
 
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
@@ -298,13 +330,44 @@ class TypeResolutionContext {
   ofExpression(expression: AST.Expression): TaoType {
     return Switch.type(expression, {
       ActionExpression: () => primitiveType('action'),
+      BinaryExpression: binary => this.ofBinaryExpression(binary),
+      BooleanLiteral: () => primitiveType('boolean'),
       ListLiteral: () => ({ kind: 'list' }),
       MemberAccessExpression: access => this.ofMemberAccess(access),
       NumberLiteral: () => primitiveType('number'),
+      ParenthesizedExpression: parenthesized => this.ofExpression(parenthesized.expression),
       StringLiteral: () => primitiveType('text'),
       TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
+      UnaryOperation: unary => this.ofUnaryOperation(unary),
       ValueReference: reference => this.valueDeclarationType(reference.target.ref),
+      // A `when` expression's type is its first resolvable branch value; the validator requires
+      // every branch to agree, so any resolvable branch describes the whole expression.
+      WhenExpression: when => this.ofWhenExpression(when),
     })
+  }
+
+  // Comparison and boolean operators always produce a boolean; arithmetic keeps its operand type
+  // so named number and text types survive `Price - Discount` style expressions.
+  private ofBinaryExpression(binary: AST.BinaryExpression): TaoType {
+    if (booleanResultOperators.has(binary.operator)) {
+      return primitiveType('boolean')
+    }
+    const left = this.ofExpression(binary.left)
+    return left.kind === 'unresolved' ? this.ofExpression(binary.right) : left
+  }
+
+  private ofUnaryOperation(unary: AST.UnaryOperation): TaoType {
+    return unary.operator === 'not' ? primitiveType('boolean') : this.ofExpression(unary.operand)
+  }
+
+  private ofWhenExpression(when: AST.WhenExpression): TaoType {
+    for (const branch of when.branches) {
+      const branchType = this.ofExpression(branch.value)
+      if (branchType.kind !== 'unresolved') {
+        return branchType
+      }
+    }
+    return this.ofExpression(when.otherwise)
   }
 
   ofProperty(property: AST.TypeProperty): TaoType {
@@ -407,6 +470,7 @@ function primitiveType(primitive: AST.PrimitiveType): TaoType {
   return Switch(primitive, {
     text: () => ({ kind: 'primitive', primitive: 'text' }),
     number: () => ({ kind: 'primitive', primitive: 'number' }),
+    boolean: () => ({ kind: 'primitive', primitive: 'boolean' }),
     action: () => ({ kind: 'primitive', primitive: 'action' }),
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),

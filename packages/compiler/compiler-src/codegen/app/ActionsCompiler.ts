@@ -51,6 +51,7 @@ export const ActionsCompiler = {
     return Switch.type(statement, {
       DoStatement: Compile.DoStatement,
       SetStatement: Compile.SetStatement,
+      ToggleStatement: Compile.ToggleStatement,
     })
   },
 

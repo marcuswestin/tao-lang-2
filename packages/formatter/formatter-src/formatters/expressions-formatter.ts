@@ -39,6 +39,41 @@ export default {
   /** MemberAccessExpression has no whitespace around member dots. */
   MemberAccessExpression() {},
 
+  /** BinaryExpression separates its operator from both operands with one space. */
+  BinaryExpression(f) {
+    f.oneSpaceAround(f.node.operator)
+  },
+
+  /** UnaryOperation keeps `not` spaced from its operand and `-` tight against it. */
+  UnaryOperation(f) {
+    if (f.node.operator === 'not') {
+      f.oneSpaceAfter('not')
+      return
+    }
+    f.noSpaceAfter('-')
+  },
+
+  /** ParenthesizedExpression keeps its grouped expression tight inside the parentheses. */
+  ParenthesizedExpression(f) {
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+  },
+
+  /** WhenExpression puts each branch and the otherwise fallback on its own indented line. */
+  WhenExpression(f) {
+    f.indentedLines(f.node.branches)
+    f.indentedLine('otherwise')
+    f.oneSpaceAround('->')
+  },
+
+  /** WhenBranch spaces its condition and value around the branch arrow. */
+  WhenBranch(f) {
+    f.oneSpaceAround('->')
+  },
+
+  /** BooleanLiteral is a single token with no interior formatting. */
+  BooleanLiteral() {},
+
   /** StringLiteral is a single token with no interior formatting. */
   StringLiteral() {},
 

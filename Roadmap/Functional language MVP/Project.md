@@ -34,7 +34,7 @@ This branch operates under an explicit experimental delegation: language, produc
 Each slice is a full vertical (grammar → scoping → validator/Typir → formatter → compiler → runtime → per-layer tests → executable Tao coverage), validated with focused tests plus `./agent verify`, and committed green.
 
 - [x] Slice 0 — parenthesized invocations (`View(args)`, `do Action(args)`); repository-wide migration
-- [ ] Slice 1 — booleans and operators (+ `toggle` for boolean state) and the `when` expression — Expressions test app
+- [x] Slice 1 — booleans and operators (+ `toggle` for boolean state) and the `when` expression — Expressions test app
 - [ ] Slice 2 — `let` binding and the `when` render/action forms — Control Flow test app; repo `alias` migration
 - [ ] Slice 3 — `for` iteration, string interpolation, builtin members
 - [ ] Slice 4 — events (`on` clauses), `TextInput`, forms, test interaction steps — advance Still

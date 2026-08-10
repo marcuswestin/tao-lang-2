@@ -39,6 +39,7 @@ function CompileExpressionJsType(expression: AST.Expression): Compiled {
     primitive: type =>
       Switch(type.primitive, {
         action: () => gen`TR.ActionValue`,
+        boolean: () => gen`boolean`,
         number: () => gen`number`,
         text: () => gen`string`,
       }),

@@ -312,6 +312,28 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('spaces operators and lays out when branches', async () => {
+    await testFormatCode(
+      `view MainView{state Ready=false state Count=1 alias Total=(Count+1)*2-  -3 alias Flag=not Ready and Count>=1 alias Label=when Ready->"on" Count<1->"low" otherwise->"off" action Flip{toggle   Ready} render Text(Label)}`,
+      `
+        view MainView {
+           state Ready = false
+           state Count = 1
+           alias Total = (Count + 1) * 2 - -3
+           alias Flag = not Ready and Count >= 1
+           alias Label = when
+              Ready -> "on"
+              Count < 1 -> "low"
+              otherwise -> "off"
+           action Flip {
+              toggle Ready
+           }
+           render Text(Label)
+        }
+      `,
+    )
+  })
+
   Test('tightens invocation parentheses on renders, children, and actions', async () => {
     await testFormatCode(
       `view MainView{state Count = 0 action AddStep Step is number{set Count += Step} action Run{do AddStep ( 2 )} render Stack ( ) {CountText ( 3 , "label" ) [width fill]}}`,

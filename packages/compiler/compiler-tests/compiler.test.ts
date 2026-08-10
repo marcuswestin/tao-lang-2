@@ -55,6 +55,37 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
+  Test('compiles operators, conditionals, and toggles through the runtime API', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      view Text Value is text {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        state Ready = false
+        state Count = 2
+        alias Total = (Count + 1) * 2
+        alias Label = when
+          Ready and Count > 1 -> "ready"
+          otherwise -> "waiting"
+        action Flip {
+          toggle Ready
+        }
+        render Text(Label)
+      }
+    `)
+
+    const source = compiled.files[0]!.code
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(source).toContain('TR.Operator("+"')
+    Expect(source).toContain('TR.Operator("*"')
+    Expect(source).toContain('TR.When([')
+    Expect(source).toContain('TR.Value(false)')
+    Expect(source).toContain('TR.UnaryOperator("not", _Scope.Ready.evaluate())')
+  })
+
   Test('compiles dynamic action parameter invocations without arguments', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }

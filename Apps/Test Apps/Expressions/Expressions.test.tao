@@ -1,0 +1,40 @@
+use Expressions from ./
+
+test "Expressions" {
+   check "evaluates arithmetic, comparison, and boolean operators" {
+      run Expressions
+
+      expect text "Operator MVP"
+      expect text "Expressions"
+      expect text "4"
+      expect text "9"
+      expect text "0.5"
+      expect text "-2"
+      expect text "15"
+      expect text "medium"
+   }
+
+   check "recomputes derived values after state changes" {
+      run Expressions
+      press text "Advance"
+      expect text "10"
+      expect text "24"
+      expect text "1.25"
+      expect text "-5"
+      expect text "30"
+      expect text "large"
+   }
+
+   check "toggles boolean state and reselects when branches" {
+      run Expressions
+
+      expect text "Waiting"
+      expect text "gated"
+      press text "Flip"
+      expect text "Ready"
+      expect text "open"
+      press text "Flip"
+      expect text "Waiting"
+      expect text "gated"
+   }
+}

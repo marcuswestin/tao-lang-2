@@ -147,6 +147,10 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
     validateConstructorKind(constructor, expectedKind === 'number', expectedKind, ctx)
     return
   }
+  if (AST.isBooleanLiteral(constructor.value)) {
+    validateConstructorKind(constructor, expectedKind === 'boolean', expectedKind, ctx)
+    return
+  }
   if (AST.isListLiteral(constructor.value)) {
     validateConstructorKind(constructor, expectedKind === 'list', expectedKind, ctx)
     return

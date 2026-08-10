@@ -20,7 +20,10 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | DoStatement;
+    SetStatement | ToggleStatement | DoStatement;
+
+ToggleStatement:
+    'toggle' target=[StateDeclaration:ID];
 
 SetStatement:
     'set' target=[StateDeclaration:ID] operator=SetOperator value=Expression;

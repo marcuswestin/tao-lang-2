@@ -23,19 +23,52 @@ TypedArgumentValue:
     ItemLiteral | Expression;
 
 Expression:
-    ActionExpression | TypedConstructor | PrimaryExpression;
+    ActionExpression | OrExpression;
+
+// Operator precedence, loosest first. Each level folds into a left-associative BinaryExpression.
+OrExpression:
+    AndExpression ({infer BinaryExpression.left=current} operator='or' right=AndExpression)*;
+
+AndExpression:
+    ComparisonExpression ({infer BinaryExpression.left=current} operator='and' right=ComparisonExpression)*;
+
+ComparisonExpression:
+    AdditiveExpression (
+        {infer BinaryExpression.left=current} operator=('==' | '!=' | '<=' | '>=' | '<' | '>') right=AdditiveExpression
+    )*;
+
+AdditiveExpression:
+    MultiplicativeExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicativeExpression)*;
+
+MultiplicativeExpression:
+    UnaryExpression ({infer BinaryExpression.left=current} operator=('*' | '/') right=UnaryExpression)*;
+
+UnaryExpression:
+    {infer UnaryOperation} operator=('not' | '-') operand=UnaryExpression | PrimaryExpression;
 
 PrimaryExpression:
-    ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | ValueReference;
+    ParenthesizedExpression | WhenExpression | ListLiteral | TypedConstructor | MemberAccessExpression | StringLiteral
+    | NumberLiteral | BooleanLiteral | ValueReference;
+
+ParenthesizedExpression:
+    '(' expression=Expression ')';
+
+// `when` picks the first branch whose condition holds; `otherwise` keeps every branch total.
+WhenExpression:
+    'when' branches+=WhenBranch+ 'otherwise' '->' otherwise=OrExpression;
+
+WhenBranch:
+    condition=OrExpression '->' value=OrExpression;
 
 TypedConstructor:
     type=ConstructorTypeReference value=TypedConstructorValue;
 
 TypedConstructorValue:
-    StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;
+    StringLiteral | NumberLiteral | BooleanLiteral | ListLiteral | ItemLiteral;
 
+// List elements are primary expressions so whitespace separation stays unambiguous: write `[1 (0 - 2)]`.
 ListLiteral:
-    '[' elements+=Expression* ']';
+    '[' elements+=PrimaryExpression* ']';
 
 ItemLiteral:
     '{' properties+=ItemProperty* '}';
@@ -51,6 +84,12 @@ StringLiteral:
 
 NumberLiteral:
     value=NUMBER;
+
+BooleanLiteral:
+    value=BooleanValue;
+
+BooleanValue returns string:
+    'true' | 'false';
 
 ValueReference:
     target=[ValueDeclaration:ID];
