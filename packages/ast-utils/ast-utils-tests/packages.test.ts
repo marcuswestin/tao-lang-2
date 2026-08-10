@@ -18,4 +18,33 @@ Describe('Tao package discovery', () => {
       await FS.remove(root)
     }
   })
+
+  Test('skips hidden future-source directories during recursive package discovery', async () => {
+    const root = await mkTestDir('tao-packages-sketches-')
+    try {
+      const packageRoot = FS.resolvePath('@cards', root)
+      await FS.writeText(FS.resolvePath('Main.tao', root), '')
+      await FS.writeText(FS.resolvePath('Main.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('Rows.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('.tao-future/Ignored.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('MVP-4/Valid.tao', packageRoot), '')
+      await FS.writeText(FS.resolvePath('Syntax Sketches/Valid.tao', packageRoot), '')
+
+      const context = await Packages.createContext(root)
+      const resolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', packageRoot),
+      })
+      const candidates = (await Packages.candidateFilePaths(resolution))
+        .map(path => FS.relativePath(root, path))
+
+      Expect(candidates).toEqual([
+        '@cards/MVP-4/Valid.tao',
+        '@cards/Main.tao',
+        '@cards/Rows.tao',
+        '@cards/Syntax Sketches/Valid.tao',
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })

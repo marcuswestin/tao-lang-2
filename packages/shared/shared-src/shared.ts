@@ -5,6 +5,7 @@ import * as HCI from './HCI'
 import * as Log from './Log'
 import * as Platform from './Platform'
 import * as Repo from './Repo'
+import { TaoFiles } from './TaoFiles'
 
 export type {
   DiagnosticRange,
@@ -24,6 +25,7 @@ export {
   Platform,
   Repo,
   Switch,
+  TaoFiles,
   Text,
   Time,
 }

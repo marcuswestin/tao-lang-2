@@ -1,0 +1,46 @@
+use InstantDB from @instantdb
+use @ui as UI
+
+project {
+   name "Still MVP Target"
+   version "0.1"
+   remote none
+}
+
+app StillMVP {
+   Name "Still"
+   // Full-target capabilities; the navigation foundation milestone intentionally omits them.
+   Design UI.StillDesign
+   Navigator UI.StillNavigator
+
+   Datasource {
+      Data StillData
+      Provider InstantDB {
+         AppId "still-mvp-local"
+      }
+   }
+}
+
+let StillMVPStage = StillMVP with {
+   Name "Still - Stage"
+   Datasource {
+      Provider {
+         AppId "still-mvp-stage"
+      }
+   }
+}
+
+workspace data StillData {
+   Tasks/Task {
+      Title text indexed
+      Body text
+      Done boolean indexed default false
+      CreatedAt time indexed default now()
+   }
+
+   Documents/Document {
+      Title text indexed
+      Body text
+      UpdatedAt time indexed default now()
+   }
+}

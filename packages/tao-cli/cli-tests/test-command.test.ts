@@ -37,6 +37,23 @@ Describe('tao test', () => {
     })
   })
 
+  Test('skips hidden future-source directories without reserving test directory names', async () => {
+    await withTaoFixture({
+      'Current.test.tao': 'test "Current" { }\n',
+      'Apps/MVP/.tao-future/Future.test.tao': 'test "Future" {',
+      'Apps/MVP/Current/Valid.test.tao': 'test "Valid current MVP" { }\n',
+      'Roadmap/Feature/Syntax Sketches/Valid.test.tao': 'test "Valid syntax sketch" { }\n',
+    }, async (rootDir) => {
+      const found = await findTaoTestFiles(rootDir)
+
+      Expect(found.map(path => FS.relativePath(rootDir, path))).toEqual([
+        'Apps/MVP/Current/Valid.test.tao',
+        'Current.test.tao',
+        'Roadmap/Feature/Syntax Sketches/Valid.test.tao',
+      ])
+    })
+  })
+
   Test('finds an explicitly named Tao test file', async () => {
     await withTaoFixture({
       'Main.test.tao': 'test "Main" { }\n',

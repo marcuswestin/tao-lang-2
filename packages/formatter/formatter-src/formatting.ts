@@ -30,6 +30,8 @@ export type NodeFormat<NodeT extends AST.Node> = {
   lineSeparatedList(items: readonly AST.Node[]): void
   /** indentedBraceBlock formats braces as `{ }` when empty, or one indented item per line with `}` on its own line. */
   indentedBraceBlock(items: readonly AST.Node[]): void
+  /** singleLineBraceBlock formats a one-statement brace block as `{ statement }`. */
+  singleLineBraceBlock(item: AST.Node): void
   /** indentedBracketBlock formats list brackets with one indented item per line when non-empty. */
   indentedBracketBlock(items: readonly AST.Node[]): void
   /** separateLines puts each item after the first on its own line, `linesBetween` newlines below the previous item. */
@@ -112,6 +114,12 @@ export function createNodeFormat<NodeT extends AST.Node>(
         formatter.interior(open, close).prepend(Formatting.indent())
         close.prepend(Formatting.newLine())
       }
+    },
+    singleLineBraceBlock() {
+      const open = formatter.keyword('{')
+      const close = formatter.keyword('}')
+      open.append(Formatting.oneSpace())
+      close.prepend(Formatting.oneSpace())
     },
     indentedBracketBlock(items) {
       if (items.length === 0) {

@@ -2,7 +2,7 @@
 
 This document describes the (intended) Tao type system.
 
-Current implementation status: this repo currently supports `text` and `number` literals, coarse `list` and `item` values, `view` and `layout` declarations, `alias` values, the state/action MVP for view-local `state`, named/inline `action`, `set`, `do`, stateful reads, and reactive rerendering, simple custom `type` declarations, typed primitive/list/item construction by juxtaposition, member access, scoped parameter type declarations, value references, invocation-only typed argument labels with `:`, and exact-first type-based render/action/item-field binding. Boolean, typed list elements, operators beyond MVP compound `set`, interpolation, functions, `match`, optional item fields, extension is item, and richer collection inference remain future work.
+Current implementation status: this repo currently supports `text` and `number` literals, coarse `list` and `item` values, `view` and `layout` declarations, the transitional `alias` binding, the state/action MVP for view-local `state`, named/inline `action`, `set`, `do`, stateful reads, and reactive rerendering, simple custom `type` declarations, typed primitive/list/item construction by juxtaposition, member access, scoped parameter type declarations, value references, invocation-only typed argument labels with `:`, and exact-first type-based render/action/item-field binding. The intended language described below replaces value `alias` with immutable `let`, expands parameters into declaration properties, and adds the closed-union assignability needed by `Presentable`; that migration is not implemented yet. Boolean, typed list elements, operators beyond MVP compound `set`, interpolation, functions, `match`, optional item fields, extension is item, and richer collection inference remain future work.
 
 Any commented out code is WIP material and should be ignored.
 
@@ -14,7 +14,7 @@ In these examples, `=>` means "is equivalent to". It is not part of tao syntax.
 
 Everything in Tao is "typed". This means that Tao can ensure that you don't put one type of value where another different one is expected.
 
-Tao's primitive types are `text`, `number`, `item`, `list`, `view`, `action`, and `boolean`
+Tao's scalar and structural core types include `text`, `number`, `boolean`, `item`, and `list`. Callable declaration kinds include `action`, `function`, `view`, `frame`, `layout`, `ui`, `nav`, and `dialogue`; each declaration name is a value of its corresponding callable type.
 
 Each one can be expressed as "literals", e.g
 
@@ -24,7 +24,7 @@ Each one can be expressed as "literals", e.g
 - `item`: `Person { Name "Ro" Age 40 }`, `Person { }` (empty item of type `Person`)
 - `list`: `[1 2 3]`, `[ ]` (empty list)
 - `action`: `action Name { ... }` (declaration), `action { ... }` (inline)
-- `view`: `view Name { ... }` (declaration)
+- callable declarations: `view Name { ... }`, `ui Detail { ... }`, `nav Stack { ... }`, `action Save { ... }`, and the other declaration kinds above
 
 ```tao
 // The `number` type represents any number value (inside the range -2^53 + 1 to 2^64 - 1):
@@ -70,7 +70,7 @@ You can also define new types, from other ones with `type <New Type> is <Type>`:
 type <New Type> is <Type>
   => <New Type> is <Type>
 type Name is text
-alias ExampleName = Name "Ro"
+let ExampleName = Name "Ro"
   => typeof ExampleName is Name // true
   => typeof ExampleName is text // false
   => text is Name // false
@@ -152,22 +152,24 @@ true or "Hello" => Type Error!
 not "Hello" => Type Error!
 ```
 
-### Type of Aliases
+### Immutable Bindings
 
-An `alias` allows to reference values and expressions by name.
+`let` creates a real immutable binding. It is not textual substitution, a macro, or an alternate declaration name. The binding cannot be reassigned.
 
-The value of an `alias` will _always automatically update_ in real-time to reflect the referenced expression's value.
+In a declarative scope, a `let` expression is reevaluated when a reactive dependency changes, so views depending on it update automatically. In an action, `let` captures the expression's value for that action execution. Reusable code belongs in a `function` or a specialized declaration rather than in a code-substitution feature.
 
-Conceptually, you could substitute any `alias` name with its right-hand value at any time and anywhere in your code.
+Declarative expressions are pure, so an implementation may cache a `let` between dependency revisions without changing observable behavior. Module/import cycles are permitted when they do not require an impossible eager value cycle. A value-initialization cycle with no already-available value is a diagnostic; it is never resolved from arbitrary source or import order.
+
+During migration, the implemented `alias` keyword may remain as deprecated compatibility syntax. A source action may rewrite it only when the binding has equivalent `let` evaluation and cycle behavior. Declaration synonyms, textual substitution, and cycle-sensitive cases require an explicit migration rather than a blind keyword replacement.
 
 ```tao
-alias <AliasName> = <Expression>
-  => <AliasName> becomes <Expression>
-alias Alias1 = 1
-  => Alias1 => 1
-alias Alias2 = Alias1
-  => Alias2 => Alias1 => 1
-typeof Alias1
+let <Name> = <Expression>
+  => <Name> is immutably bound to the evaluated expression
+let Value1 = 1
+  => Value1 => 1
+let Value2 = Value1
+  => Value2 => 1
+typeof Value1
   => typeof 1
   => number
 ```
@@ -180,10 +182,10 @@ type USD is Currency
 type Price is number
 type Discount is number
 
-alias Price = Price 314
-alias Discount = Discount 10
+let Price = Price 314
+let Discount = Discount 10
 
-alias DiscountPrice = Price - Price * Discount
+let DiscountPrice = Price - Price * Discount
 
 render Text "{DiscountPrice} USD"
 
@@ -203,7 +205,7 @@ When you `render` a view somewhere in the code, it displays at the correspondin
 
 ```tao
 view <ViewName> <Parameters> { <Body> }
-  => alias <ViewName> = view <Parameters> { <Body> }
+  => defines a callable view value named <ViewName>
 render <ViewName> <Arguments> { <Body> }
   => <ViewName> appears in the UI along with its <Body>
 ```
@@ -217,7 +219,7 @@ view Example {
 }
 ```
 
-The `render` keyword can only be used inside of other views - Tao will take care of rendering your root view for you
+The `render` keyword is valid inside render-bearing declarations: `view`, `frame`, `layout`, `ui`, `nav`, and `dialogue`. App roots mount a nav rather than rendering ordinary content directly.
 
 Also, inside of any `view` the `render` keyword can be dropped - and you should:
 
@@ -257,12 +259,12 @@ This boolean `when` expression is separate from type-matching `match` expression
 You use an `action` to update any `state`:
 
 ```tao
-view Button Label is text, OnPress is action {
+view Button Label text, OnPress action {
   Text Label
   on press -> { do OnPress }
 }
 
-view Button2 Label is text, OnPress is action {
+view Button2 Label text, OnPress action {
   Text Label
   on press -> { do OnPress }
 }
@@ -296,18 +298,18 @@ render Button2 "Hi", OnPress -> {
 }
 ```
 
-You can use `alias` to create new values that depend on other `state`. It will always change automatically whenever a `state` that it uses changes.
+You can use `let` in a declarative scope to create derived values that depend on `state`. The expression reevaluates whenever one of its reactive dependencies changes.
 
 For example, a button can change its text when the user logs in; or display a user's full name:
 
 ```tao
 type Title is text
 
-alias ButtonText when
+let ButtonText = when
   IsLoggedIn -> Title "Logout"
   otherwise -> Title "Login"
 
-alias DisplayName when
+let DisplayName = when
   IsLoggedIn -> "{FirstName} {LastName}"
   otherwise -> "Guest"
 ```
@@ -336,7 +338,7 @@ use every, Minutes from @tao/time
 ...
 
 state Countdown = 100.seconds
-alias MinutesCountdown = Countdown.asMinutes
+let MinutesCountdown = Countdown.asMinutes
 render Text "T minus {MinutesCountdown} minutes"
 ```
 
@@ -371,9 +373,9 @@ state Name = "Ro"
   => typeof evaluate Name => typeof Name => text
 
 // `stateful` is contagious: any expression that touches a something stateful is stateful.
-alias Doubled = Count * 2
+let Doubled = Count * 2
   => typeof ((stateful number) + number) => (stateful number) + (stateful number) => stateful number
-alias Greeting = "Hi " + Name
+let Greeting = "Hi " + Name
   => typeof (text + stateful text) =..> stateful text
 
 // `render stateful T` collapses to `T` when rendered.
@@ -391,9 +393,9 @@ action Increment {
     =..> set Count = number
 }
 
-// Mixing an alias with a state becomes `stateful T`
-alias Two = 2 => typeof Two = 2 => number
-alias Quad = Count * Two
+// Mixing a declarative let with state produces a derived `stateful T`
+let Two = 2 => typeof Two = 2 => number
+let Quad = Count * Two
   => typeof Quad = (stateful number) * number
   =..> typeof Quad = stateful number
 ```
@@ -401,7 +403,7 @@ alias Quad = Count * Two
 Notes:
 
 - `stateful` is a **type modifier**, not a nominal `type`. It composes with any base type: `stateful number`, `stateful text`, `stateful Person`, `stateful list T`, etc.
-- Reading a `stateful T` in view or position is action is the only place it collapses to `T`. Elsewhere (e.g. in a top-level `alias`), expressions stay `stateful T` so downstream views/actions can subscribe.
+- Reading a `stateful T` in a view or action is the only place it collapses to `T`. Elsewhere, declarative `let` expressions stay `stateful T` so downstream views and actions can subscribe.
 - `set X = <expr>` requires `X` to be a `state` binding; the RHS is type-checked against `X`'s underlying `T` (after `stateful` collapse on both sides).
 - Compound `set` forms such as `set X += <expr>`, `set X -= <expr>`, `set X *= <expr>`, and `set X /= <expr>` are shorthand for `set X = X <op> <expr>` using the corresponding operator.
 - `toggle X` is shorthand for `set X = not X`, and requires `X` to be a boolean `state`.
@@ -419,9 +421,8 @@ type Nickname is Alias
 type AKA is Alias
 type Age is number
 
-alias Name = Name "Ro"
-alias Name "Ro" // shorthand for: alias Name = Name "Ro"
-alias Age 40    // shorthand for: alias Age = Age 40
+let Name = Name "Ro"
+let Age = Age 40
 
 Name is text => true
 Alias is Name => true
@@ -436,22 +437,35 @@ Typed construction has these forms:
 <ValueA> with <ValueB> // merges two values
 ```
 
-`with` produces a new value by overlaying the right value onto the left value. For item values, matching properties from the right value replace matching properties from the left value, and properties that are only present on one side remain present in the result.
+`with` produces a new value by overlaying the right value onto the left value. It never mutates the original.
+
+For item values, matching properties from the right value replace matching properties from the left value, and properties that are only present on one side remain present in the result. For configured declaration values, the right block may replace public declaration properties only. Internal `let` bindings and runtime-owned state are not properties and cannot be patched.
 
 ```tao
 type Person is { Name Age }
 
-alias PersonA = Person { Name "A" Age 1 }
-alias PersonB = PersonA with Person { Name "B" Age 1 }
+let PersonA = Person { Name "A" Age 1 }
+let PersonB = PersonA with Person { Name "B" Age 1 }
   => Person { Name "B" Age 1 }
 
-alias PersonC = PersonA with { Name "C" }
+let PersonC = PersonA with { Name "C" }
   => Person { Name "C" Age 1 }
+
+ui Profile {
+  User User
+  Theme Theme default SystemTheme
+  let DisplayName = User.Name
+  render ProfileBody User DisplayName Theme
+}
+
+let RoProfile = Profile { User Ro }
+let DarkRoProfile = RoProfile with { Theme DarkTheme }
+// `with { DisplayName "Other" }` is invalid because DisplayName is internal.
 ```
 
-In `Value with { ... }`, the bare item patch is interpreted in the type context of `Value`. Its properties are matched with the same rules as item construction. Scalar properties named in the overlay replace the inherited scalar value. Nested item properties merge recursively with the inherited nested item value. List and collection merge semantics are deferred; until explicit append/remove syntax exists, list-like properties replace as a whole. Overlays do not mutate the base value.
+In `Value with { ... }`, the bare patch is interpreted in the type context of `Value`. Its properties are matched with the same owner-qualified rules as construction and invocation. Scalar properties named in the overlay replace the inherited scalar value. Nested item properties merge recursively with the inherited nested item value. List and keyed-collection merge semantics are deferred; initially they replace as a whole.
 
-Two types are compatible for typed value creation when they are in the same direct ancestry chain. Child-to-parent and parent-to-child type-fixing are allowed at invocation labels such as `Name: FirstName`; sibling-to-sibling type-fixing is not. Union types, structural `like` types, and other overlapping shapes do not participate unless a later spec defines that explicitly.
+Two nominal types are compatible for typed value creation when they are in the same direct ancestry chain. Child-to-parent and parent-to-child type-fixing are allowed at invocation labels such as `Name: FirstName`; sibling-to-sibling type-fixing is not. A value is assignable to a closed union when its type is assignable to exactly one union member; this does not make the union a nominal ancestor for type-fixing. Structural `like` types and other overlapping shapes do not participate unless a later spec defines that explicitly.
 
 ```tao
 type Name is text
@@ -463,9 +477,9 @@ view NameSink Name { ... }
 view AliasSink Alias { ... }
 view NicknameSink Nickname { ... }
 
-alias NameValue = Name "Ro"
-alias AliasValue = Alias "Ro"
-alias NicknameValue = Nickname "Ro"
+let NameValue = Name "Ro"
+let AliasValue = Alias "Ro"
+let NicknameValue = Nickname "Ro"
 
 render NameSink Alias: AliasValue      // OK: child to parent
 render AliasSink Name: NameValue       // OK: parent to child
@@ -491,8 +505,8 @@ type <NewType> is <SubType>
 type Name is text
 type FirstName is Name
 
-alias Name = Name "Ro"
-alias FirstName = FirstName "Ro"
+let Name = Name "Ro"
+let FirstName = FirstName "Ro"
 
 evaluate Name
   => "Ro"
@@ -522,10 +536,10 @@ render NameSink FirstName: CurrentFirstName
 
 ### Declaration Shorthands
 
-You can shorthand common declarations when the binding name is also the type name:
+Bindings and state use explicit assignment:
 
 ```tao
-alias <Name> = <Value>
+let <Name> = <Value>
   => <Name> becomes <Value>
   => typeof <Name> => typeof <Value>
 
@@ -533,21 +547,13 @@ state <Name> = <Value>
   => <Name> becomes stateful <Value>
   => typeof <Name> => stateful typeof <Value>
 
-alias Width = 30
+let Width = 30
   => typeof Width => number
 
 state Height = 30
   => typeof Height => stateful number
 
-alias <NamedType> <Value>
-  => alias <NamedType> = <NamedType> <Value>
-
-// The shorthand only works when <NamedType> is already a declared type.
-alias Name2 "Bar"
-  => Type Error
-
-alias FirstName "Joe"
-  => alias FirstName = FirstName "Joe"
+let FirstName = FirstName "Joe"
   => typeof FirstName is FirstName
 
 type LastName is text
@@ -556,145 +562,132 @@ state LastName "Doe"
   => typeof LastName is stateful LastName
 ```
 
-## Views and Actions
+## Callable Declarations
 
 ```tao
 view <ViewName> <Parameters> { <Body> }
-  => alias <ViewName> = view <Parameters> { <Body> }
+  => defines a callable view value named <ViewName>
 
 action <ActionName> <Parameters> { <Body> }
-  => alias <ActionName> = action <Parameters> { <Body> }
+  => defines a callable action value named <ActionName>
 ```
 
-### Parameters and Arguments
+Apps, functions, frames, layouts, UI, navs, and dialogues use the same declaration-property and configured-value model. Their distinct keywords add role-specific validation and behavior; they do not introduce separate argument systems. An app is not invoked as UI, but `App with { ... }` creates another immutable launch configuration that retains the originating app declaration ID.
 
-Parameters are named types. A bare named type parameter uses the type name as the value name inside the body. Any parameter that needs a different value name, a primitive source type, or a scoped nominal type uses `Name is Type`.
+A declaration name denotes its callable definition. In a context that requires a configured value, a declaration with no required properties is implicitly applied with zero arguments; this is why `Initial HomeUi` and `present HomeUi` are valid. A context that expects a callable-definition type receives the definition without applying it. An unconstrained `let Home = HomeUi` therefore binds the definition; use `let ConfiguredHome = HomeUi {}` when an explicit configured descriptor is required without an expected type. Parameterized declarations always require normal application.
+
+### Declaration Properties And Arguments
+
+A callable declaration defines its public inputs as properties. Header parameters are shorthand for the same property slots; they do not form a second parameter system.
 
 ```tao
-view <Name> <NamedType> [, <ParameterName> is <Type> ...] { ... }
-
-view Profile Person {
-  Text Person.Name + " " + Person.Age
+view Profile User {
+   render Text User.Name
 }
 
-view TextX text { ... } // Syntax Error: primitive source types need `Name is text`
-
-view Text1 Value is text {
-  Text Value
-}
-
-view Text3 Value is text, Postfix is text {
-  Text Value + Postfix
+// Equivalent public property surface:
+view ProfileLonghand {
+   User User
+   render Text User.Name
 }
 ```
 
-Conceptually, the parameter signature is a dictionary. The declaration decides both which argument type is accepted and which value alias is available in the body:
+A property may accept an existing named type, create an owner-qualified type from a source type, be optional, or have a default:
 
 ```tao
-view V1 Foo { ... }
-  => parameters: Foo -> Foo
+view PersonLine {
+   Person Person
+   Label text
+   optional Subtitle text
+   Density number default 1
 
-view V2 Foo, Cat is text { ... }
-  => parameters: Foo -> Foo, V2.Cat -> Cat
-
-view V3 Foo, Bar is Mat { ... }
-  => parameters: Foo -> Foo, V3.Bar -> Bar
-
-view V4 Moo is Foo, Bar is text, Mat { ... }
-  => parameters: V4.Moo -> Moo, V4.Bar -> Bar, Mat -> Mat
+   render Text "{Label}: {Person.Name}"
+}
 ```
 
-Inline parameter type declarations create owner-qualified nominal types. `view V Bar is text { ... }` creates the scoped type `V.Bar`, whose base type is `text`. The value name available inside `V` is `Bar`.
+`Label text` creates the nominal slot type `PersonLine.Label` based on `text`; `Subtitle text` and `Density number` similarly create owner-qualified types. Existing-type shorthand such as `Person Person` can be written as bare `Person` when the property and accepted type have the same name.
+
+The header form uses the same rules:
 
 ```tao
-type Name is text
-type Age is number
-
-view View1 Name, Age { }
-view View2 Name, Age { }
-
-render View1 Name: "Ro", Age: 40 { }
-render View2 Name: "Ro", Age: 40 { }
-render View2 Name, Age { }         // Type Error: Name and Age are types, not values
+view PersonLine Person, Label text, optional Subtitle text { ... }
 ```
 
-Scoped parameter types are public through the owning declaration when the owner is visible:
+Omitting an optional property binds `none`; spelling `default none` is redundant. Omitting a defaulted property binds the normalized default value. An invocation must bind every other required property. Partial application is deferred.
+
+Arguments may appear inline or in a property block:
 
 ```tao
-view PersonLine FirstName is text, LastName is text { ... }
+render Profile User
 
-alias Example = PersonLine.FirstName "Ada"
-render PersonLine FirstName: "Ada", LastName: "Lovelace" { }
+render PersonLine {
+   Person User
+   Label "Owner"
+   Subtitle "Active"
+}
 ```
 
-Multiple named top-level parameter types follow the same rule:
-
-```tao
-type AKA is Alias
-
-view Foo Name, Alias, Nickname, AKA { ... }
-
-render Foo Name: "Name", Alias: "Foo", Nickname: "Bar", AKA: "QWE" { }
-// Alias, Nickname, and AKA resolve to outer types.
-```
+Property constructors such as `Label "Owner"` explicitly name their destination slot. This is preferred whenever multiple slots accept the same source type.
 
 ### Argument Matching
 
-Arguments are matched by exact type first, then by unambiguous type lineage. They are not matched by source order.
+Arguments are not positional. A declaration's slots are owner-qualified even when several accept the same source type. Matching proceeds in this order:
 
-No two parameters may have the same exact type. No two provided arguments may have the same exact type before resolution.
+1. Bind explicitly named property entries such as `Label "Owner"`.
+2. Bind values whose exact type is one unbound owner-qualified slot type.
+3. Bind remaining values by exact accepted type, then by nominal type lineage, only when one complete assignment is possible.
+4. Bind a remaining value to a closed-union slot only when it is assignable to exactly one member and one complete assignment remains.
+5. Apply normalized defaults and `none` for omitted optional slots.
+6. Error on an unmatched argument, an unbound required slot, or more than one complete assignment.
 
-Lineage matching assumes nominal, single-parent type ancestry. Union types, structural `like` types, and other overlapping shapes do not participate in lineage matching unless they are exact matches or the caller explicitly provides a typed argument.
-
-Argument and item-property matching use the same rules:
-
-- If any two provided arguments have the same exact type before resolution, error.
-- If any two parameters have the same exact type, error.
-- Resolve exact argument-parameter type matches.
-- If any two unmatched arguments share lineage, excluding only the root literal type such as `text` or `number`, error.
-- If any two unmatched parameters share lineage, excluding only the root literal type such as `text` or `number`, error.
-- To manually disambiguate invocation arguments, the caller can use the invocation-only `<Type>: <Value>` form.
-- For each remaining unmatched argument, attempt to match it by type lineage.
-- If the remaining unmatched arguments have more than one complete valid assignment, error.
-- If any unmatched arguments remain, error.
-- If any unmatched required parameters remain, error.
-- Optional parameters may remain unmatched.
-
-Multiple parameters may share lineage as long as they do not have the same exact type, but callers must provide exact or explicitly typed arguments for enough of them that no ambiguous unmatched lineage remains.
-
-Optional parameter syntax is still a separate design. The rule above only reserves how omitted optional parameters behave once that syntax exists.
+Source order never resolves an ambiguity. Duplicate source types are valid in a declaration because their slot types are distinct, but bare literals cannot choose between them:
 
 ```tao
-view Text1 Value is text { ... }
-render Text1 "Foo"        // OK, equivalent to text "Foo"
+view TextPair {
+   Primary text
+   Secondary text
+   render Text "{Primary} / {Secondary}"
+}
 
-type String is text
-type Alias is text
-render Text1 String: "Foo" // OK, String unambiguously matches text by lineage
-
-view Text3 Value is text, Postfix is text { ... }
-render Text3 "Foo", "Bar"              // Type Error: two provided text arguments
-render Text3 "Foo", Postfix: "Bar"     // OK
-render Text3 text: "Foo", "Bar"        // Type Error: two provided text arguments
-render Text3 Postfix: "Foo", "Bar"     // OK, Postfix exact-matches first, then "Bar" matches text
-render Text3 Alias: "Foo", Postfix: "Bar" // OK
-
-view Text4 Value is text, String { ... }
-render Text4 "Foo", String: "Bar" // OK
-render Text4 String: "Bar", "Foo" // OK
-render Text4 "Foo", "Bar"        // Type Error: two provided text arguments
-render Text4 "Foo", text: "Bar"  // Type Error: two provided text arguments
+render TextPair Primary "A", Secondary "B" // OK
+render TextPair TextPair.Primary "A", TextPair.Secondary "B" // OK
+render TextPair "A", "B" // Type Error: ambiguous text arguments
 ```
 
-Actions use the same parameter and argument rules as views.
+The invocation-only `<Type>: <Value>` form remains valid when a caller needs to construct an exact argument type explicitly. Exact and nominal slots take priority over closed-union membership so a broad union cannot steal an argument from a more specific property. Two compatible union slots remain ambiguous unless explicitly named. Structural `like` types and other overlapping shapes do not participate in matching unless a later specification defines their behavior.
+
+Item construction and declaration invocation use the same owner-qualified matching algorithm. Render children do not: ordinary render expressions in a caller block remain children and are never consumed as declaration properties solely because their types happen to match. Named render slots are also separate from property slots.
+
+A keyed collection property written `{ @ EntryType }` accepts arbitrary stable entries such as `@home { ... }`. A caller may place literal keyed entries directly in the configured declaration when owner-qualified matching can assign them to one keyed-collection property:
 
 ```tao
-view Button Label is text, OnPress is action {
+Nav.SelectionNav {
+   Initial @home
+
+   @home {
+      Label "Home"
+      Content HomeStack
+   }
+}
+```
+
+This is equivalent to wrapping the entry in `Items { ... }`; `Items` remains available for an empty, prebuilt, computed, or otherwise explicitly named collection. Direct entries are aggregated before property matching. If their entry types admit more than one complete keyed-property assignment, the caller must name the destination property. Supplying both direct entries and an explicit value for the same property is a duplicate-property error.
+
+Every targetable key owned by one configured declaration belongs to that owner's key namespace and must be unique there, whether supplied directly or through an explicit property and even when different keyed properties receive the entries. A nested configured declaration begins a new namespace. Ordinary non-targetable keyed data remains scoped to its property and may reuse names. Property names such as `Items`, `Panes`, and `Auxiliaries` organize descriptor data but do not become target-path segments.
+
+Each entry creates an owner-qualified key value throughout the containing invocation. A dependent property may accept `key of Items`, meaning one key assigned to that configured `Items` property. References such as `Initial @home` resolve independently of source order and cannot escape their configured owner without an explicitly declared key type.
+
+Direct keyed entries in `Value with { ... }` configure and replace the complete matched keyed-collection property, exactly like its explicit property form. They do not introduce implicit key-by-key merging.
+
+Actions, functions, views, UI, navs, dialogues, frames, and layouts all use these declaration-property and argument rules.
+
+```tao
+view Button Label text, OnPress action {
   Text Label
   on press -> { do OnPress }
 }
 
-view Button2 Label is text, OnPress is action {
+view Button2 Label text, OnPress action {
   Text Label
   on press -> { do OnPress }
 }
@@ -728,13 +721,15 @@ render Button2 "Hi", OnPress -> {
 
 ## Match Expressions and Overloaded Views
 
+A closed union is declared with `type Name is A | B | ...`. A configured value of any member is assignable to the union, while `view`, `dialogue`, or any other nonmember is not. Nested named unions flatten for membership checks, duplicate members are rejected, and a value compatible with multiple overlapping members requires explicit type construction rather than order-based selection.
+
 Use `match` to branch by type:
 
 Inside each `when` branch, the matched value is narrowed to that branch's type. The `match` expression's result type is the union of its branch result types, and that union must type-check wherever the match expression is used.
 
 ```tao
 type Cat is text | number
-alias Cat 1
+let Cat = Cat 1
 
 render Text match Cat
   when text -> Cat
@@ -757,16 +752,16 @@ An item type has properties. Each property is a typed value. Item construction u
 
 ```tao
 type Person is { Name Age }
-type Person2 is { Name is text Age } // creates type Person2.Name
+type Person2 is { Name text Age } // creates type Person2.Name
 
-alias PersonA = Person { Name "A" Age 1 }
-alias PersonB = PersonA with Person { Name "B" Age 1 }
-alias PersonC = PersonA with { Name "C" }
+let PersonA = Person { Name "A" Age 1 }
+let PersonB = PersonA with Person { Name "B" Age 1 }
+let PersonC = PersonA with { Name "C" }
 ```
 
 For items, the right value overrides matching properties from the left value, and the result has the merged item type. A bare `{ ... }` patch is allowed as the right operand of `with`; it is interpreted in the type context of the left item value.
 
-Item properties are matched with the same rules as view arguments. They are not positional.
+Item properties use the same owner-qualified matching rules as declaration arguments. They are not positional.
 
 ```tao
 type FirstName is text
@@ -774,35 +769,35 @@ type LastName is text
 type Age is number
 type Person is { FirstName LastName Age }
 
-alias Person1 = Person { FirstName "Ro" LastName "Cat" Age 40 } // OK
-alias Person2 = Person { "Ro" 40 }                              // Type Error
-alias Person3 = Person { "Ro" "Cat" 40 }                        // Type Error
+let Person1 = Person { FirstName "Ro" LastName "Cat" Age 40 } // OK
+let Person2 = Person { "Ro" 40 }                              // Type Error
+let Person3 = Person { "Ro" "Cat" 40 }                        // Type Error
 
-alias RoAge = Age 40
-alias Person4 = Person { FirstName "Ro" LastName "Cat" RoAge }   // OK, RoAge type-matches Age
+let RoAge = Age 40
+let Person4 = Person { FirstName "Ro" LastName "Cat" RoAge }   // OK, RoAge type-matches Age
 ```
 
 Inline item property types create scoped property types:
 
 ```tao
-alias Name "Ro"
-alias Age 40
+let Name = Name "Ro"
+let Age = Age 40
 
 type LastName is Name
 type FullNamePerson is Person + { LastName }
-alias FullNamePerson = FullNamePerson { Name Age LastName "Johnsson" }
+let FullNamePerson = FullNamePerson { Name Age LastName "Johnsson" }
 
-type FullNamePerson2 is Person + { LastName is text }
-alias LastName "Petterson"
+type FullNamePerson2 is Person + { LastName text }
+let LastName = LastName "Petterson"
 
-alias Bad = FullNamePerson2 { Name Age LastName }              // Type Error: LastName value is the outer LastName type
-alias OK = FullNamePerson2 { Name Age LastName "West" }         // OK: LastName type resolves to the scoped property type
-alias OK2 = FullNamePerson2 { Name Age LastName "West" } // OK: typed construction uses the scoped property type
+let Bad = FullNamePerson2 { Name Age LastName }              // Type Error: LastName value is the outer LastName type
+let OK = FullNamePerson2 { Name Age LastName "West" }         // OK: LastName type resolves to the scoped property type
+let OK2 = FullNamePerson2 { Name Age LastName "West" } // OK: typed construction uses the scoped property type
 
 type FullNamePerson3 is Person + { LastName }
-type FullNamePerson4 is Person + { LastName is FullNamePerson2.LastName }
+type FullNamePerson4 is Person + { LastName FullNamePerson2.LastName }
 ```
 
-Inside item construction, scoped property types are available in the constructor's argument scope and shadow outer types with the same name. This is the same scoping rule used by view invocation arguments. Outside the constructor argument scope, `LastName` still refers to the outer type/value.
+Inside item construction, scoped property constructors are available in the constructor's argument scope and shadow outer values with the same name. This is the same scoping rule used by declaration invocation arguments. Outside the constructor argument scope, `LastName` still refers to the outer type/value.
 
-Unlike view parameter scoped types, property is item scoped types are part of the item type and can be referenced with their qualified name, such as `FullNamePerson2.LastName`.
+Owner-qualified property types are part of the item or declaration type and can be referenced with their qualified name, such as `FullNamePerson2.LastName` or `PersonLine.Label`.

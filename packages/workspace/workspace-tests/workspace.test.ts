@@ -1,6 +1,6 @@
 import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
+import { LSPWorkspace, Workspace } from '@workspace'
 
 const tsFence = '```ts'
 const fence = '```'
@@ -96,6 +96,29 @@ Describe('directory-rooted Tao workspace pipeline', () => {
 
         Expect(fresh).not.toBe(shared)
         Expect(shared).toBe(sameShared)
+      },
+    )
+  })
+
+  Test('skips hidden future-source directories while preloading LSP documents', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-sketches-',
+      {
+        'Main.tao': 'view MainView { }\n',
+        'Apps/MVP/.tao-future/Future.tao': 'project app FutureMVP {',
+        'Apps/MVP/Current/Valid.tao': 'view ValidCurrentMVP { }\n',
+        'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
+      },
+      async (_paths, rootDir) => {
+        const workspace = await LSPWorkspace.open(rootDir)
+        const loadedPaths = Array.from(workspace.services.shared.workspace.LangiumDocuments.all)
+          .map(document => document.uri.fsPath)
+
+        Expect(loadedPaths).toEqual([
+          FS.resolvePath('Apps/MVP/Current/Valid.tao', rootDir),
+          FS.resolvePath('Main.tao', rootDir),
+          FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
+        ])
       },
     )
   })

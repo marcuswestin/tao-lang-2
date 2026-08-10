@@ -28,7 +28,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
 
 - [ ] Add navigation and routing MVP
-  - `navigator`, stack/tabs, screen params, path metadata, `navigation push/pop/tab`, generated React Navigation runtime, and route tests.
+  - Research complete in `Roadmap/Add navigation and routing MVP/`. First plan covers immutable `let`, declaration properties/`with`, descriptor and target IR, app root hosting, SlotNav/StackNav, one semantic reducer, native back reconciliation, and focused migration support.
 
 - [ ] Define canonical buildable app target and acceptance bar
   - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
@@ -44,6 +44,10 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 - [ ] Add render IDs and minimal accessibility semantics
   - Stable test/accessibility identifiers, labels, roles for built-ins, useful TextInput/Button semantics, and validator guidance.
+
+- [ ] Add Tao design system MVP
+  - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level design application, runtime lowering, and first design diagnostics.
+  - Plan: `Roadmap/Add Tao design system MVP/Plan - Add Tao design system MVP.md`
 
 - [ ] Add forms and inputs MVP
   - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
@@ -74,6 +78,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
+- [ ] Add simulation mode with datasources kept locally (with simulated network delays), library states/state saving, demo renders
+- [ ] String interpolation syntax highlighting (did we accomplish this in old repo?)
 - [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
   - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
 - [x] Reorganize agent context

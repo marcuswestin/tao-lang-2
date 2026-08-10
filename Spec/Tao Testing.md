@@ -4,6 +4,8 @@ Status: design draft with an initial v0 implementation in progress. The current 
 
 This design starts with app and UI behavior tests. Tests can live in regular `.tao` files or sidecar `.test.tao` files. Package testing is deferred until Tao package semantics and app/UI testing are stable.
 
+Examples that launch an app through the currently implemented root `view` reflect the transitional runtime. The navigation foundation migrates intended app values to required `Name` and `Navigator` properties and makes `run` accept complete configured app values, as specified in `Tao Presentation and Navigation.md`.
+
 ## Goals
 
 - Tao users write automated tests in Tao.
@@ -19,7 +21,7 @@ This design starts with app and UI behavior tests. Tests can live in regular `.t
 Non-goals for the first testing design:
 
 - No package unit-test syntax.
-- No value-level assertions over Tao functions, aliases, state, or provider internals.
+- No value-level assertions over Tao functions, immutable bindings, state, or provider internals.
 - No direct action invocation as a test step.
 - No generated TypeScript or React component inspection.
 - No default connection to real production datasources.
@@ -38,7 +40,7 @@ Tests are `test` declarations containing one or more `check` declarations. The `
 
 ```tao
 test "optional description" {
-   alias Foo "ASD"
+   let Foo = Foo "ASD"
 
    check "optional description" {
       render ViewName Foo, Cats 1 with UserName "Henry" { }
@@ -52,7 +54,7 @@ test "optional description" {
       expect text "Henry Andersson has 2 cats"
    }
 
-   app AppNameStage = AppName with {
+   let AppNameStage = AppName with {
       datasource {
          appId "r112d22-stage"
       }
@@ -77,7 +79,7 @@ test "optional description" {
 
 Some things to notice:
 
-- `alias Foo "ASD"` and `app AppNameStage = ...` are test-local helper declarations visible to checks in the same `test`.
+- `let Foo = ...` and `let AppNameStage = ...` are immutable test-local helper bindings visible to checks in the same `test`.
 - Each `check` starts its own app or focused render subject. Checks do not share runtime state.
 - `render ViewName Foo, Cats 1 with UserName "Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
 - `run AppName with { ... }` launches a one-off app expression without requiring a named staging app.
@@ -120,7 +122,7 @@ Apps/Test Apps/TODOs/
 ```tao
 use TODOs from ./
 
-app TODOsTest = TODOs with {
+let TODOsTest = TODOs with {
    datasource {
       appId "local-empty-todos"
    }
@@ -153,10 +155,10 @@ Rules:
 
 ## App And Expression Overrides
 
-Datasource-backed tests need a cheap way to make a test app variant without copying the whole app declaration. The broader Tao language should support structural extension for item declarations and item expressions with `with`:
+Datasource-backed tests need a cheap way to make a test app variant without copying the whole app declaration. The broader Tao language supports immutable configured values and item expressions with `let` and `with`:
 
 ```tao
-app TodoStaging = TodoApp with {
+let TodoStaging = TodoApp with {
    datasource {
       appId "staging-app-id"
    }
@@ -168,30 +170,30 @@ This creates a new app from `TodoApp`, then applies the overlay. Only `datasourc
 This should not be app-specific. The same `Base with { ... }` expression should work anywhere Tao accepts an item expression:
 
 ```tao
-theme StagingTheme = AppTheme with {
+let StagingTheme = AppTheme with {
    colors {
       danger "#cc0033"
    }
 }
 
-datasource TodoLocalDatasource = TodoDatasource with {
+let TodoLocalDatasource = TodoDatasource with {
    appId "local-test-app-id"
 }
 
-app TodoLocal = TodoApp with {
+let TodoLocal = TodoApp with {
    datasource TodoLocalDatasource
 }
 
-app TodoLocalInline = TodoApp with {
+let TodoLocalInline = TodoApp with {
    datasource TodoDatasource with {
       appId "local-test-app-id"
    }
 }
 ```
 
-Draft overlay rules:
+`with` rules:
 
-- `kind Name = Base with { ... }` declares a new item of the same kind as `Base`.
+- `let Name = Base with { ... }` binds a new immutable value of the same type as `Base`.
 - `Base with { ... }` produces an expression value of the same type as `Base`.
 - Scalar properties named in the overlay replace the inherited scalar value.
 - Nested item/object blocks merge recursively with the inherited nested value.
@@ -275,7 +277,7 @@ Render rules:
 - If no app context is named, the test runner supplies the default test shell, theme, strings, and empty/no-op capabilities that the subject can legally render without.
 - Focused render checks are still black-box UI tests: assertions target rendered output and accessibility-visible state, not internal values.
 
-This gives package-like confidence without introducing package unit tests. A package can test exported `view`, `layout`, `screen`, or `nav` declarations through a focused render subject. If a full harness app is needed, it should live at a project root, because package folders cannot declare apps.
+This gives package-like confidence without introducing package unit tests. A package can test exported `view`, `frame`, `layout`, or `ui` declarations through a focused render subject. A nav requires a harness app because navs mount only at app roots, as app auxiliaries, or inside other navs. If a full harness app is needed, it should live at a workspace root, because package folders cannot declare apps.
 
 ## Data And Datasource Setup
 
@@ -302,7 +304,7 @@ app TodoApp {
    view TodoMain
 }
 
-app TodoStaging = TodoApp with {
+let TodoStaging = TodoApp with {
    datasource {
       appId "staging-app-id"
    }
@@ -488,7 +490,7 @@ Named render slots still need their own spec. This testing spec only owns the bo
 Render slot direction from old repo work:
 
 ```tao
-view Button Label is text, Press is action {
+view Button Label text, Press action {
    Row {
       @icon
       Text Label
@@ -749,8 +751,32 @@ Future target examples:
 
 - A state/actions test app presses buttons and asserts rendered counters.
 - A datasource app targets a named local/staging datasource, creates or updates rows through the UI, and asserts rendered rows.
-- A navigation app presses user-visible links and asserts the destination screen content while prior content is missing.
+- A navigation app presses user-visible controls and asserts destination UI while prior content is missing.
 - Focused `view` and `layout` checks render rare UI states directly, instead of forcing the full app through awkward setup paths.
+
+## Navigation Behavior And Diagnostics
+
+Navigation tests run an app and drive user-visible controls. They do not mount a nav as ordinary UI or inspect provider state. Assertions observe rendered content, accessibility behavior, native-equivalent back actions, and structured diagnostics emitted by the semantic reducer.
+
+```tao
+test "Navigation foundation" {
+   check "pushes a deterministic detail and handles back" {
+      run WriterFoundationTest
+
+      expect text "Foundation home marker"
+      expect missing text "Foundation detail marker"
+      press text "Open deterministic detail"
+      expect text "Foundation detail marker"
+      back
+      expect text "Foundation home marker"
+      expect missing text "Foundation detail marker"
+   }
+}
+```
+
+Invalid-target diagnostics use focused validator fixtures for statically impossible paths and a runtime harness that first unmounts an otherwise valid configured target before invoking it. The runtime check expects `navigation.target.not-found` and verifies that visible content is unchanged; it does not depend on a nonexistent control in the full Writer sketch.
+
+`expect diagnostic code ...` is planned syntax for structured development diagnostics. Tests should prefer stable diagnostic codes plus optional fields over matching prose. Navigation behavior follows `Tao Presentation and Navigation.md`: Tao statements reduce one semantic tree synchronously, while native back, selection, dismissal, and close events dispatch into that same reducer.
 
 ## Package Testing
 
@@ -759,7 +785,7 @@ Package testing is deferred.
 When package testing is designed, the preferred starting point is focused subject testing, with project-root harness apps as a fallback:
 
 - A package test imports package declarations.
-- The check mounts an exported `view`, `layout`, `screen`, or `nav`.
+- The check mounts an exported `view`, `frame`, `layout`, or `ui`. A nav is exercised through a workspace-root harness app.
 - A full harness app, when needed, is declared from a project root that imports the package, not inside the package folder itself.
 - The user drives that subject through rendered UI behavior.
 - Assertions remain rendered-behavior-only.

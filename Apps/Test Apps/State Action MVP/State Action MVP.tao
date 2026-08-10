@@ -45,6 +45,5 @@ view MainView {
       Button "Double", Double
       Button "Halve", Halve
       Button "Reset", SetZero
-      Button "Inline add one", -> {
-         set Count += 1
-}  }  }
+      Button "Inline add one", -> { set Count += 1 }
+}  }

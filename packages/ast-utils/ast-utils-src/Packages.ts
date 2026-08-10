@@ -1,5 +1,5 @@
 import { AST, type PackageResolver } from '@parser'
-import { FS, Repo } from '@shared'
+import { FS, Repo, TaoFiles } from '@shared'
 
 /** Packages exposes Tao package discovery, import resolution, and visibility helpers. */
 export namespace Packages {
@@ -305,7 +305,10 @@ export namespace Packages {
     if (!await FS.isDirectory(targetPath)) {
       return []
     }
-    return (await Repo.filesUnder(targetPath, { extensions: ['.tao'] }))
+    return (await Repo.filesUnder(targetPath, {
+      excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
+      extensions: ['.tao'],
+    }))
       .filter(isImportableTaoSourcePath)
       .filter(path => !pathCrossesPackageDirectory(targetPath, path))
   }
