@@ -22,25 +22,25 @@ type Person is {
    Job
 }
 
-alias FirstTitle = "Open"
-alias FirstCount = 1
-alias SecondTitle = "Done"
-alias SecondCount = 2
-alias DisplayName = Name "Ada"
-alias TypedDisplayName = Name "Grace"
-alias DemoTags = Tags ["types" "items" "lists"]
-alias EmptyTags = Tags []
-alias DemoJob = Job {
+let FirstTitle = "Open"
+let FirstCount = 1
+let SecondTitle = "Done"
+let SecondCount = 2
+let DisplayName = Name "Ada"
+let TypedDisplayName = Name "Grace"
+let DemoTags = Tags ["types" "items" "lists"]
+let EmptyTags = Tags []
+let DemoJob = Job {
    Level 2
    Title "Compiler engineer"
 }
-alias DemoPerson = Person {
+let DemoPerson = Person {
    DemoTags
    DemoJob
    Age 40
    DisplayName
 }
-alias Team = [
+let Team = [
    DemoPerson
    Person {
       Name "Ro"

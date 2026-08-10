@@ -99,7 +99,7 @@ Describe('Tao AST invocation resolution', () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
       action Save { }
-      alias SaveAlias = Save
+      let SaveAlias = Save
       view MainView {
         action CallSave {
           do SaveAlias()
@@ -238,7 +238,7 @@ Describe('Tao AST invocation resolution', () => {
         Name
         Age
       }
-      alias DemoPerson = Person { Age 40 Name "Ada" }
+      let DemoPerson = Person { Age 40 Name "Ada" }
       view MainView { }
     `)
     const person = parseResult.entry.ast.statements.find(
@@ -267,7 +267,7 @@ Describe('Tao AST invocation resolution', () => {
       type Pair is {
         Base
       }
-      alias BadPair = Pair { Name "Ada" Title "Grace" }
+      let BadPair = Pair { Name "Ada" Title "Grace" }
       view MainView { }
     `)
     const pair = parseResult.entry.ast.statements.find(

@@ -12,7 +12,7 @@ app StillCurrent {
 
 type WorkspaceName is text
 
-alias InboxName = WorkspaceName "Inbox"
+let InboxName = WorkspaceName "Inbox"
 
 view Home {
    state CaptureCount = 0

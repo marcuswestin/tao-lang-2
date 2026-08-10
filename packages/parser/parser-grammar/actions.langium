@@ -20,7 +20,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | ToggleStatement | DoStatement;
+    SetStatement | ToggleStatement | DoStatement | WhenActionStatement;
 
 ToggleStatement:
     'toggle' target=[StateDeclaration:ID];

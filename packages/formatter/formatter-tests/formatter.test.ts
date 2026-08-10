@@ -23,8 +23,8 @@ Describe('Tao formatter top-level statements', () => {
     await testFormatCode(
       `
         app MyApp { view MainView }
-        alias Greeting = "Hello"
-        alias Count = 3
+        let Greeting = "Hello"
+        let Count = 3
         view MainView { }
       `,
       `
@@ -32,8 +32,8 @@ Describe('Tao formatter top-level statements', () => {
            view MainView
         }
 
-        alias Greeting = "Hello"
-        alias Count = 3
+        let Greeting = "Hello"
+        let Count = 3
 
         view MainView { }
       `,
@@ -43,14 +43,14 @@ Describe('Tao formatter top-level statements', () => {
   Test('collapses extra blank lines between declarations', async () => {
     await testFormatCode(
       `
-        alias Greeting = "Hello"
+        let Greeting = "Hello"
 
 
 
         view MainView { }
       `,
       `
-        alias Greeting = "Hello"
+        let Greeting = "Hello"
 
         view MainView { }
       `,
@@ -81,9 +81,9 @@ Describe('Tao formatter top-level statements', () => {
         use Text from @tao/ui
 
         use Stack from @tao/ui
-        alias Greeting = "a"
+        let Greeting = "a"
 
-        alias Count = 3
+        let Count = 3
         view MainView { }
       `,
       `
@@ -91,9 +91,9 @@ Describe('Tao formatter top-level statements', () => {
 
         use Stack from @tao/ui
 
-        alias Greeting = "a"
+        let Greeting = "a"
 
-        alias Count = 3
+        let Count = 3
 
         view MainView { }
       `,
@@ -103,17 +103,17 @@ Describe('Tao formatter top-level statements', () => {
   Test('collapses multiple blank lines between consecutive aliases to one', async () => {
     await testFormatCode(
       `
-        alias Greeting = "a"
+        let Greeting = "a"
 
 
 
-        alias Count = 3
+        let Count = 3
         view MainView { }
       `,
       `
-        alias Greeting = "a"
+        let Greeting = "a"
 
-        alias Count = 3
+        let Count = 3
 
         view MainView { }
       `,
@@ -314,14 +314,14 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('spaces operators and lays out when branches', async () => {
     await testFormatCode(
-      `view MainView{state Ready=false state Count=1 alias Total=(Count+1)*2-  -3 alias Flag=not Ready and Count>=1 alias Label=when Ready->"on" Count<1->"low" otherwise->"off" action Flip{toggle   Ready} render Text(Label)}`,
+      `view MainView{state Ready=false state Count=1 let Total=(Count+1)*2-  -3 let Flag=not Ready and Count>=1 let Label=when Ready->"on" Count<1->"low" otherwise->"off" action Flip{toggle   Ready} render Text(Label)}`,
       `
         view MainView {
            state Ready = false
            state Count = 1
-           alias Total = (Count + 1) * 2 - -3
-           alias Flag = not Ready and Count >= 1
-           alias Label = when
+           let Total = (Count + 1) * 2 - -3
+           let Flag = not Ready and Count >= 1
+           let Label = when
               Ready -> "on"
               Count < 1 -> "low"
               otherwise -> "off"
@@ -330,6 +330,32 @@ Describe('Tao formatter views and blocks', () => {
            }
            render Text(Label)
         }
+      `,
+    )
+  })
+
+  Test('formats when statements in render and action bodies', async () => {
+    await testFormatCode(
+      `view MainView{state Ready=false action Run{when Ready->{set Ready=false} otherwise->{set Ready=true}} render Stack(){when Ready->{Text("on")} otherwise->{Text("off")}}}`,
+      `
+        view MainView {
+           state Ready = false
+           action Run {
+              when
+                 Ready -> {
+                    set Ready = false
+                 }
+                 otherwise -> {
+                    set Ready = true
+           }  }
+           render Stack() {
+              when
+                 Ready -> {
+                    Text("on")
+                 }
+                 otherwise -> {
+                    Text("off")
+        }  }  }
       `,
     )
   })
@@ -407,12 +433,23 @@ Describe('Tao formatter views and blocks', () => {
   })
 })
 
-Describe('Tao formatter aliases', () => {
-  Test('normalizes alias declaration spacing', async () => {
+Describe('Tao formatter bindings', () => {
+  Test('normalizes let declaration spacing', async () => {
     await testFormatCode(
-      `publish alias   Greeting="Hello"\nview MainView { }`,
+      `publish let   Greeting="Hello"\nview MainView { }`,
       `
-        publish alias Greeting = "Hello"
+        publish let Greeting = "Hello"
+
+        view MainView { }
+      `,
+    )
+  })
+
+  Test('keeps the deprecated alias keyword as written', async () => {
+    await testFormatCode(
+      `alias   Greeting="Hello"\nview MainView { }`,
+      `
+        alias Greeting = "Hello"
 
         view MainView { }
       `,
@@ -423,7 +460,7 @@ Describe('Tao formatter aliases', () => {
 Describe('Tao formatter types and constructors', () => {
   Test('normalizes type declarations, constructors, casts, lists, and member access', async () => {
     await testFormatCode(
-      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nalias Demo = Person {Tags ["a" "b"] Job {Level 2 Title "Engineer"} Age 40 Name "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
+      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nlet Demo = Person {Tags ["a" "b"] Job {Level 2 Title "Engineer"} Age 40 Name "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
       `
         type Job is {
            Title is text
@@ -437,7 +474,7 @@ Describe('Tao formatter types and constructors', () => {
            Job
         }
 
-        alias Demo = Person {
+        let Demo = Person {
            Tags ["a" "b"]
            Job {
               Level 2
@@ -651,7 +688,7 @@ Describe('Tao formatter injections', () => {
   Test('normalizes injection argument spacing', async () => {
     await testFormatCode(
       `
-        alias UserName = "Ro"
+        let UserName = "Ro"
         view MainView {
         render inject Name    UserName,UserName ${tsFence}
         return <RN.Text>{Name}</RN.Text>
@@ -659,7 +696,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        alias UserName = "Ro"
+        let UserName = "Ro"
 
         view MainView {
            render inject Name UserName, UserName ${tsFence}
@@ -675,13 +712,13 @@ Describe('Tao formatter comments', () => {
   Test('keeps top-level comments attached below the blank-line separation', async () => {
     await testFormatCode(
       `
-        alias Greeting = "hi"
+        let Greeting = "hi"
 
         // the main view
         view MainView { render Text(Greeting) }
       `,
       `
-        alias Greeting = "hi"
+        let Greeting = "hi"
 
         // the main view
         view MainView {
@@ -696,14 +733,14 @@ Describe('Tao formatter comments', () => {
       `
         view MainView {
         // local greeting
-        alias G = "hi"
+        let G = "hi"
         render Text(G)
         }
       `,
       `
         view MainView {
            // local greeting
-           alias G = "hi"
+           let G = "hi"
            render Text(G)
         }
       `,

@@ -7,23 +7,23 @@ app Expressions {
 view MainView {
    state Count = 2
    state Ready = false
-   alias Doubled = Count * 2
-   alias Total = Count + Doubled * 2 - 1
-   alias Half = Count / 4
-   alias Negated = -Count
-   alias Grouped = (Count + 1) * 5
-   alias Greeting = "Expr" + "essions"
-   alias Ordering = Count < 3 and Doubled >= 4
-   alias Either = Count == 99 or Ready
-   alias Blocked = not Ready
-   alias ReadyLabel = when
+   let Doubled = Count * 2
+   let Total = Count + Doubled * 2 - 1
+   let Half = Count / 4
+   let Negated = -Count
+   let Grouped = (Count + 1) * 5
+   let Greeting = "Expr" + "essions"
+   let Ordering = Count < 3 and Doubled >= 4
+   let Either = Count == 99 or Ready
+   let Blocked = not Ready
+   let ReadyLabel = when
       Ready -> "Ready"
       otherwise -> "Waiting"
-   alias Size = when
+   let Size = when
       Count > 4 -> "large"
       Count > 1 -> "medium"
       otherwise -> "small"
-   alias GateLabel = when
+   let GateLabel = when
       Blocked and Either -> "gated and either"
       Blocked -> "gated"
       otherwise -> "open"

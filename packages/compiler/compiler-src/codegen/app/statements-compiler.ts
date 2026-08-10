@@ -25,6 +25,7 @@ export const StatementsCompiler = {
       UseStatement: Compile.UseStatement,
       ViewDeclaration: Compile.ViewDeclaration,
       ViewRender: Compile.ViewRender,
+      WhenRenderStatement: Compile.WhenRenderStatement,
     })
   },
 

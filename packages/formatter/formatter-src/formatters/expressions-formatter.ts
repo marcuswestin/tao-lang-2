@@ -74,6 +74,37 @@ export default {
   /** BooleanLiteral is a single token with no interior formatting. */
   BooleanLiteral() {},
 
+  /** WhenRenderStatement puts each conditional branch and the otherwise fallback on its own line. */
+  WhenRenderStatement(f) {
+    f.indentedLines([...f.node.branches, f.node.otherwise])
+  },
+
+  // The branch body owns the space after `->`, so branches only set the arrow's left side.
+  /** WhenRenderBranch spaces its condition against the branch arrow. */
+  WhenRenderBranch(f) {
+    f.oneSpaceBefore('->')
+  },
+
+  /** WhenRenderOtherwise spaces the fallback keyword against the branch arrow. */
+  WhenRenderOtherwise(f) {
+    f.oneSpaceBefore('->')
+  },
+
+  /** WhenActionStatement puts each conditional branch and the otherwise fallback on its own line. */
+  WhenActionStatement(f) {
+    f.indentedLines([...f.node.branches, f.node.otherwise])
+  },
+
+  /** WhenActionBranch spaces its condition against the branch arrow. */
+  WhenActionBranch(f) {
+    f.oneSpaceBefore('->')
+  },
+
+  /** WhenActionOtherwise spaces the fallback keyword against the branch arrow. */
+  WhenActionOtherwise(f) {
+    f.oneSpaceBefore('->')
+  },
+
   /** StringLiteral is a single token with no interior formatting. */
   StringLiteral() {},
 

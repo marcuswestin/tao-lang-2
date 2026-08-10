@@ -52,6 +52,7 @@ export const ActionsCompiler = {
       DoStatement: Compile.DoStatement,
       SetStatement: Compile.SetStatement,
       ToggleStatement: Compile.ToggleStatement,
+      WhenActionStatement: Compile.WhenActionStatement,
     })
   },
 

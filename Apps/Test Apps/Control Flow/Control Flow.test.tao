@@ -1,0 +1,46 @@
+use ControlFlow from ./
+
+test "Control Flow" {
+   check "renders the branch matching current state" {
+      run ControlFlow
+
+      expect text "Control flow"
+      expect text "waiting"
+      expect text "nothing counted yet"
+      expect missing text "ready"
+   }
+
+   check "switches rendered branches as state changes" {
+      run ControlFlow
+      press text "Flip"
+      expect text "ready"
+      expect text "below threshold"
+      expect missing text "waiting"
+      press text "Advance"
+      press text "Advance"
+      press text "Advance"
+      expect text "ready and past threshold"
+      expect missing text "below threshold"
+   }
+
+   check "drops a branch-less when when no branch matches" {
+      run ControlFlow
+
+      expect text "nothing counted yet"
+      press text "Advance"
+      expect missing text "nothing counted yet"
+   }
+
+   check "runs conditional action branches" {
+      run ControlFlow
+      press text "Prepare"
+      expect text "ready"
+      press text "Reset"
+      expect text "2"
+      press text "Advance"
+      expect text "3"
+      press text "Reset"
+      expect text "0"
+      expect text "waiting"
+   }
+}

@@ -35,7 +35,7 @@ Each slice is a full vertical (grammar → scoping → validator/Typir → forma
 
 - [x] Slice 0 — parenthesized invocations (`View(args)`, `do Action(args)`); repository-wide migration
 - [x] Slice 1 — booleans and operators (+ `toggle` for boolean state) and the `when` expression — Expressions test app
-- [ ] Slice 2 — `let` binding and the `when` render/action forms — Control Flow test app; repo `alias` migration
+- [x] Slice 2 — `let` binding and the `when` render/action forms — Control Flow test app; repo `alias` migration
 - [ ] Slice 3 — `for` iteration, string interpolation, builtin members
 - [ ] Slice 4 — events (`on` clauses), `TextInput`, forms, test interaction steps — advance Still
 - [ ] Slice 5 — `data` declarations, entity types, `TR.Data` store, mutations, Memory provider — Data MVP test app

@@ -36,7 +36,7 @@ Describe('minimal Tao parser diagnostics', () => {
   })
 
   Test('parses aliases in app blocks for later validator checks', async () => {
-    const parseResult = await testParseCode('app MyApp { alias Greeting = "hello" view MyView } view MyView { }')
+    const parseResult = await testParseCode('app MyApp { let Greeting = "hello" view MyView } view MyView { }')
 
     Expect(parseResult.entry.ast.statements).toHaveLength(2)
   })
@@ -70,7 +70,7 @@ Describe('minimal Tao parser diagnostics', () => {
     const parseResult = await parseCodeWithErrors(`
       view Text Value is text { }
       view Source Secret is text {
-        alias Local = Secret
+        let Local = Secret
       }
       view Target {
         render Text(Secret) { }

@@ -1,0 +1,56 @@
+use Button, Col, Number, Text from @tao/ui
+
+app ControlFlow {
+   view MainView
+}
+
+view MainView {
+   state Count = 0
+   state Ready = false
+   let Threshold = 2
+   action Advance {
+      set Count += 1
+   }
+   action Flip {
+      toggle Ready
+   }
+   action Reset {
+      when
+         Count > Threshold -> {
+            set Count = 0
+            set Ready = false
+         }
+         otherwise -> {
+            set Count = Threshold
+   }  }
+   action Prepare {
+      when
+         not Ready -> {
+            set Ready = true
+         }
+         otherwise -> { }
+   }
+   render Col() [fill, gap 8, pad 12] {
+      Text("Control flow")
+      Number(Count)
+      when
+         Ready and Count > Threshold -> {
+            Text("ready and past threshold")
+         }
+         Ready -> {
+            Text("ready")
+            Text("below threshold")
+         }
+         otherwise -> {
+            Text("waiting")
+         }
+      when
+         Count == 0 -> {
+            Text("nothing counted yet")
+         }
+         otherwise -> { }
+      Button("Advance", Advance)
+      Button("Flip", Flip)
+      Button("Prepare", Prepare)
+      Button("Reset", Reset)
+}  }

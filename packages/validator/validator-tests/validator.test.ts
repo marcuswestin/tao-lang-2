@@ -147,8 +147,8 @@ Describe('Tao validator structural diagnostics', () => {
     await withValidationParse(
       `
       app MyApp { view MainView }
-      alias Greeting = "Hello"
-      alias Count = 3
+      let Greeting = "Hello"
+      let Count = 3
       view MainView { }
     `,
       ({ result, workspace }) => {
@@ -164,7 +164,7 @@ Describe('Tao validator structural diagnostics', () => {
     await withValidationParse(
       `
       app MyApp { view MainView }
-      alias SaveAction = action { }
+      let SaveAction = action { }
       view Text Value is text {
         render inject ${tsFence}
           return null
@@ -172,7 +172,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         state Count = 3
-        alias DisplayCount = Count
+        let DisplayCount = Count
         render Text("hi")
       }
     `,
@@ -202,7 +202,7 @@ Describe('Tao validator structural diagnostics', () => {
         use OtherPerson from ./Other.tao
         app MyApp { view MainView }
         type Person is text
-        alias LocalPerson = Person "Ada"
+        let LocalPerson = Person "Ada"
         view MainView {
           render Text(LocalPerson)
         }
@@ -210,7 +210,7 @@ Describe('Tao validator structural diagnostics', () => {
       `,
       'Other.tao': `
         type Person is text
-        project alias OtherPerson = Person "Grace"
+        project let OtherPerson = Person "Grace"
         view OtherView { }
       `,
     }, async paths => {
@@ -314,7 +314,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects non-root-view statements in app blocks', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp {
-        alias Greeting = "Hello"
+        let Greeting = "Hello"
         view MainView
       }
       view MainView { }
@@ -398,7 +398,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         state Count = 0
-        alias DisplayCount = Count
+        let DisplayCount = Count
         action AddStep Step is number {
           set Count += Step
         }
@@ -447,7 +447,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        alias LaterClick = action {
+        let LaterClick = action {
           do AddOne()
         }
         action AddOne { }
@@ -465,7 +465,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        alias LaterClick = AddOne
+        let LaterClick = AddOne
         action AddOne { }
         render Text("hi")
       }
@@ -486,12 +486,12 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         state Count = InitialCount
-        alias Greeting = LateGreeting
-        alias Save = SharedAction
+        let Greeting = LateGreeting
+        let Save = SharedAction
         render Text(Greeting)
       }
-      alias InitialCount = 1
-      alias LateGreeting = "Hello"
+      let InitialCount = 1
+      let LateGreeting = "Hello"
       action SharedAction { }
     `)
   })
@@ -620,7 +620,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('allows do targets through action aliases', async () => {
     await testValidateCode(`
       app MyApp { view MainView }
-      alias Save = action { }
+      let Save = action { }
       view Text Value is text {
         render inject ${tsFence}
           return null
@@ -709,7 +709,7 @@ Describe('Tao validator structural diagnostics', () => {
         action AddStep Step is number {
           set Count += Step
         }
-        alias CallAdd = AddStep
+        let CallAdd = AddStep
         action Missing {
           do CallAdd()
         }
@@ -723,8 +723,8 @@ Describe('Tao validator structural diagnostics', () => {
   Test('reports alias diagnostics when cyclic action aliases are invoked', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias First = Second
-      alias Second = First
+      let First = Second
+      let Second = First
       view Text Value is text {
         render inject ${tsFence}
           return null
@@ -863,7 +863,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         state Count = LaterCount
-        alias LaterCount = 1
+        let LaterCount = 1
         render Text("hi")
       }
     `)
@@ -932,7 +932,7 @@ Describe('Tao validator structural diagnostics', () => {
     const missing = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        alias Greeting = "Hello"
+        let Greeting = "Hello"
       }
     `)
     const extra = await testValidateCodeWithErrors(`
@@ -957,7 +957,7 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       view MainView {
         render Text("Hello")
-        alias Greeting = "Again"
+        let Greeting = "Again"
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -993,7 +993,7 @@ Describe('Tao validator structural diagnostics', () => {
     const withAlias = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        alias Greeting = "Hello"
+        let Greeting = "Hello"
         render inject ${tsFence}
           return null
         ${fence}
@@ -1023,7 +1023,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('validates aliases and parameter references as render arguments', async () => {
     await testValidateCode(`
       app MyApp { view MainView }
-      alias Greeting = "Hello"
+      let Greeting = "Hello"
       layout Stack {
         render inject ${tsFence}
           return <>{_ViewProps.children}</>
@@ -1038,7 +1038,7 @@ Describe('Tao validator structural diagnostics', () => {
         render Text(Label)
       }
       view MainView {
-        alias Local = "Local"
+        let Local = "Local"
         render Stack() {
           Text(Greeting)
           ParameterEcho(Local)
@@ -1061,12 +1061,12 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        alias Local = "Outer"
+        let Local = "Outer"
         render Stack() {
-          alias Local = "First"
+          let Local = "First"
           Text(Local)
           Stack() {
-            alias Local = "Nested"
+            let Local = "Nested"
             Text(Local)
           }
         }
@@ -1090,7 +1090,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Stack() {
           Text("First")
-          alias Later = "Second"
+          let Later = "Second"
           Text(Later)
         }
       }
@@ -1115,11 +1115,11 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Stack() {
           Stack() {
-            alias Local = "First"
+            let Local = "First"
             Text(Local)
           }
           Stack() {
-            alias Local = "Second"
+            let Local = "Second"
             Text(Local)
           }
         }
@@ -1142,8 +1142,8 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         render Stack() {
-          alias Local = "First"
-          alias Local = "Second"
+          let Local = "First"
+          let Local = "Second"
           Text(Local)
         }
       }
@@ -1168,8 +1168,8 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Stack() {
           Stack() {
-            alias Local = "First"
-            alias Local = "Second"
+            let Local = "First"
+            let Local = "Second"
             Text(Local)
           }
         }
@@ -1195,7 +1195,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Stack() {
           Stack() {
-            alias Text = "shadow"
+            let Text = "shadow"
           }
         }
       }
@@ -1738,8 +1738,8 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects alias references to later values', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias Greeting = Later
-      alias Later = "Hello"
+      let Greeting = Later
+      let Later = "Hello"
       view Text Value is text {
         render inject ${tsFence}
           return null
@@ -1759,8 +1759,8 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView Label is text {
-        alias Greeting = Later
-        alias Later = Label
+        let Greeting = Later
+        let Later = Label
       }
     `)
 
@@ -1785,7 +1785,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         render Stack() {
           Text(Local)
-          alias Local = "Hello"
+          let Local = "Hello"
         }
       }
     `)
@@ -1796,7 +1796,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects recursive alias member access without recursing forever', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias A = A.X
+      let A = A.X
       view MainView { }
     `)
 
@@ -1823,8 +1823,8 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects duplicate file-level aliases', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias Greeting = "Hello"
-      alias Greeting = "Again"
+      let Greeting = "Hello"
+      let Greeting = "Again"
       view MainView { }
     `)
     const diagnostic = result.diagnostics.find(diagnostic =>
@@ -1839,13 +1839,13 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects duplicate file-level declaration names', async () => {
     const aliasBeforeView = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias Text = "Hello"
+      let Text = "Hello"
       view MainView { }
       view Text Value is text { }
     `)
     const aliasAfterApp = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias MyApp = "Hello"
+      let MyApp = "Hello"
       view MainView { }
     `)
     const viewAfterApp = await testValidateCodeWithErrors(`
@@ -1863,7 +1863,7 @@ Describe('Tao validator structural diagnostics', () => {
     await testValidateCode(`
       app MyApp { view MainView }
       type Name is text
-      alias Name = Name "Ro"
+      let Name = Name "Ro"
       view MainView {
         render Text(Name)
       }
@@ -1888,7 +1888,7 @@ Describe('Tao validator structural diagnostics', () => {
     const aliasShadow = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        alias Text = "Hello"
+        let Text = "Hello"
         render Text(Text)
       }
       view Text Value is text {
@@ -1916,16 +1916,16 @@ Describe('Tao validator structural diagnostics', () => {
   Test('allows local aliases that shadow file-level aliases', async () => {
     await testValidateCode(`
       app MyApp { view MainView }
-      alias Greeting = "Outer"
+      let Greeting = "Outer"
       layout Stack {
         render inject ${tsFence}
           return <>{_ViewProps.children}</>
         ${fence}
       }
       view MainView {
-        alias OuterGreeting = Greeting
+        let OuterGreeting = Greeting
         render Stack() {
-          alias Greeting = "Inner"
+          let Greeting = "Inner"
           Text(Greeting)
           Text(OuterGreeting)
         }
@@ -1942,7 +1942,7 @@ Describe('Tao validator structural diagnostics', () => {
     const parameterShadow = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView Label is text {
-        alias Label = "shadow"
+        let Label = "shadow"
       }
     `)
 
@@ -1952,7 +1952,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects alias self references as undeclared-before references', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias First = First
+      let First = First
       view MainView { }
     `)
 
@@ -1964,8 +1964,8 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects mutually recursive aliases through declaration order', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias First = Second
-      alias Second = First
+      let First = Second
+      let Second = First
       view MainView { }
     `)
 
@@ -1977,8 +1977,8 @@ Describe('Tao validator structural diagnostics', () => {
   Test('returns alias declaration-order diagnostics when invalid aliases are used as render arguments', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias First = Second
-      alias Second = First
+      let First = Second
+      let Second = First
       view Text Value is text {
         render inject ${tsFence}
           return null
@@ -2000,12 +2000,12 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         state Count = 1
         state Ready = false
-        alias BadArithmetic = Count - "two"
-        alias BadLogical = Count and Ready
-        alias BadOrdering = Ready > Count
-        alias BadNegation = -Ready
-        alias BadNot = not Count
-        alias BadComparison = Count == "one"
+        let BadArithmetic = Count - "two"
+        let BadLogical = Count and Ready
+        let BadOrdering = Ready > Count
+        let BadNegation = -Ready
+        let BadNot = not Count
+        let BadComparison = Count == "one"
         render Text("hi")
       }
       view Text Value is text {
@@ -2030,10 +2030,10 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         state Count = 1
         state Ready = false
-        alias Total = (Count + 2) * 3 / 2 - 1
-        alias Joined = "a" + "b"
-        alias Gate = Ready and Count >= 1 or not Ready
-        alias Label = when
+        let Total = (Count + 2) * 3 / 2 - 1
+        let Joined = "a" + "b"
+        let Gate = Ready and Count >= 1 or not Ready
+        let Label = when
           Gate -> "on"
           otherwise -> "off"
         render Text(Label)
@@ -2053,10 +2053,10 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       view MainView {
         state Count = 1
-        alias BadCondition = when
+        let BadCondition = when
           Count -> "one"
           otherwise -> "other"
-        alias BadBranches = when
+        let BadBranches = when
           Count > 1 -> "many"
           otherwise -> 0
         render Text("hi")
@@ -2071,6 +2071,66 @@ Describe('Tao validator structural diagnostics', () => {
 
     Expect(messages).toContain(ExpressionsValidator.messages.whenCondition('number'))
     Expect(messages).toContain(ExpressionsValidator.messages.whenBranchType('text', 'number'))
+  })
+
+  Test('warns that the alias keyword is deprecated', async () => {
+    const result = await testValidateCode(`
+      app MyApp { view MainView }
+      alias Greeting = "hi"
+      let Farewell = "bye"
+      view MainView {
+        render Text(Greeting)
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(result.diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+      AliasesValidator.messages.deprecatedAlias('Greeting'),
+    ])
+    Expect(result.diagnostics[0]?.severity).toBe('warning')
+  })
+
+  Test('rejects non-boolean conditions in when statements', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      view MainView {
+        state Count = 1
+        action Run {
+          when
+            Count -> {
+              set Count = 0
+            }
+            otherwise -> { }
+        }
+        render Stack() {
+          when
+            Count -> {
+              Text("counted")
+            }
+            otherwise -> { }
+        }
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(
+      validationErrorMessages(result).filter(message =>
+        message === ExpressionsValidator.messages.whenCondition('number')
+      ),
+    ).toHaveLength(2)
   })
 
   Test('rejects toggling non-boolean state', async () => {
@@ -2254,14 +2314,14 @@ Describe('Tao validator structural diagnostics', () => {
         Rank is number
       }
       type CurrentJob is InlineJob
-      alias DisplayName = Name "Ada"
-      alias DemoPerson = Person {
+      let DisplayName = Name "Ada"
+      let DemoPerson = Person {
         Tags ["types"]
         Job { Level 2 Title "Compiler engineer" }
         Age 40
         DisplayName
       }
-      alias DemoCurrentJob = CurrentJob { Role "Architect" Rank 3 }
+      let DemoCurrentJob = CurrentJob { Role "Architect" Rank 3 }
       layout Stack {
         render inject ${tsFence}
           return <>{_ViewProps.children}</>
@@ -2315,7 +2375,7 @@ Describe('Tao validator structural diagnostics', () => {
         Base
         Name
       }
-      alias BadPair = Pair { Name "Ada" Name "Grace" }
+      let BadPair = Pair { Name "Ada" Name "Grace" }
       view MainView { }
     `)
     const duplicateLineageArguments = await testValidateCodeWithErrors(`
@@ -2341,7 +2401,7 @@ Describe('Tao validator structural diagnostics', () => {
         Base
         Middle
       }
-      alias BadPair = Pair { Leaf "Ada" Leaf "Grace" }
+      let BadPair = Pair { Leaf "Ada" Leaf "Grace" }
       view MainView { }
     `)
 
@@ -2456,7 +2516,7 @@ Describe('Tao validator structural diagnostics', () => {
         Name
         Name
       }
-      alias BadPerson = Person { Name "Ada" }
+      let BadPerson = Person { Name "Ada" }
       view MainView { }
     `)
     const ambiguousProperty = await testValidateCodeWithErrors(`
@@ -2468,7 +2528,7 @@ Describe('Tao validator structural diagnostics', () => {
         Base
         Middle
       }
-      alias BadPerson = Person { Leaf "Ada" }
+      let BadPerson = Person { Leaf "Ada" }
       view MainView { }
     `)
     const ambiguousParameter = await testValidateCodeWithErrors(`
@@ -2493,7 +2553,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Pair is {
         Base
       }
-      alias BadPair = Pair { Name "Ada" Title "Grace" }
+      let BadPair = Pair { Name "Ada" Title "Grace" }
       view MainView { }
     `)
 
@@ -2519,7 +2579,7 @@ Describe('Tao validator structural diagnostics', () => {
     const badCast = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       type Age is number
-      alias BadAge = Age "Ada"
+      let BadAge = Age "Ada"
       view MainView { }
     `)
     const missingField = await testValidateCodeWithErrors(`
@@ -2530,7 +2590,7 @@ Describe('Tao validator structural diagnostics', () => {
         Name
         Age
       }
-      alias BadPerson = Person { Name "Ada" }
+      let BadPerson = Person { Name "Ada" }
       view MainView { }
     `)
     const unmatchedField = await testValidateCodeWithErrors(`
@@ -2541,13 +2601,13 @@ Describe('Tao validator structural diagnostics', () => {
         Name
         Age
       }
-      alias BadPerson = Person { Name "Ada" Age 40 "extra" }
+      let BadPerson = Person { Name "Ada" Age 40 "extra" }
       view MainView { }
     `)
     const badMember = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       type Name is text
-      alias DisplayName = Name "Ada"
+      let DisplayName = Name "Ada"
       view MainView {
         render Text(DisplayName.First)
       }
@@ -2563,7 +2623,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Person is {
         Name
       }
-      alias DemoPerson = Person { Name "Ada" }
+      let DemoPerson = Person { Name "Ada" }
       view MainView {
         render Text(DemoPerson.Missing)
       }
@@ -2576,7 +2636,7 @@ Describe('Tao validator structural diagnostics', () => {
     const shapelessItem = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       type Bag is item
-      alias BadBag = Bag { "extra" }
+      let BadBag = Bag { "extra" }
       view MainView {
         render inject ${tsFence}
           return null
@@ -2585,7 +2645,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
     const unresolvedCast = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias Bad = Missing "Ada"
+      let Bad = Missing "Ada"
       view MainView {
         render inject ${tsFence}
           return null
@@ -2594,7 +2654,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
     const unresolvedConstructor = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      alias Bad = Missing "Ada"
+      let Bad = Missing "Ada"
       view MainView {
         render inject ${tsFence}
           return null
@@ -2629,7 +2689,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Person is {
         Name
       }
-      alias BadPerson = Person { Missing }
+      let BadPerson = Person { Missing }
       view MainView {
         render inject ${tsFence}
           return null
@@ -2682,7 +2742,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Person is {
         Name
       }
-      alias Bad = Person.Missing "Ada"
+      let Bad = Person.Missing "Ada"
       view MainView { }
     `)
 
@@ -2704,9 +2764,9 @@ Describe('Tao validator structural diagnostics', () => {
         Name is text
         LastName
       }
-      alias OuterName = Name "Outer"
-      alias FamilyName = LastName "Lovelace"
-      alias Ada = FullNamePerson {
+      let OuterName = Name "Outer"
+      let FamilyName = LastName "Lovelace"
+      let Ada = FullNamePerson {
         Name "Ada"
         FamilyName
       }
@@ -2734,7 +2794,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       type Age is number
-      alias OuterAge = Age 42
+      let OuterAge = Age 42
       view MainView {
         render Card(Details: { OuterAge })
       }
@@ -2756,7 +2816,7 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       type A is B
       type B is A
-      alias Bad = A "value"
+      let Bad = A "value"
       view MainView { }
     `)
     const qualifiedResult = await testValidateCodeWithErrors(`
@@ -2765,7 +2825,7 @@ Describe('Tao validator structural diagnostics', () => {
       type B is {
         C is A
       }
-      alias Bad = A "value"
+      let Bad = A "value"
       view MainView { }
     `)
     const shorthandResult = await testValidateCodeWithErrors(`
@@ -2774,7 +2834,7 @@ Describe('Tao validator structural diagnostics', () => {
         Friend
       }
       type Friend is Person
-      alias Bad = Person { Friend { Friend { } } }
+      let Bad = Person { Friend { Friend { } } }
       view MainView { }
     `)
 
@@ -2842,7 +2902,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Person is {
         Name
       }
-      alias Bad = Person "hello"
+      let Bad = Person "hello"
       view MainView { }
     `)
 
@@ -2908,7 +2968,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCode(`
       app MyApp { view MainView }
       type Card is text
-      alias CardValue = Card "Ada"
+      let CardValue = Card "Ada"
       view Card {
         render inject ${tsFence}
           return null
@@ -2933,7 +2993,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Card is {
         Name is text
       }
-      alias CardName = Card.Name "Ada"
+      let CardName = Card.Name "Ada"
       view Card Label is text {
         render inject ${tsFence}
           return null
@@ -2959,7 +3019,7 @@ Describe('Tao validator structural diagnostics', () => {
         'Main.tao': `
         app MyApp { view MainView }
         use Name from ./Types.tao
-        alias Name = Name "Ro"
+        let Name = Name "Ro"
         view MainView {
           render Text(Name)
         }
@@ -2970,7 +3030,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Types.tao': `
-        alias Name = "Hidden"
+        let Name = "Hidden"
         project type Name is text
       `,
       },
@@ -2997,7 +3057,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'Types.tao': `
-        alias Name = "Hidden"
+        let Name = "Hidden"
         project type Name is text
       `,
       },
@@ -3014,7 +3074,7 @@ Describe('Tao validator structural diagnostics', () => {
         'Main.tao': `
         app MyApp { view MainView }
         use Name from ./Types.tao
-        alias DisplayName = Name "Ro"
+        let DisplayName = Name "Ro"
         view MainView {
           render Text(DisplayName)
         }
@@ -3026,7 +3086,7 @@ Describe('Tao validator structural diagnostics', () => {
       `,
         'Types.tao': `
         type Name is text
-        project alias Name = "Visible"
+        project let Name = "Visible"
       `,
       },
       async result => {
@@ -3533,7 +3593,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       test "Smoke" {
         check "renders" {
-          alias Message = "Hello"
+          let Message = "Hello"
           run MyApp
         }
       }
@@ -3639,7 +3699,7 @@ Describe('Tao validator structural diagnostics', () => {
         'Main.tao': `
         app MyApp { view MainView }
         use Greeting from ./
-        alias Local = Greeting
+        let Local = Greeting
         view Text Value is text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
@@ -3654,7 +3714,7 @@ Describe('Tao validator structural diagnostics', () => {
         // importing file's references, which used to trip the declaration-order check.
         // More padding.
         // More padding.
-        project alias Greeting = "Hello"
+        project let Greeting = "Hello"
       `,
       },
       async result => {
@@ -3672,7 +3732,7 @@ Describe('Tao validator structural diagnostics', () => {
         use MainView from @foo/forms
       `,
         'features/@foo/Title.tao': `
-        package alias PackageTitle = "Package title"
+        package let PackageTitle = "Package title"
       `,
         'features/@foo/forms/Main.tao': `
         use PackageTitle
@@ -3730,16 +3790,16 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'features/@foo/Widget.tao': `
-        project alias Chosen = "Wrong file target"
+        project let Chosen = "Wrong file target"
       `,
         'features/@foo/Widget/Index.tao': `
-        project alias Chosen = "Folder target"
+        project let Chosen = "Folder target"
       `,
         'features/@foo/FileOnly.tao': `
-        project alias FileOnly = "File target"
+        project let FileOnly = "File target"
       `,
         'features/@foo/ExplicitFile.tao': `
-        project alias ExplicitFile = "Explicit file target"
+        project let ExplicitFile = "Explicit file target"
       `,
       },
       async result => {
@@ -3847,7 +3907,7 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'features/@outer/@inner/Main.tao': `
-        package alias NestedAlias = "Nested"
+        package let NestedAlias = "Nested"
         project view InnerView {
           render inject ${tsFence}
             return null
@@ -3903,10 +3963,10 @@ Describe('Tao validator structural diagnostics', () => {
         }
       `,
         'features/@foo/First.tao': `
-        package alias Shared = "First"
+        package let Shared = "First"
       `,
         'features/@foo/Second.tao': `
-        publish alias Shared = "Second"
+        publish let Shared = "Second"
       `,
       },
       async result => {

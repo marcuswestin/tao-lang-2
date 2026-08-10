@@ -10,7 +10,7 @@ view CounterButton Title is text, Action is action {
 
 view MainView {
    state Count = 0
-   alias DisplayCount = Count
+   let DisplayCount = Count
    action SetZero {
       set Count = 0
    }

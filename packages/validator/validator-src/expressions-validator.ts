@@ -40,6 +40,22 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     }
     if (AST.isWhenExpression(node)) {
       validateWhenExpression(node, ctx)
+      continue
+    }
+    if (AST.isWhenRenderStatement(node) || AST.isWhenActionStatement(node)) {
+      validateWhenConditions(node.branches, ctx)
+    }
+  }
+}
+
+function validateWhenConditions(
+  branches: readonly (AST.WhenBranch | AST.WhenRenderBranch | AST.WhenActionBranch)[],
+  ctx: ValidationContext,
+): void {
+  for (const branch of branches) {
+    const condition = Type.ofExpression(branch.condition)
+    if (condition.kind !== 'unresolved' && !isPrimitive(condition, 'boolean')) {
+      ctx.error(expressionValidationMessages.whenCondition(Type.displayName(condition)), branch.condition)
     }
   }
 }
@@ -103,12 +119,7 @@ function validateUnaryOperation(unary: AST.UnaryOperation, ctx: ValidationContex
 }
 
 function validateWhenExpression(when: AST.WhenExpression, ctx: ValidationContext): void {
-  for (const branch of when.branches) {
-    const condition = Type.ofExpression(branch.condition)
-    if (condition.kind !== 'unresolved' && !isPrimitive(condition, 'boolean')) {
-      ctx.error(expressionValidationMessages.whenCondition(Type.displayName(condition)), branch.condition)
-    }
-  }
+  validateWhenConditions(when.branches, ctx)
 
   const results = [...when.branches.map(branch => branch.value), when.otherwise]
   const expected = results.map(Type.ofExpression).find(type => type.kind !== 'unresolved')

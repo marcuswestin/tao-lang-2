@@ -11,7 +11,7 @@ Describe('tao fix', () => {
         use Text,Button from @tao/ui
         view MainView {
            render Text(Greeting)
-           alias Greeting = "hi"
+           let Greeting = "hi"
         }
       `),
     }, async (rootDir) => {
@@ -28,7 +28,7 @@ Describe('tao fix', () => {
         }
 
         view MainView {
-           alias Greeting = "hi"
+           let Greeting = "hi"
            render Text(Greeting)
         }
       `)

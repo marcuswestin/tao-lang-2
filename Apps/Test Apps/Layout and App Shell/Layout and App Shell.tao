@@ -4,8 +4,8 @@ app LayoutAndAppShell {
    view MainView
 }
 
-alias PageTitle = "Layout and app shell"
-alias BodyCopy = "This screen should sit inside the default Tao app shell."
+let PageTitle = "Layout and app shell"
+let BodyCopy = "This screen should sit inside the default Tao app shell."
 
 view MainView {
    action Noop { }

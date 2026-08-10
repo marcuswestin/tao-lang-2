@@ -1,6 +1,7 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { DeclarationOrder } from './DeclarationOrder'
+import { aliasValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
 
 type NamedValueDeclaration =
@@ -21,6 +22,7 @@ const aliasValidationMessages = {
   aliasUsedBeforeDeclaration: (alias: string, value: string) =>
     `Alias '${alias}' cannot reference '${value}' because it is not declared before the alias.`,
   usedBeforeDeclaration: (name: string) => `Name '${name}' is used before it is declared.`,
+  deprecatedAlias: (name: string) => `\`alias\` is deprecated. Write \`let ${name} = ...\`.`,
 } as const
 
 /** AliasesValidator validates alias names and declaration order. */
@@ -36,6 +38,7 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   reportDuplicateNames(fileValueDeclarations, new Map(), ctx)
   reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
   reportAliasReferenceOrder(allAliases(file), ctx)
+  reportDeprecatedAliasKeyword(allAliases(file), ctx)
   reportLocalValueReferenceOrder(file, ctx)
 
   const fileRenderables = file.statements.filter(AST.isRenderableDeclaration)
@@ -83,6 +86,16 @@ function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<str
 
 function allAliases(file: AST.TaoFile): AST.AliasDeclaration[] {
   return AST.streamAllContents(file).filter(AST.isAliasDeclaration)
+}
+
+function reportDeprecatedAliasKeyword(aliases: readonly AST.AliasDeclaration[], ctx: ValidationContext): void {
+  for (const alias of aliases) {
+    if (alias.keyword === 'alias') {
+      ctx.warning(aliasValidationMessages.deprecatedAlias(alias.name), alias, {
+        code: aliasValidationCodes.deprecatedAlias,
+      })
+    }
+  }
 }
 
 function reportAliasReferenceOrder(aliases: readonly AST.AliasDeclaration[], ctx: ValidationContext): void {

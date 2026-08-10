@@ -190,7 +190,7 @@ Describe('minimal Tao parser', () => {
       app MyApp { view MainView }
       view MainView {
         render Stack() {
-          alias Local = "Inside"
+          let Local = "Inside"
           Text(Local) { }
           Text("Literal")
         }
@@ -291,12 +291,12 @@ Describe('minimal Tao parser', () => {
 
   Test('parses operators with standard precedence and when expressions', async () => {
     const parseResult = await testParseCode(`
-      alias Total = 1 + 2 * 3
-      alias Grouped = (1 + 2) * 3
-      alias Decimal = 1.5
-      alias Negated = -2
-      alias Gate = true and not false
-      alias Label = when
+      let Total = 1 + 2 * 3
+      let Grouped = (1 + 2) * 3
+      let Decimal = 1.5
+      let Negated = -2
+      let Gate = true and not false
+      let Label = when
         Gate -> "on"
         otherwise -> "off"
     `)
@@ -381,13 +381,13 @@ Describe('minimal Tao parser', () => {
 
   Test('parses aliases, literals is number, and value references', async () => {
     const parseResult = await testParseCode(`
-      alias Greeting = "Hello"
-      alias LaunchCount = 3
+      let Greeting = "Hello"
+      let LaunchCount = 3
 
       view Text Value is text { }
       view StatTile Label is text, Count is number { }
       view MainView Label is text {
-        alias LocalLabel = Label
+        let LocalLabel = Label
         render Text(LocalLabel) { }
         render StatTile(Greeting, LaunchCount) { }
       }
@@ -575,7 +575,7 @@ Describe('minimal Tao parser', () => {
 
   Test('resolves value references through nested scope shadowing', async () => {
     const parseResult = await testParseCode(`
-      alias Greeting = "File"
+      let Greeting = "File"
 
       layout Stack {
         render inject \`\`\`ts
@@ -588,13 +588,13 @@ Describe('minimal Tao parser', () => {
         \`\`\`
       }
       view MainView Label is text {
-        alias Greeting = "View"
-        alias LabelAlias = Label
+        let Greeting = "View"
+        let LabelAlias = Label
         render Stack() {
-          alias Greeting = "Block"
+          let Greeting = "Block"
           Text(Greeting)
           Stack() {
-            alias Greeting = "Nested"
+            let Greeting = "Nested"
             Text(Greeting)
           }
           Text(LabelAlias)
@@ -668,10 +668,10 @@ Describe('minimal Tao parser', () => {
         Job
       }
 
-      alias DisplayName = Name "Ada"
-      alias DemoTags = Tags ["types" "items"]
-      alias DemoJob = Job { Title "Compiler engineer" }
-      alias DemoPerson = Person { DisplayName DemoTags DemoJob }
+      let DisplayName = Name "Ada"
+      let DemoTags = Tags ["types" "items"]
+      let DemoJob = Job { Title "Compiler engineer" }
+      let DemoPerson = Person { DisplayName DemoTags DemoJob }
 
       view Profile Person {
         render Text(Person.Job.Title)
@@ -721,7 +721,7 @@ Describe('minimal Tao parser', () => {
       type Profile is {
         Role is Job
       }
-      alias DemoProfile = Profile { Role { Title "Compiler engineer" } }
+      let DemoProfile = Profile { Role { Title "Compiler engineer" } }
       view MainView { }
     `)
 
@@ -769,7 +769,7 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseSyntax(`
       app MyApp { view MainView }
       use Text, Stack from ./
-      project alias Greeting = "Hello"
+      project let Greeting = "Hello"
       project view MainView {
         render Stack() {
           Text(Greeting)
@@ -840,7 +840,7 @@ Describe('minimal Tao parser', () => {
 
   Test('parses project package visibility declarations', async () => {
     const parseResult = await testParseCode(`
-      package alias PackageTitle = "Package"
+      package let PackageTitle = "Package"
       project view ProjectView { }
       publish layout PublishedStack { }
     `)

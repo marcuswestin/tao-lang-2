@@ -13,6 +13,32 @@ Apps/Test Apps/<App Name>/
 
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
+## Control Flow
+
+### Purpose
+
+Exercise statement-level `when` conditionals: choosing which content renders and which statements run, and reselecting branches as state changes.
+
+### Belongs Here
+
+- `when` render statements inside render blocks, including multi-child branches and a `otherwise -> { }` fallback that renders nothing.
+- `when` action statements inside action bodies, including branches that run several statements.
+- Conditions built from comparisons, boolean operators, and `let` bindings.
+
+### Does Not Belong Here
+
+- The `when` expression form selecting values; that belongs in the Expressions app.
+- Non-boolean condition diagnostics; those belong in validator tests.
+- Iteration, forms, data, or navigation.
+
+### Edit When
+
+- `when` statement semantics or totality rules change.
+
+### Behavior Test Notes
+
+`Control Flow.test.tao` asserts which branch content is present and missing at each state, then presses buttons to move between branches and to run conditional action logic.
+
 ## Expressions
 
 ### Purpose

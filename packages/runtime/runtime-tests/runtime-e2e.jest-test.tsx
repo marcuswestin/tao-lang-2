@@ -404,7 +404,7 @@ Describe('Expo runtime', () => {
           Age
         }
 
-        alias Ada = Person { Age 40 Name "Ada" }
+        let Ada = Person { Age 40 Name "Ada" }
 
         view MainView {
           render Keys(Ada)
@@ -1172,7 +1172,7 @@ Describe('Expo runtime', () => {
         'A.tao': `
           use BView from ./
 
-          project alias SharedTitle = "Circular alias"
+          project let SharedTitle = "Circular alias"
 
           project view AView {
               render BView()
@@ -1181,7 +1181,7 @@ Describe('Expo runtime', () => {
         'B.tao': `
           use SharedTitle from ./
 
-          alias ImportedTitle = SharedTitle
+          let ImportedTitle = SharedTitle
 
           project view BView {
               render Text(ImportedTitle)
@@ -1207,8 +1207,8 @@ Describe('Expo runtime', () => {
             view MainView
         }
 
-        alias Message = "Ordered output"
-        alias Greeting = Message
+        let Message = "Ordered output"
+        let Greeting = Message
 
         view MainView {
             render Text(Greeting) { }
@@ -1233,12 +1233,12 @@ Describe('Expo runtime', () => {
             view MainView
         }
 
-        alias Greeting = "Outer"
+        let Greeting = "Outer"
 
         view MainView {
-            alias OuterGreeting = Greeting
+            let OuterGreeting = Greeting
             render Stack() {
-                alias Greeting = "Inner"
+                let Greeting = "Inner"
                 Text(Greeting)
                 Text(OuterGreeting)
             }

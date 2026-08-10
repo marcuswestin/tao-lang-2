@@ -20,7 +20,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           use MainView from @cards/screens
         `,
         'Packages/@cards/Title.tao': `
-          package alias Title = "Package title"
+          package let Title = "Package title"
         `,
         'Packages/@cards/screens/Main.tao': `
           use Title

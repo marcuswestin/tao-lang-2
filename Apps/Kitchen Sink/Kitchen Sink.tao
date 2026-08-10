@@ -4,8 +4,8 @@ app KitchenSink {
    view MainView
 }
 
-alias Greeting = "Hello, World!"
-alias LaunchCount = 3
+let Greeting = "Hello, World!"
+let LaunchCount = 3
 
 type SinkName is text
 
@@ -16,18 +16,18 @@ type SinkProfile is {
    SinkTags
 }
 
-alias FixedSinkName = SinkName "Fixed Kitchen type"
-alias SinkProfileValue = SinkProfile {
+let FixedSinkName = SinkName "Fixed Kitchen type"
+let SinkProfileValue = SinkProfile {
    SinkName "Typed Kitchen"
    SinkTags ["item" "list" "type"]
 }
 
 view MainView {
    state KitchenCount = 0
-   alias LocalText = "Text from a local alias"
-   alias OuterGreeting = Greeting
+   let LocalText = "Text from a local alias"
+   let OuterGreeting = Greeting
    render Stack() [gap 8, pad 12, fill] {
-      alias Greeting = "Nested scope greeting"
+      let Greeting = "Nested scope greeting"
       Text(OuterGreeting) { }
       Text(LocalText)
       Text(Greeting)

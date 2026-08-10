@@ -10,9 +10,13 @@ Work happens on `feat/functional-language-mvp`, created from `main` (`444b02ed`)
 
 `Spec/Tao Type System.md` defines arithmetic and boolean operators but leaves equality spelling open; the Writer sketch used a single `=` inside `where` clauses. `==`/`!=` are chosen everywhere (general expressions and query `where`) so `=` remains exclusively assignment/binding. Comparisons are `< <= > >=`.
 
-## DEC-FMVP-003 — `when` is the MVP's only conditional
+## DEC-FMVP-003 — `when` is the MVP's only conditional, and always total
 
-Three forms with one shape: expression (`when C -> V … otherwise -> V`, `otherwise` required), render statement (branch bodies render content, `otherwise` optional), action statement (branch bodies are action blocks). `if/else`, `match`, and `guard` are deferred; `when` covers conditional rendering, derived values, and conditional action logic with a single surface.
+Three forms with one shape: expression (branch values), render statement (branch bodies render content), and action statement (branch bodies are action blocks). `otherwise` is **required** in all three. Totality is both a semantic choice — every `when` has a defined result — and what makes the branch list unambiguous to parse: without a terminating keyword, the statement forms would swallow the following statement as another branch condition. "Render nothing" is written `otherwise -> { }`. `if/else`, `match`, and `guard` are deferred; `when` covers conditional rendering, derived values, and conditional action logic with a single surface.
+
+## DEC-FMVP-018 — `alias` stays as a deprecated keyword, AST name unchanged
+
+`let` is the binding keyword; `alias` still parses and emits a deprecation warning carrying the `tao-deprecated-alias` code, and all repository sources moved to `let`. The AST node keeps the name `AliasDeclaration` with a `keyword` property rather than being renamed to `LetDeclaration`: the rename touches every package for no behavior change, so it is deferred (DEF-FMVP-016). A `tao fix` source action that rewrites `alias` to `let` is also deferred.
 
 ## DEC-FMVP-004 — String interpolation via sub-parsed segments
 

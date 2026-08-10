@@ -93,6 +93,33 @@ class TR {
     return otherwise().evaluate() as TR.Value<T>
   }
 
+  /** WhenRender renders the first matching Tao conditional branch, or the otherwise branch. */
+  static WhenRender(
+    branches: readonly [() => TR.Evaluable, () => React.ReactNode][],
+    otherwise: () => React.ReactNode,
+  ): React.ReactNode {
+    for (const [condition, body] of branches) {
+      if (condition().evaluate().jsValue) {
+        return body()
+      }
+    }
+    return otherwise()
+  }
+
+  /** WhenAction runs the first matching Tao conditional branch body, or the otherwise branch. */
+  static WhenAction(
+    branches: readonly [() => TR.Evaluable, () => void][],
+    otherwise: () => void,
+  ): void {
+    for (const [condition, body] of branches) {
+      if (condition().evaluate().jsValue) {
+        body()
+        return
+      }
+    }
+    otherwise()
+  }
+
   /** Do invokes a Tao action value with already-compiled runtime arguments. */
   static Do(action: TR.Action, ...args: any[]): void {
     action.evaluate().jsValue.invoke(...args)

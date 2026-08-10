@@ -46,13 +46,22 @@ export const ViewsCompiler = {
   /** RenderBlockBody compiles render child setup statements followed by JSX children. */
   RenderBlockBody(block: AST.Block): Compiled {
     const setupStatements = block.statements.filter(AST.isAliasDeclaration)
-    const renders = block.statements.filter(AST.isRender)
+    const children = block.statements.filter(statement =>
+      AST.isRender(statement) || AST.isWhenRenderStatement(statement)
+    )
     return gen`
       ${gen.list(setupStatements, Compile.Statement)}
       return <>
-        ${gen.list(renders, Compile.Render)}
+        ${gen.list(children, Compile.RenderChild)}
       </>
     `
+  },
+
+  /** RenderChild compiles one JSX child of a render block. */
+  RenderChild(statement: AST.Render | AST.WhenRenderStatement): Compiled {
+    return AST.isWhenRenderStatement(statement)
+      ? Compile.WhenRenderStatement(statement)
+      : Compile.Render(statement)
   },
 
   /** ViewParameterBinding compiles one view parameter into the current generated scope. */

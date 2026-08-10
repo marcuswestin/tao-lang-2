@@ -41,7 +41,7 @@ Describe('Tao compiler', () => {
       }
       view MainView {
         state Count = 0
-        alias DisplayCount = Count
+        let DisplayCount = Count
         action AddOne {
           set Count += 1
         }
@@ -66,8 +66,8 @@ Describe('Tao compiler', () => {
       view MainView {
         state Ready = false
         state Count = 2
-        alias Total = (Count + 1) * 2
-        alias Label = when
+        let Total = (Count + 1) * 2
+        let Label = when
           Ready and Count > 1 -> "ready"
           otherwise -> "waiting"
         action Flip {
@@ -236,7 +236,7 @@ Describe('Tao compiler', () => {
         use MainView from @foo/forms
       `,
         'feature/@foo/Title.tao': `
-        package alias PackageTitle = "Package alias"
+        package let PackageTitle = "Package alias"
       `,
         'feature/@foo/forms/Main.tao': `
         use PackageTitle
@@ -277,14 +277,14 @@ Describe('Tao compiler', () => {
         Role is text
       }
       type CurrentJob is InlineJob
-      alias DisplayName = Name "Ada"
-      alias DemoPerson = Person {
+      let DisplayName = Name "Ada"
+      let DemoPerson = Person {
         DisplayName
         Tags ["compiler" "runtime"]
         Job { Title "Engineer" }
       }
-      alias EmptyItem = item {}
-      alias DemoCurrentJob = CurrentJob { Role "Engineer" }
+      let EmptyItem = item {}
+      let DemoCurrentJob = CurrentJob { Role "Engineer" }
       view MainView {
         render Stack() {
           TextValue(DemoPerson.Name)
@@ -325,7 +325,7 @@ Describe('Tao compiler', () => {
         'Main.tao': `
         app TypeImportApp { view MainView }
         use Name from ./Types.tao
-        alias Name = Name "Ada"
+        let Name = Name "Ada"
         view MainView {
           render TextValue(Name)
         }
@@ -359,7 +359,7 @@ Describe('Tao compiler', () => {
       `,
         'A.tao': `
         use BView from ./
-        project alias SharedTitle = "Cycle"
+        project let SharedTitle = "Cycle"
         project view AView {
           render BView()
         }

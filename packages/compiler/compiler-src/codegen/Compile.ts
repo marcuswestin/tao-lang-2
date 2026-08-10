@@ -1,6 +1,7 @@
 import { ActionsCompiler } from './app/ActionsCompiler'
 import AliasesCompiler from './app/aliases-compiler'
 import AppCompiler from './app/app-compiler'
+import { ConditionalsCompiler } from './app/conditionals-compiler'
 import { ExpressionsCompiler } from './app/expressions-compiler'
 import FilesCompiler from './app/files-compiler'
 import { InjectionsCompiler } from './app/injections-compiler'
@@ -31,4 +32,5 @@ export const Compile = {
   ...ProjectDeclarationCompiler,
   ...InjectionsCompiler,
   ...ExpressionsCompiler,
+  ...ConditionalsCompiler,
 } as const
