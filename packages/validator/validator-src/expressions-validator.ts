@@ -17,6 +17,10 @@ const expressionValidationMessages = {
   whenCondition: (actual: string) => `A \`when\` condition must be boolean, got ${actual}.`,
   whenBranchType: (expected: string, actual: string) =>
     `All \`when\` branches must produce the same type; expected ${expected}, got ${actual}.`,
+  unknownInterpolation: (source: string) => `Interpolated name '${source}' is not declared here.`,
+  interpolationType: (source: string, actual: string) =>
+    `Interpolated value '${source}' must be text, number, or boolean, got ${actual}.`,
+  iterationCollection: (actual: string) => `\`for\` iterates a list, got ${actual}.`,
 } as const
 
 /** ExpressionsValidator validates and inspects Tao expression types. */
@@ -44,8 +48,56 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     }
     if (AST.isWhenRenderStatement(node) || AST.isWhenActionStatement(node)) {
       validateWhenConditions(node.branches, ctx)
+      continue
+    }
+    if (AST.isStringLiteral(node)) {
+      validateInterpolation(node, ctx)
+      continue
+    }
+    if (AST.isForRenderStatement(node)) {
+      validateIteration(node, ctx)
     }
   }
+}
+
+function validateInterpolation(literal: AST.StringLiteral, ctx: ValidationContext): void {
+  if (!ASTUtils.hasInterpolation(literal)) {
+    return
+  }
+  for (const segment of ASTUtils.interpolationSegments(literal)) {
+    if (segment.kind !== 'value') {
+      continue
+    }
+    const resolved = ASTUtils.resolveInterpolation(literal, segment)
+    if (!resolved.declaration) {
+      ctx.error(expressionValidationMessages.unknownInterpolation(segment.source), literal)
+      continue
+    }
+    if (resolved.type.kind === 'unresolved') {
+      continue
+    }
+    if (!isInterpolatable(resolved.type)) {
+      ctx.error(
+        expressionValidationMessages.interpolationType(segment.source, Type.displayName(resolved.type)),
+        literal,
+      )
+    }
+  }
+}
+
+function validateIteration(forStatement: AST.ForRenderStatement, ctx: ValidationContext): void {
+  const collection = Type.ofExpression(forStatement.collection)
+  if (collection.kind === 'unresolved' || collection.kind === 'list') {
+    return
+  }
+  ctx.error(
+    expressionValidationMessages.iterationCollection(Type.displayName(collection)),
+    forStatement.collection,
+  )
+}
+
+function isInterpolatable(type: ASTUtils.TaoType): boolean {
+  return isPrimitive(type, 'text') || isPrimitive(type, 'number') || isPrimitive(type, 'boolean')
 }
 
 function validateWhenConditions(

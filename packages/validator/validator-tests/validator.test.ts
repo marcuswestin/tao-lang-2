@@ -2133,6 +2133,53 @@ Describe('Tao validator structural diagnostics', () => {
     ).toHaveLength(2)
   })
 
+  Test('rejects unknown and non-scalar interpolated names', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        let Tags = ["a" "b"]
+        let Unknown = "value {Missing}"
+        let Structural = "tags {Tags}"
+        render Text(Unknown)
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const messages = validationErrorMessages(result)
+
+    Expect(messages).toContain(ExpressionsValidator.messages.unknownInterpolation('Missing'))
+    Expect(messages).toContain(ExpressionsValidator.messages.interpolationType('Tags', 'list'))
+  })
+
+  Test('rejects iterating a non-list value', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      view MainView {
+        let Title = "not a list"
+        render Stack() {
+          for Item in Title {
+            Text(Item)
+          }
+        }
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(ExpressionsValidator.messages.iterationCollection('text'))
+  })
+
   Test('rejects toggling non-boolean state', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }

@@ -69,6 +69,8 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
         return Switch.type(target, {
           ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
           AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
+          LoopVariable: loopVariable =>
+            TypeSystemHelpers.taoType(Type.ofLoopVariable(loopVariable), typir) ?? InferenceRuleNotApplicable,
           ParameterDeclaration: parameter =>
             TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
           StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,

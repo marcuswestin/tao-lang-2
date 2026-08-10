@@ -63,10 +63,17 @@ export function importableValueDeclarationsInFile(
 /** valueDeclarationsOwnedByBlock returns value declarations owned directly by `block`. */
 export function valueDeclarationsOwnedByBlock(block: AST.Block): AST.ValueDeclaration[] {
   return [
+    ...loopVariablesBoundByBlock(block),
     ...block.statements.filter(AST.isAliasDeclaration),
     ...block.statements.filter(AST.isStateDeclaration),
     ...block.statements.filter(AST.isActionDeclaration),
   ]
+}
+
+/** loopVariablesBoundByBlock returns the loop variable a `for` statement binds inside its block. */
+function loopVariablesBoundByBlock(block: AST.Block): AST.LoopVariable[] {
+  const owner = block.$container
+  return AST.isForRenderStatement(owner) && owner.block === block ? [owner.item] : []
 }
 
 /** isImportableValueDeclaration returns true for value declarations that can be imported. */

@@ -154,6 +154,29 @@ Describe('TR.When', () => {
   })
 })
 
+Describe('TR.Member', () => {
+  Test('reads builtin list and text members', () => {
+    Expect(TR.Member(TR.Value(['a', 'b']), 'Count').jsValue).toBe(2)
+    Expect(TR.Member(TR.Value([]), 'Empty').jsValue).toBe(true)
+    Expect(TR.Member(TR.Value(['a']), 'Empty').jsValue).toBe(false)
+    Expect(TR.Member(TR.Value('four'), 'Length').jsValue).toBe(4)
+    Expect(TR.Member(TR.Value(''), 'Empty').jsValue).toBe(true)
+  })
+
+  Test('reads item fields and missing fields', () => {
+    Expect(TR.Member(TR.Value({ Title: 'Task' }), 'Title').jsValue).toBe('Task')
+    Expect(TR.Member(TR.Value({}), 'Missing').jsValue).toBeUndefined()
+  })
+})
+
+Describe('TR.Interpolate', () => {
+  Test('renders text, number, and boolean values as text', () => {
+    Expect(TR.Interpolate(TR.Value('a'))).toBe('a')
+    Expect(TR.Interpolate(TR.Value(2))).toBe('2')
+    Expect(TR.Interpolate(TR.Value(true))).toBe('true')
+  })
+})
+
 Describe('TR.BlockScope', () => {
   Test('creates child scopes that can shadow parent declarations', () => {
     const parent: TR.Scope = {

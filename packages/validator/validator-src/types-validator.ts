@@ -326,6 +326,11 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
   }
   let typeName = Type.displayName(current)
   for (const member of memberAccess.members) {
+    if (Type.isBuiltinMember(current, member)) {
+      current = Type.ofValuePath(current, [member]) as ASTUtils.TaoType
+      typeName = Type.displayName(current)
+      continue
+    }
     if (current.kind !== 'item' || !current.item) {
       ctx.error(typeValidationMessages.memberNotItem(member), memberAccess)
       return
@@ -349,6 +354,7 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     AliasDeclaration: declaration => Type.ofExpression(declaration.value),
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
     ActionDeclaration: () => ({ kind: 'primitive', primitive: 'action' }),
+    LoopVariable: Type.ofLoopVariable,
     undefined: () => ({ kind: 'unresolved' }),
   })
 }

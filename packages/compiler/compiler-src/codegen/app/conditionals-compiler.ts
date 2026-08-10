@@ -42,6 +42,17 @@ export const ConditionalsCompiler = {
     `
   },
 
+  /** ForRenderStatement compiles iteration into a keyed runtime list render. */
+  ForRenderStatement(forStatement: AST.ForRenderStatement): Compiled {
+    return gen`
+      {TR.ForRender(${Compile.Expression(forStatement.collection)}, (_TaoItem: any) =>
+        TR.BlockScope(_Scope, _Scope => {
+          ${gen.scopeName(forStatement.item)} = TR.Value(_TaoItem)
+          ${Compile.RenderBlockBody(forStatement.block)}
+        }))}
+    `
+  },
+
   /** WhenActionBranchBody compiles one conditional action branch body into a scoped callback. */
   WhenActionBranchBody(block: AST.ActionBlock): Compiled {
     return gen`

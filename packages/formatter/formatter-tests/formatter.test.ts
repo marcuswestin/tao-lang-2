@@ -360,6 +360,20 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('formats for statements and interpolated text', async () => {
+    await testFormatCode(
+      `view MainView{let Tags=["a" "b"] render Stack(){for   Tag   in   Tags{Text("- {Tag}")}}}`,
+      `
+        view MainView {
+           let Tags = ["a" "b"]
+           render Stack() {
+              for Tag in Tags {
+                 Text("- {Tag}")
+        }  }  }
+      `,
+    )
+  })
+
   Test('tightens invocation parentheses on renders, children, and actions', async () => {
     await testFormatCode(
       `view MainView{state Count = 0 action AddStep Step is number{set Count += Step} action Run{do AddStep ( 2 )} render Stack ( ) {CountText ( 3 , "label" ) [width fill]}}`,

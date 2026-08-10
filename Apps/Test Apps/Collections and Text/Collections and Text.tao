@@ -1,0 +1,41 @@
+use Button, Col, Number, Row, Text from @tao/ui
+
+app CollectionsAndText {
+   view MainView
+}
+
+view TagRow Label is text, Position is number {
+   render Row() [gap 6] {
+      Text("{Position}. {Label}")
+      Text("({Label.Length} letters)")
+}  }
+
+view MainView {
+   state Count = 2
+   let Tags = ["alpha" "beta" "gamma"]
+   let NoTags = []
+   let Doubled = Count * 2
+   let Summary = "{Tags.Count} tags, counter at {Count}"
+   let Headline = "doubled is {Doubled}"
+   action Advance {
+      set Count += 1
+   }
+   render Col() [fill, gap 8, pad 12] {
+      Text("Collections and text")
+      Text(Summary)
+      Text(Headline)
+      Number(Tags.Count)
+      for Tag in Tags {
+         Text("- {Tag}")
+      }
+      when
+         NoTags.Empty -> {
+            Text("no extra tags")
+         }
+         otherwise -> {
+            for Extra in NoTags {
+               Text("extra {Extra}")
+         }  }
+      TagRow("solo", Count)
+      Button("Advance", Advance)
+}  }

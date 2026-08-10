@@ -18,13 +18,13 @@ Three forms with one shape: expression (branch values), render statement (branch
 
 `let` is the binding keyword; `alias` still parses and emits a deprecation warning carrying the `tao-deprecated-alias` code, and all repository sources moved to `let`. The AST node keeps the name `AliasDeclaration` with a `keyword` property rather than being renamed to `LetDeclaration`: the rename touches every package for no behavior change, so it is deferred (DEF-FMVP-016). A `tao fix` source action that rewrites `alias` to `let` is also deferred.
 
-## DEC-FMVP-004 — String interpolation via sub-parsed segments
+## DEC-FMVP-004 — String interpolation holds names, not expressions
 
-`"… {Expr} …"` keeps the existing STRING terminal; `{…}` segments are parsed as expressions by the language's own parser and resolved against the enclosing scope in ast-utils/validator, compiled to template literals. Trade-off: segments are not native Langium cross-references (IDE rename/hover inside strings deferred), in exchange for full expression power without lexer surgery.
+`"… {Name} …"` and `"… {Task.Title} …"` keep the existing STRING terminal; segments are scanned in `@ast-utils`, resolved against the enclosing scope by name, validated (unknown name, or a value that is not text/number/boolean), and compiled to a JavaScript template literal through `TR.Interpolate`. Segments hold a name or member path only — an expression like `{Count * 2}` is not supported; bind it with `let` first. Making segments real expressions needs either lexer modes or a sub-parser: Chevrotain lexes context-free, so the natural `"…{` / `}…{` / `}…"` terminals would also match a `}` from an unrelated block followed by any later `"` on the line. The name-path form buys the app's real cases at a fraction of the risk. Full expressions and IDE cross-references inside strings are deferred (DEF-FMVP-011).
 
-## DEC-FMVP-005 — Iteration is `for <Name> in <ListExpr> { … }`
+## DEC-FMVP-005 — Iteration is `for <Name> in <Collection> { … }`
 
-A render statement iterating lists and query results, keyed by entity `Id` when elements are entities and by index otherwise. Builtin members: `.Count`/`.Empty` on lists and queries, `.Length`/`.Empty` on text. A stdlib `List` view is unnecessary for the MVP — the app shell scrolls.
+A render statement iterating lists and (from the query slice) query results, keyed by entity `Id` when elements carry one and by index otherwise. The collection is restricted to a value reference, member path, list literal, or parenthesized expression: a general expression there would let the loop body's `{` be read as a typed constructor's item literal. Builtin members `.Count`/`.Empty` on lists and `.Length`/`.Empty` on text are resolved before item fields, in the type resolver and in `TR.Member`. List literals infer an element type when every element agrees, which is what gives the loop variable its type. A stdlib `List` view is unnecessary for the MVP — the app shell scrolls.
 
 ## DEC-FMVP-006 — Event clauses
 

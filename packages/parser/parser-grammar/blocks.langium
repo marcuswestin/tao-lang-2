@@ -17,7 +17,7 @@ entry BlocksGrammarEntrypoint:
 
 // Statement stays broad so validators can report context-specific placement errors.
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | AppView | StateDeclaration | Injection | RenderStatement | ViewRender | WhenRenderStatement;
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | AppView | StateDeclaration | Injection | RenderStatement | ViewRender | WhenRenderStatement | ForRenderStatement;
 
 Declaration:
     AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration;
@@ -26,8 +26,8 @@ Declaration:
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 // View statements are the declarations and render sites accepted by view/layout bodies.
-type ViewStatement = AliasDeclaration | StateDeclaration | ActionDeclaration | Render | WhenRenderStatement;
-type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration;
+type ViewStatement = AliasDeclaration | StateDeclaration | ActionDeclaration | Render | WhenRenderStatement | ForRenderStatement;
+type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | LoopVariable;
 type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | RenderableDeclaration | ActionDeclaration;
 type ParameterizedDeclaration = RenderableDeclaration | ActionDeclaration;

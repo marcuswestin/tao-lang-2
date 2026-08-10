@@ -47,7 +47,7 @@ export const ViewsCompiler = {
   RenderBlockBody(block: AST.Block): Compiled {
     const setupStatements = block.statements.filter(AST.isAliasDeclaration)
     const children = block.statements.filter(statement =>
-      AST.isRender(statement) || AST.isWhenRenderStatement(statement)
+      AST.isRender(statement) || AST.isWhenRenderStatement(statement) || AST.isForRenderStatement(statement)
     )
     return gen`
       ${gen.list(setupStatements, Compile.Statement)}
@@ -58,10 +58,14 @@ export const ViewsCompiler = {
   },
 
   /** RenderChild compiles one JSX child of a render block. */
-  RenderChild(statement: AST.Render | AST.WhenRenderStatement): Compiled {
-    return AST.isWhenRenderStatement(statement)
-      ? Compile.WhenRenderStatement(statement)
-      : Compile.Render(statement)
+  RenderChild(statement: AST.Render | AST.WhenRenderStatement | AST.ForRenderStatement): Compiled {
+    if (AST.isWhenRenderStatement(statement)) {
+      return Compile.WhenRenderStatement(statement)
+    }
+    if (AST.isForRenderStatement(statement)) {
+      return Compile.ForRenderStatement(statement)
+    }
+    return Compile.Render(statement)
   },
 
   /** ViewParameterBinding compiles one view parameter into the current generated scope. */

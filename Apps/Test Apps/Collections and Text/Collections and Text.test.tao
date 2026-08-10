@@ -1,0 +1,37 @@
+use CollectionsAndText from ./
+
+test "Collections and Text" {
+   check "interpolates values and iterates a list" {
+      run CollectionsAndText
+
+      expect text "Collections and text"
+      expect text "3 tags, counter at 2"
+      expect text "doubled is 4"
+      expect text "3"
+      expect text "- alpha"
+      expect text "- beta"
+      expect text "- gamma"
+   }
+
+   check "renders builtin members and the empty branch" {
+      run CollectionsAndText
+
+      expect text "no extra tags"
+      expect missing text "extra "
+   }
+
+   check "interpolates view parameters" {
+      run CollectionsAndText
+
+      expect text "2. solo"
+      expect text "(4 letters)"
+   }
+
+   check "recomputes interpolated text after state changes" {
+      run CollectionsAndText
+      press text "Advance"
+      expect text "3 tags, counter at 3"
+      expect text "doubled is 6"
+      expect text "3. solo"
+   }
+}

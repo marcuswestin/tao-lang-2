@@ -120,6 +120,43 @@ class TR {
     otherwise()
   }
 
+  /** ForRender renders one keyed child per element of a Tao list value. */
+  static ForRender(collection: TR.Evaluable, body: (item: any) => React.ReactNode): React.ReactNode {
+    const items = collection.evaluate().jsValue
+    if (!Array.isArray(items)) {
+      return null
+    }
+    // Entities carry a stable Id; anything else falls back to position.
+    return items.map((item, index) => React.createElement(React.Fragment, { key: itemKey(item, index) }, body(item)))
+  }
+
+  /** Interpolate renders one Tao value inside an interpolated text literal. */
+  static Interpolate(value: TR.Evaluable): string {
+    return String(value.evaluate().jsValue)
+  }
+
+  /** Member reads a Tao member: builtin list and text members first, then item fields. */
+  static Member(target: TR.Evaluable, name: string): TR.Value<any> {
+    const value = target.evaluate().jsValue
+    if (Array.isArray(value)) {
+      if (name === 'Count') {
+        return new RuntimeValue(value.length)
+      }
+      if (name === 'Empty') {
+        return new RuntimeValue(value.length === 0)
+      }
+    }
+    if (typeof value === 'string') {
+      if (name === 'Length') {
+        return new RuntimeValue(value.length)
+      }
+      if (name === 'Empty') {
+        return new RuntimeValue(value.length === 0)
+      }
+    }
+    return new RuntimeValue(value?.[name])
+  }
+
   /** Do invokes a Tao action value with already-compiled runtime arguments. */
   static Do(action: TR.Action, ...args: any[]): void {
     action.evaluate().jsValue.invoke(...args)
@@ -182,6 +219,11 @@ class TR {
 
   /** Views exposes runtime-backed Tao stdlib primitives. */
   static readonly Views = TRViews.Views
+}
+
+function itemKey(item: unknown, index: number): string | number {
+  const id = (item as { Id?: unknown } | null | undefined)?.Id
+  return typeof id === 'string' || typeof id === 'number' ? id : index
 }
 
 function parentDirectionFromProps(props: TR.TaoProps | undefined): TR.TaoProps['parentDirection'] {

@@ -8,6 +8,7 @@ type NamedValueDeclaration =
   | NamedFileValueDeclaration
   | AST.ParameterDeclaration
   | AST.StateDeclaration
+  | AST.LoopVariable
 type NamedFileValueDeclaration =
   | AST.ActionDeclaration
   | AST.AliasDeclaration

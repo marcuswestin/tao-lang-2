@@ -4,7 +4,7 @@ import { Switch } from '@shared'
 /** TaoType declares the static Tao type shape used by semantic helpers. */
 export type TaoType =
   | { kind: 'primitive'; primitive: 'text' | 'number' | 'boolean' | 'action'; nominal?: AST.TypeDefinition }
-  | { kind: 'list'; nominal?: AST.TypeDefinition }
+  | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
   | { kind: 'unresolved' }
 
@@ -63,6 +63,26 @@ export class Type {
   /** declarationName returns the source-facing name of a named declaration. */
   static declarationName(declaration: AST.NamedDeclaration): string {
     return AST.isParameterDeclaration(declaration) ? Type.parameterName(declaration) : declaration.name
+  }
+
+  /** ofValuePath resolves the type reached by reading `members` from a value declaration. */
+  static ofValuePath(declaration: AST.ValueDeclaration, members: readonly string[]): TaoType
+  /** ofValuePath resolves the type reached by reading `members` from an already-resolved type. */
+  static ofValuePath(type: TaoType, members: readonly string[]): TaoType
+  static ofValuePath(root: AST.ValueDeclaration | TaoType, members: readonly string[]): TaoType {
+    const context = new TypeResolutionContext()
+    const rootType = 'kind' in root ? root : context.ofValueDeclaration(root)
+    return context.atValuePath(rootType, members)
+  }
+
+  /** isBuiltinMember returns whether a member name reads a builtin member of a value's kind. */
+  static isBuiltinMember(target: TaoType, member: string): boolean {
+    return builtinMemberType(target, member) !== undefined
+  }
+
+  /** ofLoopVariable resolves the element type a `for` statement binds to its loop variable. */
+  static ofLoopVariable(loopVariable: AST.LoopVariable): TaoType {
+    return new TypeResolutionContext().ofValueDeclaration(loopVariable)
   }
 
   /** referenceName returns the source-facing name of a Tao type reference. */
@@ -332,7 +352,7 @@ class TypeResolutionContext {
       ActionExpression: () => primitiveType('action'),
       BinaryExpression: binary => this.ofBinaryExpression(binary),
       BooleanLiteral: () => primitiveType('boolean'),
-      ListLiteral: () => ({ kind: 'list' }),
+      ListLiteral: list => ({ kind: 'list', element: this.commonElementType(list.elements) }),
       MemberAccessExpression: access => this.ofMemberAccess(access),
       NumberLiteral: () => primitiveType('number'),
       ParenthesizedExpression: parenthesized => this.ofExpression(parenthesized.expression),
@@ -354,6 +374,27 @@ class TypeResolutionContext {
     }
     const left = this.ofExpression(binary.left)
     return left.kind === 'unresolved' ? this.ofExpression(binary.right) : left
+  }
+
+  // A list literal has an element type only when every element agrees on one, so a mixed list
+  // stays an untyped list rather than claiming a wrong element type.
+  private commonElementType(elements: readonly AST.Expression[]): TaoType | undefined {
+    let common: TaoType | undefined
+    for (const element of elements) {
+      const elementType = this.ofExpression(element)
+      if (elementType.kind === 'unresolved') {
+        return undefined
+      }
+      const key = Type.identityKey(elementType)
+      if (!common) {
+        common = elementType
+        continue
+      }
+      if (key !== Type.identityKey(common)) {
+        return undefined
+      }
+    }
+    return common
   }
 
   private ofUnaryOperation(unary: AST.UnaryOperation): TaoType {
@@ -379,14 +420,25 @@ class TypeResolutionContext {
     return this.atMemberPath(rootType, expression.members)
   }
 
+  ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
+    return this.valueDeclarationType(declaration)
+  }
+
   private valueDeclarationType(declaration: AST.ValueDeclaration | undefined): TaoType {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: () => primitiveType('action'),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
+      LoopVariable: loopVariable => this.loopVariableType(loopVariable),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
       StateDeclaration: state => this.stateDeclarationType(state),
       undefined: unresolvedType,
     })
+  }
+
+  // A loop variable takes the element type of the collection it iterates.
+  private loopVariableType(loopVariable: AST.LoopVariable): TaoType {
+    const collectionType = this.ofExpression(loopVariable.$container.collection)
+    return collectionType.kind === 'list' && collectionType.element ? collectionType.element : unresolvedType()
   }
 
   private aliasDeclarationType(alias: AST.AliasDeclaration): TaoType {
@@ -413,9 +465,18 @@ class TypeResolutionContext {
     return this.seenStates.has(declaration)
   }
 
+  atValuePath(root: TaoType, members: readonly string[]): TaoType {
+    return this.atMemberPath(root, members)
+  }
+
   private atMemberPath(root: TaoType, members: readonly string[]): TaoType {
     let current = root
     for (const member of members) {
+      const builtin = builtinMemberType(current, member)
+      if (builtin) {
+        current = builtin
+        continue
+      }
       const itemType = isItemKind(current) ? current.item : undefined
       if (!itemType) {
         return unresolvedType()
@@ -464,6 +525,28 @@ class TypeResolutionContext {
       PrimitiveTypeReference: reference => this.ofReference(reference),
     })
   }
+}
+
+// Builtin members are readable on every value of their kind; they are not item fields.
+function builtinMemberType(target: TaoType, member: string): TaoType | undefined {
+  if (target.kind === 'list') {
+    if (member === 'Count') {
+      return primitiveType('number')
+    }
+    if (member === 'Empty') {
+      return primitiveType('boolean')
+    }
+    return undefined
+  }
+  if (target.kind === 'primitive' && target.primitive === 'text') {
+    if (member === 'Length') {
+      return primitiveType('number')
+    }
+    if (member === 'Empty') {
+      return primitiveType('boolean')
+    }
+  }
+  return undefined
 }
 
 function primitiveType(primitive: AST.PrimitiveType): TaoType {

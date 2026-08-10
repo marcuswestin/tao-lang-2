@@ -100,6 +100,15 @@ export default {
     f.oneSpaceBefore('->')
   },
 
+  /** ForRenderStatement spaces the loop header keywords. */
+  ForRenderStatement(f) {
+    f.oneSpaceAfter('for')
+    f.oneSpaceAround('in')
+  },
+
+  /** LoopVariable is a single identifier with no interior formatting. */
+  LoopVariable() {},
+
   /** WhenActionOtherwise spaces the fallback keyword against the branch arrow. */
   WhenActionOtherwise(f) {
     f.oneSpaceBefore('->')

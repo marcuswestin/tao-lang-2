@@ -55,9 +55,32 @@ export const ExpressionsCompiler = {
     }], () => ${Compile.Expression(when.otherwise)})`
   },
 
-  /** StringLiteral compiles a Tao string literal into a Tao text value. */
+  /** StringLiteral compiles a Tao string literal, expanding `{...}` interpolation into a template. */
   StringLiteral(str: AST.StringLiteral): Compiled {
-    return gen`TR.Value(${gen.jsLiteral(str.value)})`
+    if (!ASTUtils.hasInterpolation(str)) {
+      return gen`TR.Value(${gen.jsLiteral(str.value)})`
+    }
+    const segments = ASTUtils.interpolationSegments(str).map(segment =>
+      segment.kind === 'text'
+        ? gen`${templateText(segment.text)}`
+        : gen`\${TR.Interpolate(${Compile.InterpolationValue(str, segment)})}`
+    )
+    return gen`TR.Value(\`${gen.join(segments, segment => segment, { separator: '' })}\`)`
+  },
+
+  /** InterpolationValue compiles one interpolated name path into a runtime value expression. */
+  InterpolationValue(
+    str: AST.StringLiteral,
+    segment: Extract<ASTUtils.InterpolationSegment, { kind: 'value' }>,
+  ): Compiled {
+    const resolved = ASTUtils.resolveInterpolation(str, segment)
+    Assert.defined(resolved.declaration, 'validated interpolation resolves to a value declaration', {
+      source: segment.source,
+    })
+    return segment.path.slice(1).reduce<Compiled>(
+      (value, member) => gen`TR.Member(${value}, ${gen.jsLiteral(member)})`,
+      Compile.ValueDeclarationReference(resolved.declaration),
+    )
   },
 
   /** NumberLiteral compiles a Tao number literal into a Tao number value. */
@@ -96,12 +119,13 @@ export const ExpressionsCompiler = {
     })`
   },
 
-  /** MemberAccessExpression compiles a typed item member path into a runtime value wrapper. */
+  /** MemberAccessExpression compiles a member path into chained runtime member reads. */
   MemberAccessExpression(reference: AST.MemberAccessExpression): Compiled {
     const target = resolveRef(reference.target)
-    const root = Compile.ValueDeclarationReference(target)
-    const path = reference.members.map(member => `[${gen.jsLiteral(member)}]`).join('')
-    return gen`TR.Value(${root}.jsValue${path})`
+    return reference.members.reduce<Compiled>(
+      (value, member) => gen`TR.Member(${value}, ${gen.jsLiteral(member)})`,
+      Compile.ValueDeclarationReference(target),
+    )
   },
 
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
@@ -115,11 +139,17 @@ export const ExpressionsCompiler = {
     return Switch.type(target, {
       ActionDeclaration: action => gen`${gen.scopeName(action)}.evaluate()`,
       AliasDeclaration: alias => gen`${gen.scopeName(alias)}.evaluate()`,
+      LoopVariable: loopVariable => gen`${gen.scopeName(loopVariable)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
     })
   },
 } as const
+
+// Literal text is emitted inside a generated JavaScript template literal.
+function templateText(text: string): string {
+  return text.replaceAll('\\', '\\\\').replaceAll('`', '\\`').replaceAll('${', '\\${')
+}
 
 function itemPropertyBindingPairs(
   item: AST.ItemLiteral,

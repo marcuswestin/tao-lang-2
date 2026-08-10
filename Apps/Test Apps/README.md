@@ -13,6 +13,34 @@ Apps/Test Apps/<App Name>/
 
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
+## Collections and Text
+
+### Purpose
+
+Exercise list iteration, string interpolation, and builtin list/text members, including recomputation after state changes.
+
+### Belongs Here
+
+- `for <Name> in <List> { ... }` iteration inside render blocks, including iteration nested in a `when` branch.
+- String interpolation of value names and member paths, in view bodies and in view parameters.
+- Builtin members: `.Count` and `.Empty` on lists, `.Length` and `.Empty` on text.
+- List literals bound with `let`, including an empty list.
+
+### Does Not Belong Here
+
+- Unknown-name or non-scalar interpolation diagnostics, and non-list iteration diagnostics; those belong in validator tests.
+- Expressions inside interpolation braces, which the MVP does not support.
+- Data-backed collections; those arrive with the data slices.
+
+### Edit When
+
+- Interpolation or iteration syntax changes.
+- The builtin member set changes.
+
+### Behavior Test Notes
+
+`Collections and Text.test.tao` asserts interpolated summaries, each iterated row, the empty-list branch, and interpolation inside a parameterized view, then presses `Advance` to confirm interpolated text recomputes.
+
 ## Control Flow
 
 ### Purpose

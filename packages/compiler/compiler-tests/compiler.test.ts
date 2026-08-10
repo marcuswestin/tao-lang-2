@@ -86,6 +86,38 @@ Describe('Tao compiler', () => {
     Expect(source).toContain('TR.UnaryOperator("not", _Scope.Ready.evaluate())')
   })
 
+  Test('compiles iteration and interpolated text through the runtime API', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      layout Stack {
+        render inject ${tsFence}
+          return <>{_ViewProps.children}</>
+        ${fence}
+      }
+      view Text Value is text {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+      view MainView {
+        let Tags = ["a" "b"]
+        let Summary = "{Tags.Count} tags"
+        render Stack() {
+          Text(Summary)
+          for Tag in Tags {
+            Text("- {Tag}")
+          }
+        }
+      }
+    `)
+
+    const source = compiled.files[0]!.code
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(source).toContain('TR.ForRender(')
+    Expect(source).toContain('TR.Member(_Scope.Tags.evaluate(), "Count")')
+    Expect(source).toContain('TR.Interpolate(')
+  })
+
   Test('compiles dynamic action parameter invocations without arguments', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }

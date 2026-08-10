@@ -1,5 +1,11 @@
 import { injectionArgumentName } from './injections'
 import {
+  hasInterpolation,
+  interpolationSegments,
+  resolveInterpolation,
+  visibleValueDeclaration,
+} from './interpolation'
+import {
   resolveActionInvocation,
   resolveActionTarget,
   resolveItemPropertyBindings,
@@ -14,7 +20,11 @@ export { Operators, Packages, Type }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  hasInterpolation,
   injectionArgumentName,
+  interpolationSegments,
+  resolveInterpolation,
+  visibleValueDeclaration,
   layoutEntryValues,
   layoutTermValue,
   referencedNames,
@@ -35,5 +45,7 @@ export namespace ASTUtils {
   export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
+  export type InterpolationSegment = import('./interpolation').InterpolationSegment
+  export type ResolvedInterpolation = import('./interpolation').ResolvedInterpolation
   export type TaoType = import('./Type').TaoType
 }

@@ -289,6 +289,39 @@ Describe('minimal Tao parser', () => {
     Expect(AST.layoutEntriesOf(render.layoutClause)).toHaveLength(0)
   })
 
+  Test('parses for statements and their loop variable binding', async () => {
+    const parseResult = await testParseCode(`
+      layout Stack { }
+      view Text Value is text { }
+      view MainView {
+        let Tags = ["a" "b"]
+        render Stack() {
+          for Tag in Tags {
+            Text(Tag)
+          }
+        }
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const mainView = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'MainView',
+    )
+    Expect.Is(mainView, AST.isViewDeclaration)
+    const render = mainView.block.statements.find(AST.isRenderStatement)
+    Expect.Is(render, AST.isRenderStatement)
+    const forStatement = render.block?.statements[0]
+    Expect.Is(forStatement, AST.isForRenderStatement)
+    Expect(forStatement.item.name).toBe('Tag')
+    Expect.Is(forStatement.collection, AST.isValueReference)
+
+    const childRender = forStatement.block.statements[0]
+    Expect.Is(childRender, AST.isViewRender)
+    const argument = AST.argumentsOf(childRender)[0]?.value
+    Expect.Is(argument, AST.isValueReference)
+    Expect(argument.target.ref).toBe(forStatement.item)
+  })
+
   Test('parses operators with standard precedence and when expressions', async () => {
     const parseResult = await testParseCode(`
       let Total = 1 + 2 * 3

@@ -12,7 +12,7 @@ const viewValidationMessages = {
   renderLast: '`render` must be the last statement in a view or layout body.',
   viewBody: 'Only alias, state, action, and render statements are allowed in view bodies.',
   layoutBody: 'Only alias and render statements are allowed in layout bodies.',
-  renderBlock: 'Only alias, render, view invocation, and `when` statements are allowed in render child blocks.',
+  renderBlock: 'Only alias, render, view invocation, `when`, and `for` statements are allowed in render child blocks.',
   renderBlockAliasPlacement: 'Aliases in render blocks must be declared before child view invocations.',
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view or layout body.',
@@ -136,6 +136,11 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
         validateRenderBlock(branch.block, ctx)
       }
       validateRenderBlock(statement.otherwise.block, ctx)
+      continue
+    }
+    if (AST.isForRenderStatement(statement)) {
+      hasChildInvocation = true
+      validateRenderBlock(statement.block, ctx)
       continue
     }
     ctx.error(viewValidationMessages.renderBlock, statement)

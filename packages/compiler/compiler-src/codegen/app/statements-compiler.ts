@@ -26,6 +26,7 @@ export const StatementsCompiler = {
       ViewDeclaration: Compile.ViewDeclaration,
       ViewRender: Compile.ViewRender,
       WhenRenderStatement: Compile.WhenRenderStatement,
+      ForRenderStatement: Compile.ForRenderStatement,
     })
   },
 
