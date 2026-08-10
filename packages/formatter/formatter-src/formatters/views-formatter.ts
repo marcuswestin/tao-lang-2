@@ -30,6 +30,15 @@ export default {
     f.oneSpaceBeforeProperty('parameterList')
   },
 
+  /** PresentStatement formats `present View(args)`. */
+  PresentStatement(f) {
+    f.oneSpaceAfter('present')
+    f.parenthesizedArguments()
+  },
+
+  /** DismissStatement is a single keyword with no interior formatting. */
+  DismissStatement() {},
+
   /** LayoutClause formats bracketed render layout entries. */
   LayoutClause(f) {
     f.commaSpacedList()

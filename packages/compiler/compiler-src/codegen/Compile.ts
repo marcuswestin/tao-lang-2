@@ -7,6 +7,7 @@ import { ExpressionsCompiler } from './app/expressions-compiler'
 import FilesCompiler from './app/files-compiler'
 import { InjectionsCompiler } from './app/injections-compiler'
 import InvocationsCompiler from './app/invocations-compiler'
+import { NavigationCompiler } from './app/navigation-compiler'
 import ProjectDeclarationCompiler from './app/project-declaration-compiler'
 import RenderStatementCompiler from './app/render-statement-compiler'
 import { StateCompiler } from './app/StateCompiler'
@@ -35,4 +36,5 @@ export const Compile = {
   ...ExpressionsCompiler,
   ...ConditionalsCompiler,
   ...DataCompiler,
+  ...NavigationCompiler,
 } as const

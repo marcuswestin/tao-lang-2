@@ -70,7 +70,14 @@ Tests always load through a fresh provider — Memory by default, or Loading/Fai
 
 ## DEC-FMVP-012 — Navigation subset
 
-Implemented: a new `ui` declaration kind (presentable screens; `view` stays embeddable content), app blocks accepting `Name "…"`, `Navigator StackNav { Initial <Ui> }`, and `Datasource { … }`; `present <Ui> <args…>` (push) and `dismiss` (pop) action statements; deterministic stack state owned by `TR.Nav`; automatic back affordance and Android hardware back popping the stack; the `back` test step. The legacy `app X { view Root }` form remains accepted (single-screen host) with a deprecation path. Everything else in the navigation spec — targets, SlotNav syntax, selection/split/overlays/toasts/windows, restoration, canonical descriptor identity, `with`-configured apps, routes — is out of scope here and stays with the navigation roadmap project.
+Implemented: `present View(args)` (push) and `dismiss` (pop) as action statements, a deterministic screen stack owned by `TR.Nav`, an automatic back affordance on every presented screen, Android hardware back mapped to the same dismissal, and the `back` test step. The app keeps its existing `app X { view Root }` shape — the root view is simply the bottom of the stack.
+
+Two simplifications against the navigation spec's shape:
+
+- **No separate `ui` declaration kind.** Any `view` can be presented. A distinct presentable kind buys placement validation the MVP does not need, and it would have doubled the declaration surface.
+- **No `Navigator`/`StackNav` descriptors.** The app has one stack; nav containers, targets, and configured navigators are the navigation roadmap project's subject.
+
+Screens below the top stay mounted inside a stable per-level container but leave the accessibility tree, so a covered screen keeps its state while tests and screen readers only see the current screen. Everything else in the navigation spec — targets, selection/split/overlays/toasts/windows, restoration, canonical descriptor identity, `with`-configured apps, routes — stays out of scope (DEF-FMVP-008).
 
 ## DEC-FMVP-013 — Test interaction surface
 

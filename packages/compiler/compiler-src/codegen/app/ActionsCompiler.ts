@@ -69,6 +69,8 @@ export const ActionsCompiler = {
       CreateStatement: Compile.CreateStatement,
       UpdateStatement: Compile.UpdateStatement,
       DeleteStatement: Compile.DeleteStatement,
+      PresentStatement: Compile.PresentStatement,
+      DismissStatement: Compile.DismissStatement,
     })
   },
 

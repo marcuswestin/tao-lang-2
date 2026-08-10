@@ -182,6 +182,32 @@ This app verifies bracketed layout clauses and the default app-shell baseline. `
 
 `Layout and App Shell.test.tao` asserts rendered text for the layout/app-shell smoke content. Style-specific behavior is covered in runtime tests for `TR.Layout` and `TR.AppShell`.
 
+## Navigation
+
+### Purpose
+
+Exercise stack navigation: presenting screens with arguments, dismissing them, the automatic back affordance, and state preservation across screens.
+
+### Belongs Here
+
+- `present View(args)` and `dismiss` inside event clauses.
+- Screens stacked more than one level deep, unwound one at a time.
+- The runtime back affordance, and the `back` test step.
+- App-root state that must survive being covered by a presented screen.
+
+### Does Not Belong Here
+
+- Navigation targets, overlays, tabs, split views, and restoration; those remain with the navigation roadmap project.
+- Data-backed screens; those belong with the data apps.
+
+### Edit When
+
+- The presentation model or back behavior changes.
+
+### Behavior Test Notes
+
+`Navigation.test.tao` asserts which screen is visible at each step, that covered screens leave the accessibility tree, that a root counter survives a round trip, and that `back`, the back affordance, and an in-app dismiss button all pop one screen.
+
 ## Package Access
 
 ### Purpose

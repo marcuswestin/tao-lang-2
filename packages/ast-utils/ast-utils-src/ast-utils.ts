@@ -10,6 +10,7 @@ import {
   resolveActionInvocation,
   resolveActionTarget,
   resolveItemPropertyBindings,
+  resolvePresentInvocation,
   resolveRenderInvocation,
   unboundDefaultedParameters,
 } from './invocations'
@@ -41,6 +42,7 @@ export const ASTUtils = {
   resolveActionInvocation,
   resolveActionTarget,
   resolveItemPropertyBindings,
+  resolvePresentInvocation,
   resolveRenderInvocation,
   parameterDefaultValue,
   unboundDefaultedParameters,

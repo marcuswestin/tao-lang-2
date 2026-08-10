@@ -1,0 +1,43 @@
+use Button, Col, Text from @tao/ui
+
+app Navigation {
+   view MainView
+}
+
+action Noop { }
+
+view DetailScreen Title is text {
+   render Col() [fill, gap 8, pad 12] {
+      Text("Detail for {Title}")
+      Button("Open nested", Noop)
+         on press -> {
+            present NestedScreen("{Title} nested")
+         }
+      Button("Close detail", Noop)
+         on press -> {
+            dismiss
+}  }  }
+
+view NestedScreen Label is text {
+   render Col() [fill, gap 8, pad 12] {
+      Text("Nested: {Label}")
+      Button("Close nested", Noop)
+         on press -> {
+            dismiss
+}  }  }
+
+view MainView {
+   state Opens = 0
+   render Col() [fill, gap 8, pad 12] {
+      Text("Navigation home")
+      Text("Opens: {Opens}")
+      Button("Open first", Noop)
+         on press -> {
+            set Opens += 1
+            present DetailScreen("first")
+         }
+      Button("Open second", Noop)
+         on press -> {
+            set Opens += 1
+            present DetailScreen("second")
+}  }  }

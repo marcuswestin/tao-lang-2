@@ -1,7 +1,7 @@
 import { Langium } from './langium-exports'
 import * as AST from './parserASTExport'
 
-type ArgumentListOwner = AST.Render | AST.DoStatement
+type ArgumentListOwner = AST.Render | AST.DoStatement | AST.PresentStatement
 type BlockStatementFor<OwnerT extends AST.BlockStatementOwner> = OwnerT extends
   AST.ActionDeclaration | AST.ActionExpression ? AST.ActionStatement
   : OwnerT extends AST.ProjectDeclaration ? AST.ProjectStatement

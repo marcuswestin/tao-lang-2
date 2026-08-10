@@ -678,3 +678,28 @@ Describe('TR.Data LocalProvider', () => {
 async function flushPending(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 0))
 }
+
+Describe('TR.Nav', () => {
+  Test('pushes and pops presented screens', () => {
+    const Screen = () => null
+    TR.Nav.reset()
+
+    Expect(TR.Nav.depth()).toBe(0)
+    TR.Nav.present(Screen, { Title: 'first' })
+    TR.Nav.present(Screen, { Title: 'second' })
+    Expect(TR.Nav.depth()).toBe(2)
+
+    TR.Nav.dismiss()
+    Expect(TR.Nav.depth()).toBe(1)
+    TR.Nav.dismiss()
+    Expect(TR.Nav.depth()).toBe(0)
+  })
+
+  Test('dismissing at the app root does nothing', () => {
+    TR.Nav.reset()
+
+    TR.Nav.dismiss()
+
+    Expect(TR.Nav.depth()).toBe(0)
+  })
+})

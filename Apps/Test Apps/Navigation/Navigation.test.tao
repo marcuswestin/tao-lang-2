@@ -1,0 +1,49 @@
+use Navigation from ./
+
+test "Navigation" {
+   check "starts on the app root" {
+      run Navigation
+
+      expect text "Navigation home"
+      expect missing text "Back"
+      expect missing text "Detail for first"
+   }
+
+   check "presents a screen with an argument" {
+      run Navigation
+      press text "Open first"
+      expect text "Detail for first"
+      expect text "Back"
+      expect missing text "Navigation home"
+   }
+
+   check "dismisses back to the root" {
+      run Navigation
+      press text "Open second"
+      expect text "Detail for second"
+      press text "Close detail"
+      expect text "Navigation home"
+      expect missing text "Detail for second"
+      expect text "Opens: 1"
+   }
+
+   check "stacks screens and unwinds them one at a time" {
+      run Navigation
+      press text "Open first"
+      press text "Open nested"
+      expect text "Nested: first nested"
+      expect missing text "Detail for first"
+      back
+      expect text "Detail for first"
+      back
+      expect text "Navigation home"
+      expect missing text "Back"
+   }
+
+   check "uses the back affordance to dismiss" {
+      run Navigation
+      press text "Open first"
+      press text "Back"
+      expect text "Navigation home"
+   }
+}

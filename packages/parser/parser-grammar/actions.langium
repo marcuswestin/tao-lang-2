@@ -1,6 +1,7 @@
 grammar TaoActions
 
 import "./data"
+import "./navigation"
 import "./expressions"
 import "./views"
 import "./terminals"
@@ -21,7 +22,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | ToggleStatement | DoStatement | WhenActionStatement | CreateStatement | UpdateStatement | DeleteStatement;
+    SetStatement | ToggleStatement | DoStatement | WhenActionStatement | CreateStatement | UpdateStatement | DeleteStatement | PresentStatement | DismissStatement;
 
 ToggleStatement:
     'toggle' target=[StateDeclaration:ID];

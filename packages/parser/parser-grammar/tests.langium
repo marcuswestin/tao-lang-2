@@ -13,7 +13,7 @@ TestDeclaration:
 CheckDeclaration:
     'check' name=STRING block=Block;
 
-type CheckStep = RunStep | PressTextStep | ExpectTextStep | ExpectInputStep | WriteStep | SubmitStep;
+type CheckStep = RunStep | PressTextStep | ExpectTextStep | ExpectInputStep | WriteStep | SubmitStep | BackStep;
 
 RunStep:
     'run' app=[AppDeclaration:ID] ('with' '{' config+=RunConfig* '}')?;
@@ -40,6 +40,9 @@ WriteStep:
 
 SubmitStep:
     submit?='submit';
+
+BackStep:
+    back?='back';
 
 TestSelector returns string:
     ID | 'text';

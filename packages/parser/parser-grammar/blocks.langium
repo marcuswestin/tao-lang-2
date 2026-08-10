@@ -18,7 +18,7 @@ entry BlocksGrammarEntrypoint:
 
 // Statement stays broad so validators can report context-specific placement errors.
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | ExpectInputStep | WriteStep | SubmitStep | AppView | AppDatasource | StateDeclaration | Injection | RenderStatement | ViewRender | WhenRenderStatement | ForRenderStatement | QueryDeclaration;
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | ExpectInputStep | WriteStep | SubmitStep | BackStep | AppView | AppDatasource | StateDeclaration | Injection | RenderStatement | ViewRender | WhenRenderStatement | ForRenderStatement | QueryDeclaration;
 
 Declaration:
     AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | DataDeclaration;

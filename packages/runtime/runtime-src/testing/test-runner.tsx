@@ -1,6 +1,7 @@
 import { Switch } from '@shared/core'
 import { act, fireEvent } from '@testing-library/react-native'
 import { DataControls } from '../../TaoRuntime-src/TR-data'
+import { NavControls } from '../../TaoRuntime-src/TR-nav'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
 import type * as TestCompiler from './test-compiler/TestCompiler'
@@ -23,6 +24,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   let screen: RuntimeApp.Screen | undefined
   try {
     DataControls.setTestProvider(check.app.dataState ?? 'memory')
+    NavControls.reset()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
     // Providers may resolve on a microtask, so let pending updates settle before the first step.
     await act(async () => {})
@@ -42,6 +44,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
 
 function runStep(screen: RuntimeApp.Screen, state: CheckState, step: TestCompiler.Step): void {
   return Switch.kind<TestCompiler.Step, void>(step, {
+    back: () => act(() => NavControls.dismiss()),
     expect: expectation => assertExpectation(screen, expectation),
     'expect-input': expectation => assertInputValue(screen, expectation),
     press: press => pressStep(screen, state, press),
@@ -147,6 +150,7 @@ function formatStep(step: TestCompiler.Step): string {
         : `expect ${expectation.selector} "${expectation.text}"`,
     'expect-input': expectation =>
       `expect input ${expectation.selector} "${expectation.text}" value "${expectation.value}"`,
+    back: () => 'back',
     press: press => `press ${press.selector} "${press.text}"`,
     submit: () => 'submit',
     write: write => `write "${write.text}"`,

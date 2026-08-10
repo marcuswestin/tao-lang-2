@@ -50,4 +50,7 @@ export default {
 
   /** SubmitStep is a single keyword with no interior formatting. */
   SubmitStep() {},
+
+  /** BackStep is a single keyword with no interior formatting. */
+  BackStep() {},
 } satisfies Partial<FormatHandlers>

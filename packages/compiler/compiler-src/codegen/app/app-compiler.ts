@@ -28,7 +28,7 @@ export default {
     const view = resolveRef(appView.view)
     return gen`
       return <TR.AppShell>
-        <${gen.scopeName(view)} />
+        <TR.Nav.Host root={${gen.scopeName(view)}} />
       </TR.AppShell>
     `
   },

@@ -58,8 +58,15 @@ export type TaoTestSubmitStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestBackStep declares triggering the app's normal back behavior. */
+export type TaoTestBackStep = {
+  kind: 'back'
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestStep declares one ordered Tao test operation after the run step. */
 export type TaoTestStep =
+  | TaoTestBackStep
   | TaoTestExpectation
   | TaoTestPressStep
   | TaoTestInputExpectation
@@ -144,6 +151,7 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
     ExpectTextStep: compileExpectation,
     ExpectInputStep: compileInputExpectation,
     PressTextStep: compilePressTextStep,
+    BackStep: back => ({ kind: 'back', source: sourceLocation(back) }),
     SubmitStep: submit => ({ kind: 'submit', source: sourceLocation(submit) }),
     WriteStep: write => ({ kind: 'write', text: write.text, source: sourceLocation(write) }),
   })

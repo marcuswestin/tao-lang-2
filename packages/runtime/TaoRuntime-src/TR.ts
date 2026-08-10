@@ -11,6 +11,7 @@ import {
   type TaoRow,
 } from './TR-data'
 import { LayoutControls } from './TR-layout'
+import { NavControls } from './TR-nav'
 import * as TRTaoProps from './TR-TaoProps'
 import { RuntimeValue } from './TR-value'
 import * as TRViews from './TR-views'
@@ -228,6 +229,9 @@ class TR {
 
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
+
+  /** Nav exposes the generated-code navigation runtime surface. */
+  static readonly Nav = NavControls
 
   /** Views exposes runtime-backed Tao stdlib primitives. */
   static readonly Views = TRViews.Views

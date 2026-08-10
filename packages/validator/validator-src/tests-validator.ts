@@ -63,6 +63,11 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(testValidationMessages.pressPlacement, submit)
     }
   }
+  for (const back of AST.streamAllContents(file).filter(AST.isBackStep)) {
+    if (statementNeedsStepPlacementDiagnostic(back)) {
+      ctx.error(testValidationMessages.pressPlacement, back)
+    }
+  }
 }
 
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
@@ -109,6 +114,7 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
       PressTextStep: checkStepOrder,
       WriteStep: checkStepOrder,
       SubmitStep: checkStepOrder,
+      BackStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
       },

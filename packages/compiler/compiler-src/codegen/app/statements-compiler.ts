@@ -17,6 +17,7 @@ export const StatementsCompiler = {
       ExpectInputStep: Compile.ExpectInputStep,
       WriteStep: Compile.WriteStep,
       SubmitStep: Compile.SubmitStep,
+      BackStep: Compile.BackStep,
       Injection: Compile.Injection,
       LayoutDeclaration: Compile.LayoutDeclaration,
       PressTextStep: Compile.PressTextStep,

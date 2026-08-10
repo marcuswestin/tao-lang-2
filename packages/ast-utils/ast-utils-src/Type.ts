@@ -854,8 +854,11 @@ function owningArgumentTypeReference(reference: AST.NamedTypeReference): AST.Arg
 }
 
 function invocationTargetDeclaration(
-  invocation: AST.Render | AST.DoStatement,
+  invocation: AST.Render | AST.DoStatement | AST.PresentStatement,
 ): AST.ParameterizedDeclaration | undefined {
+  if (AST.isPresentStatement(invocation)) {
+    return invocation.view.ref
+  }
   if (AST.isRender(invocation)) {
     return invocation.view?.ref
   }

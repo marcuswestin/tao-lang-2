@@ -216,6 +216,12 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
   }
 }
 
+/** resolvePresentInvocation resolves a presented view and its type-based argument bindings. */
+export function resolvePresentInvocation(present: AST.PresentStatement): ArgumentBindingResult {
+  const view = present.view.ref
+  return view ? resolveArgumentBindings(view, present) : { pairs: [], diagnostics: [] }
+}
+
 /** resolveActionInvocation resolves a named action call and type-based argument bindings. */
 export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedActionInvocation {
   const target = resolveActionTarget(invocation.action)
@@ -266,7 +272,7 @@ function reportDuplicatePropertyTypes(
 /** resolveArgumentBindings binds Tao arguments to parameters by exact type and unambiguous lineage. */
 function resolveArgumentBindings(
   declaration: AST.ParameterizedDeclaration,
-  invocation: AST.Render | AST.DoStatement,
+  invocation: AST.Render | AST.DoStatement | AST.PresentStatement,
 ): ArgumentBindingResult {
   const parameters = AST.parametersOf(declaration)
   const args = AST.argumentsOf(invocation)

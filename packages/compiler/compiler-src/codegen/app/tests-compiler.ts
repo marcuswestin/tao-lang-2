@@ -32,6 +32,11 @@ export default {
     return gen.noop()
   },
 
+  /** BackStep compiles to no generated app output. */
+  BackStep(_back: AST.BackStep): Compiled {
+    return gen.noop()
+  },
+
   /** SubmitStep compiles to no generated app output. */
   SubmitStep(_submit: AST.SubmitStep): Compiled {
     return gen.noop()
