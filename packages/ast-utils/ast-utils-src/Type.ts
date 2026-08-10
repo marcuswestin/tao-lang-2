@@ -6,6 +6,7 @@ export type TaoType =
   | { kind: 'primitive'; primitive: 'text' | 'number' | 'boolean' | 'action'; nominal?: AST.TypeDefinition }
   | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
+  | { kind: 'entity'; entity: AST.EntityDeclaration }
   | { kind: 'unresolved' }
 
 /** TypeReferenceRoot declares the root definition and remaining member path for a named type reference. */
@@ -80,6 +81,11 @@ export class Type {
     return builtinMemberType(target, member) !== undefined
   }
 
+  /** ofValueDeclaration resolves the type a value declaration binds. */
+  static ofValueDeclaration(declaration: AST.ValueDeclaration): TaoType {
+    return new TypeResolutionContext().ofValueDeclaration(declaration)
+  }
+
   /** ofLoopVariable resolves the element type a `for` statement binds to its loop variable. */
   static ofLoopVariable(loopVariable: AST.LoopVariable): TaoType {
     return new TypeResolutionContext().ofValueDeclaration(loopVariable)
@@ -112,6 +118,8 @@ export class Type {
         const owner = owningParameterizedDeclaration(parameterType)
         return owner ? `${owner.name}.${parameterType.name}` : parameterType.name
       },
+      EntityDeclaration: entity => `${entity.$container.name}.${entity.name}`,
+      FieldDeclaration: field => `${Type.definitionName(field.$container)}.${field.name}`,
     })
   }
 
@@ -122,6 +130,7 @@ export class Type {
       primitive: type => type.nominal ? Type.definitionName(type.nominal) : type.primitive,
       list: () => 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
+      entity: type => Type.definitionName(type.entity),
     })
   }
 
@@ -244,6 +253,12 @@ export class Type {
       }
     }
 
+    // `Schema.Entity` and `Schema.Entity.Field` name data types through the schema declaration.
+    const schema = visibleDataDeclaration(reference, reference.root)
+    if (schema) {
+      return dataTypeRoot(schema, reference.members)
+    }
+
     const root = itemConstructorProperty(reference, reference.root)
       ?? visibleTypeDeclaration(reference, reference.root)
     return { definition: root, remainingMembers: reference.members }
@@ -282,7 +297,10 @@ function primitivesDiffer(actual: TaoType, expected: TaoType): boolean {
 }
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
-  return isUnresolvedType(type) ? undefined : type.nominal
+  if (isUnresolvedType(type)) {
+    return undefined
+  }
+  return type.kind === 'entity' ? type.entity : type.nominal
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -428,11 +446,19 @@ class TypeResolutionContext {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: () => primitiveType('action'),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
+      FieldDeclaration: field => fieldType(field),
       LoopVariable: loopVariable => this.loopVariableType(loopVariable),
+      QueryDeclaration: query => this.queryType(query),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
       StateDeclaration: state => this.stateDeclarationType(state),
       undefined: unresolvedType,
     })
+  }
+
+  // A query value is a live list of the queried entity's rows.
+  private queryType(query: AST.QueryDeclaration): TaoType {
+    const entity = queriedEntity(query)
+    return { kind: 'list', element: entity ? { kind: 'entity', entity } : undefined }
   }
 
   // A loop variable takes the element type of the collection it iterates.
@@ -477,6 +503,14 @@ class TypeResolutionContext {
         current = builtin
         continue
       }
+      if (current.kind === 'entity') {
+        const field = entityField(current.entity, member)
+        if (!field) {
+          return unresolvedType()
+        }
+        current = fieldType(field)
+        continue
+      }
       const itemType = isItemKind(current) ? current.item : undefined
       if (!itemType) {
         return unresolvedType()
@@ -499,6 +533,8 @@ class TypeResolutionContext {
       ParameterTypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
       TypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
       TypeProperty: property => this.typePropertyType(property),
+      EntityDeclaration: entity => ({ kind: 'entity', entity }),
+      FieldDeclaration: field => fieldType(field),
     })
   }
 
@@ -527,9 +563,97 @@ class TypeResolutionContext {
   }
 }
 
+// A field with no declared type names an entity in the same schema and stores its identifier.
+function fieldType(field: AST.FieldDeclaration): TaoType {
+  if (!field.type) {
+    const entity = referencedEntity(field)
+    return entity ? { kind: 'entity', entity } : unresolvedType()
+  }
+  return withNominal(fieldBaseType(field.type), field)
+}
+
+function fieldBaseType(type: AST.FieldType): TaoType {
+  // `time` is a millisecond instant, so it behaves as a number everywhere except in diagnostics.
+  return type === 'time' ? primitiveType('number') : primitiveType(type)
+}
+
+// `Schema.Entity` and `Schema.Collection` both name the entity; a collection reads as its rows.
+function dataTypeRoot(schema: AST.DataDeclaration, members: readonly string[]): TypeReferenceRoot {
+  const [entityName, ...remaining] = members
+  const entity = entityName
+    ? schema.entities.find(candidate => candidate.name === entityName || candidate.collection === entityName)
+    : undefined
+  if (!entity) {
+    return { definition: undefined, remainingMembers: members }
+  }
+  const [fieldName, ...afterField] = remaining
+  const field = fieldName ? entityField(entity, fieldName) : undefined
+  return field
+    ? { definition: field, remainingMembers: afterField }
+    : { definition: entity, remainingMembers: remaining }
+}
+
+/** mutationEntity resolves the entity a create, update, or delete statement writes. */
+export function mutationEntity(
+  statement: AST.CreateStatement | AST.UpdateStatement | AST.DeleteStatement,
+): AST.EntityDeclaration | undefined {
+  if (AST.isCreateStatement(statement)) {
+    const schema = visibleDataDeclaration(statement, statement.entity.root)
+    const [entityName] = statement.entity.members
+    return entityName ? schema?.entities.find(entity => entity.name === entityName) : undefined
+  }
+  const targetType = Type.ofExpression(statement.target)
+  return targetType.kind === 'entity' ? targetType.entity : undefined
+}
+
+/** queriedEntity resolves the entity a query declaration reads. */
+export function queriedEntity(query: AST.QueryDeclaration): AST.EntityDeclaration | undefined {
+  const [collectionName] = query.collection.members
+  const schema = visibleDataDeclaration(query, query.collection.root)
+  if (!schema || !collectionName) {
+    return undefined
+  }
+  return schema.entities.find(entity => entity.collection === collectionName)
+}
+
+/** visibleDataDeclaration finds a data declaration by name in the file that owns `node`. */
+export function visibleDataDeclaration(node: AST.Node, name: string): AST.DataDeclaration | undefined {
+  const root = AST.findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const declared = root.statements.filter(AST.isDataDeclaration).find(data => data.name === name)
+  if (declared) {
+    return declared
+  }
+  return root.statements
+    .filter(AST.isUseStatement)
+    .flatMap(useStatement => useStatement.importedDeclarations.map(reference => reference.ref))
+    .filter(AST.isDataDeclaration)
+    .find(data => data.name === name)
+}
+
+/** referencedEntity returns the entity a bare field name refers to within its schema. */
+export function referencedEntity(field: AST.FieldDeclaration): AST.EntityDeclaration | undefined {
+  const schema = field.$container.$container
+  return schema.entities.find(entity => entity.name === field.name)
+}
+
+/** entityField returns one field declared by an entity, including the implicit identifier. */
+export function entityField(entity: AST.EntityDeclaration, name: string): AST.FieldDeclaration | undefined {
+  return entity.fields.find(field => field.name === name)
+}
+
 // Builtin members are readable on every value of their kind; they are not item fields.
 function builtinMemberType(target: TaoType, member: string): TaoType | undefined {
+  // Every stored entity carries a generated identifier alongside its declared fields.
+  if (target.kind === 'entity' && member === 'Id') {
+    return primitiveType('text')
+  }
   if (target.kind === 'list') {
+    if (member === 'Loading' || member === 'Failed') {
+      return primitiveType('boolean')
+    }
     if (member === 'Count') {
       return primitiveType('number')
     }
@@ -575,7 +699,7 @@ function withNominal(type: TaoType, nominal: AST.TypeDefinition): TaoType {
   return type
 }
 
-function canCarryNominal(type: TaoType): type is Exclude<TaoType, { kind: 'unresolved' }> {
+function canCarryNominal(type: TaoType): type is Exclude<TaoType, { kind: 'unresolved' } | { kind: 'entity' }> {
   return isPrimitiveKind(type) || type.kind === 'list' || isItemKind(type)
 }
 
@@ -624,6 +748,8 @@ function parentTypeDefinition(definition: AST.TypeDefinition): AST.TypeDefinitio
       property.type
         ? namedParentDefinition(property.type)
         : Type.shorthandPropertyDefinition(property),
+    EntityDeclaration: () => undefined,
+    FieldDeclaration: () => undefined,
   })
 }
 

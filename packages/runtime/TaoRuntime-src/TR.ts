@@ -2,6 +2,14 @@ import { Switch } from '@shared/core'
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
+import {
+  DataControls,
+  type TaoDataProvider,
+  type TaoDataSchema,
+  type TaoDataStore,
+  type TaoQuerySpec,
+  type TaoRow,
+} from './TR-data'
 import { LayoutControls } from './TR-layout'
 import * as TRTaoProps from './TR-TaoProps'
 import { RuntimeValue } from './TR-value'
@@ -215,6 +223,9 @@ class TR {
   /** Dev exposes public Tao runtime development-only diagnostic controls. */
   static readonly Dev = DevControls
 
+  /** Data exposes the generated-code data schema, store, and provider runtime. */
+  static readonly Data = DataControls
+
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
 
@@ -318,6 +329,16 @@ namespace TR {
   export type TaoProps = TRTaoProps.TaoProps
   /** DevModeOptions declares runtime development-only diagnostic flags. */
   export type DevModeOptions = TaoDevModeOptions
+  /** DataProvider declares the storage boundary a Tao datasource binds. */
+  export type DataProvider = TaoDataProvider
+  /** DataSchema declares one Tao data declaration's compiled shape. */
+  export type DataSchema = TaoDataSchema
+  /** DataStore declares the runtime store for one Tao data declaration. */
+  export type DataStore = TaoDataStore
+  /** QuerySpec declares one compiled Tao query. */
+  export type QuerySpec = TaoQuerySpec
+  /** Row declares one stored Tao entity row. */
+  export type Row = TaoRow
 }
 
 export default TR

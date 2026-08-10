@@ -565,3 +565,84 @@ function setReactNativeDevModeForTest(value: boolean): () => void {
     delete (globalThis as { __DEV__?: unknown }).__DEV__
   }
 }
+
+Describe('TR.Data', () => {
+  const schema: TR.DataSchema = {
+    name: 'Notes',
+    entities: [{
+      name: 'Entry',
+      collection: 'Entries',
+      fields: [
+        { name: 'Title', kind: 'text' },
+        { name: 'Done', kind: 'boolean', defaultValue: false },
+        { name: 'Position', kind: 'number', defaultValue: 0 },
+      ],
+    }],
+  }
+
+  Test('creates rows with generated identifiers and declared defaults', () => {
+    const store = TR.Data.define(schema)
+    store.configure(TR.Data.MemoryProvider())
+
+    const row = store.create('Entry', { Title: 'Write the plan' })
+
+    Expect(row['Title']).toBe('Write the plan')
+    Expect(row['Done']).toBe(false)
+    Expect(row['Position']).toBe(0)
+    Expect(typeof row.Id).toBe('string')
+    Expect(store.snapshot()['Entries']).toHaveLength(1)
+  })
+
+  Test('updates and removes rows by identifier', () => {
+    const store = TR.Data.define(schema)
+    store.configure(TR.Data.MemoryProvider())
+    const row = store.create('Entry', { Title: 'Ship' })
+
+    store.update('Entry', row.Id, { Done: true })
+    Expect(store.snapshot()['Entries']?.[0]?.['Done']).toBe(true)
+
+    store.remove('Entry', row.Id)
+    Expect(store.snapshot()['Entries']).toHaveLength(0)
+  })
+
+  Test('filters and orders query results', () => {
+    const store = TR.Data.define(schema)
+    store.configure(TR.Data.MemoryProvider())
+    store.create('Entry', { Title: 'b', Position: 2 })
+    store.create('Entry', { Title: 'a', Position: 1 })
+    store.create('Entry', { Title: 'done', Position: 3, Done: true })
+
+    const open = store.query({ collection: 'Entries', where: row => row['Done'] === false })
+    Expect(open.map(row => row['Title'])).toEqual(['b', 'a'])
+
+    const ordered = store.query({ collection: 'Entries', orderField: 'Position', orderDirection: 'desc' })
+    Expect(ordered.map(row => row['Title'])).toEqual(['done', 'b', 'a'])
+  })
+
+  Test('notifies subscribers when rows change', () => {
+    const store = TR.Data.define(schema)
+    store.configure(TR.Data.MemoryProvider())
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1
+    })
+
+    store.create('Entry', { Title: 'Write' })
+    Expect(notifications).toBe(1)
+
+    unsubscribe()
+    store.create('Entry', { Title: 'Ship' })
+    Expect(notifications).toBe(1)
+  })
+
+  Test('reports loading and failed provider status', async () => {
+    const loading = TR.Data.define(schema)
+    loading.configure(TR.Data.LoadingProvider())
+    Expect(loading.status()).toEqual({ loading: true, failed: false })
+
+    const failing = TR.Data.define(schema)
+    failing.configure(TR.Data.FailingProvider())
+    await new Promise(resolve => setTimeout(resolve, 0))
+    Expect(failing.status()).toEqual({ loading: false, failed: true })
+  })
+})

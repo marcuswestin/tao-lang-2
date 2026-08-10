@@ -1,5 +1,6 @@
 grammar TaoTypes
 
+import "./data"
 import "./expressions"
 import "./visibility"
 import "./terminals"
@@ -45,4 +46,4 @@ PrimitiveType returns string:
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';
 
-type TypeDefinition = TypeDeclaration | TypeProperty | ParameterTypeDeclaration;
+type TypeDefinition = TypeDeclaration | TypeProperty | ParameterTypeDeclaration | EntityDeclaration | FieldDeclaration;

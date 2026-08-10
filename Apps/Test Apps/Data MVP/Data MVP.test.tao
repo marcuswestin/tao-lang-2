@@ -1,0 +1,52 @@
+use DataMVP from ./
+
+test "Data MVP" {
+   check "starts with an empty collection" {
+      run DataMVP
+
+      expect text "Data MVP"
+      expect text "No entries yet"
+      expect text "Total: 0"
+      expect text "Open: 0"
+   }
+
+   check "creates entities and updates queries reactively" {
+      run DataMVP
+      press label "Entry title"
+      write "Write the plan"
+      press text "Add"
+      expect text "Write the plan"
+      expect text "Total: 1"
+      expect text "Open: 1"
+      expect missing text "No entries yet"
+      press label "Entry title"
+      write "Ship the slice"
+      press text "Add"
+      expect text "Total: 2"
+      expect text "Ship the slice"
+   }
+
+   check "updates an entity field through a mutation" {
+      run DataMVP
+      press label "Entry title"
+      write "Write the plan"
+      press text "Add"
+      expect text "open"
+      press text "Toggle Write the plan"
+      expect text "done"
+      expect text "Total: 1"
+      expect text "Open: 0"
+   }
+
+   check "deletes an entity" {
+      run DataMVP
+      press label "Entry title"
+      write "Write the plan"
+      press text "Add"
+      expect text "Total: 1"
+      press text "Delete Write the plan"
+      expect text "Total: 0"
+      expect text "No entries yet"
+      expect missing text "Write the plan"
+   }
+}

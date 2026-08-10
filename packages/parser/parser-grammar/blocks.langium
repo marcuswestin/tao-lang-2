@@ -5,6 +5,7 @@ import "./views"
 import "./aliases"
 import "./actions"
 import "./conditionals"
+import "./data"
 import "./injections"
 import "./imports"
 import "./project"
@@ -17,17 +18,17 @@ entry BlocksGrammarEntrypoint:
 
 // Statement stays broad so validators can report context-specific placement errors.
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | ExpectInputStep | WriteStep | SubmitStep | AppView | StateDeclaration | Injection | RenderStatement | ViewRender | WhenRenderStatement | ForRenderStatement;
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | ExpectInputStep | WriteStep | SubmitStep | AppView | AppDatasource | StateDeclaration | Injection | RenderStatement | ViewRender | WhenRenderStatement | ForRenderStatement | QueryDeclaration;
 
 Declaration:
-    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration;
+    AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | DataDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 // View statements are the declarations and render sites accepted by view/layout bodies.
-type ViewStatement = AliasDeclaration | StateDeclaration | ActionDeclaration | Render | WhenRenderStatement | ForRenderStatement;
-type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | LoopVariable;
+type ViewStatement = AliasDeclaration | StateDeclaration | ActionDeclaration | Render | WhenRenderStatement | ForRenderStatement | QueryDeclaration;
+type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | LoopVariable | QueryDeclaration | EntityDeclaration | FieldDeclaration;
 type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | RenderableDeclaration | ActionDeclaration;
 type ParameterizedDeclaration = RenderableDeclaration | ActionDeclaration;

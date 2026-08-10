@@ -1,6 +1,7 @@
 import { ActionsFormatter } from './formatters/ActionsFormatter'
 import AliasesFormatter from './formatters/aliases-formatter'
 import AppFormatter from './formatters/app-formatter'
+import DataFormatter from './formatters/data-formatter'
 import ExpressionsFormatter from './formatters/expressions-formatter'
 import FilesFormatter from './formatters/files-formatter'
 import InjectionsFormatter from './formatters/injections-formatter'
@@ -27,5 +28,6 @@ export const Format = {
   ...TypesFormatter,
   ...StatementsFormatter,
   ...ExpressionsFormatter,
+  ...DataFormatter,
   ...InjectionsFormatter,
 } as const satisfies FormatHandlers

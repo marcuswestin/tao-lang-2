@@ -10,6 +10,7 @@ export const StatementsCompiler = {
       AliasDeclaration: Compile.AliasDeclaration,
       AppDeclaration: Compile.App,
       AppView: Compile.AppView,
+      AppDatasource: Compile.AppDatasource,
       ActionDeclaration: Compile.ActionDeclaration,
       CheckDeclaration: Compile.CheckDeclaration,
       ExpectTextStep: Compile.ExpectTextStep,
@@ -30,6 +31,8 @@ export const StatementsCompiler = {
       ViewRender: Compile.ViewRender,
       WhenRenderStatement: Compile.WhenRenderStatement,
       ForRenderStatement: Compile.ForRenderStatement,
+      DataDeclaration: Compile.DataDeclaration,
+      QueryDeclaration: Compile.QueryDeclaration,
     })
   },
 

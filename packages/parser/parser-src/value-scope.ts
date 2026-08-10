@@ -37,7 +37,19 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'app' && AST.isRunStep(context.container)) {
       return this.createRunAppScope(context.container)
     }
+    if (context.property === 'field' && AST.isQueryOrder(context.container)) {
+      return this.createQueryFieldScope(context.container.$container, this.createScopeForNodes([]))
+    }
+    if (context.property === 'field' && AST.isFieldValue(context.container)) {
+      return this.createFieldValueScope(context.container)
+    }
     return super.getScope(context)
+  }
+
+  // A query's `where` and `order` clauses name the queried entity's fields directly.
+  private createQueryFieldScope(query: AST.QueryDeclaration, outerScope: Langium.Scope): Langium.Scope {
+    const entity = queriedEntityOf(query)
+    return entity ? this.createScopeForNodes(entity.fields, outerScope) : outerScope
   }
 
   private createValueScope(reference: AST.Node): Langium.Scope {
@@ -70,6 +82,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const owningEventClause = AST.findOwningEventClause(reference)
     if (owningEventClause) {
       scope = this.createScopeForParameterList(owningEventClause.parameterList, scope)
+    }
+
+    const owningQuery = AST.findOwningQuery(reference)
+    if (owningQuery) {
+      scope = this.createQueryFieldScope(owningQuery, scope)
     }
 
     return scope
@@ -113,6 +130,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     let scope = this.createScopeForNodes(root.statements.filter(AST.isAppDeclaration))
     scope = this.createScopeForNodes(this.importedDeclarations(run, AST.isAppDeclaration), scope)
     return scope
+  }
+
+  // A mutation's field names come from the entity it creates or updates.
+  private createFieldValueScope(fieldValue: AST.FieldValue): Langium.Scope {
+    const entity = mutationEntityOf(fieldValue.$container)
+    return entity ? this.createScopeForNodes(entity.fields) : this.createScopeForNodes([])
   }
 
   private createUseImportScope(useStatement: AST.UseStatement): Langium.Scope {
@@ -183,6 +206,81 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       workspaceFiles: allFiles,
     })]
   }
+}
+
+function mutationEntityOf(
+  statement: AST.CreateStatement | AST.UpdateStatement,
+): AST.EntityDeclaration | undefined {
+  if (AST.isCreateStatement(statement)) {
+    const schema = dataDeclarationNamed(statement, statement.entity.root)
+    const [entityName] = statement.entity.members
+    return entityName ? schema?.entities.find(entity => entity.name === entityName) : undefined
+  }
+  return entityOfTarget(statement.target)
+}
+
+// An update target names a value whose declaration is an entity-typed loop variable or parameter.
+function entityOfTarget(target: AST.MemberOrValueExpression): AST.EntityDeclaration | undefined {
+  const declaration = AST.isValueReference(target) ? target.target.ref : target.target.ref
+  if (!declaration) {
+    return undefined
+  }
+  if (AST.isLoopVariable(declaration)) {
+    const collection = declaration.$container.collection
+    return AST.isValueReference(collection) && AST.isQueryDeclaration(collection.target.ref)
+      ? queriedEntityOf(collection.target.ref)
+      : undefined
+  }
+  if (AST.isParameterDeclaration(declaration)) {
+    return entityOfTypeReference(declaration, parameterTypeReference(declaration))
+  }
+  return undefined
+}
+
+function parameterTypeReference(parameter: AST.ParameterDeclaration): AST.NamedTypeReference | undefined {
+  if (parameter.type) {
+    return parameter.type
+  }
+  const inlineType = parameter.inlineType?.type
+  return inlineType && AST.isNamedTypeReference(inlineType) ? inlineType : undefined
+}
+
+function entityOfTypeReference(
+  node: AST.Node,
+  reference: AST.NamedTypeReference | undefined,
+): AST.EntityDeclaration | undefined {
+  if (!reference) {
+    return undefined
+  }
+  const schema = dataDeclarationNamed(node, reference.root)
+  const [entityName] = reference.members
+  return entityName
+    ? schema?.entities.find(entity => entity.name === entityName || entity.collection === entityName)
+    : undefined
+}
+
+function queriedEntityOf(query: AST.QueryDeclaration): AST.EntityDeclaration | undefined {
+  const [collectionName] = query.collection.members
+  const schema = dataDeclarationNamed(query, query.collection.root)
+  return collectionName && schema
+    ? schema.entities.find(entity => entity.collection === collectionName)
+    : undefined
+}
+
+function dataDeclarationNamed(node: AST.Node, name: string): AST.DataDeclaration | undefined {
+  const root = AST.findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const declared = root.statements.filter(AST.isDataDeclaration).find(data => data.name === name)
+  if (declared) {
+    return declared
+  }
+  return root.statements
+    .filter(AST.isUseStatement)
+    .flatMap(useStatement => useStatement.importedDeclarations.map(reference => reference.ref))
+    .filter(AST.isDataDeclaration)
+    .find(data => data.name === name)
 }
 
 function statesOwnedByBlock(block: AST.Block): AST.StateDeclaration[] {

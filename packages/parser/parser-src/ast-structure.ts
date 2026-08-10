@@ -64,6 +64,7 @@ export function importableValueDeclarationsInFile(
 export function valueDeclarationsOwnedByBlock(block: AST.Block): AST.ValueDeclaration[] {
   return [
     ...loopVariablesBoundByBlock(block),
+    ...block.statements.filter(AST.isQueryDeclaration),
     ...block.statements.filter(AST.isAliasDeclaration),
     ...block.statements.filter(AST.isStateDeclaration),
     ...block.statements.filter(AST.isActionDeclaration),
@@ -183,6 +184,18 @@ export function findOwningView(node: AST.Node): AST.RenderableDeclaration | unde
   let current = node.$container
   while (current) {
     if (AST.isRenderableDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+/** findOwningQuery returns the query declaration whose clauses own `node`, if any. */
+export function findOwningQuery(node: AST.Node): AST.QueryDeclaration | undefined {
+  let current = node.$container
+  while (current) {
+    if (AST.isQueryDeclaration(current)) {
       return current
     }
     current = current.$container

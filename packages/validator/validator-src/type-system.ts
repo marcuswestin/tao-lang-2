@@ -69,8 +69,11 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
         return Switch.type(target, {
           ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
           AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
+          FieldDeclaration: field =>
+            TypeSystemHelpers.taoType(Type.ofDefinition(field), typir) ?? InferenceRuleNotApplicable,
           LoopVariable: loopVariable =>
             TypeSystemHelpers.taoType(Type.ofLoopVariable(loopVariable), typir) ?? InferenceRuleNotApplicable,
+          QueryDeclaration: () => TypeSystemHelpers.taoPrimitiveType('list', typir) ?? InferenceRuleNotApplicable,
           ParameterDeclaration: parameter =>
             TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
           StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
@@ -116,6 +119,9 @@ function typirBaseTypeForDefinition(
       const shorthandType = Type.shorthandPropertyDefinition(property)
       return shorthandType ? TypeSystemHelpers.taoType(Type.ofDefinition(shorthandType), typir) : undefined
     },
+    // Entity and field types are nominal on their own; they have no separate base type.
+    EntityDeclaration: () => undefined,
+    FieldDeclaration: field => TypeSystemHelpers.taoType(Type.ofDefinition(field), typir),
   })
 }
 

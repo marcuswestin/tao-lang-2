@@ -139,7 +139,9 @@ export const ExpressionsCompiler = {
     return Switch.type(target, {
       ActionDeclaration: action => gen`${gen.scopeName(action)}.evaluate()`,
       AliasDeclaration: alias => gen`${gen.scopeName(alias)}.evaluate()`,
+      FieldDeclaration: field => Compile.FieldReference(field),
       LoopVariable: loopVariable => gen`${gen.scopeName(loopVariable)}.evaluate()`,
+      QueryDeclaration: query => gen`${gen.scopeName(query)}`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
     })

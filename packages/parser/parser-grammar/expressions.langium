@@ -3,6 +3,7 @@ grammar TaoExpressions
 import "./aliases"
 import "./actions"
 import "./conditionals"
+import "./data"
 import "./blocks"
 import "./types"
 import "./terminals"
@@ -95,4 +96,4 @@ BooleanValue returns string:
 ValueReference:
     target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | LoopVariable;
+type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | LoopVariable | QueryDeclaration | FieldDeclaration;

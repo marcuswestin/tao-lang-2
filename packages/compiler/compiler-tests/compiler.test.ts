@@ -141,6 +141,43 @@ Describe('Tao compiler', () => {
     Expect(source).toContain('Label={TR.Value("none")}')
   })
 
+  Test('compiles data schemas, queries, and mutations through the runtime API', async () => {
+    const compiled = await Compiler.compileCode(`
+      data Notes {
+        Entries/Entry {
+          Title text indexed
+          Done boolean default false
+          CreatedAt time default now()
+        }
+      }
+      app MyApp {
+        view MainView
+        datasource Notes through Memory
+      }
+      view MainView {
+        query Open = Notes.Entries where Done == false order CreatedAt desc
+        action Add {
+          create Notes.Entry { Title: "x" }
+        }
+        render Text("{Open.Count}")
+      }
+      view Text Value is text {
+        render inject Value ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    const source = compiled.files[0]!.code
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(source).toContain('TR.Data.define(')
+    Expect(source).toContain('"kind":"time","defaultValue":"now"')
+    Expect(source).toContain('TR.Data.useConfigure(_Scope.Notes, TR.Data.MemoryProvider())')
+    Expect(source).toContain('TR.Data.useQuery(_Scope.Notes, { collection: "Entries"')
+    Expect(source).toContain('orderField: "CreatedAt", orderDirection: "desc"')
+    Expect(source).toContain('_Scope.Notes.create("Entry", { "Title": TR.Value("x").jsValue })')
+  })
+
   Test('compiles dynamic action parameter invocations without arguments', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }

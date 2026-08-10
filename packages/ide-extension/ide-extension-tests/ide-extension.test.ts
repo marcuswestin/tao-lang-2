@@ -81,7 +81,7 @@ Describe('Tao IDE extension smoke', () => {
       }
     `)
 
-    Expect(diagnostics).toContain('Only root view declarations are allowed in app Demo.')
+    Expect(diagnostics).toContain('Only root view and datasource declarations are allowed in app Demo.')
     Expect(
       diagnostics.some(diagnostic =>
         diagnostic.includes('Render of Text has an argument that does not match any unbound parameter by type.')

@@ -2222,6 +2222,86 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(result)).toContain(testValidationMessages.selector('role'))
   })
 
+  Test('accepts data declarations, queries, and mutations', async () => {
+    const result = await testValidateCode(`
+      data Notes {
+        Entries/Entry {
+          Title text indexed
+          Done boolean default false
+          CreatedAt time default now()
+        }
+      }
+      app MyApp {
+        view MainView
+        datasource Notes through Memory
+      }
+      view MainView {
+        state Draft = ""
+        query Entries = Notes.Entries where Done == false order CreatedAt desc
+        action Add {
+          create Notes.Entry { Title: Draft }
+        }
+        render Text("{Entries.Count}")
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(result.diagnostics).toEqual([])
+  })
+
+  Test('rejects an unknown datasource provider', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Notes {
+        Entries/Entry {
+          Title text
+        }
+      }
+      app MyApp {
+        view MainView
+        datasource Notes through Postgres
+      }
+      view MainView {
+        render Text("hi")
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.unknownProvider('Postgres'))
+  })
+
+  Test('rejects unknown entity fields in member access', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Notes {
+        Entries/Entry {
+          Title text
+        }
+      }
+      app MyApp { view MainView }
+      view MainView {
+        query Entries = Notes.Entries
+        render Text("hi")
+      }
+      view Row Entry is Notes.Entry {
+        render Text(Entry.Missing)
+      }
+      view Text Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.unknownMember('Notes.Entry', 'Missing'))
+  })
+
   Test('rejects toggling non-boolean state', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }

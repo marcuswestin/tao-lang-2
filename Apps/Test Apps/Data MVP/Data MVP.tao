@@ -1,0 +1,69 @@
+use Button, Col, Row, Text, TextInput from @tao/ui
+
+app DataMVP {
+   view MainView
+   datasource Notes through Memory
+}
+
+data Notes {
+   Lists/List {
+      Name text
+   }
+
+   Entries/Entry {
+      Title text indexed
+      Done boolean default false
+      Position number default 0
+      List
+}  }
+
+view EntryRow Entry is Notes.Entry {
+   render Row() [gap 8] {
+      Text("{Entry.Title}")
+      when
+         Entry.Done -> {
+            Text("done")
+         }
+         otherwise -> {
+            Text("open")
+         }
+      Button("Toggle {Entry.Title}", Noop)
+         on press -> {
+            update Entry { Done: not Entry.Done }
+         }
+      Button("Delete {Entry.Title}", Noop)
+         on press -> {
+            delete Entry
+}  }  }
+
+action Noop { }
+
+view MainView {
+   state Draft = ""
+   query Entries = Notes.Entries order Position asc
+   query OpenEntries = Notes.Entries where Done == false
+   action Add {
+      when
+         Draft.Empty -> { }
+         otherwise -> {
+            create Notes.Entry { Title: Draft, Position: Entries.Count }
+            set Draft = ""
+   }  }
+   render Col() [fill, gap 8, pad 12] {
+      Text("Data MVP")
+      Text("Total: {Entries.Count}")
+      Text("Open: {OpenEntries.Count}")
+      when
+         Entries.Empty -> {
+            Text("No entries yet")
+         }
+         otherwise -> {
+            for Entry in Entries {
+               EntryRow(Entry)
+         }  }
+      TextInput(Draft, Label: "Entry title")
+         on change -> Value is text {
+            set Draft = Value
+         }
+      Button("Add", Add)
+}  }

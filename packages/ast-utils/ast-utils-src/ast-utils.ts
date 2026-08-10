@@ -16,7 +16,15 @@ import {
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
-import { Operators, Type } from './Type'
+import {
+  entityField,
+  mutationEntity,
+  Operators,
+  queriedEntity,
+  referencedEntity,
+  Type,
+  visibleDataDeclaration,
+} from './Type'
 
 export { Operators, Packages, Type }
 
@@ -36,6 +44,11 @@ export const ASTUtils = {
   resolveRenderInvocation,
   parameterDefaultValue,
   unboundDefaultedParameters,
+  entityField,
+  mutationEntity,
+  queriedEntity,
+  referencedEntity,
+  visibleDataDeclaration,
 } as const
 
 export namespace ASTUtils {

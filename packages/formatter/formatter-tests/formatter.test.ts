@@ -488,6 +488,30 @@ Describe('Tao formatter bindings', () => {
   })
 })
 
+Describe('Tao formatter data', () => {
+  Test('formats data declarations, queries, and mutations', async () => {
+    await testFormatCode(
+      `data Notes{Entries/Entry{Title text   indexed\nDone boolean default false\nCreatedAt time default now()}}\nview MainView{query Open=Notes.Entries where Done==false order CreatedAt   desc\naction Add{create Notes.Entry{Title:"x",Done:true}}\nrender Text("hi")}`,
+      `
+        data Notes {
+           Entries/Entry {
+              Title text indexed
+              Done boolean default false
+              CreatedAt time default now()
+        }  }
+
+        view MainView {
+           query Open = Notes.Entries where Done == false order CreatedAt desc
+           action Add {
+              create Notes.Entry { Title: "x", Done: true }
+           }
+           render Text("hi")
+        }
+      `,
+    )
+  })
+})
+
 Describe('Tao formatter types and constructors', () => {
   Test('normalizes type declarations, constructors, casts, lists, and member access', async () => {
     await testFormatCode(

@@ -6,15 +6,20 @@ import type { ValidationContext } from './validation'
 /** appValidationMessages declares structural diagnostics for Tao app placement. */
 const appValidationMessages = {
   topLevel:
-    'Only project, app, view, layout, alias, action, type, test declarations, and use statements are allowed at file level.',
+    'Only project, app, view, layout, let, action, type, data, test declarations, and use statements are allowed at file level.',
   appCount: (count: number) => `Tao file must declare at most one app, found ${count}.`,
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
-  appBlock: (name: string) => `Only root view declarations are allowed in app ${name}.`,
+  appBlock: (name: string) => `Only root view and datasource declarations are allowed in app ${name}.`,
+  duplicateDatasource: (name: string, data: string) => `App ${name} binds datasource ${data} more than once.`,
+  unknownProvider: (provider: string) =>
+    `Unknown datasource provider '${provider}'. Supported providers: ${supportedProviders.join(', ')}.`,
   appRootCount: (name: string, count: number) => `App ${name} must declare exactly one root view, found ${count}.`,
   rootViewParameters: (appName: string, viewName: string) =>
     `App ${appName} root view ${viewName} must not declare parameters.`,
 } as const
+
+const supportedProviders = ['Memory', 'Local'] as const
 
 /** AppValidator validates Tao app placement and structure. */
 export const AppValidator = {
@@ -58,8 +63,20 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
 }
 
 function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext): void {
+  const boundData = new Set<string>()
   for (const statement of AST.blockStatements(app)) {
     if (AST.isAppView(statement)) {
+      continue
+    }
+    if (AST.isAppDatasource(statement)) {
+      const name = statement.data.$refText
+      if (boundData.has(name)) {
+        ctx.error(appValidationMessages.duplicateDatasource(app.name, name), statement)
+      }
+      boundData.add(name)
+      if (!supportedProviders.includes(statement.provider as (typeof supportedProviders)[number])) {
+        ctx.error(appValidationMessages.unknownProvider(statement.provider), statement)
+      }
       continue
     }
     ctx.error(appValidationMessages.appBlock(app.name), statement)

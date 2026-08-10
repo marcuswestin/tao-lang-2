@@ -196,6 +196,7 @@ function constructorLiteralKind(type: ASTUtils.TaoType): string {
     primitive: type => type.primitive,
     list: () => 'list',
     item: () => 'item',
+    entity: () => 'entity',
     unresolved: () => 'unresolved',
   })
 }
@@ -270,6 +271,10 @@ function typeDefinitionReferencesRoot(
   if (AST.isParameterTypeDeclaration(current)) {
     return typeExpressionReferencesRoot(root, current.type, seen)
   }
+  // Entity and field types name their schema directly and cannot form a definition cycle.
+  if (!AST.isTypeProperty(current)) {
+    return false
+  }
   const propertyType = current.type
   if (propertyType) {
     return typeReferenceReferencesRoot(root, propertyType, seen)
@@ -326,8 +331,13 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
   }
   let typeName = Type.displayName(current)
   for (const member of memberAccess.members) {
-    if (Type.isBuiltinMember(current, member)) {
-      current = Type.ofValuePath(current, [member]) as ASTUtils.TaoType
+    if (Type.isBuiltinMember(current, member) || current.kind === 'entity') {
+      const memberType = Type.ofValuePath(current, [member]) as ASTUtils.TaoType
+      if (memberType.kind === 'unresolved') {
+        ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
+        return
+      }
+      current = memberType
       typeName = Type.displayName(current)
       continue
     }
@@ -354,7 +364,9 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     AliasDeclaration: declaration => Type.ofExpression(declaration.value),
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
     ActionDeclaration: () => ({ kind: 'primitive', primitive: 'action' }),
+    FieldDeclaration: Type.ofDefinition,
     LoopVariable: Type.ofLoopVariable,
+    QueryDeclaration: query => Type.ofValueDeclaration(query),
     undefined: () => ({ kind: 'unresolved' }),
   })
 }

@@ -10,4 +10,10 @@ export default {
   AppView(f) {
     f.oneSpaceAfter('view')
   },
+
+  /** AppDatasource formats `datasource Data through Provider`. */
+  AppDatasource(f) {
+    f.oneSpaceAfter('datasource', 'through')
+    f.oneSpaceBefore('through')
+  },
 } satisfies Partial<FormatHandlers>

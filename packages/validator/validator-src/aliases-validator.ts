@@ -9,6 +9,8 @@ type NamedValueDeclaration =
   | AST.ParameterDeclaration
   | AST.StateDeclaration
   | AST.LoopVariable
+  | AST.QueryDeclaration
+  | AST.FieldDeclaration
 type NamedFileValueDeclaration =
   | AST.ActionDeclaration
   | AST.AliasDeclaration

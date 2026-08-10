@@ -67,6 +67,34 @@ Exercise statement-level `when` conditionals: choosing which content renders and
 
 `Control Flow.test.tao` asserts which branch content is present and missing at each state, then presses buttons to move between branches and to run conditional action logic.
 
+## Data MVP
+
+### Purpose
+
+Exercise the Tao data layer end to end: schema declarations, entity types, reactive queries, and create/update/delete mutations against the Memory provider.
+
+### Belongs Here
+
+- `data` declarations with `Collection/Entity` pairs, typed fields, `indexed`, `default` values including `now()`, and a bare entity-reference field.
+- An app `datasource ... through Memory` binding.
+- `query` declarations with `where` and `order`, and query members `.Count` and `.Empty`.
+- `create`, `update`, and `delete` mutations, including updates driven by an event clause.
+- Entity-typed view parameters and iteration over query results.
+
+### Does Not Belong Here
+
+- Durable persistence and provider loading/failure surfaces; those belong with the persistence slice.
+- Schema, query, and mutation diagnostics; those belong in validator tests.
+
+### Edit When
+
+- The data schema, query, or mutation syntax changes.
+- The provider boundary or store semantics change.
+
+### Behavior Test Notes
+
+`Data MVP.test.tao` starts from an empty collection, creates entries through the form, and asserts that query counts, list rows, and the empty branch update reactively after create, update, and delete.
+
 ## Expressions
 
 ### Purpose
