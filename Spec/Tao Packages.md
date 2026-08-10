@@ -1,13 +1,12 @@
 # Tao Project and Packages
 
-Status: partially implemented design draft. The current implementation supports local `project { name "..." remote none license ... }` metadata, the transitional `package`/`project`/`publish` visibility words, `use ... from ...` imports for relative Tao source paths and `@tao/...` stdlib paths, bare same-package `use Foo`, and local `@package[/subfolder]` imports through an in-memory workspace package index. The intended visibility vocabulary in this specification is `file`, `package`, `workspace`, and `public`; its migration is not implemented yet. Import renaming, `requires`, external workspace installation, lockfiles, remotes, CLI package commands, and package publishing remain future work.
+Status: partially implemented design draft. The current implementation supports local `project { name "..." remote none license ... }` metadata, the transitional `package`/`project`/`publish` visibility words, `use ... from ...` imports for relative Tao source paths and `@tao/...` stdlib paths, bare same-package `use Foo`, and local `@package[/subfolder]` imports through an in-memory workspace package index. The intended visibility vocabulary in this specification is `file`, `package`, `workspace`, and `public`; its migration is not implemented yet. Project IDs, `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other CLI package commands, and package publishing remain future work.
 
 ## Creating a Tao Project
 
-- You start a new tao project with `tao create <project name>`
-  - This creates a folder named `<project name>` with
-    - `<ProjectName>App.tao`, a barebones app stub
-    - `AGENTS.md`, `.tao-project/...`, `.git/...`, `.gitignore`, `agents/skills/...`
+- The intended command is `tao create <id>`.
+- It will create `<id>/App.tao`, using the new project's directory name as its developer-supplied, checked-in project ID and initial display name. This command and richer repository scaffolding remain future work.
+- For example, `tao create "My TODOs"` creates `./My TODOs/App.tao` with `id "My TODOs"`.
 
 ### Creating a Tao app
 
@@ -19,7 +18,7 @@ use Button, Col, List, Text from @tao/ui
 use @tao/nav as Nav
 
 project {
-   id "01JCHATPROJECT00000000000000"
+   id "example.chat"
    name "Chat"
    remote none
    license MIT
@@ -57,7 +56,7 @@ ui ThreadUi Message Chat.Message {
 }
 ```
 
-`tao create` generates the opaque, immutable project `id` in the checked-in project declaration. The ID travels with clones and published artifacts and does not change when the project moves, gains a remote, or advances to another commit. A fork that becomes an independent Tao project must explicitly regenerate it. Required dependencies retain their own project IDs; lockfile revisions select code but do not alter declaration identity.
+The project `id` is an opaque, immutable value chosen by the developer and checked into the project declaration. `tao create <id>` uses its new directory name as the ID. For an existing project, `tao project id <id> [path]` creates and persists a missing ID; repeating it with the same value preserves the existing declaration. The ID travels with clones and published artifacts and does not change when the project later moves, gains a remote, or advances to another commit. A fork that becomes an independent Tao project runs `tao project id <new-id> [path] --replace`. Required dependencies retain their own project IDs; lockfile revisions select code but do not alter declaration identity. Ordinary checking, compiling, formatting, and launching never invent or modify identity as a side effect.
 
 The data declaration supplies singular and plural values. The UI presents configured semantic destinations; `StackNav` owns the corresponding native transition.
 
@@ -154,6 +153,7 @@ Packages can make code available to other packages, and even other workspaces.
 
   ```tao
   project {
+     id "example.my-app"
      requires <tao project repo> @foo @bar // e.g:
      requires tao:<std package> @ui
      requires github:<author>/<repo> @baz --version 1.0.1 // declare what version to use

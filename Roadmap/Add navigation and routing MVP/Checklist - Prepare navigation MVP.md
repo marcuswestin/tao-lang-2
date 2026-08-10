@@ -51,8 +51,8 @@
 
 ## Required Before Merge
 
-- [ ] Fix commented compact-action formatting in its own commit, following `Roadmap/Pre-merge MVP exploration follow-ups.md`.
-- [ ] Define and bootstrap immutable project IDs in its own commit, following the same document.
+- [x] Fix commented compact-action formatting in its own commit, following `Roadmap/Pre-merge MVP exploration follow-ups.md`.
+- [x] Defer project-ID implementation until stable navigation identity has its first runtime consumer; preserve the settled contract in the same document.
 - [x] Consolidate `Apps/MVP*` into one full target, one rolling executable integration app, and focused tests.
 - [ ] Merge current `main` and reconcile its layout/testing documentation changes without reverting them.
 - [ ] Rerun the final staged-scope audit and `./agent just verify`.

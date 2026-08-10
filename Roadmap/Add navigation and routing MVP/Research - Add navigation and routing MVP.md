@@ -169,7 +169,7 @@ The runtime schedules toast expiration into the reducer using host, occurrence, 
 
 ### DEC-NAV-032: Declaration identity uses an immutable project ID
 
-`tao create` generates an opaque logical project ID in checked-in project metadata. It survives path, remote, and revision changes; an independent fork must explicitly regenerate it. Dependency declarations use the required project's ID rather than the lockfile key or resolved commit. The declaration-ID algorithm is versioned separately from source revisions and presentation-state schema versions.
+The developer supplies an opaque logical project ID in checked-in project metadata; Tao never generates one. `tao create <id>` uses the new project's directory name as its ID. `tao project id <id> [path]` migrates an existing project without changing an existing ID, while `tao project id <new-id> [path] --replace` explicitly gives an independent fork a new identity. The ID survives later path, remote, and revision changes. Dependency declarations use the required project's ID rather than the lockfile key or resolved commit. The declaration-ID algorithm is versioned separately from source revisions and presentation-state schema versions.
 
 ### DEC-NAV-033: Targetable keys use one owner namespace
 
