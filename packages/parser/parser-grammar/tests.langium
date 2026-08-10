@@ -16,7 +16,14 @@ CheckDeclaration:
 type CheckStep = RunStep | PressTextStep | ExpectTextStep | ExpectInputStep | WriteStep | SubmitStep;
 
 RunStep:
-    'run' app=[AppDeclaration:ID];
+    'run' app=[AppDeclaration:ID] ('with' '{' config+=RunConfig* '}')?;
+
+// A run config makes an otherwise timing-dependent provider state deterministic for one check.
+RunConfig:
+    'data' state=RunDataState;
+
+RunDataState returns string:
+    'loading' | 'failing';
 
 PressTextStep:
     'press' selector=TestSelector text=STRING;

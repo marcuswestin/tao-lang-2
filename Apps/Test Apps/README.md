@@ -81,9 +81,11 @@ Exercise the Tao data layer end to end: schema declarations, entity types, react
 - `create`, `update`, and `delete` mutations, including updates driven by an event clause.
 - Entity-typed view parameters and iteration over query results.
 
+- Provider loading and failure surfaces through `run ... with { data loading }` and `{ data failing }`, and the query members `.Loading` and `.Failed`.
+
 ### Does Not Belong Here
 
-- Durable persistence and provider loading/failure surfaces; those belong with the persistence slice.
+- Durable storage behavior; `LocalProvider` serialization is covered by runtime tests against an injected key-value store.
 - Schema, query, and mutation diagnostics; those belong in validator tests.
 
 ### Edit When

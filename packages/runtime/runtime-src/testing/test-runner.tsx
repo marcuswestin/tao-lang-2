@@ -1,5 +1,6 @@
 import { Switch } from '@shared/core'
-import { fireEvent } from '@testing-library/react-native'
+import { act, fireEvent } from '@testing-library/react-native'
+import { DataControls } from '../../TaoRuntime-src/TR-data'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
 import type * as TestCompiler from './test-compiler/TestCompiler'
@@ -21,7 +22,10 @@ export async function runTestFile(file: TestCompiler.File): Promise<void> {
 async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<void> {
   let screen: RuntimeApp.Screen | undefined
   try {
+    DataControls.setTestProvider(check.app.dataState ?? 'memory')
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
+    // Providers may resolve on a microtask, so let pending updates settle before the first step.
+    await act(async () => {})
     const state: CheckState = {}
     for (const step of check.steps) {
       runStep(screen, state, step)
@@ -31,6 +35,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
       `Tao check failed: ${suiteName} > ${check.name}\n${formatSource(check.source)}\n${formatError(error)}`,
     )
   } finally {
+    DataControls.setTestProvider(undefined)
     screen?.unmount()
   }
 }

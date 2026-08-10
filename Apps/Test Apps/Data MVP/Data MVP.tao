@@ -54,6 +54,12 @@ view MainView {
       Text("Total: {Entries.Count}")
       Text("Open: {OpenEntries.Count}")
       when
+         Entries.Loading -> {
+            Text("Loading entries")
+         }
+         Entries.Failed -> {
+            Text("Entries are unavailable")
+         }
          Entries.Empty -> {
             Text("No entries yet")
          }

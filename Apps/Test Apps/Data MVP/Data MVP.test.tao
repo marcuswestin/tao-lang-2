@@ -10,6 +10,20 @@ test "Data MVP" {
       expect text "Open: 0"
    }
 
+   check "shows the loading surface while the provider loads" {
+      run DataMVP with { data loading }
+
+      expect text "Loading entries"
+      expect missing text "No entries yet"
+   }
+
+   check "shows the provider error surface when loading fails" {
+      run DataMVP with { data failing }
+
+      expect text "Entries are unavailable"
+      expect missing text "Loading entries"
+   }
+
    check "creates entities and updates queries reactively" {
       run DataMVP
       press label "Entry title"

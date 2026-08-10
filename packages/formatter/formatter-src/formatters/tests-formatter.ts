@@ -11,9 +11,17 @@ export default {
     f.oneSpaceAfter('check')
   },
 
-  /** RunStep formats `run AppName`. */
+  /** RunStep formats `run AppName with { data loading }`. */
   RunStep(f) {
     f.oneSpaceAfter('run')
+    f.oneSpaceBefore('with')
+    f.oneSpaceAfter('with')
+    f.singleLineBraceBlock(f.node)
+  },
+
+  /** RunConfig formats one `data <state>` run configuration entry. */
+  RunConfig(f) {
+    f.oneSpaceAfter('data')
   },
 
   /** PressTextStep formats selector-targeted press steps. */

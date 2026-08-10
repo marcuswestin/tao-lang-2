@@ -57,10 +57,11 @@ namespace TestCompiler {
   /** Step declares one ordered runtime test operation after app launch. */
   export type Step = CompiledTestCheck['steps'][number]
 
-  /** App declares a precompiled app module for a check. */
+  /** App declares a precompiled app module for a check, with any requested provider state. */
   export type App = {
     modulePath: string
     sourcePath: string
+    dataState?: 'loading' | 'failing'
   }
 
   /** Check declares one executable precompiled Tao check. */
@@ -204,6 +205,7 @@ async function checkForPlan(
     app: {
       modulePath: await appModulePath(check.run.appSourcePath, context),
       sourcePath: check.run.appSourcePath,
+      ...(check.run.dataState ? { dataState: check.run.dataState } : {}),
     },
     name: check.name,
     source: check.source,

@@ -89,6 +89,39 @@ export function MemoryProvider(initial: TaoSnapshot = {}): TaoDataProvider {
   }
 }
 
+/**
+ * LocalProvider keeps rows on the device through AsyncStorage, the standard React Native key-value
+ * store: it needs no credentials, works in Expo Go and on web, and ships an official Jest mock.
+ */
+export function LocalProvider(key = 'tao-data', storage?: TaoKeyValueStorage): TaoDataProvider {
+  const store = (): TaoKeyValueStorage => storage ?? asyncStorage()
+  return {
+    name: 'Local',
+    load: async schema => {
+      const stored = await store().getItem(`${key}:${schema.name}`)
+      return stored ? (JSON.parse(stored) as TaoSnapshot) : {}
+    },
+    save: async (schema, snapshot) => {
+      await store().setItem(`${key}:${schema.name}`, JSON.stringify(snapshot))
+    },
+  }
+}
+
+/** TaoKeyValueStorage is the device key-value surface LocalProvider persists through. */
+export type TaoKeyValueStorage = {
+  getItem(key: string): Promise<string | null>
+  setItem(key: string, value: string): Promise<void>
+}
+
+type AsyncStorageModule = TaoKeyValueStorage
+
+function asyncStorage(): AsyncStorageModule {
+  const required = require('@react-native-async-storage/async-storage') as
+    | AsyncStorageModule
+    | { default: AsyncStorageModule }
+  return 'default' in required ? required.default : required
+}
+
 /** LoadingProvider never resolves, so tests can assert an app's loading surface. */
 export function LoadingProvider(): TaoDataProvider {
   return {
@@ -204,10 +237,21 @@ export function define(schema: TaoDataSchema): TaoDataStore {
   return store
 }
 
-/** useQuery subscribes a rendering view to one query's current rows. */
+/**
+ * useQuery subscribes a rendering view to one query's rows. The rows array also carries the store's
+ * `Loading` and `Failed` status, so a query value answers both "what rows" and "is it ready".
+ */
 export function useQuery(store: TaoDataStore, spec: TaoQuerySpec): ReturnType<typeof runtimeValue<TaoRow[]>> {
   const rows = useStoreValue(store, () => store.query(spec))
-  return runtimeValue(rows)
+  const status = useStatus(store)
+  return runtimeValue(withStatus(rows, status))
+}
+
+function withStatus(rows: TaoRow[], status: TaoDataStatus): TaoRow[] {
+  return Object.defineProperties(rows, {
+    Loading: { value: status.loading, enumerable: false },
+    Failed: { value: status.failed, enumerable: false },
+  })
 }
 
 /** useStatus subscribes a rendering view to the store's load status. */
@@ -215,13 +259,33 @@ export function useStatus(store: TaoDataStore): TaoDataStatus {
   return useStoreValue(store, () => store.status())
 }
 
+let testProviderKind: 'memory' | 'loading' | 'failing' | undefined
+
+/**
+ * setTestProvider makes Tao tests deterministic: every checked app loads through a fresh in-memory
+ * provider, or through the loading/failing providers a check asks for. Cleared between checks.
+ */
+export function setTestProvider(kind: 'memory' | 'loading' | 'failing' | undefined): void {
+  testProviderKind = kind
+}
+
 /** useConfigure attaches a provider to a store once per app mount. */
 export function useConfigure(store: TaoDataStore, provider: TaoDataProvider): void {
   const configured = React.useRef(false)
   if (!configured.current) {
     configured.current = true
-    store.configure(provider)
+    store.configure(testProvider() ?? provider)
   }
+}
+
+function testProvider(): TaoDataProvider | undefined {
+  if (testProviderKind === 'memory') {
+    return MemoryProvider()
+  }
+  if (testProviderKind === 'loading') {
+    return LoadingProvider()
+  }
+  return testProviderKind === 'failing' ? FailingProvider() : undefined
 }
 
 function useStoreValue<T>(store: TaoDataStore, read: () => T): T {
@@ -307,7 +371,9 @@ export const DataControls = {
   define,
   FailingProvider,
   LoadingProvider,
+  LocalProvider,
   MemoryProvider,
+  setTestProvider,
   useConfigure,
   useQuery,
   useStatus,

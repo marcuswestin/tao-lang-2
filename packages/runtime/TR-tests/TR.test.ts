@@ -646,3 +646,35 @@ Describe('TR.Data', () => {
     Expect(failing.status()).toEqual({ loading: false, failed: true })
   })
 })
+
+Describe('TR.Data LocalProvider', () => {
+  const schema: TR.DataSchema = {
+    name: 'Persisted',
+    entities: [{ name: 'Note', collection: 'Notes', fields: [{ name: 'Title', kind: 'text' }] }],
+  }
+
+  Test('writes rows to device storage and reloads them', async () => {
+    const stored = new Map<string, string>()
+    const storage = {
+      getItem: async (key: string) => stored.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        stored.set(key, value)
+      },
+    }
+    const first = TR.Data.define(schema)
+    first.configure(TR.Data.LocalProvider('tao-test', storage))
+    await flushPending()
+    first.create('Note', { Title: 'Persisted title' })
+    await flushPending()
+
+    const second = TR.Data.define(schema)
+    second.configure(TR.Data.LocalProvider('tao-test', storage))
+    await flushPending()
+
+    Expect(second.snapshot()['Notes']?.map(row => row['Title'])).toEqual(['Persisted title'])
+  })
+})
+
+async function flushPending(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 0))
+}

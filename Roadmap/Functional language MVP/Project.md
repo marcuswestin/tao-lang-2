@@ -39,7 +39,7 @@ Each slice is a full vertical (grammar → scoping → validator/Typir → forma
 - [x] Slice 3 — `for` iteration, string interpolation, builtin members — Collections and Text test app
 - [x] Slice 4 — events (`on` clauses), `TextInput`, forms, test interaction steps — Forms and Events test app
 - [x] Slice 5 — `data` declarations, entity types, `TR.Data` store, queries, mutations, Memory provider — Data MVP test app
-- [ ] Slice 6 — durable Local provider, loading/failure surfaces, `run … with { data … }` — advance Still
+- [x] Slice 6 — durable Local provider, loading/failure surfaces, `run … with { data … }`
 - [ ] Slice 7 — navigation: `ui`, `Navigator StackNav`, `present`/`dismiss`, back — Navigation test app; advance Still
 - [ ] Slice 8 — functions and visual styling entries
 - [ ] Slice 9 — Still assembly: full app + journey behavior tests

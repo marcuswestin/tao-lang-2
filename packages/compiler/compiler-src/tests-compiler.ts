@@ -15,6 +15,7 @@ export type TaoTestSourceLocation = {
 export type TaoTestRun = {
   appName: string
   appSourcePath: string
+  dataState?: 'loading' | 'failing'
   source: TaoTestSourceLocation
 }
 
@@ -119,9 +120,11 @@ function compileCheck(check: AST.CheckDeclaration): TaoTestCheck {
 function compileRun(run: AST.RunStep): TaoTestRun {
   const app = run.app.ref
   Assert.defined(app, 'validated run step references an app', { appName: run.app.$refText })
+  const dataState = run.config.map(config => config.state).at(-1)
   return {
     appName: app.name,
     appSourcePath: sourceLocation(app).filePath,
+    ...(dataState ? { dataState } : {}),
     source: sourceLocation(run),
   }
 }

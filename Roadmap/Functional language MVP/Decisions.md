@@ -62,7 +62,11 @@ Action statements `create <Data>.<Entity> { Field Expr, … }`, `update <entityR
 
 ## DEC-FMVP-011 — Provider boundary and choices
 
-One narrow provider interface (load snapshot / apply mutation / subscribe / status). Two implementations: `Memory` (deterministic, used by tests and available to apps) and `Local` (durable). `Local` uses `@react-native-async-storage/async-storage` — standard RN persistence, works in Expo Go and on web, has an official jest mock, needs no credentials; expo-sqlite was rejected for jest/web friction and native-module weight. `InstantDB`/remote sync deferred. Entity ids come from a small TR random-id helper (no dependency).
+The provider interface is deliberately tiny: `load(schema)` returns one starting snapshot and `save(schema, snapshot)` is told about each committed change. Defaults, identifiers, query evaluation, subscriptions, and status all stay in `TR.Data`, so every provider behaves identically and a new one is a few lines.
+
+Implementations: `Memory` (in-process), `Local` (durable), plus `Loading` and `Failing` used only by tests. `Local` persists through `@react-native-async-storage/async-storage` — the standard React Native key-value store: no credentials, works in Expo Go and on web, and one dependency instead of a native database. Its storage handle is injectable, so serialization is tested without the native module. `InstantDB`/remote sync deferred. Entity ids are generated in the runtime (no dependency).
+
+Tests always load through a fresh provider — Memory by default, or Loading/Failing when a check writes `run App with { data loading }` — so checks are isolated from each other and from device storage regardless of which provider the app declares.
 
 ## DEC-FMVP-012 — Navigation subset
 
