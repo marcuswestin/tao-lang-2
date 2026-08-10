@@ -102,7 +102,7 @@ Concrete work:
 
 Likely commit unit: call-site design application, test app, Kitchen Sink coverage.
 
-Validation: parser, validator, compiler, formatter, runtime tests; `./agent just compile-app 'Apps/Kitchen Sink/Kitchen Sink.tao'`.
+Validation: parser, validator, compiler, formatter, runtime tests; `just compile-app 'Apps/Kitchen Sink/Kitchen Sink.tao'`.
 
 Exit criteria: visible Tao source can request a semantic treatment such as primary button, raised card, muted text, or screen surface, and runtime output reflects it.
 
@@ -137,7 +137,7 @@ Concrete work:
 
 Likely commit unit: docs and stale cleanup only.
 
-Validation: `./agent just verify`.
+Validation: `./agent verify`.
 
 Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deterministic design surface.
 
@@ -148,7 +148,7 @@ Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deter
 - Compiler tests prove successful design lowering without brittle generated-code substring checks.
 - `TR` and runtime tests prove token, recipe, state, and precedence behavior.
 - Test Apps and Kitchen Sink prove the end-to-end Tao authoring experience.
-- Final validation is `./agent just verify`.
+- Final validation is `./agent verify`.
 
 ## Deferrals
 

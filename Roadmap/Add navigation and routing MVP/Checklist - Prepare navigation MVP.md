@@ -45,7 +45,7 @@
 - [x] Active TODOs all reference a deferral ID.
 - [x] Relevant discovery tests pass.
 - [x] `git diff --check` passes.
-- [x] `./agent just verify` passes.
+- [x] `./agent verify` passes.
 - [x] Final staged/unstaged audit confirms the complete intended tree is staged with unrelated changes separated or intentionally included.
 - [x] Ro receives the completed checklist and explicit remaining deferrals before any commit.
 
@@ -55,6 +55,6 @@
 - [x] Defer project-ID implementation until stable navigation identity has its first runtime consumer; preserve the settled contract in the same document.
 - [x] Consolidate `Apps/MVP*` into one full target, one rolling executable integration app, and focused tests.
 - [x] Merge current `main` and reconcile its layout/testing documentation changes without reverting them.
-- [x] Rerun the final committed-scope audit and `./agent just verify`.
+- [x] Rerun the final committed-scope audit and `./agent verify`.
 
 All required pre-merge changes are split into scoped commits. The final handoff requires a clean index and worktree after the conformance cleanup commit.

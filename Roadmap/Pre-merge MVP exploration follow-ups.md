@@ -21,7 +21,7 @@ Required work:
 - Make the compactness decision aware of CST comments between the action braces, rather than checking only `statements.length`.
 - Add formatter tests for leading line comments, trailing comments, block comments, and comment-free compact actions.
 - Add an explicit formatter-idempotence assertion for the commented cases.
-- Run focused formatter tests followed by `./agent just verify`.
+- Run focused formatter tests followed by `./agent verify`.
 
 Suggested commit title: `Preserve comments in compact inline actions`
 
@@ -45,6 +45,6 @@ Work required when the feature is activated:
 - Implement or plan the explicit migration command in the same coherent slice; do not document a command that cannot be run.
 - Add IDs to the authoritative target and foundation fixtures.
 - Test creation, migration, repeat invocation, clone stability, explicit replacement, and missing-ID diagnostics.
-- Run focused CLI/parser/validator tests followed by `./agent just verify`.
+- Run focused CLI/parser/validator tests followed by `./agent verify`.
 
 Suggested commit title: `Bootstrap stable Tao project identity`

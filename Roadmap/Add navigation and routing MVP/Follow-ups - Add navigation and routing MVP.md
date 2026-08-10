@@ -103,4 +103,4 @@ After each project:
 3. Add behavior coverage to focused Test Apps and Kitchen Sink.
 4. Update source actions for mechanical migrations such as `alias` to `let`.
 5. Re-enable discovery for individual future-syntax folders only when every discovered file parses, validates, formats, compiles, and tests.
-6. Run the stale-repository workflow and `./agent just verify` before handoff.
+6. Run a targeted stale-reference audit and `./agent verify` before handoff.
