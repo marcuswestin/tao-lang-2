@@ -2,9 +2,42 @@
 
 This document describes the (intended) Tao type system.
 
-Current implementation status: this repo currently supports `text` and `number` literals, coarse `list` and `item` values, `view` and `layout` declarations, the transitional `alias` binding, the state/action MVP for view-local `state`, named/inline `action`, `set`, `do`, stateful reads, and reactive rerendering, simple custom `type` declarations, typed primitive/list/item construction by juxtaposition, member access, scoped parameter type declarations, value references, invocation-only typed argument labels with `:`, and exact-first type-based render/action/item-field binding. The intended language described below replaces value `alias` with immutable `let`, expands parameters into declaration properties, and adds the closed-union assignability needed by `Presentable`; that migration is not implemented yet. Boolean, typed list elements, operators beyond MVP compound `set`, interpolation, functions, `match`, optional item fields, extension is item, and richer collection inference remain future work.
+Current implementation status: this repo supports `text`, `number`, `boolean`, and `none` literals; homogeneous list and item values; precedence-aware arithmetic, comparison, equality, and boolean expressions; explicit `interpolate`; expression-bodied pure functions and positional calls; value `if … then … else …`; render `if/else` and `for … in`; `.Empty`/`.Count` on text and lists; `view` and `layout` declarations; the transitional `alias` binding; view-local `state`, named/inline `action`, `set`, `do`, stateful reads, and reactive rerendering; simple custom `type` declarations; typed primitive/list/item construction by juxtaposition; item member access; scoped parameter type declarations; value references; invocation-only typed argument labels with `:`; and exact-first type-based render/action/item-field binding. The intended language described below still replaces value `alias` with immutable `let`, expands parameters into declaration properties, and adds the closed-union assignability needed by `Presentable`; that migration is not implemented yet. Template-literal sugar, optional types and item fields, `match`, extension is item, heterogeneous lists, and richer collection transforms remain future work.
 
 Any commented out code is WIP material and should be ignored.
+
+## Implemented functional MVP syntax
+
+The executable functional core intentionally uses one small canonical form per capability:
+
+```tao
+function HasCount Count is number returns boolean = Count > 0 and not false
+function CountLabel Count is number returns text = interpolate "Count: ", Count
+function Status Visible is boolean returns text = if Visible then "Open" else "Hidden"
+
+view Example {
+   state Count = 2
+   render Col {
+      if HasCount(Count) {
+         Text CountLabel(Count)
+      } else {
+         Text "Empty"
+      }
+      for Name in ["Inbox" "Today"] {
+         Text Name
+      }
+   }
+}
+```
+
+- Pure functions have an explicit return type, one expression body, lexical parameters, and positional calls using parentheses.
+- Function calls, interpolation, scalar literals, references, and other unambiguous expressions can be passed directly as invocation arguments. Parenthesize a binary expression or list literal used as an argument so following layout and render child blocks remain unambiguous.
+- `interpolate` concatenates text, number, boolean, and `none` parts; `none` contributes empty text.
+- Operator precedence is unary, multiplication/division, addition/subtraction, comparison, equality, `and`, then `or`. Equality uses `==` and `!=`.
+- Arithmetic operands are numbers, except `text + text`. Ordered comparison operands are numbers. Boolean operators require booleans.
+- List literals are homogeneous in the MVP. `for` exposes the inferred element value inside its render body.
+- Render `if/else` and `for` are valid only inside render child blocks. Their branches and iterations have lexical child scopes.
+- Text and lists expose `.Empty` as boolean and `.Count` as number. Item fields continue to use ordinary member access.
 
 ## Basic typing
 

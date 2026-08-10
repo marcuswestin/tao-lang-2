@@ -38,9 +38,9 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'item' | 'list' | 'action';
+    'text' | 'number' | 'boolean' | 'item' | 'list' | 'action';
 
 ConstructablePrimitiveType returns string:
-    'text' | 'number' | 'item' | 'list';
+    'text' | 'number' | 'boolean' | 'item' | 'list';
 
 type TypeDefinition = TypeDeclaration | TypeProperty | ParameterTypeDeclaration;

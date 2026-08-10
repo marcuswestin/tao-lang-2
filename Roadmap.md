@@ -4,6 +4,10 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## MVP Roadmap
 
+- [ ] Complete the autonomous functional-language MVP experiment
+  - Integrate the smallest coherent expression, control-flow, interaction, data, navigation, and presentation surface required by the executable Still app.
+  - Project record: `Roadmap/Autonomous language MVP/Project.md`
+
 - [x] Add item/list/custom type MVP
   - Item/object literals, list literals, typed item constructors, simple custom type declarations, and field/member validation.
   - Plan: `Roadmap/Add item list custom type MVP/Plan - Add item list custom type MVP.md`
@@ -14,11 +18,11 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add state and action MVP
   - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
 
-- [ ] Expand core expression/value language
-  - Booleans, string interpolation, arithmetic, comparison, basic boolean operators, member access, call expressions, and better diagnostics.
+- [x] Expand core expression/value language
+  - Boolean and `none` values, `interpolate`, arithmetic/comparison/boolean expressions, pure function calls, collection/text members, and focused diagnostics.
 
-- [ ] Add control flow and collection rendering MVP
-  - `if/else`, `when` if still preferred, pure functions/returns, `.Empty`, `for` over lists/query results, and formatter/compiler support.
+- [x] Add control flow and collection rendering MVP
+  - Expression-bodied pure functions, value and render `if/else`, `.Empty`/`.Count`, and `for` over typed lists with formatter/compiler/runtime support.
 
 - [ ] Add datasource schema and query MVP
   - `data`, entities/fields/relationships, `query`, `where`, ordering, `guard`, typed query rows, and Memory provider support.

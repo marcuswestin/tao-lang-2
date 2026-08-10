@@ -3,6 +3,7 @@ import { ActionsValidator } from './ActionsValidator'
 import { AliasesValidator } from './aliases-validator'
 import { AppValidator } from './app-validator'
 import { ExpressionsValidator } from './expressions-validator'
+import { FunctionalCoreValidator } from './FunctionalCoreValidator'
 import { validateInjections } from './injections-validator'
 import { InvocationsValidator } from './invocations-validator'
 import { LayoutValidator } from './layout-validator'
@@ -26,6 +27,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   validateTests(file, ctx)
   validateTypes(file, ctx)
   InvocationsValidator.validate(file, ctx)
+  FunctionalCoreValidator.validate(file, ctx)
 
   const document = AST.getDocument(file)
   if (document.uri.scheme === 'file') {
@@ -41,6 +43,7 @@ export const Validate = {
   Actions: ActionsValidator.validate,
   Injections: validateInjections,
   Invocations: InvocationsValidator.validate,
+  FunctionalCore: FunctionalCoreValidator.validate,
   Layouts: LayoutValidator.validate,
   Project: validateProject,
   States: StateValidator.validate,

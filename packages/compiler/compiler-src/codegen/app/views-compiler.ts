@@ -33,6 +33,8 @@ export const ViewsCompiler = {
       primitive: type =>
         Switch(type.primitive, {
           action: () => gen`TR.Action`,
+          boolean: () => gen`TR.Value<boolean>`,
+          none: () => gen`TR.Value<null>`,
           number: () => gen`TR.Value<number>`,
           text: () => gen`TR.Value<string>`,
         }),
@@ -45,11 +47,13 @@ export const ViewsCompiler = {
   /** RenderBlockBody compiles render child setup statements followed by JSX children. */
   RenderBlockBody(block: AST.Block): Compiled {
     const setupStatements = block.statements.filter(AST.isAliasDeclaration)
-    const renders = block.statements.filter(AST.isRender)
+    const renders = block.statements.filter(statement =>
+      AST.isRender(statement) || AST.isIfStatement(statement) || AST.isForStatement(statement)
+    )
     return gen`
       ${gen.list(setupStatements, Compile.Statement)}
       return <>
-        ${gen.list(renders, Compile.Render)}
+        ${gen.list(renders, Compile.RenderFragmentStatement)}
       </>
     `
   },

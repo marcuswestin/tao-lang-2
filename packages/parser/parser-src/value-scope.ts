@@ -22,6 +22,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'target' && AST.isMemberAccessExpression(context.container)) {
       return this.createValueScope(context.container)
     }
+    if (context.property === 'function' && AST.isFunctionCallExpression(context.container)) {
+      return this.createFunctionScope(context.container)
+    }
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
       return this.createUseImportScope(context.container)
     }
@@ -54,7 +57,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       scope = this.createScopeForParameters(owningView, scope)
     }
 
+    const owningFunction = AST.findOwningFunction(reference)
+    if (owningFunction) {
+      scope = this.createScopeForParameters(owningFunction, scope)
+    }
+
     for (const block of AST.ancestorBlocks(reference).reverse()) {
+      const forBinding = AST.forBindingOwnedByBlock(block)
+      if (forBinding) {
+        scope = this.createScopeForNodes([forBinding], scope)
+      }
       scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(block), scope)
     }
 
@@ -86,6 +98,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
+  private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {
+    const root = AST.findRoot(call)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isFunctionDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(call, AST.isFunctionDeclaration), scope)
+    return scope
+  }
+
   private createAppViewScope(appView: AST.AppView): Langium.Scope {
     const root = AST.findRoot(appView)
     if (!AST.isTaoFile(root)) {
@@ -111,7 +133,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createScopeForParameters(
-    declaration: AST.RenderableDeclaration | AST.ActionDeclaration,
+    declaration: AST.ParameterizedDeclaration,
     outerScope: Langium.Scope,
   ): Langium.Scope {
     const parameters = AST.parametersOf(declaration)

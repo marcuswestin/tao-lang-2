@@ -1,7 +1,7 @@
 import { Langium } from './langium-exports'
 import * as AST from './parserASTExport'
 
-type ArgumentListOwner = AST.Render | AST.DoStatement
+type ArgumentListOwner = AST.Render | AST.DoStatement | AST.FunctionCallExpression
 type BlockStatementFor<OwnerT extends AST.BlockStatementOwner> = OwnerT extends
   AST.ActionDeclaration | AST.ActionExpression ? AST.ActionStatement
   : OwnerT extends AST.ProjectDeclaration ? AST.ProjectStatement
@@ -67,6 +67,11 @@ export function valueDeclarationsOwnedByBlock(block: AST.Block): AST.ValueDeclar
     ...block.statements.filter(AST.isStateDeclaration),
     ...block.statements.filter(AST.isActionDeclaration),
   ]
+}
+
+/** forBindingOwnedByBlock returns the iteration binding visible inside a `for` body. */
+export function forBindingOwnedByBlock(block: AST.Block): AST.ForStatement | undefined {
+  return AST.isForStatement(block.$container) ? block.$container : undefined
 }
 
 /** isImportableValueDeclaration returns true for value declarations that can be imported. */
@@ -188,6 +193,18 @@ export function findOwningAction(node: AST.Node): AST.ActionDeclaration | undefi
   let current = node.$container
   while (current) {
     if (AST.isActionDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+/** findOwningFunction returns the pure function declaration that owns `node`, if any. */
+export function findOwningFunction(node: AST.Node): AST.FunctionDeclaration | undefined {
+  let current = node.$container
+  while (current) {
+    if (AST.isFunctionDeclaration(current)) {
       return current
     }
     current = current.$container

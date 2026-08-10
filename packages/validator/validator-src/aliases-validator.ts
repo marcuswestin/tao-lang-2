@@ -7,10 +7,12 @@ type NamedValueDeclaration =
   | NamedFileValueDeclaration
   | AST.ParameterDeclaration
   | AST.StateDeclaration
+  | AST.ForStatement
 type NamedFileValueDeclaration =
   | AST.ActionDeclaration
   | AST.AliasDeclaration
   | AST.AppDeclaration
+  | AST.FunctionDeclaration
   | AST.RenderableDeclaration
 type NamedDeclaration = NamedValueDeclaration | AST.TypeDeclaration
 type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
@@ -169,6 +171,15 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
     if (AST.isRender(statement) && statement.block) {
       collectRenderChildBlocks(statement.block, blocks)
     }
+    if (AST.isIfStatement(statement)) {
+      collectRenderChildBlocks(statement.thenBlock, blocks)
+      if (statement.elseBlock) {
+        collectRenderChildBlocks(statement.elseBlock, blocks)
+      }
+    }
+    if (AST.isForStatement(statement)) {
+      collectRenderChildBlocks(statement.block, blocks)
+    }
   }
 }
 
@@ -180,5 +191,6 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
   return AST.isActionDeclaration(node)
     || AST.isAliasDeclaration(node)
     || AST.isAppDeclaration(node)
+    || AST.isFunctionDeclaration(node)
     || AST.isRenderableDeclaration(node)
 }

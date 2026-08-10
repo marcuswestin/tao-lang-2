@@ -16,11 +16,18 @@ export const DeclarationOrder = {
 function valueReferences(value: AST.Expression): ValueReferenceLike[] {
   return Switch.type(value, {
     ActionExpression: expressionValueReferences,
+    BinaryExpression: expressionValueReferences,
+    BooleanLiteral: expressionValueReferences,
+    ConditionalExpression: expressionValueReferences,
+    FunctionCallExpression: expressionValueReferences,
+    InterpolationExpression: expressionValueReferences,
     ListLiteral: expressionValueReferences,
     MemberAccessExpression: reference => [reference],
+    NoneLiteral: expressionValueReferences,
     NumberLiteral: expressionValueReferences,
     StringLiteral: expressionValueReferences,
     TypedConstructor: expressionValueReferences,
+    UnaryExpression: expressionValueReferences,
     ValueReference: reference => [reference],
   })
 }
@@ -57,6 +64,7 @@ function isLocalValueDeclaration(declaration: AST.ValueDeclaration): boolean {
   return AST.isAliasDeclaration(declaration)
     || AST.isStateDeclaration(declaration)
     || AST.isActionDeclaration(declaration)
+    || AST.isForStatement(declaration)
 }
 
 /** isViewOwnedValueDeclaration returns true when a value belongs to a renderable declaration body. */

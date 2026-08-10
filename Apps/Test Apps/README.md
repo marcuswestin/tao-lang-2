@@ -11,6 +11,30 @@ Apps/Test Apps/<App Name>/
   <App Name>.test.tao
 ```
 
+## Functional Core MVP
+
+### Purpose
+
+Exercise the executable functional-language core: booleans and `none`, precedence-aware operators, interpolation, expression-bodied pure functions, conditional rendering, list iteration, and reactive composition with existing state/actions.
+
+### Belongs Here
+
+- Boolean, absence, arithmetic, comparison, and boolean expressions.
+- Positional pure-function calls with explicit return types.
+- `interpolate` text construction.
+- `if/else` and `for … in` inside render child blocks.
+- Reactive branch changes driven by Tao state/actions.
+
+### Does Not Belong Here
+
+- Invalid expression, function, or control-flow diagnostics; package tests own those.
+- Input/form events, data queries/mutations, or navigation.
+- Additional collection transforms beyond the shipped list members and iteration.
+
+### Behavior Test Notes
+
+`Functional Core MVP.test.tao` checks initial function/interpolation/iteration output and verifies that a Tao action reactively switches the rendered `if` branch.
+
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
 ## Layout and App Shell

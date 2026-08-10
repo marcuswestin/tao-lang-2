@@ -26,3 +26,9 @@ ViewRender:
     view=[RenderableDeclaration:ID] (layoutClause=LayoutClause block=Block? | argumentList=ArgumentList layoutClause=LayoutClause? block=Block? | block=Block?);
 
 type Render = RenderStatement | ViewRender;
+
+IfStatement:
+    'if' condition=Expression thenBlock=Block ('else' elseBlock=Block)?;
+
+ForStatement:
+    'for' name=ID 'in' collection=Expression block=Block;

@@ -24,6 +24,18 @@ export default {
 
   /** ParameterDeclaration formats either a bare named type or an inline `Name is Type` declaration. */
   ParameterDeclaration() {},
+
+  /** IfStatement formats conditional render branches. */
+  IfStatement(f) {
+    f.oneSpaceAfter('if')
+    f.oneSpaceBefore('else')
+  },
+
+  /** ForStatement formats iteration headers. */
+  ForStatement(f) {
+    f.oneSpaceAfter('for', 'in')
+    f.oneSpaceBefore('in')
+  },
 } satisfies Partial<FormatHandlers>
 
 /**

@@ -1,0 +1,18 @@
+use FunctionalCoreMVP from ./
+
+test "Functional Core MVP" {
+   check "evaluates functions, control flow, and collection rendering" {
+      run FunctionalCoreMVP
+
+      expect text "Functional core"
+      expect text "Ready"
+      expect text "Count: 2"
+      expect text "Next: 3"
+      expect text "Inbox"
+      expect text "Today"
+      expect missing text "Empty"
+      press text "Hide count"
+      expect missing text "Count: 2"
+      expect text "Empty"
+   }
+}

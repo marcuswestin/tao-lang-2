@@ -322,6 +322,20 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
   }
   let typeName = Type.displayName(current)
   for (const member of memberAccess.members) {
+    if (
+      (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text')) && member === 'Empty'
+    ) {
+      current = { kind: 'primitive', primitive: 'boolean' }
+      typeName = 'boolean'
+      continue
+    }
+    if (
+      (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text')) && member === 'Count'
+    ) {
+      current = { kind: 'primitive', primitive: 'number' }
+      typeName = 'number'
+      continue
+    }
     if (current.kind !== 'item' || !current.item) {
       ctx.error(typeValidationMessages.memberNotItem(member), memberAccess)
       return
@@ -345,6 +359,10 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     AliasDeclaration: declaration => Type.ofExpression(declaration.value),
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
     ActionDeclaration: () => ({ kind: 'primitive', primitive: 'action' }),
+    ForStatement: statement => {
+      const collection = Type.ofExpression(statement.collection)
+      return collection.kind === 'list' ? collection.element ?? { kind: 'unresolved' } : { kind: 'unresolved' }
+    },
     undefined: () => ({ kind: 'unresolved' }),
   })
 }

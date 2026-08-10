@@ -3,8 +3,8 @@ import { Switch } from '@shared'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
 export type TaoType =
-  | { kind: 'primitive'; primitive: 'text' | 'number' | 'action'; nominal?: AST.TypeDefinition }
-  | { kind: 'list'; nominal?: AST.TypeDefinition }
+  | { kind: 'primitive'; primitive: 'text' | 'number' | 'boolean' | 'action' | 'none'; nominal?: AST.TypeDefinition }
+  | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
   | { kind: 'unresolved' }
 
@@ -298,13 +298,56 @@ class TypeResolutionContext {
   ofExpression(expression: AST.Expression): TaoType {
     return Switch.type(expression, {
       ActionExpression: () => primitiveType('action'),
-      ListLiteral: () => ({ kind: 'list' }),
+      BinaryExpression: binary => this.binaryExpressionType(binary),
+      BooleanLiteral: () => primitiveType('boolean'),
+      ConditionalExpression: conditional => this.conditionalExpressionType(conditional),
+      FunctionCallExpression: call =>
+        call.function.ref ? this.ofReference(call.function.ref.returnType) : unresolvedType(),
+      InterpolationExpression: () => primitiveType('text'),
+      ListLiteral: list => this.listLiteralType(list),
       MemberAccessExpression: access => this.ofMemberAccess(access),
+      NoneLiteral: () => primitiveType('none'),
       NumberLiteral: () => primitiveType('number'),
       StringLiteral: () => primitiveType('text'),
       TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
+      UnaryExpression: unary => unary.operator === 'not' ? primitiveType('boolean') : primitiveType('number'),
       ValueReference: reference => this.valueDeclarationType(reference.target.ref),
     })
+  }
+
+  private binaryExpressionType(expression: AST.BinaryExpression): TaoType {
+    if (['==', '!=', '<', '<=', '>', '>=', 'and', 'or'].includes(expression.operator)) {
+      return primitiveType('boolean')
+    }
+    const left = this.ofExpression(expression.left)
+    return expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text'
+      ? primitiveType('text')
+      : primitiveType('number')
+  }
+
+  private conditionalExpressionType(expression: AST.ConditionalExpression): TaoType {
+    const whenTrue = this.ofExpression(expression.whenTrue)
+    const whenFalse = this.ofExpression(expression.whenFalse)
+    if (Type.isAssignable(whenTrue, whenFalse)) {
+      return whenFalse
+    }
+    if (Type.isAssignable(whenFalse, whenTrue)) {
+      return whenTrue
+    }
+    return unresolvedType()
+  }
+
+  private listLiteralType(list: AST.ListLiteral): TaoType {
+    const first = list.elements[0]
+    if (!first) {
+      return { kind: 'list' }
+    }
+    const element = this.ofExpression(first)
+    const homogeneous = list.elements.slice(1).every(candidate => {
+      const candidateType = this.ofExpression(candidate)
+      return Type.isAssignable(candidateType, element) || Type.isAssignable(element, candidateType)
+    })
+    return homogeneous && element.kind !== 'unresolved' ? { kind: 'list', element } : { kind: 'list' }
   }
 
   ofProperty(property: AST.TypeProperty): TaoType {
@@ -320,10 +363,16 @@ class TypeResolutionContext {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: () => primitiveType('action'),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
+      ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
       StateDeclaration: state => this.stateDeclarationType(state),
       undefined: unresolvedType,
     })
+  }
+
+  private forStatementBindingType(statement: AST.ForStatement): TaoType {
+    const collection = this.ofExpression(statement.collection)
+    return collection.kind === 'list' ? collection.element ?? unresolvedType() : unresolvedType()
   }
 
   private aliasDeclarationType(alias: AST.AliasDeclaration): TaoType {
@@ -353,6 +402,20 @@ class TypeResolutionContext {
   private atMemberPath(root: TaoType, members: readonly string[]): TaoType {
     let current = root
     for (const member of members) {
+      if (
+        (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text'))
+        && member === 'Empty'
+      ) {
+        current = primitiveType('boolean')
+        continue
+      }
+      if (
+        (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text'))
+        && member === 'Count'
+      ) {
+        current = primitiveType('number')
+        continue
+      }
       const itemType = isItemKind(current) ? current.item : undefined
       if (!itemType) {
         return unresolvedType()
@@ -403,11 +466,13 @@ class TypeResolutionContext {
   }
 }
 
-function primitiveType(primitive: AST.PrimitiveType): TaoType {
+function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
   return Switch(primitive, {
     text: () => ({ kind: 'primitive', primitive: 'text' }),
     number: () => ({ kind: 'primitive', primitive: 'number' }),
+    boolean: () => ({ kind: 'primitive', primitive: 'boolean' }),
     action: () => ({ kind: 'primitive', primitive: 'action' }),
+    none: () => ({ kind: 'primitive', primitive: 'none' }),
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),
   })
@@ -581,10 +646,13 @@ function owningArgumentTypeReference(reference: AST.NamedTypeReference): AST.Arg
 }
 
 function invocationTargetDeclaration(
-  invocation: AST.Render | AST.DoStatement,
+  invocation: AST.Render | AST.DoStatement | AST.FunctionCallExpression,
 ): AST.ParameterizedDeclaration | undefined {
   if (AST.isRender(invocation)) {
     return invocation.view?.ref
+  }
+  if (AST.isFunctionCallExpression(invocation)) {
+    return invocation.function.ref
   }
   const action = invocation.action
   if (!AST.isValueReference(action)) {

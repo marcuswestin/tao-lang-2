@@ -12,8 +12,12 @@ export type NodeFormat<NodeT extends AST.Node> = {
   readonly node: NodeT
   /** oneSpaceBefore requests exactly one space before each present keyword. */
   oneSpaceBefore(...keywords: string[]): void
+  /** noSpaceBefore requests no whitespace before each present keyword. */
+  noSpaceBefore(...keywords: string[]): void
   /** oneSpaceAfter requests exactly one space after each present keyword. */
   oneSpaceAfter(...keywords: string[]): void
+  /** noSpaceAfter requests no whitespace after each present keyword. */
+  noSpaceAfter(...keywords: string[]): void
   /** oneSpaceAround requests exactly one space on both sides of each present keyword. */
   oneSpaceAround(...keywords: string[]): void
   /** oneSpaceBeforeProperty requests exactly one space before each present property value. */
@@ -74,8 +78,14 @@ export function createNodeFormat<NodeT extends AST.Node>(
     oneSpaceBefore(...keywords) {
       formatter.keywords(...keywords).prepend(Formatting.oneSpace())
     },
+    noSpaceBefore(...keywords) {
+      formatter.keywords(...keywords).prepend(Formatting.noSpace())
+    },
     oneSpaceAfter(...keywords) {
       formatter.keywords(...keywords).append(Formatting.oneSpace())
+    },
+    noSpaceAfter(...keywords) {
+      formatter.keywords(...keywords).append(Formatting.noSpace())
     },
     oneSpaceAround(...keywords) {
       formatter.keywords(...keywords).surround(Formatting.oneSpace())
