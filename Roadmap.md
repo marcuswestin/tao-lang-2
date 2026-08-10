@@ -28,7 +28,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
 
 - [ ] Add navigation and routing MVP
-  - `navigator`, stack/tabs, screen params, path metadata, `navigation push/pop/tab`, generated React Navigation runtime, and route tests.
+  - Research complete in `Roadmap/Add navigation and routing MVP/`. First plan covers immutable `let`, declaration properties/`with`, descriptor and target IR, app root hosting, SlotNav/StackNav, one semantic reducer, native back reconciliation, and focused migration support.
 
 - [ ] Define canonical buildable app target and acceptance bar
   - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
@@ -78,6 +78,9 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
+- [ ] Branch and remove all agent instructions. As opposed to structural descriptions. Then re-implement agent instructions for new models, best practices.
+- [ ] Add simulation mode with datasources kept locally (with simulated network delays), library states/state saving, demo renders
+- [ ] String interpolation syntax highlighting (did we accomplish this in old repo?)
 - [ ] Consider removing the Purpose.md files from the Test Apps.
 - [ ] Create langium types for Statement, such that we have e.g ViewStatement, ProjectStatement, FileStatement, etc
   - [ ] And add comments to the Statement rule, to seperate ones that are in one context only (e.g test statements).
