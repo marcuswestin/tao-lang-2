@@ -331,6 +331,39 @@ Describe('Tao formatter views and blocks', () => {
       `,
     )
   })
+
+  Test('keeps commented inline actions multiline', async () => {
+    await testFormatCode(
+      `view MainView { state Count = 0 render Stack {
+        Button "Leading", action {
+          // before
+          set Count = 1
+        }
+        Button "Trailing", action {
+          set Count = 2 // after
+        }
+        Button "Block", action { /* explanation */ set Count = 3 }
+        Button "Compact", action { set Count = 4 }
+      } }`,
+      `
+        view MainView {
+           state Count = 0
+           render Stack {
+              Button "Leading", action {
+                 // before
+                 set Count = 1
+              }
+              Button "Trailing", action {
+                 set Count = 2 // after
+              }
+              Button "Block", action { /* explanation */
+                 set Count = 3
+              }
+              Button "Compact", action { set Count = 4 }
+        }  }
+      `,
+    )
+  })
 })
 
 Describe('Tao formatter aliases', () => {
