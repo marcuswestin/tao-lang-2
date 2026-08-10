@@ -330,6 +330,46 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('formats data schemas, queries, writes, and provider status steps', async () => {
+    await testFormatCode(
+      `project data Tasks memory{Groups Group{Name text}Items Item{Title text Done boolean Group Group}}\nproject view MainView{query Tasks . Items as OpenItems{where Done==false order by Title desc}action Add{create Tasks . Item{Title "Draft" Done false Group "Group-1"}}render Stack{for Item in OpenItems{Button "Delete",action{delete Item}}}}\ntest "Data"{check "status"{run DataApp data Tasks error "Offline" data Tasks ready}}`,
+      `
+        project data Tasks memory {
+           Groups Group {
+              Name text
+           }
+           Items Item {
+              Title text
+              Done boolean
+              Group Group
+        }  }
+
+        project view MainView {
+           query Tasks.Items as OpenItems {
+              where Done == false
+              order by Title desc
+           }
+           action Add {
+              create Tasks.Item {
+                 Title "Draft"
+                 Done false
+                 Group "Group-1"
+           }  }
+           render Stack {
+              for Item in OpenItems {
+                 Button "Delete", action { delete Item }
+        }  }  }
+
+        test "Data" {
+           check "status" {
+              run DataApp
+              data Tasks error "Offline"
+              data Tasks ready
+        }  }
+      `,
+    )
+  })
+
   Test('formats state declarations and action bodies', async () => {
     await testFormatCode(
       `view MainView{state Count=0 action AddStep Step is number{set Count+=Step} action AddFive{do AddStep 5} render Stack{Button "Reset",action{set Count=0} Button "Inline",->{set Count+=1}}}`,

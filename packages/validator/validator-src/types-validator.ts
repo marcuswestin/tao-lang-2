@@ -192,6 +192,7 @@ function constructorLiteralKind(type: ASTUtils.TaoType): string {
     primitive: type => type.primitive,
     list: () => 'list',
     item: () => 'item',
+    entity: type => type.entity.name,
     unresolved: () => 'unresolved',
   })
 }
@@ -322,6 +323,13 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
   }
   let typeName = Type.displayName(current)
   for (const member of memberAccess.members) {
+    if (AST.isQueryDeclaration(memberAccess.target.ref) && (member === 'Loading' || member === 'Error')) {
+      current = member === 'Loading'
+        ? { kind: 'primitive', primitive: 'boolean' }
+        : { kind: 'primitive', primitive: 'text' }
+      typeName = Type.displayName(current)
+      continue
+    }
     if (
       (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text')) && member === 'Empty'
     ) {
@@ -334,6 +342,21 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
     ) {
       current = { kind: 'primitive', primitive: 'number' }
       typeName = 'number'
+      continue
+    }
+    if (current.kind === 'entity') {
+      if (member === 'Id') {
+        current = { kind: 'primitive', primitive: 'text' }
+        typeName = 'text'
+        continue
+      }
+      const field = current.entity.block.fields.find(candidate => candidate.name === member)
+      if (!field) {
+        ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
+        return
+      }
+      current = Type.dataFieldType(field)
+      typeName = Type.displayName(current)
       continue
     }
     if (current.kind !== 'item' || !current.item) {
@@ -359,6 +382,10 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     AliasDeclaration: declaration => Type.ofExpression(declaration.value),
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
     ActionDeclaration: () => ({ kind: 'primitive', primitive: 'action' }),
+    QueryDeclaration: declaration => {
+      const entity = Type.queryEntity(declaration)
+      return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }
+    },
     ForStatement: statement => {
       const collection = Type.ofExpression(statement.collection)
       return collection.kind === 'list' ? collection.element ?? { kind: 'unresolved' } : { kind: 'unresolved' }

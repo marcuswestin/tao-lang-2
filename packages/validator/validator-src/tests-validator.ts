@@ -14,6 +14,7 @@ export const testValidationMessages = {
   pressPlacement: 'Press steps are only allowed inside check blocks.',
   enterPlacement: 'Enter steps are only allowed inside check blocks.',
   submitPlacement: 'Submit steps are only allowed inside check blocks.',
+  dataStatusPlacement: 'Data status steps are only allowed inside check blocks.',
   expectationPlacement: 'Expectations are only allowed inside check blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
@@ -54,6 +55,11 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(testValidationMessages.submitPlacement, submit)
     }
     validateSelector(submit, ctx)
+  }
+  for (const status of AST.streamAllContents(file).filter(AST.isDataStatusStep)) {
+    if (statementNeedsStepPlacementDiagnostic(status)) {
+      ctx.error(testValidationMessages.dataStatusPlacement, status)
+    }
   }
   for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
     if (statementNeedsStepPlacementDiagnostic(expectation)) {
@@ -102,6 +108,7 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
   let hasRun = false
   for (const step of check.block.statements.filter(AST.isCheckStep)) {
     Switch.type(step, {
+      DataStatusStep: checkStepOrder,
       EnterTextStep: checkStepOrder,
       ExpectTextStep: checkStepOrder,
       PressTextStep: checkStepOrder,
@@ -113,7 +120,12 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
   }
 
   function checkStepOrder(
-    step: AST.EnterTextStep | AST.ExpectTextStep | AST.PressTextStep | AST.SubmitInputStep,
+    step:
+      | AST.DataStatusStep
+      | AST.EnterTextStep
+      | AST.ExpectTextStep
+      | AST.PressTextStep
+      | AST.SubmitInputStep,
   ): void {
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)

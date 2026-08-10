@@ -465,6 +465,54 @@ Describe('minimal Tao parser', () => {
     ])
   })
 
+  Test('parses data schemas, queries, writes, and provider test status', async () => {
+    const parseResult = await testParseCode(`
+      project data Tasks memory {
+        Groups Group { Name text }
+        Items Item { Title text Done boolean Ordering number Group Group }
+      }
+      layout Stack { }
+      view Button Title is text, Press is action { }
+      app DataApp { view MainView }
+      project view MainView {
+        query Tasks.Items as OpenItems {
+          where Done == false
+          order by Ordering desc
+        }
+        action Add {
+          create Tasks.Item { Title "Draft" Done false Ordering 1 Group "Group-1" }
+        }
+        render Stack {
+          for Item in OpenItems {
+            Button "Update", action { update Item { Done true } }
+            Button "Delete", action { delete Item }
+          }
+        }
+      }
+      test "Data" {
+        check "loading" {
+          run DataApp
+          data Tasks loading
+          data Tasks error "Offline"
+          data Tasks ready
+        }
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const data = parseResult.entry.ast.statements.find(AST.isDataDeclaration)
+    Expect.Is(data, AST.isDataDeclaration)
+    Expect(data.provider).toBe('memory')
+    Expect(data.block.entities.map(entity => entity.name)).toEqual(['Group', 'Item'])
+    const query = AST.streamAllContents(parseResult.entry.ast).find(AST.isQueryDeclaration)
+    Expect.Is(query, AST.isQueryDeclaration)
+    Expect(query.block?.clauses.map(clause => clause.$type)).toEqual(['WhereClause', 'OrderClause'])
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isCreateStatement)).toHaveLength(1)
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isUpdateStatement)).toHaveLength(1)
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isDeleteStatement)).toHaveLength(1)
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isDataStatusStep)).toHaveLength(3)
+  })
+
   Test('parses the Kitchen Sink v0 Tao test sidecar', async () => {
     const parseResult = await Workspace.parse(kitchenSinkTestPath)
 

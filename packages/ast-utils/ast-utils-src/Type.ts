@@ -6,6 +6,7 @@ export type TaoType =
   | { kind: 'primitive'; primitive: 'text' | 'number' | 'boolean' | 'action' | 'none'; nominal?: AST.TypeDefinition }
   | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
+  | { kind: 'entity'; entity: AST.DataEntity }
   | { kind: 'unresolved' }
 
 /** TypeReferenceRoot declares the root definition and remaining member path for a named type reference. */
@@ -70,6 +71,7 @@ export class Type {
       primitive: type => type.nominal ? Type.definitionName(type.nominal) : type.primitive,
       list: () => 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
+      entity: type => type.entity.name,
     })
   }
 
@@ -160,12 +162,39 @@ export class Type {
     if (isPrimitiveKind(type)) {
       return `${type.kind}:${type.primitive}`
     }
+    if (type.kind === 'entity') {
+      return `entity:${AST.getDocument(type.entity).uri.path}#${type.entity.name}`
+    }
     return type.kind
   }
 
   /** ofMemberAccess resolves the static type reached by a member access expression. */
   static ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
     return new TypeResolutionContext().ofMemberAccess(expression)
+  }
+
+  /** queryEntity resolves the entity selected by one query declaration. */
+  static queryEntity(query: AST.QueryDeclaration): AST.DataEntity | undefined {
+    return query.data.ref?.block.entities.find(entity => entity.collectionName === query.collectionName)
+  }
+
+  /** dataEntity resolves a schema entity by its singular source name. */
+  static dataEntity(data: AST.DataDeclaration | undefined, name: string): AST.DataEntity | undefined {
+    return data?.block.entities.find(entity => entity.name === name)
+  }
+
+  /** dataFieldType resolves the value type stored by a schema field. */
+  static dataFieldType(field: AST.DataField): TaoType {
+    if (field.primitive === 'text') {
+      return primitiveType('text')
+    }
+    if (field.primitive === 'number') {
+      return primitiveType('number')
+    }
+    if (field.primitive === 'boolean') {
+      return primitiveType('boolean')
+    }
+    return field.relationName ? primitiveType('text') : unresolvedType()
   }
 
   /** definitionOfReference resolves a named type reference, including qualified item fields. */
@@ -230,7 +259,7 @@ function primitivesDiffer(actual: TaoType, expected: TaoType): boolean {
 }
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
-  return isUnresolvedType(type) ? undefined : type.nominal
+  return isUnresolvedType(type) || type.kind === 'entity' ? undefined : type.nominal
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -355,6 +384,15 @@ class TypeResolutionContext {
   }
 
   ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
+    if (AST.isQueryDeclaration(expression.target.ref)) {
+      const [first, ...remaining] = expression.members
+      if (first === 'Loading') {
+        return remaining.length === 0 ? primitiveType('boolean') : unresolvedType()
+      }
+      if (first === 'Error') {
+        return this.atMemberPath(primitiveType('text'), remaining)
+      }
+    }
     const rootType = this.valueDeclarationType(expression.target.ref)
     return this.atMemberPath(rootType, expression.members)
   }
@@ -365,9 +403,15 @@ class TypeResolutionContext {
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
+      QueryDeclaration: query => this.queryDeclarationType(query),
       StateDeclaration: state => this.stateDeclarationType(state),
       undefined: unresolvedType,
     })
+  }
+
+  private queryDeclarationType(query: AST.QueryDeclaration): TaoType {
+    const entity = Type.queryEntity(query)
+    return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }
   }
 
   private forStatementBindingType(statement: AST.ForStatement): TaoType {
@@ -414,6 +458,18 @@ class TypeResolutionContext {
         && member === 'Count'
       ) {
         current = primitiveType('number')
+        continue
+      }
+      if (current.kind === 'entity') {
+        if (member === 'Id') {
+          current = primitiveType('text')
+          continue
+        }
+        const field = current.entity.block.fields.find(candidate => candidate.name === member)
+        if (!field) {
+          return unresolvedType()
+        }
+        current = Type.dataFieldType(field)
         continue
       }
       const itemType = isItemKind(current) ? current.item : undefined
@@ -493,7 +549,9 @@ function withNominal(type: TaoType, nominal: AST.TypeDefinition): TaoType {
   return type
 }
 
-function canCarryNominal(type: TaoType): type is Exclude<TaoType, { kind: 'unresolved' }> {
+function canCarryNominal(
+  type: TaoType,
+): type is Extract<TaoType, { kind: 'primitive' | 'list' | 'item' }> {
   return isPrimitiveKind(type) || type.kind === 'list' || isItemKind(type)
 }
 

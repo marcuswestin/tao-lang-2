@@ -46,6 +46,7 @@ function CompileExpressionJsType(expression: AST.Expression): Compiled {
       }),
     list: () => gen`any[]`,
     item: () => gen`any`,
+    entity: () => gen`any`,
     unresolved: () => gen`any`,
   })
 }

@@ -7,6 +7,7 @@ type NamedValueDeclaration =
   | NamedFileValueDeclaration
   | AST.ParameterDeclaration
   | AST.StateDeclaration
+  | AST.QueryDeclaration
   | AST.ForStatement
 type NamedFileValueDeclaration =
   | AST.ActionDeclaration

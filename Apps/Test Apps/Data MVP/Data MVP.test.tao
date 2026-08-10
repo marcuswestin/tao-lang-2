@@ -1,0 +1,49 @@
+use DataMVP, DataMVPApp from ./
+
+test "Data MVP" {
+   check "runs reactive related CRUD with filtering and ordering" {
+      run DataMVPApp
+
+      expect text "No workspaces yet"
+      enter "Home" into label "Workspace name"
+      press id "add-workspace"
+      expect text "Home"
+      press id "Workspace-1"
+      expect text "Selected: Home"
+      expect text "No open tasks"
+      enter "Plan launch" into label "Task title"
+      submit id "task-title"
+      expect text "Plan launch"
+      press id "rename-task"
+      expect missing text "Plan launch"
+      expect text "Updated task"
+      press id "complete-task"
+      expect text "No open tasks"
+      expect text "Updated task"
+      press id "delete-task"
+      expect text "No completed tasks"
+   }
+
+   check "renders deterministic loading and provider failure states" {
+      run DataMVPApp
+      data DataMVP loading
+      expect text "Loading local data…"
+      data DataMVP error "Storage unavailable"
+      expect text "Storage unavailable"
+      data DataMVP ready
+      expect text "No workspaces yet"
+   }
+
+   check "cascades relationship rows when a workspace is deleted" {
+      run DataMVPApp
+      enter "Work" into id "workspace-name"
+      press id "add-workspace"
+      press id "Workspace-1"
+      enter "Related task" into id "task-title"
+      press id "add-task"
+      expect text "Related task"
+      press id "delete-workspace"
+      expect missing text "Related task"
+      expect text "No workspaces yet"
+   }
+}

@@ -24,9 +24,9 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add control flow and collection rendering MVP
   - Expression-bodied pure functions, value and render `if/else`, `.Empty`/`.Count`, and `for` over typed lists with formatter/compiler/runtime support.
 
-- [ ] Add datasource schema and query MVP
-  - `data`, entities/fields/relationships, `query`, `where`, ordering, `guard`, typed query rows, and Memory provider support.
-  - `create`, strict row-handle `update`, provider-neutral IR, local InstantDB support, local dev setup, and post-write UI consistency.
+- [x] Add datasource schema and query MVP
+  - `data`, entities/fields/relationships, reactive `query`, `where`, ordering, typed query rows, and isolated Memory provider support.
+  - `create`, strict row-handle `update`/`delete`, provider-neutral IR, durable local web/native storage, cascading relationship cleanup, and post-write UI consistency.
 
 - [ ] Add typed TS value injection expressions
   - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
@@ -56,7 +56,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add forms and inputs MVP
   - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
 
-- [ ] Add loading, empty, and error-state MVP
+- [x] Add loading, empty, and error-state MVP
   - Practical `guard`/boundary semantics, app-visible failure states, provider/runtime errors, and canonical patterns for first apps.
 
 - [ ] Add beautiful app defaults mini slice

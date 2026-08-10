@@ -65,6 +65,7 @@ export function valueDeclarationsOwnedByBlock(block: AST.Block): AST.ValueDeclar
   return [
     ...block.statements.filter(AST.isAliasDeclaration),
     ...block.statements.filter(AST.isStateDeclaration),
+    ...block.statements.filter(AST.isQueryDeclaration),
     ...block.statements.filter(AST.isActionDeclaration),
   ]
 }

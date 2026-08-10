@@ -19,7 +19,7 @@ The MVP must add one integrated path for:
 
 1. [x] **Expressions and control.** Add boolean/absence literals, precedence-aware unary/binary expressions, interpolation, expression-bodied pure functions, `if` rendering, and `for` rendering. Cover parser, scope/type validation, formatter, compiler, runtime semantics, diagnostics, and a focused executable Test App.
 2. [x] **Interaction and forms.** Add event bindings for press/change/submit, runtime-backed text input, field labels and identifiers, validation patterns, and Tao test steps for entering and submitting text.
-3. **Data.** Add Tao schemas and entity handles, provider-neutral query/mutation IR, a durable local provider, filtering/order, relationships, reactive consistency, and deterministic loading/error controls.
+3. [x] **Data.** Add Tao schemas and entity handles, provider-neutral query/mutation IR, a durable local provider, filtering/order, relationships, reactive consistency, and deterministic loading/error controls.
 4. **Navigation.** Add an app-owned stack, destination declarations with typed arguments, present/back actions, deterministic runtime state, and test steps that exercise navigation.
 5. **Still.** Advance `Apps/MVP/Current/Still.tao` into the forcing app; cover workspace/task CRUD, completion, forms, filtering/order, loading/empty/error/populated states, and list/detail navigation in Tao behavior tests.
 6. **Agreement and hardening.** Align active specifications, roadmap status, Test Apps, MVP README, formatter/diagnostics, and tool commands; remove stale executable claims; run final verification and audit branch cleanliness.
@@ -37,8 +37,12 @@ The MVP must add one integrated path for:
 - **2026-08-10 — Name ambiguous invocation inputs explicitly.** `.Value Draft` binds directly to the `Value` parameter before Tao's type-based matching runs. This makes duplicate primitive and action parameters practical for forms without making ordinary arguments positional.
 - **2026-08-10 — Keep interaction component-owned.** `TextInput` and `FormButton` expose change, submit, and press through action-valued parameters. Their runtime implementations own React Native event adaptation, stable IDs, labels, disabled state, and basic accessible defaults.
 - **2026-08-10 — Extend tests with direct semantic input steps.** The executable MVP uses `enter … into label|id …` and `submit label|id …`; the runtime adapter resolves accessibility-visible controls and fires the corresponding native events.
+- **2026-08-10 — Make queries reactive list values.** A view-local query compiles to a provider-neutral plan, subscribes through the runtime store, and composes with ordinary `for`, `.Empty`, `.Count`, and member access. `Loading` and `Error` are query-specific members so app-visible states remain Tao-authored branches.
+- **2026-08-10 — Keep writes strict and action-owned.** `create Schema.Entity { … }` requires every field, while `update Row { … }` and `delete Row` accept only query-produced row handles. Relationship values use stable row IDs, and deleting an owner cascades its directly related rows in the local MVP.
+- **2026-08-10 — Persist locally without a service.** `local` uses browser local storage or Expo FileSystem document storage; `memory` shares the provider contract. The direct `expo-file-system` runtime dependency formalizes the native persistence module already shipped transitively with Expo.
+- **2026-08-10 — Isolate and control data in Tao tests.** Every check gets a fresh memory store even for a `local` schema. `data Schema loading|ready|error "…"` synchronously drives provider states without touching durable developer data.
 
-No external dependencies have been added. Any later dependency must be justified here before it is committed.
+The data slice adds `expo-file-system` as a direct runtime dependency so the local provider can persist in Expo; it was already present transitively in the Expo toolchain. Any later dependency must be justified here before it is committed.
 
 ## Deliberate deferrals
 

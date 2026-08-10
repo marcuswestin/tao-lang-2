@@ -36,6 +36,29 @@ Exercise controlled text input, named view arguments, change and submit events, 
 
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
+## Data MVP
+
+### Purpose
+
+Exercise schema-declared entities and relationships through reactive queries and an isolated memory provider using the same provider-neutral runtime contract as durable local data.
+
+### Belongs Here
+
+- `data` schemas with primitive and relationship fields.
+- Reactive `query` values with direct filters, ordering, `Loading`, `Error`, `Empty`, and `Count`.
+- Strict action-owned `create`, row-handle `update`, and `delete` writes.
+- Relationship cleanup, empty/populated transitions, and deterministic loading/provider-error test controls.
+
+### Does Not Belong Here
+
+- Remote providers, credentials, authentication, permissions, sync, pagination, or aggregation.
+- Navigation or Still-specific product behavior.
+- Invalid schema/query/write diagnostics; package tests own those.
+
+### Behavior Test Notes
+
+`Data MVP.test.tao` proves reactive related CRUD and filtering, deterministic loading/error recovery, and deletion of relationship-owned rows. Each check receives a fresh memory store.
+
 ## Functional Core MVP
 
 ### Purpose

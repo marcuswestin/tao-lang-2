@@ -52,8 +52,22 @@ export type TaoTestSubmitStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestDataStatusStep declares a deterministic provider state transition. */
+export type TaoTestDataStatusStep = {
+  kind: 'dataStatus'
+  dataName: string
+  status: 'error' | 'loading' | 'ready'
+  message: string
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
-export type TaoTestStep = TaoTestEnterStep | TaoTestExpectation | TaoTestPressStep | TaoTestSubmitStep
+export type TaoTestStep =
+  | TaoTestDataStatusStep
+  | TaoTestEnterStep
+  | TaoTestExpectation
+  | TaoTestPressStep
+  | TaoTestSubmitStep
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
 export type TaoTestCheck = {
@@ -128,11 +142,22 @@ function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation
 
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
+    DataStatusStep: compileDataStatusStep,
     EnterTextStep: compileEnterTextStep,
     ExpectTextStep: compileExpectation,
     PressTextStep: compilePressTextStep,
     SubmitInputStep: compileSubmitInputStep,
   })
+}
+
+function compileDataStatusStep(step: AST.DataStatusStep): TaoTestDataStatusStep {
+  return {
+    kind: 'dataStatus',
+    dataName: step.data.$refText,
+    status: step.status || 'error',
+    message: step.message || '',
+    source: sourceLocation(step),
+  }
 }
 
 function compileEnterTextStep(enter: AST.EnterTextStep): TaoTestEnterStep {

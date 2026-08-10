@@ -66,6 +66,7 @@ function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | u
       type.nominal
         ? ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
         : taoPrimitiveType(type.kind, typir),
+    entity: () => undefined,
   })
 }
 

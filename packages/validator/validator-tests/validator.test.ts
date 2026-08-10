@@ -7,6 +7,7 @@ import { Workspace } from '@workspace'
 import { ActionsValidator } from '../validator-src/ActionsValidator'
 import { AliasesValidator } from '../validator-src/aliases-validator'
 import { AppValidator } from '../validator-src/app-validator'
+import { dataValidationMessages } from '../validator-src/data-validator'
 import { useValidationCodes } from '../validator-src/diagnostic-codes'
 import { ExpressionsValidator } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
@@ -68,6 +69,56 @@ async function withValidatedFiles<
 }
 
 Describe('Tao validator structural diagnostics', () => {
+  Test('validates data schemas, queries, relationships, and strict writes', async () => {
+    await testValidateCode(`
+      project data Tasks memory {
+        Groups Group { Name text }
+        Items Item { Title text Done boolean Ordering number Group Group }
+      }
+      app DataApp { view MainView }
+      project view MainView {
+        query Tasks.Items as OpenItems {
+          where Done == false
+          order by Ordering asc
+        }
+        action Add {
+          create Tasks.Item { Title "Draft" Done false Ordering 1 Group "Group-1" }
+        }
+        render Stack {
+          for Item in OpenItems {
+            Button "Update", action { update Item { Done true } }
+            Button "Delete", action { delete Item }
+          }
+        }
+      }
+      layout Stack { render inject ${tsFence} return null ${fence} }
+      view Button Title is text, Press is action { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      data Bad memory {
+        Items Item { Title text Title number Missing MissingEntity }
+      }
+      app BadApp { view MainView }
+      project view MainView {
+        state Draft = ""
+        query Bad.Unknown as Rows { order by Missing asc }
+        action Add {
+          create Bad.Item { Title true Unknown "x" }
+          delete Draft
+        }
+        render inject ${tsFence} return null ${fence}
+      }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(dataValidationMessages.duplicateField('Item', 'Title'))
+    Expect(messages).toContain(dataValidationMessages.unknownRelation('Item', 'MissingEntity'))
+    Expect(messages).toContain(dataValidationMessages.unknownCollection('Bad', 'Unknown'))
+    Expect(messages).toContain(dataValidationMessages.fieldType('Title', 'text', 'boolean'))
+    Expect(messages).toContain(dataValidationMessages.unknownField('Item', 'Unknown'))
+    Expect(messages).toContain(dataValidationMessages.rowTarget('delete'))
+  })
+
   Test('validates the current Kitchen Sink app', async () => {
     const result = await Workspace.validate(kitchenSinkPath)
 

@@ -1,6 +1,6 @@
 # Tao Testing
 
-Status: design draft with an executable v0 implementation. The current repo has package tests, an Expo runtime render harness, and Tao-native app behavior steps: `test`, `check`, `run <AppName>`, `expect [missing] text`, `press text|label|id`, `enter "value" into text|label|id`, `submit text|label|id`, test-plan IR, and `tao test [path]`. It does not have `render` test subjects, datasource test seeding, provider test adapters, or the richer CLI options described below yet.
+Status: design draft with an executable v0 implementation. The current repo has package tests, an Expo runtime render harness, and Tao-native app behavior steps: `test`, `check`, `run <AppName>`, `expect [missing] text`, `press text|label|id`, `enter "value" into text|label|id`, `submit text|label|id`, deterministic `data Schema loading|ready|error`, test-plan IR, and `tao test [path]`. It does not have `render` test subjects, datasource row seeding, remote-provider test adapters, or the richer CLI options described below yet.
 
 This design starts with app and UI behavior tests. Tests can live in regular `.tao` files or sidecar `.test.tao` files. Package testing is deferred until Tao package semantics and app/UI testing are stable.
 
@@ -627,7 +627,7 @@ CLI behavior:
 - `--fail-fast` stops after the first failing check.
 - Failure output includes the test name, check name, failing step, source location, selected runtime, rendered UI summary, and artifacts where the runtime supports them.
 
-The current v0 implementation exposes `tao test [path]` for Tao files with inline or sidecar test declarations. Press, text entry, and input submission resolve exact rendered text, accessibility labels, or stable IDs through the runtime adapter. It still delegates execution to the runtime Jest harness; richer CLI filtering, watch mode, JSON output, artifacts, and alternate runtimes remain future work.
+The current v0 implementation exposes `tao test [path]` for Tao files with inline or sidecar test declarations. Press, text entry, and input submission resolve exact rendered text, accessibility labels, or stable IDs through the runtime adapter. Each check receives isolated memory data, and `data Schema loading|ready|error` drives provider status without external services or durable writes. It still delegates execution to the runtime Jest harness; richer CLI filtering, watch mode, JSON output, artifacts, and alternate runtimes remain future work.
 
 ## First Implementation Slice
 

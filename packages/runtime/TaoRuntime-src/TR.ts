@@ -2,6 +2,7 @@ import { Switch } from '@shared/core'
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
+import { DataControls, type TaoDataSchema } from './TR-data'
 import { LayoutControls } from './TR-layout'
 import * as TRTaoProps from './TR-TaoProps'
 import * as TRViews from './TR-views'
@@ -201,6 +202,9 @@ class TR {
   /** Dev exposes public Tao runtime development-only diagnostic controls. */
   static readonly Dev = DevControls
 
+  /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
+  static readonly Data = DataControls
+
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
 
@@ -316,6 +320,8 @@ namespace TR {
   export type TaoProps = TRTaoProps.TaoProps
   /** DevModeOptions declares runtime development-only diagnostic flags. */
   export type DevModeOptions = TaoDevModeOptions
+  /** DataSchema declares one runtime-backed Tao data schema. */
+  export type DataSchema = TaoDataSchema
 }
 
 export default TR

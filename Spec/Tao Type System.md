@@ -33,6 +33,7 @@ view Example {
 - Pure functions have an explicit return type, one expression body, lexical parameters, and positional calls using parentheses.
 - Function calls, interpolation, scalar literals, references, and other unambiguous expressions can be passed directly as invocation arguments. Parenthesize a binary expression or list literal used as an argument so following layout and render child blocks remain unambiguous.
 - `.Parameter Value` explicitly binds an invocation value to a declared parameter name before type-based matching. Use it when a declaration intentionally has multiple parameters with the same underlying type, as in `.Value Draft, .Label "Task title"`.
+- Data queries are reactive list values whose element type is the selected schema entity. A loop binding over a query exposes the entity's declared fields and stable text `Id`; strict `update` and `delete` accept that row-handle type. Relationship fields accept stable related-row IDs in the functional MVP. See `Tao Data.md`.
 - `interpolate` concatenates text, number, boolean, and `none` parts; `none` contributes empty text.
 - Operator precedence is unary, multiplication/division, addition/subtraction, comparison, equality, `and`, then `or`. Equality uses `==` and `!=`.
 - Arithmetic operands are numbers, except `text + text`. Ordered comparison operands are numbers. Boolean operators require booleans.

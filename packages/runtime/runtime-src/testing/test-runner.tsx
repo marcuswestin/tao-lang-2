@@ -1,5 +1,6 @@
+import TR from '@runtime/TR'
 import { Switch } from '@shared/core'
-import { fireEvent } from '@testing-library/react-native'
+import { act, fireEvent } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
 import type * as TestCompiler from './test-compiler/TestCompiler'
@@ -16,6 +17,7 @@ export async function runTestFile(file: TestCompiler.File): Promise<void> {
 async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<void> {
   let screen: RuntimeApp.Screen | undefined
   try {
+    TR.Data.beginTest()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
     for (const step of check.steps) {
       runStep(screen, step)
@@ -26,15 +28,23 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
     )
   } finally {
     screen?.unmount()
+    TR.Data.endTest()
   }
 }
 
 function runStep(screen: RuntimeApp.Screen, step: TestCompiler.Step): void {
   return Switch.kind<TestCompiler.Step, void>(step, {
+    dataStatus: status => dataStatusStep(status),
     enter: enter => enterStep(screen, enter),
     expect: expectation => assertExpectation(screen, expectation),
     press: press => pressStep(screen, press),
     submit: submit => submitStep(screen, submit),
+  })
+}
+
+function dataStatusStep(step: Extract<TestCompiler.Step, { kind: 'dataStatus' }>): void {
+  act(() => {
+    TR.Data.setTestStatus(step.dataName, step.status, step.message)
   })
 }
 
@@ -91,6 +101,10 @@ function assertExpectation(
 function formatStep(step: TestCompiler.Step): string {
   return Switch.kind<TestCompiler.Step, string>(step, {
     enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
+    dataStatus: status =>
+      status.status === 'error'
+        ? `data ${status.dataName} error "${status.message}"`
+        : `data ${status.dataName} ${status.status}`,
     expect: expectation =>
       expectation.missing
         ? `expect missing ${expectation.selector} "${expectation.text}"`
@@ -102,7 +116,7 @@ function formatStep(step: TestCompiler.Step): string {
 
 function requireSingleMatch(
   screen: RuntimeApp.Screen,
-  step: TestCompiler.Step,
+  step: Exclude<TestCompiler.Step, { kind: 'dataStatus' }>,
   target: string,
   description: string,
 ) {

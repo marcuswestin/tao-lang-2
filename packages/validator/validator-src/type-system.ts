@@ -78,6 +78,7 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
           ForStatement: () => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
           ParameterDeclaration: parameter =>
             TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
+          QueryDeclaration: () => InferenceRuleNotApplicable,
           StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
         })
       },

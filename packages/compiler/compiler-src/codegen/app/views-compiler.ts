@@ -40,6 +40,7 @@ export const ViewsCompiler = {
         }),
       list: () => gen`TR.Value<any[]>`,
       item: () => gen`TR.Value<Record<string, any>>`,
+      entity: () => gen`TR.Value<Record<string, any>>`,
       unresolved: () => gen`TR.Value<Record<string, any>>`,
     })
   },

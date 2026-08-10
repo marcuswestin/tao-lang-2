@@ -32,6 +32,11 @@ export default {
     return gen.noop()
   },
 
+  /** DataStatusStep compiles to no generated app output. */
+  DataStatusStep(_status: AST.DataStatusStep): Compiled {
+    return gen.noop()
+  },
+
   /** ExpectTextStep compiles to no generated app output. */
   ExpectTextStep(_expectation: AST.ExpectTextStep): Compiled {
     return gen.noop()

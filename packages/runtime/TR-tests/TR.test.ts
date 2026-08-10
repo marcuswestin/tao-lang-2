@@ -436,6 +436,59 @@ Describe('TR.Views', () => {
   })
 })
 
+Describe('TR.Data', () => {
+  Test('persists local rows and applies strict update, relationship cascade, and rehydration', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    const values = new Map<string, string>()
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    })
+    const definition = {
+      name: 'RuntimeDataTest',
+      provider: 'local' as const,
+      storageKey: 'runtime-data-test',
+      entities: {
+        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' as const } } },
+        Task: {
+          collection: 'Tasks',
+          fields: {
+            Title: { kind: 'text' as const },
+            Workspace: { kind: 'relation' as const, relation: 'Workspace' },
+          },
+        },
+      },
+    }
+    try {
+      const schema = TR.Data.Schema(definition)
+      TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
+      TR.Data.Create(schema, 'Task', { Title: TR.Value('Draft'), Workspace: TR.Value('Workspace-1') })
+      const initiallyRehydrated = TR.Data.Schema(definition)
+      Expect(initiallyRehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(1)
+      Expect(initiallyRehydrated.query({ entity: 'Task', filters: [] })).toHaveLength(1)
+      const tasks = schema.query({ entity: 'Task', filters: [] }) as Array<Record<string, unknown>>
+      Expect(tasks).toHaveLength(1)
+      TR.Data.Update(TR.Value(tasks[0]), { Title: TR.Value('Updated') })
+      Expect((schema.query({ entity: 'Task', filters: [] })[0] as Record<string, unknown>)['Title']).toBe('Updated')
+      const workspaces = schema.query({ entity: 'Workspace', filters: [] })
+      TR.Data.Delete(TR.Value(workspaces[0]))
+      Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
+
+      const rehydrated = TR.Data.Schema(definition)
+      Expect(rehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(globalThis, 'localStorage', descriptor)
+      } else {
+        delete (globalThis as { localStorage?: unknown }).localStorage
+      }
+    }
+  })
+})
+
 Describe('TR.Dev', () => {
   Test('exposes only public hook-free diagnostic controls', () => {
     Expect(typeof TR.Dev.getMode).toBe('function')

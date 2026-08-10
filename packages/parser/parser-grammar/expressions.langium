@@ -106,4 +106,4 @@ NoneLiteral:
 ValueReference:
     target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | ForStatement;
+type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | QueryDeclaration | ForStatement;

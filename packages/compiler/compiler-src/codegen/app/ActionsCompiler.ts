@@ -49,8 +49,11 @@ export const ActionsCompiler = {
   /** ActionStatement compiles one statement inside a Tao action body. */
   ActionStatement(statement: AST.ActionStatement): Compiled {
     return Switch.type(statement, {
+      CreateStatement: Compile.CreateStatement,
+      DeleteStatement: Compile.DeleteStatement,
       DoStatement: Compile.DoStatement,
       SetStatement: Compile.SetStatement,
+      UpdateStatement: Compile.UpdateStatement,
     })
   },
 

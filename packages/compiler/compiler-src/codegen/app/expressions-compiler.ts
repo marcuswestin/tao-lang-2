@@ -130,6 +130,7 @@ export const ExpressionsCompiler = {
       AliasDeclaration: alias => gen`${gen.scopeName(alias)}.evaluate()`,
       ForStatement: statement => gen`${gen.scopeName(statement)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
+      QueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
     })
   },

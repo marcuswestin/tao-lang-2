@@ -55,6 +55,47 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
+  Test('compiles provider-neutral data schemas, reactive queries, and row writes', async () => {
+    const compiled = await Compiler.compileCode(`
+      data Tasks memory {
+        Items Item { Title text Done boolean Ordering number }
+      }
+      app MyApp { view MainView }
+      project view MainView {
+        query Tasks.Items as Items {
+          where Done == false
+          order by Ordering desc
+        }
+        action Add {
+          create Tasks.Item { Title "Draft" Done false Ordering 1 }
+        }
+        render Stack {
+          for Item in Items {
+            Button "Update", action { update Item { Done true } }
+            Button "Delete", action { delete Item }
+          }
+        }
+      }
+      layout Stack {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view Button Title is text, Press is action {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Data.Schema')
+    Expect(compiled.code).toContain('TR.Data.Query')
+    Expect(compiled.code).toContain('TR.Data.Create')
+    Expect(compiled.code).toContain('TR.Data.Update')
+    Expect(compiled.code).toContain('TR.Data.Delete')
+  })
+
   Test('compiles dynamic action parameter invocations without arguments', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
@@ -426,7 +467,7 @@ Describe('Tao compiler', () => {
       'tao-test-plan-',
       {
         'Main.test.tao': `
-        use MyApp from ./
+        use MyApp, MyData from ./
 
         test "Smoke" {
           check "renders" {
@@ -435,11 +476,13 @@ Describe('Tao compiler', () => {
             press text "Add"
             enter "Draft" into label "Title"
             submit id "title-input"
+            data MyData loading
             expect missing text "Loading"
           }
         }
       `,
         'Main.tao': `
+        project data MyData memory { }
         app MyApp { view MainView }
         view MainView {
           render inject ${tsFence}
@@ -465,15 +508,20 @@ Describe('Tao compiler', () => {
         Expect(
           plan.suites[0]?.checks[0]?.steps.map(step => ({
             kind: step.kind,
-            selector: step.selector,
-            ...('text' in step ? { text: step.text } : { target: step.target }),
+            ...('selector' in step ? { selector: step.selector } : {}),
+            ...('text' in step ? { text: step.text } : {}),
+            ...('target' in step ? { target: step.target } : {}),
             ...('value' in step ? { value: step.value } : {}),
+            ...('dataName' in step
+              ? { dataName: step.dataName, status: step.status, message: step.message }
+              : {}),
           })),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },
           { kind: 'press', selector: 'text', text: 'Add' },
           { kind: 'enter', selector: 'label', target: 'Title', value: 'Draft' },
           { kind: 'submit', selector: 'id', target: 'title-input' },
+          { kind: 'dataStatus', dataName: 'MyData', status: 'loading', message: '' },
           { kind: 'expect', selector: 'text', text: 'Loading' },
         ])
         Expect(plan.suites[0]?.source.range).toBeDefined()

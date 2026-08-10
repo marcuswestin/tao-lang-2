@@ -2,6 +2,7 @@ grammar TaoTests
 
 import "./app"
 import "./blocks"
+import "./data"
 import "./terminals"
 
 entry TestsGrammarEntrypoint:
@@ -13,7 +14,7 @@ TestDeclaration:
 CheckDeclaration:
     'check' name=STRING block=Block;
 
-type CheckStep = RunStep | PressTextStep | ExpectTextStep | EnterTextStep | SubmitInputStep;
+type CheckStep = RunStep | PressTextStep | ExpectTextStep | EnterTextStep | SubmitInputStep | DataStatusStep;
 
 RunStep:
     'run' app=[AppDeclaration:ID];
@@ -29,6 +30,9 @@ EnterTextStep:
 
 SubmitInputStep:
     'submit' selector=TestSelector target=STRING;
+
+DataStatusStep:
+    'data' data=[DataDeclaration:ID] (status=('loading' | 'ready') | 'error' message=STRING);
 
 TestSelector returns string:
     ID | 'text' | 'label' | 'id';
