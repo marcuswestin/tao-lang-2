@@ -27,7 +27,7 @@ A Tao-defined nav renders exactly one root nav descriptor:
 nav WorkspaceNav {
    Workspace Data.Workspace
 
-   render Nav.SplitNav {
+   render Nav(.SplitNav) {
       // keyed pane properties
    }
 }
@@ -45,7 +45,7 @@ ui DocumentEditor {
    optional Mode EditorMode
    let Title = Document.Title
 
-   render Editor Document
+   render Editor(Document)
 }
 ```
 
@@ -406,9 +406,9 @@ Dialogue is a separate later implementation slice:
 dialogue ConfirmClose responds ConfirmResult {
    Document Data.Document
 
-   render Col {
-      Button "Close", on press -> { respond "confirmed" }
-      Button "Cancel", on press -> { respond }
+   render Col() {
+      Button("Close", on press -> { respond "confirmed" })
+      Button("Cancel", on press -> { respond })
    }
 }
 

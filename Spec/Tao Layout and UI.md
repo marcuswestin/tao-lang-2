@@ -91,21 +91,21 @@ use Icon, Text, Box, Row from @tao/ui
 view Label Title text {
    @icon = empty
 
-   render Box {
-      if @icon {
+   render Box() {
+      if(@icon) {
          @icon [centered, pad 2] { }
       }
-      Box [content center, gap 2, pad horizontal 4 vertical 2] {
-         Text Title
+      Box() [content center, gap 2, pad horizontal 4 vertical 2] {
+         Text(Title)
       }
    }
 }
 
-render Row {
-   Label "Info" {
+render Row() {
+   Label("Info") {
       @icon Icon "info" // Renders Label with an icon
    }
-   Label "..." { }
+   Label("...") { }
 }
 ```
 
@@ -117,7 +117,7 @@ When `frame` and `layout` UI render, they get to choose where to render it using
 frame Card {
    @title = empty
 
-   render Stack [content top stretch, gap 8, pad 16, background white, radius 2, shadow gray] {
+   render Stack() [content top stretch, gap 8, pad 16, background white, radius 2, shadow gray] {
       @title [pad 2]
       @@content
    }
@@ -130,16 +130,16 @@ Declaration properties use the owner-qualified binding rules in `Tao Type System
 
 ```tao
 view Profile User {
-   render Text User.Name
+   render Text(User.Name)
 }
 
 view ProfileLonghand {
    User User
-   render Text User.Name
+   render Text(User.Name)
 }
 
-render Profile User
-render ProfileLonghand { User User }
+render Profile(User)
+render ProfileLonghand() { User(User) }
 ```
 
 Properties, unnamed render children, and named render slots are distinct channels:
@@ -161,16 +161,16 @@ frame UserCard {
    User User
    @actions = empty
 
-   render Stack {
-      Text User.Name
+   render Stack() {
+      Text(User.Name)
       @@content
       @actions
    }
 }
 
-render UserCard {
-   User CurrentUser       // property
-   Text "Recent activity" // unnamed child
+render UserCard() {
+   User(CurrentUser)       // property
+   Text("Recent activity") // unnamed child
    @actions Button "Edit" // named render slot
 }
 ```
@@ -231,10 +231,10 @@ If we want a row with three icons aligned to its right edge and vertically cente
 ```tao
 use Row, Icon from @tao/ui
 
-render Row [content right center] {
-   Icon "info"
-   Icon "hide"
-   Icon "settings"
+render Row() [content right center] {
+   Icon("info")
+   Icon("hide")
+   Icon("settings")
 }
 ```
 
@@ -278,11 +278,11 @@ Or, if we want to:
 
 ```tao
 layout AppShell {
-   render Col [fill, content top stretch, gap 12, pad 16] {
-      Header [hug]
-      Row [fill, gap 16] {
-         Sidebar [width 280, rigid]
-         MainPane [width fill, compress]
+   render Col() [fill, content top stretch, gap 12, pad 16] {
+      Header() [hug]
+      Row() [fill, gap 16] {
+         Sidebar() [width 280, rigid]
+         MainPane() [width fill, compress]
       }
    }
 }
@@ -296,15 +296,15 @@ Here, the outer `Col` fills the screen. The header hugs its content. The body ro
 
 ```tao
 frame Card {
-   render Stack [content top stretch, gap 8, pad 16] {
+   render Stack() [content top stretch, gap 8, pad 16] {
       @@content
    }
 }
 
-render Col [gap 12] {
-   Card {
-      Text "Title"
-      Text "Body"
+render Col() [gap 12] {
+   Card() {
+      Text("Title")
+      Text("Body")
    }
 }
 ```
@@ -315,7 +315,7 @@ Caller container layout, such as `gap` and `content`, applies at the explicit co
 
 ```tao
 layout ToolbarArea {
-   render Row [content spread center, gap 12] {
+   render Row() [content spread center, gap 12] {
       @@content
    }
 }
@@ -330,10 +330,10 @@ If the declaration has fixed siblings and caller content, put `@@content` inside
 
 ```tao
 frame LabeledSection text Label {
-   render Stack [gap 12, pad 16] {
-      Text Label
+   render Stack() [gap 12, pad 16] {
+      Text(Label)
 
-      Stack [gap 8] {
+      Stack() [gap 8] {
          @@content
       }
    }
@@ -402,10 +402,10 @@ Use a real scrolling view when the user should scroll:
 
 ```tao
 layout FeedPage {
-   render Col [fill] {
-      Header
-      ScrollView [fill] {
-         FeedItems
+   render Col() [fill] {
+      Header()
+      ScrollView() [fill] {
+         FeedItems()
       }
    }
 }

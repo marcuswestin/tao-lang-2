@@ -1,6 +1,6 @@
 # Functional Language MVP
 
-Status: active experimental project on branch `feat/functional-language-mvp`.
+Status: complete on branch `feat/functional-language-mvp`. Every slice below is implemented, tested, and committed; `Deferrals.md` lists what was consciously left out.
 
 This project delivers the functional core of Tao as one coherent, executable MVP: expressions, control flow, iteration, events and forms, a persisted data layer, stack navigation, functions, and a small visual-styling surface — proven by making `Apps/MVP/Current/Still.tao` a real multi-screen CRUD application authored entirely in Tao.
 
@@ -43,15 +43,15 @@ Each slice is a full vertical (grammar → scoping → validator/Typir → forma
 - [x] Slice 7 — navigation: `present`/`dismiss`, screen stack, back affordance — Navigation test app
 - [ ] Slice 8 — functions and visual styling entries (deferred; see DEF-FMVP-017)
 - [x] Slice 9 — Still assembly: full app + journey behavior tests
-- [ ] Slice 10 — coherence: `Spec/Tao Data.md`, spec status updates, Roadmap/README agreement, final `./agent verify`
+- [x] Slice 10 — coherence: `Spec/Tao Data.md`, spec status updates, Roadmap/README agreement, final `./agent verify`
 
 ## Success criteria
 
-- [ ] Work committed on `feat/functional-language-mvp`; clean tree; nothing merged or pushed
-- [ ] `Apps/MVP/Current/Still.tao` is a real executable app: persisted related data, CRUD, forms + validation, filtering/ordering, reactive updates, loading/empty/error states, multi-screen navigation with back
-- [ ] Still business behavior authored in Tao (injection remains only as the typed escape hatch)
-- [ ] Implemented features recombine to express apps adjacent to Still
-- [ ] Per-layer parser/validator/formatter/compiler/runtime coverage; actionable diagnostics; deterministic formatting
-- [ ] Primary Still journeys covered by Tao behavior tests, including loading and provider-failure states
-- [ ] Active specs, `Roadmap.md`, Test Apps README, and MVP README agree with implemented behavior
-- [ ] `./agent verify` passes at the final branch head
+- [x] Work committed on `feat/functional-language-mvp`; clean tree; nothing merged or pushed
+- [x] `Apps/MVP/Current/Still.tao` is a real executable app: persisted related data, CRUD, forms + validation, filtering/ordering, reactive updates, loading/empty/error states, multi-screen navigation with back
+- [x] Still business behavior authored in Tao (injection remains only as the typed escape hatch, used by the stdlib)
+- [x] Implemented features recombine to express apps adjacent to Still
+- [x] Per-layer parser/validator/formatter/compiler/runtime coverage; actionable diagnostics; deterministic formatting
+- [x] Primary Still journeys covered by Tao behavior tests, including loading and provider-failure states
+- [x] Active specs, `Roadmap.md`, Test Apps README, and MVP README agree with implemented behavior
+- [x] `./agent verify` passes at the final branch head

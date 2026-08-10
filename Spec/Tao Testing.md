@@ -43,7 +43,7 @@ test "optional description" {
    let Foo = Foo "ASD"
 
    check "optional description" {
-      render ViewName Foo, Cats 1 with UserName "Henry" { }
+      render ViewName(Foo, Cats 1 with UserName "Henry") { }
 
       expect text "Henry has 1 cat"
       press text "Add cat"
@@ -100,7 +100,7 @@ app RuntimeStdlibTests {
 }
 
 view MainView {
-   render Text "Runtime stdlib smoke"
+   render Text("Runtime stdlib smoke")
 }
 
 test "Runtime stdlib" {
@@ -236,13 +236,13 @@ The `run ... with { ... }` block is an app expression overlay. It is useful when
 ```tao
 test "focused UI behavior" {
    check "renders validation message" {
-      render ViewX ParamA "abc", ParamB "asd" { }
+      render ViewX(ParamA "abc", ParamB "asd") { }
 
       expect text "asd"
    }
 
    check "disabled save button ignores presses" {
-      render SaveControls ItemId "task-1" with CanSave.false { }
+      render SaveControls(ItemId "task-1" with CanSave.false) { }
 
       expect text "Save"
       press text "Save"
@@ -250,15 +250,15 @@ test "focused UI behavior" {
    }
 
    check "task row renders staging data" {
-      render TaskRow TaskId "task-1" using app TodoStaging { }
+      render TaskRow(TaskId "task-1" using app TodoStaging) { }
 
       expect text "Book dentist"
    }
 
    check "field row layout renders supplied controls" {
-      render FieldRow {
-         Text "Email"
-         TextInput Email
+      render FieldRow() {
+         Text("Email")
+         TextInput(Email)
       }
 
       expect text "Email"

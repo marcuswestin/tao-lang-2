@@ -187,14 +187,14 @@ let Discount = Discount 10
 
 let DiscountPrice = Price - Price * Discount
 
-render Text "{DiscountPrice} USD"
+render Text("{DiscountPrice} USD")
 
 type Title is text
 type OnPress is action
 
-render Button "Buy", OnPress -> {
-  do Purchase
-}
+render Button("Buy", OnPress -> {
+  do Purchase()
+})
 ```
 
 ### Views: Declarations and Rendering
@@ -215,7 +215,7 @@ Tao comes with a core library, including UI components. For example, `Text` rend
 ```tao
 view Example {
   // Display `Hello ... ` in the UI:
-  render Text "Hello World!"
+  render Text("Hello World!")
 }
 ```
 
@@ -234,7 +234,7 @@ Conventional Tao is expected to drop `render` inside any `view` once render elis
 The one exception is for example code. It is useful to demonstrate using views without a wrapping `view Example { ... }` wrapper definition:
 
 ```tao
-render Text "Hello World!"
+render Text("Hello World!")
 // vs:
 view Example {
   Text "Hello World!"
@@ -249,7 +249,7 @@ To represent data that changes, you declare `state` values. Any time a `state` v
 
 ```tao
 state IsLoggedIn false
-render Text when
+render Text(when)
   IsLoggedIn -> "Logged in"
   otherwise -> "Logged out"
 ```
@@ -261,23 +261,23 @@ You use an `action` to update any `state`:
 ```tao
 view Button Label text, OnPress action {
   Text Label
-  on press -> { do OnPress }
+  on press -> { do OnPress() }
 }
 
 view Button2 Label text, OnPress action {
   Text Label
-  on press -> { do OnPress }
+  on press -> { do OnPress() }
 }
 
 action OnPress {
   set IsLoggedIn = true
 }
 
-render Button "Hi", action {
+render Button("Hi", action {
   set IsLoggedIn = true
-}
+})
 
-render Button "Hi", OnPress
+render Button("Hi", OnPress)
 ```
 
 `do <Action>` invokes an action value. It is valid anywhere action execution is valid, such as inside a view interaction body or another action body.
@@ -285,17 +285,17 @@ render Button "Hi", OnPress
 Actions are ordinary typed arguments and are matched the same way as view arguments. `<Type> -> { ... }` is shorthand for creating an action value of `<Type>`. If no type appears before `->`, the type defaults to `action`.
 
 ```tao
-render Button "Hi", -> {
+render Button("Hi", -> {
+  toggle IsLoggedIn
+})
+
+render Button2("Hi", OnPress) {
   toggle IsLoggedIn
 }
 
-render Button2 "Hi", OnPress {
+render Button2("Hi", OnPress -> {
   toggle IsLoggedIn
-}
-
-render Button2 "Hi", OnPress -> {
-  toggle IsLoggedIn
-}
+})
 ```
 
 You can use `let` in a declarative scope to create derived values that depend on `state`. The expression reevaluates whenever one of its reactive dependencies changes.
@@ -339,7 +339,7 @@ use every, Minutes from @tao/time
 
 state Countdown = 100.seconds
 let MinutesCountdown = Countdown.asMinutes
-render Text "T minus {MinutesCountdown} minutes"
+render Text("T minus {MinutesCountdown} minutes")
 ```
 
 A `state` value can only ever be updated by an `action`; and an `action` can only ever happen in response to an `event`.
@@ -455,7 +455,7 @@ ui Profile {
   User User
   Theme Theme default SystemTheme
   let DisplayName = User.Name
-  render ProfileBody User DisplayName Theme
+  render ProfileBody(User DisplayName Theme)
 }
 
 let RoProfile = Profile { User Ro }
@@ -481,9 +481,9 @@ let NameValue = Name "Ro"
 let AliasValue = Alias "Ro"
 let NicknameValue = Nickname "Ro"
 
-render NameSink Alias: AliasValue      // OK: child to parent
-render AliasSink Name: NameValue       // OK: parent to child
-render NicknameSink AKA: NicknameValue // Type Error: sibling to sibling
+render NameSink(Alias: AliasValue)      // OK: child to parent
+render AliasSink(Name: NameValue)       // OK: parent to child
+render NicknameSink(AKA: NicknameValue) // Type Error: sibling to sibling
 ```
 
 Action values have two extra construction shorthands:
@@ -530,7 +530,7 @@ state CurrentFirstName = FirstName "Ro"
 set CurrentFirstName = Name "Mo"
   => Type Error
 
-render NameSink FirstName: CurrentFirstName
+render NameSink(FirstName: CurrentFirstName)
   => OK
 ```
 
@@ -582,13 +582,13 @@ A callable declaration defines its public inputs as properties. Header parameter
 
 ```tao
 view Profile User {
-   render Text User.Name
+   render Text(User.Name)
 }
 
 // Equivalent public property surface:
 view ProfileLonghand {
    User User
-   render Text User.Name
+   render Text(User.Name)
 }
 ```
 
@@ -601,7 +601,7 @@ view PersonLine {
    optional Subtitle text
    Density number default 1
 
-   render Text "{Label}: {Person.Name}"
+   render Text("{Label}: {Person.Name}")
 }
 ```
 
@@ -618,12 +618,12 @@ Omitting an optional property binds `none`; spelling `default none` is redundant
 Arguments may appear inline or in a property block:
 
 ```tao
-render Profile User
+render Profile(User)
 
-render PersonLine {
-   Person User
-   Label "Owner"
-   Subtitle "Active"
+render PersonLine() {
+   Person(User)
+   Label("Owner")
+   Subtitle("Active")
 }
 ```
 
@@ -646,12 +646,12 @@ Source order never resolves an ambiguity. Duplicate source types are valid in a 
 view TextPair {
    Primary text
    Secondary text
-   render Text "{Primary} / {Secondary}"
+   render Text("{Primary} / {Secondary}")
 }
 
-render TextPair Primary "A", Secondary "B" // OK
-render TextPair TextPair.Primary "A", TextPair.Secondary "B" // OK
-render TextPair "A", "B" // Type Error: ambiguous text arguments
+render TextPair(Primary "A", Secondary "B") // OK
+render TextPair(TextPair.Primary "A", TextPair.Secondary "B") // OK
+render TextPair("A", "B") // Type Error: ambiguous text arguments
 ```
 
 The invocation-only `<Type>: <Value>` form remains valid when a caller needs to construct an exact argument type explicitly. Exact and nominal slots take priority over closed-union membership so a broad union cannot steal an argument from a more specific property. Two compatible union slots remain ambiguous unless explicitly named. Structural `like` types and other overlapping shapes do not participate in matching unless a later specification defines their behavior.
@@ -684,39 +684,39 @@ Actions, functions, views, UI, navs, dialogues, frames, and layouts all use thes
 ```tao
 view Button Label text, OnPress action {
   Text Label
-  on press -> { do OnPress }
+  on press -> { do OnPress() }
 }
 
 view Button2 Label text, OnPress action {
   Text Label
-  on press -> { do OnPress }
+  on press -> { do OnPress() }
 }
 
 action OnPress {
-  do Save
+  do Save()
 }
 
 action Save {
   ...
 }
 
-render Button "Hi", action {
-  do Save
+render Button("Hi", action {
+  do Save()
+})
+
+render Button("Hi", OnPress)
+
+render Button("Hi", -> {
+  do Save()
+})
+
+render Button2("Hi", OnPress) {
+  do Save()
 }
 
-render Button "Hi", OnPress
-
-render Button "Hi", -> {
-  do Save
-}
-
-render Button2 "Hi", OnPress {
-  do Save
-}
-
-render Button2 "Hi", OnPress -> {
-  do Save
-}
+render Button2("Hi", OnPress -> {
+  do Save()
+})
 ```
 
 ## Match Expressions and Overloaded Views
@@ -731,7 +731,7 @@ Inside each `when` branch, the matched value is narrowed to that branch's type. 
 type Cat is text | number
 let Cat = Cat 1
 
-render Text match Cat
+render Text(match Cat)
   when text -> Cat
   when number -> "{Cat + 9}"
 ```

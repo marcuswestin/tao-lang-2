@@ -14,33 +14,38 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add state and action MVP
   - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
 
-- [ ] Expand core expression/value language
-  - Booleans, string interpolation, arithmetic, comparison, basic boolean operators, member access, call expressions, and better diagnostics.
+- [x] Expand core expression/value language
+  - Booleans, arithmetic, comparison, and boolean operators with precedence; decimals, unary minus, grouping; `let` bindings; name-path string interpolation; builtin members; operand-type diagnostics.
+  - Delivered by `Roadmap/Functional language MVP/`. Call expressions and interpolated expressions remain deferred there.
 
-- [ ] Add control flow and collection rendering MVP
-  - `if/else`, `when` if still preferred, pure functions/returns, `.Empty`, `for` over lists/query results, and formatter/compiler support.
+- [x] Add control flow and collection rendering MVP
+  - `when` as expression, render statement, and action statement, always total; `for` over lists and query results; `.Empty`/`.Count`; formatter and compiler support.
+  - Delivered by `Roadmap/Functional language MVP/`. `if/else`, `match`, and pure functions remain deferred there.
 
-- [ ] Add datasource schema and query MVP
-  - `data`, entities/fields/relationships, `query`, `where`, ordering, `guard`, typed query rows, and Memory provider support.
-  - `create`, strict row-handle `update`, provider-neutral IR, local InstantDB support, local dev setup, and post-write UI consistency.
+- [x] Add datasource schema and query MVP
+  - `data` with collection/entity pairs, typed fields, defaults including `now()`, indexes, and belongs-to references; `query` with `where` and `order`; `create`/`update`/`delete`; a narrow provider boundary with in-memory and durable local providers; reactive post-write consistency.
+  - Delivered by `Roadmap/Functional language MVP/`. `guard`, relationship traversal, transactions, and InstantDB remain deferred there.
 
 - [ ] Add typed TS value injection expressions
   - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
 
 - [ ] Add navigation and routing MVP
   - Research complete in `Roadmap/Add navigation and routing MVP/`. First plan covers immutable `let`, declaration properties/`with`, descriptor and target IR, app root hosting, SlotNav/StackNav, one semantic reducer, native back reconciliation, and focused migration support.
+  - A minimal screen stack (`present`/`dismiss`, back affordance, native back) already ships from `Roadmap/Functional language MVP/`; nav containers, targets, and restoration remain this project's subject.
 
-- [ ] Define canonical buildable app target and acceptance bar
-  - Pick the forcing app, probably a Still/TODOs-class app: local data, relationships, empty states, create/update flows, navigation, forms, polished defaults, and tests.
+- [x] Define canonical buildable app target and acceptance bar
+  - `Apps/MVP/Current/Still.tao` is the forcing app: workspaces and tasks in durable local storage, capture forms with validation, filtering, list and detail screens with back navigation, and loading/empty/error/populated states, all covered by Tao behavior tests.
 
 - [x] Implement Tao-native testing v0
   - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
 
 - [ ] Migrate Test Apps to Tao-authored behavior tests and harden `tao test`
+  - Every Test App added by `Roadmap/Functional language MVP/` is Tao-authored; CLI filters, watch/CI output, and richer reporting remain.
   - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures; add filters, watch/CI output, richer failure reporting, and broader runtime coverage.
 
-- [ ] Add interaction event MVP
-  - Press/change/submit/focus behavior for built-in controls, event-to-action binding, disabled/loading behavior, and testable event semantics.
+- [x] Add interaction event MVP
+  - `on press`, `on change`, and `on submit` clauses with typed payloads, event-to-action binding through the Tao props bag, `Disabled` actions, and `press label`/`placeholder`, `write`, `submit`, `back` test steps.
+  - Delivered by `Roadmap/Functional language MVP/`. Declared per-view events (`does`/`did`) and focus events remain deferred there.
 
 - [ ] Add render IDs and minimal accessibility semantics
   - Stable test/accessibility identifiers, labels, roles for built-ins, useful TextInput/Button semantics, and validator guidance.
