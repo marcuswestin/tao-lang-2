@@ -23,29 +23,29 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - Rendering, action `do`, and function calls use mandatory `Name(args)` delimiters; render layout remains outside the call as `Name(args) [layout]`.
 
 - [x] Add control flow and collection rendering MVP
-  - Expression-bodied pure functions, value and render `if/else`, `.Empty`/`.Count`, and `for` over typed lists with formatter/compiler/runtime support.
+  - Expression-bodied pure functions, one ordered and total `when ... otherwise` form for values/renders/actions, boolean-state `toggle`, `.Empty`/`.Count`, and `for` over typed lists with formatter/compiler/runtime support.
 
 - [x] Add datasource schema and query MVP
-  - `data`, entities/fields/relationships, reactive `query`, `where`, ordering, typed query rows, and isolated Memory provider support.
-  - `create`, strict row-handle `update`/`delete`, provider-neutral IR, durable local web/native storage, cascading relationship cleanup, and post-write UI consistency.
+  - Provider-neutral `data` schemas, app-owned `datasource Schema through Local|Memory`, required/defaulted fields, `time`, index metadata, explicit relationships, reactive `query`, AND-composed `where`, ordering, typed live entity rows, and isolated Memory test providers.
+  - `create`, strict live-handle `update`/`delete`, versioned AsyncStorage persistence, explicit transitive cascade, surfaced provider failures, and post-write UI consistency.
 
 - [ ] Add typed TS value injection expressions
-  - `alias X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
+  - `let X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
 
 - [x] Add navigation and routing MVP
-  - The autonomous MVP branch implements one app-owned stack with destination views, typed `present`, deterministic history, Tao `back`, and native hardware-back reconciliation. Selection, split, overlays, restoration, and public routing remain deferred.
+  - The autonomous MVP branch implements one app-owned declared stack with typed destination views and `present Stack.Destination(args)`, deterministic state-preserving history, an automatic accessible Back affordance, Tao `back Stack`, test `back`, and native hardware-back reconciliation. Selection, split, overlays, restoration, and public routing remain deferred.
 
 - [x] Define canonical buildable app target and acceptance bar
   - `Apps/MVP/Current/Still.tao` is the executable forcing app: local related data, empty/error/loading/populated states, create/update/delete flows, navigation, forms, and Tao behavior tests.
 
 - [x] Implement Tao-native testing v0
-  - Inline/sidecar `test`, `expect text`, `expect missing text`, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
+  - Inline/sidecar `test`, direct text/label/id/placeholder selectors, input-value assertions, deterministic data states, root-safe navigation back, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
 
 - [ ] Migrate Test Apps to Tao-authored behavior tests and harden `tao test`
   - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures; add filters, watch/CI output, richer failure reporting, and broader runtime coverage.
 
 - [x] Add interaction event MVP
-  - Press/change/submit/focus behavior for built-in controls, event-to-action binding, disabled/loading behavior, and testable event semantics.
+  - Press/change/submit behavior for built-in controls, action-valued component parameters, disabled/submitting suppression, authored accessibility labels, and deterministic event tests.
 
 - [x] Add render IDs and minimal accessibility semantics
   - Stable test/accessibility identifiers, labels, roles for built-ins, useful TextInput/Button semantics, and validator guidance.
@@ -58,7 +58,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
 
 - [x] Add loading, empty, and error-state MVP
-  - Reactive query `Loading`/`Error` members, explicit Tao `if/else` branches, app-visible provider failures, and canonical empty/populated patterns for first apps.
+  - Reactive query `Loading`/text-bearing `Error` members, total Tao `when` branches, app-visible provider failures and recovery tests, and canonical loading/error/empty/populated patterns for first apps.
 
 - [ ] Add beautiful app defaults mini slice
   - Polished default text/input/button styles, seeded accent, neutral palette, app-shell content frame, empty/error/loading surfaces.
@@ -83,9 +83,11 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 
 ## Ro's STACK
 
+This remains Ro's product/backlog stack. Items completed or deliberately superseded by the autonomous MVP are reconciled here rather than left as contradictory current-work claims.
+
 - [ ] Add simulation mode with datasources kept locally (with simulated network delays), library states/state saving, demo renders
 - [ ] String interpolation syntax highlighting (did we accomplish this in old repo?)
-- [ ] Add typed TS value injection expressions: `alias X = inject <type>`ts ...`
+- [ ] Add typed TS value injection expressions: `let X = inject <type>`ts ...`
   - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
 - [x] Reorganize agent context
   - Reports and plan: `Roadmap/Archive/Reorganize agent context/`
@@ -101,8 +103,9 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - [ ] Switch other test apps to use tao testing rather than ts
 - [ ] Change argument order of `ValidationContext.error`/etc
 - [ ] Require type of lists: `view TagText Tags is list {`
-- [ ] Implement boolean operators, requiring `EXPRESSION is OPERATOR EXPRESSION`, e.g `Age is < 10`
-- [ ] Allow `TYPE Value` in general, e.g `alias TYPENAME value literal`, `VIEW TYPEVALUE, TYPENAMEItemInThisCase { Foo 1, Bar 2 } < VIEW RENDER BODY >`
+- [x] Implement boolean operators
+  - The autonomous MVP chose conventional precedence-aware expressions such as `Age < 10`, with `not`, `and`, and `or`; the earlier `Age is < 10` sketch is superseded.
+- [ ] Allow `TYPE Value` in general, e.g `let Value = TYPENAME value literal`, `VIEW TYPEVALUE, TYPENAMEItemInThisCase { Foo 1, Bar 2 } < VIEW RENDER BODY >`
 - [ ] Implement all of `Tao Layout and UI.md`
 - [ ] /refactor all test files that are getting really big
 - [ ] Review all validator file structure; and consider simplifying
@@ -112,8 +115,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Update validator code to walk through the tree once, as opposed to filtering out odes and validating them in order of type.
 - [ ] Change validator structure, to go away from walking the tree multiple times and filtering for type; and instead walking each node once, and validating it based on its type.
 - [ ] Remove magical strings
-- [ ] Add remaining control mini slice
-  - Import `if/else`, `function` return, string interpolation, and basic operators needed by old `Action Invocation` and `Control Syntax` examples.
+- [x] Add remaining control mini slice
+  - The autonomous MVP ships expression-bodied functions with explicit return types, `interpolate`, operators, and one total `when ... otherwise` form. The earlier separate `if/else` sketch is superseded.
 - [ ] Improve util fn usages, e.g GenUtil instead of importing seperate functions
 - [ ] Improve code structure such that `fmt` layout of switch -> gen statements doesn't have gen`...` appear on the next line, somehow.
 - [ ] Rename all `gen` helper properties to capitalized names, e.g. `gen.Comment`, `gen.Block`, and `gen.List`.

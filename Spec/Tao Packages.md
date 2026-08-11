@@ -43,7 +43,7 @@ ui ThreadListUi {
    render Col() {
       List(Messages) {
          Text(Message.Text)
-         on select -> Message { present ThreadUi Message }
+         on select -> Message { present ThreadUi(Message) }
       }
    }
 }
@@ -51,7 +51,7 @@ ui ThreadListUi {
 ui ThreadUi Message Chat.Message {
    render Col() {
       Text(Message.Text)
-      Button("Open thread", on press -> { present ThreadUi Message })
+      Button("Open thread", on press -> { present ThreadUi(Message) })
    }
 }
 ```

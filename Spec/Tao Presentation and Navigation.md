@@ -1,79 +1,95 @@
 # Tao Presentation And Navigation
 
-Status: implemented MVP.
+Status: authoritative implemented MVP.
 
-Tao applications may select either one root view or one app-owned stack. The stack is the MVP navigation container: it has one argument-free initial destination, a closed set of destination views, ordered presentation history, typed destination arguments, and deterministic back behavior.
+Tao applications select either one root view or one app-owned stack. The stack is the MVP navigation container: it has one initial destination that requires no supplied arguments, a closed set of typed destination views, ordered presentation history, state-preserving covered entries, and deterministic back behavior.
 
-## Declaring A Stack
+## Declaring a stack
 
 ```tao
 project stack MainNavigation {
    initial WorkspaceList
    destination WorkspaceList
    destination WorkspaceDetail
+   destination TaskDetail
 }
 
 app Still {
+   datasource StillData through Local
    stack MainNavigation
 }
 ```
 
-Each `destination` references a `view`. The destination inherits that view's parameter signature, so the view declaration is the single source of truth for its typed inputs:
+Each `destination` references a `view`. The destination inherits that view's parameter signature, including entity types and typed defaults, so the view declaration is the single source of truth for its inputs:
 
 ```tao
 project view WorkspaceList {
    render Text("Workspaces")
 }
 
-project view WorkspaceDetail WorkspaceId is text {
-   render Text(WorkspaceId)
+project view WorkspaceDetail Workspace is StillData.Workspace {
+   render Text(Workspace.Name)
 }
 ```
 
-A stack must declare each destination once. Its `initial` name must match one declared destination, and that initial destination must not require parameters. An app block contains exactly one `view` or `stack` root.
+A stack declares each destination once. Its `initial` name must match one declared destination, and the initial destination must declare no required parameters. All-defaulted parameters are allowed and use their view defaults when the runtime mounts the argument-free initial entry. An `app` contains exactly one `view` or `stack` root; datasource bindings may precede that root.
 
-## Presenting A Destination
+## Presenting a destination
 
-Navigation is action-owned and non-blocking:
+Presentation is an action statement:
 
 ```tao
-action OpenWorkspace WorkspaceId is text {
-   present MainNavigation.WorkspaceDetail .WorkspaceId WorkspaceId
+action OpenWorkspace Workspace is StillData.Workspace {
+   present MainNavigation.WorkspaceDetail(.Workspace Workspace)
 }
 ```
 
-`present Stack.Destination arguments` validates arguments against the destination view exactly like a render invocation. Named arguments are recommended when destinations accept repeated primitive types. A successful presentation pushes a new occurrence onto the named stack; presenting the same destination and semantic value again still creates a distinct history entry.
+Parentheses are mandatory, including for an argument-free destination: `present MainNavigation.Settings()`. Presentation arguments use the same typed binding as render and action invocations. `.Parameter Value` explicitly selects a parameter and is required to override a defaulted destination parameter; unnamed values bind only when the remaining required parameter match is unambiguous.
 
-The runtime owns the ordered stack state. Generated code contains destination descriptors and delegates history changes to `TR.Navigation`; app-specific routing logic is not generated or injected by hand.
+A successful presentation pushes a new occurrence onto that stack. Presenting the same destination and semantic value again still creates a distinct history entry. Generated code contains destination descriptors and delegates history changes to `TR.Navigation`; application-specific routing logic is not injected by hand.
 
-## Back
+Entity-valued destination arguments remain live. The navigation host subscribes to data revisions, so a destination reading `Task.Title` or `Task.Workspace.Name` rerenders after that row or relationship changes.
+
+## Covered entries and back
+
+Every presented entry receives a stable occurrence identity. Covered entries remain mounted but are hidden visually and from accessibility traversal, preserving their local React/Tao state. Popping the top entry therefore reveals the exact prior destination instance rather than reconstructing it.
+
+At depth greater than one, the stack host supplies an accessible `Back` control. Platform hardware back, the automatic control, and explicit Tao back actions all use the same reducer:
 
 ```tao
-action ReturnToList {
+action ReturnToPrevious {
    back MainNavigation
 }
 ```
 
-`back Stack` pops one presented entry. Back at the initial entry is a safe no-op. On React Native, a hardware back event dispatches the same operation and is consumed only when an entry was popped.
+`back Stack` pops one entry. Back at the initial entry is a safe no-op; a hardware event is consumed only when an entry was popped.
 
-Tao checks drive navigation through user-visible controls and rendered assertions. Cached stack descriptors reset to their initial entry before every check, so checks do not share navigation history.
+Tao behavior checks may use the test-only `back` step to invoke the currently mounted stack's same root-safe reducer. Cached stack descriptors reset to their initial entry before every check, so checks do not share history.
 
-## Presentation Boundary
+## Presentation boundary
 
-Views remain presentable UI; a `stack` is an app root and is not renderable as an ordinary child view. The existing layout system continues to own visual layout within each destination. Root destination views receive the same app-shell layout props as a direct app root.
+Views remain presentable UI; a `stack` is an app root and cannot be rendered as an ordinary child view. The layout system continues to own visual layout within each destination. Root destination views receive the same app-shell layout props as a direct app root.
+
+Rendering, action invocation, function invocation, and presentation all delimit arguments with parentheses. A render layout clause remains outside the argument list:
+
+```tao
+render WorkspaceCard(.Workspace Workspace) [fill, gap 8] {
+   Text(Workspace.Name)
+}
+```
 
 ## Diagnostics
 
 Validation reports:
 
 - duplicate destinations;
-- missing or parameterized initial destinations;
+- a missing initial destination or one with required parameters;
 - presentation of an undeclared destination;
 - missing, extra, ambiguous, duplicated, or incorrectly typed destination arguments;
 - invalid app root count or root statements.
 
 Accepted navigation syntax formats deterministically.
 
-## Deliberate Deferrals
+## Deliberate deferrals
 
-The MVP does not include tabs or selection navigation, split views, slots, overlays, modals, windows, toasts, target paths, replacement, restoration, deep links, public routes, animation policy, navigation results, guards, or lifecycle hooks. These require a forcing application beyond Still before they should expand the semantic model.
+The MVP does not include tabs or selection navigation, split views, slots, overlays, modals, windows, toasts, target paths, replacement, restoration across app launches, deep links, public routes, animation policy, navigation results, guards, or lifecycle hooks. These remain future design work and should not be inferred from the implemented stack.
