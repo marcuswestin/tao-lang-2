@@ -1,0 +1,146 @@
+use Still from ./
+
+test "Still functional MVP" {
+   check "starts empty and keeps invalid creates inert" {
+      run Still
+
+      expect {
+         text "Still"
+         text "No workspaces yet"
+         text "Workspace name is required"
+      }
+      expect #workspaceName {
+         placeholder "Home"
+         input value ""
+      }
+      press #addWorkspace // disabled while the draft is empty, so nothing happens
+      expect missing text "A workspace needs a name"
+      submit #workspaceName
+      expect text "A workspace needs a name" // the empty-name guard presents an overlay notice
+      press #dismissNotice
+      expect missing text "A workspace needs a name"
+      expect text "No workspaces yet"
+   }
+
+   check "uses live workspaces and preserves covered screen state" {
+      run Still
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      enter "Unsent workspace" into #workspaceName
+      select #workspaces[1] { // `select` scopes steps to the tagged loop's 1-based row
+         expect text "Home"
+         press #openWorkspace
+      }
+      expect text "Workspace: Home"
+      expect #workspaceTitle input value "Home"
+      enter "" into #workspaceTitle
+      submit #workspaceTitle
+      expect text "Workspace: Home"
+      enter "Renamed workspace" into #workspaceTitle
+      press #saveWorkspace
+      expect {
+         text "Workspace: Renamed workspace"
+         text "No open tasks"
+      }
+      back
+      expect {
+         text "Still"
+         text "Renamed workspace"
+      }
+      expect #workspaceName input value "Unsent workspace"
+      expect missing text "Workspace: Renamed workspace"
+   }
+
+   check "edits a related task on its own live destination" {
+      run Still
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      submit #newTaskTitle
+      expect text "No open tasks"
+      enter "Plan the launch" into #newTaskTitle
+      submit #newTaskTitle
+      expect text "Open tasks: 1"
+      select #openTasks[1] {
+         expect text "Plan the launch"
+         press #edit
+      }
+      expect {
+         text "Edit task"
+         text "Workspace: Home"
+      }
+      expect #editTaskTitle input value "Plan the launch"
+      enter "" into #editTaskTitle
+      submit #editTaskTitle
+      expect text "Saved title: Plan the launch"
+      enter "Ship the launch" into #editTaskTitle
+      enter "Coordinate the release" into #editTaskNotes
+      press #saveTask
+      expect {
+         text "Saved title: Ship the launch"
+         text "Saved notes: Coordinate the release"
+      }
+      back
+      select #openTasks[1] {
+         expect text "Ship the launch"
+         press #complete
+      }
+      expect {
+         text "Open tasks: 0"
+         text "No open tasks"
+      }
+      select #completedTasks[1] {
+         expect text "Ship the launch"
+         press #deleteCompleted
+      }
+      expect text "No completed tasks"
+   }
+
+   check "deletes related tasks transitively with their workspace" {
+      run Still
+      enter "Temporary" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Related task" into #newTaskTitle
+      press #addTask
+      expect text "Related task"
+      back
+      select #workspaces[1] {
+         press #deleteWorkspace
+      }
+      expect text "No workspaces yet"
+      enter "Replacement" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         expect text "Replacement"
+         press #openWorkspace
+      }
+      expect {
+         missing text "Related task"
+         text "No open tasks"
+      }
+   }
+
+   check "renders deterministic loading, failure, and recovery states" {
+      run Still
+      data loading // `data` drives the app's datasource provider state
+      expect {
+         text "Loading workspaces…"
+         missing text "Workspace name is required"
+      }
+      data error "Local storage is unavailable"
+      expect {
+         text "Could not load Still"
+         text "Local storage is unavailable"
+      }
+      data ready
+      expect {
+         text "No workspaces yet"
+         text "Workspace name is required"
+      }
+   }
+}
