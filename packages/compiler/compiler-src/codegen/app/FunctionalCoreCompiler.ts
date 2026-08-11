@@ -26,41 +26,46 @@ export const FunctionalCoreCompiler = {
 
   /** FunctionRuntimeParameter emits one runtime-wrapped function parameter. */
   FunctionRuntimeParameter(parameter: FunctionParameter): Compiled {
-    return gen`${functionRuntimeParameterName(parameter.index)}: ${Compile.ParameterType(parameter.parameter)}`
+    return gen`${functionRuntimeParameterName(parameter.index)}${
+      parameter.parameter.defaultValue === undefined ? '' : '?'
+    }: ${Compile.ParameterType(parameter.parameter)}`
   },
 
   /** FunctionParameterBinding exposes one positional argument through Tao lexical scope. */
   FunctionParameterBinding(parameter: FunctionParameter): Compiled {
     const name = { name: Type.parameterName(parameter.parameter) }
-    return gen`${gen.scopeName(name)} = ${functionRuntimeParameterName(parameter.index)}`
+    const runtimeParameter = functionRuntimeParameterName(parameter.index)
+    return parameter.parameter.defaultValue === undefined
+      ? gen`${gen.scopeName(name)} = ${runtimeParameter}`
+      : gen`${gen.scopeName(name)} = ${runtimeParameter} ?? ${Compile.Expression(parameter.parameter.defaultValue)}`
   },
 
   /** RenderFragmentStatement compiles one child render/control-flow fragment. */
-  RenderFragmentStatement(statement: AST.Render | AST.IfStatement | AST.ForStatement): Compiled {
+  RenderFragmentStatement(statement: AST.Render | AST.WhenRenderStatement | AST.ForStatement): Compiled {
     return Switch.type(statement, {
       ForStatement: Compile.ForStatement,
-      IfStatement: Compile.IfStatement,
+      WhenRenderStatement: Compile.WhenRenderStatement,
       RenderStatement: Compile.Render,
       ViewRender: Compile.Render,
     })
   },
 
-  /** IfStatement compiles lazy conditional rendering. */
-  IfStatement(statement: AST.IfStatement): Compiled {
+  /** WhenRenderStatement compiles total render branches lazily in source order. */
+  WhenRenderStatement(statement: AST.WhenRenderStatement): Compiled {
     return gen`
-      {TR.If(
-        ${Compile.Expression(statement.condition)},
-        () => TR.BlockScope(_Scope, _Scope => {
-          ${Compile.RenderBlockBody(statement.thenBlock)}
-        }),
+      {TR.WhenRender([
         ${
-      statement.elseBlock
-        ? gen`() => TR.BlockScope(_Scope, _Scope => {
-            ${Compile.RenderBlockBody(statement.elseBlock)}
-          })`
-        : gen`undefined`
-    },
-      )}
+      gen.list(
+        statement.branches,
+        branch =>
+          gen`[() => ${Compile.Expression(branch.condition)}, () => TR.BlockScope(_Scope, _Scope => {
+            ${Compile.RenderBlockBody(branch.block)}
+          })],`,
+      )
+    }
+      ], () => TR.BlockScope(_Scope, _Scope => {
+        ${Compile.RenderBlockBody(statement.otherwise.block)}
+      }))}
     `
   },
 

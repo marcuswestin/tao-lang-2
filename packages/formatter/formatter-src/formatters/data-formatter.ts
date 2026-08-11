@@ -3,7 +3,6 @@ import type { FormatHandlers } from '../formatting'
 export default {
   DataDeclaration(f) {
     f.oneSpaceAfter('package', 'project', 'publish', 'data')
-    f.oneSpaceBefore('local', 'memory')
   },
 
   DataBlock(f) {
@@ -23,7 +22,15 @@ export default {
   },
 
   DataField(f) {
-    f.oneSpaceBeforeProperty('primitive', 'relationName')
+    f.oneSpaceBeforeProperty('primitive', 'relation', 'defaultValue')
+    f.oneSpaceBefore('relation', 'indexed', 'default', 'on', 'delete', 'cascade')
+  },
+
+  /** NowExpression is the fixed `now()` data-default sentinel. */
+  NowExpression(f) {
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
   },
 
   QueryDeclaration(f) {

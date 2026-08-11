@@ -89,7 +89,7 @@ Describe('Tao IDE extension smoke', () => {
     ).toBe(true)
   })
 
-  Test('reports alias declaration-order diagnostics through Langium services', async () => {
+  Test('reports binding declaration-order diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
       app Demo {
         view MainView
@@ -103,7 +103,7 @@ Describe('Tao IDE extension smoke', () => {
     `)
 
     Expect(diagnostics).toContain(
-      "Alias 'First' cannot reference 'Second' because it is not declared before the alias.",
+      "Binding 'First' cannot reference 'Second' because it is not declared before the binding.",
     )
   })
 

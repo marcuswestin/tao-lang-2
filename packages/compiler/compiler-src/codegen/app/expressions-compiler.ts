@@ -11,7 +11,7 @@ export const ExpressionsCompiler = {
       ActionExpression: Compile.ActionExpression,
       BinaryExpression: Compile.BinaryExpression,
       BooleanLiteral: Compile.BooleanLiteral,
-      ConditionalExpression: Compile.ConditionalExpression,
+      WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
       InterpolationExpression: Compile.InterpolationExpression,
       NumberLiteral: Compile.NumberLiteral,
@@ -47,13 +47,16 @@ export const ExpressionsCompiler = {
     return gen`TR.Unary(${gen.jsLiteral(expression.operator)}, ${Compile.Expression(expression.operand)})`
   },
 
-  /** ConditionalExpression evaluates only the selected value branch. */
-  ConditionalExpression(expression: AST.ConditionalExpression): Compiled {
-    return gen`TR.Conditional(
-      ${Compile.Expression(expression.condition)},
-      () => ${Compile.Expression(expression.whenTrue)},
-      () => ${Compile.Expression(expression.whenFalse)},
-    )`
+  /** WhenExpression evaluates value branches lazily in source order. */
+  WhenExpression(expression: AST.WhenExpression): Compiled {
+    return gen`TR.When([
+      ${
+      gen.list(
+        expression.branches,
+        branch => gen`[() => ${Compile.Expression(branch.condition)}, () => ${Compile.Expression(branch.value)}],`,
+      )
+    }
+    ], () => ${Compile.Expression(expression.otherwise.value)})`
   },
 
   /** InterpolationExpression joins evaluated Tao values as text. */
@@ -104,7 +107,7 @@ export const ExpressionsCompiler = {
       ${
       gen.list(
         pairs,
-        pair => gen`${gen.nameLiteral(pair.expected)}: ${Compile.Expression(pair.property.value)}.jsValue,`,
+        pair => gen`[${gen.nameLiteral(pair.expected)}]: ${Compile.Expression(pair.property.value)}.jsValue,`,
       )
     }
     })`

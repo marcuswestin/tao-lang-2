@@ -40,4 +40,14 @@ export default {
     f.oneSpaceAfter('expect', 'missing')
     f.oneSpaceBetweenProperties('selector', 'text')
   },
+
+  /** ExpectInputValueStep formats input value assertions. */
+  ExpectInputValueStep(f) {
+    f.oneSpaceAfter('expect', 'input', 'value')
+    f.oneSpaceBetweenProperties('selector', 'target')
+    f.oneSpaceBefore('value')
+  },
+
+  /** BackTestStep has no operands. */
+  BackTestStep() {},
 } satisfies Partial<FormatHandlers>

@@ -36,6 +36,17 @@ Describe('TR.Alias', () => {
     Expect(alias.evaluate().jsValue).toBe('lazy 2')
     Expect(evaluations).toBe(2)
   })
+
+  Test('preserves parameterized action types through aliases', () => {
+    const calls: string[] = []
+    const alias: TR.Alias<TR.Action<[TR.Value<string>]>> = TR.Alias(() =>
+      TR.Action((value: TR.Value<string>) => calls.push(value.jsValue))
+    )
+
+    TR.Do(alias.evaluate(), TR.Value('saved'))
+
+    Expect(calls).toEqual(['saved'])
+  })
 })
 
 Describe('TR.Action', () => {
@@ -437,16 +448,14 @@ Describe('TR.Views', () => {
 })
 
 Describe('TR.Data', () => {
-  Test('persists local rows and applies strict update, relationship cascade, and rehydration', () => {
-    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Test('persists local rows and applies strict update, relationship cascade, and rehydration', async () => {
     const values = new Map<string, string>()
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: {
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => values.set(key, value),
+    const storage = {
+      getItem: async (key: string) => values.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        values.set(key, value)
       },
-    })
+    }
     const definition = {
       name: 'RuntimeDataTest',
       provider: 'local' as const,
@@ -457,35 +466,44 @@ Describe('TR.Data', () => {
           collection: 'Tasks',
           fields: {
             Title: { kind: 'text' as const },
-            Workspace: { kind: 'relation' as const, relation: 'Workspace' },
+            Workspace: {
+              kind: 'relation' as const,
+              relation: 'Workspace',
+              onDelete: 'cascade' as const,
+            },
           },
         },
       },
     }
-    try {
-      const schema = TR.Data.Schema(definition)
-      TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
-      TR.Data.Create(schema, 'Task', { Title: TR.Value('Draft'), Workspace: TR.Value('Workspace-1') })
-      const initiallyRehydrated = TR.Data.Schema(definition)
-      Expect(initiallyRehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(1)
-      Expect(initiallyRehydrated.query({ entity: 'Task', filters: [] })).toHaveLength(1)
-      const tasks = schema.query({ entity: 'Task', filters: [] }) as Array<Record<string, unknown>>
-      Expect(tasks).toHaveLength(1)
-      TR.Data.Update(TR.Value(tasks[0]), { Title: TR.Value('Updated') })
-      Expect((schema.query({ entity: 'Task', filters: [] })[0] as Record<string, unknown>)['Title']).toBe('Updated')
-      const workspaces = schema.query({ entity: 'Workspace', filters: [] })
-      TR.Data.Delete(TR.Value(workspaces[0]))
-      Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
+    const provider = TR.Data.LocalProvider(storage, 'runtime-test')
+    const schema = TR.Data.Schema(definition, provider)
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
+    Expect(() =>
+      TR.Data.Create(schema, 'Task', {
+        Title: TR.Value('Draft'),
+        Workspace: TR.Value('Workspace-1'),
+      })
+    ).toThrow("Relationship 'Task.Workspace' expects a live Workspace entity handle.")
+    const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
+    TR.Data.Create(schema, 'Task', { Title: TR.Value('Draft'), Workspace: TR.Value(workspace) })
+    await TR.Data.Settle(schema)
+    const initiallyRehydrated = TR.Data.Schema(definition, provider)
+    await TR.Data.Settle(initiallyRehydrated)
+    Expect(initiallyRehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(1)
+    Expect(initiallyRehydrated.query({ entity: 'Task', filters: [] })).toHaveLength(1)
+    const tasks = schema.query({ entity: 'Task', filters: [] }) as Array<Record<string, unknown>>
+    Expect(tasks).toHaveLength(1)
+    TR.Data.Update(TR.Value(tasks[0]), { Title: TR.Value('Updated') })
+    Expect((schema.query({ entity: 'Task', filters: [] })[0] as Record<string, unknown>)['Title']).toBe('Updated')
+    const workspaces = schema.query({ entity: 'Workspace', filters: [] })
+    TR.Data.Delete(TR.Value(workspaces[0]))
+    Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
+    await TR.Data.Settle(schema)
 
-      const rehydrated = TR.Data.Schema(definition)
-      Expect(rehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
-    } finally {
-      if (descriptor) {
-        Object.defineProperty(globalThis, 'localStorage', descriptor)
-      } else {
-        delete (globalThis as { localStorage?: unknown }).localStorage
-      }
-    }
+    const rehydrated = TR.Data.Schema(definition, provider)
+    await TR.Data.Settle(rehydrated)
+    Expect(rehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
   })
 })
 
@@ -535,7 +553,7 @@ Describe('TR.Dev', () => {
       Expect(TR.Dev.isEnabled()).toBe(false)
 
       TR.setDevMode({})
-      Expect(TR.Dev.getMode()).toEqual({ enabled: true, layoutBounds: true })
+      Expect(TR.Dev.getMode()).toEqual({ enabled: true, layoutBounds: false })
     } finally {
       restoreDevGlobal()
       TR.setDevMode({ enabled: false })

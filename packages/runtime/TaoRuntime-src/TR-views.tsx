@@ -9,6 +9,7 @@ type TaoButtonProps = TaoViewProps & {
   action?: {
     invoke(): void
   }
+  disabled?: boolean
   title: string
 }
 
@@ -56,7 +57,13 @@ export const Views = {
   Pressable(props: TaoButtonProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     return React.createElement(TaoPrimitiveElement, {
       kind: 'Pressable',
-      nativePropOverrides: { onPress: () => props.action?.invoke() },
+      nativePropOverrides: {
+        onPress: () => {
+          if (props.disabled !== true) {
+            props.action?.invoke()
+          }
+        },
+      },
       pressableTitle: props.title,
       providesParentDirection: true,
       runtimeProps,
@@ -78,9 +85,10 @@ function TaoTextInput({ props, runtimeProps }: {
   const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
   const input = createReactElement(runtime, runtime.TextInput, {
     accessibilityLabel: props.label,
+    accessibilityState: { disabled: props.disabled === true },
     editable: !props.disabled,
-    onChangeText: props.onChange,
-    onSubmitEditing: props.onSubmit,
+    onChangeText: props.disabled ? undefined : props.onChange,
+    onSubmitEditing: props.disabled ? undefined : props.onSubmit,
     placeholder: props.placeholder,
     style: {
       borderColor: '#a8b0aa',
@@ -92,7 +100,7 @@ function TaoTextInput({ props, runtimeProps }: {
       paddingHorizontal: 12,
       paddingVertical: 10,
     },
-    testID: props.id,
+    testID: props.id || undefined,
     value: props.value,
   })
   const label = createReactElement(

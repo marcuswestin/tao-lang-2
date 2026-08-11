@@ -301,6 +301,13 @@ function resolveArgumentBindings(
   const remainingArgs = new Set(args)
 
   bindNamedArguments(remainingArgs, remainingParameters, pairs, diagnostics)
+  // Optional parameters are explicit-only for type-based view/action binding. This keeps a
+  // defaulted text/number/etc. parameter from competing with an unnamed required parameter.
+  for (const parameter of [...remainingParameters]) {
+    if (parameter.defaultValue !== undefined) {
+      remainingParameters.delete(parameter)
+    }
+  }
   reportDuplicateParameterTypes([...remainingParameters], diagnostics)
   const duplicateArgumentTypes = reportDuplicateArgumentTypes([...remainingArgs], diagnostics)
 
@@ -683,6 +690,10 @@ function resolveActionTargetWithSeenAliases(
   }
   if (AST.isValueReference(expression)) {
     return resolveActionTargetReference(expression, seenAliases)
+  }
+  const type = Type.ofExpression(expression)
+  if (type.kind === 'primitive' && type.primitive === 'action') {
+    return { kind: 'dynamic' }
   }
   return UnresolvedActionTarget
 }

@@ -27,8 +27,15 @@ ViewRender:
 
 type Render = RenderStatement | ViewRender;
 
-IfStatement:
-    'if' condition=Expression thenBlock=Block ('else' elseBlock=Block)?;
+// `otherwise` makes every render conditional total and terminates the branch list unambiguously.
+WhenRenderStatement:
+    'when' branches+=WhenRenderBranch+ otherwise=WhenRenderOtherwise;
+
+WhenRenderBranch:
+    condition=OrExpression '->' block=Block;
+
+WhenRenderOtherwise:
+    'otherwise' '->' block=Block;
 
 ForStatement:
     'for' name=ID 'in' collection=ForCollectionExpression block=Block;

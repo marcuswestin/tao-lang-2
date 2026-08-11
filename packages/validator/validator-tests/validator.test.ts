@@ -8,7 +8,7 @@ import { ActionsValidator } from '../validator-src/ActionsValidator'
 import { AliasesValidator } from '../validator-src/aliases-validator'
 import { AppValidator } from '../validator-src/app-validator'
 import { dataValidationMessages } from '../validator-src/data-validator'
-import { useValidationCodes } from '../validator-src/diagnostic-codes'
+import { aliasValidationCodes, useValidationCodes } from '../validator-src/diagnostic-codes'
 import { ExpressionsValidator } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
 import { InvocationsValidator } from '../validator-src/invocations-validator'
@@ -78,8 +78,8 @@ Describe('Tao validator structural diagnostics', () => {
         destination Detail
       }
       app NavigationApp { stack MainStack }
-      view Home {
-        action Open { present MainStack.Detail .Name "Workspace" }
+      view Home Title is text default "Home" {
+        action Open { present MainStack.Detail(.Name "Workspace") }
         render Detail("Inline")
       }
       view Detail Name is text {
@@ -100,8 +100,8 @@ Describe('Tao validator structural diagnostics', () => {
       view Home { render Detail("Inline") }
       view Detail Name is text {
         action Broken {
-          present BrokenStack.Unknown
-          present BrokenStack.Detail .Name false
+          present BrokenStack.Unknown()
+          present BrokenStack.Detail(.Name false)
         }
         render Text(Name)
       }
@@ -118,18 +118,18 @@ Describe('Tao validator structural diagnostics', () => {
 
   Test('validates data schemas, queries, relationships, and strict writes', async () => {
     await testValidateCode(`
-      project data Tasks memory {
+      project data Tasks {
         Groups Group { Name text }
-        Items Item { Title text Done boolean Ordering number Group Group }
+        Items Item { Title text Done boolean Ordering number CreatedAt time indexed default now() }
       }
-      app DataApp { view MainView }
+      app DataApp { datasource Tasks through Memory view MainView }
       project view MainView {
         query Tasks.Items as OpenItems {
           where Done == false
           order by Ordering asc
         }
         action Add {
-          create Tasks.Item { Title "Draft" Done false Ordering 1 Group "Group-1" }
+          create Tasks.Item { Title "Draft" Done false Ordering 1 }
         }
         render Stack(){
           for Item in OpenItems {
@@ -143,8 +143,9 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     const invalid = await testValidateCodeWithErrors(`
-      data Bad memory {
-        Items Item { Title text Title number Missing MissingEntity }
+      data Bad {
+        Groups Group { Name text }
+        Items Item { Id text Title text Title number Group relation Group Missing relation MissingEntity }
       }
       app BadApp { view MainView }
       project view MainView {
@@ -156,14 +157,173 @@ Describe('Tao validator structural diagnostics', () => {
         }
         render inject ${tsFence} return null ${fence}
       }
+      view Detail Group is Bad.Group {
+        query Bad.Items as Rows { where Group > Group }
+        render inject ${tsFence} return null ${fence}
+      }
     `)
     const messages = validationErrorMessages(invalid)
     Expect(messages).toContain(dataValidationMessages.duplicateField('Item', 'Title'))
+    Expect(messages).toContain(dataValidationMessages.reservedField('Item', 'Id'))
     Expect(messages).toContain(dataValidationMessages.unknownRelation('Item', 'MissingEntity'))
+    Expect(messages).toContain(dataValidationMessages.relationComparison('Group', '>'))
     Expect(messages).toContain(dataValidationMessages.unknownCollection('Bad', 'Unknown'))
     Expect(messages).toContain(dataValidationMessages.fieldType('Title', 'text', 'boolean'))
     Expect(messages).toContain(dataValidationMessages.unknownField('Item', 'Unknown'))
     Expect(messages).toContain(dataValidationMessages.rowTarget('delete'))
+  })
+
+  Test('validates datasource bindings, entity relations, literal defaults, and strict creates', async () => {
+    await testValidateCode(`
+      data Tasks {
+        Workspaces Workspace { Name text }
+        Items Item { Title text CreatedAt time indexed default now() Workspace relation Workspace on delete cascade }
+      }
+      app DataApp { datasource Tasks through Memory view MainView }
+      view MainView { render Text("Main") }
+      view Detail Workspace is Tasks.Workspace {
+        action Add { create Tasks.Item { Title "Draft" Workspace Workspace } }
+        render Text("Detail")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      data Bad {
+        Workspaces Workspace { Name text }
+        Items Item { Required text WrongNow number default now() Workspace relation Workspace }
+      }
+      app BadApp {
+        datasource Bad through Unknown
+        datasource Bad through Memory
+        datasource Bad through Memory
+        view MainView
+      }
+      view MainView {
+        let Invalid = Bad.Workspace { }
+        action Add { create Bad.Item { Workspace "workspace-1" } }
+        render Text("Main")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(AppValidator.messages.unknownProvider('Unknown'))
+    Expect(messages).toContain(AppValidator.messages.duplicateDatasource('BadApp', 'Bad'))
+    Expect(messages).toContain(dataValidationMessages.nowDefault('WrongNow'))
+    Expect(messages).toContain(dataValidationMessages.missingCreateField('Item', 'Required'))
+    Expect(messages).toContain(dataValidationMessages.fieldType('Workspace', 'Bad.Workspace', 'text'))
+    Expect(messages).toContain(typeValidationMessages.constructorShape('Bad.Workspace', 'Workspace'))
+  })
+
+  Test('requires project data declarations to be local or explicitly imported at every use site', async () => {
+    const files = {
+      'Main.tao': `
+        use Visible from ./Data.tao
+        app DataApp { datasource Visible through Memory view MainView }
+        view Text Value is text { render inject ${tsFence} return null ${fence} }
+        view MainView {
+          query Hidden.Rows as Rows
+          action Add { create Hidden.Row { Name "Draft" } }
+          render Text("Ready")
+        }
+        test "Data status" {
+          check "hidden" {
+            run DataApp
+            data Hidden ready
+          }
+        }
+      `,
+      'Data.tao': `
+        project data Visible { Rows Row { Name text } }
+        project data Hidden { Rows Row { Name text } }
+      `,
+    }
+
+    await withValidatedFiles('Main.tao', files, async result => {
+      const unresolved = "Could not resolve reference to DataDeclaration named 'Hidden'."
+      Expect(validationErrorMessages(result).filter(message => message === unresolved)).toHaveLength(3)
+    })
+
+    await withValidatedFiles('Main.tao', {
+      ...files,
+      'Main.tao': files['Main.tao'].replace('use Visible', 'use Visible, Hidden'),
+    }, async result => {
+      Expect(validationErrorMessages(result)).toEqual([])
+    })
+  })
+
+  Test('keeps private data declarations unavailable across files even when imported by name', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use Private from ./Data.tao
+          app DataApp { view MainView }
+          view Text Value is text { render inject ${tsFence} return null ${fence} }
+          view MainView {
+            query Private.Rows as Rows
+            action Add { create Private.Row { Name "Draft" } }
+            render Text("Ready")
+          }
+          test "Data status" {
+            check "private" {
+              run DataApp
+              data Private ready
+            }
+          }
+        `,
+        'Data.tao': `
+          data Private { Rows Row { Name text } }
+        `,
+      },
+      async result => {
+        const unresolved = "Could not resolve reference to DataDeclaration named 'Private'."
+        Expect(validationErrorMessages(result).filter(message => message === unresolved)).toHaveLength(3)
+      },
+    )
+  })
+
+  Test('limits query status members to the query root', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Tasks { Items Item { Title text } }
+      app DataApp { datasource Tasks through Memory view MainView }
+      view MainView {
+        query Tasks.Items as Items
+        render Text(Items.Count.Error)
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.memberNotItem('Error'))
+  })
+
+  Test('scopes parameter defaults to preceding parameters only', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app DefaultsApp { view MainView }
+      view MainView { render inject ${tsFence} return null ${fence} }
+      view Child First is text default "first", Second is text default First, Third is text default Fourth, Fourth is text default "fourth", Self is text default Self {
+        render inject ${tsFence} return null ${fence}
+      }
+    `)
+
+    const messages = validationErrorMessages(result)
+    Expect(messages).toContain("Could not resolve reference to ValueDeclaration named 'Fourth'.")
+    Expect(messages).toContain("Could not resolve reference to ValueDeclaration named 'Self'.")
+    Expect(messages).not.toContain("Could not resolve reference to ValueDeclaration named 'First'.")
+  })
+
+  Test('rejects prototype-mutating runtime scope names', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app ScopeApp { view MainView }
+      let __proto__ = "unsafe"
+      view MainView __proto__ is text {
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const messages = validationErrorMessages(result)
+    Expect(messages.filter(message => message === AliasesValidator.messages.reservedName('__proto__'))).toHaveLength(2)
   })
 
   Test('validates the current Kitchen Sink app', async () => {
@@ -774,6 +934,158 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.dynamicActionArguments)
   })
 
+  Test('validates callback signatures and positional dynamic action invocation', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Change Value is text { }
+        action Submit { }
+        render Forwarder(.Change Change, .Submit Submit)
+      }
+      view Forwarder Change is action(text), Submit is action() {
+        render Field(.Change Change, .Submit Submit)
+      }
+      view Field Change is action(text), Submit is action() {
+        action Relay Value is text {
+          do Change(Value)
+        }
+        action Send {
+          do Submit()
+        }
+        render Text("Ready")
+      }
+    `)
+  })
+
+  Test('rejects incompatible callback values and invalid dynamic callback calls', async () => {
+    const contracts = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Change Value is number { }
+        render Field(.Change Change, .Submit Change)
+      }
+      view Field Change is action(text), Submit is action() {
+        render Text("Ready")
+      }
+    `)
+    const dynamicCalls = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Change Value is text { }
+        render Wrapper(Change)
+      }
+      view Wrapper Callback is action(text) {
+        action Call {
+          do Callback()
+          do Callback(1)
+          do Callback(.Value "named")
+        }
+        render Text("Ready")
+      }
+    `)
+
+    const contractMessages = validationErrorMessages(contracts)
+    Expect(contractMessages).toContain(
+      invocationValidationMessages.namedArgumentType('Field', 'Change', 'action(text)', 'action(Change.Value)'),
+    )
+    Expect(contractMessages).toContain(
+      invocationValidationMessages.namedArgumentType('Field', 'Submit', 'action()', 'action(Change.Value)'),
+    )
+    const dynamicMessages = validationErrorMessages(dynamicCalls)
+    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionArity(1, 0))
+    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'))
+    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionNamedArgument)
+  })
+
+  Test('validates computed action callbacks and honors their optional parameters', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Message is text
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action First Message { }
+        action Second Message { }
+        action Optional Message default "Saved" { }
+        let Chosen = when true -> First otherwise -> Second
+        let OptionalCallback = when true -> Optional otherwise -> Optional
+        action Call {
+          do Chosen(1)
+          do OptionalCallback()
+          do OptionalCallback("Saved", "extra")
+        }
+        render Text("Ready")
+      }
+    `)
+
+    const messages = validationErrorMessages(result)
+    Expect(messages).toContain(ActionsValidator.messages.dynamicActionArgumentType(1, 'Message', 'number'))
+    Expect(messages).toContain(ActionsValidator.messages.dynamicActionArgumentCount(0, 1, 2))
+    Expect(messages).not.toContain(ActionsValidator.messages.dynamicActionArity(1, 0))
+  })
+
+  Test('validates action callbacks reached through typed item members', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type CallbackHolder is { Callback is action(text) }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Receive Value is text { }
+        let Holder = CallbackHolder { Receive }
+        action Call { do Holder.Callback(1) }
+        render Text("Ready")
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'),
+    )
+  })
+
+  Test('infers a safe action type for compatible when branches regardless of order', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Message is text
+      layout Stack { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Short Message { }
+        action Long Message, Count is number default 1 { }
+        render Stack(){
+          Consumer(.Callback when false -> Long otherwise -> Short)
+          Consumer(.Callback when false -> Short otherwise -> Long)
+        }
+      }
+      view Consumer Callback is action(text, number) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const messages = validationErrorMessages(result)
+    const unsafeCallback = invocationValidationMessages.namedArgumentType(
+      'Consumer',
+      'Callback',
+      'action(text, number)',
+      'action(Message)',
+    )
+    Expect(messages.filter(message => message === unsafeCallback)).toHaveLength(2)
+    Expect(messages).not.toContain('`when` branches must produce compatible value types.')
+  })
+
+  Test('does not allow type fixing to launder an incompatible action signature', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Wrapper(action(text): action { })
+      }
+      view Wrapper Callback is action(text) {
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.typeFixIncompatible('action(text)'))
+  })
+
   Test('rejects action parameters that shadow visible state declarations', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
@@ -870,7 +1182,7 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
-  Test('rejects action-valued state and set targets used before declaration', async () => {
+  Test('rejects action-valued state and mutation targets used before declaration', async () => {
     const actionState = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view Text Value is text {
@@ -898,9 +1210,21 @@ Describe('Tao validator structural diagnostics', () => {
         render Text("hi")
       }
     `)
+    const lateToggleTarget = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Flip {
+          toggle Ready
+        }
+        state Ready = false
+        render Text("hi")
+      }
+    `)
 
     Expect(validationErrorMessages(actionState)).toContain(StateValidator.messages.stateActionType('Click'))
     Expect(validationErrorMessages(lateSetTarget)).toContain(StateValidator.messages.usedBeforeDeclaration('Count'))
+    Expect(validationErrorMessages(lateToggleTarget)).toContain(StateValidator.messages.usedBeforeDeclaration('Ready'))
   })
 
   Test('rejects action-valued state', async () => {
@@ -2363,7 +2687,7 @@ Describe('Tao validator structural diagnostics', () => {
         action Submit { }
         render Field(.Value "Draft", .Change Change, .Submit Submit, .Label "Title", .Disabled false)
       }
-      view Field Value is text, Change is action, Submit is action, Label is text, Disabled is boolean {
+      view Field Value is text, Change is action(text), Submit is action(), Label is text, Disabled is boolean {
         render inject ${tsFence}
           return null
         ${fence}
@@ -2843,6 +3167,24 @@ Describe('Tao validator structural diagnostics', () => {
 
     Expect(validationErrorMessages(result).length).toBeGreaterThan(0)
     Expect(Diagnostics.hasSource(result.diagnostics, 'validator')).toBe(true)
+  })
+
+  Test('keeps toggle targets inside their lexical state scope', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view Target }
+      view Source {
+        state Ready = false
+        render inject ${tsFence} return null ${fence}
+      }
+      view Target {
+        action Flip { toggle Ready }
+        render inject ${tsFence} return null ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      "Could not resolve reference to StateDeclaration named 'Ready'.",
+    )
   })
 
   Test('validates relative use imports across sibling files', async () => {
@@ -3461,6 +3803,46 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(selectorMessages.filter(message => message === testValidationMessages.selector('role'))).toHaveLength(2)
   })
 
+  Test('validates placeholder selectors, input-value selectors, and standalone test back', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
+      test "Input" {
+        check "selectors" {
+          run MyApp
+          enter "Draft" into placeholder "Title"
+          submit placeholder "Title"
+          expect placeholder "Title"
+          expect input placeholder "Title" value "Draft"
+          back
+        }
+      }
+    `)
+    const invalidInputSelector = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
+      test "Input" {
+        check "selectors" {
+          run MyApp
+          expect input role "Title" value "Draft"
+        }
+      }
+    `)
+    const backBeforeRun = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
+      test "Navigation" {
+        check "order" {
+          back
+          run MyApp
+        }
+      }
+    `)
+
+    Expect(validationErrorMessages(invalidInputSelector)).toContain(testValidationMessages.inputSelector('role'))
+    Expect(validationErrorMessages(backBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
+  })
+
   Test('validates v0 test statement placement', async () => {
     const checkAtTopLevel = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
@@ -3912,6 +4294,23 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateRemote())
     Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateLicense())
     Expect(validationErrorMessages(result)).toContain(projectValidationMessages.unsupportedRequires())
+  })
+})
+
+Describe('Tao validator binding compatibility', () => {
+  Test('warns for legacy alias while accepting let without a warning', async () => {
+    const result = await Validator.validateCode(`
+      let Current = "current"
+      alias Legacy = "legacy"
+    `)
+    const warning = result.diagnostics.find(diagnostic =>
+      diagnostic.message === AliasesValidator.messages.deprecatedAlias('Legacy')
+    )
+
+    Expect(validationErrorMessages(result)).toEqual([])
+    Expect(warning?.severity).toBe('warning')
+    Expect(warning?.code).toBe(aliasValidationCodes.deprecatedAlias)
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'warning')).toHaveLength(1)
   })
 })
 

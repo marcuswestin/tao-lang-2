@@ -145,7 +145,7 @@ Describe('Tao formatter use statements', () => {
 Describe('Tao formatter tests', () => {
   Test('formats v0 Tao test declarations', async () => {
     await testFormatCode(
-      `use KitchenSink from ./\ntest   "Kitchen Sink"{check "renders"{run   KitchenSink\nexpect   text "Hello"\npress   role "Add"\nexpect missing   label "Loading"}}`,
+      `use KitchenSink from ./\ntest   "Kitchen Sink"{check "renders"{run   KitchenSink\nexpect   text "Hello"\npress   role "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
       `
         use KitchenSink from ./
 
@@ -155,6 +155,8 @@ Describe('Tao formatter tests', () => {
 
               expect text "Hello"
               press role "Add"
+              expect input placeholder "Title" value "Draft"
+              back
               expect missing label "Loading"
            }
         }
@@ -332,17 +334,24 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats data schemas, queries, writes, and provider status steps', async () => {
     await testFormatCode(
-      `project data Tasks memory{Groups Group{Name text}Items Item{Title text Done boolean Group Group}}\nproject view MainView{query Tasks . Items as OpenItems{where Done==false order by Title desc}action Add{create Tasks . Item{Title "Draft" Done false Group "Group-1"}}render Stack() {for Item in OpenItems{Button("Delete",action{delete Item})}}}\ntest "Data"{check "status"{run DataApp data Tasks error "Offline" data Tasks ready}}`,
+      `project data Tasks{Groups Group{Name text}Items Item{Title text Done boolean Count number indexed   default   2 CreatedAt time indexed default now ( ) Group relation Group on delete cascade}}\napp DataApp{datasource Tasks through Memory view MainView}\nproject view MainView{query Tasks . Items as OpenItems{where Done==false order by Title desc}action Add{create Tasks . Item{Title "Draft" Done false}}render Stack() {for Item in OpenItems{Button("Delete",action{delete Item})}}}\ntest "Data"{check "status"{run DataApp data Tasks error "Offline" data Tasks ready}}`,
       `
-        project data Tasks memory {
+        project data Tasks {
            Groups Group {
               Name text
            }
            Items Item {
               Title text
               Done boolean
-              Group Group
+              Count number indexed default 2
+              CreatedAt time indexed default now()
+              Group relation Group on delete cascade
         }  }
+
+        app DataApp {
+           datasource Tasks through Memory
+           view MainView
+        }
 
         project view MainView {
            query Tasks.Items as OpenItems {
@@ -353,7 +362,6 @@ Describe('Tao formatter views and blocks', () => {
               create Tasks.Item {
                  Title "Draft"
                  Done false
-                 Group "Group-1"
            }  }
            render Stack() {
               for Item in OpenItems {
@@ -372,7 +380,7 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats stack declarations and navigation actions', async () => {
     await testFormatCode(
-      `project stack Main{initial Home destination Home destination Detail}\napp Demo{stack Main}\nview Home{action Open{present Main . Detail .Name "Item"}render Text("Home")}\nview Detail Name is text{action Close{back Main}render Text(Name)}`,
+      `project stack Main{initial Home destination Home destination Detail}\napp Demo{stack Main}\nview Home{action Open{present Main . Detail(.Name "Item")}render Text("Home")}\nview Detail Name is text{action Close{back Main}render Text(Name)}`,
       `
         project stack Main {
            initial Home
@@ -386,7 +394,7 @@ Describe('Tao formatter views and blocks', () => {
 
         view Home {
            action Open {
-              present Main.Detail .Name "Item"
+              present Main.Detail(.Name "Item")
            }
            render Text("Home")
         }
@@ -456,11 +464,12 @@ Describe('Tao formatter views and blocks', () => {
 })
 
 Describe('Tao formatter aliases', () => {
-  Test('normalizes alias declaration spacing', async () => {
+  Test('preserves current and legacy binding keywords while normalizing spacing', async () => {
     await testFormatCode(
-      `publish alias   Greeting="Hello"\nview MainView { }`,
+      `publish let   Greeting="Hello"\nalias   Legacy="Hello"\nview MainView { }`,
       `
-        publish alias Greeting = "Hello"
+        publish let Greeting = "Hello"
+        alias Legacy = "Hello"
 
         view MainView { }
       `,

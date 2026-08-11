@@ -28,6 +28,8 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
       .inferenceRule({ filter: AST.isBooleanLiteral })
       .finish()
 
+    typir.factory.Primitives.create({ primitiveName: 'time' }).finish()
+
     typir.factory.Primitives.create({ primitiveName: 'none' })
       .inferenceRule({ filter: AST.isNoneLiteral })
       .finish()
@@ -54,7 +56,7 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
       BinaryExpression: (node) =>
         TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
           ?? InferenceRuleNotApplicable,
-      ConditionalExpression: (node) =>
+      WhenExpression: (node) =>
         TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
           ?? InferenceRuleNotApplicable,
       FunctionCallExpression: (node) =>
@@ -133,6 +135,7 @@ function typirTypeForTypeExpression(
   typir: TaoTypirServices,
 ): TypirType | undefined {
   return Switch.type(type, {
+    ActionTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     ItemTypeExpression: () => TypeSystemHelpers.taoPrimitiveType('item', typir),
     NamedTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     PrimitiveTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),

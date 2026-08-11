@@ -38,11 +38,20 @@ function CompileExpressionJsType(expression: AST.Expression): Compiled {
   return Switch.kind(type, {
     primitive: type =>
       Switch(type.primitive, {
-        action: () => gen`TR.ActionValue`,
+        action: () => {
+          const parameters = type.primitive === 'action' ? type.parameters : []
+          return gen`TR.ActionValue<[${
+            gen.join(
+              parameters,
+              parameter => gen`${Compile.RuntimeType(parameter.type)}${parameter.optional ? '?' : ''}`,
+            )
+          }]>`
+        },
         boolean: () => gen`boolean`,
         number: () => gen`number`,
         none: () => gen`null`,
         text: () => gen`string`,
+        time: () => gen`number`,
       }),
     list: () => gen`any[]`,
     item: () => gen`any`,

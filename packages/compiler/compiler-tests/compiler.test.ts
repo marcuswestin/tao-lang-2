@@ -41,7 +41,7 @@ Describe('Tao compiler', () => {
       }
       view MainView {
         state Count = 0
-        alias DisplayCount = Count
+        let DisplayCount = Count
         action AddOne {
           set Count += 1
         }
@@ -57,17 +57,15 @@ Describe('Tao compiler', () => {
 
   Test('compiles provider-neutral data schemas, reactive queries, and row writes', async () => {
     const compiled = await Compiler.compileCode(`
-      data Tasks memory {
-        Items Item { Title text Done boolean Ordering number }
+      data Tasks {
+        Workspaces Workspace { Name text }
+        Items Item { Title text Marker text default "now" Done boolean default false Ordering number CreatedAt time indexed default now() Workspace relation Workspace on delete cascade }
       }
-      app MyApp { view MainView }
+      app MyApp { datasource Tasks through Memory view MainView }
       project view MainView {
         query Tasks.Items as Items {
           where Done == false
           order by Ordering desc
-        }
-        action Add {
-          create Tasks.Item { Title "Draft" Done false Ordering 1 }
         }
         render Stack(){
           for Item in Items {
@@ -86,6 +84,10 @@ Describe('Tao compiler', () => {
           return null
         ${fence}
       }
+      view Detail Workspace is Tasks.Workspace, CreatedAt is time {
+        action AddRelated { create Tasks.Item { Title "Related" Ordering 2 Workspace Workspace } }
+        render Stack() { }
+      }
     `)
 
     Expect(compiled.validation.diagnostics).toEqual([])
@@ -94,6 +96,32 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('TR.Data.Create')
     Expect(compiled.code).toContain('TR.Data.Update')
     Expect(compiled.code).toContain('TR.Data.Delete')
+    Expect(compiled.code).toContain('TR.Data.Use')
+    Expect(compiled.code).not.toContain('TR.Data.Bind')
+    Expect(compiled.code).toContain('schemaVersion: 1')
+    Expect(compiled.code).toContain('defaultValue: "now"')
+    Expect(compiled.code).toContain('defaultNow: true')
+    Expect(compiled.code).toContain('relation: "Workspace"')
+    Expect(compiled.code).toContain("onDelete: 'cascade'")
+    Expect(compiled.code).toContain('CreatedAt: TR.Value<number>')
+  })
+
+  Test('emits prototype-sensitive data names as computed object keys', async () => {
+    const compiled = await Compiler.compileCode(`
+      data SafeData {
+        Rows __proto__ { __proto__ text }
+      }
+      app SafeApp { datasource SafeData through Memory view MainView }
+      view MainView {
+        action Add { create SafeData.__proto__ { __proto__ "safe" } }
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code.match(/\["__proto__"\]/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    Expect(compiled.code).not.toContain('"__proto__":')
   })
 
   Test('compiles app-owned stack destinations, presentation, and back behavior', async () => {
@@ -104,8 +132,8 @@ Describe('Tao compiler', () => {
         destination Detail
       }
       app NavigationApp { stack MainStack }
-      view Home {
-        action Open { present MainStack.Detail .Name "Workspace" }
+      view Home Title is text default "Home" {
+        action Open { present MainStack.Detail(.Name "Workspace") }
         render Detail("Inline")
       }
       view Detail Name is text {
@@ -120,18 +148,20 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('TR.Navigation.Host')
     Expect(compiled.code).toContain('TR.Navigation.Present')
     Expect(compiled.code).toContain('TR.Navigation.Back')
+    Expect(compiled.code).toContain('Title={_NavigationArguments["Title"]}')
     Expect(compiled.code).toContain('Name={_NavigationArguments["Name"]}')
   })
 
-  Test('compiles dynamic action parameter invocations without arguments', async () => {
+  Test('compiles typed dynamic action arguments in source order', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
-        render Wrapper(action { })
+        action Receive Label is text, Count is number { }
+        render Wrapper(Receive)
       }
-      view Wrapper Callback is action {
+      view Wrapper Callback is action(text, number) {
         action CallCallback {
-          do Callback()
+          do Callback("first", 2)
         }
         render Text("Done")
       }
@@ -143,6 +173,28 @@ Describe('Tao compiler', () => {
     `)
 
     Expect(compiled.validation.diagnostics).toEqual([])
+    const code = compiled.files[0]?.code ?? ''
+    Expect(code).toContain('Callback: TR.Action<[TR.Value<string>, TR.Value<number>]>')
+    const first = code.indexOf('TR.Value("first")')
+    const second = code.indexOf('TR.Value(2)', first)
+    Expect(first).toBeGreaterThan(-1)
+    Expect(second).toBeGreaterThan(first)
+  })
+
+  Test('compiles action aliases as invokable callback values', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      view MainView {
+        let Save = action { }
+        action Run { do Save() }
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Alias(() => TR.Action')
+    Expect(compiled.code).toContain('TR.Do(_Scope.Save.evaluate())')
   })
 
   Test('compiles layout clauses into a generated app file', async () => {
@@ -314,14 +366,14 @@ Describe('Tao compiler', () => {
         Role is text
       }
       type CurrentJob is InlineJob
-      alias DisplayName = Name "Ada"
-      alias DemoPerson = Person {
+      let DisplayName = Name "Ada"
+      let DemoPerson = Person {
         DisplayName
         Tags ["compiler" "runtime"]
         Job { Title "Engineer" }
       }
-      alias EmptyItem = item {}
-      alias DemoCurrentJob = CurrentJob { Role "Engineer" }
+      let EmptyItem = item {}
+      let DemoCurrentJob = CurrentJob { Role "Engineer" }
       view MainView {
         render Stack(){
           TextValue(DemoPerson.Name)
@@ -503,14 +555,16 @@ Describe('Tao compiler', () => {
             press text "Add"
             enter "Draft" into label "Title"
             submit id "title-input"
+            expect input placeholder "Title" value "Draft"
+            back
             data MyData loading
             expect missing text "Loading"
           }
         }
       `,
         'Main.tao': `
-        project data MyData memory { }
-        app MyApp { view MainView }
+        project data MyData { }
+        app MyApp { datasource MyData through Memory view MainView }
         view MainView {
           render inject ${tsFence}
             return null
@@ -548,6 +602,8 @@ Describe('Tao compiler', () => {
           { kind: 'press', selector: 'text', text: 'Add' },
           { kind: 'enter', selector: 'label', target: 'Title', value: 'Draft' },
           { kind: 'submit', selector: 'id', target: 'title-input' },
+          { kind: 'expectInputValue', selector: 'placeholder', target: 'Title', value: 'Draft' },
+          { kind: 'back' },
           { kind: 'dataStatus', dataName: 'MyData', status: 'loading', message: '' },
           { kind: 'expect', selector: 'text', text: 'Loading' },
         ])

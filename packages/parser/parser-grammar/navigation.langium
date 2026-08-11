@@ -24,7 +24,7 @@ AppStack:
     'stack' stack=[StackDeclaration:ID];
 
 PresentStatement:
-    'present' stack=[StackDeclaration:ID] '.' destinationName=ID argumentList=ArgumentList?;
+    'present' stack=[StackDeclaration:ID] '.' destinationName=ID '(' argumentList=ArgumentList? ')';
 
 BackStatement:
     'back' stack=[StackDeclaration:ID];

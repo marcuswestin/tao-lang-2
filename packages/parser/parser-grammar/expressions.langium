@@ -27,10 +27,7 @@ FunctionDeclaration:
     visibility=DeclarationVisibility? 'function' name=ID parameterList=ParameterList? 'returns' returnType=TypeReference '=' value=Expression;
 
 Expression:
-    ConditionalExpression | OrExpression;
-
-ConditionalExpression:
-    'if' condition=OrExpression 'then' whenTrue=Expression 'else' whenFalse=Expression;
+    OrExpression;
 
 OrExpression infers Expression:
     AndExpression ({infer BinaryExpression.left=current} operator='or' right=AndExpression)*;
@@ -54,7 +51,17 @@ UnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PrimaryExpression;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | ActionExpression | TypedConstructor | ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | InterpolationExpression | FunctionCallExpression | ValueReference;
+    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | InterpolationExpression | FunctionCallExpression | ValueReference;
+
+// `otherwise` makes every value conditional total and terminates the branch list unambiguously.
+WhenExpression:
+    'when' branches+=WhenBranch+ otherwise=WhenOtherwise;
+
+WhenBranch:
+    condition=OrExpression '->' value=OrExpression;
+
+WhenOtherwise:
+    'otherwise' '->' value=OrExpression;
 
 TypedConstructor:
     type=ConstructorTypeReference value=TypedConstructorValue;

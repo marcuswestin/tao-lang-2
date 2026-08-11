@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals'
 import { RuntimeTesting } from '@runtime/testing/runtime-testing'
 import TR from '@runtime/TR'
 import { Repo } from '@shared'
@@ -5,6 +6,7 @@ import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shar
 import { act, cleanup, fireEvent, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, type ReactNode, useState } from 'react'
 import * as RN from 'react-native'
+import * as TaoReactNative from '../TaoRuntime-src/TR-react-native'
 import { compileAndRenderApp, ExpectScreen, testCompileApp, testCompileFiles } from './test-compile-app'
 
 AfterAll(async () => {
@@ -17,6 +19,210 @@ AfterEach(() => {
 })
 
 Describe('Expo runtime', () => {
+  Test('suppresses disabled pressable actions while retaining their accessible name', () => {
+    let presses = 0
+    const screen = render(
+      TR.Views.Pressable(
+        {
+          action: {
+            invoke: () => {
+              presses += 1
+            },
+          },
+          disabled: true,
+          title: 'Save',
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: 'Save',
+            accessibilityRole: 'button',
+            accessibilityState: { busy: true, disabled: true },
+            disabled: true,
+          },
+        },
+      ),
+    )
+
+    const button = screen.getByLabelText('Save')
+    fireEvent.press(button)
+    Expect(presses).toBe(0)
+  })
+
+  Test('suppresses disabled text-input changes and submissions', () => {
+    let changes = 0
+    let submissions = 0
+    const screen = render(TR.Views.TextInput({
+      disabled: true,
+      label: 'Task title',
+      onChange: () => {
+        changes += 1
+      },
+      onSubmit: () => {
+        submissions += 1
+      },
+      value: 'Draft',
+    }))
+
+    const input = screen.getByLabelText('Task title')
+    fireEvent.changeText(input, 'Changed')
+    fireEvent(input, 'submitEditing')
+
+    Expect(input.props.accessibilityState).toEqual({ disabled: true })
+    Expect(input.props.editable).toBe(false)
+    Expect(changes).toBe(0)
+    Expect(submissions).toBe(0)
+  })
+
+  Test('binds an app datasource after render without updating an existing query subscriber during render', async () => {
+    const schema = TR.Data.Schema({
+      name: 'LifecycleSafeBinding',
+      entities: {
+        Entry: { collection: 'Entries', fields: {} },
+      },
+    })
+
+    function QuerySubscriber(): ReactElement {
+      const rows = TR.Data.Query(
+        schema,
+        { entity: 'Entry', filters: [] },
+        TR.Value,
+      ).evaluate().jsValue as unknown[] & { Error: string; Loading: boolean }
+      const status = rows.Loading ? 'Loading' : rows.Error ? 'Provider error' : 'Bound'
+      return createElement(RN.Text, null, status)
+    }
+
+    function ProviderBinding(): null {
+      TR.Data.Use(schema, 'memory')
+      return null
+    }
+
+    const subscriber = render(createElement(QuerySubscriber))
+    ExpectScreen(subscriber).toHaveText('Provider error')
+    const consoleErrors: string[] = []
+    const consoleError = jest.spyOn(console, 'error').mockImplementation((...values: unknown[]) => {
+      consoleErrors.push(values.map(String).join(' '))
+    })
+
+    try {
+      render(createElement(ProviderBinding))
+      await act(async () => {
+        await TR.Data.Settle(schema)
+      })
+
+      ExpectScreen(subscriber).toHaveText('Bound')
+      Expect(consoleErrors.some(message =>
+        message.includes('Cannot update a component')
+        && message.includes('while rendering a different component')
+      )).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  Test('dispatches hardware Back through the stack reducer and cleans up its subscription', () => {
+    let handler: (() => boolean) | undefined
+    let removes = 0
+    const restoreReactNativeRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      BackHandler: {
+        addEventListener(event, nextHandler) {
+          Expect(event).toBe('hardwareBackPress')
+          handler = nextHandler
+          return {
+            remove: () => {
+              removes += 1
+            },
+          }
+        },
+      },
+      KeyboardAvoidingView: RN.View,
+      Pressable: RN.Pressable,
+      ScrollView: RN.View,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+
+    try {
+      const stack = TR.Navigation.Stack({
+        name: 'HardwareBackTest',
+        initial: 'Home',
+        destinations: {
+          Home: { render: () => null },
+          Detail: { render: () => null },
+        },
+      })
+      const screen = render(createElement(TR.Navigation.Host, { stack }))
+
+      Expect(handler?.()).toBe(false)
+      act(() => {
+        TR.Navigation.Present(stack, 'Detail', {})
+      })
+      let consumed = false
+      act(() => {
+        consumed = handler!()
+      })
+      Expect(consumed).toBe(true)
+      Expect(stack.currentDestination).toBe('Home')
+      Expect(stack.depth).toBe(1)
+
+      screen.unmount()
+      Expect(removes).toBe(1)
+    } finally {
+      restoreReactNativeRuntime.mockRestore()
+    }
+  })
+
+  Test('keeps covered navigation entries mounted and returns through the accessible root-safe back reducer', () => {
+    let stack: ReturnType<typeof TR.Navigation.Stack>
+
+    function Home(): ReactElement {
+      const [count, setCount] = useState(0)
+      return createElement(
+        RN.View,
+        null,
+        createElement(RN.Text, null, `Home count ${count}`),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Increment home',
+          onPress: () => setCount(value => value + 1),
+        }),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Open detail',
+          onPress: () => TR.Navigation.Present(stack, 'Detail', {}),
+        }),
+      )
+    }
+
+    function Detail(): ReactElement {
+      return createElement(RN.Text, null, 'Detail')
+    }
+
+    stack = TR.Navigation.Stack({
+      name: 'RuntimeNavigationHostTest',
+      initial: 'Home',
+      destinations: {
+        Home: { render: () => createElement(Home) },
+        Detail: { render: () => createElement(Detail) },
+      },
+    })
+
+    const screen = render(createElement(TR.Navigation.Host, { stack }))
+    fireEvent.press(screen.getByLabelText('Increment home'))
+    ExpectScreen(screen).toHaveText('Home count 1')
+
+    fireEvent.press(screen.getByLabelText('Open detail'))
+    Expect(stack.currentDestination).toBe('Detail')
+    Expect(stack.depth).toBe(2)
+    ExpectScreen(screen).toHaveText('Detail')
+    Expect(screen.queryByLabelText('Increment home')).toBeNull()
+    fireEvent.press(screen.getByLabelText('Back'))
+
+    Expect(stack.currentDestination).toBe('Home')
+    Expect(stack.depth).toBe(1)
+    ExpectScreen(screen).toHaveText('Home count 1')
+    Expect(screen.queryByLabelText('Back')).toBeNull()
+    Expect(stack.back()).toBe(false)
+  })
+
   Test('runs Tao text expectations with duplicate rendered text', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',
@@ -112,6 +318,42 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('reports selector-neutral Tao press failures', async () => {
+    await withTaoFiles(
+      'tao-runtime-press-failure-test-plan-',
+      {
+        'Main.test.tao': `
+        use MissingPressApp from ./
+
+        test "Press failure" {
+          check "reports the selector" {
+            run MissingPressApp
+            press id "missing-button"
+          }
+        }
+      `,
+        'Main.tao': `
+        app MissingPressApp { view MainView }
+
+        view MainView {
+          render Text("Ready")
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /press id "missing-button" expected one pressable but found 0 matches/,
+        )
+      },
+    )
+  })
+
   Test('runs Tao enter and submit steps through label and id selectors', async () => {
     await withTaoFiles(
       'tao-runtime-input-test-plan-',
@@ -122,8 +364,9 @@ Describe('Expo runtime', () => {
         test "Input" {
           check "changes and submits" {
             run InputApp
-            enter "Plan launch" into label "Task title"
+            enter "Plan launch" into placeholder "Task title"
             expect text "Plan launch"
+            expect input placeholder "Task title" value "Plan launch"
             submit id "task-title"
             expect text "Saved"
           }
@@ -151,11 +394,12 @@ Describe('Expo runtime', () => {
             return <>{_ViewProps.children}</>
           \`\`\`
         }
-        view NativeInput Value is text, Change is action, Submit is action, Label is text, Id is text {
+        view NativeInput Value is text, Change is action(text), Submit is action(), Label is text, Id is text {
           render inject Value, Change, Submit, Label, Id \`\`\`ts
             return (
               <RN.TextInput
                 accessibilityLabel={Label}
+                placeholder="Task title"
                 testID={Id}
                 value={Value}
                 onChangeText={value => Change.invoke(TR.Value(value))}
@@ -164,6 +408,75 @@ Describe('Expo runtime', () => {
             )
           \`\`\`
         }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('runs standalone Tao back through the active navigation host', async () => {
+    await withTaoFiles(
+      'tao-runtime-navigation-test-plan-',
+      {
+        'Main.test.tao': `
+        use NavigationApp from ./
+
+        test "Navigation" {
+          check "returns to the active stack root" {
+            run NavigationApp
+            expect text "Home"
+            press text "Open"
+            expect text "Detail"
+            back
+            expect text "Home"
+            expect missing text "Detail"
+          }
+        }
+      `,
+        'Main.tao': `
+        project stack AppStack {
+          initial Home
+          destination Home
+          destination Detail
+        }
+
+        app NavigationApp { stack AppStack }
+
+        project view Home {
+          action Open { present AppStack.Detail() }
+          render Stack(){
+            Text("Home")
+            Button("Open", Open)
+          }
+        }
+
+        project view Detail {
+          render Text("Detail")
+        }
+
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+
+        view Button Title is text, Press is action {
+          render inject Title, Press \`\`\`ts
+            return (
+              <RN.Pressable accessibilityRole="button" onPress={() => Press.invoke()}>
+                <RN.Text>{Title}</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+
         view Text Value is text {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
@@ -347,7 +660,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton Title is text, Action is action {
+        view NativeButton Title is text, Action is action() {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -368,6 +681,94 @@ Describe('Expo runtime', () => {
 
         fireEvent.press(screen.getByText('Native add'))
         ExpectScreen(screen).toHaveText('1')
+      },
+    )
+  })
+
+  Test('applies typed defaults for functions, views, layouts, and actions', async () => {
+    await testCompileApp(
+      `
+        app DefaultsApp {
+          view MainView
+        }
+
+        function Greeting Name is text default "world" returns text = interpolate "Hello, ", Name
+
+        view MainView {
+          state Result = ""
+          action Save Message is text default "Saved" {
+            set Result = Message
+          }
+          render Stack(){
+            Text(Greeting())
+            GreetingView()
+            NativeButton("Save", Save)
+            Text(Result)
+          }
+        }
+
+        view GreetingView Title is text default "Welcome" {
+          render Text(Title)
+        }
+
+        layout Stack Gap is number default 8 {
+          render inject Gap \`\`\`ts
+            return <>
+              <RN.Text>{\`Gap \${Gap}\`}</RN.Text>
+              {_ViewProps.children}
+            </>
+          \`\`\`
+        }
+
+        view NativeButton Title is text, Action is action {
+          render inject Title, Action \`\`\`ts
+            return (
+              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
+                <RN.Text>{Title}</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('Hello, world')
+        ExpectScreen(screen).toHaveText('Welcome')
+        ExpectScreen(screen).toHaveText('Gap 8')
+
+        fireEvent.press(screen.getByText('Save'))
+        ExpectScreen(screen).toHaveText('Saved')
+      },
+    )
+  })
+
+  Test('renders an all-defaulted initial destination', async () => {
+    await testCompileApp(
+      `
+        project stack DefaultsNavigation {
+          initial Home
+          destination Home
+        }
+
+        app DefaultsNavigationApp { stack DefaultsNavigation }
+
+        project view Home Title is text default "Welcome home" {
+          render Text(Title)
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('Welcome home')
       },
     )
   })

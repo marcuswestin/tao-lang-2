@@ -21,6 +21,9 @@ export const typeValidationMessages = {
   cyclicType: (name: string) => `Type '${name}' cannot reference itself through its type definition.`,
   memberNotItem: (name: string) => `Cannot access member '${name}' on a non-item value.`,
   unknownMember: (type: string, name: string) => `Item type '${type}' has no field '${name}'.`,
+  defaultParameterOrder: (name: string) => `Required parameter '${name}' cannot follow a defaulted parameter.`,
+  defaultParameterType: (name: string, expected: string, actual: string) =>
+    `Default value for parameter '${name}' expects ${expected}, got ${actual}.`,
 } as const
 
 /** validateTypes validates custom type declarations and item/list/custom expression forms. */
@@ -40,6 +43,9 @@ export function validateTypes(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const parameter of AST.streamAllContents(file).filter(AST.isParameterDeclaration)) {
     validateParameter(parameter, ctx)
   }
+  for (const declaration of AST.streamAllContents(file).filter(AST.isParameterizedDeclaration)) {
+    validateDefaultParameterOrder(declaration, ctx)
+  }
   for (const argument of AST.streamAllContents(file).filter(AST.isArgument)) {
     validateTypedArgument(argument, ctx)
   }
@@ -58,11 +64,36 @@ function validateTypeDeclaration(declaration: AST.TypeDeclaration, ctx: Validati
 }
 
 function validateParameter(parameter: AST.ParameterDeclaration, ctx: ValidationContext): void {
-  if (!parameter.inlineType) {
+  if (parameter.inlineType && typeDefinitionHasCycle(parameter.inlineType, parameter.inlineType, new Set())) {
+    ctx.error(typeValidationMessages.cyclicType(Type.definitionName(parameter.inlineType)), parameter.inlineType)
+  }
+  if (!parameter.defaultValue) {
     return
   }
-  if (typeDefinitionHasCycle(parameter.inlineType, parameter.inlineType, new Set())) {
-    ctx.error(typeValidationMessages.cyclicType(Type.definitionName(parameter.inlineType)), parameter.inlineType)
+  const expected = Type.ofParameter(parameter)
+  const actual = Type.ofExpression(parameter.defaultValue)
+  if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+    ctx.error(
+      typeValidationMessages.defaultParameterType(
+        Type.parameterName(parameter),
+        Type.displayName(expected),
+        Type.displayName(actual),
+      ),
+      parameter.defaultValue,
+    )
+  }
+}
+
+function validateDefaultParameterOrder(declaration: AST.ParameterizedDeclaration, ctx: ValidationContext): void {
+  let foundDefault = false
+  for (const parameter of AST.parametersOf(declaration)) {
+    if (parameter.defaultValue !== undefined) {
+      foundDefault = true
+      continue
+    }
+    if (foundDefault) {
+      ctx.error(typeValidationMessages.defaultParameterOrder(Type.parameterName(parameter)), parameter)
+    }
   }
 }
 
@@ -84,6 +115,9 @@ function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext
 }
 
 function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: ValidationContext): void {
+  if (Type.entityOfReference(reference)) {
+    return
+  }
   const root = Type.rootOfReference(reference)
   if (!root.definition) {
     ctx.error(typeValidationMessages.unknownType(Type.referenceName(reference)), reference)
@@ -294,6 +328,9 @@ function typeReferenceReferencesRoot(
   if (AST.isPrimitiveTypeReference(type)) {
     return false
   }
+  if (AST.isActionTypeReference(type)) {
+    return type.parameterTypes.some(parameter => typeReferenceReferencesRoot(root, parameter, new Set(seen)))
+  }
   const target = Type.definitionOfReference(type)
   if (!target) {
     return false
@@ -322,8 +359,12 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
     return
   }
   let typeName = Type.displayName(current)
-  for (const member of memberAccess.members) {
-    if (AST.isQueryDeclaration(memberAccess.target.ref) && (member === 'Loading' || member === 'Error')) {
+  for (const [index, member] of memberAccess.members.entries()) {
+    if (
+      index === 0
+      && AST.isQueryDeclaration(memberAccess.target.ref)
+      && (member === 'Loading' || member === 'Error')
+    ) {
       current = member === 'Loading'
         ? { kind: 'primitive', primitive: 'boolean' }
         : { kind: 'primitive', primitive: 'text' }
@@ -381,7 +422,7 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     ParameterDeclaration: Type.ofParameter,
     AliasDeclaration: declaration => Type.ofExpression(declaration.value),
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
-    ActionDeclaration: () => ({ kind: 'primitive', primitive: 'action' }),
+    ActionDeclaration: Type.ofAction,
     QueryDeclaration: declaration => {
       const entity = Type.queryEntity(declaration)
       return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }

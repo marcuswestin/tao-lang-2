@@ -17,6 +17,11 @@ export default {
     return gen.noop()
   },
 
+  /** BackTestStep compiles to no generated app output. */
+  BackTestStep(_back: AST.BackTestStep): Compiled {
+    return gen.noop()
+  },
+
   /** PressTextStep compiles to no generated app output. */
   PressTextStep(_press: AST.PressTextStep): Compiled {
     return gen.noop()
@@ -39,6 +44,11 @@ export default {
 
   /** ExpectTextStep compiles to no generated app output. */
   ExpectTextStep(_expectation: AST.ExpectTextStep): Compiled {
+    return gen.noop()
+  },
+
+  /** ExpectInputValueStep compiles to no generated app output. */
+  ExpectInputValueStep(_expectation: AST.ExpectInputValueStep): Compiled {
     return gen.noop()
   },
 } as const

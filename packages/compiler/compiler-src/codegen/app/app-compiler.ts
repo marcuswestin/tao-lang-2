@@ -5,11 +5,23 @@ import { Compile } from '../Compile'
 export default {
   /** App compiles a Tao app declaration into the generated default app component. */
   App(app: AST.AppDeclaration): Compiled {
+    const statements = AST.blockStatements(app)
+    const datasources = statements.filter(AST.isAppDatasource)
+    const roots = statements.filter(statement => AST.isAppView(statement) || AST.isAppStack(statement))
     return gen`
       export default function TaoApp() {
-        ${gen.block(app, Compile.Statement)}
+        ${gen.list(datasources, Compile.AppDatasource)}
+        ${gen.list(roots, Compile.Statement)}
       }
     `
+  },
+
+  /** AppDatasource uses lifecycle-safe provider binding for one stable schema at the app root. */
+  AppDatasource(datasource: AST.AppDatasource): Compiled {
+    return gen`TR.Data.Use(
+      ${gen.scopeName(resolveRef(datasource.data))},
+      ${gen.jsLiteral(datasource.provider === 'Memory' ? 'memory' : 'local')},
+    )`
   },
 
   /** AppView compiles an app view statement into the generated app root return. */

@@ -122,7 +122,7 @@ function defaultDevMode(): TaoDevModeState {
   const enabled = isReactNativeDevMode()
   return {
     enabled,
-    layoutBounds: enabled,
+    layoutBounds: false,
   }
 }
 

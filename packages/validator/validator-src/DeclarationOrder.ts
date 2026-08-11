@@ -18,7 +18,7 @@ function valueReferences(value: AST.Expression): ValueReferenceLike[] {
     ActionExpression: expressionValueReferences,
     BinaryExpression: expressionValueReferences,
     BooleanLiteral: expressionValueReferences,
-    ConditionalExpression: expressionValueReferences,
+    WhenExpression: expressionValueReferences,
     FunctionCallExpression: expressionValueReferences,
     InterpolationExpression: expressionValueReferences,
     ListLiteral: expressionValueReferences,

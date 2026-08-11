@@ -27,6 +27,15 @@ export type TaoTestExpectation = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestInputValueExpectation declares one selector-targeted native input value assertion. */
+export type TaoTestInputValueExpectation = {
+  kind: 'expectInputValue'
+  selector: string
+  target: string
+  value: string
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestPressStep declares one v0 selector-targeted press action. */
 export type TaoTestPressStep = {
   kind: 'press'
@@ -61,11 +70,19 @@ export type TaoTestDataStatusStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestBackStep dispatches the active stack's platform-equivalent back operation. */
+export type TaoTestBackStep = {
+  kind: 'back'
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
 export type TaoTestStep =
+  | TaoTestBackStep
   | TaoTestDataStatusStep
   | TaoTestEnterStep
   | TaoTestExpectation
+  | TaoTestInputValueExpectation
   | TaoTestPressStep
   | TaoTestSubmitStep
 
@@ -140,14 +157,30 @@ function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation
   }
 }
 
+function compileInputValueExpectation(expectation: AST.ExpectInputValueStep): TaoTestInputValueExpectation {
+  return {
+    kind: 'expectInputValue',
+    selector: expectation.selector,
+    target: expectation.target,
+    value: expectation.value,
+    source: sourceLocation(expectation),
+  }
+}
+
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
+    BackTestStep: compileBackTestStep,
     DataStatusStep: compileDataStatusStep,
     EnterTextStep: compileEnterTextStep,
+    ExpectInputValueStep: compileInputValueExpectation,
     ExpectTextStep: compileExpectation,
     PressTextStep: compilePressTextStep,
     SubmitInputStep: compileSubmitInputStep,
   })
+}
+
+function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {
+  return { kind: 'back', source: sourceLocation(step) }
 }
 
 function compileDataStatusStep(step: AST.DataStatusStep): TaoTestDataStatusStep {

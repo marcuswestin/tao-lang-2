@@ -51,19 +51,27 @@ class TR {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
   }
 
-  /** Conditional evaluates only the selected expression branch. */
-  static Conditional<T>(
-    condition: TR.Value<boolean>,
-    whenTrue: () => TR.Value<T>,
-    whenFalse: () => TR.Value<T>,
+  /** When evaluates value branches in source order, invoking only the selected body. */
+  static When<T>(
+    branches: readonly [() => TR.Evaluable, () => TR.Evaluable][],
+    otherwise: () => TR.Evaluable,
   ): TR.Value<T> {
-    return condition.evaluate().jsValue ? whenTrue() : whenFalse()
+    for (const [condition, body] of branches) {
+      if (condition().evaluate().jsValue) {
+        return body().evaluate() as TR.Value<T>
+      }
+    }
+    return otherwise().evaluate() as TR.Value<T>
   }
 
   /** Member reads item fields and the built-in Empty/Count collection and text members. */
   static Member(root: TR.Evaluable, path: readonly string[]): TR.Value<any> {
     let value = root.evaluate().jsValue
     for (const member of path) {
+      if (DataControls.IsEntityHandle(value)) {
+        value = DataControls.Read(value, member)
+        continue
+      }
       if ((Array.isArray(value) || typeof value === 'string') && member === 'Empty') {
         value = value.length === 0
         continue
@@ -87,13 +95,31 @@ class TR {
     return fn.invoke(...args) as TR.Value<T>
   }
 
-  /** If selects one lazy render branch. */
-  static If(
-    condition: TR.Value<boolean>,
-    whenTrue: () => React.ReactNode,
-    whenFalse?: () => React.ReactNode,
+  /** WhenRender renders only the first matching branch body. */
+  static WhenRender(
+    branches: readonly [() => TR.Evaluable, () => React.ReactNode][],
+    otherwise: () => React.ReactNode,
   ): React.ReactNode {
-    return condition.evaluate().jsValue ? whenTrue() : whenFalse?.() ?? null
+    for (const [condition, body] of branches) {
+      if (condition().evaluate().jsValue) {
+        return body()
+      }
+    }
+    return otherwise()
+  }
+
+  /** WhenAction runs only the first matching action body. */
+  static WhenAction(
+    branches: readonly [() => TR.Evaluable, () => void][],
+    otherwise: () => void,
+  ): void {
+    for (const [condition, body] of branches) {
+      if (condition().evaluate().jsValue) {
+        body()
+        return
+      }
+    }
+    otherwise()
   }
 
   /** ForEach renders a stable fragment for each list value. */
@@ -115,12 +141,12 @@ class TR {
   }
 
   /** Action creates runtime Tao actions from generated callbacks. */
-  static Action(body: (...args: any[]) => void): TR.Action {
+  static Action<Args extends any[]>(body: (...args: Args) => void): TR.Action<Args> {
     return new RuntimeAction(body)
   }
 
   /** Alias creates live runtime Tao aliases that intentionally re-evaluate their initializer on every read. */
-  static Alias<T>(value: TR.Evaluable | (() => TR.Evaluable)): TR.Alias<T> {
+  static Alias<Source extends TR.Evaluable>(value: Source | (() => Source)): RuntimeAlias<Source> {
     return new RuntimeAlias(value)
   }
 
@@ -147,13 +173,18 @@ class TR {
   }
 
   /** Do invokes a Tao action value with already-compiled runtime arguments. */
-  static Do(action: TR.Action, ...args: any[]): void {
+  static Do<Args extends any[]>(action: TR.Action<Args>, ...args: Args): void {
     action.evaluate().jsValue.invoke(...args)
   }
 
   /** Set updates a Tao state value. */
   static Set<T>(state: TR.State<T>, value: () => TR.Value<T>): void {
     state.set(value())
+  }
+
+  /** Toggle inverts a boolean state. Validation limits this to boolean states. */
+  static Toggle(state: TR.State<boolean>): void {
+    state.set(new RuntimeValue(!state.evaluate().jsValue))
   }
 
   /** State creates view-local reactive Tao state. */
@@ -231,11 +262,11 @@ class RuntimeValue<T> {
   }
 }
 
-class RuntimeAlias<T> {
-  constructor(private readonly value: TR.Evaluable | (() => TR.Evaluable)) {}
+class RuntimeAlias<Source extends TR.Evaluable> {
+  constructor(private readonly value: Source | (() => Source)) {}
 
-  evaluate(): TR.AliasValue<T> {
-    return (typeof this.value === 'function' ? this.value() : this.value).evaluate() as TR.AliasValue<T>
+  evaluate(): TR.AliasValue<Source> {
+    return (typeof this.value === 'function' ? this.value() : this.value).evaluate() as TR.AliasValue<Source>
   }
 }
 
@@ -256,22 +287,22 @@ class RuntimeState<T> {
   }
 }
 
-class RuntimeActionValue {
-  constructor(private readonly body: (...args: any[]) => void) {}
+class RuntimeActionValue<Args extends any[] = any[]> {
+  constructor(private readonly body: (...args: Args) => void) {}
 
-  invoke(...args: any[]): void {
+  invoke(...args: Args): void {
     this.body(...args)
   }
 }
 
-class RuntimeAction {
-  readonly jsValue: RuntimeActionValue
+class RuntimeAction<Args extends any[] = any[]> {
+  readonly jsValue: RuntimeActionValue<Args>
 
-  constructor(body: (...args: any[]) => void) {
+  constructor(body: (...args: Args) => void) {
     this.jsValue = new RuntimeActionValue(body)
   }
 
-  evaluate(): RuntimeAction {
+  evaluate(): RuntimeAction<Args> {
     return this
   }
 }
@@ -297,15 +328,15 @@ function stableListKey(value: unknown, index: number): string | number {
 
 namespace TR {
   /** Action declares a runtime Tao action wrapper. */
-  export type Action = RuntimeAction
+  export type Action<Args extends any[] = any[]> = RuntimeAction<Args>
   /** ActionValue declares the JavaScript payload for an evaluated Tao action. */
-  export type ActionValue = RuntimeActionValue
+  export type ActionValue<Args extends any[] = any[]> = RuntimeActionValue<Args>
   /** BinaryOperator declares the shipped Tao binary operators. */
   export type BinaryOperator = '!=' | '*' | '+' | '-' | '/' | '<' | '<=' | '==' | '>' | '>=' | 'and' | 'or'
   /** Alias declares a runtime Tao alias wrapper. */
-  export type Alias<T> = RuntimeAlias<T>
+  export type Alias<T> = RuntimeAlias<T extends TR.Evaluable ? T : TR.Value<T>>
   /** AliasValue declares the evaluated runtime value for a Tao alias. */
-  export type AliasValue<T> = T extends TR.Action ? TR.Action : TR.Value<T>
+  export type AliasValue<T> = T extends TR.Evaluable ? ReturnType<T['evaluate']> : TR.Value<T>
   /** CompoundSetOperator declares supported numeric compound state update operators. */
   export type CompoundSetOperator = '+=' | '-=' | '*=' | '/='
   /** Evaluable declares runtime values that can collapse to their current value. */

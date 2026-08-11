@@ -18,7 +18,7 @@ entry BlocksGrammarEntrypoint:
 
 // Statement stays broad so validators can report context-specific placement errors.
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | EnterTextStep | SubmitInputStep | DataStatusStep | AppView | AppStack | StateDeclaration | QueryDeclaration | Injection | RenderStatement | ViewRender | IfStatement | ForStatement;
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | ExpectTextStep | ExpectInputValueStep | EnterTextStep | SubmitInputStep | BackTestStep | DataStatusStep | AppView | AppStack | AppDatasource | StateDeclaration | QueryDeclaration | Injection | RenderStatement | ViewRender | WhenRenderStatement | ForStatement;
 
 Declaration:
     AppDeclaration | ViewDeclaration | LayoutDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration | StackDeclaration;
@@ -27,7 +27,7 @@ Declaration:
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 // View statements are the declarations and render sites accepted by view/layout bodies.
-type ViewStatement = AliasDeclaration | StateDeclaration | QueryDeclaration | ActionDeclaration | Render | IfStatement | ForStatement;
+type ViewStatement = AliasDeclaration | StateDeclaration | QueryDeclaration | ActionDeclaration | Render | WhenRenderStatement | ForStatement;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | QueryDeclaration | ForStatement;
 type ExportableDeclaration = AliasDeclaration | RenderableDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration | StackDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | RenderableDeclaration | ActionDeclaration | FunctionDeclaration | DataDeclaration | StackDeclaration;
@@ -43,4 +43,4 @@ ParameterList:
     parameters+=ParameterDeclaration (',' parameters+=ParameterDeclaration)*;
 
 ParameterDeclaration:
-    inlineType=ParameterTypeDeclaration | type=NamedTypeReference;
+    (inlineType=ParameterTypeDeclaration | type=NamedTypeReference) ('default' defaultValue=Expression)?;

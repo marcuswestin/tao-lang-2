@@ -62,7 +62,7 @@ function validateStack(stack: AST.StackDeclaration, ctx: ValidationContext): voi
     return
   }
   const initialView = initial.view.ref
-  if (initialView && AST.parametersOf(initialView).length > 0) {
+  if (initialView && AST.parametersOf(initialView).some(parameter => parameter.defaultValue === undefined)) {
     ctx.error(navigationValidationMessages.parameterizedInitial(stack.name, initialName), stack.block.initial)
   }
 }

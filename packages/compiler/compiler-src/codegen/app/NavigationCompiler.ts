@@ -21,7 +21,7 @@ export const NavigationCompiler = {
   NavigationDestination(destination: AST.NavigationDestination): Compiled {
     const view = resolveRef(destination.view)
     return gen`
-      ${gen.jsLiteral(view.name)}: {
+      [${gen.jsLiteral(view.name)}]: {
         render: (_NavigationArguments, _NavigationProps) =>
           <${gen.scopeName(view)}${
       gen.join(AST.parametersOf(view), parameter => {
@@ -46,7 +46,7 @@ export const NavigationCompiler = {
   },
 
   NavigationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    return gen`${gen.jsLiteral(Type.parameterName(pair.parameter))}: ${Compile.Argument(pair.argument)},`
+    return gen`[${gen.jsLiteral(Type.parameterName(pair.parameter))}]: ${Compile.Argument(pair.argument)},`
   },
 
   BackStatement(back: AST.BackStatement): Compiled {

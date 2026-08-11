@@ -7,12 +7,15 @@ const messages = {
   binaryComparable: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
-  conditionalBranch: '`if … then … else …` branches must produce compatible value types.',
-  conditionBoolean: 'An if condition must be boolean.',
+  conditionalBranch: '`when` branches must produce compatible value types.',
+  conditionBoolean: 'A `when` condition must be boolean.',
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this function.`,
+  functionNamedArgument: (name: string) => `Function '${name}' only accepts positional arguments.`,
   forCollection: '`for` requires a list value after `in`.',
-  functionArgumentCount: (name: string, expected: number, actual: number) =>
-    `Function '${name}' expects ${expected} argument${expected === 1 ? '' : 's'}, got ${actual}.`,
+  functionArgumentCount: (name: string, minimum: number, maximum: number, actual: number) =>
+    minimum === maximum
+      ? `Function '${name}' expects ${minimum} argument${minimum === 1 ? '' : 's'}, got ${actual}.`
+      : `Function '${name}' expects ${minimum} to ${maximum} arguments, got ${actual}.`,
   functionArgumentType: (name: string, index: number, expected: string, actual: string) =>
     `Argument ${index + 1} of function '${name}' expects ${expected}, got ${actual}.`,
   functionPlacement: 'Pure functions must be declared at file level.',
@@ -20,7 +23,7 @@ const messages = {
     `Function '${name}' returns ${expected}, but its expression produces ${actual}.`,
   interpolationPart: '`interpolate` accepts text, number, boolean, or none values.',
   listElement: 'List elements must have compatible types.',
-  renderControlPlacement: '`if` and `for` rendering must be nested inside a render child block.',
+  renderControlPlacement: '`when` and `for` rendering must be nested inside a render child block.',
   unaryBoolean: "Unary 'not' requires a boolean value.",
   unaryNumber: "Unary '-' requires a number value.",
 } as const
@@ -48,14 +51,19 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(expression.operator === 'not' ? messages.unaryBoolean : messages.unaryNumber, expression)
     }
   }
-  for (const expression of AST.streamAllContents(file).filter(AST.isConditionalExpression)) {
-    validateCondition(expression.condition, ctx)
-    validateCompatibleBranches(expression.whenTrue, expression.whenFalse, expression, ctx)
+  for (const expression of AST.streamAllContents(file).filter(AST.isWhenExpression)) {
+    validateWhenConditions(expression.branches, ctx)
+    validateCompatibleBranches(
+      [...expression.branches.map(branch => branch.value), expression.otherwise.value],
+      ctx,
+    )
   }
   for (const expression of AST.streamAllContents(file).filter(AST.isInterpolationExpression)) {
     for (const part of expression.parts) {
       const type = Type.ofExpression(part)
-      if (type.kind !== 'unresolved' && (type.kind !== 'primitive' || type.primitive === 'action')) {
+      const supported = type.kind === 'primitive'
+        && ['text', 'number', 'boolean', 'none'].includes(type.primitive)
+      if (type.kind !== 'unresolved' && !supported) {
         ctx.error(messages.interpolationPart, part)
       }
     }
@@ -63,9 +71,12 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const list of AST.streamAllContents(file).filter(AST.isListLiteral)) {
     validateList(list, ctx)
   }
-  for (const statement of AST.streamAllContents(file).filter(AST.isIfStatement)) {
-    validateCondition(statement.condition, ctx)
+  for (const statement of AST.streamAllContents(file).filter(AST.isWhenRenderStatement)) {
+    validateWhenConditions(statement.branches, ctx)
     validateRenderControlPlacement(statement, ctx)
+  }
+  for (const statement of AST.streamAllContents(file).filter(AST.isWhenActionStatement)) {
+    validateWhenConditions(statement.branches, ctx)
   }
   for (const statement of AST.streamAllContents(file).filter(AST.isForStatement)) {
     const collection = Type.ofExpression(statement.collection)
@@ -102,8 +113,14 @@ function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationC
   }
   const parameters = AST.parametersOf(fn)
   const arguments_ = AST.argumentsOf(call)
-  if (parameters.length !== arguments_.length) {
-    ctx.error(messages.functionArgumentCount(fn.name, parameters.length, arguments_.length), call)
+  const requiredCount = parameters.filter(parameter => parameter.defaultValue === undefined).length
+  if (arguments_.length < requiredCount || arguments_.length > parameters.length) {
+    ctx.error(messages.functionArgumentCount(fn.name, requiredCount, parameters.length, arguments_.length), call)
+  }
+  for (const argument of arguments_) {
+    if (argument.parameterName !== undefined) {
+      ctx.error(messages.functionNamedArgument(fn.name), argument)
+    }
   }
   for (let index = 0; index < Math.min(parameters.length, arguments_.length); index++) {
     const parameter = parameters[index]!
@@ -158,46 +175,55 @@ function validateCondition(condition: AST.Expression, ctx: ValidationContext): v
   }
 }
 
-function validateCompatibleBranches(
-  whenTrue: AST.Expression,
-  whenFalse: AST.Expression,
-  node: AST.Node,
+function validateWhenConditions(
+  branches: readonly (AST.WhenBranch | AST.WhenRenderBranch | AST.WhenActionBranch)[],
   ctx: ValidationContext,
 ): void {
-  const trueType = Type.ofExpression(whenTrue)
-  const falseType = Type.ofExpression(whenFalse)
-  if (
-    trueType.kind !== 'unresolved'
-    && falseType.kind !== 'unresolved'
-    && !Type.isAssignable(trueType, falseType)
-    && !Type.isAssignable(falseType, trueType)
-  ) {
-    ctx.error(messages.conditionalBranch, node)
+  for (const branch of branches) {
+    validateCondition(branch.condition, ctx)
+  }
+}
+
+function validateCompatibleBranches(
+  values: readonly AST.Expression[],
+  ctx: ValidationContext,
+): void {
+  const resolvedValues = values
+    .map(value => ({ value, type: Type.ofExpression(value) }))
+    .filter(({ type }) => type.kind !== 'unresolved')
+  const incompatible = firstValueWithoutCommonType(resolvedValues)
+  if (incompatible) {
+    ctx.error(messages.conditionalBranch, incompatible.value)
   }
 }
 
 function validateList(list: AST.ListLiteral, ctx: ValidationContext): void {
-  const first = list.elements[0]
-  if (!first) {
-    return
-  }
-  const expected = Type.ofExpression(first)
-  if (expected.kind === 'unresolved') {
-    return
-  }
-  for (const element of list.elements.slice(1)) {
-    const actual = Type.ofExpression(element)
-    if (
-      actual.kind !== 'unresolved'
-      && !Type.isAssignable(actual, expected)
-      && !Type.isAssignable(expected, actual)
-    ) {
-      ctx.error(messages.listElement, element)
-    }
+  const resolvedElements = list.elements
+    .map(element => ({ element, type: Type.ofExpression(element) }))
+    .filter(({ type }) => type.kind !== 'unresolved')
+  const incompatible = firstValueWithoutCommonType(resolvedElements)
+  if (incompatible) {
+    ctx.error(messages.listElement, incompatible.element)
   }
 }
 
-function validateRenderControlPlacement(node: AST.IfStatement | AST.ForStatement, ctx: ValidationContext): void {
+function firstValueWithoutCommonType<ValueT extends { type: ReturnType<typeof Type.ofExpression> }>(
+  values: readonly ValueT[],
+): ValueT | undefined {
+  const prefix = []
+  for (const value of values) {
+    prefix.push(value.type)
+    if (prefix.length > 1 && !Type.commonType(prefix)) {
+      return value
+    }
+  }
+  return undefined
+}
+
+function validateRenderControlPlacement(
+  node: AST.WhenRenderStatement | AST.ForStatement,
+  ctx: ValidationContext,
+): void {
   let current: AST.Node | undefined = node.$container
   while (current) {
     if (AST.isRender(current)) {

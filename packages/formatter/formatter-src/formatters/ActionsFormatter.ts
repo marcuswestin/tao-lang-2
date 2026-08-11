@@ -25,6 +25,26 @@ export const ActionsFormatter = {
   /** ActionExpression formats inline action bodies. */
   ActionExpression() {},
 
+  /** ToggleStatement formats boolean state inversion. */
+  ToggleStatement(f) {
+    f.oneSpaceAfter('toggle')
+  },
+
+  /** WhenActionStatement puts each branch and its required fallback on an indented line. */
+  WhenActionStatement(f) {
+    f.indentedLines([...f.node.branches, f.node.otherwise])
+  },
+
+  /** WhenActionBranch spaces its condition against the branch arrow. */
+  WhenActionBranch(f) {
+    f.oneSpaceBefore('->')
+  },
+
+  /** WhenActionOtherwise spaces the fallback keyword against the branch arrow. */
+  WhenActionOtherwise(f) {
+    f.oneSpaceBefore('->')
+  },
+
   /** DoStatement formats action invocation spacing. */
   DoStatement(f) {
     f.oneSpaceAfter('do')

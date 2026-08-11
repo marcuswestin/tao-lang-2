@@ -47,10 +47,19 @@ export default {
     f.oneSpaceAfter('not')
   },
 
-  /** ConditionalExpression formats `if … then … else …` expression spacing. */
-  ConditionalExpression(f) {
-    f.oneSpaceAfter('if', 'then', 'else')
-    f.oneSpaceBefore('then', 'else')
+  /** WhenExpression puts each branch and its required fallback on an indented line. */
+  WhenExpression(f) {
+    f.indentedLines([...f.node.branches, f.node.otherwise])
+  },
+
+  /** WhenBranch spaces a value branch around its arrow. */
+  WhenBranch(f) {
+    f.oneSpaceAround('->')
+  },
+
+  /** WhenOtherwise spaces the required fallback around its arrow. */
+  WhenOtherwise(f) {
+    f.oneSpaceAround('->')
   },
 
   /** InterpolationExpression formats comma-separated interpolation parts. */

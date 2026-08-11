@@ -80,7 +80,7 @@ publish view Number Value is number {
    ```
 }
 
-publish view Button Title is text, Action is action {
+publish view Button Title is text, Action is action() {
    render inject Title, Action ```ts
       return TR.Views.Pressable(
         { __tao: _ViewProps.__tao, title: Title, action: Action },
@@ -89,7 +89,7 @@ publish view Button Title is text, Action is action {
    ```
 }
 
-publish view TextInput Value is text, Change is action, Submit is action, Label is text, Placeholder is text, Id is text, Disabled is boolean {
+publish view TextInput Value is text, Change is action(text), Submit is action(), Label is text, Placeholder is text default "", Id is text default "", Disabled is boolean default false {
    render inject Value, Change, Submit, Label, Placeholder, Id, Disabled ```ts
       return TR.Views.TextInput(
         {
@@ -106,28 +106,31 @@ publish view TextInput Value is text, Change is action, Submit is action, Label 
    ```
 }
 
-publish view FormButton Title is text, Press is action, Id is text, Disabled is boolean, Submitting is boolean {
+publish view FormButton Title is text, Press is action(), Id is text default "", Disabled is boolean default false, Submitting is boolean default false {
    render inject Title, Press, Id, Disabled, Submitting ```ts
+      const effectiveDisabled = Disabled || Submitting
       return TR.Views.Pressable(
         {
           __tao: _ViewProps.__tao,
           title: Submitting ? 'Saving…' : Title,
           action: Press,
+          disabled: effectiveDisabled,
         },
         {
           nativeProps: {
+            accessibilityLabel: Title,
             accessibilityRole: 'button',
-            accessibilityState: { busy: Submitting, disabled: Disabled },
-            disabled: Disabled,
+            accessibilityState: { busy: Submitting, disabled: effectiveDisabled },
+            disabled: effectiveDisabled,
             style: {
               alignItems: 'center',
-              backgroundColor: Disabled ? '#9aa49d' : '#2f6b4f',
+              backgroundColor: effectiveDisabled ? '#9aa49d' : '#2f6b4f',
               borderRadius: 8,
               minHeight: 44,
               paddingHorizontal: 16,
               paddingVertical: 11,
             },
-            testID: Id,
+            testID: Id || undefined,
           },
         },
       )

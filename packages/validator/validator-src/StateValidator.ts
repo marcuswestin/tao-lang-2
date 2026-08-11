@@ -12,6 +12,8 @@ const stateValidationMessages = {
   stateActionType: (state: string) => `State '${state}' cannot store an action value in this MVP.`,
   compoundStateType: (state: string, operator: AST.SetOperator, actual: string) =>
     `Compound set '${operator}' requires state '${state}' to be number, got ${actual}.`,
+  toggleStateType: (state: string, actual: string) =>
+    `\`toggle\` requires state '${state}' to be boolean, got ${actual}.`,
 } as const
 
 /** StateValidator groups state validation and diagnostics. */
@@ -23,7 +25,24 @@ export const StateValidator = {
 
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   reportStateReferenceOrder(allStates(file), ctx)
-  reportSetTargetReferenceOrder(file, ctx)
+  reportStateMutationTargetReferenceOrder(file, ctx)
+  reportToggleTargets(file, ctx)
+}
+
+function reportToggleTargets(file: AST.TaoFile, ctx: ValidationContext): void {
+  for (const toggle of AST.streamAllContents(file).filter(AST.isToggleStatement)) {
+    const state = toggle.target.ref
+    if (!state) {
+      continue
+    }
+    const stateType = Type.ofExpression(state.value)
+    if (stateType.kind === 'unresolved') {
+      continue
+    }
+    if (stateType.kind !== 'primitive' || stateType.primitive !== 'boolean') {
+      ctx.error(stateValidationMessages.toggleStateType(state.name, Type.displayName(stateType)), toggle)
+    }
+  }
 }
 
 function registerTypeValidation(typir: TaoTypirServices): void {
@@ -56,13 +75,17 @@ function valueDeclarationName(declaration: AST.ValueDeclaration | undefined): st
   return declaration ? Type.declarationName(declaration) : '<unresolved>'
 }
 
-function reportSetTargetReferenceOrder(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const setStatement of AST.streamAllContents(file).filter(AST.isSetStatement)) {
-    const target = setStatement.target.ref
-    if (isInvalidSetTargetReferenceOrder(target, setStatement)) {
-      ctx.error(stateValidationMessages.usedBeforeDeclaration(target.name), setStatement)
+function reportStateMutationTargetReferenceOrder(file: AST.TaoFile, ctx: ValidationContext): void {
+  for (const mutation of AST.streamAllContents(file).filter(isStateMutationStatement)) {
+    const target = mutation.target.ref
+    if (isInvalidStateMutationTargetReferenceOrder(target, mutation)) {
+      ctx.error(stateValidationMessages.usedBeforeDeclaration(target.name), mutation)
     }
   }
+}
+
+function isStateMutationStatement(node: AST.Node): node is AST.SetStatement | AST.ToggleStatement {
+  return AST.isSetStatement(node) || AST.isToggleStatement(node)
 }
 
 function isInvalidStateInitializerReferenceOrder(
@@ -77,13 +100,13 @@ function isInvalidStateInitializerReferenceOrder(
     && DeclarationOrder.isUsedBeforeDeclaration(declaration, state)
 }
 
-function isInvalidSetTargetReferenceOrder(
+function isInvalidStateMutationTargetReferenceOrder(
   target: AST.StateDeclaration | undefined,
-  setStatement: AST.SetStatement,
+  mutation: AST.SetStatement | AST.ToggleStatement,
 ): target is AST.StateDeclaration {
   return target !== undefined
     && DeclarationOrder.isViewOwnedValueDeclaration(target)
-    && DeclarationOrder.isUsedBeforeDeclaration(target, setStatement)
+    && DeclarationOrder.isUsedBeforeDeclaration(target, mutation)
 }
 
 function validateSetStatementTypes(

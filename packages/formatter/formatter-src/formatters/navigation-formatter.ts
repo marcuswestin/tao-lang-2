@@ -28,7 +28,9 @@ export default {
     f.oneSpaceAfter('present')
     f.noSpaceBefore('.')
     f.noSpaceAfter('.')
-    f.oneSpaceBeforeProperty('argumentList')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
   },
 
   BackStatement(f) {

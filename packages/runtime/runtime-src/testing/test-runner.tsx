@@ -35,11 +35,19 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
 
 function runStep(screen: RuntimeApp.Screen, step: TestCompiler.Step): void {
   return Switch.kind<TestCompiler.Step, void>(step, {
+    back: back => backStep(back),
     dataStatus: status => dataStatusStep(status),
     enter: enter => enterStep(screen, enter),
     expect: expectation => assertExpectation(screen, expectation),
+    expectInputValue: expectation => assertInputValue(screen, expectation),
     press: press => pressStep(screen, press),
     submit: submit => submitStep(screen, submit),
+  })
+}
+
+function backStep(_step: Extract<TestCompiler.Step, { kind: 'back' }>): void {
+  act(() => {
+    TR.Navigation.Back()
   })
 }
 
@@ -50,23 +58,7 @@ function dataStatusStep(step: Extract<TestCompiler.Step, { kind: 'dataStatus' }>
 }
 
 function pressStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'press' }>): void {
-  const matches = querySelector(screen, step.selector, step.text)
-  if (matches.length === 0) {
-    throw new Error(
-      `${formatStep(step)} expected pressable rendered text but found none.\n${formatSource(step.source)}`,
-    )
-  }
-  if (matches.length > 1) {
-    throw new Error(
-      `${formatStep(step)} expected one pressable rendered text but found ${matches.length} matches.\n${
-        formatSource(step.source)
-      }`,
-    )
-  }
-  const match = matches[0]
-  if (match === undefined) {
-    throw new Error(`${formatStep(step)} expected one pressable rendered text but found none.`)
-  }
+  const match = requireSingleMatch(screen, step, step.text, 'pressable')
   fireEvent.press(match)
 }
 
@@ -99,8 +91,25 @@ function assertExpectation(
   }
 }
 
+function assertInputValue(
+  screen: RuntimeApp.Screen,
+  expectation: Extract<TestCompiler.Step, { kind: 'expectInputValue' }>,
+): void {
+  const match = requireSingleMatch(screen, expectation, expectation.target, 'input')
+  if (match.props.value !== expectation.value) {
+    throw new Error(
+      `${formatStep(expectation)} expected input value ${JSON.stringify(expectation.value)}, got ${
+        JSON.stringify(
+          match.props.value,
+        )
+      }.\n${formatSource(expectation.source)}`,
+    )
+  }
+}
+
 function formatStep(step: TestCompiler.Step): string {
   return Switch.kind<TestCompiler.Step, string>(step, {
+    back: () => 'back',
     enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
     dataStatus: status =>
       status.status === 'error'
@@ -110,6 +119,8 @@ function formatStep(step: TestCompiler.Step): string {
       expectation.missing
         ? `expect missing ${expectation.selector} "${expectation.text}"`
         : `expect ${expectation.selector} "${expectation.text}"`,
+    expectInputValue: expectation =>
+      `expect input ${expectation.selector} "${expectation.target}" value "${expectation.value}"`,
     press: press => `press ${press.selector} "${press.text}"`,
     submit: submit => `submit ${submit.selector} "${submit.target}"`,
   })
@@ -117,7 +128,7 @@ function formatStep(step: TestCompiler.Step): string {
 
 function requireSingleMatch(
   screen: RuntimeApp.Screen,
-  step: Exclude<TestCompiler.Step, { kind: 'dataStatus' }>,
+  step: Extract<TestCompiler.Step, { selector: string }>,
   target: string,
   description: string,
 ) {
@@ -141,6 +152,9 @@ function querySelector(screen: RuntimeApp.Screen, selector: string, target: stri
   }
   if (selector === 'text') {
     return screen.queryAllByText(target)
+  }
+  if (selector === 'placeholder') {
+    return screen.queryAllByPlaceholderText(target)
   }
   throw new Error(`Unsupported test selector '${selector}'.`)
 }

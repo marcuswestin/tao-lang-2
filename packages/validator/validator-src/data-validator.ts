@@ -8,6 +8,8 @@ export const dataValidationMessages = {
   duplicateCollection: (name: string) => `Data collection '${name}' is declared more than once.`,
   duplicateEntity: (name: string) => `Data entity '${name}' is declared more than once.`,
   duplicateField: (entity: string, name: string) => `Entity '${entity}' declares field '${name}' more than once.`,
+  reservedField: (entity: string, name: string) =>
+    `Entity '${entity}' cannot declare reserved field '${name}'; every entity receives that field automatically.`,
   unknownRelation: (entity: string, name: string) =>
     `Entity '${entity}' references unknown relationship entity '${name}'.`,
   queryPlacement: 'Queries must be declared directly inside view bodies.',
@@ -16,10 +18,15 @@ export const dataValidationMessages = {
   unknownField: (entity: string, name: string) => `Entity '${entity}' has no field named '${name}'.`,
   duplicateOrder: 'A query may declare only one order clause.',
   relationOrder: (name: string) => `Relationship field '${name}' cannot be used for ordering.`,
+  relationComparison: (name: string, operator: string) =>
+    `Relationship field '${name}' supports only == and !=, not '${operator}'.`,
   booleanComparison: (name: string, operator: string) =>
     `Boolean field '${name}' supports only == and !=, not '${operator}'.`,
   fieldType: (field: string, expected: string, actual: string) =>
     `Data field '${field}' expects ${expected}, got ${actual}.`,
+  defaultType: (field: string, expected: string, actual: string) =>
+    `Default for data field '${field}' expects ${expected}, got ${actual}.`,
+  nowDefault: (field: string) => `Only time field '${field}' can default to now().`,
   duplicateWriteField: (name: string) => `Data write provides field '${name}' more than once.`,
   missingCreateField: (entity: string, name: string) => `Create of '${entity}' is missing field '${name}'.`,
   rowTarget: (operation: string) => `${operation} expects a row handle produced by a Tao query.`,
@@ -55,7 +62,6 @@ function validateSchema(data: AST.DataDeclaration, ctx: ValidationContext): void
     ctx,
   )
   reportDuplicates(data.block.entities, entity => entity.name, dataValidationMessages.duplicateEntity, ctx)
-  const entityNames = new Set(data.block.entities.map(entity => entity.name))
   for (const entity of data.block.entities) {
     reportDuplicates(
       entity.block.fields,
@@ -64,9 +70,13 @@ function validateSchema(data: AST.DataDeclaration, ctx: ValidationContext): void
       ctx,
     )
     for (const field of entity.block.fields) {
-      if (field.relationName && !entityNames.has(field.relationName)) {
-        ctx.error(dataValidationMessages.unknownRelation(entity.name, field.relationName), field)
+      if (field.name === 'Id') {
+        ctx.error(dataValidationMessages.reservedField(entity.name, field.name), field)
       }
+      if (field.relation && !field.relation.ref) {
+        ctx.error(dataValidationMessages.unknownRelation(entity.name, field.relation.$refText), field)
+      }
+      validateFieldDefault(field, ctx)
     }
   }
 }
@@ -96,13 +106,16 @@ function validateQuery(query: AST.QueryDeclaration, ctx: ValidationContext): voi
       continue
     }
     if (AST.isOrderClause(clause)) {
-      if (field.relationName) {
+      if (field.relation) {
         ctx.error(dataValidationMessages.relationOrder(field.name), clause)
       }
       continue
     }
     if (field.primitive === 'boolean' && clause.operator !== '==' && clause.operator !== '!=') {
       ctx.error(dataValidationMessages.booleanComparison(field.name, clause.operator), clause)
+    }
+    if (field.relation && clause.operator !== '==' && clause.operator !== '!=') {
+      ctx.error(dataValidationMessages.relationComparison(field.name, clause.operator), clause)
     }
     validateFieldValue(field, clause.value, ctx)
   }
@@ -165,10 +178,34 @@ function validateWriteFields(
   }
   if (requireAll) {
     for (const field of entity.block.fields) {
-      if (!provided.has(field.name)) {
+      if (!provided.has(field.name) && field.defaultValue === undefined) {
         ctx.error(dataValidationMessages.missingCreateField(entity.name, field.name), fields[0]?.$container ?? entity)
       }
     }
+  }
+}
+
+function validateFieldDefault(field: AST.DataField, ctx: ValidationContext): void {
+  const defaultValue = field.defaultValue
+  if (!defaultValue) {
+    return
+  }
+  if (AST.isNowExpression(defaultValue)) {
+    if (field.primitive !== 'time') {
+      ctx.error(dataValidationMessages.nowDefault(field.name), defaultValue)
+    }
+    return
+  }
+  const expected = Type.dataFieldType(field)
+  const actual = Type.ofExpression(defaultValue)
+  if (expected.kind === 'unresolved' || actual.kind === 'unresolved') {
+    return
+  }
+  if (!Type.isAssignable(actual, expected)) {
+    ctx.error(
+      dataValidationMessages.defaultType(field.name, Type.displayName(expected), Type.displayName(actual)),
+      defaultValue,
+    )
   }
 }
 

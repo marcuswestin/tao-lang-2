@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -8,7 +9,7 @@ export const DataCompiler = {
     return gen`
       ${gen.scopeName(data)} = TR.Data.Schema({
         name: ${gen.jsLiteral(data.name)},
-        provider: ${gen.jsLiteral(data.provider || 'local')},
+        schemaVersion: 1,
         storageKey: ${gen.jsLiteral(data.name)},
         entities: {
           ${gen.list(data.block.entities, Compile.DataEntity)}
@@ -19,7 +20,7 @@ export const DataCompiler = {
 
   DataEntity(entity: AST.DataEntity): Compiled {
     return gen`
-      ${gen.jsLiteral(entity.name)}: {
+      [${gen.jsLiteral(entity.name)}]: {
         collection: ${gen.jsLiteral(entity.collectionName)},
         fields: {
           ${gen.list(entity.block.fields, Compile.DataField)}
@@ -30,18 +31,41 @@ export const DataCompiler = {
 
   DataField(field: AST.DataField): Compiled {
     return field.primitive
-      ? gen`${gen.jsLiteral(field.name)}: { kind: ${gen.jsLiteral(field.primitive)} },`
-      : gen`${gen.jsLiteral(field.name)}: { kind: 'relation', relation: ${gen.jsLiteral(field.relationName ?? '')} },`
+      ? gen`[${gen.jsLiteral(field.name)}]: {
+          kind: ${gen.jsLiteral(field.primitive)},
+          ${field.indexed ? 'indexed: true,' : ''}
+          ${field.defaultValue ? Compile.DataFieldDefault(field.defaultValue) : ''}
+        },`
+      : gen`[${gen.jsLiteral(field.name)}]: {
+          kind: 'relation',
+          relation: ${gen.jsLiteral(resolveRef(field.relation!).name)},
+          ${field.onDeleteCascade ? "onDelete: 'cascade'," : ''}
+        },`
+  },
+
+  /** DataFieldDefault keeps literal defaults distinct from the time-only now() sentinel. */
+  DataFieldDefault(value: Exclude<AST.DataField['defaultValue'], undefined>): Compiled {
+    return AST.isNowExpression(value)
+      ? gen`defaultNow: true,`
+      : AST.isBooleanLiteral(value)
+      ? gen`defaultValue: ${value.value},`
+      : AST.isNumberLiteral(value)
+      ? gen`defaultValue: ${value.value},`
+      : gen`defaultValue: ${gen.jsLiteral(value.value)},`
   },
 
   QueryDeclaration(query: AST.QueryDeclaration): Compiled {
     const data = resolveRef(query.data)
     const entity = data.block.entities.find(candidate => candidate.collectionName === query.collectionName)
+    Assert.defined(entity, 'validated query collection resolves an entity', {
+      collectionName: query.collectionName,
+      dataName: data.name,
+    })
     return gen`
       ${gen.scopeName(query)} = TR.Data.Query(
         ${gen.scopeName(data)},
         {
-          entity: ${gen.jsLiteral(entity?.name ?? query.collectionName)},
+          entity: ${gen.jsLiteral(entity.name)},
           filters: [${gen.list(query.block?.clauses.filter(AST.isWhereClause) ?? [], Compile.WhereClause)}],
           ${
       query.block?.clauses.find(AST.isOrderClause)
@@ -90,6 +114,6 @@ export const DataCompiler = {
   },
 
   DataWriteField(field: AST.DataWriteField): Compiled {
-    return gen`${gen.jsLiteral(field.name)}: ${Compile.Expression(field.value)},`
+    return gen`[${gen.jsLiteral(field.name)}]: ${Compile.Expression(field.value)},`
   },
 } as const

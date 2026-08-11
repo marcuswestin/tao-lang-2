@@ -90,7 +90,7 @@ _tao-check: _parser-gen
 
 _dprint-check:
     dprint check --incremental=false
-    just --check
+    just --fmt --check
 
 _typecheck:
     bunx tsc --build packages/*/tsconfig.json

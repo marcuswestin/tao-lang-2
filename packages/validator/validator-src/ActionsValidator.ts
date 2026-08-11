@@ -27,7 +27,14 @@ const actionValidationMessages = {
     `Action ${action} receives parameter '${name}' more than once.`,
   namedArgumentType: (action: string, name: string, expected: string, actual: string) =>
     `Named argument '.${name}' of action ${action} expects ${expected}, got ${actual}.`,
-  dynamicActionArguments: 'Action values without a named declaration cannot receive arguments in this MVP.',
+  dynamicActionArguments: 'Action callback declared as action() cannot receive arguments.',
+  dynamicActionArity: (expected: number, actual: number) =>
+    `Action callback expects ${expected} argument${expected === 1 ? '' : 's'}, got ${actual}.`,
+  dynamicActionArgumentCount: (minimum: number, maximum: number, actual: number) =>
+    `Action callback expects ${minimum} to ${maximum} arguments, got ${actual}.`,
+  dynamicActionArgumentType: (position: number, expected: string, actual: string) =>
+    `Argument ${position} of action callback expects ${expected}, got ${actual}.`,
+  dynamicActionNamedArgument: 'Action callback arguments are positional and cannot use a parameter name.',
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
 }
 
@@ -108,9 +115,7 @@ function addDeclarationNames(visibleNames: Set<string>, declarations: readonly A
 function reportArity(invocation: AST.DoStatement, ctx: ValidationContext): void {
   const resolved = ASTUtils.resolveActionInvocation(invocation)
   if (!resolved.action) {
-    if (ASTUtils.resolveActionTarget(invocation.action).kind === 'dynamic') {
-      reportDynamicActionArguments(invocation, ctx)
-    }
+    validateDynamicActionInvocation(invocation, ctx)
     return
   }
 
@@ -179,10 +184,47 @@ function reportActionBindingDiagnostic(
   })
 }
 
-function reportDynamicActionArguments(invocation: AST.DoStatement, ctx: ValidationContext): void {
+function validateDynamicActionInvocation(invocation: AST.DoStatement, ctx: ValidationContext): void {
+  const actionType = Type.ofExpression(invocation.action)
+  if (actionType.kind !== 'primitive' || actionType.primitive !== 'action') {
+    return
+  }
   const args = AST.argumentsOf(invocation)
-  if (args.length > 0) {
+  if (actionType.parameters.length === 0 && args.length > 0) {
     ctx.error(actionValidationMessages.dynamicActionArguments, args[0]!)
+    return
+  }
+  const requiredCount = actionType.parameters.filter(parameter => !parameter.optional).length
+  if (args.length < requiredCount || args.length > actionType.parameters.length) {
+    const message = requiredCount === actionType.parameters.length
+      ? actionValidationMessages.dynamicActionArity(actionType.parameters.length, args.length)
+      : actionValidationMessages.dynamicActionArgumentCount(requiredCount, actionType.parameters.length, args.length)
+    ctx.error(message, invocation)
+  }
+  for (const [index, argument] of args.entries()) {
+    if (argument.parameterName) {
+      ctx.error(actionValidationMessages.dynamicActionNamedArgument, argument)
+      continue
+    }
+    const parameter = actionType.parameters[index]
+    if (!parameter) {
+      continue
+    }
+    const actual = Type.ofArgument(argument)
+    if (
+      actual.kind !== 'unresolved'
+      && parameter.type.kind !== 'unresolved'
+      && !Type.isAssignable(actual, parameter.type)
+    ) {
+      ctx.error(
+        actionValidationMessages.dynamicActionArgumentType(
+          index + 1,
+          Type.displayName(parameter.type),
+          Type.displayName(actual),
+        ),
+        argument,
+      )
+    }
   }
 }
 

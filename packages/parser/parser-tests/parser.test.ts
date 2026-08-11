@@ -338,6 +338,19 @@ Describe('minimal Tao parser', () => {
     Expect(valueDeclarationName(countArg.target.ref)).toBe('LaunchCount')
   })
 
+  Test('parses current and legacy binding keywords on AliasDeclaration', async () => {
+    const parseResult = await testParseCode(`
+      let Current = "current"
+      alias Legacy = "legacy"
+    `)
+
+    const [current, legacy] = parseResult.entry.ast.statements
+    Expect.Is(current, AST.isAliasDeclaration)
+    Expect.Is(legacy, AST.isAliasDeclaration)
+    Expect(current.keyword).toBe('let')
+    Expect(legacy.keyword).toBe('alias')
+  })
+
   Test('parses state declarations and action values', async () => {
     const parseResult = await testParseCode(`
       app CounterApp { view MainView }
@@ -393,6 +406,24 @@ Describe('minimal Tao parser', () => {
     Expect.Is(AST.argumentsOf(inlineRender)[1]?.value, AST.isActionExpression)
   })
 
+  Test('parses explicit positional action callback signatures', async () => {
+    const parseResult = await testParseCode(`
+      view Field Change is action(text), Submit is action() { }
+    `)
+
+    const field = parseResult.entry.ast.statements[0]
+    Expect.Is(field, AST.isViewDeclaration)
+    const [change, submit] = AST.parametersOf(field)
+    const changeType = change?.inlineType?.type
+    const submitType = submit?.inlineType?.type
+    Expect.Is(changeType, AST.isActionTypeReference)
+    Expect.Is(submitType, AST.isActionTypeReference)
+    Expect(changeType.parameterTypes).toHaveLength(1)
+    Expect.Is(changeType.parameterTypes[0], AST.isPrimitiveTypeReference)
+    Expect(changeType.parameterTypes[0].primitive).toBe('text')
+    Expect(submitType.parameterTypes).toEqual([])
+  })
+
   Test('parses v0 Tao test declarations', async () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
@@ -411,6 +442,8 @@ Describe('minimal Tao parser', () => {
           enter "Draft" into label "Title"
           submit id "title-input"
           expect missing text "Loading"
+          expect input placeholder "Title" value "Draft"
+          back
         }
       }
     `)
@@ -421,7 +454,7 @@ Describe('minimal Tao parser', () => {
     const [check] = test.block.statements
     Expect.Is(check, AST.isCheckDeclaration)
     Expect(check.name).toBe('renders text')
-    const [run, expectedText, pressText, enterText, submitInput, missingText] = check.block.statements
+    const [run, expectedText, pressText, enterText, submitInput, missingText, inputValue, back] = check.block.statements
     Expect.Is(run, AST.isRunStep)
     Expect(run.app.ref?.name).toBe('MyApp')
     Expect.Is(expectedText, AST.isExpectTextStep)
@@ -442,6 +475,11 @@ Describe('minimal Tao parser', () => {
     Expect(missingText.selector).toBe('text')
     Expect(missingText.text).toBe('Loading')
     Expect(missingText.missing).toBe(true)
+    Expect.Is(inputValue, AST.isExpectInputValueStep)
+    Expect(inputValue.selector).toBe('placeholder')
+    Expect(inputValue.target).toBe('Title')
+    Expect(inputValue.value).toBe('Draft')
+    Expect.Is(back, AST.isBackTestStep)
   })
 
   Test('parses named invocation arguments', async () => {
@@ -467,13 +505,13 @@ Describe('minimal Tao parser', () => {
 
   Test('parses data schemas, queries, writes, and provider test status', async () => {
     const parseResult = await testParseCode(`
-      project data Tasks memory {
+      project data Tasks {
         Groups Group { Name text }
-        Items Item { Title text Done boolean Ordering number Group Group }
+        Items Item { Title text Done boolean Ordering number CreatedAt time indexed default now() Group relation Group on delete cascade }
       }
       layout Stack { }
       view Button Title is text, Press is action { }
-      app DataApp { view MainView }
+      app DataApp { datasource Tasks through Memory view MainView }
       project view MainView {
         query Tasks.Items as OpenItems {
           where Done == false
@@ -502,8 +540,8 @@ Describe('minimal Tao parser', () => {
     Expect(parseResult.diagnostics).toEqual([])
     const data = parseResult.entry.ast.statements.find(AST.isDataDeclaration)
     Expect.Is(data, AST.isDataDeclaration)
-    Expect(data.provider).toBe('memory')
     Expect(data.block.entities.map(entity => entity.name)).toEqual(['Group', 'Item'])
+    Expect(data.block.entities[1]?.block.fields.find(field => field.name === 'CreatedAt')?.indexed).toBe(true)
     const query = AST.streamAllContents(parseResult.entry.ast).find(AST.isQueryDeclaration)
     Expect.Is(query, AST.isQueryDeclaration)
     Expect(query.block?.clauses.map(clause => clause.$type)).toEqual(['WhereClause', 'OrderClause'])
@@ -522,7 +560,7 @@ Describe('minimal Tao parser', () => {
       }
       app NavigationApp { stack MainStack }
       view Home {
-        action Open { present MainStack.Detail .Name "Workspace" }
+        action Open { present MainStack.Detail(.Name "Workspace") }
         render Detail("Inline")
       }
       view Detail Name is text {

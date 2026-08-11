@@ -8,10 +8,7 @@ entry DataGrammarEntrypoint:
     DataDeclaration | QueryDeclaration | CreateStatement | UpdateStatement | DeleteStatement;
 
 DataDeclaration:
-    visibility=DeclarationVisibility? 'data' name=ID provider=DataProvider? block=DataBlock;
-
-DataProvider returns string:
-    'local' | 'memory';
+    visibility=DeclarationVisibility? 'data' name=ID block=DataBlock;
 
 DataBlock:
     '{' entities+=DataEntity* '}';
@@ -23,10 +20,16 @@ DataEntityBlock:
     '{' fields+=DataField* '}';
 
 DataField:
-    name=ID (primitive=DataPrimitiveType | relationName=ID);
+    name=ID (
+        primitive=DataPrimitiveType indexed?='indexed'? ('default' defaultValue=(StringLiteral | NumberLiteral | BooleanLiteral | NowExpression))?
+        | 'relation' relation=[DataEntity:ID] ('on' 'delete' onDeleteCascade?='cascade')?
+    );
 
 DataPrimitiveType returns string:
-    'text' | 'number' | 'boolean';
+    'text' | 'number' | 'boolean' | 'time';
+
+NowExpression:
+    {infer NowExpression} 'now' '(' ')';
 
 QueryDeclaration:
     'query' data=[DataDeclaration:ID] '.' collectionName=ID 'as' name=ID block=QueryBlock?;

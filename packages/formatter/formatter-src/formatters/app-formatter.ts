@@ -10,4 +10,10 @@ export default {
   AppView(f) {
     f.oneSpaceAfter('view')
   },
+
+  /** AppDatasource formats app-owned schema storage bindings. */
+  AppDatasource(f) {
+    f.oneSpaceAfter('datasource', 'through')
+    f.oneSpaceBefore('through')
+  },
 } satisfies Partial<FormatHandlers>
