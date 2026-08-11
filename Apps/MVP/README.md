@@ -6,13 +6,14 @@
 
 Still is authored entirely in Tao and demonstrates:
 
-- a project and app-owned typed stack with list/detail presentation and back behavior;
-- durable local workspace and related-task data, with deterministic in-memory isolation in tests;
-- reactive queries, filtering, ordering, relationship cascade deletion, and create/update/delete writes;
-- controlled text inputs, submit/press actions, validation, disabled controls, labels, and stable IDs;
+- an app-owned typed stack with workspace/task destinations, state-preserving covered screens, and automatic Back behavior;
+- durable asynchronous Local workspace and related-task data, with deterministic Memory isolation in tests;
+- reactive queries, AND filtering, time-based ordering, live entity and relationship reads, explicit cascade deletion, and strict create/update/delete writes;
+- controlled text inputs, structurally typed change/submit/press actions, validation, typed defaults, disabled controls, accessible labels, placeholders, and stable IDs;
 - loading, provider-error, empty, populated, open-task, and completed-task UI states;
-- pure functions, interpolation, expressions, `if/else`, and `for` rendering;
-- mandatory invocation delimiters: `render View(args) [layout] { children }`, `View(args) [layout] { children }`, `do Action(args)`, and `Function(args)`.
+- workspace and task editors whose entity-valued destinations stay live after writes;
+- explicit `interpolate`, expressions, total `when`, and `for` rendering; focused test apps own broader `let`, pure-function, and `none` coverage;
+- mandatory invocation delimiters: `render View(args) [layout] { children }`, `View(args) [layout] { children }`, `do Action(args)`, `Function(args)`, and `present Stack.Destination(args)`.
 
 Focused feature coverage remains in `Apps/Test Apps/*` and the owning package tests.
 

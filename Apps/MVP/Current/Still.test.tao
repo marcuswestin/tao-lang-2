@@ -1,66 +1,95 @@
 use Still, StillData from ./
 
 test "Still functional MVP" {
-   check "manages a workspace and its task lifecycle across list and detail" {
+   check "starts empty and keeps invalid creates inert" {
       run Still
 
       expect text "Still"
       expect text "No workspaces yet"
       expect text "Workspace name is required"
+      expect placeholder "Home"
+      expect input placeholder "Home" value ""
       press id "add-workspace"
+      submit placeholder "Home"
       expect text "No workspaces yet"
-      enter "Home" into label "Workspace name"
-      submit id "workspace-name"
+   }
+
+   check "uses live workspaces and preserves covered screen state" {
+      run Still
+      enter "Home" into placeholder "Home"
+      submit placeholder "Home"
       expect text "Home"
-      press id "rename-workspace-Workspace-1"
-      expect missing text "Home"
-      expect text "Renamed workspace"
-      press id "Workspace-1"
-      expect missing text "Still"
+      enter "Unsent workspace" into placeholder "Home"
+      press id "open-workspace-Workspace-1"
+      expect text "Workspace: Home"
+      expect input label "Workspace title" value "Home"
+      enter "" into label "Workspace title"
+      submit label "Workspace title"
+      expect text "Workspace: Home"
+      enter "Renamed workspace" into label "Workspace title"
+      press id "save-workspace"
       expect text "Workspace: Renamed workspace"
-      expect text "Open tasks: 0"
       expect text "No open tasks"
-      expect text "Task title is required"
-      enter "Plan the launch" into label "Task title"
-      press id "add-task"
+      back
+      expect text "Still"
+      expect text "Renamed workspace"
+      expect input placeholder "Home" value "Unsent workspace"
+      expect missing text "Workspace: Renamed workspace"
+   }
+
+   check "edits a related task on its own live destination" {
+      run Still
+      enter "Home" into placeholder "Home"
+      press id "add-workspace"
+      press id "open-workspace-Workspace-1"
+      submit placeholder "Plan the next step"
+      expect text "No open tasks"
+      enter "Plan the launch" into placeholder "Plan the next step"
+      submit placeholder "Plan the next step"
       expect text "Plan the launch"
       expect text "Open tasks: 1"
-      press id "rename-task-Task-2"
-      expect missing text "Plan the launch"
-      expect text "Clarified task"
+      press id "open-task-Task-2"
+      expect text "Edit task"
+      expect text "Workspace: Home"
+      expect input label "Task title" value "Plan the launch"
+      enter "" into label "Task title"
+      submit label "Task title"
+      expect text "Saved title: Plan the launch"
+      enter "Ship the launch" into label "Task title"
+      enter "Coordinate the release" into placeholder "Notes for this task"
+      press id "save-task"
+      expect text "Saved title: Ship the launch"
+      expect text "Saved notes: Coordinate the release"
+      back
+      expect text "Ship the launch"
       press id "complete-task-Task-2"
       expect text "Open tasks: 0"
       expect text "No open tasks"
       expect text "Completed"
-      expect text "Clarified task"
+      expect text "Ship the launch"
       press id "delete-completed-task-Task-2"
       expect text "No completed tasks"
-      press id "back"
-      expect text "Still"
-      expect text "Renamed workspace"
-      expect missing text "Workspace: Renamed workspace"
    }
 
-   check "deletes a workspace and cascades its related tasks" {
+   check "deletes related tasks transitively with their workspace" {
       run Still
       enter "Temporary" into id "workspace-name"
       press id "add-workspace"
-      press id "Workspace-1"
-      enter "Related task" into id "task-title"
-      submit id "task-title"
+      press id "open-workspace-Workspace-1"
+      enter "Related task" into id "new-task-title"
+      press id "add-task"
       expect text "Related task"
-      press id "back"
+      back
       press id "delete-workspace-Workspace-1"
       expect text "No workspaces yet"
-      expect missing text "Temporary"
       enter "Replacement" into id "workspace-name"
       press id "add-workspace"
-      press id "Workspace-3"
+      press id "open-workspace-Workspace-3"
       expect missing text "Related task"
       expect text "No open tasks"
    }
 
-   check "renders deterministic loading and provider error states" {
+   check "renders deterministic loading, failure, and recovery states" {
       run Still
       data StillData loading
       expect text "Loading workspaces…"
