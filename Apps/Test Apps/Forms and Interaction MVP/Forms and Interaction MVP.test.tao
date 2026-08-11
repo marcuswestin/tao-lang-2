@@ -6,13 +6,19 @@ test "Forms and Interaction MVP" {
 
       expect text "Title is required"
       press id "save"
+      submit placeholder "Capture something"
       expect missing text "Submitted: "
-      enter "Plan launch" into label "Task title"
+      expect text "Submissions: 0"
+      enter "Plan launch" into placeholder "Capture something"
+      expect input placeholder "Capture something" value "Plan launch"
       expect text "Plan launch"
       expect missing text "Title is required"
       submit id "task-title"
       expect text "Submitted: Plan launch"
       expect text "Saving…"
+      expect text "Submissions: 1"
+      press label "Save"
+      expect text "Submissions: 1"
    }
 
    check "presses an enabled form button" {
@@ -21,5 +27,6 @@ test "Forms and Interaction MVP" {
       press id "save"
       expect text "Submitted: Ship release"
       expect text "Saving…"
+      expect text "Submissions: 1"
    }
 }

@@ -1,1 +1,1 @@
-package alias SiblingFileTitle = "Package sibling file works"
+package let SiblingFileTitle = "Package sibling file works"

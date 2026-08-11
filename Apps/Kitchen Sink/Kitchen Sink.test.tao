@@ -5,7 +5,7 @@ test "Kitchen Sink" {
       run KitchenSink
 
       expect text "Hello, World!"
-      expect text "Text from a local alias"
+      expect text "Text from a local let"
       expect text "Nested scope greeting"
       expect text "Hello World"
       expect text "Claimed space"

@@ -6,12 +6,14 @@ test "Functional Core MVP" {
 
       expect text "Functional core"
       expect text "Ready"
+      expect text "Visible"
       expect text "Count: 2"
       expect text "Next: 3"
       expect text "Inbox"
       expect text "Today"
       expect missing text "Empty"
       press text "Hide count"
+      expect text "Hidden"
       expect missing text "Count: 2"
       expect text "Empty"
    }

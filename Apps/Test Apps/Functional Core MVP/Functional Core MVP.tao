@@ -10,22 +10,39 @@ function CountLabel Count is number returns text = interpolate "Count: ", Count
 
 function NextLabel Count is number returns text = interpolate "Next: ", Count + 1
 
-function PresenceLabel Present is boolean returns text = if Present then "Ready" else interpolate "Missing", none
+function PresenceLabel Present is boolean returns text = when
+   Present -> "Ready"
+   otherwise -> interpolate "Missing", none
 
 view MainView {
    state Count = 2
+   state Visible = true
    action HideCount {
-      set Count = 0
+      when
+         HasCount(Count) -> {
+            toggle Visible
+            set Count = 0
+         }
+         otherwise -> { }
    }
    render Col() [gap 8, pad 12] {
       Text("Functional core")
       Text(PresenceLabel(true))
-      if HasCount(Count) {
-         Text(CountLabel(Count))
-         Text(NextLabel(Count))
-      } else {
-         Text("Empty")
-      }
+      when
+         Visible -> {
+            Text("Visible")
+         }
+         otherwise -> {
+            Text("Hidden")
+         }
+      when
+         HasCount(Count) -> {
+            Text(CountLabel(Count))
+            Text(NextLabel(Count))
+         }
+         otherwise -> {
+            Text("Empty")
+         }
       for Label in ["Inbox" "Today"] {
          Text(Label)
       }

@@ -4,13 +4,13 @@ app StateActionMVP {
    view MainView
 }
 
-view CounterButton Title is text, Action is action {
+view CounterButton Title is text, Action is action() {
    render Button(Title, Action)
 }
 
 view MainView {
    state Count = 0
-   alias DisplayCount = Count
+   let DisplayCount = Count
    action SetZero {
       set Count = 0
    }

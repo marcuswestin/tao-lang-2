@@ -15,24 +15,25 @@ Apps/Test Apps/<App Name>/
 
 ### Purpose
 
-Exercise an app-owned stack whose destinations inherit typed view parameters, with deterministic presentation and back behavior through executable Tao actions.
+Exercise an app-owned stack whose destinations inherit typed view parameters, with deterministic presentation, state-preserving covered entries, and automatic back behavior.
 
 ### Belongs Here
 
 - `stack`, `initial`, and `destination` declarations.
 - A root `stack` selected by an `app`.
-- `present Stack.Destination …` with named typed arguments.
-- `back Stack`, including returning to the initial destination.
+- `present Stack.Destination(.Parameter Value)` with mandatory parentheses and named typed arguments.
+- A covered destination that remains mounted while hidden and restores its local state when revealed.
+- The automatic accessible Back control and the test-only `back` step, including returning to the initial destination through the root-safe reducer.
 
 ### Does Not Belong Here
 
-- Tabs, split views, overlays, restoration, routes, deep links, or animated transition policy.
+- Tabs, split views, overlays, launch-time restoration, routes, deep links, or animated transition policy.
 - Invalid destination or argument diagnostics; package tests own those.
 - Still-specific data and product behavior.
 
 ### Behavior Test Notes
 
-`Navigation MVP.test.tao` proves that a press presents a parameterized detail destination, hides the prior screen, and returns to the initial screen through stack history.
+`Navigation MVP.test.tao` increments state on the initial destination, presents a parameterized detail destination, proves the covered screen is hidden, invokes test `back`, and confirms that the exact initial-screen state was preserved.
 
 ## Forms and Interaction MVP
 
@@ -43,9 +44,11 @@ Exercise controlled text input, named view arguments, change and submit events, 
 ### Belongs Here
 
 - `TextInput` and `FormButton` from `@tao/ui`.
-- Named invocation arguments such as `.Value`, `.Change`, and `.Disabled`.
-- `enter … into label …`, `submit id …`, and `press id …` behavior-test steps.
-- Reactive form state, required-field feedback, disabled submit behavior, and visible submission progress.
+- Structural callback contracts: change is `action(text)`; submit and press are `action()`.
+- Named invocation arguments such as `.Value`, `.Change`, `.Placeholder`, and `.Disabled`, including standard-control parameter defaults.
+- Direct `label`, `id`, and `placeholder` selectors for input entry/submission; direct label/ID button presses; and `expect placeholder "target"` placeholder checks.
+- `expect input <label|id|placeholder> "target" value "value"` for controlled native input values.
+- Reactive form state, required-field feedback, disabled submit behavior, visible submission progress, and suppression of duplicate presses while submitting.
 
 ### Does Not Belong Here
 
@@ -55,7 +58,7 @@ Exercise controlled text input, named view arguments, change and submit events, 
 
 ### Behavior Test Notes
 
-`Forms and Interaction MVP.test.tao` proves both keyboard submission and button submission, including the disabled initial button and reactive validation/progress output.
+`Forms and Interaction MVP.test.tao` enters through a placeholder, asserts the controlled input value, and proves both keyboard and button submission. It also covers the disabled initial button, reactive validation/progress output, the authored accessible Save label while visible text changes to `Saving…`, and duplicate-press suppression.
 
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
@@ -63,13 +66,14 @@ This README is the contract for each test app. When adding functionality to a te
 
 ### Purpose
 
-Exercise schema-declared entities and relationships through reactive queries and an isolated memory provider using the same provider-neutral runtime contract as durable local data.
+Exercise provider-neutral schema declarations and an app-selected isolated Memory datasource through reactive queries and typed entity-handle writes.
 
 ### Belongs Here
 
-- `data` schemas with primitive and relationship fields.
-- Reactive `query` values with direct filters, ordering, `Loading`, `Error`, `Empty`, and `Count`.
-- Strict action-owned `create`, row-handle `update`, and `delete` writes.
+- A provider-independent `data` schema plus `datasource DataMVP through Memory` in the app.
+- `time`, `indexed`, literal defaults, `default now()`, explicit `relation`, and explicit `on delete cascade` schema metadata.
+- Reactive `query` values with filtering, ordering, `Loading`, `Error`, and `Empty`.
+- Strict action-owned `create`, live entity-handle `update`, and `delete` writes; relation values are entities rather than text IDs.
 - Relationship cleanup, empty/populated transitions, and deterministic loading/provider-error test controls.
 
 ### Does Not Belong Here
@@ -80,20 +84,20 @@ Exercise schema-declared entities and relationships through reactive queries and
 
 ### Behavior Test Notes
 
-`Data MVP.test.tao` proves reactive related CRUD and filtering, deterministic loading/error recovery, and deletion of relationship-owned rows. Each check receives a fresh memory store.
+`Data MVP.test.tao` proves reactive related CRUD and filtering, deterministic loading/error recovery, and explicit cascade behavior by deleting a workspace and its related task. Each check receives a fresh memory store.
 
 ## Functional Core MVP
 
 ### Purpose
 
-Exercise the executable functional-language core: booleans and `none`, precedence-aware operators, interpolation, expression-bodied pure functions, conditional rendering, list iteration, and reactive composition with existing state/actions.
+Exercise the executable functional-language core: booleans and `none`, precedence-aware operators, explicit interpolation, expression-bodied pure functions, total conditionals, list iteration, and reactive composition with existing state/actions.
 
 ### Belongs Here
 
 - Boolean, absence, arithmetic, comparison, and boolean expressions.
-- Positional pure-function calls with explicit return types.
+- Positional parenthesized pure-function calls with explicit `returns` types.
 - `interpolate` text construction.
-- `if/else` and `for … in` inside render child blocks.
+- Required-total `when … otherwise` in value, render, and action contexts, plus `for … in` inside render child blocks.
 - Reactive branch changes driven by Tao state/actions.
 
 ### Does Not Belong Here
@@ -104,7 +108,7 @@ Exercise the executable functional-language core: booleans and `none`, precedenc
 
 ### Behavior Test Notes
 
-`Functional Core MVP.test.tao` checks initial function/interpolation/iteration output and verifies that a Tao action reactively switches the rendered `if` branch.
+`Functional Core MVP.test.tao` checks function/interpolation/absence/iteration output and verifies that a Tao action lazily takes a matching branch, toggles boolean state, and reactively switches total rendered `when` branches.
 
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
@@ -148,7 +152,7 @@ Exercise positive behavior for local project package access, package-indexed imp
 - `use ... from @package/subfolder` where the package folder is nested inside the project.
 - Bare `use Foo` for `package` declarations in sibling files, sibling folders, and child folders in the same `@package`.
 - `project` declarations imported across indexed local packages.
-- Runtime rendering for package-imported views and aliases.
+- Runtime rendering for package-imported views and immutable bindings.
 
 ### Does Not Belong Here
 
@@ -169,7 +173,7 @@ Exercise positive behavior for local project package access, package-indexed imp
   - `Package sibling file works`
   - `Package sibling folder works`
   - `Package child folder works`
-  - `Project alias works`
+  - `Project let works`
   - `Project view works`
 
 ## Runtime Stdlib Tests
@@ -208,7 +212,7 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 
 ### Purpose
 
-Exercise positive behavior for view-local state, named and inline actions, parameters is action, `set`, `do`, compound state updates, state-derived aliases, Button action binding, and reactive rerendering.
+Exercise positive behavior for view-local state, named and inline actions, action parameters and values, `set`, `do`, compound state updates, state-derived immutable bindings, Button action binding, and reactive rerendering.
 
 ### Belongs Here
 
@@ -221,13 +225,13 @@ Exercise positive behavior for view-local state, named and inline actions, param
 
 - Invalid placement or type diagnostics, which belong in package validator tests.
 - General event syntax beyond Button action binding.
-- `if/else`, `toggle`, functions, booleans, custom types, item/list behavior, or Tao-native `check` syntax.
+- `when`, `toggle`, functions, booleans, custom types, item/list behavior, or Tao-native `check` syntax.
 
 ### Edit When
 
 - State/action syntax changes.
 - `@tao/ui` Button action binding changes.
-- Runtime behavior for reactive state or state-derived aliases changes.
+- Runtime behavior for reactive state or state-derived immutable bindings changes.
 
 ### Behavior Test Notes
 
@@ -246,9 +250,9 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 - List literals.
 - Custom type declarations for primitive, list, and item shapes.
 - Typed primitive, list, and item constructors.
-- Type-fixing with `as`.
+- Typed constructors and invocation type-fixing with `Type: value`.
 - Item member access.
-- Aliases whose inferred types are used as view arguments.
+- Immutable `let` bindings whose inferred types are used as view arguments.
 - Invocation argument compatibility for view calls, including out-of-order type-based binding.
 - Inject arguments that expose typed view values inside injected TS.
 
@@ -262,7 +266,7 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 ### Edit When
 
 - The Tao type system gains a new value kind that should be demonstrated through view invocation.
-- Alias inference or invocation checking behavior changes.
+- Immutable-binding inference or invocation checking behavior changes.
 - Custom type declaration, constructor, or member-access behavior changes.
 
 ### Behavior Test Notes
