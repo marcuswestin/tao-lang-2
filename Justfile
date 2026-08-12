@@ -1,6 +1,6 @@
 set quiet
 
-KITCHEN_SINK_APP := justfile_directory() + "/Apps/Kitchen Sink/Kitchen Sink.tao"
+WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
 DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
 
@@ -20,7 +20,7 @@ deps:
     bun install
 
 # Run all tests, optionally filtered by test name
-test PATTERN="": _compile-kitchen-sink-app
+test PATTERN="": _compile-word-flower-app
     just _test '{{ PATTERN }}'
 
 # Format code
@@ -35,7 +35,7 @@ fix: _agent-config _parser-gen
     ./tao fix
 
 # Check and test all code
-check: _compile-kitchen-sink-app _parallel-check
+check: _compile-word-flower-app _parallel-check
 
 # Compile a Tao app path relative to the invocation directory into the local runtime package
 compile-app app_path: _parser-gen
@@ -47,8 +47,8 @@ install-ide-extension: _ide-extension-package
     if command -v code >/dev/null 2>&1; then code --install-extension "{{ IDE_EXTENSION_VSIX }}" --force; fi
     if command -v antigravity >/dev/null 2>&1; then antigravity --install-extension "{{ IDE_EXTENSION_VSIX }}" --force; fi
 
-# Compile Kitchen Sink, launch an Android emulator, and start the Expo runtime on Android.
-android: _compile-kitchen-sink-app _android-emulator _android-expo-go
+# Compile WordFlower, launch an Android emulator, and start the Expo runtime on Android.
+android: _compile-word-flower-app _android-emulator _android-expo-go
     ./dev expo-android
 
 # Clean run dependencies and build artifacts
@@ -61,7 +61,7 @@ clean-all: clean
     rm -rf .artifacts packages/runtime/ios packages/runtime/android
 
 # Prepare all code for commit
-verify: fix _compile-kitchen-sink-app _parallel-verify-check
+verify: fix _compile-word-flower-app _parallel-verify-check
 
 # Private
 #########
@@ -75,8 +75,8 @@ _parallel-check: _ide-extension-build _tao-check _dprint-check _typecheck _test
 [parallel]
 _parallel-verify-check: _ide-extension-build _typecheck _test
 
-_compile-kitchen-sink-app: _parser-gen
-    ./tao compile "{{ KITCHEN_SINK_APP }}"
+_compile-word-flower-app: _parser-gen
+    ./tao compile "{{ WORD_FLOWER_APP }}"
 
 _ide-extension-build: _parser-gen
     cd packages/ide-extension && bun esbuild.config.ts

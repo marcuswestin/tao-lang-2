@@ -7,7 +7,7 @@ import { RawKeyInput } from './keyboard-input/RawKeyInput'
 import Run from './Run'
 import { TUI } from './TUI'
 
-const DEFAULT_APP_PATH = 'Apps/Kitchen Sink/Kitchen Sink.tao'
+const DEFAULT_APP_PATH = 'Apps/WordFlower/1 - Current/WordFlower.tao'
 const RUNTIME_PACKAGE_PATH = 'packages/runtime'
 
 /** runDevLoop runs the interactive Tao dev loop and returns its process exit code. */
