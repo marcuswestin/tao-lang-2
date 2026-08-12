@@ -20,7 +20,7 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 - Layout and visual design entries share one typed `[ ... ]` application surface. Step 1 settles only the design declaration and recipe shapes, not a second render-site delimiter.
 - The first runtime target is the existing Expo/React Native runtime.
 - Generated code imports default `TR` from `@runtime/TR` and delegates reusable design semantics to `TR.*` or generated design data consumed by `TR`.
-- The first implementation should update `Apps/Kitchen Sink/Kitchen Sink.tao` only after the slice is executable.
+- The first implementation should update `Apps/WordFlower/1 - Current/WordFlower.tao` only after the slice is executable.
 - Old repo design code is reference material only; do not port old implementation files wholesale.
 
 ## Tao code coverage
@@ -28,7 +28,7 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 Add executable coverage once the parser, validator, compiler, and runtime can support it:
 
 - `Apps/Test Apps/Design System MVP/` demonstrates tokens, semantic tokens, recipes, and one styled screen.
-- `Apps/Kitchen Sink/Kitchen Sink.tao` gains a compact design section after the first end-to-end slice compiles and renders.
+- `Apps/WordFlower/1 - Current/WordFlower.tao` gains a compact design section after the first end-to-end slice compiles and renders.
 - `Apps/Test Apps/README.md` records the Design System MVP app's intended scope and behavior-test notes before the app is added.
 
 ## Implementation steps
@@ -98,11 +98,11 @@ Concrete work:
 - Define precedence among stdlib defaults, app selected design defaults, recipe defaults, call-site variants, raw visual values, and native props from injected views.
 - Ensure current layout clauses still merge independently from visual styles.
 - Add focused compiler/runtime tests that inspect behavior through rendered output or runtime style resolution, not brittle generated-code substrings.
-- Add the implemented slice to `Apps/Test Apps/Design System MVP/` and then Kitchen Sink once the app compiles and renders.
+- Add the implemented slice to `Apps/Test Apps/Design System MVP/` and then WordFlower/1 - Current once the app compiles and renders.
 
-Likely commit unit: call-site design application, test app, Kitchen Sink coverage.
+Likely commit unit: call-site design application, test app, WordFlower coverage.
 
-Validation: parser, validator, compiler, formatter, runtime tests; `just compile-app 'Apps/Kitchen Sink/Kitchen Sink.tao'`.
+Validation: parser, validator, compiler, formatter, runtime tests; `just compile-app 'Apps/WordFlower/1 - Current/WordFlower.tao'`.
 
 Exit criteria: visible Tao source can request a semantic treatment such as primary button, raised card, muted text, or screen surface, and runtime output reflects it.
 
@@ -147,7 +147,7 @@ Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deter
 - Validator tests prove source-level design diagnostics and reference resolution.
 - Compiler tests prove successful design lowering without brittle generated-code substring checks.
 - `TR` and runtime tests prove token, recipe, state, and precedence behavior.
-- Test Apps and Kitchen Sink prove the end-to-end Tao authoring experience.
+- Test Apps and WordFlower prove the end-to-end Tao authoring experience.
 - Final validation is `./agent verify`.
 
 ## Deferrals

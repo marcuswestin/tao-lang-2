@@ -17,12 +17,12 @@ The old Tao repo has useful precedent in app-level design blocks, semantic varia
 - The first design model should include raw tokens, semantic tokens, component recipes, component variants or recipe variants, state styles, and design rules.
 - Raw visual values may be useful while prototyping, but the intended checker should prefer semantic tokens and eventually warn on raw color, spacing, and radius values in app code.
 - Generated app TypeScript should stay small. Reusable design resolution, token lookup, recipe merging, state style resolution, and diagnostics belong in `TR`/runtime or focused compiler helpers, not repeated emitted helpers.
-- The first visible acceptance surface should be a focused Test App and Kitchen Sink coverage once the feature is executable.
+- The first visible acceptance surface should be a focused Test App and WordFlower coverage once the feature is executable.
 
 ## Open Questions
 
-- Does the first slice introduce a `design AppTheme { ... }` declaration in `.tao` source, a separate `tao.design` file, or both?
-- Does `app` select a design with `design AppTheme`, `theme AppTheme`, or another capability name? `Spec/Tao Packages.md` currently mentions app capabilities such as themes, strings, assets, and datasources.
+- ~~Does the first slice introduce a `design AppTheme { ... }` declaration in `.tao` source, a separate `tao.design` file, or both?~~ **Decided: a `design` declaration in `.tao` source.**
+- ~~Does `app` select a design with `design AppTheme`, `theme AppTheme`, or another capability name?~~ **Decided: `design` is the capability name**, selected by the app as `Design <Name>`. See `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp` and `Apps/WordFlower/4 - Revolution/WordFlower.tao-revolution` for the intended usage.
 - Which visuals can be applied to `layout` and future `frame` declarations, versus only to `view` declarations and view-like primitives?
 - How much of "beautiful defaults" should ship before author-controlled tokens and recipes? A deterministic baseline can be useful, but it should not obscure the source-level design system contract.
 - Should recipe variants be declared through a standalone `recipe Button { variant ... }` surface, named combined specs, generated semantic components, or a staged combination?
