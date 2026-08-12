@@ -40,6 +40,7 @@ let DemoPerson = Person {
    Age 40
    DisplayName
 }
+let ScopeLabel = "File scope label"
 let Team = [
    DemoPerson
    Person {
@@ -53,7 +54,9 @@ let Team = [
 ]
 
 view Demo {
+   let OuterScopeLabel = ScopeLabel
    render Stack() {
+      let ScopeLabel = "Nested scope label"
       Tile(FirstTitle, FirstCount)
       Tile(SecondTitle, SecondCount)
       ProfileCard(DemoPerson)
@@ -71,6 +74,8 @@ view Demo {
       TeamList(Team)
       TextValue(TypedDisplayName)
       TextValue("Constructed primitive text")
+      TextValue(OuterScopeLabel)
+      TextValue(ScopeLabel)
 }  }
 
 layout Stack {

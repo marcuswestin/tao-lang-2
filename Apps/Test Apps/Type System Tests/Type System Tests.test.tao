@@ -18,5 +18,7 @@ test "Type System Tests" {
       expect text "2 team member(s)"
       expect text "Grace"
       expect text "Constructed primitive text"
+      expect text "File scope label"
+      expect text "Nested scope label"
    }
 }

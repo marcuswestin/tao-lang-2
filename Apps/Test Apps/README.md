@@ -29,7 +29,7 @@ Exercise an app-owned stack whose destinations inherit typed view parameters, wi
 
 - Tabs, split views, overlays, launch-time restoration, routes, deep links, or animated transition policy.
 - Invalid destination or argument diagnostics; package tests own those.
-- Still-specific data and product behavior.
+- WordFlower-specific data and product behavior.
 
 ### Behavior Test Notes
 
@@ -79,7 +79,7 @@ Exercise provider-neutral schema declarations and an app-selected isolated Memor
 ### Does Not Belong Here
 
 - Remote providers, credentials, authentication, permissions, sync, pagination, or aggregation.
-- Navigation or Still-specific product behavior.
+- Navigation or WordFlower-specific product behavior.
 - Invalid schema/query/write diagnostics; package tests own those.
 
 ### Behavior Test Notes
@@ -253,6 +253,7 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 - Typed constructors and invocation type-fixing with `Type: value`.
 - Item member access.
 - Immutable `let` bindings whose inferred types are used as view arguments.
+- Nested render-block `let` declarations that shadow file-level bindings while captured view-level references keep the outer value.
 - Invocation argument compatibility for view calls, including out-of-order type-based binding.
 - Inject arguments that expose typed view values inside injected TS.
 
@@ -260,7 +261,7 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 
 - Parser-only grammar edge cases without type-system meaning.
 - Layout, styling, navigation, data, or action behavior unless it directly supports type-system coverage.
-- Runtime standard-library coverage that is better exercised by Kitchen Sink or a dedicated runtime app.
+- Runtime standard-library coverage that is better exercised by Runtime Stdlib Tests or a dedicated runtime app.
 - Invalid or intentionally failing validation cases.
 
 ### Edit When
@@ -272,5 +273,5 @@ This app must stay valid Tao; invalid type and validation cases belong in valida
 ### Behavior Test Notes
 
 - `Type System Tests.test.tao` asserts the visible type-system output.
-- Expected visible output includes `Open: 1`, `Done: 2`, `Ada`, `40`, `Compiler engineer`, `types, items, lists`, `Kai`, `29`, `Runtime engineer`, `runtime, mobile`, `People in the team: 2`, `2 team member(s)`, `Grace`, and `Constructed primitive text`.
+- Expected visible output includes `Open: 1`, `Done: 2`, `Ada`, `40`, `Compiler engineer`, `types, items, lists`, `Kai`, `29`, `Runtime engineer`, `runtime, mobile`, `People in the team: 2`, `2 team member(s)`, `Grace`, `Constructed primitive text`, `File scope label`, and `Nested scope label`.
 - Future behavior metadata can live in this section without changing the app layout.
