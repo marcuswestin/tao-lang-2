@@ -1,0 +1,85 @@
+# WordFlower Revolution — the intended `tao` CLI surface beyond the MVP release.
+#
+# This file is a specification artifact, exactly like `WordFlower.tao-revolution` beside it. It
+# states the commands Tao intends to offer after v1 ships. Nothing here executes yet.
+#
+# The MVP-release surface (create, check, fmt, fix, test, compile, dev, build) is specified in
+# `../3 - MVP/Justfile` and is not repeated here; this file adds to it.
+
+set quiet
+
+TAO := justfile_directory() + "/../../../tao"
+APP := "WordFlower.tao"
+PROJECT_ID := "wordflower"
+
+# Print available recipes
+help:
+    just --list
+
+## Dependencies
+##############
+
+# Declare a dependency on another Tao project's packages, writing `requires` into the project block. Spec/Tao Packages.md
+require:
+    {{ TAO }} require github:acme/prose @editor, @markdown --as @prose
+
+# Install every required project, honoring existing lockfile pins. Spec/Tao Packages.md
+install:
+    {{ TAO }} install
+
+# Re-resolve version ranges and branch refs, updating the lockfile pins. Spec/Tao Packages.md
+update:
+    {{ TAO }} update
+    {{ TAO }} update acme.prose
+
+## Publishing
+############
+
+# Publish this project and its public packages: bump, commit, tag, push. Spec/Tao Packages.md
+publish:
+    {{ TAO }} publish
+
+# Publish the app itself to app stores and the web. Spec/Tao Packages.md
+publish-app:
+    {{ TAO }} publish --app
+
+# Install a published Tao app onto this device. Spec/Tao Packages.md
+install-app:
+    {{ TAO }} install --app "{{ PROJECT_ID }}"
+
+## Simulation and demos
+######################
+
+# Run against local datasources with simulated network delays and saved library states. Roadmap.md: simulation mode
+simulate:
+    {{ TAO }} simulate "{{ APP }}" --delay 250ms
+
+# Restore a named saved state, so a demo or check starts from known data. Roadmap.md: simulation mode
+simulate-state:
+    {{ TAO }} simulate "{{ APP }}" --state "full-workspace"
+
+## Design and scenarios
+######################
+
+# Render declared scenarios to visual artifacts for design review. LANG-028
+scenarios:
+    {{ TAO }} scenarios "{{ APP }}"
+
+# Check rendered output against approved design artifacts. LANG-028
+design-check:
+    {{ TAO }} design check "{{ APP }}"
+
+## Debugging
+###########
+
+# Compile with source maps so runtime failures point back at Tao source. LANG-029
+compile-traced:
+    {{ TAO }} compile "{{ APP }}" --source-maps
+
+# Trace semantic navigation reducer decisions for a running app. LANG-029
+trace-navigation:
+    {{ TAO }} trace "{{ APP }}" --navigation
+
+# Open the inspector for a running app: presentation tree, data store, and reducer history. LANG-029
+studio:
+    {{ TAO }} studio "{{ APP }}"

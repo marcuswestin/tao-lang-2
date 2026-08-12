@@ -1,0 +1,111 @@
+use WordFlower, WordFlowerData from ./
+
+test "WordFlower functional MVP" {
+   check "starts empty and keeps invalid creates inert" {
+      run WordFlower
+
+      expect text "WordFlower"
+      expect text "No workspaces yet"
+      expect text "Starter prompt: Morning pages"
+      expect text "Try writing for 10 minutes"
+      expect text "Tagged: daily, warmup"
+      expect text "Workspace name is required"
+      expect placeholder "Home"
+      expect input placeholder "Home" value ""
+      press id "add-workspace"
+      submit placeholder "Home"
+      expect text "No workspaces yet"
+   }
+
+   check "uses live workspaces and preserves covered screen state" {
+      run WordFlower
+      enter "Home" into placeholder "Home"
+      submit placeholder "Home"
+      expect text "Home"
+      enter "Unsent workspace" into placeholder "Home"
+      press id "open-workspace-Workspace-1"
+      expect text "Workspace: Home"
+      expect input label "Workspace title" value "Home"
+      enter "" into label "Workspace title"
+      submit label "Workspace title"
+      expect text "Workspace: Home"
+      enter "Renamed workspace" into label "Workspace title"
+      press id "save-workspace"
+      expect text "Workspace: Renamed workspace"
+      expect text "No drafts"
+      back
+      expect text "WordFlower"
+      expect text "Renamed workspace"
+      expect input placeholder "Home" value "Unsent workspace"
+      expect missing text "Workspace: Renamed workspace"
+   }
+
+   check "edits a related document on its own live destination" {
+      run WordFlower
+      enter "Home" into placeholder "Home"
+      press id "add-workspace"
+      press id "open-workspace-Workspace-1"
+      submit placeholder "Draft the next chapter"
+      expect text "No drafts"
+      enter "Draft the intro" into placeholder "Draft the next chapter"
+      submit placeholder "Draft the next chapter"
+      expect text "Draft the intro"
+      expect text "Drafts: 1"
+      press id "open-document-Document-2"
+      expect text "Edit document"
+      expect text "Workspace: Home"
+      expect input label "Document title" value "Draft the intro"
+      expect text "Words: 0"
+      expect text "Saves this session: 0"
+      enter "" into label "Document title"
+      submit label "Document title"
+      expect text "Saved title: Draft the intro"
+      enter "Polish the intro" into label "Document title"
+      enter "Set the scene with intent" into label "Document body"
+      expect text "Words: 5"
+      press id "save-document"
+      expect text "Saved title: Polish the intro"
+      expect text "Saved body: Set the scene with intent"
+      expect text "Saves this session: 1"
+      back
+      expect text "Polish the intro"
+      press id "finish-document-Document-2"
+      expect text "Drafts: 0"
+      expect text "No drafts"
+      expect text "Finished"
+      expect text "Polish the intro"
+      press id "delete-finished-document-Document-2"
+      expect text "No finished documents"
+   }
+
+   check "deletes related documents transitively with their workspace" {
+      run WordFlower
+      enter "Temporary" into id "workspace-name"
+      press id "add-workspace"
+      press id "open-workspace-Workspace-1"
+      enter "Related draft" into id "new-document-title"
+      press id "add-document"
+      expect text "Related draft"
+      back
+      press id "delete-workspace-Workspace-1"
+      expect text "No workspaces yet"
+      enter "Replacement" into id "workspace-name"
+      press text "Add workspace"
+      press id "open-workspace-Workspace-3"
+      expect missing text "Related draft"
+      expect text "No drafts"
+   }
+
+   check "renders deterministic loading, failure, and recovery states" {
+      run WordFlower
+      data WordFlowerData loading
+      expect text "Loading workspaces…"
+      expect missing text "Workspace name is required"
+      data WordFlowerData error "Local storage is unavailable"
+      expect text "Could not load WordFlower"
+      expect text "Local storage is unavailable"
+      data WordFlowerData ready
+      expect text "No workspaces yet"
+      expect text "Workspace name is required"
+   }
+}

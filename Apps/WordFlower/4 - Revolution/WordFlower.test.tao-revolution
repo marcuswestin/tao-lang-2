@@ -1,0 +1,164 @@
+use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest from ./
+
+// Directional journeys for the full target. Steps that reach panes, overlays, toasts, windows,
+// and dialogues reuse the #tag / select vocabulary the Next sketch settles for lists; anything
+// beyond that vocabulary is expected to be decided in a future Next slice before implementation.
+test "WordFlower full target" {
+   check "activates the workspace tab and fills the split" {
+      run WordFlower
+      expect text "Starter prompt: Morning pages"
+      expect text "Try writing for 10 minutes"
+      expect text "Tagged: daily, warmup"
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      press text "Workspace" // selection items are activated by their labels
+      expect text "Choose a workspace"
+      select #chooseWorkspace[1] {
+         press #choose
+      }
+      expect text "Files" // the split mounts with its pane titles
+      expect text "Novel"
+   }
+
+   check "asks before closing a document" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] {
+         press #openDocument
+      }
+      expect text "Document: Chapter one"
+      press #closeDocument
+      expect text "Close Chapter one?"
+      press #cancelClose
+      expect text "Document: Chapter one" // cancelling answers none and the editor stays
+      press #closeDocument
+      press #confirmClose
+      expect missing text "Document: Chapter one"
+   }
+
+   check "saving presents a keyed toast" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] {
+         press #openDocument
+      }
+      expect text "Saves this session: 0"
+      enter "" into #documentTitle
+      press #save
+      expect text "Document: Chapter one"
+      expect text "Saves this session: 0"
+      enter "Opening" into #documentTitle
+      enter "The first line." into #documentBody
+      press #save
+      expect text "Saved"
+      expect text "Document: Opening"
+      expect text "Saves this session: 1"
+   }
+
+   check "preserves workspace and document CRUD through lifecycle states" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Renamed novel" into #workspaceTitle
+      press #saveWorkspace
+      expect text "Workspace: Renamed novel"
+      press #addDocument
+      expect text "Document title is required"
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] {
+         press #finish
+      }
+      expect text "No drafts"
+      select #finishedDocuments[1] {
+         press #reopen
+      }
+      select #documents[1] {
+         press #delete
+      }
+      expect text "No drafts"
+      back
+      select #workspaces[1] {
+         press #deleteWorkspace
+      }
+      expect text "No workspaces yet"
+   }
+
+   check "a with-variant reconfigures the same app" {
+      run WordFlowerDrawer
+      press text "Workspace"
+      expect text "Choose a workspace"
+   }
+}
+
+test "WordFlower navigation foundation" {
+   check "native back uses the semantic reducer" {
+      run WordFlowerFoundationTest
+      expect text "Foundation home marker"
+      press text "Open deterministic detail"
+      expect text "Foundation detail marker"
+      back
+      expect text "Foundation home marker"
+      expect missing text "Foundation detail marker"
+   }
+
+   check "slot dismissal restores its initial stack" {
+      run WordFlowerFoundationTest
+      press text "Open deterministic slot"
+      expect text "Foundation slot marker"
+      press text "Restore initial stack"
+      expect text "Foundation home marker"
+      expect missing text "Foundation slot marker"
+   }
+}
+
+// Testing vocabulary intended beyond the MVP tier: focused renders with state overrides, app-level
+// overrides, role and accessibility-state selectors, and localized string keys.
+test "WordFlower revolution" {
+   let LongTitle = "A Complete History of the Semicolon, Volume Two"
+
+   check "renders one view in isolation with overridden state" {
+      render ReadingView(Document) with Focused { }
+
+      expect role heading name LongTitle
+      expect checkbox label "Final" unchecked
+   }
+
+   check "runs the app against a named datasource and theme" {
+      run WordFlower with {
+         datasource.appId "wordflower-empty"
+         theme WordFlowerDesign
+      }
+
+      expect text string .workspaces.EmptyTitle // localized string keys, not literal copy
+      expect id "EmptyState"
+      expect missing id "LoadingSpinner"
+   }
+
+   check "exports a document and reports failure through a presentation result" {
+      run WordFlower with {
+         datasource.appId "wordflower-seeded"
+      }
+
+      press label "Workspace"
+      press role button name "Open document"
+      press #export
+      expect text "Exporting"
+      expect button "Export" disabled
+   }
+}

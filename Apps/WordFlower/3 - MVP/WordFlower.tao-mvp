@@ -1,0 +1,626 @@
+use InstantDB from @instantdb
+use Occurrence, OverlayNav, SelectionNav, SlotNav, SplitNav, StackNav, Toast, ToastHost, Window, WindowHost from @tao/nav
+use Col, FormButton, Row, Spinner, Text, TextInput from @tao/ui
+
+// WordFlower/MVP is the malleable full target for the v1 release: everything Tao must cover to call
+// itself shipped, written with the syntax decisions settled so far (see `../2 - Next`). It is
+// reconciled — not frozen — whenever Current absorbs a Next slice and the implementation teaches us
+// something. Intended functionality beyond the release lives in `../4 - Revolution`.
+
+project {
+   name "WordFlower"
+   remote none
+   license MIT
+}
+
+// Design is a directional capability: deterministic tokens plus named clause bundles that render
+// sites apply like layout clauses. The design-system roadmap owns the final shape.
+design WordFlowerDesign {
+   paper #f6f7f3
+   ink #121826
+   accent #2f6b4f
+
+   screen [fill, content top stretch, pad 24, bg paper]
+   title [size 34, weight 800, fg ink]
+   body [size 16, line 22, fg ink]
+}
+
+// A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
+let HomeStack = StackNav { Initial WorkspaceList }
+let SettingsStack = StackNav { Initial Settings }
+let WorkspaceNav = SlotNav { Initial WorkspaceChooser }
+let SignedOutNav = StackNav { Initial SignedOut }
+
+let WordFlowerNavigator = SelectionNav {
+   Initial @home
+   Display "automatic"
+
+   // Direct keys bind to Items and share this configured nav's target-key namespace.
+   @home {
+      Label "Home"
+      Content HomeStack
+   }
+   @workspace {
+      Label "Workspace"
+      Content WorkspaceNav
+   }
+   @settings {
+      Label "Settings"
+      Content SettingsStack
+   }
+}
+
+// An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
+// entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
+app WordFlower {
+   Name "WordFlower"
+   Design WordFlowerDesign
+   Navigator WordFlowerNavigator
+
+   // Declaring a nav does not mount it. App-owned direct keys mount these auxiliary hosts.
+   @overlays OverlayNav { }
+   @toasts ToastHost { }
+   @windows WindowHost { }
+
+   Datasource {
+      Provider InstantDB { // remote syncing provider; Local stays for tests and offline development
+         AppId "wordflower-mvp"
+      }
+   }
+}
+
+// `with` copies public properties into a configured variant. WordFlower and WordFlowerNavigator are unchanged.
+let WordFlowerDrawer = WordFlower with {
+   Name "WordFlower - Drawer Preview"
+   Navigator WordFlowerNavigator with { Display "drawer" }
+}
+
+let WordFlowerStage = WordFlower with {
+   Name "WordFlower - Stage"
+   Datasource {
+      Provider {
+         AppId "wordflower-stage"
+      }
+   }
+}
+
+let Tagline = "A quiet place for words that matter."
+
+type PromptTitle is text
+
+type PromptMinutes is number
+
+type PromptTags is list
+
+type WritingPrompt is {
+   PromptTitle
+   PromptMinutes
+   PromptTags
+}
+
+let StarterPrompt = WritingPrompt {
+   PromptTitle: "Morning pages"
+   PromptMinutes: 10
+   PromptTags: PromptTags ["daily" "warmup"]
+}
+
+enum ConfirmResult { // enum shape is directional; two-state fields prefer boolean cases like Final / Draft
+   Confirmed
+}
+
+data Workspace / Workspaces {
+   Name text
+   CreatedAt time, default now()
+   Documents
+
+   index CreatedAt
+   order by CreatedAt
+}
+
+data Document / Documents {
+   Title text
+   Body text, default ""
+   Final / Draft, default Draft
+   CreatedAt time, default now()
+   Workspace, on delete cascade
+   Paragraphs
+
+   index CreatedAt
+   order by CreatedAt
+}
+
+data Paragraph / Paragraphs {
+   Text text
+   Ordering number
+   Document, on delete cascade
+
+   index Ordering
+   order by Ordering
+}
+
+function DocumentLabel Title is text returns text = "Document: { Title }"
+
+ui WorkspaceList {
+   state WorkspaceName = ""
+   query Workspaces { }
+   action AddWorkspace {
+      guard WorkspaceName empty -> {
+         present WorkspaceNameNotice() in WordFlower@overlays
+      }
+      create Workspace {
+         Name: WorkspaceName
+      }
+      set WorkspaceName = ""
+   }
+   render Col() [screen, gap 10] {
+      Text("WordFlower") [title]
+      Text(Tagline)
+      guard Workspaces {
+         loading -> { Spinner() }
+         error -> Message {
+            Text("Could not load WordFlower")
+            Text(Message)
+         }
+      }
+      #workspaceName
+      TextInput(Value: WorkspaceName Label: "Workspace name" Placeholder: "Novel") {
+         on submit AddWorkspace
+      }
+      #addWorkspace
+      FormButton("Add workspace" Disabled: WorkspaceName is empty) {
+         on press AddWorkspace
+      }
+      #activateWorkspaceTab
+      FormButton("Activate workspace") {
+         // Target-only activation: presenting a bare key reveals that item without new content.
+         on press -> { present WordFlower@workspace }
+      }
+      guard Workspaces empty -> {
+         Text("No workspaces yet")
+         Text("Starter prompt: { StarterPrompt.PromptTitle }")
+         Text("Try writing for { StarterPrompt.PromptMinutes } minutes")
+         TagLine(StarterPrompt.PromptTags)
+      }
+      #workspaces
+      loop Workspaces / Workspace {
+         Col() [gap 6, pad 10] {
+            Text(Workspace.Name)
+            #openWorkspace
+            FormButton("Open workspace") {
+               // Omitted target delegates to the nearest enclosing nav (HomeStack), pushing a new occurrence.
+               on press -> { present WorkspaceDetails(Workspace) }
+            }
+            #deleteWorkspace
+            FormButton("Delete workspace") {
+               on press -> { delete Workspace }
+            }
+            #openInSplit
+            FormButton("Open in workspace tab") {
+               on press -> {
+                  // A configured nav value locates its one equal active mount. The next statement sees the update synchronously.
+                  present WorkspaceSplit(Workspace) in WorkspaceNav
+                  present WordFlower@workspace
+               }
+            }
+         }
+      }
+   }
+}
+
+// Presented into the app's overlay host; overlays stack above content and are dismissible.
+ui WorkspaceNameNotice {
+   render Col() [gap 6, pad 10] {
+      Text("A workspace needs a name")
+      #dismissNotice
+      FormButton("Dismiss") {
+         on press -> { dismiss } // the nearest enclosing nav is the overlay host that presented this
+      }
+   }
+}
+
+workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the same-named entity type
+   state WorkspaceNameDraft = Workspace.Name
+   state DocumentTitle = ""
+   let SectionLabel = "Drafts"
+   query Drafts from Workspace.Documents {
+      where Draft
+   }
+   query FinishedDocuments from Workspace.Documents {
+      where Final
+   }
+   action SaveWorkspace {
+      guard WorkspaceNameDraft empty
+      update Workspace {
+         Name: WorkspaceNameDraft
+      }
+   }
+   action AddDocument {
+      guard DocumentTitle empty
+      async {
+         create Document { // don't wait for creation completion to update the text input
+            Title: DocumentTitle
+            Workspace // unlabeled arguments bind by type; the entity value matches the relation field
+         }
+      }
+      set DocumentTitle = ""
+   }
+   render Col() [screen, gap 10] {
+      Text("Workspace: { Workspace.Name }") [title]
+      #workspaceTitle
+      TextInput(Value: WorkspaceNameDraft Label: "Workspace title" Placeholder: "Workspace title") {
+         on submit SaveWorkspace
+      }
+      #saveWorkspace
+      FormButton("Save workspace" Disabled: WorkspaceNameDraft is empty) {
+         on press SaveWorkspace
+      }
+      Text("{ SectionLabel }: { Drafts.Count }")
+      #pushTwice
+      FormButton("Push this workspace twice") {
+         on press -> {
+            // Presenting the same semantic value twice still creates two distinct occurrences.
+            present WorkspaceDetails(Workspace)
+            present WorkspaceDetails(Workspace)
+         }
+      }
+      guard Drafts, FinishedDocuments {
+         loading -> { Spinner() }
+         error -> Message { Text("Could not load documents: { Message }") }
+      }
+      #newDocumentTitle
+      TextInput(Value: DocumentTitle Label: "New document title" Placeholder: "Draft the next chapter") {
+         on submit AddDocument
+      }
+      when DocumentTitle {
+         empty -> { Text("Document title is required") }
+         otherwise -> { Text(DocumentTitle) }
+      }
+      #addDocument
+      FormButton("Add document" Disabled: DocumentTitle is empty) {
+         on press AddDocument
+      }
+      when Drafts {
+         empty -> { Text("No drafts") }
+         otherwise -> {
+            #documents
+            loop Drafts / Document {
+               Col() [gap 6] {
+                  #openDocument
+                  FormButton(Document.Title) {
+                     on press -> {
+                        present WorkspaceSplit(Workspace) in WordFlower@workspace
+                        present DocumentScreen(Document) in WordFlower@workspace@documents
+                     }
+                  }
+                  #finish
+                  FormButton("Finish document") {
+                     on press -> { update Document { Final } }
+                  }
+                  #delete
+                  FormButton("Delete document") {
+                     on press -> { delete Document }
+                  }
+               }
+            }
+         }
+      }
+      guard FinishedDocuments empty -> {
+         Text("No finished documents")
+      }
+      Col() [gap 6] {
+         let SectionLabel = "Finished"
+         Text(SectionLabel)
+         #finishedDocuments
+         loop FinishedDocuments / Document {
+            Col() [gap 6] {
+               Text(Document.Title)
+               #reopen
+               FormButton("Reopen document") {
+                  on press -> { update Document { Draft } }
+               }
+               #deleteFinished
+               FormButton("Delete finished document") {
+                  on press -> { delete Document }
+               }
+            }
+         }
+      }
+   }
+}
+
+ui WorkspaceChooser {
+   query Workspaces { }
+   render Col() [screen, gap 10] {
+      Text("Choose a workspace")
+      #chooseWorkspace
+      loop Workspaces / Workspace {
+         #choose
+         FormButton(Workspace.Name) {
+            on press -> { present WorkspaceSplit(Workspace) in WordFlower@workspace }
+         }
+      }
+   }
+}
+
+// A nav definition declares public properties and produces one root nav descriptor.
+nav WorkspaceSplit Workspace {
+   render SplitNav {
+      Axis "horizontal"
+
+      // Direct keys bind to Panes. The nested SelectionNav starts its own key namespace.
+      @files {
+         // A ui with bound arguments is a presentable value; it renders only when the nav mounts it.
+         Content SlotNav { Initial FileTree(Workspace) }
+         Title "Files"
+         IdealSize 280
+         CollapsePriority 2
+      }
+      @documents {
+         Content SelectionNav {
+            Items { }
+            Display "tabs"
+            Dynamic true
+         }
+         Title "Documents"
+         Grow 1
+         CollapsePriority 3
+      }
+      @inspector {
+         Content SlotNav { }
+         Title "Inspector"
+         IdealSize 340
+         CollapsePriority 1
+      }
+   }
+}
+
+workspace ui FileTree Workspace {
+   query Documents from Workspace.Documents { }
+   render Col() [gap 6, pad 10] {
+      Text(Workspace.Name)
+      guard Documents {
+         loading -> { Spinner() }
+         error -> Message { Text("Could not load files: { Message }") }
+      }
+      #files
+      loop Documents / Document {
+         Row() [gap 6] {
+            #open
+            FormButton(Document.Title) {
+               // Relative @documents resolves to the nearest unique pane and reveals it.
+               on press -> { present DocumentScreen(Document) in @documents }
+            }
+            #openRooted
+            FormButton("Rooted") {
+               on press -> { present DocumentScreen(Document) in WordFlower@workspace@documents }
+            }
+            #openViaBinding
+            FormButton("Via mounted binding") {
+               // WorkspaceNav is mounted once; resolution follows its active WorkspaceSplit content.
+               on press -> { present DocumentScreen(Document) in WorkspaceNav@documents }
+            }
+            #openComparison
+            FormButton("Comparison tab") {
+               // Dynamic selection normally focuses semantic identity; a key makes another occurrence.
+               on press -> {
+                  present Occurrence {
+                     Content: DocumentScreen(Document)
+                     Key: "comparison"
+                  } in @documents
+               }
+            }
+         }
+      }
+   }
+}
+
+// The pane-level entry guards entity availability; the editor below assumes an available document.
+workspace ui DocumentScreen Document {
+   render Col() [fill] {
+      guard Document {
+         loading -> { Spinner() }
+         missing -> { Text("Document { Document.Id } no longer exists.") } // a handle keeps its Id after the row is gone
+         unauthorized -> { Text("You no longer have access to this document.") }
+         error -> Message { Text("The document could not be loaded: { Message }") }
+      }
+      DocumentEditor(Document)
+   }
+}
+
+// `view` stays embeddable content; DocumentEditor only appears inside another render tree.
+workspace view DocumentEditor Document {
+   state TitleDraft = Document.Title
+   state BodyDraft = Document.Body
+   state SaveCount = 0
+   query Paragraphs from Document.Paragraphs { }
+   action SaveDocument {
+      guard TitleDraft empty
+      update Document {
+         Title: TitleDraft
+         Body: BodyDraft
+      }
+      set SaveCount += 1
+      present Toast {
+         Content: SavedToast
+         Key: "document-saved"
+         Duration: 3.seconds // duration literals are directional
+      } in WordFlower@toasts
+   }
+   action CloseDocument {
+      // `ask` suspends the action until the dialogue responds; a bare `respond` answers none.
+      let Result = ask ConfirmCloseDialogue(Document)
+      when Result {
+         Confirmed -> { dismiss }
+         otherwise -> { } // cancelled
+      }
+   }
+   render Col() [gap 10, pad 16] {
+      Text(DocumentLabel(Document.Title)) [title, width fill]
+      #documentTitle
+      TextInput(Value: TitleDraft Label: "Document title" Placeholder: "Document title") {
+         on submit SaveDocument
+      }
+      #documentBody
+      TextInput(Value: BodyDraft Label: "Document body" Placeholder: "Write the document body") [claim 2] {
+         on submit SaveDocument
+      }
+      WordCount(BodyDraft)
+      Text("Saves this session: { SaveCount }")
+      guard Paragraphs {
+         loading -> { Spinner() }
+         error -> Message { Text("Could not load paragraphs: { Message }") }
+      }
+      #paragraphs
+      loop Paragraphs / Paragraph {
+         #inspect
+         FormButton(Paragraph.Text) {
+            on press -> { present ParagraphInspector(Paragraph) in @inspector }
+         }
+      }
+      Row() [gap 6] {
+         #documentInfo
+         FormButton("Document info") {
+            on press -> { present DocumentInfo(Document) in WordFlower@overlays }
+         }
+         #save
+         FormButton("Save") {
+            on press SaveDocument
+         }
+         #comparisonWindow
+         FormButton("Comparison window") {
+            on press -> {
+               present Window {
+                  Content: DocumentScreen(Document)
+                  Key: "comparison-left"
+                  Title: DocumentLabel(Document.Title)
+               } in WordFlower@windows
+            }
+         }
+         #snapshotDocument
+         FormButton("Snapshot") {
+            on press -> {
+               // A snapshot is an immutable copy; the live handle keeps updating elsewhere.
+               let Snapshot = snapshot Document
+               present DocumentSnapshot(Snapshot) in WordFlower@overlays
+            }
+         }
+         #closeDocument
+         FormButton("Close document") {
+            on press CloseDocument
+         }
+      }
+   }
+}
+
+ui ParagraphInspector Paragraph {
+   render Text("{ Paragraph.Document.Title } - { Paragraph.Text }")
+}
+
+ui DocumentInfo Document {
+   render Col() [gap 6, pad 10] {
+      Text(Document.Title)
+      Text("{ Document.Paragraphs.Count } paragraphs")
+      #dismissInfo
+      FormButton("Dismiss") {
+         on press -> { dismiss }
+      }
+   }
+}
+
+ui DocumentSnapshot Snapshot is Document.Snapshot {
+   render Col() [gap 6, pad 10] {
+      Text("Captured version")
+      Text(Snapshot.Title)
+      #dismissSnapshot
+      FormButton("Dismiss") {
+         on press -> { dismiss }
+      }
+   }
+}
+
+ui SavedToast {
+   render Text("Saved")
+}
+
+// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none.
+dialogue ConfirmCloseDialogue Document responds ConfirmResult {
+   render Col() [gap 6, pad 10] {
+      Text("Close { Document.Title }?")
+      #confirmClose
+      FormButton("Close") {
+         on press -> { respond Confirmed }
+      }
+      #cancelClose
+      FormButton("Cancel") {
+         on press -> { respond } // bare respond answers none
+      }
+   }
+}
+
+ui Settings {
+   render Col() [screen, gap 10] {
+      Text("Settings")
+      #resetSignedOut
+      FormButton("Reset to signed out") {
+         // `replace` is the only root operation an app host accepts.
+         on press -> { replace SignedOutNav in WordFlower }
+      }
+   }
+}
+
+ui SignedOut {
+   render Text("Signed out")
+}
+
+// Typed TS injection stays the permanent escape hatch for behavior Tao does not own.
+view WordCount Value is text {
+   render inject Value ```ts
+      return <RN.Text>Words: {Value.trim() === '' ? 0 : Value.trim().split(/\s+/).length}</RN.Text>
+   ```
+}
+
+view TagLine Tags is list {
+   render inject Tags ```ts
+      return <RN.Text>Tagged: {Tags.join(', ')}</RN.Text>
+   ```
+}
+
+// Deterministic navigation-foundation harness: only StackNav and SlotNav, with no Design or
+// Datasource capability, so navigation foundations stay executable independently of them.
+let FoundationStack = StackNav { Initial FoundationHome }
+let FoundationNavigator = SlotNav { Initial FoundationStack }
+
+app WordFlowerFoundationTest {
+   Name "WordFlower Navigation Foundation Test"
+   Navigator FoundationNavigator
+}
+
+ui FoundationHome {
+   render Col() {
+      Text("Foundation home marker")
+      FormButton("Open deterministic detail") {
+         on press -> { present FoundationDetail() }
+      }
+      FormButton("Open deterministic slot") {
+         on press -> { present FoundationSlot() in FoundationNavigator }
+      }
+   }
+}
+
+ui FoundationDetail {
+   render Col() {
+      Text("Foundation detail marker")
+      FormButton("Reset foundation app") {
+         on press -> { replace FoundationNavigator in WordFlowerFoundationTest }
+      }
+   }
+}
+
+ui FoundationSlot {
+   render Col() {
+      Text("Foundation slot marker")
+      FormButton("Restore initial stack") {
+         on press -> { dismiss }
+      }
+   }
+}

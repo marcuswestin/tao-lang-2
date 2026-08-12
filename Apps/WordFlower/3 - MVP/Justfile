@@ -1,0 +1,98 @@
+# WordFlower MVP — the intended `tao` CLI surface for the MVP release.
+#
+# This file is a specification artifact, exactly like `WordFlower.tao-mvp` beside it: it states
+# the commands a WordFlower developer runs once Tao ships v1. It is not run by CI, and recipes
+# marked [intended] do not execute yet. Recipes marked [today] exist in the CLI now.
+#
+# Everything the MVP release must offer appears here. Capabilities intended beyond the MVP live
+# in `../4 - Revolution/Justfile`.
+
+set quiet
+
+TAO := justfile_directory() + "/../../../tao"
+APP := "WordFlower.tao"
+PROJECT_ID := "wordflower"
+
+# Print available recipes
+help:
+    just --list
+
+## Starting a project
+###################
+
+# [intended] Scaffold a new project; the directory name becomes the immutable project ID. Spec/Tao Packages.md
+create:
+    {{ TAO }} create "{{ PROJECT_ID }}"
+
+# [intended] Give an existing project its checked-in ID, or replace a fork's identity. Spec/Tao Packages.md
+adopt-id:
+    {{ TAO }} project id "{{ PROJECT_ID }}"
+    {{ TAO }} project id "{{ PROJECT_ID }}-fork" --replace
+
+## Authoring
+###########
+
+# [today] Report every file that is not in canonical source form, without writing.
+check:
+    {{ TAO }} check .
+
+# [today] Format .tao files in place.
+fmt:
+    {{ TAO }} fmt .
+
+# [today] Apply all source fixes in place: renders last, organized use statements, formatting.
+fix:
+    {{ TAO }} fix .
+
+## Testing
+#########
+
+# [today] Run every Tao behavior test in this app.
+test:
+    {{ TAO }} test .
+
+# [intended] Run only checks whose name matches a pattern. Roadmap.md: harden `tao test`
+test-only PATTERN:
+    {{ TAO }} test . --check "{{ PATTERN }}"
+
+# [intended] Re-run affected checks as sources change. Roadmap.md: harden `tao test`
+test-watch:
+    {{ TAO }} test . --watch
+
+# [intended] Machine-readable results and non-zero exit for continuous integration.
+test-ci:
+    {{ TAO }} test . --output json
+
+## Running
+#########
+
+# [today] Compile this app into the local runtime package.
+compile:
+    {{ TAO }} compile "{{ APP }}"
+
+# [intended] Start the interactive dev loop: compile, launch, watch, and reload. Roadmap.md: finish dev loop
+dev:
+    {{ TAO }} dev "{{ APP }}"
+
+# [intended] Launch the dev loop on a specific target, including a physical device over LAN.
+dev-ios:
+    {{ TAO }} dev "{{ APP }}" --target ios
+
+# [intended] Launch the dev loop on a connected Android device or emulator.
+dev-android:
+    {{ TAO }} dev "{{ APP }}" --target android
+
+# [intended] Launch the dev loop in the browser.
+dev-web:
+    {{ TAO }} dev "{{ APP }}" --target web
+
+## Shipping
+##########
+
+# [intended] Build a distributable app for an environment profile. Roadmap.md: production/staging runtime targets
+build-staging:
+    {{ TAO }} build "{{ APP }}" --profile staging
+
+# [intended] Build the release artifact for store submission and web deployment.
+build-production:
+    {{ TAO }} build "{{ APP }}" --profile production
