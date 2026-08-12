@@ -1,6 +1,6 @@
 # Autonomous language MVP
 
-This branch-local project integrates Tao's functional application core around the executable Still app. The experiment intentionally owns its language decisions and does not wait for the independent roadmap slices that were active when the branch began. The first end-to-end implementation is complete; a consolidation pass is now incorporating the strongest independently proven ideas and hardening the result for merge consideration.
+This branch-local project integrates Tao's functional application core around one executable forcing app (Still during the experiment, since restructured into WordFlower). The experiment intentionally owns its language decisions and does not wait for the independent roadmap slices that were active when the branch began. The first end-to-end implementation is complete; a consolidation pass is now incorporating the strongest independently proven ideas and hardening the result for merge consideration.
 
 ## Capability inventory
 
@@ -13,7 +13,7 @@ The MVP must add one integrated path for:
 - text input, change/submit events, validation, disabled/submitting state, stable identifiers, labels, and roles;
 - schema declarations, related records, typed queries, filtering/order, reactive create/update/delete, durable local storage, and deterministic loading/failure tests;
 - a deterministic stack navigator with typed destination arguments and back behavior;
-- a complete, pleasant Still app whose product behavior is authored in Tao.
+- a complete, pleasant forcing app whose product behavior is authored in Tao.
 
 ## Numbered vertical slices
 
@@ -28,9 +28,11 @@ The MVP must add one integrated path for:
 9. [x] **Data hardening.** Separate schemas from app datasource providers; add required/defaulted fields, `time`, `now()`, index metadata, explicit cascade relationships, stable live entity handles, versioned AsyncStorage persistence, serialized saves, and surfaced load/save errors while preserving structured queries and strict diagnostics.
 10. [x] **Navigation and test polish.** Keep typed stack/destination contracts, preserve covered screen state, add an automatic accessible Back affordance, make entity destination arguments live, and extend direct selector-based tests with placeholder/input-value/back coverage.
 11. [x] **Canonical-app and agreement pass.** Remove forcing-app boilerplate and ordering bugs, add a task detail/editor journey, split behavior checks by purpose, align Test Apps/specs/roadmap/readmes, audit every requirement, and run final verification.
+12. [x] **WordFlower restructuring.** Replace Still and Kitchen Sink with the WordFlower app family (`Apps/WordFlower/{Current,Next,Future}`): port the executable app, journeys, tooling fixtures, and Next decision sketches to the WordFlower domain; write the full-envelope Future reference; document Current/Next/Future as the standing implementation process.
 
 ## Decision log
 
+- **2026-08-12 — Adopt WordFlower as the single canonical app and Current/Next/Future as the process.** Still (the executable MVP) and Kitchen Sink (the v1 showcase) are deleted. `Apps/WordFlower/1 - Current` is the executable, test-passing app carrying Still's feature set in the WordFlower domain plus the typed injection escape hatch as a word-count view; `Apps/WordFlower/2 - Next` holds the active decision sketches; `Apps/WordFlower/3 - MVP` is the malleable full target covering every planned capability, reconciled whenever Current absorbs a Next slice. WordFlower/1 - Current itself exercises Kitchen Sink's full language surface organically — custom primitive/list/item types, typed constructors, list literals, item member access, view-local and nested shadowed `let`, number state with compound `set`, `claim`/`width fill` layout clauses, and typed injection — and Type System Tests keeps the focused nested-shadowing coverage; parser/validator/formatter/runtime fixtures, Just recipes, and the dev-loop default now anchor on WordFlower/1 - Current. The process contract lives in `Apps/WordFlower/README.md`.
 - **2026-08-10 — Integrate on one experimental branch.** Existing active roadmap branches remain independent and read-only. This branch implements the dependency chain itself so the result can be validated as one product.
 - **2026-08-10 — Favor expression-bodied pure functions.** MVP functions are deterministic value transformations with an explicit return type and one expression body. Stateful work remains in actions; this avoids a second imperative statement language.
 - **2026-08-10 — Keep data and navigation semantics in the runtime.** Generated TypeScript describes Tao-authored schemas, queries, mutations, and destinations. Reusable behavior belongs behind provider-neutral `TR` APIs.
@@ -68,11 +70,11 @@ The consolidation replaces direct `expo-file-system` use with `@react-native-asy
 ## Success checklist
 
 - [x] `feat/autonomous-language-mvp` contains intentional consolidation work only and remains available for Ro's review.
-- [x] `Apps/MVP/Current/Still.tao` is executable through the normal dev/runtime path after the consolidated syntax/runtime migration.
-- [x] Still persists related data and supports CRUD, completion, forms, filtering/order, reactive updates, and live detail editing without manual ordering state.
-- [x] Still visibly covers loading, empty, validation-error, provider-error, recovery, and populated states.
-- [x] Still has deterministic state-preserving list/detail navigation and automatic/native back behavior.
-- [x] Primary Still journeys are covered by focused Tao-authored behavior tests.
+- [x] `Apps/WordFlower/1 - Current/WordFlower.tao` is executable through the normal dev/runtime path after the consolidated syntax/runtime migration.
+- [x] WordFlower persists related data and supports CRUD, completion, forms, filtering/order, reactive updates, and live detail editing without manual ordering state.
+- [x] WordFlower visibly covers loading, empty, validation-error, provider-error, recovery, and populated states.
+- [x] WordFlower has deterministic state-preserving list/detail navigation and automatic/native back behavior.
+- [x] Primary WordFlower journeys are covered by focused Tao-authored behavior tests.
 - [x] Expressions, control flow, collections, interaction, data, forms, and navigation compose without app-specific TypeScript business logic.
 - [x] Common invalid usage has actionable diagnostics and accepted syntax formats deterministically.
 - [x] Active specifications, roadmap, Test Apps, and MVP documentation agree with the consolidated implementation.

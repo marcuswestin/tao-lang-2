@@ -5,7 +5,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 ## MVP Roadmap
 
 - [x] Complete the autonomous functional-language MVP experiment
-  - Integrate the smallest coherent expression, control-flow, interaction, data, navigation, and presentation surface required by the executable Still app.
+  - Integrate the smallest coherent expression, control-flow, interaction, data, navigation, and presentation surface required by the executable forcing app.
   - Project record: `Roadmap/Autonomous language MVP/Project.md`
 
 - [x] Add item/list/custom type MVP
@@ -36,7 +36,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - The autonomous MVP branch implements one app-owned declared stack with typed destination views and `present Stack.Destination(args)`, deterministic state-preserving history, an automatic accessible Back affordance, Tao `back Stack`, test `back`, and native hardware-back reconciliation. Selection, split, overlays, restoration, and public routing remain deferred.
 
 - [x] Define canonical buildable app target and acceptance bar
-  - `Apps/MVP/Current/Still.tao` is the executable forcing app: local related data, empty/error/loading/populated states, create/update/delete flows, navigation, forms, and Tao behavior tests.
+  - `Apps/WordFlower/1 - Current/WordFlower.tao` is the executable forcing app: local related data, empty/error/loading/populated states, create/update/delete flows, navigation, forms, and Tao behavior tests.
 
 - [x] Implement Tao-native testing v0
   - Inline/sidecar `test`, direct text/label/id/placeholder selectors, input-value assertions, deterministic data states, root-safe navigation back, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
@@ -75,11 +75,11 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Polish IDE MVP
   - Syntax, diagnostics, formatting, source actions, go-to-definition/reference basics, and live preview once runtime/test flow is stable.
 
-- [ ] Complete Kitchen Sink as the v1 feature showcase
-  - One navigable app demonstrating every shipped v1 feature, separate from focused Test Apps.
+- [ ] Advance WordFlower through the Current/Next/Future process
+  - Implement `Apps/WordFlower/2 - Next` into `Apps/WordFlower/1 - Current` slice by slice, reconciling `Apps/WordFlower/3 - MVP` after every landed slice; cut a new Next tranche after Current absorbs the existing one. The process contract is `Apps/WordFlower/README.md`.
 
 - [ ] Complete canonical app and v1 hardening
-  - Build the selected real app end to end, close gaps, tighten diagnostics/docs, remove stale roadmap/spec drift, and validate `verify`.
+  - Build WordFlower end to end, close gaps, tighten diagnostics/docs, remove stale roadmap/spec drift, and validate `verify`.
 
 ## Ro's STACK
 
@@ -163,8 +163,8 @@ This remains Ro's product/backlog stack. Items completed or deliberately superse
 - Spec
   - Copy/fill spec
 - Apps
-  - Kitchen Sink
-    - Executable Tao app used by tests; add slices only after that functionality is implemented
+  - WordFlower
+    - Canonical executable Tao app used by tests; grown through the Current/Next/Future process (`Apps/WordFlower/README.md`); add slices only after that functionality is implemented
 
 ## Minimal Port: Kitchen Sink Current
 
@@ -213,7 +213,7 @@ This remains Ro's product/backlog stack. Items completed or deliberately superse
 - [x] Add ability for `inject` to take kvp arguments, which become available inside the inject statement directly, e.g. `inject Value, Name UserName`.
 - [x] Add runtime stdlib and module imports
 - [x] Have `./dev [path/to/tao/app]` without command start a dev TUI, which:
-  - defaults to Kitchen Sink when no app path is supplied
+  - defaults to the canonical app when no app path is supplied (Kitchen Sink then, WordFlower today)
   - compiles the tao app
   - launches the app in an expo runtime, opening web/ios and already-available android targets
   - watches the tao app folder and recompiles on changes, including files not yet in the imported dependency tree
