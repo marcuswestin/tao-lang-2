@@ -1,14 +1,14 @@
 # WordFlower
 
-WordFlower is the canonical Tao application: a workspace/document writing app that forces every language capability we ship. It replaces the earlier Still and Kitchen Sink apps as the single product target.
+WordFlower is the canonical Tao application: a workspace/document writing app that forces every language capability we ship. It replaced Still and Kitchen Sink as the single product target.
 
-This folder is also the definition of **the implementation process** for Tao language work. All feature development flows through the four numbered versions below.
+This folder also defines **the implementation process** for Tao language work. All feature development flows through the four numbered versions below.
 
 ## The four versions
 
 ```text
 1 - Current      the executable app — implemented, formatted, proven by behavior tests
-2 - Next         the decision sketchpad — the next tranche of syntax/semantics, settled here first
+2 - Next         the sprint contract — the next tranche of syntax/semantics, settled here first
 3 - MVP          the full intended MVP release — everything Tao must cover to call v1 done
 4 - Revolution   intended functionality beyond the MVP release
 ```
@@ -17,12 +17,22 @@ Each version is the same app written at a different distance from today. Reading
 
 Only `1 - Current` is executable. The others use their own file extensions (`.tao-next`, `.tao-mvp`, `.tao-revolution`), which keeps them out of Tao discovery — Tao only discovers `.tao` and `.test.tao`.
 
-## The process
+## Next is the sprint contract
 
-1. **Decide in `2 - Next`.** New syntax and semantics are designed as sketches of WordFlower itself, with comments recording each decision. A Next sketch is the contract for upcoming implementation work.
-2. **Propagate immediately.** Every decision made in Next is reflected into `3 - MVP` and `4 - Revolution` as part of making it — see the synchronization rule below.
-3. **Implement into `1 - Current`.** Features move from Next into the language one slice at a time (grammar → validator → formatter → compiler → runtime → tests). Each slice lands in `1 - Current/WordFlower.tao` and its behavior tests, which must stay green through `./agent verify` at every commit.
-4. **Cut the next tranche.** When Current expresses everything in Next, reconcile MVP with what implementation taught us, then cut a new Next from the gap between Current and MVP.
+`2 - Next` holds the tranche of decided syntax and semantics that implementation moves into `1 - Current`, slice by slice. Decisions live there as working code plus comments: the file's header lists the tranche, and every construct in the sketch is the agreed target form. `3 - MVP` and `4 - Revolution` always stay in sync with those decisions.
+
+## Moving Next into Current
+
+Work the tranche one slice at a time; a slice is one decision group from Next's header.
+
+1. **Implement the vertical.** Grammar → scoping → validator → formatter → compiler → runtime, with package tests at each layer. The validator is authoritative for AST correctness; downstream layers assume validated input.
+2. **Migrate Current.** Rewrite `1 - Current/WordFlower.tao` and its journeys to the new form, matching Next's spelling exactly, and extend the journeys to prove the new behavior. Migrate any Test Apps and specs the slice touches in the same change.
+3. **Verify and commit.** Focused tests while working, `./agent verify` before committing; every commit leaves Current green.
+4. **Repeat** until Current expresses everything Next expresses. The tranche is done when the two files say the same thing — Next just says it with decision comments.
+
+A change of mind mid-sprint goes through Next first: amend the sketch, propagate to MVP and Revolution, then implement. Current never leads; it follows Next.
+
+When the tranche is absorbed, reconcile `3 - MVP` with what implementation taught us, then cut a new Next from the gap between Current and MVP.
 
 ## Synchronization rule
 
@@ -34,8 +44,8 @@ If reflecting a Next decision reveals a **contradiction** — the decision canno
 
 ## Version contents
 
-- **`1 - Current/WordFlower.tao`** + `WordFlower.test.tao` — the executable app and its journey tests. The repository's canonical compile target (`just _compile-word-flower-app`, the default `./dev` app) and the fixed-point fixture for parser/validator/formatter tests. It exercises the whole implemented language surface, including custom types and typed constructors (the starter writing prompt), nested `let` shadowing (the section labels), number state with compound `set` (the session save counter), and typed injection (the word count).
-- **`2 - Next/WordFlower.tao-next`** + test — the currently proposed decisions: `guard`, `#id` tags, `Name:` labeled arguments with no commas, entity-first `data`, boolean cases, `loop`, the `ui`/navigator model, two-way input binding, overlay notices, and bare `data` test steps.
+- **`1 - Current/WordFlower.tao`** + `WordFlower.test.tao` — the executable app and its journey tests. The repository's canonical compile target (`just _compile-word-flower-app`, the default `./dev` app) and the fixed-point fixture for parser/validator/formatter tests. It exercises the whole implemented language surface.
+- **`2 - Next/WordFlower.tao-next`** + test — the sprint contract; the header comment lists the full tranche.
 - **`3 - MVP/WordFlower.tao-mvp`** + test + `Justfile` — the full MVP target: three-level related data, every navigation family, dialogues with `ask`/`respond`, snapshots, `with` app variants, design tokens, a remote provider, functions, and the typed injection escape hatch. Its `Justfile` demonstrates every `tao` CLI capability the MVP release intends to ship.
 - **`4 - Revolution/WordFlower.tao-revolution`** + test + `Justfile` — intended functionality that is explicitly _not_ part of the MVP release, plus a TODO list at the top of the app file naming intended capabilities that do not yet have expressible syntax. Its `Justfile` demonstrates the CLI surface intended beyond the MVP.
 
