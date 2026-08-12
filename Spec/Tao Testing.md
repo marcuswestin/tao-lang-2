@@ -756,7 +756,7 @@ Navigation tests run an app and drive user-visible controls. They do not mount a
 ```tao
 test "Navigation foundation" {
    check "pushes a deterministic detail and handles back" {
-      run WriterFoundationTest
+      run WordFlowerFoundationTest
 
       expect text "Foundation home marker"
       expect missing text "Foundation detail marker"
@@ -769,7 +769,7 @@ test "Navigation foundation" {
 }
 ```
 
-Invalid-target diagnostics use focused validator fixtures for statically impossible paths and a runtime harness that first unmounts an otherwise valid configured target before invoking it. The runtime check expects `navigation.target.not-found` and verifies that visible content is unchanged; it does not depend on a nonexistent control in the full Writer sketch.
+Invalid-target diagnostics use focused validator fixtures for statically impossible paths and a runtime harness that first unmounts an otherwise valid configured target before invoking it. The runtime check expects `navigation.target.not-found` and verifies that visible content is unchanged; it does not depend on a nonexistent control in the full WordFlower sketch.
 
 `expect diagnostic code ...` remains planned syntax for structured development diagnostics. Static invalid destinations and arguments use focused validator fixtures. Navigation behavior follows `Tao Presentation and Navigation.md`: `present` and `back` synchronously update one runtime-owned stack, and native hardware back dispatches the same pop operation.
 

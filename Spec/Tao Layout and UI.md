@@ -154,7 +154,7 @@ Properties, unnamed render children, and named render slots are distinct channel
 
 Direct `@name` entries share one namespace within their immediate configured owner. Nested configured values begin new namespaces. A direct name must resolve to exactly one declared render slot or compatible open keyed property; Tao gives neither role precedence. If more than one channel or keyed property could accept it, validation reports an ambiguity and the caller must write the property explicitly, such as `Items { @home { ... } }`. A duplicate direct name in one owner is invalid.
 
-Only a targetable keyed entry creates an owner-qualified target such as `Writer@home`. A render slot never becomes a navigation target merely because it uses `@`.
+Only a targetable keyed entry creates an owner-qualified target such as `WordFlower@home`. A render slot never becomes a navigation target merely because it uses `@`.
 
 ```tao
 frame UserCard {

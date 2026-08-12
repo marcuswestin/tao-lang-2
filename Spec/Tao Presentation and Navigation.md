@@ -11,11 +11,11 @@ project stack MainNavigation {
    initial WorkspaceList
    destination WorkspaceList
    destination WorkspaceDetail
-   destination TaskDetail
+   destination DocumentEditor
 }
 
-app Still {
-   datasource StillData through Local
+app WordFlower {
+   datasource WordFlowerData through Local
    stack MainNavigation
 }
 ```
@@ -27,7 +27,7 @@ project view WorkspaceList {
    render Text("Workspaces")
 }
 
-project view WorkspaceDetail Workspace is StillData.Workspace {
+project view WorkspaceDetail Workspace is WordFlowerData.Workspace {
    render Text(Workspace.Name)
 }
 ```
@@ -39,7 +39,7 @@ A stack declares each destination once. Its `initial` name must match one declar
 Presentation is an action statement:
 
 ```tao
-action OpenWorkspace Workspace is StillData.Workspace {
+action OpenWorkspace Workspace is WordFlowerData.Workspace {
    present MainNavigation.WorkspaceDetail(.Workspace Workspace)
 }
 ```
@@ -48,7 +48,7 @@ Parentheses are mandatory, including for an argument-free destination: `present 
 
 A successful presentation pushes a new occurrence onto that stack. Presenting the same destination and semantic value again still creates a distinct history entry. Generated code contains destination descriptors and delegates history changes to `TR.Navigation`; application-specific routing logic is not injected by hand.
 
-Entity-valued destination arguments remain live. The navigation host subscribes to data revisions, so a destination reading `Task.Title` or `Task.Workspace.Name` rerenders after that row or relationship changes.
+Entity-valued destination arguments remain live. The navigation host subscribes to data revisions, so a destination reading `Document.Title` or `Document.Workspace.Name` rerenders after that row or relationship changes.
 
 ## Covered entries and back
 

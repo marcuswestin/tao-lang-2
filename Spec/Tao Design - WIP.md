@@ -566,8 +566,8 @@ Phase 5: ecosystem
 ## Open Questions
 
 - What declaration syntax best defines tokens, named specs, recipes, and recipe variants?
-- Does source use `design`, `theme`, or both as public capability names?
-- Should the first design data live in `.tao` source, a `tao.design` file, or both?
+- ~~Does source use `design`, `theme`, or both as public capability names?~~ **Decided: `design`.** The declaration is `design <Name> { ... }` and an app selects it with `Design <Name>`.
+- ~~Should the first design data live in `.tao` source, a `tao.design` file, or both?~~ **Decided: `.tao` source.** Design is an ordinary Tao declaration subject to the same visibility, imports, and validation as the rest of the language; no separate design file format.
 - Which visual treatments can apply to `layout` and future `frame` declarations?
 - How do combined specs interact with named render slots and caller content?
 - Which diagnostics are ordinary validator diagnostics, and which belong to `tao design check`?
@@ -598,7 +598,7 @@ Old Tao repo lessons:
 ## Deferred Decisions
 
 - Exact declaration syntax for recipe variants and state-specific entries.
-- Whether `tao create` writes a first `tao.design` file.
+- Whether `tao create` writes a first `design` declaration into the scaffolded app.
 - Whether `tao design init` is separate from project creation.
 - The `tao.design.lock` schema.
 - Visual screenshot artifact naming and retention.
