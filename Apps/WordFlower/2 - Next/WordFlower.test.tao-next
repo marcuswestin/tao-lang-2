@@ -4,7 +4,7 @@ test "WordFlower functional MVP" {
    check "starts empty and keeps invalid creates inert" {
       run WordFlower
 
-      expect {
+      expect { // `expect { ... }` groups several assertions into one step
          text "WordFlower"
          text "No workspaces yet"
          text "Starter prompt: Morning pages"

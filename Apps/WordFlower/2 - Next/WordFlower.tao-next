@@ -2,6 +2,27 @@ use Col, FormButton, Text, TextInput from @tao/ui
 use Local from @tao/data
 use OverlayNav, SlotNav, StackNav from @tao/nav
 
+// This tranche decides (the process contract is ../README.md):
+// - Arguments: `Name:` labels, unlabeled type-based binding, comma-separated, never positional
+// - Interpolated strings "{ Name.Path }"
+// - `is empty` expressions and the empty/loading/error case vocabulary (`.Empty` retired)
+// - `guard` in actions (stops the rest of the action) and renders (block-scoped stop);
+//   one subject per guard
+// - `when` subject form for values and renders
+// - `data Plural / Singular` top-level declarations with comma modifiers, `index`, default
+//   `order by`, relation elision, and boolean case fields written and filtered by name
+// - `loop Plural / Singular` list rendering
+// - `query [Name from] Source { ... }` including relation sources and inline placement
+//   (declared before use, and before any conditional)
+// - Two-way input binding; `on press|change|submit` with action references or inline handlers
+// - `ui` role; app Navigator/@overlays/Datasource block; `present Name(Args)` with required
+//   parentheses; `dismiss`; StackNav/SlotNav/OverlayNav; `replace <nav> in <App>`
+// - `#id` tags and test vocabulary: `press`/`enter`/`submit` with `#tag`, `select #tag[1-based]`,
+//   grouped `expect { ... }`, bare `data loading|error|ready` steps
+// - Visibility words: `file` (default, written by omission), `package`, `workspace`, `public`
+// - Custom types with value-literal constructors; view-local and block-shadowed `let`;
+//   number state with compound `set`; typed injection
+
 project {
    name "WordFlower"
    remote none
@@ -21,16 +42,16 @@ app WordFlower {
    }
 }
 
-data Workspace / Workspaces { // data is declared as a top level item instead of in a `data` block
+data Workspaces / Workspace { // top-level data: the plural collection, then the singular entity it stores — the same `Plural / Singular` order as `loop`
    Name text
-   CreatedAt time, default now() // modifications are comma seperated; index is declared separately
+   CreatedAt time, default now() // modifications are comma separated; index is declared separately
    Documents // `relation Documents` can be omitted if the name matches a data declaration
 
    index CreatedAt // index is declared separately
    order by CreatedAt // default order, defaults to asc
 }
 
-data Document / Documents {
+data Documents / Document {
    Title text
    Body text, default ""
    Final / Draft, default Draft // booleans are <yesName> / <noName>
@@ -57,7 +78,7 @@ type WritingPrompt is {
 
 // Typed constructors keep their value-literal form; item fields follow the same argument decisions
 // as invocations: `Field: value` labels a field, and an unlabeled typed value binds by type.
-let StarterTags = PromptTags ["daily" "warmup"]
+let StarterTags = PromptTags ["daily", "warmup"] // list items are comma separated
 
 let StarterPrompt = WritingPrompt {
    PromptTitle: "Morning pages"
@@ -73,7 +94,7 @@ ui WorkspaceList {
       // order by CreatedAt asc // can be omitted bc it's the entity's declared default order
    }
    action AddWorkspace {
-      guard WorkspaceName empty -> { // `guard <subject> <case>` runs its handler and stops when the case matches
+      guard WorkspaceName empty -> { // in an action, a matched guard runs its handler and stops the rest of the action
          // `present` is an invocation, so parentheses are always required, including with no arguments
          present WorkspaceNameNotice() in WordFlower@overlays
       }
@@ -85,7 +106,7 @@ ui WorkspaceList {
    render Col() [fill, content top stretch, gap 10, pad 16] {
       Text("WordFlower")
       Text(Tagline)
-      // Statements after `guard` only execute if no guard condition is met
+      // In a render, a matched guard shows its handler and skips the remainder of its ENCLOSING BLOCK
       guard Workspaces {
          loading -> { Text("Loading workspaces…") }
          error -> Message {
@@ -94,8 +115,8 @@ ui WorkspaceList {
          }
       }
       #workspaceName // Id tags apply to the next view render
-      // Arguments are not comma-separated: a `Name:` label or a new value starts the next argument
-      TextInput(Value: WorkspaceName Label: "Workspace name" Placeholder: "Home") {
+      // Arguments are comma-separated; `Name:` labels a parameter, and unlabeled values bind by type
+      TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Home") {
          // An explicit `on change` replaces the input's default update of its bound state
          on change -> NewWorkspaceName {
             set WorkspaceName = NewWorkspaceName
@@ -109,7 +130,7 @@ ui WorkspaceList {
       })
 
       #addWorkspace
-      FormButton("Add workspace" Disabled: WorkspaceName is empty) {
+      FormButton("Add workspace", Disabled: WorkspaceName is empty) {
          on press AddWorkspace
       }
 
@@ -163,13 +184,9 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
    }
    action AddDocument {
       guard DocumentTitle empty
-      async {
-         create Document { // Don't wait for creation completion to update the text input
-            Title: DocumentTitle
-            Workspace // unlabeled arguments bind by type; the entity value matches the relation field
-         }
-         // can do another action here
-         // Could also have done `async create Document { ... }`; but then no follow up can be done
+      create Document {
+         Title: DocumentTitle
+         Workspace // unlabeled arguments bind by type; the entity value matches the relation field
       }
       set DocumentTitle = ""
    }
@@ -177,27 +194,33 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
       Text("Workspace: { Workspace.Name }")
 
       #workspaceTitle
-      TextInput(Value: WorkspaceNameDraft Label: "Workspace title" Placeholder: "Workspace title") {
+      TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
          on submit SaveWorkspace
       }
 
       #saveWorkspace
-      FormButton("Save workspace" Disabled: WorkspaceNameDraft is empty) {
+      FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
          on press SaveWorkspace
       }
-
-      Text("{ SectionLabel }: { Drafts.Count }")
 
       // Queries can be inlined, but hook-like statements (state, query) must come before any
       // conditional in the definition body
       query Drafts from Workspace.Documents {
-         where Draft
+         where Draft // filters by boolean case name, mirroring `update Document { Final }`
       }
       query FinishedDocuments from Workspace.Documents {
          where Final
       }
 
-      guard Drafts, FinishedDocuments {
+      Text("{ SectionLabel }: { Drafts.Count }")
+
+      guard Drafts { // a guard takes exactly one subject; guard each query separately
+         loading -> { Text("Loading documents…") }
+         error -> Message {
+            Text("Could not load documents: { Message }")
+         }
+      }
+      guard FinishedDocuments {
          loading -> { Text("Loading documents…") }
          error -> Message {
             Text("Could not load documents: { Message }")
@@ -205,8 +228,8 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
       }
 
       #newDocumentTitle
-      TextInput(Value: DocumentTitle Label: "New document title" Placeholder: "Draft the next chapter") {
-         // No `on change`: TextInput updates its bound state automatically
+      TextInput(Value: DocumentTitle, Label: "New document title", Placeholder: "Draft the next chapter") {
+         // No `on change`: TextInput updates its bound state automatically; the default binding requires `Value:` to reference a writable state
          on submit AddDocument
       }
       when DocumentTitle {
@@ -214,7 +237,7 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
          otherwise -> { Text(DocumentTitle) }
       }
       #addDocument
-      FormButton("Add document" Disabled: DocumentTitle is empty) {
+      FormButton("Add document", Disabled: DocumentTitle is empty) {
          on press AddDocument
       }
       when Drafts {
@@ -286,18 +309,18 @@ workspace ui DocumentEditor Document {
       Text("Edit document") [width fill]
       Text("Workspace: { Document.Workspace.Name }")
       #editDocumentTitle
-      TextInput(Value: TitleDraft Label: "Document title" Placeholder: "Document title") {
+      TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
       #editDocumentBody
       // The body editor claims the column's leftover space
-      TextInput(Value: BodyDraft Label: "Document body" Placeholder: "Write the document body") [claim 2] {
+      TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on change SetBodyDraft // an explicit action reference also replaces the input's default binding
          on submit SaveDocument
       }
       WordCount(BodyDraft)
       #saveDocument
-      FormButton("Save document" Disabled: TitleDraft is empty) {
+      FormButton("Save document", Disabled: TitleDraft is empty) {
          on press SaveDocument
       }
       Text("Saved title: { Document.Title }")
@@ -327,6 +350,7 @@ let FoundationNavigator = SlotNav { Initial FoundationStack }
 app WordFlowerFoundationTest {
    Name "WordFlower Navigation Foundation Test"
    Navigator FoundationNavigator
+   // An app without data omits `Datasource` entirely
 }
 
 ui FoundationHome {
@@ -345,6 +369,7 @@ ui FoundationDetail {
    render Col() {
       Text("Foundation detail marker")
       FormButton("Reset foundation app") {
+         // `replace <nav> in <App>` swaps the app's root content; it is the only root operation an app accepts
          on press -> { replace FoundationNavigator in WordFlowerFoundationTest }
       }
    }
@@ -354,7 +379,7 @@ ui FoundationSlot {
    render Col() {
       Text("Foundation slot marker")
       FormButton("Restore initial stack") {
-         on press -> { dismiss }
+         on press -> { dismiss } // dismissing a SlotNav's presented content restores its Initial
       }
    }
 }
