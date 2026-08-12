@@ -22,7 +22,7 @@ Implement process-local `ask`/`respond`, exactly-once completion, platform cance
 
 ### FOLLOW-NAV-005: Repository Conformance
 
-Complete repository-wide migration from deprecated `alias` to `let`, remove compatibility after cycle and initialization audits pass, finish the visibility-vocabulary migration and remove transitional `project`/`publish` compatibility, remove obsolete push/pop/tab APIs, add source actions only where migration is semantically mechanical, add implemented coverage to Kitchen Sink and Test Apps, and move target/example files out of `.tao-future` only as each becomes executable.
+Complete repository-wide migration from deprecated `alias` to `let`, remove compatibility after cycle and initialization audits pass, finish the visibility-vocabulary migration and remove transitional `project`/`publish` compatibility, remove obsolete push/pop/tab APIs, add source actions only where migration is semantically mechanical, add implemented coverage to WordFlower/1 - Current and Test Apps, and move target/example files out of `.tao-future` only as each becomes executable.
 
 ## Deferred Design
 
@@ -100,7 +100,7 @@ After each project:
 
 1. Search active specifications, roadmap tasks, apps, tests, stdlib, and prompts for superseded syntax.
 2. Migrate executable code only when the replacement feature is implemented.
-3. Add behavior coverage to focused Test Apps and Kitchen Sink.
+3. Add behavior coverage to focused Test Apps and WordFlower/1 - Current.
 4. Update source actions for mechanical migrations such as `alias` to `let`.
 5. Re-enable discovery for individual future-syntax folders only when every discovered file parses, validates, formats, compiles, and tests.
 6. Run a targeted stale-reference audit and `./agent verify` before handoff.

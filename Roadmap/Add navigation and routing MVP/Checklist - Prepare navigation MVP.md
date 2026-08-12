@@ -10,10 +10,10 @@
 
 ## Intended Surface
 
-- [x] `.tao-future/Writer.tao` is the sole authoritative navigation usage sketch.
-- [x] Writer covers every settled surface and later implementation family; the policy matrix and planned tests own exhaustive transition branches.
-- [x] The nav stdlib stub agrees with the spec and Writer.
-- [x] The Still target app uses the settled model without duplicating the navigation contract.
+- [x] `Apps/WordFlower/2 - Next/` is the sole product decision sketch; this roadmap owns navigation semantics and the stdlib contract, not a second app sketch.
+- [x] `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp` covers every settled surface and later implementation family; the policy matrix and planned tests own exhaustive transition branches.
+- [x] The nav stdlib stub agrees with the spec and the WordFlower Next/Future app family.
+- [x] The full target app uses the settled model without duplicating the navigation contract in this roadmap folder.
 - [x] Traceability maps every settled feature to a rule, example, and planned test.
 - [x] Invalid operations have a specified validation error or structured runtime diagnostic.
 
