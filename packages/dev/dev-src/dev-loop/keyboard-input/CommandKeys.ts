@@ -155,7 +155,7 @@ async function appChoices(): Promise<AppChoice[]> {
   if (choices.length === 0) {
     throw new Errors.UserInputError('No switchable apps found in Apps/.')
   }
-  return choices.sort((left, right) => left.label.localeCompare(right.label))
+  return choices
 }
 
 function formatAppChoiceLabel(appsRoot: string, appPath: string): string {
