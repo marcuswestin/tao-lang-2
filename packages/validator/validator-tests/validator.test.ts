@@ -24,7 +24,7 @@ import Validator from '../validator-src/validator'
 import { ViewsValidator } from '../validator-src/views-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
-const kitchenSinkPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao')
 const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 const stateActionMvpPath = Repo.resolvePath('Apps/Test Apps/State Action MVP/State Action MVP.tao')
@@ -326,8 +326,8 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(messages.filter(message => message === AliasesValidator.messages.reservedName('__proto__'))).toHaveLength(2)
   })
 
-  Test('validates the current Kitchen Sink app', async () => {
-    const result = await Workspace.validate(kitchenSinkPath)
+  Test('validates the current WordFlower app', async () => {
+    const result = await Workspace.validate(wordFlowerPath)
 
     Expect(validationErrorMessages(result)).toEqual([])
   })

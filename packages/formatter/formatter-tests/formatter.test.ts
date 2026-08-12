@@ -3,18 +3,18 @@ import { Describe, Expect, Test } from '@shared/test'
 import Formatter from '../formatter-src/formatter'
 import { testFormatCode } from './test-format'
 
-const kitchenSinkPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const kitchenSinkTestPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
+const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao')
+const wordFlowerTestPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.test.tao')
 const tsFence = '```ts'
 const fence = '```'
 
-Describe('Tao formatter Kitchen Sink apps', () => {
-  Test('the current Kitchen Sink app is a formatting fixed point', async () => {
-    Expect(await Formatter.formatFile(kitchenSinkPath)).toBe(await FS.readText(kitchenSinkPath))
+Describe('Tao formatter WordFlower apps', () => {
+  Test('the current WordFlower app is a formatting fixed point', async () => {
+    Expect(await Formatter.formatFile(wordFlowerPath)).toBe(await FS.readText(wordFlowerPath))
   })
 
-  Test('the current Kitchen Sink v0 test sidecar is a formatting fixed point', async () => {
-    Expect(await Formatter.formatFile(kitchenSinkTestPath)).toBe(await FS.readText(kitchenSinkTestPath))
+  Test('the current WordFlower test sidecar is a formatting fixed point', async () => {
+    Expect(await Formatter.formatFile(wordFlowerTestPath)).toBe(await FS.readText(wordFlowerTestPath))
   })
 })
 
@@ -145,13 +145,13 @@ Describe('Tao formatter use statements', () => {
 Describe('Tao formatter tests', () => {
   Test('formats v0 Tao test declarations', async () => {
     await testFormatCode(
-      `use KitchenSink from ./\ntest   "Kitchen Sink"{check "renders"{run   KitchenSink\nexpect   text "Hello"\npress   role "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
+      `use WordFlower from ./\ntest   "WordFlower"{check "renders"{run   WordFlower\nexpect   text "Hello"\npress   role "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
       `
-        use KitchenSink from ./
+        use WordFlower from ./
 
-        test "Kitchen Sink" {
+        test "WordFlower" {
            check "renders" {
-              run KitchenSink
+              run WordFlower
 
               expect text "Hello"
               press role "Add"

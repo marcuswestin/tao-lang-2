@@ -105,8 +105,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-lsp-sketches-',
       {
         'Main.tao': 'view MainView { }\n',
-        'Apps/MVP/.tao-future/Future.tao': 'project app FutureMVP {',
-        'Apps/MVP/Current/Valid.tao': 'view ValidCurrentMVP { }\n',
+        'Apps/WordFlower/.tao-archive/Future.tao': 'project app FutureMVP {',
+        'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP { }\n',
         'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
       },
       async (_paths, rootDir) => {
@@ -115,7 +115,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           .map(document => document.uri.fsPath)
 
         Expect(loadedPaths).toEqual([
-          FS.resolvePath('Apps/MVP/Current/Valid.tao', rootDir),
+          FS.resolvePath('Apps/WordFlower/1 - Current/Valid.tao', rootDir),
           FS.resolvePath('Main.tao', rootDir),
           FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
         ])

@@ -60,14 +60,14 @@ Describe('tao check', () => {
   Test('skips hidden future-source directories without reserving user directory names', async () => {
     await withTaoFixture({
       'canonical.tao': 'view MainView { }\n',
-      'Apps/MVP/.tao-future/Future.tao': 'project app FutureMVP {',
-      'Apps/MVP/Current/Valid.tao': 'view ValidCurrentMVP { }\n',
+      'Apps/WordFlower/.tao-archive/Future.tao': 'project app FutureMVP {',
+      'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP { }\n',
       'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({
-        'Apps/MVP/Current/Valid.tao': 'unchanged',
+        'Apps/WordFlower/1 - Current/Valid.tao': 'unchanged',
         'Roadmap/Feature/Syntax Sketches/Valid.tao': 'unchanged',
         'canonical.tao': 'unchanged',
       })
