@@ -101,14 +101,14 @@ type WritingPrompt is {
 let StarterPrompt = WritingPrompt {
    PromptTitle: "Morning pages"
    PromptMinutes: 10
-   PromptTags: PromptTags ["daily" "warmup"]
+   PromptTags: PromptTags ["daily", "warmup"]
 }
 
 enum ConfirmResult { // enum shape is directional; two-state fields prefer boolean cases like Final / Draft
    Confirmed
 }
 
-data Workspace / Workspaces {
+data Workspaces / Workspace {
    Name text
    CreatedAt time, default now()
    Documents
@@ -117,7 +117,7 @@ data Workspace / Workspaces {
    order by CreatedAt
 }
 
-data Document / Documents {
+data Documents / Document {
    Title text
    Body text, default ""
    Final / Draft, default Draft
@@ -129,7 +129,7 @@ data Document / Documents {
    order by CreatedAt
 }
 
-data Paragraph / Paragraphs {
+data Paragraphs / Paragraph {
    Text text
    Ordering number
    Document, on delete cascade
@@ -163,11 +163,11 @@ ui WorkspaceList {
          }
       }
       #workspaceName
-      TextInput(Value: WorkspaceName Label: "Workspace name" Placeholder: "Novel") {
+      TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
          on submit AddWorkspace
       }
       #addWorkspace
-      FormButton("Add workspace" Disabled: WorkspaceName is empty) {
+      FormButton("Add workspace", Disabled: WorkspaceName is empty) {
          on press AddWorkspace
       }
       #activateWorkspaceTab
@@ -247,11 +247,11 @@ workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the sam
    render Col() [screen, gap 10] {
       Text("Workspace: { Workspace.Name }") [title]
       #workspaceTitle
-      TextInput(Value: WorkspaceNameDraft Label: "Workspace title" Placeholder: "Workspace title") {
+      TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
          on submit SaveWorkspace
       }
       #saveWorkspace
-      FormButton("Save workspace" Disabled: WorkspaceNameDraft is empty) {
+      FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
          on press SaveWorkspace
       }
       Text("{ SectionLabel }: { Drafts.Count }")
@@ -263,12 +263,16 @@ workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the sam
             present WorkspaceDetails(Workspace)
          }
       }
-      guard Drafts, FinishedDocuments {
+      guard Drafts {
+         loading -> { Spinner() }
+         error -> Message { Text("Could not load documents: { Message }") }
+      }
+      guard FinishedDocuments {
          loading -> { Spinner() }
          error -> Message { Text("Could not load documents: { Message }") }
       }
       #newDocumentTitle
-      TextInput(Value: DocumentTitle Label: "New document title" Placeholder: "Draft the next chapter") {
+      TextInput(Value: DocumentTitle, Label: "New document title", Placeholder: "Draft the next chapter") {
          on submit AddDocument
       }
       when DocumentTitle {
@@ -276,7 +280,7 @@ workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the sam
          otherwise -> { Text(DocumentTitle) }
       }
       #addDocument
-      FormButton("Add document" Disabled: DocumentTitle is empty) {
+      FormButton("Add document", Disabled: DocumentTitle is empty) {
          on press AddDocument
       }
       when Drafts {
@@ -457,11 +461,11 @@ workspace view DocumentEditor Document {
    render Col() [gap 10, pad 16] {
       Text(DocumentLabel(Document.Title)) [title, width fill]
       #documentTitle
-      TextInput(Value: TitleDraft Label: "Document title" Placeholder: "Document title") {
+      TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
       #documentBody
-      TextInput(Value: BodyDraft Label: "Document body" Placeholder: "Write the document body") [claim 2] {
+      TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on submit SaveDocument
       }
       WordCount(BodyDraft)
