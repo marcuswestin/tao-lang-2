@@ -3,7 +3,6 @@ use WordFlower, WordFlowerFoundationTest from ./
 test "WordFlower functional MVP" {
    check "starts empty and keeps invalid creates inert" {
       run WordFlower
-
       expect { // `expect { ... }` groups several assertions into one step
          text "WordFlower"
          text "No workspaces yet"
@@ -129,8 +128,7 @@ test "WordFlower functional MVP" {
       expect {
          missing text "Related draft"
          text "No drafts"
-      }
-   }
+   }  }
 
    check "renders deterministic loading, failure, and recovery states" {
       run WordFlower
@@ -148,13 +146,12 @@ test "WordFlower functional MVP" {
       expect {
          text "No workspaces yet"
          text "Workspace name is required"
-      }
-   }
-}
+}  }  }
 
 test "WordFlower navigation foundation" {
    check "native back uses the semantic reducer" {
       run WordFlowerFoundationTest
+
       expect text "Foundation home marker"
       press text "Open deterministic detail"
       expect text "Foundation detail marker"

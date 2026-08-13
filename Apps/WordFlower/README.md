@@ -56,10 +56,14 @@ From the repository root:
 ```sh
 ./tao check "Apps/WordFlower/1 - Current/WordFlower.tao"
 ./tao test "Apps/WordFlower/1 - Current"
-./tao compile "Apps/WordFlower/1 - Current/WordFlower.tao"
-./dev "Apps/WordFlower/1 - Current/WordFlower.tao"
+./tao compile "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
+./dev "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
 ```
 
 The first three commands are automated verification paths. The final command launches the Expo development path for interactive use.
+
+Files may declare more than one app. `compile` and `dev` accept `--app <Name>`; without it they
+prompt when attached to an interactive terminal and fail with the available names in noninteractive
+environments. They never select by filename or source order.
 
 Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The full navigation contract and its decision log remain in `Roadmap/Add navigation and routing MVP/`.
