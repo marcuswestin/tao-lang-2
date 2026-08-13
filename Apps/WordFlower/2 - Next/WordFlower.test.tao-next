@@ -177,8 +177,10 @@ test "WordFlower selection and document depth" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
+      expect text "Novel"
       press #activateWorkspaceTab
       expect text "Choose a workspace"
+      expect text "Novel"
       select #chooseWorkspace[1] {
          press #choose
       }
