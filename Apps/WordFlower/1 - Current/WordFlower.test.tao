@@ -70,7 +70,7 @@ test "WordFlower functional MVP" {
          press #edit
       }
       expect {
-         text "Edit document"
+         text "Document: Draft the intro"
          text "Workspace: Home"
          text "Words: 0"
          text "Saves this session: 0"

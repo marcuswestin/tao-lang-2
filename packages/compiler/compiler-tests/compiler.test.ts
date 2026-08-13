@@ -311,6 +311,36 @@ Describe('Tao compiler', () => {
     )
   })
 
+  Test('compiles imported pure functions as module-owned runtime values', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+        use DocumentLabel from ./Labels.tao
+        app MultiFile { view MainView }
+        view MainView {
+          render Text(DocumentLabel("Draft"))
+        }
+        view Text Value is text {
+          render inject Value ${tsFence}
+            return <RN.Text>{Value}</RN.Text>
+          ${fence}
+        }
+      `,
+        'Labels.tao': `
+        workspace function DocumentLabel Title is text returns text = "Document: { Title }"
+      `,
+      },
+      compiled => {
+        Expect(compiled['Main.tao'].code).toContain("import { DocumentLabel } from './modules/Labels.tao'")
+        Expect(compiled['Main.tao'].code).toContain("TR.Use(_Scope, 'DocumentLabel', () => DocumentLabel)")
+        Expect(compiled['Main.tao'].code).toContain('TR.Call(_Scope.DocumentLabel, TR.Value("Draft"))')
+        Expect(compiled['Labels.tao'].code).toContain('_Scope.DocumentLabel = TR.Function(')
+        Expect(compiled['Labels.tao'].code).toContain('export const DocumentLabel = _Scope.DocumentLabel')
+      },
+    )
+  })
+
   Test('does not compile sidecar test files from app directory imports', async () => {
     await withTaoFiles(
       'tao-compiler-sidecar-',

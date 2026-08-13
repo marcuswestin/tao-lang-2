@@ -99,6 +99,8 @@ let StarterPrompt = WritingPrompt {
    StarterTags // unlabeled: binds the PromptTags field by type
 }
 
+function DocumentLabel Title is text returns text = "Document: { Title }"
+
 // `ui` is content that can enter the app's presentation tree; `view` stays embeddable content.
 // There is no separate destination list: presenting a `ui` is the whole navigation contract.
 ui WorkspaceList {
@@ -334,7 +336,7 @@ workspace view DocumentEditor Document {
       set SaveCount += 1 // compound `set` composes with number state
    }
    render Col() [fill, content top stretch, gap 10, pad 16] {
-      Text("Edit document") [width fill]
+      Text(DocumentLabel(Document.Title)) [width fill]
       Text("Workspace: { Document.Workspace.Name }")
       #editDocumentTitle
       TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
