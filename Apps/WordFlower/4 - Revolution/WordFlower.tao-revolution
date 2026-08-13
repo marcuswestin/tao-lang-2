@@ -1,5 +1,5 @@
 use InstantDB from @instantdb
-use Occurrence, OverlayNav, SelectionNav, SlotNav, SplitNav, StackNav, Toast, ToastHost, Window, WindowHost from @tao/nav
+use Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, Window, WindowHost from @tao/nav
 use Checkbox, Col, FormButton, Icon, Image, List, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
 use every from @tao/time
@@ -206,7 +206,8 @@ let WordFlowerNavigator = SelectionNav {
 }
 
 // An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
-// entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
+// Overlay and toast hosting are universal capabilities, so no app declares them; keyed auxiliary
+// entries remain for app-specific hosts such as windows, and their keys are navigation targets.
 // A Local datasource is configured as `Datasource Local with { StorageKey "WordFlowerData" }`;
 // Memory is keyless, while remote providers own their provider-specific configuration below.
 app WordFlower {
@@ -214,12 +215,10 @@ app WordFlower {
    Design WordFlowerDesign
    Navigator WordFlowerNavigator
 
-   // Declaring a nav does not mount it. App-owned direct keys mount these auxiliary hosts.
-   @overlays OverlayNav {
-      Layout "sheet" // "sheet" | "popover" | "full-screen" | "palette" | "inspector" | "floating"
-      Dismissible true
-   }
-   @toasts ToastHost { }
+   // Declaring a nav does not mount it. App-owned direct keys mount app-specific hosts.
+   // Overlay and toast hosting need no declaration; a presentation names the mode instead:
+   //   present X() as overlay (Layout: "sheet", Dismissible: true)
+   // Layout is one of "sheet" | "popover" | "full-screen" | "palette" | "inspector" | "floating".
    @windows WindowHost { }
 
    Datasource InstantDB with { // remote syncing provider; Local stays for tests and offline development
@@ -319,7 +318,7 @@ ui WorkspaceList {
    query Workspaces { }
    action AddWorkspace {
       guard WorkspaceName empty -> {
-         present WorkspaceNameNotice() in WordFlower@overlays
+         present WorkspaceNameNotice() as overlay
       }
       create Workspace {
          Name: WorkspaceName
@@ -622,19 +621,14 @@ workspace view DocumentEditor Document {
          Body: BodyDraft
       }
       set SaveCount += 1
-      present Toast {
-         Content: SavedToast
-         Key: "document-saved"
-         Duration: 3.seconds // duration literals are directional
-      } in WordFlower@toasts
+      // A keyed toast replaces the same key instead of stacking; modifiers go in parentheses.
+      present SavedToast() as toast (Key: "document-saved", Duration: 3.seconds)
    }
    action CloseDocument {
       // `ask` suspends the action until the dialogue responds; a bare `respond` answers none.
       let Result = ask ConfirmCloseDialogue(Document)
-      when Result {
-         Confirmed -> { dismiss }
-         otherwise -> { } // cancelled
-      }
+      // `when` is always exhaustive, so a one-sided test uses `if`, which never takes `else`.
+      if Result is Confirmed { dismiss }
    }
    render Col() [gap 10, pad 16] {
       Text(DocumentLabel(Document.Title)) [title, width fill]
@@ -662,7 +656,7 @@ workspace view DocumentEditor Document {
       Row() [gap 6] {
          #documentInfo
          FormButton("Document info") {
-            on press -> { present DocumentInfo(Document) in WordFlower@overlays }
+            on press -> { present DocumentInfo(Document) as overlay }
          }
          #save
          FormButton("Save") {
@@ -683,7 +677,7 @@ workspace view DocumentEditor Document {
             on press -> {
                // A snapshot is an immutable copy; the live handle keeps updating elsewhere.
                let Snapshot = snapshot Document
-               present DocumentSnapshot(Snapshot) in WordFlower@overlays
+               present DocumentSnapshot(Snapshot) as overlay
             }
          }
          #closeDocument
@@ -873,7 +867,7 @@ workspace ui ExportPanel Document {
       let Status = present ExportProgress(Document, Format: Format)
       when Status {
          Presented -> { log "export started" }
-         Failed -> Error { present ExportFailure(Error) in WordFlower@overlays }
+         Failed -> Error { present ExportFailure(Error) as overlay }
          FellBack -> Fallback { log Fallback }
       }
    }
