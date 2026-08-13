@@ -1,5 +1,7 @@
 # Research - Add navigation and routing MVP
 
+Status: archived research record. The implemented contract is `Spec/Tao Presentation and Navigation.md`; unimplemented work lives in `Roadmap/Add navigation and routing MVP/Follow-ups - Add navigation and routing MVP.md`. Its decisions predate the WordFlower tranches, which reversed the overlay/toast host model in favour of presentation modes.
+
 ## Status And Authority
 
 This record consolidates the presentation and navigation exploration into a planning-ready contract. It records rationale and implementation scope; normative language behavior belongs in `Spec/`.

@@ -1,5 +1,7 @@
 # Deferred Navigation Syntax Explorations
 
+Status: archived. Every example predates the WordFlower tranches and uses retired syntax; the surviving ideas are owned by the `DEF-NAV-*` entries in the live follow-ups.
+
 Status: non-normative preservation. These deliberately incomplete examples retain the shape of ideas from the deleted `@ToBeDecided` sketches. Their linked `DEF-NAV-*` records own the decisions; none of this syntax is accepted until that decision is resolved.
 
 ## Target-Specific Declarations

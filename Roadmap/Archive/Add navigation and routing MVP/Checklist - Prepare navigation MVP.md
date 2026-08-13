@@ -1,5 +1,7 @@
 # Checklist - Prepare navigation MVP
 
+Status: archived. Every item completed before the navigation MVP shipped.
+
 ## Authority And Decisions
 
 - [x] Active specifications are normative and cross-link the roadmap research.
