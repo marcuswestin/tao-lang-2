@@ -17,6 +17,7 @@ export type TaoType =
   | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
   | { kind: 'entity'; entity: DataEntityDefinition }
+  | { kind: 'enum'; declaration: AST.EnumDeclaration }
   | { kind: 'union'; members: readonly TaoType[] }
   | { kind: 'unresolved' }
 
@@ -100,6 +101,7 @@ export class Type {
       list: () => 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
       entity: type => dataEntityName(type.entity),
+      enum: type => type.declaration.name,
       union: type => type.members.map(Type.displayName).join(' | '),
     })
   }
@@ -269,6 +271,9 @@ export class Type {
     if (type.kind === 'entity') {
       return `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`
     }
+    if (type.kind === 'enum') {
+      return `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`
+    }
     if (type.kind === 'union') {
       return `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`
     }
@@ -278,6 +283,25 @@ export class Type {
   /** ofMemberAccess resolves the static type reached by a member access expression. */
   static ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
     return new TypeResolutionContext().ofMemberAccess(expression)
+  }
+
+  /** dataFieldOfMemberAccess returns the declaration reached by an entity member path. */
+  static dataFieldOfMemberAccess(expression: AST.MemberAccessExpression): DataFieldDefinition | undefined {
+    let current = Type.ofValueDeclaration(expression.target.ref)
+    for (const [index, member] of expression.members.entries()) {
+      if (current.kind !== 'entity') {
+        return undefined
+      }
+      const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
+      if (!field) {
+        return undefined
+      }
+      if (index === expression.members.length - 1) {
+        return field
+      }
+      current = Type.dataFieldType(field)
+    }
+    return undefined
   }
 
   /** queryEntity resolves the entity selected by one query declaration. */
@@ -436,7 +460,13 @@ function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
   if (!bothTypesAreResolved || !typesShareKind || primitivesDiffer(actual, expected)) {
     return false
   }
-  return actual.kind !== 'entity' || expected.kind !== 'entity' || actual.entity === expected.entity
+  if (actual.kind === 'entity' && expected.kind === 'entity') {
+    return actual.entity === expected.entity
+  }
+  if (actual.kind === 'enum' && expected.kind === 'enum') {
+    return actual.declaration === expected.declaration
+  }
+  return true
 }
 
 function listTypeIsAssignable(
@@ -510,7 +540,9 @@ function primitivesDiffer(actual: TaoType, expected: TaoType): boolean {
 }
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
-  return isUnresolvedType(type) || type.kind === 'entity' || type.kind === 'union' ? undefined : type.nominal
+  return isUnresolvedType(type) || type.kind === 'entity' || type.kind === 'enum' || type.kind === 'union'
+    ? undefined
+    : type.nominal
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -592,7 +624,7 @@ class TypeResolutionContext {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
       BooleanLiteral: () => primitiveType('boolean'),
-      EmptyExpression: () => primitiveType('boolean'),
+      CaseTestExpression: () => primitiveType('boolean'),
       WhenExpression: when => this.whenExpressionType(when),
       FunctionCallExpression: call =>
         call.function.ref ? this.ofReference(call.function.ref.returnType) : unresolvedType(),
@@ -647,6 +679,7 @@ class TypeResolutionContext {
       CasePayload: () => primitiveType('text'),
       EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
       EntityQueryDeclaration: query => this.queryDeclarationType(query),
+      EnumCase: enumCase => ({ kind: 'enum', declaration: AST.enumOwningCase(enumCase) }),
       ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
       StateDeclaration: state => this.stateDeclarationType(state),

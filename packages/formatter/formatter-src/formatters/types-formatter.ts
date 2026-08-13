@@ -7,6 +7,21 @@ export default {
     f.oneSpaceAround('is')
   },
 
+  /** EnumDeclaration formats its declaration keyword and case block. */
+  EnumDeclaration(f) {
+    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'enum')
+    f.oneSpaceBeforeProperty('block')
+  },
+
+  /** EnumDeclarationBlock places each case on its own indented line. */
+  EnumDeclarationBlock(f) {
+    f.indentedBraceBlock(f.node.cases)
+    f.lineSeparatedList(f.node.cases)
+  },
+
+  /** EnumCase preserves its declaration name. */
+  EnumCase() {},
+
   /** ItemTypeExpression formats item type property blocks. */
   ItemTypeExpression(f) {
     f.indentedBraceBlock(f.node.properties)

@@ -31,6 +31,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'case' && AST.isBooleanWhereClause(context.container)) {
       return this.createBooleanWhereScope(context.container)
     }
+    if (context.property === 'declaredCase' && AST.isCaseTestExpression(context.container)) {
+      return this.createCaseTestScope(context.container)
+    }
     if (context.property === 'type' && AST.isConfiguredValue(context.container)) {
       return this.createConfiguredTypeScope(context.container)
     }
@@ -72,6 +75,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       this.importedDeclarations(reference, AST.isImportableValueDeclaration),
       scope,
     )
+    scope = this.createScopeForNodes(this.importedEnumCases(reference), scope)
 
     const owningView = AST.findOwningView(reference)
     if (owningView) {
@@ -223,6 +227,35 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScope(descriptions)
   }
 
+  private createCaseTestScope(test: AST.CaseTestExpression): Langium.Scope {
+    const root = AST.findRoot(test)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const enumCases = [
+      ...root.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
+      ...this.importedEnumCases(test),
+    ]
+    const exactField = booleanFieldForCaseTest(test)
+    const fields = visibleEntityDataDeclarations(test).flatMap(entity =>
+      entity.block.entries.filter(AST.isEntityDataField).filter(field => field.boolean)
+    )
+    const caseDescriptions = (field: AST.EntityDataField) => {
+      const document = AST.getDocument(field)
+      const cases = [this.descriptions.createDescription(field, field.name, document)]
+      if (field.negativeName) {
+        cases.push(this.descriptions.createDescription(field, field.negativeName, document))
+      }
+      return cases
+    }
+    let scope = this.createScope(fields.flatMap(caseDescriptions))
+    scope = this.createScopeForNodes(enumCases, scope)
+    if (exactField) {
+      scope = this.createScope(caseDescriptions(exactField), scope)
+    }
+    return scope
+  }
+
   private createRunAppScope(node: AST.RunStep | AST.NavigationTarget): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
@@ -235,6 +268,21 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   private createUseImportScope(useStatement: AST.UseStatement): Langium.Scope {
     return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
+  }
+
+  private importedEnumCases(node: AST.Node): AST.EnumCase[] {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return []
+    }
+    return root.statements
+      .filter(AST.isUseStatement)
+      .flatMap(useStatement =>
+        useStatement.importedDeclarations
+          .map(reference => reference.ref)
+          .filter(AST.isEnumDeclaration)
+          .flatMap(declaration => declaration.block.cases)
+      )
   }
 
   private createScopeForParameters(
@@ -311,6 +359,40 @@ function entityDataForValueDeclaration(
     return entityDataForCollection(declaration.collection, context)
   }
   return undefined
+}
+
+function booleanFieldForCaseTest(test: AST.CaseTestExpression): AST.EntityDataField | undefined {
+  const subject = test.value
+  if (!AST.isMemberAccessExpression(subject)) {
+    return undefined
+  }
+  let entity = entityDataForValueDeclaration(subject.target.ref, test)
+  for (const [index, member] of subject.members.entries()) {
+    const field = entity?.block.entries
+      .filter(AST.isEntityDataField)
+      .find(candidate => candidate.name === member)
+    if (!field) {
+      return undefined
+    }
+    if (index === subject.members.length - 1) {
+      return field.boolean ? field : undefined
+    }
+    entity = relationEntityForField(field, test)
+  }
+  return undefined
+}
+
+function relationEntityForField(
+  field: AST.EntityDataField,
+  context: AST.Node,
+): AST.EntityDataDeclaration | undefined {
+  if (field.primitive || field.boolean) {
+    return undefined
+  }
+  const relationName = field.modifiers.find(modifier => modifier.relationName)?.relationName ?? field.name
+  return visibleEntityDataDeclarations(context).find(entity =>
+    entity.singularName === relationName || entity.name === relationName
+  )
 }
 
 function entityDataForCollection(

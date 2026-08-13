@@ -69,6 +69,44 @@ Describe('functional core validator', () => {
     Expect(errors).toContain(StateValidator.messages.toggleStateType('Count', 'number'))
   })
 
+  Test('validates enum and data case identity plus boolean one-sided if conditions', async () => {
+    await testValidateCode(`
+      enum ConfirmResult { Confirmed Cancelled }
+      data Documents / Document { Final yes / no Draft }
+      view Main Document {
+        state Result = Confirmed
+        action Close { if Result is Confirmed { } }
+        render Stack() {
+          if Result is Confirmed { Text("Confirmed") }
+          if Document.Final is Draft { Text("Draft") }
+        }
+      }
+      ${runtimeViews}
+    `)
+
+    const result = await testValidateCodeWithErrors(`
+      enum ConfirmResult { Confirmed Confirmed }
+      enum OtherResult { Other }
+      data Documents / Document { Final yes / no Draft }
+      data Accounts / Account { Active yes / no Inactive }
+      view Main Document {
+        state Result = Other
+        action Close {
+          if 1 { }
+          if Result is Confirmed { }
+          if Document.Final is Inactive { }
+        }
+        render Stack() { if "yes" { Text("Wrong") } }
+      }
+      ${runtimeViews}
+    `)
+    const errors = validationErrorMessages(result)
+    Expect(errors).toContain(FunctionalCoreValidator.messages.duplicateEnumCase('ConfirmResult', 'Confirmed'))
+    Expect(errors.filter(error => error === FunctionalCoreValidator.messages.ifCondition)).toHaveLength(2)
+    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('Confirmed', 'OtherResult'))
+    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('Inactive', 'boolean'))
+  })
+
   Test('unifies nested list values without treating unlike element types as compatible', async () => {
     const accepted = await testValidateCode(`
       let EmptyFirst = [[], [1]]

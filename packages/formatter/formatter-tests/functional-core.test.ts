@@ -91,6 +91,28 @@ Describe('functional core formatter', () => {
     )
   })
 
+  Test('formats enums, general case tests, and one-sided action and render if', async () => {
+    await testFormatCode(
+      `enum ConfirmResult{Confirmed Cancelled}\nview Main{state Result=Confirmed action Close{if Result is Confirmed{}}render Stack(){if Result is Cancelled{Text("Cancelled")}}}`,
+      `
+        enum ConfirmResult {
+           Confirmed
+           Cancelled
+        }
+
+        view Main {
+           state Result = Confirmed
+           action Close {
+              if Result is Confirmed { }
+           }
+           render Stack() {
+              if Result is Cancelled {
+                 Text("Cancelled")
+        }  }  }
+      `,
+    )
+  })
+
   Test('formats positional action callback signatures compactly', async () => {
     await testFormatCode(
       `view Field Change is action ( text,number ),Submit is action ( ){render Text("Field")}`,

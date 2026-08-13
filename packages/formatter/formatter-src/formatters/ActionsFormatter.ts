@@ -50,6 +50,11 @@ export const ActionsFormatter = {
     }
   },
 
+  /** IfActionStatement separates its boolean condition from its one-sided body. */
+  IfActionStatement(f) {
+    f.oneSpaceAfter('if')
+  },
+
   /** DoStatement formats action invocation spacing. */
   DoStatement(f) {
     f.oneSpaceAfter('do')

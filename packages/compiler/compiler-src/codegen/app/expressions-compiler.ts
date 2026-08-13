@@ -11,7 +11,7 @@ export const ExpressionsCompiler = {
       ActionExpression: Compile.ActionExpression,
       BinaryExpression: Compile.BinaryExpression,
       BooleanLiteral: Compile.BooleanLiteral,
-      EmptyExpression: Compile.EmptyExpression,
+      CaseTestExpression: Compile.CaseTestExpression,
       WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
       InterpolatedString: Compile.InterpolatedString,
@@ -90,9 +90,19 @@ export const ExpressionsCompiler = {
     return gen`TR.Unary(${gen.jsLiteral(expression.operator)}, ${Compile.Expression(expression.operand)})`
   },
 
-  /** EmptyExpression matches empty text/lists and ready queries with no rows. */
-  EmptyExpression(expression: AST.EmptyExpression): Compiled {
-    return gen`TR.IsEmpty(${Compile.Expression(expression.value)})`
+  /** CaseTestExpression compares one subject with a built-in or declaration-linked case. */
+  CaseTestExpression(expression: AST.CaseTestExpression): Compiled {
+    if (expression.builtinCase) {
+      return gen`TR.IsCase(${Compile.Expression(expression.value)}, ${gen.jsLiteral(expression.builtinCase)})`
+    }
+    Assert.defined(expression.declaredCase, 'parsed case test has a declared or built-in case')
+    const declaredCase = resolveRef(expression.declaredCase)
+    if (AST.isEntityDataField(declaredCase)) {
+      return gen`TR.IsCase(${Compile.Expression(expression.value)}, TR.Value(${
+        expression.declaredCase.$refText === declaredCase.name ? 'true' : 'false'
+      }))`
+    }
+    return gen`TR.IsCase(${Compile.Expression(expression.value)}, ${Compile.ValueDeclarationReference(declaredCase)})`
   },
 
   /** WhenExpression evaluates one subject and selects one lazy value case. */
@@ -204,6 +214,7 @@ export const ExpressionsCompiler = {
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
+      EnumCase: enumCase => gen`${gen.scopeName(AST.enumOwningCase(enumCase))}.${gen.Name(enumCase)}`,
       ForStatement: statement => gen`${gen.scopeName(statement)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,

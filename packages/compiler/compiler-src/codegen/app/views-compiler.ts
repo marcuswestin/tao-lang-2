@@ -61,6 +61,7 @@ export const ViewsCompiler = {
       list: () => gen`TR.Value<any[]>`,
       item: () => gen`TR.Value<Record<string, any>>`,
       entity: () => gen`TR.Value<Record<string, any>>`,
+      enum: () => gen`TR.Value<TR.EnumCaseIdentity>`,
       unresolved: () => gen`TR.Value<Record<string, any>>`,
       union: () => gen`TR.Evaluable`,
     })
@@ -75,6 +76,7 @@ export const ViewsCompiler = {
       AST.isRender(statement)
       || AST.isWhenRenderStatement(statement)
       || AST.isGuardRenderStatement(statement)
+      || AST.isIfRenderStatement(statement)
       || AST.isForStatement(statement)
     )
     return gen`
@@ -87,7 +89,9 @@ export const ViewsCompiler = {
 
   /** RenderBlockFragments compiles sequential render fragments around the first block-scoped guard. */
   RenderBlockFragments(
-    statements: readonly (AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement)[],
+    statements: readonly (
+      AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.IfRenderStatement | AST.ForStatement
+    )[],
   ): Compiled {
     const guardIndex = statements.findIndex(AST.isGuardRenderStatement)
     if (guardIndex < 0) {

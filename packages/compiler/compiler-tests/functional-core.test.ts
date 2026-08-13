@@ -62,6 +62,39 @@ Describe('functional core compiler', () => {
     Expect(code).toContain('_TaoFunctionArg0 ?? TR.Value("Save")')
   })
 
+  Test('lowers enum identity case tests and one-sided action and render if', async () => {
+    const compiled = await Compiler.compileCode(`
+      app CaseApp { view Main }
+      enum ConfirmResult { Confirmed Cancelled }
+      data Documents / Document { Final yes / no Draft }
+      view Main {
+        state Result = Confirmed
+        state Ready = true
+        query Documents { }
+        action Close {
+          if Result is Confirmed { toggle Ready }
+        }
+        render Stack() {
+          if Result is Confirmed { Text("Confirmed") }
+          loop Documents / Document {
+            if Document.Final is Final { Text("Final") }
+            if Document.Final is Draft { Text("Draft") }
+          }
+        }
+      }
+      layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    const code = compiled.files[0]?.code ?? ''
+    Expect(code).toContain('_Scope.ConfirmResult = TR.Enum(["Confirmed", "Cancelled"])')
+    Expect(code).toContain('TR.IsCase(_Scope.Result.evaluate(), _Scope.ConfirmResult.Confirmed)')
+    Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(true))')
+    Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(false))')
+    Expect(code.match(/TR\.If\(/g)).toHaveLength(4)
+  })
+
   Test('keeps a matched guard inside its action block while caller execution continues', async () => {
     const compiled = await Compiler.compileCode(`
       app GuardApp { view Main }

@@ -10,11 +10,13 @@ type NamedValueDeclaration =
   | AST.EntityQueryDeclaration
   | AST.ForStatement
   | AST.CasePayload
+  | AST.EnumCase
 type NamedFileValueDeclaration =
   | AST.ActionDeclaration
   | AST.AliasDeclaration
   | AST.AppDeclaration
   | AST.FunctionDeclaration
+  | AST.EnumDeclaration
   | AST.VisualDeclaration
 type NamedDeclaration = NamedValueDeclaration | AST.TypeDeclaration
 type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
@@ -37,7 +39,10 @@ export const AliasesValidator = {
 /** validateAliases validates duplicate names and immutable-binding reference order. */
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   reportReservedRuntimeNames(file, ctx)
-  const fileValueDeclarations = file.statements.filter(isFileValueDeclaration)
+  const fileValueDeclarations: NamedValueDeclaration[] = [
+    ...file.statements.filter(isFileValueDeclaration),
+    ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
+  ]
   const fileTypeDeclarations = file.statements.filter(AST.isTypeDeclaration)
   reportDuplicateNames(fileValueDeclarations, new Map(), ctx)
   reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
@@ -72,6 +77,8 @@ function isRuntimeScopeNamedDeclaration(node: AST.Node): node is NamedDeclaratio
     || AST.isFunctionDeclaration(node)
     || AST.isParameterDeclaration(node)
     || AST.isEntityQueryDeclaration(node)
+    || AST.isEnumCase(node)
+    || AST.isEnumDeclaration(node)
     || AST.isVisualDeclaration(node)
     || AST.isStateDeclaration(node)
     || AST.isTypeDeclaration(node)
@@ -214,6 +221,9 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
         }
       }
     }
+    if (AST.isIfRenderStatement(statement)) {
+      collectRenderChildBlocks(statement.block, blocks)
+    }
     if (AST.isForStatement(statement)) {
       collectRenderChildBlocks(statement.block, blocks)
     }
@@ -229,5 +239,6 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
     || AST.isAliasDeclaration(node)
     || AST.isAppDeclaration(node)
     || AST.isFunctionDeclaration(node)
+    || AST.isEnumDeclaration(node)
     || AST.isVisualDeclaration(node)
 }

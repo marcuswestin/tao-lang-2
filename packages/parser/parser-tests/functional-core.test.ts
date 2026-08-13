@@ -71,6 +71,49 @@ Describe('functional core parser', () => {
     Expect(action.entry.document.parseResult.parserErrors).toEqual([])
   })
 
+  Test('parses declaration-linked case tests, enums, and one-sided action and render if', async () => {
+    const result = await testParseCode(`
+      enum ConfirmResult { Confirmed Cancelled }
+      data Documents / Document { Final yes / no Draft }
+      view Main Document {
+        state Result = Confirmed
+        action Close {
+          if Result is Confirmed { }
+        }
+        render Stack() {
+          if Result is Confirmed { Text("Confirmed") }
+          if Document.Final is Draft { Text("Draft") }
+        }
+      }
+      layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    const enumDeclaration = result.entry.ast.statements.find(AST.isEnumDeclaration)
+    const main = result.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Main'
+    )
+    Expect.Is(enumDeclaration, AST.isEnumDeclaration)
+    Expect.Is(main, AST.isViewDeclaration)
+    const close = AST.blockStatementOf(main, { find: AST.isActionDeclaration })
+    const actionIf = close.block.statements.find(AST.isIfActionStatement)
+    Expect.Is(actionIf, AST.isIfActionStatement)
+    Expect.Is(actionIf.condition, AST.isCaseTestExpression)
+    Expect(actionIf.condition.declaredCase?.ref).toBe(enumDeclaration.block.cases[0])
+
+    const render = AST.blockStatementOf(main, { find: AST.isRenderStatement })
+    Expect.Is(render, AST.isRenderStatement)
+    const renderIfs = AST.statementsOf(render.block).filter(AST.isIfRenderStatement)
+    Expect(renderIfs).toHaveLength(2)
+    const dataCase = renderIfs[1]?.condition
+    Expect.Is(dataCase, AST.isCaseTestExpression)
+    Expect(dataCase.declaredCase?.$refText).toBe('Draft')
+    Expect(dataCase.declaredCase?.ref?.name).toBe('Final')
+
+    const withElse = await parseCodeWithErrors('action Run { if true { } else { } }')
+    Expect(withElse.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+  })
+
   Test('parses and links scalar expressions inside interpolated strings', async () => {
     const result = await testParseCode(`
       let Name = "Ada"

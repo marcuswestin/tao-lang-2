@@ -6,7 +6,7 @@ import type { ValidationContext } from './validation'
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {
   topLevel:
-    'Only project, app, ui, view, layout, let, function, action, data, type, test declarations, and use statements are allowed at file level.',
+    'Only project, app, ui, view, layout, let, function, action, data, type, enum, test declarations, and use statements are allowed at file level.',
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
   appBlock: (name: string) => `App ${name} contains a statement that is not app configuration.`,

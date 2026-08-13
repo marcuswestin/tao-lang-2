@@ -59,6 +59,7 @@ export const ActionsCompiler = {
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
+      IfActionStatement: Compile.IfActionStatement,
       ReplaceStatement: Compile.ReplaceStatement,
       SetStatement: Compile.SetStatement,
       ToggleStatement: Compile.ToggleStatement,
@@ -104,6 +105,15 @@ export const ActionsCompiler = {
       )
     }
     ])) return`
+  },
+
+  /** IfActionStatement lazily executes one action sub-block without terminating its caller. */
+  IfActionStatement(statement: AST.IfActionStatement): Compiled {
+    return gen`TR.If(${Compile.Expression(statement.condition)}, () =>
+      TR.BlockScope(_Scope, _Scope => {
+        ${Compile.ActionBlockBody(statement.block)}
+      })
+    )`
   },
 } as const
 

@@ -190,6 +190,7 @@ function constructorLiteralKind(type: ASTUtils.TaoType): string {
     list: () => 'list',
     item: () => 'item',
     entity: type => Type.dataEntityName(type.entity),
+    enum: type => type.declaration.name,
     unresolved: () => 'unresolved',
     union: type => type.members.map(Type.displayName).join(' | '),
   })
@@ -497,6 +498,7 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     ActionDeclaration: Type.ofAction,
     CasePayload: () => ({ kind: 'primitive', primitive: 'text' }),
     EntityDataField: field => field.negativeName ? { kind: 'primitive', primitive: 'boolean' } : { kind: 'unresolved' },
+    EnumCase: enumCase => ({ kind: 'enum', declaration: AST.enumOwningCase(enumCase) }),
     EntityQueryDeclaration: declaration => {
       const entity = Type.queryEntity(declaration)
       return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }

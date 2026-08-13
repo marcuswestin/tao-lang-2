@@ -11,6 +11,9 @@ const messages = {
   conditionalBranch: '`when` branches must produce compatible value types.',
   duplicateCase: (name: string) => `Case '${name}' is declared more than once for this subject.`,
   emptySubject: '`is empty` accepts text, list, or query values.',
+  enumPlacement: 'Enums must be declared at file level.',
+  duplicateEnumCase: (enumName: string, caseName: string) =>
+    `Enum '${enumName}' declares case '${caseName}' more than once.`,
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this function.`,
   forCollection: '`loop` requires a list value before `/`.',
   functionMissingArgument: (name: string, parameter: string) =>
@@ -37,10 +40,11 @@ const messages = {
   functionReturn: (name: string, expected: string, actual: string) =>
     `Function '${name}' returns ${expected}, but its expression produces ${actual}.`,
   interpolationPart: 'String interpolation accepts text, number, boolean, or none values.',
+  ifCondition: '`if` requires a boolean condition.',
   invalidCase: (name: string, subject: string) => `Case '${name}' is not valid for ${subject}.`,
   invalidCasePayload: "Only an 'error -> Name' case may introduce an error-message value.",
   listElement: 'List elements must have compatible types.',
-  renderControlPlacement: '`when`, `guard`, and `for` rendering must be nested inside a render child block.',
+  renderControlPlacement: '`when`, `guard`, `if`, and `for` rendering must be nested inside a render child block.',
   subjectCases: '`when` and `guard` subjects must be text, list, query, or boolean values.',
   unaryBoolean: "Unary 'not' requires a boolean value.",
   unaryNumber: "Unary '-' requires a number value.",
@@ -53,6 +57,9 @@ export const FunctionalCoreValidator = {
 } as const
 
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
+  for (const declaration of AST.streamAllContents(file).filter(AST.isEnumDeclaration)) {
+    validateEnum(declaration, ctx)
+  }
   for (const fn of AST.streamAllContents(file).filter(AST.isFunctionDeclaration)) {
     validateFunction(fn, ctx)
   }
@@ -69,8 +76,8 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(expression.operator === 'not' ? messages.unaryBoolean : messages.unaryNumber, expression)
     }
   }
-  for (const expression of AST.streamAllContents(file).filter(AST.isEmptyExpression)) {
-    validateEmptyExpression(expression, ctx)
+  for (const expression of AST.streamAllContents(file).filter(AST.isCaseTestExpression)) {
+    validateCaseTestExpression(expression, ctx)
   }
   for (const expression of AST.streamAllContents(file).filter(AST.isWhenExpression)) {
     validateSubjectCases(expression.subject, expression.branches, ctx)
@@ -100,6 +107,13 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   }
   for (const statement of AST.streamAllContents(file).filter(AST.isGuardActionStatement)) {
     validateSubjectCases(statement.subject, guardActionBranches(statement), ctx)
+  }
+  for (const statement of AST.streamAllContents(file).filter(AST.isIfActionStatement)) {
+    validateIfCondition(statement.condition, ctx)
+  }
+  for (const statement of AST.streamAllContents(file).filter(AST.isIfRenderStatement)) {
+    validateIfCondition(statement.condition, ctx)
+    validateRenderControlPlacement(statement, ctx)
   }
   for (const statement of AST.streamAllContents(file).filter(AST.isForStatement)) {
     const collection = Type.ofExpression(statement.collection)
@@ -213,11 +227,65 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
 
 type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardActionBranch | AST.GuardRenderBranch
 
-function validateEmptyExpression(expression: AST.EmptyExpression, ctx: ValidationContext): void {
+function validateEnum(declaration: AST.EnumDeclaration, ctx: ValidationContext): void {
+  if (!AST.isTaoFile(declaration.$container)) {
+    ctx.error(messages.enumPlacement, declaration)
+  }
+  const seen = new Set<string>()
+  for (const enumCase of declaration.block.cases) {
+    if (seen.has(enumCase.name)) {
+      ctx.error(messages.duplicateEnumCase(declaration.name, enumCase.name), enumCase)
+    }
+    seen.add(enumCase.name)
+  }
+}
+
+function validateCaseTestExpression(expression: AST.CaseTestExpression, ctx: ValidationContext): void {
+  if (expression.builtinCase) {
+    const category = subjectCaseCategory(expression.value)
+    if (category === 'unresolved') {
+      return
+    }
+    if (!allowedCases(category).has(expression.builtinCase)) {
+      ctx.error(
+        expression.builtinCase === 'empty'
+          ? messages.emptySubject
+          : messages.invalidCase(expression.builtinCase, subjectCaseLabel(category)),
+        expression.value,
+      )
+    }
+    return
+  }
+  const declaredCase = expression.declaredCase?.ref
+  if (!declaredCase) {
+    return
+  }
   const type = Type.ofExpression(expression.value)
-  const supported = type.kind === 'list' || isPrimitive(type, 'text')
-  if (type.kind !== 'unresolved' && !supported) {
-    ctx.error(messages.emptySubject, expression.value)
+  if (type.kind === 'unresolved') {
+    return
+  }
+  if (AST.isEnumCase(declaredCase)) {
+    const owner = AST.enumOwningCase(declaredCase)
+    if (type.kind !== 'enum' || type.declaration !== owner) {
+      ctx.error(messages.invalidCase(declaredCase.name, Type.displayName(type)), expression)
+    }
+    return
+  }
+  const subjectField = AST.isMemberAccessExpression(expression.value)
+    ? Type.dataFieldOfMemberAccess(expression.value)
+    : undefined
+  if (!declaredCase.boolean || subjectField !== declaredCase) {
+    ctx.error(
+      messages.invalidCase(expression.declaredCase?.$refText ?? declaredCase.name, Type.displayName(type)),
+      expression,
+    )
+  }
+}
+
+function validateIfCondition(condition: AST.Expression, ctx: ValidationContext): void {
+  const type = Type.ofExpression(condition)
+  if (type.kind !== 'unresolved' && !isPrimitive(type, 'boolean')) {
+    ctx.error(messages.ifCondition, condition)
   }
 }
 
@@ -337,7 +405,7 @@ function firstValueWithoutCommonType<ValueT extends { type: ReturnType<typeof Ty
 }
 
 function validateRenderControlPlacement(
-  node: AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement,
+  node: AST.WhenRenderStatement | AST.GuardRenderStatement | AST.IfRenderStatement | AST.ForStatement,
   ctx: ValidationContext,
 ): void {
   let current: AST.Node | undefined = node.$container

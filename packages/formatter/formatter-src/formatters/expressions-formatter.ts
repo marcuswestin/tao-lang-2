@@ -60,8 +60,8 @@ export default {
     f.oneSpaceAround('==', '!=', '<', '<=', '>', '>=', '+', '-', '*', '/', 'and', 'or')
   },
 
-  /** EmptyExpression formats the postfix emptiness predicate. */
-  EmptyExpression(f) {
+  /** CaseTestExpression formats a postfix built-in or declared case predicate. */
+  CaseTestExpression(f) {
     f.oneSpaceAround('is')
   },
 

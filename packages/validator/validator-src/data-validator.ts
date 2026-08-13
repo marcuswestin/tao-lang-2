@@ -240,7 +240,10 @@ function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: Va
   }
   const queryIndex = block.statements.indexOf(query)
   const controlIndex = block.statements.findIndex(statement =>
-    AST.isGuardRenderStatement(statement) || AST.isWhenRenderStatement(statement) || AST.isForStatement(statement)
+    AST.isGuardRenderStatement(statement)
+    || AST.isWhenRenderStatement(statement)
+    || AST.isIfRenderStatement(statement)
+    || AST.isForStatement(statement)
   )
   if (controlIndex >= 0 && queryIndex > controlIndex) {
     ctx.error(dataValidationMessages.queryAfterControl, query)

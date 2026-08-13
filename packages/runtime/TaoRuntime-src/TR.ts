@@ -56,9 +56,31 @@ class TR {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
   }
 
+  /** Enum creates declaration-owned case identities without a process-global name registry. */
+  static Enum(caseNames: readonly string[]): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>> {
+    return Object.freeze(Object.fromEntries(caseNames.map(caseName => [
+      caseName,
+      new RuntimeValue(Object.freeze({ identity: Symbol(caseName) })),
+    ])))
+  }
+
+  /** IsCase tests built-in subject states, declared boolean cases, and enum identity values. */
+  static IsCase(subject: TR.Evaluable, expected: TR.SubjectCaseName | TR.Evaluable): TR.Value<boolean> {
+    const value = subject.evaluate().jsValue
+    if (typeof expected === 'string') {
+      return new RuntimeValue(matchSubjectCase(value, expected).matched)
+    }
+    return new RuntimeValue(Object.is(value, expected.evaluate().jsValue))
+  }
+
   /** IsEmpty matches empty text/lists and ready queries with no rows. */
   static IsEmpty(subject: TR.Evaluable): TR.Value<boolean> {
-    return new RuntimeValue(matchSubjectCase(subject.evaluate().jsValue, 'empty').matched)
+    return TR.IsCase(subject, 'empty')
+  }
+
+  /** If evaluates a validated boolean once and lazily runs its one-sided body when true. */
+  static If<ResultT>(condition: TR.Evaluable, body: () => ResultT): ResultT | undefined {
+    return condition.evaluate().jsValue === true ? body() : undefined
   }
 
   /** WhenCase evaluates one subject once and selects one mutually exclusive value case. */
@@ -368,6 +390,10 @@ namespace TR {
   export type CompoundSetOperator = '+=' | '-=' | '*=' | '/='
   /** Evaluable declares runtime values that can collapse to their current value. */
   export type Evaluable = { evaluate(): any }
+  /** EnumCaseIdentity is the opaque runtime token owned by one enum declaration and case. */
+  export type EnumCaseIdentity = Readonly<{ identity: symbol }>
+  /** SubjectCaseName declares runtime-recognized built-in subject states. */
+  export type SubjectCaseName = 'empty' | 'loading' | 'error' | 'true' | 'false'
   /** CaseBranch maps one source case name to a payload-aware lazy body. */
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */

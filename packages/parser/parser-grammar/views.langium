@@ -50,6 +50,9 @@ WhenRenderBranch:
 WhenRenderOtherwise:
     'otherwise' '->' block=Block;
 
+IfRenderStatement:
+    'if' condition=Expression block=Block;
+
 GuardRenderStatement:
     'guard' subject=SubjectExpression (caseBlock=GuardRenderCaseBlock | single=GuardRenderBranch);
 

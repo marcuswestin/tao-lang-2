@@ -57,8 +57,11 @@ export function ancestorBlocks(node: AST.Node): AST.Block[] {
 /** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
 export function importableValueDeclarationsInFile(
   file: AST.TaoFile,
-): Array<AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration> {
-  return file.statements.filter(isImportableValueDeclaration)
+): Array<AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration | AST.EnumCase> {
+  return [
+    ...file.statements.filter(isImportableValueDeclaration),
+    ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
+  ]
 }
 
 /** valueDeclarationsOwnedByBlock returns value declarations owned directly by `block`. */
@@ -95,6 +98,7 @@ export function taggedLoopRowRoot(loop: AST.ForStatement): AST.Render | undefine
     AST.isRender(statement)
     || AST.isWhenRenderStatement(statement)
     || AST.isGuardRenderStatement(statement)
+    || AST.isIfRenderStatement(statement)
     || AST.isForStatement(statement)
   )
   return renderers.length === 1 && AST.isRender(renderers[0]) ? renderers[0] : undefined
@@ -117,6 +121,11 @@ export function isImportableValueDeclaration(
   node: AST.Node,
 ): node is AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration {
   return AST.isAliasDeclaration(node) || AST.isActionDeclaration(node) || AST.isUiDeclaration(node)
+}
+
+/** enumOwningCase returns the declaration whose runtime identity owns one enum case. */
+export function enumOwningCase(enumCase: AST.EnumCase): AST.EnumDeclaration {
+  return enumCase.$container.$container
 }
 
 /** parametersOf returns the parameters declared by a renderable or action declaration. */

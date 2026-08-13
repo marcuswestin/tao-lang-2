@@ -22,7 +22,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | ToggleStatement | DoStatement | GuardActionStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | DismissStatement | ReplaceStatement;
+    SetStatement | ToggleStatement | DoStatement | GuardActionStatement | IfActionStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | DismissStatement | ReplaceStatement;
 
 ToggleStatement:
     'toggle' target=[StateDeclaration:ID];
@@ -35,6 +35,9 @@ GuardActionCaseBlock:
 
 GuardActionBranch:
     case=SubjectCaseName ('->' payload=CasePayload?)? block=ActionBlock?;
+
+IfActionStatement:
+    'if' condition=Expression block=ActionBlock;
 
 SetStatement:
     'set' target=[StateDeclaration:ID] operator=SetOperator value=Expression;

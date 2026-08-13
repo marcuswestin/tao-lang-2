@@ -34,10 +34,10 @@ EqualityExpression infers Expression:
     ComparisonExpression ({infer BinaryExpression.left=current} operator=('==' | '!=') right=ComparisonExpression)*;
 
 ComparisonExpression infers Expression:
-    EmptyExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=EmptyExpression)*;
+    CaseTestExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
 
-EmptyExpression infers Expression:
-    AdditionExpression ({infer EmptyExpression.value=current} 'is' empty?='empty')?;
+CaseTestExpression infers Expression:
+    AdditionExpression ({infer CaseTestExpression.value=current} 'is' (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
 
 AdditionExpression infers Expression:
     MultiplicationExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
@@ -85,7 +85,10 @@ SubjectExpression infers Expression:
     | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | ValueReference;
 
 SubjectCaseName returns string:
-    'empty' | 'loading' | 'error' | 'true' | 'false' | ID;
+    BuiltInSubjectCaseName | ID;
+
+BuiltInSubjectCaseName returns string:
+    'empty' | 'loading' | 'error' | 'true' | 'false';
 
 CasePayload:
     name=ID;
@@ -141,4 +144,4 @@ NoneLiteral:
 ValueReference:
     target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | UiDeclaration | EntityDataField;
+type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | UiDeclaration | EntityDataField | EnumCase;

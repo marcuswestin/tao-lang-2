@@ -21,7 +21,7 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     ActionExpression: expressionValueReferences,
     BinaryExpression: expressionValueReferences,
     BooleanLiteral: expressionValueReferences,
-    EmptyExpression: expressionValueReferences,
+    CaseTestExpression: expressionValueReferences,
     WhenExpression: expressionValueReferences,
     FunctionCallExpression: expressionValueReferences,
     InterpolatedString: expressionValueReferences,
