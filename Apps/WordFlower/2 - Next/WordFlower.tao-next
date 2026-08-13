@@ -1,7 +1,7 @@
 use Local from @tao/data
 use Memory from @tao-next/data // the self-hosted stdlib sketch: copyable navs and datasources
 use StackNav from @tao-next/nav
-use OverlayNav, SelectionNav, SlotNav, Toast, ToastHost from @tao/nav
+use SelectionNav, SlotNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
 // This tranche decides (the process contract is ../README.md):
@@ -13,11 +13,17 @@ use Col, FormButton, Text, TextInput from @tao/ui
 //   `guard Entity { loading / missing / unauthorized / error -> Message }` with available fall-through;
 //   a handle keeps its Id after its row is gone
 // - `dialogue Name <Params> responds <Enum>`; `ask` suspends the action until the dialogue answers;
-//   `respond Case` answers, bare `respond` answers none; results match with `when`
-// - Keyed toasts: `present Toast { Content: X, Key: "...", Duration: 3.seconds } in App@toasts`;
-//   `N.seconds` is the first unit literal
-// - `snapshot Entity` immutable copies, typed `Entity.Snapshot`
-// - `async { ... }` runs its block without delaying the statements after it
+//   `respond Case` answers, bare `respond` answers none
+// - `is <Case>` generalizes `is empty` into a case test usable wherever a boolean is
+// - `when` stays exhaustive everywhere — `otherwise` is always required. `if <boolean> { ... }` is
+//   the one-sided test and never takes `else`; two or more outcomes are `when`'s job
+// - Presentation modes replace named hosts. Every nav can host overlays, so
+//   `present X() as overlay` layers above the NEAREST nav (the same contextual rule plain
+//   `present` uses) and `in <target>` still overrides scope. `present X() as toast (Key: "...",
+//   Duration: 3.seconds)` is always app-level, transient, and replaces the same key rather than
+//   stacking. Keyed app auxiliaries stay in the language for genuinely app-specific hosts such as
+//   windows, but no app declares overlay or toast hosts
+// - `N.seconds` is the first unit literal
 // - Pure functions in product code (`function Name Params returns type = expression`)
 // - Data fields as `Name type (modifiers)`: parenthesized comma-separated modifiers, booleans as
 //   `Name yes / no [NoAlias] [(default Case)]`, owner-side `auto-delete`, values (like `now`)
@@ -69,13 +75,12 @@ let WordFlowerNavigator = SelectionNav {
       Content SettingsStack
 }  }
 
-// An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
-// entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
+// An app mounts navs, it does not render content directly. `Navigator` is the primary nav. Overlay
+// and toast hosting are universal capabilities, so no app declares them; keyed auxiliary entries
+// remain available for app-specific hosts such as windows.
 app WordFlower {
    Name "WordFlower"
    Navigator WordFlowerNavigator
-   @overlays OverlayNav { }
-   @toasts ToastHost { }
    Datasource Local { // Local is a type, which gets instantiated, so no `with`
       StorageKey "WordFlowerData"
 }  }
@@ -172,8 +177,9 @@ ui WorkspaceList {
    }
    action AddWorkspace {
       guard WorkspaceName empty -> { // a match runs its handler and skips the remainder of this action block
-         // `present` is an invocation, so parentheses are always required, including with no arguments
-         present WorkspaceNameNotice() in WordFlower@overlays
+         // `present` is an invocation, so parentheses are always required, including with no arguments.
+         // `as overlay` layers above the nearest enclosing nav rather than pushing into it.
+         present WorkspaceNameNotice() as overlay
       }
       create Workspace {
          Name: WorkspaceName
@@ -282,10 +288,10 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
       // Queries can be inlined, but hook-like statements (state, query) must come before any
       // conditional in the definition body
       query Drafts from Workspace.Documents {
-         where Draft // filters by boolean case name, mirroring `update Document { Final }`
+         where is Draft // filters by boolean case name, mirroring `update Document { Final }`. `is <yes/no>` evaluates to true or false.
       }
       query FinishedDocuments from Workspace.Documents {
-         where Final
+         where is Final
       }
       Text("{ SectionLabel }: { Drafts.Count }")
       guard Drafts { // a guard takes exactly one subject; guard each query separately
@@ -403,32 +409,25 @@ workspace view DocumentEditor Document {
          Body: BodyDraft
       }
       set SaveCount += 1 // compound `set` composes with number state
-      // A keyed toast replaces the previous occurrence with the same key instead of stacking
-      present Toast {
-         Content: SavedToast
-         Key: "document-saved"
-         Duration: 3.seconds // `N.seconds` is the first unit literal
-      } in WordFlower@toasts
+      // A keyed toast replaces the previous occurrence with the same key instead of stacking.
+      // Presentation modifiers go in parentheses, like data field modifiers.
+      present SavedToast() as toast (Key: "document-saved", Duration: 3.seconds)
    }
    action AddParagraph {
       guard ParagraphText empty
-      // `async` runs its block without delaying the statements after it
-      async {
-         create Paragraph {
-            Text: ParagraphText
-            Ordering: Paragraphs.Count + 1
-            Document
-      }  }
+      create Paragraph {
+         Text: ParagraphText
+         Ordering: Paragraphs.Count + 1
+         Document
+      }
       set ParagraphText = ""
    }
    action CloseDocument {
-      // `ask` suspends this action until the dialogue responds; a bare `respond` answers none
+      // `ask` suspends this action until the dialogue responds; a bare `respond` answers none.
+      // A one-sided test is `if`; it never takes `else`, so multi-outcome branching stays `when`.
       let Result = ask ConfirmCloseDialogue(Document)
-      when Result {
-         Confirmed -> {
-            dismiss
-         }
-         otherwise -> { } // cancelled
+      if Result is Confirmed {
+         dismiss
    }  }
    render Col() [fill, content top stretch, gap 10, pad 16] {
       Text(DocumentLabel(Document.Title)) [width fill]
@@ -463,13 +462,6 @@ workspace view DocumentEditor Document {
          Col() [gap 6, pad 10] {
             Text(Paragraph.Text)
       }  }
-      #snapshotDocument
-      FormButton("Snapshot") {
-         on press -> {
-            // A snapshot is an immutable copy; the live handle keeps updating elsewhere
-            let Snapshot = snapshot Document
-            present DocumentSnapshot(Snapshot) in WordFlower@overlays
-      }  }
       #closeDocument
       FormButton("Close document") {
          on press CloseDocument
@@ -479,16 +471,6 @@ workspace view DocumentEditor Document {
 ui SavedToast {
    render Text("Saved")
 }
-
-ui DocumentSnapshot Snapshot is Document.Snapshot {
-   render Col() [gap 6, pad 10] {
-      Text("Captured version")
-      Text(Snapshot.Title)
-      #dismissSnapshot
-      FormButton("Dismiss") {
-         on press -> {
-            dismiss
-}  }  }  }
 
 // A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none.
 dialogue ConfirmCloseDialogue Document responds ConfirmResult {

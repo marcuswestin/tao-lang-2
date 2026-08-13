@@ -170,8 +170,8 @@ test "WordFlower navigation foundation" {
    }
 }
 
-// Tranche-2 journeys. Selection labels are pressed by visible text; keyed toasts, dialogues,
-// snapshots, and paragraph depth all flow through the same #tag vocabulary.
+// Tranche-2 journeys. Selection labels are pressed by visible text; overlays, keyed toasts,
+// dialogues, and paragraph depth all flow through the same #tag vocabulary.
 test "WordFlower selection and document depth" {
    check "activates the workspace tab and opens a document from the chooser" {
       run WordFlower
@@ -211,7 +211,7 @@ test "WordFlower selection and document depth" {
       expect missing text "Document: Chapter one"
    }
 
-   check "adds paragraphs asynchronously and snapshots the live document" {
+   check "adds paragraphs and keeps the live document handle current" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
@@ -228,13 +228,9 @@ test "WordFlower selection and document depth" {
       submit #newParagraph
       expect text "Paragraphs: 1"
       expect text "It began at sea."
-      press #snapshotDocument
-      expect text "Captured version"
-      expect text "Chapter one"
-      press #dismissSnapshot
       enter "Chapter one, revised" into #editDocumentTitle
       press #saveDocument
-      expect text "Saved title: Chapter one, revised" // the snapshot stayed immutable; the handle stayed live
+      expect text "Saved title: Chapter one, revised"
    }
 
    check "a with-variant reconfigures the same app" {
