@@ -6,12 +6,13 @@ import { Compile } from '../Compile'
 
 /** NavigationCompiler lowers configured navigation actions to TR.Navigation. */
 export const NavigationCompiler = {
-  /** ContextualPresentStatement presents a ui through the nearest or explicitly named nav. */
+  /** ContextualPresentStatement presents a ui as content or an overlay through the selected nav. */
   ContextualPresentStatement(presentation: AST.ContextualPresentStatement): Compiled {
     const ui = resolveRef(presentation.ui)
     const resolved = ASTUtils.resolveArgumentBindings(ui, presentation)
     Assert(resolved.diagnostics.length === 0, 'validated ui presentation has no binding diagnostics')
-    return gen`TR.Navigation.PresentIn(
+    const runtimeMethod = presentation.mode?.kind === 'overlay' ? 'PresentOverlay' : 'PresentIn'
+    return gen`TR.Navigation.${runtimeMethod}(
       _ViewProps.__tao,
       ${presentation.target ? compileNavigationTarget(presentation.target) : 'undefined'},
       ${Compile.UiValue(ui)},

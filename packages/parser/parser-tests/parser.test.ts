@@ -614,7 +614,7 @@ Describe('minimal Tao parser', () => {
         }
       }
       ui Home {
-        action Open { present Detail() }
+        action Open { present Detail() as overlay }
         render inject \`\`\`ts return null \`\`\`
       }
       ui Detail {
@@ -629,7 +629,9 @@ Describe('minimal Tao parser', () => {
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(home, AST.isUiDeclaration)
     Expect(AST.blockStatements(app).some(AST.isAppNavigator)).toBe(true)
-    Expect(AST.streamAllContents(home).some(AST.isContextualPresentStatement)).toBe(true)
+    const presentation = AST.streamAllContents(home).find(AST.isContextualPresentStatement)
+    Expect.Is(presentation, AST.isContextualPresentStatement)
+    Expect(presentation.mode?.kind).toBe('overlay')
   })
 
   Test('parses the WordFlower Tao test sidecar', async () => {

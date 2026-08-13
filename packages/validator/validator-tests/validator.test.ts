@@ -14,6 +14,7 @@ import { FunctionalCoreValidator } from '../validator-src/FunctionalCoreValidato
 import { injectionValidationMessages } from '../validator-src/injections-validator'
 import { InvocationsValidator } from '../validator-src/invocations-validator'
 import { LayoutValidator } from '../validator-src/layout-validator'
+import { navigationValidationMessages } from '../validator-src/navigation-validator'
 import { projectValidationMessages } from '../validator-src/project-validator'
 import { StateValidator } from '../validator-src/StateValidator'
 import { testValidationMessages } from '../validator-src/tests-validator'
@@ -70,6 +71,33 @@ async function withValidatedFiles<
 }
 
 Describe('Tao validator structural diagnostics', () => {
+  Test('validates overlay presentation with nearest and explicit navigation targets', async () => {
+    await testValidateCode(`
+      type StackNav is nav
+      let TargetNav = StackNav { Initial Detail }
+      app OverlayApp { Name "Overlay" Navigator StackNav { Initial Home } }
+      ui Home {
+        action Nearest { present Detail() as overlay }
+        action Explicit { present Detail() as overlay in TargetNav }
+        render Empty()
+      }
+      ui Detail { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      type StackNav is nav
+      app OverlayApp { Name "Overlay" Navigator StackNav { Initial Home } }
+      ui Home {
+        action Open { present Detail() as overlay in Detail }
+        render Empty()
+      }
+      ui Detail { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+    Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.presentationTarget('ui'))
+  })
+
   Test('validates root and relation queries with boolean cases and unconditional placement', async () => {
     await testValidateCode(`
       data Workspaces / Workspace { Name text Documents (auto-delete) }

@@ -429,6 +429,18 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('formats overlay presentation before an optional target', async () => {
+    await testFormatCode(
+      `view Main{action Open{present Detail( )as overlay in Target}}`,
+      `
+        view Main {
+           action Open {
+              present Detail() as overlay in Target
+        }  }
+      `,
+    )
+  })
+
   Test('keeps commented inline actions multiline', async () => {
     await testFormatCode(
       `view MainView { state Count = 0 render Stack() {

@@ -184,6 +184,7 @@ Describe('Tao compiler', () => {
       }
       ui Home {
         action Open { present Detail() in NavigationApp@overlays }
+        action OpenOverlay { present Detail() as overlay in NavigationApp@overlays }
         render Empty()
       }
       ui Detail {
@@ -199,6 +200,7 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('TR.Navigation.StackNav({')
     Expect(compiled.code).toContain('TR.Navigation.OverlayNav({')
     Expect(compiled.code).toContain('TR.Navigation.Target(')
+    Expect(compiled.code).toContain('TR.Navigation.PresentOverlay(')
     Expect(/TR\.Navigation\.Target\(\s+_TaoAppDefinition_NavigationApp,/.test(compiled.code)).toBe(true)
     Expect(compiled.code).toContain('TR.Navigation.Dismiss(_ViewProps.__tao)')
     Expect(compiled.code).toContain('TR.Navigation.Replace(')

@@ -1,5 +1,5 @@
 use Local from @tao/data
-use OverlayNav, SlotNav, StackNav from @tao/nav
+use SlotNav, StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
 // This tranche decides (the process contract is ../README.md):
@@ -15,8 +15,8 @@ use Col, FormButton, Text, TextInput from @tao/ui
 // - `query [Name from] Source { ... }` including relation sources and inline placement
 //   (declared before use, and before any conditional)
 // - Two-way input binding; `on press|change|submit` with action references or inline handlers
-// - `ui` role; app Navigator/@overlays/Datasource block; `present Name(Args)` with required
-//   parentheses; `dismiss`; StackNav/SlotNav/OverlayNav; `replace <nav> in <App>`
+// - `ui` role; app Navigator/Datasource block; `present Name(Args)` with required parentheses;
+//   universal `as overlay`; `dismiss`; StackNav/SlotNav; `replace <nav> in <App>`
 // - `#tag` render metadata and test vocabulary: `press`/`enter`/`submit` with `#tag`, `select #tag[1-based]`,
 //   grouped `expect { ... }`, bare `data loading|error|ready` steps
 // - Visibility words: `file` (default, written by omission), `package`, `workspace`, `public`
@@ -30,14 +30,13 @@ project {
    license MIT
 }
 
-// An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
-// entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
+// An app mounts navs, it does not render content directly. `Navigator` is the primary nav. Every nav
+// owns an overlay layer, so overlays need no declared auxiliary host.
 app WordFlower {
    Name "WordFlower"
    Navigator StackNav {
       Initial WorkspaceList // Initial expects a ui, not a rendered element. So WorkspaceList is passed as a value, not as invoked result.
    }
-   @overlays OverlayNav { }
    Datasource Local with {
       StorageKey "WordFlowerData"
 }  }
@@ -110,7 +109,7 @@ ui WorkspaceList {
    action AddWorkspace {
       guard WorkspaceName empty -> { // a match runs its handler and skips the remainder of this action block
          // `present` is an invocation, so parentheses are always required, including with no arguments
-         present WorkspaceNameNotice() in WordFlower@overlays
+         present WorkspaceNameNotice() as overlay
       }
       create Workspace {
          Name: WorkspaceName
@@ -169,7 +168,7 @@ ui WorkspaceList {
                   delete Workspace
 }  }  }  }  }  }
 
-// Presented into the app's overlay host; overlays stack above content and are dismissible
+// Presented above the nearest nav; overlays stack above content and are dismissible
 ui WorkspaceNameNotice {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name")
