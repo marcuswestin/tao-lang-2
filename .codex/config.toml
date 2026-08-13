@@ -5,5 +5,8 @@ default_permissions = "tao-workspace"
 [permissions.tao-workspace]
 extends = ":workspace"
 
+[permissions.tao-workspace.filesystem]
+"/Users/ro/code/tao-lang-2/.git" = "write"
+
 [permissions.tao-workspace.filesystem.":workspace_roots"]
 "**/.env*" = "deny"
