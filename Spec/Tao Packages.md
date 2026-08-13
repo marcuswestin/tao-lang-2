@@ -10,7 +10,6 @@ Status: partially implemented design draft. The current implementation supports 
 
 ### Creating a Tao app
 
-- Only the workspace root can declare an `app`.
 - The app selects a primary navigator; see `Tao Presentation and Navigation.md` for its behavior.
 
 ```tao
@@ -236,5 +235,5 @@ Packages can make code available to other packages, and even other workspaces.
   }
   ```
 
-- Packages may export configured navigation, data, design, asset, permission, localization, and other capability values. The app imports and selects only properties supported by its typed app surface. The current app contract has required `Name` and `Navigator` properties plus optional `Auxiliaries`; see `Tao Presentation and Navigation.md`.
+- Packages may export configured navigation, data, design, asset, permission, localization, and other capability values. The app imports and selects only properties supported by its typed app surface. The current app contract has required `Name` and `Navigator` properties, optional keyed auxiliary entries such as `@overlays`, and an optional `Datasource`; see `Tao Presentation and Navigation.md`.
 - A general app-capability bundle and ambient `app.*` access model are not part of the current contract. Their ownership and lookup semantics remain deferred under `LANG-003` in `Roadmap/Deferred Tao language decisions.md`.

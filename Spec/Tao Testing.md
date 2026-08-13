@@ -27,8 +27,9 @@ state. A sidecar sees declarations through ordinary Tao import and visibility ru
 inline test declarations are excluded from application builds.
 
 `run` selects a named app directly from a multi-app generated module. It never relies on the
-module's default app, filename, or source order. Focused `render` subjects, app overlays, authored
-row seeding, remote-provider adapters, and direct action/value tests remain deferred.
+module's default app, filename, or source order. A check drives whatever the running app presents, including
+overlays. Focused `render` subjects, authored row seeding, remote-provider adapters, and direct
+action and value tests remain deferred.
 
 `tao test [path]` discovers inline and sidecar tests, compiles them to structured test-plan IR, and
 runs the plans through the repository's runtime Jest harness. Richer filtering, watch, JSON,

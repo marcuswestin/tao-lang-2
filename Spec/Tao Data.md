@@ -30,7 +30,7 @@ data Documents / Document {
 }
 ```
 
-Primitive fields support `text`, `number`, `boolean`, and `time`. `now()` is the implemented time
+Primitive fields support `text`, `number`, `boolean`, and `time`, though two-state fields are normally declared as a case pair rather than as `boolean`. `now()` is the implemented time
 default. Boolean fields are declared as their two case names; writes and filters use those names.
 Field modifiers are comma-separated. Indexes are separate statements, and one default `order by`
 may be declared for the entity.
@@ -42,20 +42,25 @@ row refers to the target. Relationship values are live entity handles, never pub
 
 ## App datasource configuration
 
-The catalog does not own provider identity. An app mounts either the keyless `Memory` provider or
-the configured `Local` provider:
+The catalog does not own provider identity. An app mounts a configured provider — `Local` with a
+storage key, or `Memory` with an empty configuration:
 
 ```tao
 use Local from @tao/data
 
 app WordFlower {
    Name "WordFlower"
-   Navigator WordFlowerNavigator
+   Navigator StackNav {
+      Initial WorkspaceList
+   }
    Datasource Local with {
       StorageKey "WordFlowerData"
    }
 }
 ```
+
+A test or in-memory app writes `Datasource Memory with { }`; the configuration block is required
+even when the provider has no properties.
 
 `StorageKey` is required and nonempty for `Local`. It is unique within the app's datasource
 configuration and belongs to that configured provider—not to a display `Name`, source filename, or
@@ -79,14 +84,15 @@ query Drafts from Workspace.Documents {
    where Draft
 }
 
-query Workspace.Documents as FinishedDocuments {
+query FinishedDocuments from Workspace.Documents {
    where Final
    order by CreatedAt desc
 }
 ```
 
-The source is either a root plural or a plural relationship. A query may keep the source name, use
-`Name from Source`, or use `Source as Name`. Repeated `where` clauses combine with AND. Primitive
+The source is either a root plural or a plural relationship. A query may keep the source name or
+use `Name from Source`; the `Source as Name` form renames a root plural only, since a relationship
+path cannot be a bare source name. Repeated `where` clauses combine with AND. Primitive
 comparisons support `==`, `!=`, `<`, `<=`, `>`, and `>=`; boolean cases are filtered by case name.
 One explicit order may override the source entity's default order. Generated hooks are hoisted while
 preserving lexical visibility and the authored declaration-order rules.
