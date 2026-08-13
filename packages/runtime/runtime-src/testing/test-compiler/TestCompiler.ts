@@ -43,6 +43,7 @@ namespace TestCompiler {
 
   /** CompileAppOptions configures where a generated runtime test app is written. */
   export type CompileAppOptions = {
+    appName?: string
     runtimePackageRoot: string
   }
 
@@ -153,7 +154,10 @@ export namespace Worker {
 }
 
 async function compileApp(appPath: string, options: TestCompiler.CompileAppOptions): Promise<string> {
-  return (await runtime().generateApp(appPath, { runtimePackageRoot: options.runtimePackageRoot })).outputPath
+  return (await runtime().generateApp(appPath, {
+    appName: options.appName,
+    runtimePackageRoot: options.runtimePackageRoot,
+  })).outputPath
 }
 
 async function compileTestFile(
@@ -202,7 +206,7 @@ async function checkForPlan(
 ): Promise<TestCompiler.Check> {
   return {
     app: {
-      modulePath: await appModulePath(check.run.appSourcePath, context),
+      modulePath: await appModulePath(check.run.appSourcePath, check.run.appName, context),
       sourcePath: check.run.appSourcePath,
     },
     name: check.name,
@@ -211,13 +215,14 @@ async function checkForPlan(
   }
 }
 
-async function appModulePath(appSourcePath: string, context: TestCompiler.Context): Promise<string> {
-  const cached = context.appModulePaths.get(appSourcePath)
+async function appModulePath(appSourcePath: string, appName: string, context: TestCompiler.Context): Promise<string> {
+  const cacheKey = `${appSourcePath}#${appName}`
+  const cached = context.appModulePaths.get(cacheKey)
   if (cached !== undefined) {
     return cached
   }
   const appRoot = FS.resolvePath(`app-${context.appModulePaths.size + 1}`, context.runRoot)
-  const outputPath = await compileApp(appSourcePath, { runtimePackageRoot: appRoot })
-  context.appModulePaths.set(appSourcePath, outputPath)
+  const outputPath = await compileApp(appSourcePath, { appName, runtimePackageRoot: appRoot })
+  context.appModulePaths.set(cacheKey, outputPath)
   return outputPath
 }

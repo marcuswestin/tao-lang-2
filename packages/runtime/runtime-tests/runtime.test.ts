@@ -29,6 +29,7 @@ Describe('Tao runtime app generation', () => {
     const appPath = FS.resolvePath('WordFlower.tao', wordFlowerDir)
 
     const generated = await Runtime.generateApp(appPath, {
+      appName: 'WordFlower',
       runtimePackageRoot,
     })
 
@@ -38,6 +39,7 @@ Describe('Tao runtime app generation', () => {
 
     const firstWrite = await FS.modifiedTimeMs(generated.outputPath)
     const generatedAgain = await Runtime.generateApp(appPath, {
+      appName: 'WordFlower',
       runtimePackageRoot,
     })
 
@@ -50,6 +52,7 @@ Describe('Tao runtime app generation', () => {
     const runtimePackageRoot = FS.resolvePath('runtime', outsideRoot)
 
     const generated = await Runtime.generateApp('WordFlower.tao', {
+      appName: 'WordFlower',
       cwd: wordFlowerDir,
       runtimePackageRoot,
     })
@@ -72,7 +75,8 @@ Describe('Tao runtime app generation', () => {
     const generated = await Runtime.generateApp(typeSystemTestsPath, { runtimePackageRoot })
 
     Expect(await FS.exists(stdlibModulePath)).toBe(false)
-    Expect(await FS.exists(stdlibModuleDir)).toBe(false)
+    // Type System Tests now imports @tao/nav, so the shared generated stdlib directory remains.
+    Expect(await FS.exists(stdlibModuleDir)).toBe(true)
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
   })
 })

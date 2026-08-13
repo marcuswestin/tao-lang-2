@@ -24,7 +24,7 @@ Describe('TR.Alias', () => {
     Expect(alias.evaluate().jsValue).toBe(3)
   })
 
-  Test('re-evaluates lazy alias values on each use', () => {
+  Test('re-evaluates lazy let values on each use', () => {
     let evaluations = 0
     const alias: TR.Alias<string> = TR.Alias(() => {
       evaluations += 1
@@ -458,8 +458,6 @@ Describe('TR.Data', () => {
     }
     const definition = {
       name: 'RuntimeDataTest',
-      provider: 'local' as const,
-      storageKey: 'runtime-data-test',
       entities: {
         Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' as const } } },
         Task: {
@@ -476,7 +474,7 @@ Describe('TR.Data', () => {
       },
     }
     const provider = TR.Data.LocalProvider(storage, 'runtime-test')
-    const schema = TR.Data.Schema(definition, provider)
+    const schema = TR.Data.Schema(definition, provider, 'runtime-data-test')
     await TR.Data.Settle(schema)
     TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
     Expect(() =>
@@ -488,7 +486,7 @@ Describe('TR.Data', () => {
     const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
     TR.Data.Create(schema, 'Task', { Title: TR.Value('Draft'), Workspace: TR.Value(workspace) })
     await TR.Data.Settle(schema)
-    const initiallyRehydrated = TR.Data.Schema(definition, provider)
+    const initiallyRehydrated = TR.Data.Schema(definition, provider, 'runtime-data-test')
     await TR.Data.Settle(initiallyRehydrated)
     Expect(initiallyRehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(1)
     Expect(initiallyRehydrated.query({ entity: 'Task', filters: [] })).toHaveLength(1)
@@ -501,10 +499,68 @@ Describe('TR.Data', () => {
     Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
     await TR.Data.Settle(schema)
 
-    const rehydrated = TR.Data.Schema(definition, provider)
+    const rehydrated = TR.Data.Schema(definition, provider, 'runtime-data-test')
     await TR.Data.Settle(rehydrated)
     Expect(rehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
   })
+
+  Test(
+    'rehydrates the version-1 envelope under an explicit key with inverse fields and next-ID continuity',
+    async () => {
+      const values = new Map<string, string>([[
+        'runtime-test:WordFlowerData',
+        JSON.stringify({
+          formatVersion: 1,
+          schemaVersion: 1,
+          nextId: 7,
+          rows: {
+            Workspace: [{ Id: 'Workspace-1', Name: 'Home', CreatedAt: 10 }],
+            Document: [{ Id: 'Document-4', Title: 'First', Final: false, Workspace: 'Workspace-1' }],
+          },
+        }),
+      ]])
+      const storage = {
+        getItem: async (key: string) => values.get(key) ?? null,
+        setItem: async (key: string, value: string) => {
+          values.set(key, value)
+        },
+      }
+      const definition = {
+        name: 'Data',
+        schemaVersion: 1,
+        entities: {
+          Workspace: {
+            collection: 'Workspaces',
+            defaultOrder: { field: 'CreatedAt', direction: 'asc' as const },
+            fields: { Name: { kind: 'text' as const }, CreatedAt: { kind: 'time' as const } },
+            inverseFields: { Documents: { relation: 'Document', inverseField: 'Workspace' } },
+          },
+          Document: {
+            collection: 'Documents',
+            fields: {
+              Title: { kind: 'text' as const },
+              Final: { kind: 'boolean' as const, defaultValue: false },
+              Workspace: { kind: 'relation' as const, relation: 'Workspace' },
+            },
+          },
+        },
+      }
+      const provider = TR.Data.LocalProvider(storage, 'runtime-test')
+      const schema = TR.Data.Schema(definition, provider, 'WordFlowerData')
+      await TR.Data.Settle(schema)
+      const workspace = schema.query({ entity: 'Workspace', filters: [] })[0] as Record<string, unknown>
+      Expect(workspace['Documents'] as unknown[]).toHaveLength(1)
+      TR.Data.Create(schema, 'Document', {
+        Title: TR.Value('Second'),
+        Workspace: TR.Value(workspace),
+      })
+      await TR.Data.Settle(schema)
+      const documents = schema.query({ entity: 'Document', filters: [] }) as Array<Record<string, unknown>>
+      Expect(documents.map(document => document['Id'])).toEqual(['Document-4', 'Document-7'])
+      Expect(documents[1]?.['Final']).toBe(false)
+      Expect(values.has('runtime-test:WordFlowerData')).toBe(true)
+    },
+  )
 })
 
 Describe('TR.Navigation', () => {
@@ -532,6 +588,34 @@ Describe('TR.Navigation', () => {
     TR.Navigation.beginTest()
     Expect(stack.currentDestination).toBe('Home')
     Expect(stack.depth).toBe(1)
+  })
+
+  Test('composes StackNav, SlotNav, OverlayNav, app targets, dismiss, and replacement', () => {
+    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const stack = TR.Navigation.StackNav({ name: 'Main', initial: home })
+    const slot = TR.Navigation.SlotNav({ name: 'Slot', initial: stack })
+    const overlays = TR.Navigation.OverlayNav({ name: 'Overlays' })
+    const replacement = TR.Navigation.StackNav({ name: 'Replacement', initial: detail })
+    const app = TR.Navigation.App({
+      key: 'ConfiguredNavigationTest',
+      name: 'Configured navigation test',
+      navigator: () => slot,
+      auxiliaries: () => ({ overlays }),
+    })
+
+    TR.Navigation.PresentIn(undefined, stack, detail, {})
+    Expect(stack.back()).toBe(true)
+    TR.Navigation.PresentIn(undefined, slot, detail, {})
+    Expect(slot.dismiss()).toBe(true)
+    const target = TR.Navigation.Target('ConfiguredNavigationTest', 'overlays')
+    Expect(target).toBe(overlays)
+    TR.Navigation.PresentIn(undefined, target, detail, {})
+    Expect(app.back()).toBe(true)
+    TR.Navigation.Replace(replacement, 'ConfiguredNavigationTest')
+    Expect(app.navigator).toBe(replacement)
+    TR.Navigation.beginTest()
+    Expect(app.navigator).toBe(slot)
   })
 })
 

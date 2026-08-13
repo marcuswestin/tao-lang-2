@@ -1,0 +1,7 @@
+public type Presentable is ui | nav
+
+public type StackNav is nav
+
+public type SlotNav is nav
+
+public type OverlayNav is nav

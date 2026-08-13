@@ -2,6 +2,7 @@ import { FS, Repo } from '@shared'
 import { Workspace } from '@workspace'
 
 type GenerateAppOptions = {
+  appName?: string
   cwd?: string
   runtimePackageRoot?: string
 }
@@ -18,7 +19,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const sourcePath = FS.resolvePath(appPath, opts.cwd)
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', runtimePackageRoot)
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
-  const compiled = await Workspace.compile(sourcePath)
+  const compiled = await Workspace.compile(sourcePath, { appName: opts.appName })
 
   await writeGeneratedFiles(generatedAppRoot, compiled.files)
 
@@ -31,10 +32,19 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
 
 /** Runtime exposes Expo runtime app generation functions. */
 const Runtime = {
+  appNames,
   generateApp,
 }
 
 export default Runtime
+
+/** appNames returns the declared app keys in an entry file without generating output. */
+async function appNames(appPath: string, opts: { cwd?: string } = {}): Promise<string[]> {
+  const sourcePath = FS.resolvePath(appPath, opts.cwd)
+  const parsed = await Workspace.parse(sourcePath)
+  return parsed.entry.ast.statements.filter(statement => statement.$type === 'AppDeclaration')
+    .map(statement => (statement as { name: string }).name)
+}
 
 function defaultRuntimePackageRoot(): string {
   return Repo.resolvePath('packages/runtime')

@@ -1,9 +1,15 @@
 import type React from 'react'
 import { LayoutRuntime, type TaoLayoutDirection, type TaoLayoutProps, type TaoResolvedLayoutProps } from './TR-layout'
+import type { TaoNavigationValue } from './TR-navigation'
 import { ParentDirectionContext } from './TR-parent-direction'
 
 /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
-export type TaoProps = TaoLayoutProps
+export type TaoProps = TaoLayoutProps & {
+  /** navigation is private Tao metadata for nearest-container presentation and dismissal. */
+  navigation?: TaoNavigationValue
+  /** testTag is private Tao metadata lowered to the existing concrete native root. */
+  testTag?: string
+}
 
 /** TaoViewProps declares React props generated Tao views receive. */
 export type TaoViewProps = {
@@ -22,6 +28,7 @@ type MergedTaoViewProps = {
   readonly direction?: TaoLayoutDirection
   readonly nativeProps: Record<string, unknown>
   readonly props: TaoResolvedLayoutProps | undefined
+  readonly testTag: string | undefined
 }
 
 /** TaoPropsControls exposes runtime Tao props merging for generated views. */
@@ -35,7 +42,7 @@ function mergeViewProps(
   runtimeProps: TaoViewRuntimeProps,
   parentDirection?: TaoLayoutDirection,
 ): MergedTaoViewProps {
-  const { direction, nativeProps = {}, ...taoRuntimeProps } = runtimeProps
+  const { direction, nativeProps = {}, testTag, ...taoRuntimeProps } = runtimeProps
   return {
     children: props.children,
     direction,
@@ -46,9 +53,18 @@ function mergeViewProps(
       props.__tao,
       ParentDirectionContext.propsForDirection(parentDirection),
     ),
+    testTag: testTag ?? testTagInChain(taoRuntimeProps) ?? testTagInChain(props.__tao),
   }
 }
 
 function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknown> {
-  return LayoutRuntime.nativePropsWithStyle(merged.nativeProps, merged.props, merged.direction)
+  const nativeProps = LayoutRuntime.nativePropsWithStyle(merged.nativeProps, merged.props, merged.direction)
+  return merged.testTag ? { ...nativeProps, testID: merged.testTag } : nativeProps
+}
+
+function testTagInChain(props: TaoProps | undefined): string | undefined {
+  if (!props) {
+    return undefined
+  }
+  return props.testTag ?? testTagInChain(props.callerProps)
 }

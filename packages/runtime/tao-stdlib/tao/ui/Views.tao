@@ -1,4 +1,4 @@
-publish layout Box {
+public layout Box {
    render inject ```ts
       return TR.Views.View(_ViewProps, {
         direction: 'row',
@@ -7,7 +7,7 @@ publish layout Box {
    ```
 }
 
-publish layout Stack {
+public layout Stack {
    render inject ```ts
       return TR.Views.View(_ViewProps, {
         direction: 'column',
@@ -16,7 +16,7 @@ publish layout Stack {
    ```
 }
 
-publish layout Col {
+public layout Col {
    render inject ```ts
       return TR.Views.View(_ViewProps, {
         direction: 'column',
@@ -25,7 +25,7 @@ publish layout Col {
    ```
 }
 
-publish layout Row {
+public layout Row {
    render inject ```ts
       return TR.Views.View(_ViewProps, {
         direction: 'row',
@@ -34,7 +34,7 @@ publish layout Row {
    ```
 }
 
-publish layout WrappingRow {
+public layout WrappingRow {
    render inject ```ts
       return TR.Views.View(_ViewProps, {
         direction: 'row',
@@ -44,7 +44,7 @@ publish layout WrappingRow {
    ```
 }
 
-publish view Text Value is text {
+public view Text Value is text {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [Value] },
@@ -53,7 +53,7 @@ publish view Text Value is text {
    ```
 }
 
-publish view TextFrame Value is text {
+public view TextFrame Value is text {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [Value] },
@@ -62,7 +62,7 @@ publish view TextFrame Value is text {
    ```
 }
 
-publish view TextMultiline Value is text {
+public view TextMultiline Value is text {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [Value] },
@@ -71,7 +71,7 @@ publish view TextMultiline Value is text {
    ```
 }
 
-publish view Number Value is number {
+public view Number Value is number {
    render inject Value ```ts
       return TR.Views.Text(
         { __tao: _ViewProps.__tao, children: [String(Value)] },
@@ -80,16 +80,16 @@ publish view Number Value is number {
    ```
 }
 
-publish view Button Title is text, Action is action() {
-   render inject Title, Action ```ts
+public view Button Title is text, Press is action() {
+   render inject Title, Press ```ts
       return TR.Views.Pressable(
-        { __tao: _ViewProps.__tao, title: Title, action: Action },
+        { __tao: _ViewProps.__tao, title: Title, action: Press },
         { nativeProps: { accessibilityRole: 'button' } },
       )
    ```
 }
 
-publish view TextInput Value is text, Change is action(text), Submit is action(), Label is text, Placeholder is text default "", Id is text default "", Disabled is boolean default false {
+public view TextInput Value is text, Change is action(text), Submit is action(), Label is text, Placeholder is text default "", Id is text default "", Disabled is boolean default false {
    render inject Value, Change, Submit, Label, Placeholder, Id, Disabled ```ts
       return TR.Views.TextInput(
         {
@@ -106,7 +106,7 @@ publish view TextInput Value is text, Change is action(text), Submit is action()
    ```
 }
 
-publish view FormButton Title is text, Press is action(), Id is text default "", Disabled is boolean default false, Submitting is boolean default false {
+public view FormButton Title is text, Press is action(), Id is text default "", Disabled is boolean default false, Submitting is boolean default false {
    render inject Title, Press, Id, Disabled, Submitting ```ts
       const effectiveDisabled = Disabled || Submitting
       return TR.Views.Pressable(
