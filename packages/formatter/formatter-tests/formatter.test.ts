@@ -64,7 +64,82 @@ Describe('Tao formatter data declarations', () => {
   })
 })
 
+Describe('Tao formatter configurable declarations', () => {
+  Test('formats declaration-owned nav and datasource contracts with injected implementations', async () => {
+    await testFormatCode(
+      `public nav CustomNav{Initial ui @key{Label text Content Presentable}implement inject nav ${tsFence}\nreturn TR.NavKind.Stack()\n${fence}}\npublic datasource CustomData{StorageKey text implement inject provider ${tsFence}\nreturn TR.DataProvider.Local()\n${fence}}`,
+      `
+        public nav CustomNav {
+           Initial ui
+           @key {
+              Label text
+              Content Presentable
+           }
+
+           implement inject nav ${tsFence}
+              return TR.NavKind.Stack()
+           ${fence}
+        }
+
+        public datasource CustomData {
+           StorageKey text
+
+           implement inject provider ${tsFence}
+              return TR.DataProvider.Local()
+           ${fence}
+        }
+      `,
+    )
+  })
+
+  Test('formats keyed, labeled, named, nested, and bare constructor entries', async () => {
+    await testFormatCode(
+      `let Demo=SelectionNav{Initial @home Display "tabs" @home{Label:"Home" Content HomeStack} Extra{Nested "value"} "bare"}`,
+      `
+        let Demo = SelectionNav {
+           Initial @home
+           Display "tabs"
+           @home {
+              Label: "Home"
+              Content HomeStack
+           }
+           Extra {
+              Nested "value"
+           }
+           "bare"
+        }
+      `,
+    )
+  })
+
+  Test('keeps qualified declaration-owned constructors tight', async () => {
+    await testFormatCode(
+      `let Demo=Card . Details { OuterAge }`,
+      `
+        let Demo = Card.Details {
+           OuterAge
+        }
+      `,
+    )
+  })
+})
+
 Describe('Tao formatter top-level statements', () => {
+  Test('formats keyed SelectionNav items and key-valued Initial', async () => {
+    await testFormatCode(
+      `let Main=SelectionNav{Initial @home Display "tabs" @home{Label "Home" Content HomeStack}}`,
+      `
+        let Main = SelectionNav {
+           Initial @home
+           Display "tabs"
+           @home {
+              Label "Home"
+              Content HomeStack
+        }  }
+      `,
+    )
+  })
+
   Test('separates declarations with one blank line and keeps let groups adjacent', async () => {
     await testFormatCode(
       `
@@ -270,12 +345,12 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats current query and loop headers', async () => {
     await testFormatCode(
-      `view Main Workspace{render Col(){query Drafts from Workspace.Documents{where Draft}\nloop Drafts/Document{Text(Document.Title)}}}`,
+      `view Main Workspace{render Col(){query Drafts from Workspace.Documents{where is Draft}\nloop Drafts/Document{Text(Document.Title)}}}`,
       `
         view Main Workspace {
            render Col() {
               query Drafts from Workspace.Documents {
-                 where Draft
+                 where is Draft
               }
               loop Drafts / Document {
                  Text(Document.Title)
@@ -429,6 +504,32 @@ Describe('Tao formatter views and blocks', () => {
     )
   })
 
+  Test('formats dialogue declarations, asks, and explicit or bare responses', async () => {
+    await testFormatCode(
+      `dialogue Confirm Title is text responds ConfirmResult{action Close{respond Confirmed} action Cancel{respond} render Empty()} view Editor{action Close{let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,
+      `
+        dialogue Confirm Title is text responds ConfirmResult {
+           action Close {
+              respond Confirmed
+           }
+           action Cancel {
+              respond
+           }
+           render Empty()
+        }
+
+        view Editor {
+           action Close {
+              let Result = ask Confirm("Draft")
+              if Result is Confirmed {
+                 dismiss
+           }  }
+           render Empty()
+        }
+      `,
+    )
+  })
+
   Test('formats overlay presentation before an optional target', async () => {
     await testFormatCode(
       `view Main{action Open{present Detail( )as overlay in Target}}`,
@@ -436,6 +537,30 @@ Describe('Tao formatter views and blocks', () => {
         view Main {
            action Open {
               present Detail() as overlay in Target
+        }  }
+      `,
+    )
+  })
+
+  Test('formats keyed app toast presentation with canonical modifiers', async () => {
+    await testFormatCode(
+      `view Main{action Save{present Saved( )as toast( Key : "document-saved" ,Duration:3)}}`,
+      `
+        view Main {
+           action Save {
+              present Saved() as toast (Key: "document-saved", Duration: 3)
+        }  }
+      `,
+    )
+  })
+
+  Test('keeps target-only selection activation tight to its app key', async () => {
+    await testFormatCode(
+      `view Main{action Open{present   WordFlower@workspace}}`,
+      `
+        view Main {
+           action Open {
+              present WordFlower@workspace
         }  }
       `,
     )

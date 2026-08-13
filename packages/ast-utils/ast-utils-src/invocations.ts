@@ -593,7 +593,12 @@ function reportDuplicatePropertyTypes(
 /** resolveArgumentBindings binds Tao arguments to parameters by exact type and unambiguous lineage. */
 export function resolveArgumentBindings(
   declaration: AST.ParameterizedDeclaration,
-  invocation: AST.Render | AST.DoStatement | AST.FunctionCallExpression | AST.ContextualPresentStatement,
+  invocation:
+    | AST.Render
+    | AST.DoStatement
+    | AST.FunctionCallExpression
+    | AST.ContextualPresentStatement
+    | AST.AskStatement,
 ): ArgumentBindingResult {
   const parameters = AST.parametersOf(declaration)
   const args = AST.argumentsOf(invocation)

@@ -15,7 +15,7 @@ export default {
     const importLines = opts.importLines?.join('\n') ?? ''
     const scopeBindings = opts.scopeBindings?.join('\n') ?? ''
     const exportLines = opts.exportedNames?.map(name => `export const ${name} = _Scope.${name}`).join('\n') ?? ''
-    const apps = taoFile.statements.filter(AST.isAppDeclaration)
+    const apps = AST.appValueDeclarationsInFile(taoFile)
     const dataEntities = taoFile.statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = taoFile.statements.some(statement =>
       AST.isAppDeclaration(statement) || AST.isEmittingRuntimeBinding(statement)
@@ -31,6 +31,7 @@ export default {
     `
     return gen`
       import React from 'react'
+      void React
       import TR from '@runtime/TR'
 
       // @ts-ignore RN is available to Tao inject blocks

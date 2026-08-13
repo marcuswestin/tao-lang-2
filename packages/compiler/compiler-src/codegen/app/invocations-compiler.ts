@@ -85,12 +85,12 @@ export default {
       ? parameterType.parameters[0]
       : undefined
     return gen`
-      TR.Action((${
+      TR.Action(async (${
       eventInput
         ? gen`_TaoEventValue: ${Compile.RuntimeType(eventInput.type)}`
         : ''
     }) => {
-        return TR.BlockScope(_Scope, _Scope => {
+        return TR.BlockScope(_Scope, async _Scope => {
           ${handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : ''}
           ${Compile.ActionBlockBody(handler.block)}
         })

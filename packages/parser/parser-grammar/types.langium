@@ -5,7 +5,7 @@ import "./terminals"
 
 entry TypesGrammarEntrypoint:
     // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
-    TypeDeclaration | EnumDeclaration | ParameterTypeDeclaration | ConstructorTypeReference;
+    TypeDeclaration | EnumDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference;
 
 EnumDeclaration:
     visibility=DeclarationVisibility? 'enum' name=ID block=EnumDeclarationBlock;
@@ -39,9 +39,6 @@ TypeReference:
 
 ActionTypeReference:
     'action' '(' (parameterTypes+=TypeReference (',' parameterTypes+=TypeReference)*)? ')';
-
-ConstructorTypeReference:
-    ConstructablePrimitiveTypeReference | NamedTypeReference;
 
 PrimitiveTypeReference:
     primitive=PrimitiveType;

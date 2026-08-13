@@ -8,13 +8,17 @@ import "./visibility"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
-    ViewDeclaration | LayoutDeclaration | UiDeclaration;
+    ViewDeclaration | LayoutDeclaration | UiDeclaration | DialogueDeclaration;
 
 TagStatement:
     tag=TAG;
 
 UiDeclaration:
     visibility=DeclarationVisibility? 'ui' name=ID parameterList=ParameterList? block=Block;
+
+DialogueDeclaration:
+    visibility=DeclarationVisibility? 'dialogue' name=ID parameterList=ParameterList?
+    'responds' response=[EnumDeclaration:ID] block=Block;
 
 ViewDeclaration:
     visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList? block=Block;
@@ -23,7 +27,7 @@ LayoutDeclaration:
     visibility=DeclarationVisibility? 'layout' name=ID parameterList=ParameterList? block=Block;
 
 type RenderableDeclaration = ViewDeclaration | LayoutDeclaration;
-type VisualDeclaration = RenderableDeclaration | UiDeclaration;
+type VisualDeclaration = RenderableDeclaration | UiDeclaration | DialogueDeclaration;
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?

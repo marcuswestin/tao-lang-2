@@ -1,3 +1,4 @@
+import { AST } from '@parser'
 import { FS, Repo } from '@shared'
 import { Workspace } from '@workspace'
 
@@ -42,8 +43,7 @@ export default Runtime
 async function appNames(appPath: string, opts: { cwd?: string } = {}): Promise<string[]> {
   const sourcePath = FS.resolvePath(appPath, opts.cwd)
   const parsed = await Workspace.parse(sourcePath)
-  return parsed.entry.ast.statements.filter(statement => statement.$type === 'AppDeclaration')
-    .map(statement => (statement as { name: string }).name)
+  return AST.appValueDeclarationsInFile(parsed.entry.ast).map(statement => statement.name)
 }
 
 function defaultRuntimePackageRoot(): string {

@@ -7,7 +7,7 @@ app DataMVPApp {
    Navigator StackNav {
       Initial MainView
    }
-   Datasource Memory with { }
+   Datasource Memory
 }
 
 workspace data Workspaces / Workspace {
@@ -30,10 +30,10 @@ ui MainView {
    state TaskDraft = ""
    query Workspaces { }
    query Tasks as OpenTasks {
-      where Open
+      where is Open
    }
    query Tasks as CompletedTasks {
-      where Done
+      where is Done
    }
    action AddWorkspace {
       create Workspace {

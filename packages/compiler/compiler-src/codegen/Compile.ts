@@ -1,6 +1,7 @@
 import { ActionsCompiler } from './app/ActionsCompiler'
 import AliasesCompiler from './app/aliases-compiler'
 import AppCompiler from './app/app-compiler'
+import { ConfigurationCompiler } from './app/configuration-compiler'
 import { DataCompiler } from './app/DataCompiler'
 import { ExpressionsCompiler } from './app/expressions-compiler'
 import FilesCompiler from './app/files-compiler'
@@ -37,4 +38,5 @@ export const Compile = {
   ...FunctionalCoreCompiler,
   ...DataCompiler,
   ...ExpressionsCompiler,
+  ...ConfigurationCompiler,
 } as const

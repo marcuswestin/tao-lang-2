@@ -4,6 +4,14 @@ export default {
   NavigationTarget() {},
   PresentationMode(f) {
     f.oneSpaceAfter('as')
+    f.oneSpaceBeforeProperty('toast')
+  },
+  ToastPresentationOptions(f) {
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+    f.noSpaceBefore(':')
+    f.oneSpaceAfter(':')
+    f.commaSpacedList()
   },
   ContextualPresentStatement(f) {
     f.oneSpaceAfter('present', 'as', 'in')
@@ -12,6 +20,10 @@ export default {
     f.noSpaceBefore('(')
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
+  },
+
+  SelectionActivateStatement(f) {
+    f.oneSpaceAfter('present')
   },
 
   DismissStatement() {},

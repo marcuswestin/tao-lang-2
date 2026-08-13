@@ -62,6 +62,23 @@ export const ActionsFormatter = {
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
   },
+
+  /** AskStatement formats its local binding and dialogue invocation. */
+  AskStatement(f) {
+    f.oneSpaceAfter('let', 'ask')
+    f.oneSpaceBefore('=')
+    f.oneSpaceAfter('=')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+  },
+
+  /** RespondStatement separates an optional declared response case. */
+  RespondStatement(f) {
+    if (f.node.case) {
+      f.oneSpaceAfter('respond')
+    }
+  },
 } satisfies Partial<FormatHandlers>
 
 function hasInteriorComments(block: AST.ActionBlock): boolean {

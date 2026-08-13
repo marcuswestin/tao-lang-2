@@ -51,7 +51,7 @@ WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
 
 BooleanWhereClause:
-    'where' case=[EntityDataField:ID];
+    'where' 'is' case=[EntityDataField:ID];
 
 QueryComparisonOperator returns string:
     '==' | '!=' | '<' | '<=' | '>' | '>=';

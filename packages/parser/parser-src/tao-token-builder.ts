@@ -11,6 +11,7 @@ type MutableTokenType = {
   LINE_BREAKS?: boolean
   START_CHARS_HINT?: string[]
   LONGER_ALT?: MutableTokenType | MutableTokenType[]
+  CATEGORIES?: MutableTokenType[]
 }
 
 /** TaoTokenBuilder switches between ordinary Tao expressions and interpolated-string text. */
@@ -44,7 +45,15 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
     booleanNoAlias.LINE_BREAKS = false
     booleanNoAlias.START_CHARS_HINT = identifierStarts
     tokens.splice(tokens.indexOf(booleanNoAlias), 1)
-    tokens.splice(tokens.indexOf(identifier), 0, booleanNoAlias)
+    // The optional no-case alias may itself be an otherwise reserved word (`Name`, for example),
+    // so its contextual token must win before both keywords and the ordinary identifier token.
+    tokens.unshift(booleanNoAlias)
+    // Capitalized app-property words remain usable in ordinary declaration/reference positions.
+    for (const name of ['Name', 'Navigator', 'Datasource']) {
+      const keyword = requiredToken(byName, name)
+      keyword.CATEGORIES = [...(keyword.CATEGORIES ?? []), identifier]
+      keyword.LONGER_ALT = identifier
+    }
 
     // Pushing the expression mode for every ordinary brace makes nested action/item/block
     // expressions balance naturally. The final interpolation brace then returns to string mode.

@@ -68,6 +68,7 @@ function isLocalValueDeclaration(declaration: AST.ValueDeclaration): boolean {
   return AST.isAliasDeclaration(declaration)
     || AST.isStateDeclaration(declaration)
     || AST.isActionDeclaration(declaration)
+    || AST.isAskStatement(declaration)
     || AST.isEntityQueryDeclaration(declaration)
     || AST.isForStatement(declaration)
 }

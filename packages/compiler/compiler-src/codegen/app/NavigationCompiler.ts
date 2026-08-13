@@ -6,17 +6,38 @@ import { Compile } from '../Compile'
 
 /** NavigationCompiler lowers configured navigation actions to TR.Navigation. */
 export const NavigationCompiler = {
-  /** ContextualPresentStatement presents a ui as content or an overlay through the selected nav. */
+  /** ContextualPresentStatement presents content through a nav or a keyed transient toast through its app. */
   ContextualPresentStatement(presentation: AST.ContextualPresentStatement): Compiled {
     const ui = resolveRef(presentation.ui)
     const resolved = ASTUtils.resolveArgumentBindings(ui, presentation)
     Assert(resolved.diagnostics.length === 0, 'validated ui presentation has no binding diagnostics')
+    const toast = presentation.mode?.kind === 'toast' ? presentation.mode.toast : undefined
+    if (toast) {
+      return gen`TR.Navigation.PresentToast(
+        _ViewProps.__tao,
+        ${Compile.UiValue(ui)},
+        { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
+        {
+          key: ${Compile.Expression(toast.key)},
+          duration: ${Compile.Expression(toast.duration)},
+        },
+      )`
+    }
     const runtimeMethod = presentation.mode?.kind === 'overlay' ? 'PresentOverlay' : 'PresentIn'
     return gen`TR.Navigation.${runtimeMethod}(
       _ViewProps.__tao,
       ${presentation.target ? compileNavigationTarget(presentation.target) : 'undefined'},
       ${Compile.UiValue(ui)},
       { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
+    )`
+  },
+
+  /** SelectionActivateStatement reveals a keyed app item without presenting new content. */
+  SelectionActivateStatement(statement: AST.SelectionActivateStatement): Compiled {
+    const app = resolveRef(statement.app)
+    return gen`TR.Navigation.Activate(
+      ${appDefinitionReference(app)},
+      ${gen.jsLiteral(statement.key.slice(1))},
     )`
   },
 
@@ -53,6 +74,8 @@ function compileNavigationTarget(target: AST.NavigationTarget): Compiled {
 }
 
 /** appDefinitionReference preserves the selected declaration's generated module identity. */
-function appDefinitionReference(app: AST.AppDeclaration): Compiled {
-  return gen.Name({ name: `_TaoAppDefinition_${app.name}` })
+function appDefinitionReference(app: AST.AppValueDeclaration): Compiled {
+  return AST.isAliasDeclaration(app)
+    ? gen.scopeName(app)
+    : gen.Name({ name: `_TaoAppDefinition_${app.name}` })
 }

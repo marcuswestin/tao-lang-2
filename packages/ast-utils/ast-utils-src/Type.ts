@@ -37,7 +37,7 @@ export type TypeReferenceRoot = {
   remainingMembers: readonly string[]
 }
 
-type AnyTypeReference = AST.TypeReference | AST.ConstructorTypeReference
+type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeReference
 
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
@@ -70,7 +70,7 @@ export class Type {
   }
 
   /** constructorReferenceName returns the source-facing name of a typed constructor's type prefix. */
-  static constructorReferenceName(type: AST.ConstructorTypeReference): string {
+  static constructorReferenceName(type: AST.ConstructablePrimitiveTypeReference): string {
     return Type.referenceName(type)
   }
 
@@ -117,7 +117,7 @@ export class Type {
   }
 
   /** ofConstructorReference resolves a typed constructor's type prefix. */
-  static ofConstructorReference(type: AST.ConstructorTypeReference): TaoType {
+  static ofConstructorReference(type: AST.ConstructablePrimitiveTypeReference): TaoType {
     return new TypeResolutionContext().ofConstructorReference(type)
   }
 
@@ -143,9 +143,28 @@ export class Type {
     return new TypeResolutionContext().atMemberPath(root, members)
   }
 
-  /** ofConfiguredValue resolves one closed stdlib configuration constructor. */
+  /** ofConfiguredValue resolves one declaration-linked named constructor. */
   static ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
-    return value.type.ref ? Type.ofDefinition(value.type.ref) : unresolvedType()
+    const declaration = value.type.ref
+    if (AST.isTypeDeclaration(declaration)) {
+      return Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? [])
+    }
+    if (AST.isParameterizedDeclaration(declaration)) {
+      const [member, ...remainingMembers] = value.members ?? []
+      const parameterType = member
+        ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === member)?.inlineType
+        : undefined
+      return parameterType
+        ? Type.atMemberPath(Type.ofDefinition(parameterType), remainingMembers)
+        : unresolvedType()
+    }
+    if (AST.isNavDeclaration(declaration)) {
+      return primitiveType('nav')
+    }
+    if (AST.isDatasourceDeclaration(declaration)) {
+      return { kind: 'item' }
+    }
+    return unresolvedType()
   }
 
   /** ofValue resolves an ordinary expression or configured runtime value. */
@@ -174,6 +193,13 @@ export class Type {
   /** ofProperty resolves the expected value type of one item property declaration. */
   static ofProperty(property: AST.TypeProperty): TaoType {
     return new TypeResolutionContext().ofProperty(property)
+  }
+
+  /** ofConfigurationProperty resolves a nav/datasource contract property's accepted Tao type. */
+  static ofConfigurationProperty(property: AST.ConfigurationPropertyDeclaration): TaoType {
+    return AST.configurationPropertyIsKey(property)
+      ? primitiveType('text')
+      : Type.ofReference(property.type)
   }
 
   /** shorthandPropertyDefinition resolves the same-name type used by a shorthand item field. */
@@ -598,18 +624,8 @@ class TypeResolutionContext {
     })
   }
 
-  ofConstructorReference(type: AST.ConstructorTypeReference): TaoType {
-    return Switch.type(type, {
-      ConstructablePrimitiveTypeReference: reference => primitiveType(reference.primitive),
-      NamedTypeReference: reference => {
-        const entity = Type.entityOfReference(reference)
-        if (entity) {
-          return { kind: 'entity', entity }
-        }
-        const definition = Type.definitionOfReference(reference)
-        return definition ? this.ofDefinition(definition) : unresolvedType()
-      },
-    })
+  ofConstructorReference(type: AST.ConstructablePrimitiveTypeReference): TaoType {
+    return primitiveType(type.primitive)
   }
 
   ofParameter(parameter: AST.ParameterDeclaration): TaoType {
@@ -625,6 +641,7 @@ class TypeResolutionContext {
       BinaryExpression: binary => this.binaryExpressionType(binary),
       BooleanLiteral: () => primitiveType('boolean'),
       CaseTestExpression: () => primitiveType('boolean'),
+      ConfigurationConstructor: value => Type.ofConfiguredValue(value),
       WhenExpression: when => this.whenExpressionType(when),
       FunctionCallExpression: call =>
         call.function.ref ? this.ofReference(call.function.ref.returnType) : unresolvedType(),
@@ -676,6 +693,11 @@ class TypeResolutionContext {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: declaration => this.ofAction(declaration),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
+      AppDeclaration: () => unresolvedType(),
+      AskStatement: ask =>
+        ask.dialogue.ref?.response.ref
+          ? { kind: 'enum', declaration: ask.dialogue.ref.response.ref }
+          : unresolvedType(),
       CasePayload: () => primitiveType('text'),
       EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
       EntityQueryDeclaration: query => this.queryDeclarationType(query),
@@ -1023,9 +1045,6 @@ function itemConstructorProperty(reference: AST.NamedTypeReference, name: string
 
 function owningItemLiteralType(reference: AST.NamedTypeReference): AST.ItemTypeExpression | undefined {
   let current: AST.Node | undefined = reference.$container
-  if (AST.isTypedConstructor(current) && current.type === reference && AST.isItemLiteral(current.value)) {
-    return undefined
-  }
   while (current) {
     if (AST.isItemLiteral(current)) {
       return itemLiteralType(current)

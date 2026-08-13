@@ -22,11 +22,66 @@ const noteDefinition: TaoDataSchemaDefinition = {
 }
 
 Describe('TR.Data provider foundation', () => {
-  Test('isolates in-memory envelopes by storage key', async () => {
-    const provider = TR.Data.MemoryProvider()
+  Test('configures and patches declaration-owned providers without losing identity', async () => {
+    const provider = TR.DataProvider.Memory()
+    const declaration = TR.Data.Declaration('Memory', provider)
+    const sameNamedDeclaration = TR.Data.Declaration('Memory', TR.DataProvider.Memory())
+    const base = TR.Data.Configure(declaration, { StorageKey: TR.Value('base-notes') })
+    const configured = TR.Data.Patch(base, { StorageKey: TR.Value('patched-notes') })
 
-    await provider.save('first-schema', 'first')
-    await provider.save('second-schema', 'second')
+    Expect(Object.isFrozen(declaration)).toBe(true)
+    Expect(Object.isFrozen(base)).toBe(true)
+    Expect(Object.isFrozen(base.config)).toBe(true)
+    Expect(declaration.identity).not.toBe(sameNamedDeclaration.identity)
+    Expect(configured.declaration).toBe(declaration)
+    Expect(configured.evaluate()).toBe(configured)
+    Expect((base.config['StorageKey'] as TR.Value<string>).jsValue).toBe('base-notes')
+
+    const schema = TR.Data.Schema(noteDefinition)
+    TR.Data.BindConfigured(schema, configured.declaration, 'patched-notes')
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('Configured') })
+    await TR.Data.Settle(schema)
+    const revision = schema.snapshot()
+
+    TR.Data.BindConfigured(schema, configured.declaration, 'patched-notes')
+
+    Expect(schema.snapshot()).toBe(revision)
+    Expect(await provider.load('base-notes')).toBeUndefined()
+    Expect(await provider.load('patched-notes')).toContain('Configured')
+  })
+
+  Test('publishes Memory through the DataProvider protocol and conformance suite', async () => {
+    const rejectingProvider = (): TR.DataProvider => ({
+      load: () => undefined,
+      persist: () => {
+        throw new Error('deterministic rejection')
+      },
+    })
+
+    await TR.testProvider(() => TR.DataProvider.Memory(), rejectingProvider)
+  })
+
+  Test('ports Local through conformance with a deterministic storage boundary', async () => {
+    const values = new Map<string, string>()
+    const storage = mapStorage(values)
+    const rejectingStorage = {
+      getItem: async (_key: string): Promise<string | null> => null,
+      setItem: async (_key: string, _value: string): Promise<void> => {
+        throw new Error('storage unavailable')
+      },
+    }
+
+    await TR.testProvider(
+      () => TR.DataProvider.Local(storage, 'provider-conformance'),
+      () => TR.DataProvider.Local(rejectingStorage, 'provider-conformance-rejection'),
+    )
+  })
+
+  Test('isolates in-memory envelopes by storage key', async () => {
+    const provider = TR.DataProvider.Memory()
+
+    await provider.persist('first-schema', 'first')
+    await provider.persist('second-schema', 'second')
 
     Expect(await provider.load('first-schema')).toBe('first')
     Expect(await provider.load('second-schema')).toBe('second')
@@ -40,7 +95,7 @@ Describe('TR.Data provider foundation', () => {
         entities: {
           Entry: { collection: 'Entries', fields: { Id: { kind: 'text' } } },
         },
-      }, TR.Data.MemoryProvider())
+      }, TR.DataProvider.Memory())
     ).toThrow("Entity 'Entry' cannot declare reserved field 'Id'.")
   })
 
@@ -52,25 +107,31 @@ Describe('TR.Data provider foundation', () => {
     Expect(rows.Error).toContain("Data schema 'RuntimeNotes' has no bound provider.")
   })
 
-  Test('binds Memory synchronously and preserves the store across repeated app renders', () => {
+  Test('binds one declared Memory provider and preserves the store across repeated app renders', () => {
+    const declaration = TR.Data.Declaration('Memory', TR.DataProvider.Memory())
+    const configured = TR.Data.Configure(declaration, {})
     const schema = TR.Data.Schema(noteDefinition)
-    TR.Data.Bind(schema, 'memory')
+    TR.Data.BindConfigured(schema, configured.declaration)
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Bound') })
     const revisionBeforeRepeat = schema.snapshot()
 
-    TR.Data.Bind(schema, 'memory')
+    TR.Data.BindConfigured(schema, configured.declaration)
 
     Expect(schema.snapshot()).toBe(revisionBeforeRepeat)
     Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(1)
   })
 
   Test('keeps the fresh test Memory provider when app binding runs during a check', () => {
-    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    const local = TR.Data.Configure(
+      TR.Data.Declaration('Local', TR.DataProvider.Local()),
+      { StorageKey: TR.Value('test-isolation') },
+    )
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory())
     try {
       TR.Data.beginTest()
       TR.Data.Create(schema, 'Note', { Title: TR.Value('Isolated') })
 
-      TR.Data.Bind(schema, 'local')
+      TR.Data.BindConfigured(schema, local.declaration, 'test-isolation')
 
       Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(1)
       Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Loading: boolean }).Loading).toBe(false)
@@ -80,7 +141,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('applies only declared defaults and creates stable live entity handles', () => {
-    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory())
     const before = Date.now()
 
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Draft') })
@@ -101,7 +162,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('derives entity guard availability while preserving a deleted handle identifier', () => {
-    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Transient') })
     const note = schema.query({ entity: 'Note', filters: [] })[0] as Record<string, unknown>
     const cases: string[] = []
@@ -145,7 +206,7 @@ Describe('TR.Data provider foundation', () => {
           },
         },
       },
-    }, TR.Data.MemoryProvider())
+    }, TR.DataProvider.Memory())
     const before = Date.now()
 
     TR.Data.Create(schema, 'Entry', {})
@@ -157,7 +218,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('applies the now clock separately for every create while preserving live handle identity', () => {
-    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory())
     const originalNow = Date.now
     let currentTime = 1_000
     Date.now = () => currentTime
@@ -178,7 +239,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('combines repeated query filters with AND and applies one deterministic order', () => {
-    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('B') })
     TR.Data.Create(schema, 'Note', { Title: TR.Value('A'), Done: TR.Value(true) })
     TR.Data.Create(schema, 'Note', { Title: TR.Value('C') })
@@ -199,7 +260,7 @@ Describe('TR.Data provider foundation', () => {
   Test('persists the versioned id counter and reloads without identifier collisions', async () => {
     const values = new Map<string, string>()
     const storage = mapStorage(values)
-    const provider = TR.Data.LocalProvider(storage, 'persisted-id-test')
+    const provider = TR.DataProvider.Local(storage, 'persisted-id-test')
     const first = TR.Data.Schema(noteDefinition, provider)
     await TR.Data.Settle(first)
     TR.Data.Create(first, 'Note', { Title: TR.Value('First') })
@@ -222,9 +283,8 @@ Describe('TR.Data provider foundation', () => {
     const saves: string[] = []
     const gates: Array<Deferred<void>> = []
     const provider: TaoDataProvider = {
-      name: 'Controlled',
       load: () => undefined,
-      save: (_key, value) => {
+      persist: (_key, value) => {
         saves.push(value)
         const gate = new Deferred<void>()
         gates.push(gate)
@@ -252,9 +312,8 @@ Describe('TR.Data provider foundation', () => {
     let saveCount = 0
     let durable = ''
     const provider: TaoDataProvider = {
-      name: 'TransientFailure',
       load: () => undefined,
-      save: (_key, value) => {
+      persist: (_key, value) => {
         saveCount += 1
         if (saveCount === 1) {
           throw new Error('temporary outage')
@@ -279,7 +338,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('reports corrupt persisted envelopes instead of accepting partial data', async () => {
-    const provider = TR.Data.MemoryProvider('{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}')
+    const provider = TR.DataProvider.Memory('{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}')
     const schema = TR.Data.Schema(noteDefinition, provider)
     await TR.Data.Settle(schema)
 
@@ -300,7 +359,7 @@ Describe('TR.Data provider foundation', () => {
         ],
       },
     })
-    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider(duplicateRows))
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory(duplicateRows))
     await TR.Data.Settle(schema)
 
     const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
@@ -311,12 +370,11 @@ Describe('TR.Data provider foundation', () => {
   Test('ignores a stale async load after provider reconfiguration', async () => {
     const stale = new Deferred<string | undefined>()
     const staleProvider: TaoDataProvider = {
-      name: 'Stale',
       load: () => stale.promise,
-      save: () => {},
+      persist: () => {},
     }
     const schema = TR.Data.Schema(noteDefinition, staleProvider)
-    schema.configure(TR.Data.MemoryProvider())
+    schema.configure(TR.DataProvider.Memory())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Current') })
     stale.resolve(persistedNotes('Stale'))
     await flushMicrotasks()
@@ -326,11 +384,11 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('invalidates live handles when the schema changes provider generations', () => {
-    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Old store') })
     const oldHandle = schema.query({ entity: 'Note', filters: [] })[0]
 
-    schema.configure(TR.Data.MemoryProvider())
+    schema.configure(TR.DataProvider.Memory())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('New store') })
     const newHandle = schema.query({ entity: 'Note', filters: [] })[0]
 
@@ -344,9 +402,8 @@ Describe('TR.Data provider foundation', () => {
   Test('normalizes entity handles in filters and cascades relationships transitively in one save', async () => {
     let saves = 0
     const provider: TaoDataProvider = {
-      name: 'CountingMemory',
       load: () => undefined,
-      save: () => {
+      persist: () => {
         saves += 1
       },
     }
@@ -416,7 +473,7 @@ Describe('TR.Data provider foundation', () => {
           },
         },
       },
-    }, TR.Data.MemoryProvider())
+    }, TR.DataProvider.Memory())
     TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
     const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
     TR.Data.Create(schema, 'Document', { Title: TR.Value('Draft'), Workspace: TR.Value(workspace) })
@@ -431,8 +488,8 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('rejects foreign, wrong-entity, deleted, and inactive relationship handles', () => {
-    const primary = TR.Data.Schema(relationshipDefinition('PrimaryRelationships'), TR.Data.MemoryProvider())
-    const foreign = TR.Data.Schema(relationshipDefinition('ForeignRelationships'), TR.Data.MemoryProvider())
+    const primary = TR.Data.Schema(relationshipDefinition('PrimaryRelationships'), TR.DataProvider.Memory())
+    const foreign = TR.Data.Schema(relationshipDefinition('ForeignRelationships'), TR.DataProvider.Memory())
     TR.Data.Create(primary, 'Workspace', { Name: TR.Value('Primary') })
     TR.Data.Create(foreign, 'Workspace', { Name: TR.Value('Foreign') })
     const primaryWorkspace = primary.query({ entity: 'Workspace', filters: [] })[0]
@@ -473,7 +530,7 @@ Describe('TR.Data provider foundation', () => {
       })
     ).toThrow(/Query filter 'Task\.Workspace' refers to missing Workspace/)
 
-    primary.configure(TR.Data.MemoryProvider())
+    primary.configure(TR.DataProvider.Memory())
     Expect(() =>
       primary.query({
         entity: 'Task',
@@ -496,7 +553,7 @@ Describe('TR.Data provider foundation', () => {
         },
       },
     }
-    const schema = TR.Data.Schema(definition, TR.Data.MemoryProvider())
+    const schema = TR.Data.Schema(definition, TR.DataProvider.Memory())
     TR.Data.Create(schema, 'Parent', { Name: TR.Value('Protected') })
     const parent = schema.query({ entity: 'Parent', filters: [] })[0]
     TR.Data.Create(schema, 'Child', { Name: TR.Value('Dependent'), Parent: TR.Value(parent) })

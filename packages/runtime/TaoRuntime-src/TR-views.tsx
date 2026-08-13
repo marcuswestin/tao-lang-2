@@ -7,7 +7,7 @@ import { TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from '.
 
 type TaoButtonProps = TaoViewProps & {
   action?: {
-    invoke(): void
+    invoke(): unknown
   }
   disabled?: boolean
   title: string
@@ -17,8 +17,8 @@ type TaoTextInputProps = TaoViewProps & {
   disabled?: boolean
   id?: string
   label: string
-  onChange?: (value: string) => void
-  onSubmit?: () => void
+  onChange?: (value: string) => unknown
+  onSubmit?: () => unknown
   placeholder?: string
   value: string
 }
@@ -58,11 +58,7 @@ export const Views = {
     return React.createElement(TaoPrimitiveElement, {
       kind: 'Pressable',
       nativePropOverrides: {
-        onPress: () => {
-          if (props.disabled !== true) {
-            props.action?.invoke()
-          }
-        },
+        onPress: () => props.disabled === true ? undefined : props.action?.invoke(),
       },
       pressableTitle: props.title,
       providesParentDirection: true,

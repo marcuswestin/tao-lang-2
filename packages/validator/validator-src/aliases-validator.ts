@@ -9,6 +9,7 @@ type NamedValueDeclaration =
   | AST.StateDeclaration
   | AST.EntityQueryDeclaration
   | AST.ForStatement
+  | AST.AskStatement
   | AST.CasePayload
   | AST.EnumCase
 type NamedFileValueDeclaration =
@@ -74,6 +75,7 @@ function isRuntimeScopeNamedDeclaration(node: AST.Node): node is NamedDeclaratio
     || AST.isAliasDeclaration(node)
     || AST.isAppDeclaration(node)
     || AST.isForStatement(node)
+    || AST.isAskStatement(node)
     || AST.isFunctionDeclaration(node)
     || AST.isParameterDeclaration(node)
     || AST.isEntityQueryDeclaration(node)

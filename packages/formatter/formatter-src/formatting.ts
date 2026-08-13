@@ -238,9 +238,10 @@ function newLinesWithTabs(lines: number, tabs: number): Langium.FormattingAction
 
 /** isInjectionFenceOpenLine returns true when a line opens a multiline inject TS fence. */
 export function isInjectionFenceOpenLine(line: string): boolean {
-  // Anchored to the `inject`/`render inject` statement start so comment lines never match.
+  // Anchored to an injection statement start so comment lines never match. Configuration
+  // implementations use the same fenced TypeScript representation as render injections.
   // Trailing whitespace after the opener is part of the fence token and only trimmed at finalization.
-  return /^[ \t]*(render\b[ \t]+)?inject\b.*```ts[ \t]*$/.test(line)
+  return /^[ \t]*(?:(?:render|implement)\b[ \t]+)?inject\b.*```ts[ \t]*$/.test(line)
 }
 
 /** findInjectionFenceCloseIndex returns the index of the line closing the fence opened above `openIndex`, or -1. */

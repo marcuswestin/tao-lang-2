@@ -2,13 +2,31 @@ import { Switch } from '@shared/core'
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
-import { DataControls, type TaoDataSchema } from './TR-data'
+import {
+  DataControls,
+  DataProviderControls,
+  type TaoConfiguredDatasource,
+  type TaoDataProvider,
+  type TaoDataSchema,
+  type TaoDatasourceDeclaration,
+  testProvider as testDataProvider,
+} from './TR-data'
 import { LayoutControls } from './TR-layout'
 import {
   NavigationControls,
+  NavKindControls,
+  type TaoNavDeclaration,
+  type TaoNavDescriptor,
   type TaoNavigationStack,
   type TaoNavigationValue,
+  type TaoNavKind,
+  type TaoNavKindProfile,
+  type TaoNavMount,
   type TaoPresentable,
+  type TaoSelectionNavConfiguration,
+  type TaoSlotNavConfiguration,
+  type TaoStackNavConfiguration,
+  testNavKind as testNavigationKind,
 } from './TR-navigation'
 import * as TRTaoProps from './TR-TaoProps'
 import * as TRViews from './TR-views'
@@ -116,13 +134,16 @@ class TR {
   }
 
   /** GuardAction runs a matching handler and reports whether the enclosing block must stop. */
-  static GuardAction(subject: TR.Evaluable, branches: readonly TR.CaseBranch<void>[]): boolean {
+  static GuardAction(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<unknown>[],
+  ): boolean | Promise<boolean> {
     const value = subject.evaluate().jsValue
     for (const [caseName, body] of branches) {
       const match = matchSubjectCase(value, caseName)
       if (match.matched) {
-        body(new RuntimeValue(match.payload))
-        return true
+        const result = body(new RuntimeValue(match.payload))
+        return isPromiseLike(result) ? Promise.resolve(result).then(() => true) : true
       }
     }
     return false
@@ -190,7 +211,7 @@ class TR {
   }
 
   /** Action creates runtime Tao actions from generated callbacks. */
-  static Action<Args extends any[]>(body: (...args: Args) => void): TR.Action<Args> {
+  static Action<Args extends any[]>(body: (...args: Args) => unknown): TR.Action<Args> {
     return new RuntimeAction(body)
   }
 
@@ -222,8 +243,8 @@ class TR {
   }
 
   /** Do invokes a Tao action value with already-compiled runtime arguments. */
-  static Do<Args extends any[]>(action: TR.Action<Args>, ...args: Args): void {
-    action.evaluate().jsValue.invoke(...args)
+  static async Do<Args extends any[]>(action: TR.Action<Args>, ...args: Args): Promise<void> {
+    await action.evaluate().jsValue.invoke(...args)
   }
 
   /** Set updates a Tao state value. */
@@ -272,6 +293,11 @@ class TR {
       : { ...localProps, callerProps }
   }
 
+  /** TaoContext carries presentation context across generated view boundaries without carrying layout. */
+  static TaoContext(callerProps: TR.TaoProps | undefined): TRTaoProps.TaoAmbientContext {
+    return TRTaoProps.TaoPropsControls.ambientContext(callerProps)
+  }
+
   /** setDevMode configures Tao runtime development-only diagnostics. */
   static setDevMode(options?: TR.DevModeOptions): void {
     Dev.setMode(options)
@@ -286,11 +312,23 @@ class TR {
   /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
   static readonly Data = DataControls
 
+  /** DataProvider exposes the published provider factories used by datasource injections. */
+  static readonly DataProvider = DataProviderControls
+
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
 
   /** Navigation exposes deterministic stack history, presentation, and back behavior. */
   static readonly Navigation = NavigationControls
+
+  /** NavKind exposes declaration-owned navigation implementations and identities. */
+  static readonly NavKind = NavKindControls
+
+  /** testProvider runs the published full-snapshot provider conformance suite. */
+  static readonly testProvider = testDataProvider
+
+  /** testNavKind runs the published navigation implementation conformance suite. */
+  static readonly testNavKind = testNavigationKind
 
   /** Views exposes runtime-backed Tao stdlib primitives. */
   static readonly Views = TRViews.Views
@@ -337,17 +375,18 @@ class RuntimeState<T> {
 }
 
 class RuntimeActionValue<Args extends any[] = any[]> {
-  constructor(private readonly body: (...args: Args) => void) {}
+  constructor(private readonly body: (...args: Args) => unknown) {}
 
-  invoke(...args: Args): void {
-    this.body(...args)
+  invoke(...args: Args): void | Promise<void> {
+    const result = this.body(...args)
+    return isPromiseLike(result) ? Promise.resolve(result).then(() => undefined) : undefined
   }
 }
 
 class RuntimeAction<Args extends any[] = any[]> {
   readonly jsValue: RuntimeActionValue<Args>
 
-  constructor(body: (...args: Args) => void) {
+  constructor(body: (...args: Args) => unknown) {
     this.jsValue = new RuntimeActionValue(body)
   }
 
@@ -362,6 +401,13 @@ class RuntimeFunction {
   invoke(...args: TR.Evaluable[]): TR.Value<any> {
     return this.body(...args)
   }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return typeof value === 'object'
+    && value !== null
+    && 'then' in value
+    && typeof value.then === 'function'
 }
 
 function stableListKey(value: unknown, index: number): string | number {
@@ -419,9 +465,40 @@ namespace TR {
   export type DevModeOptions = TaoDevModeOptions
   /** DataSchema declares one runtime-backed Tao data schema. */
   export type DataSchema = TaoDataSchema
+  /** DataProvider declares the published full-snapshot persistence protocol. */
+  export type DataProvider = TaoDataProvider
+  /** DatasourceDeclaration owns the identity and provider implementation of a Tao datasource. */
+  export type DatasourceDeclaration = TaoDatasourceDeclaration
+  /** ConfiguredDatasource is an immutable declaration-linked provider configuration. */
+  export type ConfiguredDatasource = TaoConfiguredDatasource
+  /** NavKindProfile declares the shipped profile-specific lifecycle contracts. */
+  export type NavKindProfile = TaoNavKindProfile
+  /** NavDeclaration is the immutable declaration identity carried by configured descriptors. */
+  export type NavDeclaration = TaoNavDeclaration
+  /** NavKind declares the published declaration-owned navigation implementation protocol. */
+  export type NavKind<
+    ProfileT extends TaoNavKindProfile = TaoNavKindProfile,
+    ConfigurationT extends object = object,
+  > = TaoNavKind<ProfileT, ConfigurationT>
+  /** NavDescriptor is immutable configuration separated from occurrence-local navigation state. */
+  export type NavDescriptor<
+    ProfileT extends TaoNavKindProfile = TaoNavKindProfile,
+    ConfigurationT extends object = object,
+  > = TaoNavDescriptor<ProfileT, ConfigurationT>
+  /** NavMount owns the independent mutable state for one descriptor occurrence. */
+  export type NavMount<
+    ProfileT extends TaoNavKindProfile = TaoNavKindProfile,
+    ConfigurationT extends object = object,
+  > = TaoNavMount<ProfileT, ConfigurationT>
+  /** StackNavConfiguration is the normalized Stack profile descriptor configuration. */
+  export type StackNavConfiguration = TaoStackNavConfiguration
+  /** SlotNavConfiguration is the normalized Slot profile descriptor configuration. */
+  export type SlotNavConfiguration = TaoSlotNavConfiguration
+  /** SelectionNavConfiguration is the normalized Selection profile descriptor configuration. */
+  export type SelectionNavConfiguration = TaoSelectionNavConfiguration
   /** NavigationStack declares one runtime-backed Tao application stack. */
   export type NavigationStack = TaoNavigationStack
-  /** NavigationValue declares a configured StackNav, SlotNav, or OverlayNav. */
+  /** NavigationValue declares one mounted declaration-owned navigation occurrence. */
   export type NavigationValue = TaoNavigationValue
   /** Presentable declares a first-class Tao ui descriptor. */
   export type Presentable = TaoPresentable

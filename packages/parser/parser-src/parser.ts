@@ -159,8 +159,8 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
     AST.GeneratedModule,
     {
       parser: {
-        // Tao deliberately resolves the token-identical `StackNav { Initial Home }` and
-        // one-field unlabeled item form from the linked owner type.
+        // Tao deliberately resolves token-identical configured constructors and one-field
+        // unlabeled item forms from their linked owner declarations.
         ParserConfig: () => ({ skipValidations: true }),
         TokenBuilder: () => new TaoTokenBuilder(),
         ValueConverter: () => new TaoValueConverter(),

@@ -58,10 +58,7 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
       BinaryExpression: (node) =>
         TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
           ?? InferenceRuleNotApplicable,
-      ProviderConfiguredValue: (node) =>
-        TypeSystemHelpers.taoType(Type.ofConfiguredValue(node), typir)
-          ?? InferenceRuleNotApplicable,
-      NavigationConfiguredValue: (node) =>
+      ConfigurationConstructor: (node) =>
         TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
           ?? InferenceRuleNotApplicable,
       CaseTestExpression: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
@@ -86,6 +83,10 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
         return Switch.type(target, {
           ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
           AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
+          AppDeclaration: () => InferenceRuleNotApplicable,
+          AskStatement: ask =>
+            TypeSystemHelpers.taoType(Type.ofValueDeclaration(ask), typir)
+              ?? InferenceRuleNotApplicable,
           CasePayload: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
           EntityDataField: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
           EntityQueryDeclaration: () => InferenceRuleNotApplicable,

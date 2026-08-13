@@ -1,10 +1,14 @@
 import { AST } from '@parser'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import AppCompiler from './app-compiler'
 
 export default {
   /** AliasDeclaration compiles a Tao alias into a generated Tao value binding. */
   AliasDeclaration(alias: AST.AliasDeclaration): Compiled {
+    if (AST.isAppVariantDeclaration(alias)) {
+      return AppCompiler.AppVariant(alias)
+    }
     return AST.isConfiguredValue(alias.value)
       ? gen`${gen.scopeName(alias)} = TR.Alias(${Compile.ConfiguredValue(alias.value)})`
       : gen`${gen.scopeName(alias)} = TR.Alias(() => ${Compile.Expression(alias.value)})`

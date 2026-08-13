@@ -26,19 +26,30 @@ export const navigationValidationMessages = {
   namedArgumentType: (destination: string, name: string, expected: string, actual: string) =>
     `Labeled argument '${name}:' of destination ${destination} expects ${expected}, got ${actual}.`,
   presentationContext: 'Contextual presentation is allowed only inside a ui declaration.',
+  toastContext: 'Toast presentation is allowed only inside a rendered declaration.',
+  toastTarget: 'Toast presentation is app-level and does not accept `in`.',
+  toastKeyType: (actual: string) => `Toast Key expects text, got ${actual}.`,
+  toastDurationType: (actual: string) => `Toast Duration expects number, got ${actual}.`,
+  toastDurationNegative: 'Toast Duration cannot be negative.',
+  activationContext: 'Selection activation is allowed only inside a ui declaration.',
   presentationTarget: (actual: string) => `Presentation target expects nav, got ${actual}.`,
   dismissContext: '`dismiss` is allowed only inside a ui declaration.',
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
   unknownAuxiliary: (app: string, key: string) => `App ${app} has no auxiliary navigator named '@${key}'.`,
-  unsupportedConfiguredType: (name: string) => `Type ${name} is not a configurable Tao runtime value.`,
   unknownConfiguration: (type: string, name: string) => `${type} has no configuration slot named '${name}'.`,
   duplicateConfiguration: (type: string, name: string) => `${type} configures '${name}' more than once.`,
   missingConfiguration: (type: string, name: string) => `${type} requires configuration '${name}'.`,
-  initialType: (type: string, expected: string, actual: string) =>
-    `${type} Initial expects ${expected}, got ${actual}.`,
-  localWith: 'Local datasource configuration requires `with { StorageKey "…" }`.',
-  storageKeyType: 'Local StorageKey must be text.',
-  storageKeyEmpty: 'Local StorageKey must be nonempty.',
+  configurationType: (name: string, expected: string, actual: string) => `${name} expects ${expected}, got ${actual}.`,
+  configurationKeyType: (name: string) => `${name} expects an @key.`,
+  keyedConfiguration: (type: string) => `${type} does not accept keyed configuration entries.`,
+  duplicateConfigurationKey: (type: string, key: string) => `${type} configures key '${key}' more than once.`,
+  missingKeyedItem: (type: string) => `${type} requires at least one keyed item.`,
+  unknownConfigurationKey: (type: string, name: string, key: string) =>
+    `${type} ${name} references unknown item '${key}'.`,
+  keyedItemConfiguration: (type: string, key: string, name: string) =>
+    `${type} item '${key}' has no configuration slot named '${name}'.`,
+  keyedItemMissing: (type: string, key: string, name: string) => `${type} item '${key}' requires '${name}'.`,
+  constructorBlock: (name: string) => `${name} configuration requires a block.`,
 } as const
 
 /** validateNavigation validates configured navigation and presentation calls. */
@@ -47,8 +58,13 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
     validateContextualPresentation(presentation, ctx)
   }
   for (const dismiss of AST.streamAllContents(file).filter(AST.isDismissStatement)) {
-    if (!AST.isUiDeclaration(AST.findOwningView(dismiss))) {
+    if (!AST.findOwningView(dismiss)) {
       ctx.error(navigationValidationMessages.dismissContext, dismiss)
+    }
+  }
+  for (const activation of AST.streamAllContents(file).filter(AST.isSelectionActivateStatement)) {
+    if (!AST.isUiDeclaration(AST.findOwningView(activation))) {
+      ctx.error(navigationValidationMessages.activationContext, activation)
     }
   }
   for (const replace of AST.streamAllContents(file).filter(AST.isReplaceStatement)) {
@@ -60,14 +76,81 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
   for (const configured of AST.streamAllContents(file).filter(AST.isConfiguredValue)) {
     validateConfiguredValue(configured, ctx)
   }
+  for (const patch of AST.streamAllContents(file).filter(AST.isPatchedValueReference)) {
+    const base = patch.target.ref
+    if (!AST.isAliasDeclaration(base) || AST.isAppVariantDeclaration(patch.$container)) {
+      continue
+    }
+    const declaration = configuredDeclaration(base.value)
+    if (declaration) {
+      validateConfigurationBlock(patch.patchBlock, declaration, false, ctx)
+    }
+  }
+  for (const variant of file.statements.filter(AST.isAppVariantDeclaration)) {
+    const root = AST.appDeclarationOf(variant)
+    if (!root) {
+      continue
+    }
+    for (const entry of variant.value.patchBlock.entries) {
+      if (!entry.name || !AST.isPropertyConfigurationPatch(entry.value)) {
+        continue
+      }
+      const declaration = appPropertyConfiguredType(root, entry.name)
+      if (declaration) {
+        validateConfigurationBlock(entry.value.block, declaration, false, ctx)
+      }
+    }
+  }
+}
+
+function appPropertyConfiguredType(
+  app: AST.AppDeclaration,
+  property: string,
+): AST.ConfigurableDeclaration | undefined {
+  const statement = AST.blockStatements(app).find(candidate =>
+    (property === 'Navigator' && AST.isAppNavigator(candidate))
+    || (property === 'Datasource' && AST.isAppDatasource(candidate))
+  )
+  if (!statement || (!AST.isAppNavigator(statement) && !AST.isAppDatasource(statement))) {
+    return undefined
+  }
+  const target = statement.value.target.ref
+  if (AST.isConfigurableDeclaration(target) || AST.isTypeDeclaration(target)) {
+    return AST.isConfigurableDeclaration(target) ? target : undefined
+  }
+  return AST.isAliasDeclaration(target) ? configuredDeclaration(target.value) : undefined
 }
 
 function validateContextualPresentation(
   presentation: AST.ContextualPresentStatement,
   ctx: ValidationContext,
 ): void {
-  if (!AST.isUiDeclaration(AST.findOwningView(presentation))) {
-    ctx.error(navigationValidationMessages.presentationContext, presentation)
+  const toast = presentation.mode?.kind === 'toast' ? presentation.mode.toast : undefined
+  const owningView = AST.findOwningView(presentation)
+  if (toast ? !owningView : !AST.isUiDeclaration(owningView)) {
+    ctx.error(
+      toast ? navigationValidationMessages.toastContext : navigationValidationMessages.presentationContext,
+      presentation,
+    )
+  }
+  if (toast && presentation.target) {
+    ctx.error(navigationValidationMessages.toastTarget, presentation.target)
+  }
+  if (toast) {
+    const keyType = Type.ofExpression(toast.key)
+    if (keyType.kind !== 'unresolved' && !Type.isAssignable(keyType, { kind: 'primitive', primitive: 'text' })) {
+      ctx.error(navigationValidationMessages.toastKeyType(Type.displayName(keyType)), toast.key)
+    }
+    const durationType = Type.ofExpression(toast.duration)
+    if (
+      durationType.kind !== 'unresolved'
+      && !Type.isAssignable(durationType, { kind: 'primitive', primitive: 'number' })
+    ) {
+      ctx.error(navigationValidationMessages.toastDurationType(Type.displayName(durationType)), toast.duration)
+    }
+    if (negativeNumberLiteral(toast.duration)) {
+      ctx.error(navigationValidationMessages.toastDurationNegative, toast.duration)
+    }
   }
   const ui = presentation.ui.ref
   if (ui) {
@@ -76,7 +159,7 @@ function validateContextualPresentation(
       reportBindingDiagnostic(ui, diagnostic, presentation, ctx)
     }
   }
-  if (presentation.target) {
+  if (presentation.target && !toast) {
     if (presentation.target.value) {
       const actual = Type.ofExpression(presentation.target.value)
       if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
@@ -85,9 +168,11 @@ function validateContextualPresentation(
     } else if (presentation.target.app?.ref && presentation.target.key) {
       const app = presentation.target.app.ref
       const targetKey = presentation.target.key.slice(1)
-      const auxiliary = AST.blockStatements(app).find(statement =>
-        AST.isAppAuxiliaryNavigator(statement) && statement.name.slice(1) === targetKey
-      )
+      const rootApp = AST.appDeclarationOf(app)
+      const auxiliary = rootApp
+        && AST.blockStatements(rootApp).find(statement =>
+          AST.isAppAuxiliaryNavigator(statement) && statement.name.slice(1) === targetKey
+        )
       if (!auxiliary) {
         ctx.error(navigationValidationMessages.unknownAuxiliary(app.name, targetKey), presentation.target)
       }
@@ -95,31 +180,65 @@ function validateContextualPresentation(
   }
 }
 
+function negativeNumberLiteral(expression: AST.Expression): boolean {
+  return AST.isUnaryExpression(expression)
+    && expression.operator === '-'
+    && AST.isNumberLiteral(expression.operand)
+}
+
 function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationContext): void {
-  const typeName = value.type.ref?.name
-  if (!typeName) {
+  const declaration = value.type.ref
+  if (!AST.isConfigurableDeclaration(declaration)) {
     return
   }
-  // A one-field unlabeled item constructor and a navigation configuration are intentionally
-  // token-identical. The resolved owner type decides which semantic validator owns the block.
-  if (Type.ofConfiguredValue(value).kind === 'item' && typeName !== 'Local' && typeName !== 'Memory') {
+  if (!value.block) {
+    ctx.error(navigationValidationMessages.constructorBlock(declaration.name), value)
     return
   }
-  const contracts: Record<string, { slots: readonly string[]; required: readonly string[] }> = {
-    StackNav: { slots: ['Initial'], required: ['Initial'] },
-    SlotNav: { slots: ['Initial'], required: ['Initial'] },
-    OverlayNav: { slots: [], required: [] },
-    Local: { slots: ['StorageKey'], required: ['StorageKey'] },
-    Memory: { slots: [], required: [] },
+  validateConfigurationBlock(value.block, declaration, true, ctx)
+}
+
+function configuredDeclaration(value: AST.Expression): AST.ConfigurableDeclaration | undefined {
+  if (AST.isConfigurationConstructor(value)) {
+    return AST.isConfigurableDeclaration(value.type.ref) ? value.type.ref : undefined
   }
-  const contract = contracts[typeName]
-  if (!contract) {
-    ctx.error(navigationValidationMessages.unsupportedConfiguredType(typeName), value)
-    return
+  if (AST.isPatchedValueReference(value)) {
+    const base = value.target.ref
+    return AST.isAliasDeclaration(base) ? configuredDeclaration(base.value) : undefined
   }
+  return undefined
+}
+
+function validateConfigurationBlock(
+  block: AST.ConfigurationBlock,
+  declaration: AST.ConfigurableDeclaration,
+  requireConstructorProperties: boolean,
+  ctx: ValidationContext,
+): void {
+  const typeName = declaration.name
+  const properties = AST.configurationPropertiesOf(declaration)
+  const propertiesByName = new Map(properties.map(property => [property.name, property]))
+  const keyedContract = AST.configurationKeyOf(declaration)
   const entries = new Map<string, AST.ConfigurationEntry>()
-  for (const entry of value.block.entries) {
-    if (!contract.slots.includes(entry.name)) {
+  const keyedEntries = new Map<string, AST.ConfigurationEntry>()
+  for (const entry of block.entries) {
+    if (entry.key) {
+      if (!keyedContract) {
+        ctx.error(navigationValidationMessages.keyedConfiguration(typeName), entry)
+        continue
+      }
+      if (keyedEntries.has(entry.key)) {
+        ctx.error(navigationValidationMessages.duplicateConfigurationKey(typeName, entry.key), entry)
+      }
+      keyedEntries.set(entry.key, entry)
+      validateKeyedConfigurationItem(entry, declaration.name, keyedContract, ctx)
+      continue
+    }
+    if (!entry.name || !entry.value) {
+      continue
+    }
+    const property = propertiesByName.get(entry.name)
+    if (!property) {
       ctx.error(navigationValidationMessages.unknownConfiguration(typeName, entry.name), entry)
       continue
     }
@@ -127,40 +246,110 @@ function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationCont
       ctx.error(navigationValidationMessages.duplicateConfiguration(typeName, entry.name), entry)
     }
     entries.set(entry.name, entry)
+    validateConfiguredProperty(entry.value, property, entry, ctx)
   }
-  for (const required of contract.required) {
-    if (!entries.has(required)) {
-      ctx.error(navigationValidationMessages.missingConfiguration(typeName, required), value)
+  for (const required of requireConstructorProperties ? properties : []) {
+    if (!entries.has(required.name)) {
+      ctx.error(navigationValidationMessages.missingConfiguration(typeName, required.name), block)
     }
   }
-  const initial = entries.get('Initial')
-  if (initial) {
-    const actual = Type.ofExpression(initial.value)
-    const expected: ASTUtils.TaoType = typeName === 'StackNav'
-      ? { kind: 'primitive', primitive: 'ui' }
-      : { kind: 'union', members: [{ kind: 'primitive', primitive: 'ui' }, { kind: 'primitive', primitive: 'nav' }] }
-    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+  if (keyedContract) {
+    if (requireConstructorProperties && keyedEntries.size === 0) {
+      ctx.error(navigationValidationMessages.missingKeyedItem(typeName), block)
+    }
+    for (const property of properties.filter(AST.configurationPropertyIsKey)) {
+      const configuredValues = block.entries
+        .filter(entry => entry.name === property.name)
+        .map(entry => entry.value)
+        .filter(AST.isConfigurationKeyValue)
+      for (const configured of configuredValues) {
+        if (!keyedEntries.has(configured.key)) {
+          ctx.error(
+            navigationValidationMessages.unknownConfigurationKey(typeName, property.name, configured.key),
+            configured,
+          )
+        }
+      }
+    }
+  }
+}
+
+function validateKeyedConfigurationItem(
+  entry: AST.ConfigurationEntry,
+  typeName: string,
+  declaration: AST.ConfigurationKeyDeclaration,
+  ctx: ValidationContext,
+): void {
+  const key = entry.key ?? ''
+  const expectedByName = new Map(declaration.block.properties.map(property => [property.name, property]))
+  const properties = new Map<string, AST.ConfigurationEntry>()
+  for (const property of entry.block?.entries ?? []) {
+    if (!property.name || !property.value) {
+      ctx.error(navigationValidationMessages.keyedItemConfiguration(typeName, key, property.key ?? ''), property)
+      continue
+    }
+    const expected = expectedByName.get(property.name)
+    if (!expected) {
+      ctx.error(navigationValidationMessages.keyedItemConfiguration(typeName, key, property.name), property)
+      continue
+    }
+    if (properties.has(property.name)) {
       ctx.error(
-        navigationValidationMessages.initialType(typeName, Type.displayName(expected), Type.displayName(actual)),
-        initial,
+        navigationValidationMessages.duplicateConfiguration(`${typeName} item ${key}`, property.name),
+        property,
       )
     }
+    properties.set(property.name, property)
+    validateConfiguredProperty(property.value, expected, property, ctx)
   }
-  if (typeName === 'Local') {
-    if (!AST.isProviderConfiguredValue(value) || !value.with) {
-      ctx.error(navigationValidationMessages.localWith, value)
-    }
-    const storageKey = entries.get('StorageKey')?.value
-    if (storageKey) {
-      const actual = Type.ofExpression(storageKey)
-      if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'text' })) {
-        ctx.error(navigationValidationMessages.storageKeyType, storageKey)
-      }
-      if (AST.isStringLiteral(storageKey) && storageKey.value.length === 0) {
-        ctx.error(navigationValidationMessages.storageKeyEmpty, storageKey)
-      }
+  for (const required of declaration.block.properties) {
+    if (!properties.has(required.name)) {
+      ctx.error(navigationValidationMessages.keyedItemMissing(typeName, key, required.name), entry)
     }
   }
+}
+
+function validateConfiguredProperty(
+  value: AST.ConfigurationValue,
+  property: AST.ConfigurationPropertyDeclaration,
+  node: AST.Node,
+  ctx: ValidationContext,
+): void {
+  if (AST.configurationPropertyIsKey(property)) {
+    if (!AST.isConfigurationKeyValue(value)) {
+      ctx.error(navigationValidationMessages.configurationKeyType(property.name), node)
+    }
+    return
+  }
+  const actual = configurationValueType(value)
+  const expected = Type.ofConfigurationProperty(property)
+  if (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+    ctx.error(
+      navigationValidationMessages.configurationType(
+        property.name,
+        Type.displayName(expected),
+        Type.displayName(actual),
+      ),
+      node,
+    )
+  }
+}
+
+function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
+  if (AST.isConfigurationReference(value)) {
+    const target = value.target.ref
+    if (AST.isTypeDeclaration(target)) {
+      return Type.ofDefinition(target)
+    }
+    if (AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)) {
+      return Type.ofValueDeclaration(target)
+    }
+    return { kind: 'unresolved' }
+  }
+  if (AST.isConfigurationKeyValue(value) || AST.isPropertyConfigurationPatch(value)) {
+    return { kind: 'unresolved' }
+  }
+  return Type.ofExpression(value)
 }
 
 function reportBindingDiagnostic(

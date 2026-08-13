@@ -107,6 +107,7 @@ function validateRenderLast(view: AST.VisualDeclaration, ctx: ValidationContext)
 function validateRenderableBodyBlock(view: AST.VisualDeclaration, ctx: ValidationContext): void {
   Switch.type(view, {
     LayoutDeclaration: layout => validateLayoutBodyBlock(layout.block, ctx),
+    DialogueDeclaration: dialogue => validateViewBodyBlock(dialogue.block, ctx),
     UiDeclaration: ui => validateViewBodyBlock(ui.block, ctx),
     ViewDeclaration: viewDeclaration => validateViewBodyBlock(viewDeclaration.block, ctx),
   })

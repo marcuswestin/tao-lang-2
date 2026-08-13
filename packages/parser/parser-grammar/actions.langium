@@ -22,7 +22,13 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | ToggleStatement | DoStatement | GuardActionStatement | IfActionStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | DismissStatement | ReplaceStatement;
+    SetStatement | ToggleStatement | DoStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement;
+
+AskStatement:
+    'let' name=ID '=' 'ask' dialogue=[DialogueDeclaration:ID] '(' argumentList=ArgumentList? ')';
+
+RespondStatement:
+    'respond' case=[EnumCase:ID]?;
 
 ToggleStatement:
     'toggle' target=[StateDeclaration:ID];

@@ -38,7 +38,7 @@ Describe('functional core compiler', () => {
     Expect(compiled.files).toHaveLength(1)
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
-    Expect(compiled.files[0]?.code).toContain('if (TR.GuardAction(')
+    Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
     Expect(compiled.files[0]?.code).toContain('TR.Toggle(')
   })
 
@@ -125,9 +125,9 @@ Describe('functional core compiler', () => {
 
     Expect(compiled.validation.diagnostics).toEqual([])
     const code = compiled.files[0]?.code ?? ''
-    const guard = code.indexOf('if (TR.GuardAction(')
+    const guard = code.indexOf('if (await TR.GuardAction(')
     const calleeTail = code.indexOf('TR.Set(_Scope.Count, () => TR.Value(2))')
-    const caller = code.indexOf('TR.Do(_Scope.Callee.evaluate())')
+    const caller = code.indexOf('await TR.Do(_Scope.Callee.evaluate())')
     const callerTail = code.indexOf('TR.Set(_Scope.Count, () => TR.Value(3))')
     Expect(guard).toBeGreaterThan(-1)
     Expect(calleeTail).toBeGreaterThan(guard)

@@ -33,4 +33,11 @@ export default {
   AppDatasource(f) {
     f.oneSpaceBeforeProperty('value')
   },
+
+  /** ConfiguredAppPropertyValue formats a reference or bare app-position constructor. */
+  ConfiguredAppPropertyValue(f) {
+    f.oneSpaceBefore('with')
+    f.oneSpaceAfter('with')
+    f.oneSpaceBeforeProperty('block')
+  },
 } satisfies Partial<FormatHandlers>

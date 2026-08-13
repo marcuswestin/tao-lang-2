@@ -1,16 +1,29 @@
 import type React from 'react'
 import { LayoutRuntime, type TaoLayoutDirection, type TaoLayoutProps, type TaoResolvedLayoutProps } from './TR-layout'
 import type { TaoNavigationValue } from './TR-navigation'
+import type { TaoRuntimeApp } from './TR-navigation'
 import { ParentDirectionContext } from './TR-parent-direction'
 
 /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
 export type TaoProps = TaoLayoutProps & {
+  /** app is private Tao metadata for app-owned transient presentation such as keyed toasts. */
+  app?: TaoRuntimeApp
   /** callerProps preserves inherited Tao metadata across generated view boundaries. */
   callerProps?: TaoProps
   /** navigation is private Tao metadata for nearest-container presentation and dismissal. */
   navigation?: TaoNavigationValue
+  /** dialogue is private occurrence-owned response metadata inherited by nested generated views. */
+  dialogue?: TaoDialogueOccurrence
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
   testTag?: string
+}
+
+/** TaoAmbientContext is navigation-owned context propagated independently of layout caller props. */
+export type TaoAmbientContext = Pick<TaoProps, 'app' | 'dialogue' | 'navigation'>
+
+/** TaoDialogueOccurrence settles exactly one independently asked dialogue. */
+export type TaoDialogueOccurrence = {
+  respond(value?: { evaluate(): { jsValue: unknown } }): void
 }
 
 /** TaoViewProps declares React props generated Tao views receive. */
@@ -35,10 +48,41 @@ type MergedTaoViewProps = {
 
 /** TaoPropsControls exposes runtime Tao props merging for generated views. */
 export const TaoPropsControls = {
+  ambientContext,
+  appInChain,
+  dialogueInChain,
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
 } as const
+
+/** Copies only ambient presentation context from a generated caller-props chain. */
+function ambientContext(props: TaoProps | undefined): TaoAmbientContext {
+  const app = appInChain(props)
+  const dialogue = dialogueInChain(props)
+  const navigation = navigationInChain(props)
+  return {
+    ...(app ? { app } : {}),
+    ...(dialogue ? { dialogue } : {}),
+    ...(navigation ? { navigation } : {}),
+  }
+}
+
+/** Finds the enclosing mounted app identity through generated caller props. */
+function appInChain(props: TaoProps | undefined): TaoRuntimeApp | undefined {
+  if (!props) {
+    return undefined
+  }
+  return props.app ?? appInChain(props.callerProps)
+}
+
+/** Finds the nearest independently asked dialogue occurrence through generated caller props. */
+function dialogueInChain(props: TaoProps | undefined): TaoDialogueOccurrence | undefined {
+  if (!props) {
+    return undefined
+  }
+  return props.dialogue ?? dialogueInChain(props.callerProps)
+}
 
 /** Finds the nearest enclosing navigation metadata through generated view caller props. */
 function navigationInChain(props: TaoProps | undefined): TaoNavigationValue | undefined {

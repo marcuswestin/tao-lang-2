@@ -14,6 +14,9 @@ export const ViewsCompiler = {
   /** UiDeclaration compiles presentation content through the same component body lowering as views. */
   UiDeclaration: ViewDeclaration,
 
+  /** DialogueDeclaration compiles response content through the shared component lowering. */
+  DialogueDeclaration: ViewDeclaration,
+
   /** ViewParameterList compiles Tao view parameters into generated React props. */
   ViewParameterList(renderable: AST.VisualDeclaration): Compiled {
     const parameters = AST.parametersOf(renderable)

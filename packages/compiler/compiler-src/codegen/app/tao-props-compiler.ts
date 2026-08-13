@@ -29,13 +29,15 @@ function compileTaoPropsForRenderStatement(
   render: AST.RenderStatement,
 ): Compiled {
   const inheritsCallerProps = AST.isBlock(render.$container)
-    && AST.isRenderableDeclaration(render.$container.$container)
+    && AST.isVisualDeclaration(render.$container.$container)
   const callerProps = inheritsCallerProps ? gen`, _ViewProps.__tao` : gen``
-  return gen` __tao={TR.TaoProps({ layout: ${layout}${
+  return gen` __tao={TR.TaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}${
     testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''
   } }${callerProps})}`
 }
 
 function compileTaoPropsForViewRender(layout: Compiled, testTag: string | undefined): Compiled {
-  return gen` __tao={TR.TaoProps({ layout: ${layout}${testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''} })}`
+  return gen` __tao={TR.TaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}${
+    testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''
+  } })}`
 }

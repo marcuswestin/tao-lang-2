@@ -17,7 +17,7 @@ Describe('minimal Tao lexer', () => {
   })
 
   Test('switches lexer modes for interpolated strings and nested expression braces', () => {
-    const result = expectLexes('"Hello { Name }, { action { } }!"')
+    const result = expectLexes('"Hello { Greeting }, { action { } }!"')
 
     Expect(tokenNames(result)).toEqual([
       'INTERPOLATED_STRING_START',
@@ -54,6 +54,22 @@ Describe('minimal Tao lexer', () => {
 
     Expect(tokenNames(result)).toEqual(['TS_CODE_BLOCK'])
     Expect(tokenImages(result)).toEqual(['```ts\nconst x = 1\n```'])
+  })
+
+  Test('lexes a reserved word as a contextual boolean no-case alias', () => {
+    const result = expectLexes('Enabled yes / no Name (default Enabled)')
+
+    Expect(tokenNames(result)).toEqual([
+      'ID',
+      'yes',
+      '/',
+      'no',
+      'BOOLEAN_NO_ALIAS',
+      '(',
+      'default',
+      'ID',
+      ')',
+    ])
   })
 
   Test('rejects unknown characters', () => {

@@ -56,7 +56,7 @@ function compileValidated(
 ): CompileResult {
   const errors = Diagnostics.errorMessages(validationResult.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, { errors })
-  const entryApps = validationResult.entry.ast.statements.filter(AST.isAppDeclaration)
+  const entryApps = AST.appValueDeclarationsInFile(validationResult.entry.ast)
   Assert(entryApps.length > 0, 'Cannot compile app entry: entry file must declare at least one app.')
   const appNames = entryApps.map(app => app.name)
   const selectedAppName = options.appName ?? (appNames.length === 1 ? appNames[0] : undefined)
@@ -184,7 +184,7 @@ function compileResultForEntry(
   const entryCode = compiledFiles.find((compiledFile: CompiledFile) => compiledFile.sourcePath === entryPath)?.code
   Assert.defined(entryCode, 'entry compiled code exists', { entryPath })
   return {
-    appNames: validationResult.entry.ast.statements.filter(AST.isAppDeclaration).map(app => app.name),
+    appNames: AST.appValueDeclarationsInFile(validationResult.entry.ast).map(app => app.name),
     validation: validationResult,
     code: entryCode,
     files: compiledFiles,

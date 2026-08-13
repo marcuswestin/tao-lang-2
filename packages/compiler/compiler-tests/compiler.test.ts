@@ -26,6 +26,51 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
+  Test('compiles copied nav and datasource declarations through exported identity bindings', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use CustomStack, SnapshotStore from @custom
+          let MainNav = CustomStack { Initial Home }
+          app Demo {
+            Name "Demo"
+            Navigator MainNav
+            Datasource SnapshotStore { StorageKey "demo" }
+          }
+          ui Home { render inject ${tsFence} return null ${fence} }
+        `,
+        'Packages/@custom/Constructs.tao': `
+          public nav CustomStack {
+            Initial ui
+            implement inject nav ${tsFence}
+              return TR.NavKind.Stack()
+            ${fence}
+          }
+          public datasource SnapshotStore {
+            StorageKey text
+            implement inject provider ${tsFence}
+              return TR.DataProvider.Local()
+            ${fence}
+          }
+        `,
+      },
+      async compiled => {
+        const packageCode = compiled['Packages/@custom/Constructs.tao'].code
+        const appCode = compiled['Main.tao'].code
+
+        Expect(packageCode).toContain('_Scope.CustomStack = TR.Navigation.Declaration(')
+        Expect(packageCode).toContain('return TR.NavKind.Stack()')
+        Expect(packageCode).toContain('_Scope.SnapshotStore = TR.Data.Declaration(')
+        Expect(packageCode).toContain('return TR.DataProvider.Local()')
+        Expect(packageCode).toContain('export const CustomStack = _Scope.CustomStack')
+        Expect(packageCode).toContain('export const SnapshotStore = _Scope.SnapshotStore')
+        Expect(appCode).toContain('TR.Navigation.Configure(_Scope.CustomStack, {')
+        Expect(appCode).toContain('TR.Data.Configure(_Scope.SnapshotStore, {')
+      },
+    )
+  })
+
   Test('compiles state and action declarations', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
@@ -83,7 +128,7 @@ Describe('Tao compiler', () => {
       app Notes {
         Name "Notes"
         Navigator StackNav { Initial Main }
-        Datasource Local with { StorageKey "WordFlowerData" }
+        Datasource Local { StorageKey "WordFlowerData" }
       }
       ui Main {
         query Workspaces { }
@@ -94,7 +139,7 @@ Describe('Tao compiler', () => {
         action AddDocument { create Document { Title: "Draft", Workspace } }
         render Col() {
           Text("Detail")
-          query Drafts from Workspace.Documents { where Draft }
+          query Drafts from Workspace.Documents { where is Draft }
           Text("Drafts: { Drafts.Count }")
           loop Drafts / Draft { Text(Draft.Title) }
         }
@@ -117,7 +162,8 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('defaultValue: true')
     Expect(compiled.code.match(/onDelete: 'cascade'/g)).toHaveLength(2)
     Expect(compiled.code).toContain('inverseField: "Document"')
-    Expect(compiled.code).toContain('TR.Data.Source(\'local\', TR.Value("WordFlowerData"))')
+    Expect(compiled.code).toContain('TR.Data.Configure(_Scope.Local, {')
+    Expect(compiled.code).toContain('"StorageKey": TR.Value("WordFlowerData")')
     Expect(compiled.code).toContain('_Scope._TaoDataCatalog')
     Expect(compiled.code).toContain('["Final"]: TR.Value(true)')
     Expect(compiled.code).toContain('["Final"]: TR.Value(false)')
@@ -137,6 +183,7 @@ Describe('Tao compiler', () => {
           Text("Tagged")
           #rows
           loop ["One"] / Row {
+            #choose
             Col() { Text(Row) }
           }
         }
@@ -145,20 +192,20 @@ Describe('Tao compiler', () => {
 
     Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('testTag: "title"')
-    Expect(compiled.code).toContain('testTag: "rows"')
+    Expect(compiled.code).toContain('testTag: "rows choose"')
     Expect(compiled.code).toContain('TR.ForEach')
     Expect(compiled.code).not.toContain('display: "contents"')
   })
 
   Test('emits prototype-sensitive data names as computed object keys', async () => {
     const compiled = await Compiler.compileCode(`
-      type Memory is item
-      type StackNav is nav
+      use Memory from @tao/data
+      use StackNav from @tao/nav
       data Rows / __proto__ { __proto__ text }
       app SafeApp {
         Name "Safe"
         Navigator StackNav { Initial MainView }
-        Datasource Memory with { }
+        Datasource Memory
       }
       ui MainView {
         action Add { create __proto__ { __proto__: "safe" } }
@@ -174,17 +221,17 @@ Describe('Tao compiler', () => {
 
   Test('compiles configured apps, first-class ui, strict targets, dismiss, and replacement', async () => {
     const compiled = await Compiler.compileCode(`
-      type StackNav is nav
-      type OverlayNav is nav
+      use SlotNav, StackNav from @tao/nav
       let ResetNavigator = StackNav { Initial Home }
       app NavigationApp {
         Name "Navigation"
         Navigator StackNav { Initial Home }
-        @overlays OverlayNav { }
+        @window SlotNav { Initial Detail }
       }
       ui Home {
-        action Open { present Detail() in NavigationApp@overlays }
-        action OpenOverlay { present Detail() as overlay in NavigationApp@overlays }
+        action Open { present Detail() in NavigationApp@window }
+        action OpenOverlay { present Detail() as overlay in NavigationApp@window }
+        action Activate { present NavigationApp@workspace }
         render Empty()
       }
       ui Detail {
@@ -197,10 +244,12 @@ Describe('Tao compiler', () => {
 
     Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Navigation.App({')
-    Expect(compiled.code).toContain('TR.Navigation.StackNav({')
-    Expect(compiled.code).toContain('TR.Navigation.OverlayNav({')
+    Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.StackNav, {')
+    Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.SlotNav, {')
     Expect(compiled.code).toContain('TR.Navigation.Target(')
     Expect(compiled.code).toContain('TR.Navigation.PresentOverlay(')
+    Expect(compiled.code).toContain('TR.Navigation.Activate(')
+    Expect(compiled.code).toContain('"workspace"')
     Expect(/TR\.Navigation\.Target\(\s+_TaoAppDefinition_NavigationApp,/.test(compiled.code)).toBe(true)
     Expect(compiled.code).toContain('TR.Navigation.Dismiss(_ViewProps.__tao)')
     Expect(compiled.code).toContain('TR.Navigation.Replace(')
@@ -210,6 +259,85 @@ Describe('Tao compiler', () => {
     ).toBe(true)
     Expect(compiled.code).not.toContain('key: "NavigationApp"')
     Expect(compiled.code).toContain('<TR.Navigation.AppHost')
+  })
+
+  Test('compiles dialogue asks and responses through an async-compatible action chain', async () => {
+    const compiled = await Compiler.compileCode(`
+      enum ConfirmResult { Confirmed }
+      app DialogueApp { view Editor }
+      view Editor {
+        action Close {
+          let Result = ask ConfirmClose("Draft")
+          if Result is Confirmed { dismiss }
+        }
+        render Empty()
+      }
+      dialogue ConfirmClose Title is text responds ConfirmResult {
+        action Confirm { respond Confirmed }
+        action Cancel { respond }
+        render Empty()
+      }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Navigation.Dialogue({')
+    Expect(compiled.code).toContain('await TR.Navigation.Ask(')
+    Expect(compiled.code).toContain('TR.Navigation.Respond(')
+    Expect(compiled.code).toContain('TR.Action(async')
+    Expect(compiled.code).toContain('await TR.If(')
+    Expect(compiled.code).toContain('...TR.TaoContext(_ViewProps.__tao)')
+  })
+
+  Test('compiles keyed toast presentation against inherited app context', async () => {
+    const compiled = await Compiler.compileCode(`
+      use StackNav from @tao/nav
+      app ToastApp { Name "Toast" Navigator StackNav { Initial Home } }
+      ui Home { render Editor() }
+      view Editor {
+        action Save { present Saved() as toast (Key: "document-saved", Duration: 3) }
+        render Empty()
+      }
+      ui Saved { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Navigation.PresentToast(')
+    Expect(compiled.code).toContain('_ViewProps.__tao')
+    Expect(compiled.code).toContain('key: TR.Value("document-saved")')
+    Expect(compiled.code).toContain('duration: TR.Value(3)')
+    Expect(compiled.code).not.toContain('TR.Navigation.Target(')
+  })
+
+  Test('compiles keyed SelectionNav configuration and target-only activation', async () => {
+    const compiled = await Compiler.compileCode(`
+      use SelectionNav, StackNav from @tao/nav
+      let HomeStack = StackNav { Initial Home }
+      let SettingsStack = StackNav { Initial Settings }
+      let MainNavigation = SelectionNav {
+        Initial @home
+        Display "tabs"
+        @home { Label "Home" Content HomeStack }
+        @settings { Label "Settings" Content SettingsStack }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      ui Home {
+        action Activate { present SelectionApp@settings }
+        render Empty()
+      }
+      ui Settings { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.SelectionNav, {')
+    Expect(compiled.code).toContain('"Initial": TR.Value("@home")')
+    Expect(compiled.code).toContain('"Display": TR.Value("tabs")')
+    Expect(compiled.code).toContain('"@settings": {')
+    Expect(compiled.code).toContain('"Label": TR.Value("Settings")')
+    Expect(compiled.code).toContain('"Content": _Scope.SettingsStack.evaluate()')
+    Expect(compiled.code).toContain('TR.Navigation.Activate(')
   })
 
   Test('compiles typed dynamic action arguments in source order', async () => {

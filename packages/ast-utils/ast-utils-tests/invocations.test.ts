@@ -238,7 +238,7 @@ Describe('Tao AST invocation resolution', () => {
         Name
         Age
       }
-      let DemoPerson = Person { Age: 40, Name: "Ada" }
+      let DemoPerson = item { Age: 40, Name: "Ada" }
       view MainView { }
     `)
     const person = parseResult.entry.ast.statements.find(
@@ -267,7 +267,7 @@ Describe('Tao AST invocation resolution', () => {
       type Pair is {
         Base
       }
-      let BadPair = Pair { Name "Ada", Title "Grace" }
+      let BadPair = item { Name "Ada", Title "Grace" }
       view MainView { }
     `)
     const pair = parseResult.entry.ast.statements.find(
