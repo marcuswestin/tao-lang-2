@@ -3,16 +3,8 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
 
-/** navigationValidationMessages declares structural and typed stack diagnostics. */
+/** navigationValidationMessages declares configured navigation diagnostics. */
 export const navigationValidationMessages = {
-  duplicateDestination: (stack: string, destination: string) =>
-    `Stack ${stack} declares destination '${destination}' more than once.`,
-  missingInitial: (stack: string, destination: string) =>
-    `Stack ${stack} initial destination '${destination}' is not declared.`,
-  parameterizedInitial: (stack: string, destination: string) =>
-    `Stack ${stack} initial destination '${destination}' must not require arguments.`,
-  unknownDestination: (stack: string, destination: string) =>
-    `Stack ${stack} has no destination named '${destination}'.`,
   missingArgument: (destination: string, parameter: string) =>
     `Presentation of ${destination} is missing argument for parameter '${parameter}'.`,
   unmatchedArgument: (destination: string) =>
@@ -32,64 +24,149 @@ export const navigationValidationMessages = {
   duplicateNamedArgument: (destination: string, name: string) =>
     `Presentation of ${destination} provides parameter '${name}' more than once.`,
   namedArgumentType: (destination: string, name: string, expected: string, actual: string) =>
-    `Named argument '.${name}' of destination ${destination} expects ${expected}, got ${actual}.`,
+    `Labeled argument '${name}:' of destination ${destination} expects ${expected}, got ${actual}.`,
+  presentationContext: 'Contextual presentation is allowed only inside a ui declaration.',
+  presentationTarget: (actual: string) => `Presentation target expects nav, got ${actual}.`,
+  dismissContext: '`dismiss` is allowed only inside a ui declaration.',
+  replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
+  unknownAuxiliary: (app: string, key: string) => `App ${app} has no auxiliary navigator named '@${key}'.`,
+  unsupportedConfiguredType: (name: string) => `Type ${name} is not a configurable Tao runtime value.`,
+  unknownConfiguration: (type: string, name: string) => `${type} has no configuration slot named '${name}'.`,
+  duplicateConfiguration: (type: string, name: string) => `${type} configures '${name}' more than once.`,
+  missingConfiguration: (type: string, name: string) => `${type} requires configuration '${name}'.`,
+  initialType: (type: string, expected: string, actual: string) =>
+    `${type} Initial expects ${expected}, got ${actual}.`,
+  localWith: 'Local datasource configuration requires `with { StorageKey "…" }`.',
+  storageKeyType: 'Local StorageKey must be text.',
+  storageKeyEmpty: 'Local StorageKey must be nonempty.',
 } as const
 
-/** validateNavigation validates declared stacks and presentation calls. */
+/** validateNavigation validates configured navigation and presentation calls. */
 export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const stack of AST.streamAllContents(file).filter(AST.isStackDeclaration)) {
-    validateStack(stack, ctx)
+  for (const presentation of AST.streamAllContents(file).filter(AST.isContextualPresentStatement)) {
+    validateContextualPresentation(presentation, ctx)
   }
-  for (const presentation of AST.streamAllContents(file).filter(AST.isPresentStatement)) {
-    validatePresentation(presentation, ctx)
-  }
-}
-
-function validateStack(stack: AST.StackDeclaration, ctx: ValidationContext): void {
-  const seen = new Set<string>()
-  for (const destination of stack.block.destinations) {
-    const name = destination.view.$refText
-    if (seen.has(name)) {
-      ctx.error(navigationValidationMessages.duplicateDestination(stack.name, name), destination)
+  for (const dismiss of AST.streamAllContents(file).filter(AST.isDismissStatement)) {
+    if (!AST.isUiDeclaration(AST.findOwningView(dismiss))) {
+      ctx.error(navigationValidationMessages.dismissContext, dismiss)
     }
-    seen.add(name)
   }
-
-  const initialName = stack.block.initial.destinationName
-  const initial = stack.block.destinations.find(destination => destination.view.$refText === initialName)
-  if (!initial) {
-    ctx.error(navigationValidationMessages.missingInitial(stack.name, initialName), stack.block.initial)
-    return
+  for (const replace of AST.streamAllContents(file).filter(AST.isReplaceStatement)) {
+    const actual = Type.ofExpression(replace.navigator)
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
+      ctx.error(navigationValidationMessages.replaceNavigator(Type.displayName(actual)), replace.navigator)
+    }
   }
-  const initialView = initial.view.ref
-  if (initialView && AST.parametersOf(initialView).some(parameter => parameter.defaultValue === undefined)) {
-    ctx.error(navigationValidationMessages.parameterizedInitial(stack.name, initialName), stack.block.initial)
+  for (const configured of AST.streamAllContents(file).filter(AST.isConfiguredValue)) {
+    validateConfiguredValue(configured, ctx)
   }
 }
 
-function validatePresentation(presentation: AST.PresentStatement, ctx: ValidationContext): void {
-  const resolved = ASTUtils.resolveNavigationInvocation(presentation)
-  const stack = resolved.stack
-  if (!stack) {
-    return
+function validateContextualPresentation(
+  presentation: AST.ContextualPresentStatement,
+  ctx: ValidationContext,
+): void {
+  if (!AST.isUiDeclaration(AST.findOwningView(presentation))) {
+    ctx.error(navigationValidationMessages.presentationContext, presentation)
   }
-  if (!resolved.destination || !resolved.view) {
-    ctx.error(
-      navigationValidationMessages.unknownDestination(stack.name, presentation.destinationName),
-      presentation,
-    )
-    return
+  const ui = presentation.ui.ref
+  if (ui) {
+    const resolved = ASTUtils.resolveArgumentBindings(ui, presentation)
+    for (const diagnostic of resolved.diagnostics) {
+      reportBindingDiagnostic(ui, diagnostic, presentation, ctx)
+    }
   }
+  if (presentation.target) {
+    if (presentation.target.value) {
+      const actual = Type.ofExpression(presentation.target.value)
+      if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
+        ctx.error(navigationValidationMessages.presentationTarget(Type.displayName(actual)), presentation.target)
+      }
+    } else if (presentation.target.app?.ref && presentation.target.key) {
+      const app = presentation.target.app.ref
+      const targetKey = presentation.target.key.slice(1)
+      const auxiliary = AST.blockStatements(app).find(statement =>
+        AST.isAppAuxiliaryNavigator(statement) && statement.name.slice(1) === targetKey
+      )
+      if (!auxiliary) {
+        ctx.error(navigationValidationMessages.unknownAuxiliary(app.name, targetKey), presentation.target)
+      }
+    }
+  }
+}
 
-  for (const diagnostic of resolved.diagnostics) {
-    reportBindingDiagnostic(resolved.view, diagnostic, presentation, ctx)
+function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationContext): void {
+  const typeName = value.type.ref?.name
+  if (!typeName) {
+    return
+  }
+  // A one-field unlabeled item constructor and a navigation configuration are intentionally
+  // token-identical. The resolved owner type decides which semantic validator owns the block.
+  if (Type.ofConfiguredValue(value).kind === 'item' && typeName !== 'Local' && typeName !== 'Memory') {
+    return
+  }
+  const contracts: Record<string, { slots: readonly string[]; required: readonly string[] }> = {
+    StackNav: { slots: ['Initial'], required: ['Initial'] },
+    SlotNav: { slots: ['Initial'], required: ['Initial'] },
+    OverlayNav: { slots: [], required: [] },
+    Local: { slots: ['StorageKey'], required: ['StorageKey'] },
+    Memory: { slots: [], required: [] },
+  }
+  const contract = contracts[typeName]
+  if (!contract) {
+    ctx.error(navigationValidationMessages.unsupportedConfiguredType(typeName), value)
+    return
+  }
+  const entries = new Map<string, AST.ConfigurationEntry>()
+  for (const entry of value.block.entries) {
+    if (!contract.slots.includes(entry.name)) {
+      ctx.error(navigationValidationMessages.unknownConfiguration(typeName, entry.name), entry)
+      continue
+    }
+    if (entries.has(entry.name)) {
+      ctx.error(navigationValidationMessages.duplicateConfiguration(typeName, entry.name), entry)
+    }
+    entries.set(entry.name, entry)
+  }
+  for (const required of contract.required) {
+    if (!entries.has(required)) {
+      ctx.error(navigationValidationMessages.missingConfiguration(typeName, required), value)
+    }
+  }
+  const initial = entries.get('Initial')
+  if (initial) {
+    const actual = Type.ofExpression(initial.value)
+    const expected: ASTUtils.TaoType = typeName === 'StackNav'
+      ? { kind: 'primitive', primitive: 'ui' }
+      : { kind: 'union', members: [{ kind: 'primitive', primitive: 'ui' }, { kind: 'primitive', primitive: 'nav' }] }
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+      ctx.error(
+        navigationValidationMessages.initialType(typeName, Type.displayName(expected), Type.displayName(actual)),
+        initial,
+      )
+    }
+  }
+  if (typeName === 'Local') {
+    if (!AST.isProviderConfiguredValue(value) || !value.with) {
+      ctx.error(navigationValidationMessages.localWith, value)
+    }
+    const storageKey = entries.get('StorageKey')?.value
+    if (storageKey) {
+      const actual = Type.ofExpression(storageKey)
+      if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'text' })) {
+        ctx.error(navigationValidationMessages.storageKeyType, storageKey)
+      }
+      if (AST.isStringLiteral(storageKey) && storageKey.value.length === 0) {
+        ctx.error(navigationValidationMessages.storageKeyEmpty, storageKey)
+      }
+    }
   }
 }
 
 function reportBindingDiagnostic(
-  view: AST.ViewDeclaration,
+  view: AST.VisualDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
-  presentation: AST.PresentStatement,
+  presentation: AST.ContextualPresentStatement,
   ctx: ValidationContext,
 ): void {
   Switch.kind(diagnostic, {

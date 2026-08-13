@@ -25,6 +25,8 @@ const primitiveTypes = [
   'action',
   'item',
   'list',
+  'ui',
+  'nav',
 ] as const satisfies readonly AST.PrimitiveType[]
 
 /** TypeSystemHelpers groups Tao Typir helper functions. */
@@ -68,6 +70,7 @@ function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | u
         ? ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
         : taoPrimitiveType(type.kind, typir),
     entity: () => undefined,
+    union: () => undefined,
   })
 }
 

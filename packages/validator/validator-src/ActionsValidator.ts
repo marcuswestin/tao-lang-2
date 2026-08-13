@@ -26,7 +26,7 @@ const actionValidationMessages = {
   duplicateNamedArgument: (action: string, name: string) =>
     `Action ${action} receives parameter '${name}' more than once.`,
   namedArgumentType: (action: string, name: string, expected: string, actual: string) =>
-    `Named argument '.${name}' of action ${action} expects ${expected}, got ${actual}.`,
+    `Labeled argument '${name}:' of action ${action} expects ${expected}, got ${actual}.`,
   dynamicActionArguments: 'Action callback declared as action() cannot receive arguments.',
   dynamicActionArity: (expected: number, actual: number) =>
     `Action callback expects ${expected} argument${expected === 1 ? '' : 's'}, got ${actual}.`,
@@ -202,7 +202,7 @@ function validateDynamicActionInvocation(invocation: AST.DoStatement, ctx: Valid
     ctx.error(message, invocation)
   }
   for (const [index, argument] of args.entries()) {
-    if (argument.parameterName) {
+    if (argument.label) {
       ctx.error(actionValidationMessages.dynamicActionNamedArgument, argument)
       continue
     }

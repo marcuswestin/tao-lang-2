@@ -13,14 +13,18 @@ export const DeclarationOrder = {
 }
 
 /** valueReferences returns all value references owned by an expression. */
-function valueReferences(value: AST.Expression): ValueReferenceLike[] {
+function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueReferenceLike[] {
+  if (AST.isConfiguredValue(value)) {
+    return AST.streamAllContents(value).filter(isValueReferenceLike)
+  }
   return Switch.type(value, {
     ActionExpression: expressionValueReferences,
     BinaryExpression: expressionValueReferences,
     BooleanLiteral: expressionValueReferences,
+    EmptyExpression: expressionValueReferences,
     WhenExpression: expressionValueReferences,
     FunctionCallExpression: expressionValueReferences,
-    InterpolationExpression: expressionValueReferences,
+    InterpolatedString: expressionValueReferences,
     ListLiteral: expressionValueReferences,
     MemberAccessExpression: reference => [reference],
     NoneLiteral: expressionValueReferences,
@@ -64,7 +68,7 @@ function isLocalValueDeclaration(declaration: AST.ValueDeclaration): boolean {
   return AST.isAliasDeclaration(declaration)
     || AST.isStateDeclaration(declaration)
     || AST.isActionDeclaration(declaration)
-    || AST.isQueryDeclaration(declaration)
+    || AST.isEntityQueryDeclaration(declaration)
     || AST.isForStatement(declaration)
 }
 

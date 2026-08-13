@@ -2,8 +2,8 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
 
-const supportedSelectors = ['text', 'label', 'id', 'placeholder'] as const
-const supportedInputSelectors = ['label', 'id', 'placeholder'] as const
+const supportedSelectors = ['text', 'label', 'placeholder'] as const
+const supportedInputSelectors = ['label', 'placeholder'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
@@ -29,6 +29,8 @@ export const testValidationMessages = {
   duplicateRun: (name: string) => `Check '${name}' must not declare more than one run step.`,
   expectationBeforeRun: 'Check steps must come after the run step.',
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
+  selectIndex: 'Tagged loop row selection uses a 1-based index greater than zero.',
+  selectBlock: 'A select block may contain test steps but cannot start another app.',
 } as const
 
 /** validateTests validates v0 Tao test declarations. */
@@ -50,11 +52,21 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
     }
     validateSelector(press, ctx)
   }
+  for (const press of AST.streamAllContents(file).filter(AST.isTagPressStep)) {
+    if (statementNeedsStepPlacementDiagnostic(press)) {
+      ctx.error(testValidationMessages.pressPlacement, press)
+    }
+  }
   for (const enter of AST.streamAllContents(file).filter(AST.isEnterTextStep)) {
     if (statementNeedsStepPlacementDiagnostic(enter)) {
       ctx.error(testValidationMessages.enterPlacement, enter)
     }
     validateSelector(enter, ctx)
+  }
+  for (const enter of AST.streamAllContents(file).filter(AST.isTagEnterStep)) {
+    if (statementNeedsStepPlacementDiagnostic(enter)) {
+      ctx.error(testValidationMessages.enterPlacement, enter)
+    }
   }
   for (const expectation of AST.streamAllContents(file).filter(AST.isExpectInputValueStep)) {
     if (statementNeedsStepPlacementDiagnostic(expectation)) {
@@ -62,11 +74,33 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
     }
     validateInputSelector(expectation, ctx)
   }
+  for (const expectation of AST.streamAllContents(file).filter(AST.isTagInputValueExpectation)) {
+    if (statementNeedsStepPlacementDiagnostic(expectation)) {
+      ctx.error(testValidationMessages.inputExpectationPlacement, expectation)
+    }
+  }
+  for (
+    const expectation of AST.streamAllContents(file).filter(node =>
+      AST.isExpectGroupStep(node) || AST.isExpectScopeStep(node)
+    )
+  ) {
+    if (statementNeedsStepPlacementDiagnostic(expectation)) {
+      ctx.error(testValidationMessages.expectationPlacement, expectation)
+    }
+  }
   for (const submit of AST.streamAllContents(file).filter(AST.isSubmitInputStep)) {
     if (statementNeedsStepPlacementDiagnostic(submit)) {
       ctx.error(testValidationMessages.submitPlacement, submit)
     }
     validateSelector(submit, ctx)
+  }
+  for (const submit of AST.streamAllContents(file).filter(AST.isTagSubmitStep)) {
+    if (statementNeedsStepPlacementDiagnostic(submit)) {
+      ctx.error(testValidationMessages.submitPlacement, submit)
+    }
+  }
+  for (const select of AST.streamAllContents(file).filter(AST.isSelectStep)) {
+    validateSelect(select, ctx)
   }
   for (const back of AST.streamAllContents(file).filter(AST.isBackTestStep)) {
     if (statementNeedsStepPlacementDiagnostic(back)) {
@@ -127,13 +161,20 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
     Switch.type(step, {
       DataStatusStep: checkStepOrder,
       EnterTextStep: checkStepOrder,
+      TagEnterStep: checkStepOrder,
       ExpectInputValueStep: checkStepOrder,
+      TagInputValueExpectation: checkStepOrder,
       ExpectTextStep: checkStepOrder,
+      ExpectGroupStep: checkStepOrder,
+      ExpectScopeStep: checkStepOrder,
       PressTextStep: checkStepOrder,
+      TagPressStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
       },
       SubmitInputStep: checkStepOrder,
+      TagSubmitStep: checkStepOrder,
+      SelectStep: checkStepOrder,
       BackTestStep: checkStepOrder,
     })
   }
@@ -142,14 +183,35 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
     step:
       | AST.DataStatusStep
       | AST.EnterTextStep
+      | AST.TagEnterStep
       | AST.ExpectInputValueStep
+      | AST.TagInputValueExpectation
       | AST.ExpectTextStep
+      | AST.ExpectGroupStep
+      | AST.ExpectScopeStep
       | AST.PressTextStep
+      | AST.TagPressStep
       | AST.SubmitInputStep
+      | AST.TagSubmitStep
+      | AST.SelectStep
       | AST.BackTestStep,
   ): void {
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
+    }
+  }
+}
+
+function validateSelect(select: AST.SelectStep, ctx: ValidationContext): void {
+  if (statementNeedsStepPlacementDiagnostic(select)) {
+    ctx.error(testValidationMessages.expectationPlacement, select)
+  }
+  if (select.index < 1) {
+    ctx.error(testValidationMessages.selectIndex, select)
+  }
+  for (const statement of select.block.statements) {
+    if (!AST.isCheckStep(statement) || AST.isRunStep(statement)) {
+      ctx.error(testValidationMessages.selectBlock, statement)
     }
   }
 }
@@ -185,5 +247,5 @@ function blockOwner(node: AST.Node): AST.Node | undefined {
 
 function statementNeedsStepPlacementDiagnostic(statement: AST.CheckStep): boolean {
   const owner = blockOwner(statement)
-  return !AST.isCheckDeclaration(owner) && !AST.isTestDeclaration(owner)
+  return !AST.isCheckDeclaration(owner) && !AST.isTestDeclaration(owner) && !AST.isSelectStep(owner)
 }

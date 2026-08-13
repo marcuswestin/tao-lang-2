@@ -9,7 +9,7 @@ Describe('Tao injection validator', () => {
   Test('allows inject arguments that bind visible values as TS locals', async () => {
     await testValidateCode(`
       app MyApp { view MainView }
-      alias UserName = "Ro"
+      let UserName = "Ro"
       view MainView {
         render Text("Hello")
       }
