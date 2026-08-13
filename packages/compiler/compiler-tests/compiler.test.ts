@@ -61,15 +61,24 @@ Describe('Tao compiler', () => {
       use StackNav from @tao/nav
       data Workspaces / Workspace {
         Name text
-        CreatedAt time, default now()
-        Documents
+        CreatedAt time (default now)
+        Pinned yes / no
+        Documents (relation Documents, auto-delete)
         index CreatedAt
         order by CreatedAt desc
       }
       data Documents / Document {
         Title text
-        Final / Draft, default Draft
-        Workspace, on delete cascade
+        Final yes / no Draft
+        Public yes / no Private (default Public)
+        Workspace
+        Paragraphs (auto-delete)
+      }
+      data Paragraphs / Paragraph {
+        Text text
+        Ordering number
+        Document
+        order by Ordering
       }
       app Notes {
         Name "Notes"
@@ -105,6 +114,9 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('defaultOrder: { field: "CreatedAt", direction: "desc" }')
     Expect(compiled.code).toContain('inverseField: "Workspace"')
     Expect(compiled.code).toContain('defaultValue: false')
+    Expect(compiled.code).toContain('defaultValue: true')
+    Expect(compiled.code.match(/onDelete: 'cascade'/g)).toHaveLength(2)
+    Expect(compiled.code).toContain('inverseField: "Document"')
     Expect(compiled.code).toContain('TR.Data.Source(\'local\', TR.Value("WordFlowerData"))')
     Expect(compiled.code).toContain('_Scope._TaoDataCatalog')
     Expect(compiled.code).toContain('["Final"]: TR.Value(true)')

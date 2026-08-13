@@ -270,6 +270,13 @@ export function resolveDataWriteBindings(
 
   bindNamedDataWriteFields(remainingWrites, remainingFields, pairs, diagnostics)
   bindBooleanCaseDataWriteFields(remainingWrites, remainingFields, pairs)
+  // Defaulted fields may be omitted and are not eligible for unlabeled type binding. They can
+  // still be written explicitly by label, while boolean cases bind by declaration identity above.
+  for (const field of remainingFields) {
+    if (hasDataFieldDefault(field)) {
+      remainingFields.delete(field)
+    }
+  }
   if (remainingWrites.size > 0) {
     reportDuplicateDataFieldTypes([...remainingFields], diagnostics)
   }
@@ -351,7 +358,8 @@ function bindBooleanCaseDataWriteFields(
 }
 
 function hasDataFieldDefault(field: DataFieldDefinition): boolean {
-  return field.modifiers.some(modifier => modifier.defaultValue !== undefined || modifier.defaultCase !== undefined)
+  return field.boolean
+    || field.modifiers.some(modifier => modifier.defaultValue !== undefined || modifier.defaultCase !== undefined)
 }
 
 /** resolveRenderInvocation resolves a render target and type-based argument bindings. */

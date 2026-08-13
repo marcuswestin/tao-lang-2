@@ -72,10 +72,10 @@ async function withValidatedFiles<
 Describe('Tao validator structural diagnostics', () => {
   Test('validates root and relation queries with boolean cases and unconditional placement', async () => {
     await testValidateCode(`
-      data Workspaces / Workspace { Name text Documents }
+      data Workspaces / Workspace { Name text Documents (auto-delete) }
       data Documents / Document {
         Title text
-        Final / Draft, default Draft
+        Final yes / no Draft
         Workspace
       }
       app DataApp { view Main }
@@ -110,6 +110,30 @@ Describe('Tao validator structural diagnostics', () => {
     const messages = validationErrorMessages(invalid)
     Expect(messages).toContain(dataValidationMessages.querySource)
     Expect(messages).toContain(dataValidationMessages.queryAfterControl)
+  })
+
+  Test('rejects invalid field modifiers, case collisions, and ambiguous owner-side cascades', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Parents / Parent {
+        Name text
+        Enabled yes / no Name (default true, relation Parents)
+        Child (auto-delete)
+        Children (auto-delete)
+      }
+      data Children / Child {
+        Parent
+        OtherParent (relation Parent)
+      }
+    `)
+
+    const messages = validationErrorMessages(result)
+    Expect(messages).toContain(dataValidationMessages.duplicateBooleanCase('Parent', 'Name'))
+    Expect(messages).toContain(dataValidationMessages.booleanDefaultCase('Enabled'))
+    Expect(messages).toContain(dataValidationMessages.relationModifier('Enabled'))
+    Expect(messages).toContain(dataValidationMessages.autoDeleteOwner('Child'))
+    Expect(messages).toContain(
+      dataValidationMessages.ambiguousInverseRelation('Parent.Children', 'Child'),
+    )
   })
 
   Test('validates tag attachment and the single direct row root required by tagged loops', async () => {

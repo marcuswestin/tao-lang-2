@@ -305,6 +305,31 @@ export class Type {
     return entity.block.entries.filter(AST.isEntityDataField)
   }
 
+  /** dataFieldRelationName returns the explicit relation target or the field-name inference key. */
+  static dataFieldRelationName(field: DataFieldDefinition): string {
+    return field.modifiers.find(modifier => modifier.relationName)?.relationName ?? field.name
+  }
+
+  /** dataFieldRelationEntity resolves a stored or inverse relationship target. */
+  static dataFieldRelationEntity(field: DataFieldDefinition): DataEntityDefinition | undefined {
+    if (field.primitive || field.boolean) {
+      return undefined
+    }
+    const relationName = Type.dataFieldRelationName(field)
+    return Type.topLevelDataEntities(field).find(entity =>
+      entity.singularName === relationName || entity.name === relationName
+    )
+  }
+
+  /** dataFieldIsInverseRelation distinguishes plural owner-side relations from stored handles. */
+  static dataFieldIsInverseRelation(field: DataFieldDefinition): boolean {
+    if (field.primitive || field.boolean) {
+      return false
+    }
+    const relationName = Type.dataFieldRelationName(field)
+    return Type.topLevelDataEntities(field).some(entity => entity.name === relationName)
+  }
+
   /** topLevelDataEntities returns the current provider-neutral catalog declarations in a file. */
   static topLevelDataEntities(node: AST.Node): AST.EntityDataDeclaration[] {
     const root = AST.findRoot(node)
@@ -341,16 +366,16 @@ export class Type {
     if (field.primitive === 'time') {
       return primitiveType('time')
     }
-    if (field.negativeName) {
+    if (field.boolean) {
       return primitiveType('boolean')
     }
-    const entities = Type.topLevelDataEntities(field)
-    const direct = entities.find(entity => entity.singularName === field.name)
-    if (direct) {
-      return { kind: 'entity', entity: direct }
+    const relation = Type.dataFieldRelationEntity(field)
+    if (!relation) {
+      return unresolvedType()
     }
-    const inverse = entities.find(entity => entity.name === field.name)
-    return inverse ? { kind: 'list', element: { kind: 'entity', entity: inverse } } : unresolvedType()
+    return Type.dataFieldIsInverseRelation(field)
+      ? { kind: 'list', element: { kind: 'entity', entity: relation } }
+      : { kind: 'entity', entity: relation }
   }
 
   /** definitionOfReference resolves a named type reference, including qualified item fields. */

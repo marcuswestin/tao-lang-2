@@ -12,15 +12,16 @@ app DataMVPApp {
 
 workspace data Workspaces / Workspace {
    Name text
-   CreatedAt time, default now()
+   CreatedAt time (default now)
+   Tasks (auto-delete)
    index CreatedAt
    order by Name
 }
 
 workspace data Tasks / Task {
    Title text
-   Done / Open, default Open
-   Workspace, on delete cascade
+   Done yes / no Open
+   Workspace
    order by Title
 }
 

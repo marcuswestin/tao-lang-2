@@ -36,6 +36,34 @@ Describe('Tao formatter WordFlower apps', () => {
   })
 })
 
+Describe('Tao formatter data declarations', () => {
+  Test('formats reshaped fields, relation modifiers, boolean cases, and bare now defaults', async () => {
+    await testFormatCode(
+      `
+        data Workspaces/Workspace{
+        Name text
+        CreatedAt time(default now)
+        Pinned yes / no
+        Documents(relation Documents,auto-delete)}
+        data Documents/Document{Final yes / no Draft(default Draft) Workspace(relation Workspace)}
+      `,
+      `
+        data Workspaces / Workspace {
+           Name text
+           CreatedAt time (default now)
+           Pinned yes / no
+           Documents (relation Documents, auto-delete)
+        }
+
+        data Documents / Document {
+           Final yes / no Draft (default Draft)
+           Workspace (relation Workspace)
+        }
+      `,
+    )
+  })
+})
+
 Describe('Tao formatter top-level statements', () => {
   Test('separates declarations with one blank line and keeps let groups adjacent', async () => {
     await testFormatCode(

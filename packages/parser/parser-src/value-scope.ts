@@ -191,13 +191,14 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     const document = AST.getDocument(entity)
     const descriptions = entity.block.entries.filter(AST.isEntityDataField).flatMap(field => {
-      if (!field.negativeName) {
+      if (!field.boolean) {
         return []
       }
-      return [
-        this.descriptions.createDescription(field, field.name, document),
-        this.descriptions.createDescription(field, field.negativeName, document),
-      ]
+      const cases = [this.descriptions.createDescription(field, field.name, document)]
+      if (field.negativeName) {
+        cases.push(this.descriptions.createDescription(field, field.negativeName, document))
+      }
+      return cases
     })
     return this.createScope(descriptions, outer)
   }
@@ -209,14 +210,15 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     const descriptions = entity.block.entries.filter(AST.isEntityDataField).flatMap(field => {
-      if (!field.negativeName) {
+      if (!field.boolean) {
         return []
       }
       const document = AST.getDocument(field)
-      return [
-        this.descriptions.createDescription(field, field.name, document),
-        this.descriptions.createDescription(field, field.negativeName, document),
-      ]
+      const cases = [this.descriptions.createDescription(field, field.name, document)]
+      if (field.negativeName) {
+        cases.push(this.descriptions.createDescription(field, field.negativeName, document))
+      }
+      return cases
     })
     return this.createScope(descriptions)
   }

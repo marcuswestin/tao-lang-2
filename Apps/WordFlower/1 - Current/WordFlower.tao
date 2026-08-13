@@ -9,8 +9,8 @@ use Col, FormButton, Text, TextInput from @tao/ui
 // - Block-scoped `guard` in actions and renders (a match skips the rest of its enclosing block);
 //   one subject per guard
 // - `when` subject form for values and renders
-// - `data Plural / Singular` top-level declarations with comma modifiers, `index`, default
-//   `order by`, relation elision, and boolean case fields written and filtered by name
+// - `data Plural / Singular` top-level declarations with parenthesized modifiers, `index`, default
+//   `order by`, relation elision, owner-side `auto-delete`, and yes/no case fields
 // - `loop Plural / Singular` list rendering
 // - `query [Name from] Source { ... }` including relation sources and inline placement
 //   (declared before use, and before any conditional)
@@ -50,20 +50,31 @@ app WordFlowerFoundationTest {
 
 data Workspaces / Workspace { // top-level data: the plural collection, then the singular entity it stores — the same `Plural / Singular` order as `loop`
    Name text
-   CreatedAt time, default now() // modifications are comma separated; index is declared separately
-   Documents // `relation Documents` can be omitted if the name matches a data declaration
+   CreatedAt time (default now) // modifications are parenthesized and comma separated
+   Pinned yes / no // yes / no defaults to no; declared for demonstration, not yet used by the app
+   Documents (relation Documents, auto-delete) // owner-side auto-delete cascades through Document.Workspace
    index CreatedAt // index is declared separately
    order by CreatedAt // default order, defaults to asc
 }
 
 data Documents / Document {
    Title text
-   Body text, default ""
-   Final / Draft, default Draft // booleans are <yesName> / <noName>
-   CreatedAt time, default now()
-   Workspace, on delete cascade // `relation Workspace` can be omitted if the name matches a data declaration
+   Body text (default "")
+   Final yes / no Draft // booleans are <yesName> yes / no [<noName>]
+   Public yes / no Private (default Public) // demonstrative; not yet used by the app
+   CreatedAt time (default now)
+   Workspace (relation Workspace)
+   Paragraphs (auto-delete) // `relation Paragraphs` is inferred from the matching collection name
    index CreatedAt
    order by CreatedAt // default order, defaults to asc
+}
+
+data Paragraphs / Paragraph {
+   Text text
+   Ordering number
+   Document
+   index Ordering
+   order by Ordering
 }
 
 let Tagline = "A quiet place for words that matter."

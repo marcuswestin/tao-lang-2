@@ -35,7 +35,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(useStatement, AST.isUseStatement)
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(taglineLet, AST.isAliasDeclaration)
-    Expect(data).toHaveLength(2)
+    Expect(data).toHaveLength(3)
     Expect.Is(workspaceList, AST.isUiDeclaration)
     Expect.Is(wordCountView, AST.isViewDeclaration)
     Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual([
@@ -62,6 +62,7 @@ Describe('minimal Tao parser', () => {
     Expect(data.map(entity => [entity.name, entity.singularName])).toEqual([
       ['Workspaces', 'Workspace'],
       ['Documents', 'Document'],
+      ['Paragraphs', 'Paragraph'],
     ])
     const documentEntity = data[1]!
     Expect(documentEntity.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === 'CreatedAt'))
@@ -532,15 +533,24 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       data Workspaces / Workspace {
         Name text
-        CreatedAt time, default now()
-        Documents
+        CreatedAt time (default now)
+        Pinned yes / no
+        Documents (relation Documents, auto-delete)
         index CreatedAt
         order by CreatedAt desc
       }
       data Documents / Document {
         Title text
-        Final / Draft, default Draft
-        Workspace, on delete cascade
+        Final yes / no Draft
+        Public yes / no Private (default Public)
+        Workspace (relation Workspace)
+        Paragraphs (auto-delete)
+      }
+      data Paragraphs / Paragraph {
+        Text text
+        Ordering number
+        Document
+        order by Ordering
       }
       view Detail Workspace {
         action Add { create Document { Title: "Draft", Workspace } }
@@ -562,9 +572,14 @@ Describe('minimal Tao parser', () => {
     Expect(entities.map(entity => [entity.name, entity.singularName])).toEqual([
       ['Workspaces', 'Workspace'],
       ['Documents', 'Document'],
+      ['Paragraphs', 'Paragraph'],
     ])
     const workspaceFields = entities[0]?.block.entries.filter(AST.isEntityDataField) ?? []
-    Expect(workspaceFields.map(field => field.name)).toEqual(['Name', 'CreatedAt', 'Documents'])
+    Expect(workspaceFields.map(field => field.name)).toEqual(['Name', 'CreatedAt', 'Pinned', 'Documents'])
+    Expect(workspaceFields[2]?.boolean).toBe(true)
+    Expect(workspaceFields[2]?.negativeName).toBeUndefined()
+    Expect(workspaceFields[3]?.modifiers.map(modifier => modifier.relationName ?? modifier.autoDelete))
+      .toEqual(['Documents', true])
     Expect(entities[0]?.block.entries.some(AST.isDataIndex)).toBe(true)
     Expect(entities[0]?.block.entries.some(AST.isDataDefaultOrder)).toBe(true)
     const workspaceParameter = AST.parametersOf(

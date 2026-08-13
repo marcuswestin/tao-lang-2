@@ -119,6 +119,27 @@ Describe('TR.Data provider foundation', () => {
     Expect(entry['CreatedAt'] as number).toBeGreaterThanOrEqual(before)
   })
 
+  Test('applies the now clock separately for every create while preserving live handle identity', () => {
+    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    const originalNow = Date.now
+    let currentTime = 1_000
+    Date.now = () => currentTime
+    try {
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('First') })
+      const first = schema.query({ entity: 'Note', filters: [] })[0] as Record<string, unknown>
+      currentTime = 2_000
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Second') })
+      const again = schema.query({ entity: 'Note', filters: [] })[0]
+      const second = schema.query({ entity: 'Note', filters: [] })[1] as Record<string, unknown>
+
+      Expect(again).toBe(first)
+      Expect(first['CreatedAt']).toBe(1_000)
+      Expect(second['CreatedAt']).toBe(2_000)
+    } finally {
+      Date.now = originalNow
+    }
+  })
+
   Test('combines repeated query filters with AND and applies one deterministic order', () => {
     const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('B') })
@@ -336,6 +357,40 @@ Describe('TR.Data provider foundation', () => {
     Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
     Expect(schema.query({ entity: 'Comment', filters: [] })).toHaveLength(0)
     Expect(saves).toBe(1)
+  })
+
+  Test('cascades three levels from owner-declared collection semantics', () => {
+    const schema = TR.Data.Schema({
+      name: 'OwnerCascade',
+      entities: {
+        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' } } },
+        Document: {
+          collection: 'Documents',
+          fields: {
+            Title: { kind: 'text' },
+            Workspace: { kind: 'relation', relation: 'Workspace', onDelete: 'cascade' },
+          },
+        },
+        Paragraph: {
+          collection: 'Paragraphs',
+          fields: {
+            Text: { kind: 'text' },
+            Document: { kind: 'relation', relation: 'Document', onDelete: 'cascade' },
+          },
+        },
+      },
+    }, TR.Data.MemoryProvider())
+    TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
+    const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
+    TR.Data.Create(schema, 'Document', { Title: TR.Value('Draft'), Workspace: TR.Value(workspace) })
+    const document = schema.query({ entity: 'Document', filters: [] })[0]
+    TR.Data.Create(schema, 'Paragraph', { Text: TR.Value('Opening'), Document: TR.Value(document) })
+
+    TR.Data.Delete(TR.Value(workspace))
+
+    Expect(schema.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
+    Expect(schema.query({ entity: 'Document', filters: [] })).toHaveLength(0)
+    Expect(schema.query({ entity: 'Paragraph', filters: [] })).toHaveLength(0)
   })
 
   Test('rejects foreign, wrong-entity, deleted, and inactive relationship handles', () => {
