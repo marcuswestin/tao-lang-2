@@ -1,6 +1,10 @@
+use StackNav from @tao/nav
+
 app TypeSystemTests {
-   view Demo
-}
+   Name "Type System Tests"
+   Navigator StackNav {
+      Initial Demo
+}  }
 
 type Name is text
 
@@ -28,46 +32,46 @@ let SecondTitle = "Done"
 let SecondCount = 2
 let DisplayName = Name "Ada"
 let TypedDisplayName = Name "Grace"
-let DemoTags = Tags ["types" "items" "lists"]
+let DemoTags = Tags ["types", "items", "lists"]
 let EmptyTags = Tags []
 let DemoJob = Job {
-   Level 2
-   Title "Compiler engineer"
+   Level: 2,
+   Title: "Compiler engineer"
 }
 let DemoPerson = Person {
-   DemoTags
-   DemoJob
-   Age 40
-   DisplayName
+   Tags: DemoTags,
+   Job: DemoJob,
+   Age: 40,
+   Name: DisplayName
 }
 let ScopeLabel = "File scope label"
 let Team = [
-   DemoPerson
+   DemoPerson,
    Person {
-      Name "Ro"
-      Age 41
-      EmptyTags
-      Job {
-         Title "Language designer"
-         Level 5
+      Name: "Ro",
+      Age: 41,
+      Tags: EmptyTags,
+      Job: Job {
+         Title: "Language designer",
+         Level: 5
    }  }
 ]
 
-view Demo {
+ui Demo {
    let OuterScopeLabel = ScopeLabel
    render Stack() {
       let ScopeLabel = "Nested scope label"
       Tile(FirstTitle, FirstCount)
       Tile(SecondTitle, SecondCount)
       ProfileCard(DemoPerson)
-      ProfileCard(Person: {
-         Tags ["runtime" "mobile"]
-         Job {
-            Level 3
-            Title "Runtime engineer"
-         }
-         Age 29
-         Name "Kai"
+      ProfileCard(Person {
+         Tags: Tags ["runtime", "mobile"],
+         Job: Job {
+            Level: 3,
+            Title: "Runtime engineer"
+         },
+         Age: 29,
+         Name: "Kai"
       })
       SummaryLine(Count: 2, "People in the team")
       MemberLine(DemoPerson.Job.Title, DemoPerson.Name)

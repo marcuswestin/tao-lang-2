@@ -2,7 +2,7 @@ use CardTitle, ChildFolderTitle, SiblingFileTitle, SiblingFolderTitle
 use ProjectNotice from @copy
 use ProjectWidget from @copy/widgets
 
-project view MainView {
+workspace ui MainView {
    render Stack() {
       Text(CardTitle)
       Text(SiblingFileTitle)

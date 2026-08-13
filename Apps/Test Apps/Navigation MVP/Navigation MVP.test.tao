@@ -6,9 +6,9 @@ test "Navigation MVP" {
 
       expect text "Navigation MVP"
       expect text "Home visits: 0"
-      press id "count-visit"
+      press #countVisit
       expect text "Home visits: 1"
-      press id "open-detail"
+      press #openDetail
       expect missing text "Navigation MVP"
       expect text "Detail"
       expect text "Typed workspace"

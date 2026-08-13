@@ -5,28 +5,42 @@ test "Forms and Interaction MVP" {
       run FormsInteractionMVP
 
       expect text "Title is required"
-      press id "save"
-      submit placeholder "Capture something"
+      press #save
+      submit #taskTitle
       expect missing text "Submitted: "
       expect text "Submissions: 0"
-      enter "Plan launch" into placeholder "Capture something"
-      expect input placeholder "Capture something" value "Plan launch"
+      enter "Temporary" into #taskTitle
+      press #clear
+      expect #taskTitle input value ""
+      expect text "Title is required"
+      enter "Plan launch" into #taskTitle
+      expect #taskTitle input value "Plan launch"
       expect text "Plan launch"
       expect missing text "Title is required"
-      submit id "task-title"
+      submit #taskTitle
       expect text "Submitted: Plan launch"
       expect text "Saving…"
       expect text "Submissions: 1"
-      press label "Save"
+      press #save
       expect text "Submissions: 1"
    }
 
    check "presses an enabled form button" {
       run FormsInteractionMVP
-      enter "Ship release" into id "task-title"
-      press id "save"
+      enter "Ship release" into #taskTitle
+      press #save
       expect text "Submitted: Ship release"
       expect text "Saving…"
       expect text "Submissions: 1"
+   }
+
+   check "uses explicit named and inline change handlers instead of automatic binding" {
+      run FormsInteractionMVP
+      enter "Alpha" into #namedChange
+      expect #namedChange input value "Named: Alpha"
+      expect text "Named value: Named: Alpha"
+      enter "Beta" into #inlineChange
+      expect #inlineChange input value "Inline: Beta"
+      expect text "Inline value: Inline: Beta"
    }
 }

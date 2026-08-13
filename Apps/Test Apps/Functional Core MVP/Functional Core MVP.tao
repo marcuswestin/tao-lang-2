@@ -1,50 +1,52 @@
+use StackNav from @tao/nav
 use Button, Col, Text from @tao/ui
 
 app FunctionalCoreMVP {
-   view MainView
-}
+   Name "Functional Core MVP"
+   Navigator StackNav {
+      Initial MainView
+}  }
 
 function HasCount Count is number returns boolean = Count > 0 and not false
 
-function CountLabel Count is number returns text = interpolate "Count: ", Count
+function CountLabel Count is number returns text = "Count: { Count }"
 
-function NextLabel Count is number returns text = interpolate "Next: ", Count + 1
+function NextLabel Count is number returns text = "Next: { Count + 1 }"
 
-function PresenceLabel Present is boolean returns text = when
-   Present -> "Ready"
-   otherwise -> interpolate "Missing", none
+function PresenceLabel Present is boolean returns text = when Present {
+   true -> "Ready"
+   otherwise -> "Missing{ none }"
+}
 
-view MainView {
+ui MainView {
    state Count = 2
    state Visible = true
    action HideCount {
-      when
-         HasCount(Count) -> {
-            toggle Visible
-            set Count = 0
-         }
-         otherwise -> { }
-   }
+      guard HasCount(Count) true -> {
+         toggle Visible
+         set Count = 0
+   }  }
    render Col() [gap 8, pad 12] {
       Text("Functional core")
       Text(PresenceLabel(true))
-      when
-         Visible -> {
+      when Visible {
+         true -> {
             Text("Visible")
          }
          otherwise -> {
             Text("Hidden")
-         }
-      when
-         HasCount(Count) -> {
+      }  }
+      when HasCount(Count) {
+         true -> {
             Text(CountLabel(Count))
             Text(NextLabel(Count))
          }
          otherwise -> {
             Text("Empty")
-         }
-      for Label in ["Inbox" "Today"] {
+      }  }
+      loop ["Inbox", "Today"] / Label {
          Text(Label)
       }
-      Button("Hide count", HideCount)
-}  }
+      Button("Hide count") {
+         on press HideCount
+}  }  }

@@ -1,13 +1,16 @@
+use StackNav from @tao/nav
 use Box, Button, Col, Row, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
 
 app LayoutAndAppShell {
-   view MainView
-}
+   Name "Layout and App Shell"
+   Navigator StackNav {
+      Initial MainView
+}  }
 
 let PageTitle = "Layout and app shell"
 let BodyCopy = "This screen should sit inside the default Tao app shell."
 
-view MainView {
+ui MainView {
    action Noop { }
    render Col() [fill, content top stretch, gap 12, pad 16] {
       Text(PageTitle) [width fill]
@@ -15,8 +18,9 @@ view MainView {
       TextFrame("Safe default app frame") [width fill]
       Stack() [content top stretch, gap 8, pad 12, margin bottom 4, width fill, hug] {
          Text("Stack uses column content defaults, gap, pad, margin, width fill, and hug.")
-         Button("Primary action", Noop) [centered]
-      }
+         Button("Primary action") [centered] {
+            on press Noop
+      }  }
       Row() [content spread center, gap 8, pad horizontal 12 vertical 8, width fill, rigid] {
          Text("Left")
          Text("Right") [aligned center]
@@ -28,8 +32,9 @@ view MainView {
          Text("Compressible body row below.")
          Row() [content left center, gap 8, width fill, compress] {
             Text("Flexible text") [claim 2, compress]
-            Button("Rigid", Noop) [rigid]
-      }  }
+            Button("Rigid") [rigid] {
+               on press Noop
+      }  }  }
       WrappingRow() [content top left, gap 8, pad 8, width fill, hug, compress] {
          Text("Safe area")
          Text("Keyboard")

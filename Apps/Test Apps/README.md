@@ -45,7 +45,9 @@ Exercise controlled text input, named view arguments, change and submit events, 
 
 - `TextInput` and `FormButton` from `@tao/ui`.
 - Structural callback contracts: change is `action(text)`; submit and press are `action()`.
-- Named invocation arguments such as `.Value`, `.Change`, `.Placeholder`, and `.Disabled`, including standard-control parameter defaults.
+- Named invocation arguments such as `Value:`, `Placeholder:`, and `Disabled:`, including standard-control parameter defaults.
+- Automatic two-way updates when `Value:` directly references writable text state and no explicit change handler exists.
+- `on press|change|submit` with named actions or inline handlers, including the scoped `on change` text payload and explicit override of automatic binding.
 - Direct `label`, `id`, and `placeholder` selectors for input entry/submission; direct label/ID button presses; and `expect placeholder "target"` placeholder checks.
 - `expect input <label|id|placeholder> "target" value "value"` for controlled native input values.
 - Reactive form state, required-field feedback, disabled submit behavior, visible submission progress, and suppression of duplicate presses while submitting.
@@ -58,7 +60,7 @@ Exercise controlled text input, named view arguments, change and submit events, 
 
 ### Behavior Test Notes
 
-`Forms and Interaction MVP.test.tao` enters through a placeholder, asserts the controlled input value, and proves both keyboard and button submission. It also covers the disabled initial button, reactive validation/progress output, the authored accessible Save label while visible text changes to `Saving…`, and duplicate-press suppression.
+`Forms and Interaction MVP.test.tao` proves automatic and explicit controlled-input changes, named and inline event handlers, scoped change payloads, clearing through an inline press, and both keyboard and button submission. It also covers the disabled initial button, reactive validation/progress output, the authored accessible Save label while visible text changes to `Saving…`, and duplicate-press suppression.
 
 This README is the contract for each test app. When adding functionality to a test app, update this file first if the new behavior changes the app's scope.
 
@@ -144,7 +146,7 @@ This app verifies bracketed layout clauses and the default app-shell baseline. `
 
 ### Purpose
 
-Exercise positive behavior for local project package access, package-indexed imports, bare same-package imports across package folders, project-visible imports, and local project metadata.
+Exercise positive behavior for local workspace package access, package-indexed imports, bare same-package imports across package folders, workspace-visible imports, and local project metadata.
 
 ### Belongs Here
 
@@ -187,7 +189,7 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 
 - `use ... from @tao/ui` imports for first stdlib views.
 - Runtime rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, and `TextMultiline`.
-- A no-op `Button` action binding required by the Button primitive.
+- A no-op `on press` action binding required by the Button primitive.
 - Basic nested stdlib layout/container composition that remains valid and executable.
 
 ### Does Not Belong Here
@@ -212,19 +214,19 @@ This app must stay valid Tao and focus on import/runtime integration rather than
 
 ### Purpose
 
-Exercise positive behavior for view-local state, named and inline actions, action parameters and values, `set`, `do`, compound state updates, state-derived immutable bindings, Button action binding, and reactive rerendering.
+Exercise positive behavior for view-local state, named and inline actions, action parameters and values, `set`, `do`, compound state updates, state-derived immutable bindings, Button press binding, and reactive rerendering.
 
 ### Belongs Here
 
 - `state` declarations inside views.
 - Named view-local actions with parameters.
-- Inline `action { }` and `-> { }` action values passed to views.
+- Inline `on press -> { }` action handlers and named action references configured on views.
 - `set`, compound `set`, and `do` behavior that updates rendered output through user interaction.
 
 ### Does Not Belong Here
 
 - Invalid placement or type diagnostics, which belong in package validator tests.
-- General event syntax beyond Button action binding.
+- Input, submit, or non-Button event behavior, which belongs in Forms and Interaction MVP.
 - `when`, `toggle`, functions, booleans, custom types, item/list behavior, or Tao-native `check` syntax.
 
 ### Edit When
