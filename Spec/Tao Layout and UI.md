@@ -160,7 +160,7 @@ frame Card {
 
 ### Declaration Properties, Children, And Slots
 
-Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header parameters are shorthand for the same public properties:
+Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header parameters are shorthand for the same public properties. Header parameters ship today; the longhand property block, named render slots, and `@@content` are intended, not implemented:
 
 ```tao
 view Profile User {

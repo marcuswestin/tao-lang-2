@@ -65,4 +65,4 @@ Files may declare more than one app. `compile` and `dev` accept `--app <Name>`; 
 prompt when attached to an interactive terminal and fail with the available names in noninteractive
 environments. They never select by filename or source order.
 
-Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The full navigation contract and its decision log remain in `Roadmap/Add navigation and routing MVP/`.
+Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The implemented navigation contract is `Spec/Tao Presentation and Navigation.md`; unimplemented navigation work is tracked in `Roadmap/Add navigation and routing MVP/Follow-ups - Add navigation and routing MVP.md`.

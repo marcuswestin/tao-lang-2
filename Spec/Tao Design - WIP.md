@@ -283,7 +283,7 @@ app HabitTracker {
 }
 ```
 
-Open naming question: `Spec/Tao Packages.md` already describes app capabilities such as `theme`, strings, assets, and datasources. The implementation should decide whether this capability is called `design`, `theme`, or something else before parser work.
+The capability is named `design`, selected by an app as `Design <Name>`; see the decided entry under Open Questions. A general app-capability bundle remains deferred under `LANG-003`.
 
 Starter themes can be generated from the same underlying token architecture:
 
