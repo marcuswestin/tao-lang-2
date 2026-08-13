@@ -5,6 +5,8 @@ import { ParentDirectionContext } from './TR-parent-direction'
 
 /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
 export type TaoProps = TaoLayoutProps & {
+  /** callerProps preserves inherited Tao metadata across generated view boundaries. */
+  callerProps?: TaoProps
   /** navigation is private Tao metadata for nearest-container presentation and dismissal. */
   navigation?: TaoNavigationValue
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
@@ -35,7 +37,16 @@ type MergedTaoViewProps = {
 export const TaoPropsControls = {
   mergeViewProps,
   nativePropsWithStyle,
+  navigationInChain,
 } as const
+
+/** Finds the nearest enclosing navigation metadata through generated view caller props. */
+function navigationInChain(props: TaoProps | undefined): TaoNavigationValue | undefined {
+  if (!props) {
+    return undefined
+  }
+  return props.navigation ?? navigationInChain(props.callerProps)
+}
 
 function mergeViewProps(
   props: TaoViewProps,

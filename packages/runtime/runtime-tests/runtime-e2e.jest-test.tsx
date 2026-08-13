@@ -276,6 +276,93 @@ Describe('Expo runtime', () => {
     Expect(slot.back()).toBe(false)
   })
 
+  Test('inherits contextual present, overlay, and dismiss through nested generated view props', () => {
+    function NestedNavigationAction(props: {
+      __tao?: TR.TaoProps
+      label: string
+      invoke(taoProps: TR.TaoProps): void
+    }): ReactElement {
+      const nestedProps = TR.TaoProps({}, props.__tao)
+      return createElement(RN.Pressable, {
+        accessibilityLabel: props.label,
+        onPress: () => props.invoke(nestedProps),
+      })
+    }
+
+    function GeneratedViewBoundary(props: {
+      __tao?: TR.TaoProps
+      label: string
+      invoke(taoProps: TR.TaoProps): void
+    }): ReactElement {
+      return createElement(NestedNavigationAction, {
+        __tao: TR.TaoProps({}, props.__tao),
+        label: props.label,
+        invoke: props.invoke,
+      })
+    }
+
+    const detail = TR.Navigation.UI({
+      name: 'Nested detail',
+      render: (_arguments, taoProps) =>
+        createElement(GeneratedViewBoundary, {
+          __tao: taoProps,
+          invoke: props => TR.Navigation.Dismiss(props),
+          label: 'Dismiss nested detail',
+        }),
+    })
+    const overlay = TR.Navigation.UI({
+      name: 'Nested overlay',
+      render: (_arguments, taoProps) =>
+        createElement(
+          RN.View,
+          null,
+          createElement(RN.Text, null, 'Nested overlay'),
+          createElement(GeneratedViewBoundary, {
+            __tao: taoProps,
+            invoke: props => TR.Navigation.Dismiss(props),
+            label: 'Dismiss nested overlay',
+          }),
+        ),
+    })
+    const home = TR.Navigation.UI({
+      name: 'Nested home',
+      render: (_arguments, taoProps) =>
+        createElement(
+          RN.View,
+          null,
+          createElement(RN.Text, null, 'Nested home'),
+          createElement(GeneratedViewBoundary, {
+            __tao: taoProps,
+            invoke: props => TR.Navigation.PresentIn(props, undefined, detail, {}),
+            label: 'Open nested detail',
+          }),
+          createElement(GeneratedViewBoundary, {
+            __tao: taoProps,
+            invoke: props => TR.Navigation.PresentOverlay(props, undefined, overlay, {}),
+            label: 'Open nested overlay',
+          }),
+        ),
+    })
+    const stack = TR.Navigation.StackNav({ name: 'Nested context stack', initial: home })
+    const app = TR.Navigation.App({
+      name: 'Nested context app',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    fireEvent.press(screen.getByLabelText('Open nested detail'))
+    Expect(screen.queryByText('Nested home')).toBeNull()
+    fireEvent.press(screen.getByLabelText('Dismiss nested detail'))
+    ExpectScreen(screen).toHaveText('Nested home')
+
+    fireEvent.press(screen.getByLabelText('Open nested overlay'))
+    ExpectScreen(screen).toHaveText('Nested overlay')
+    fireEvent.press(screen.getByLabelText('Dismiss nested overlay'))
+    Expect(screen.queryByText('Nested overlay')).toBeNull()
+    ExpectScreen(screen).toHaveText('Nested home')
+  })
+
   Test('keeps covered navigation entries mounted and returns through the accessible root-safe back reducer', () => {
     let stack: TR.NavigationValue
 

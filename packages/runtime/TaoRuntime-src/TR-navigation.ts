@@ -1,7 +1,7 @@
 import React from 'react'
 import { DataControls } from './TR-data'
 import { requireReactNativeRuntime } from './TR-react-native'
-import type { TaoProps } from './TR-TaoProps'
+import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 import { Views } from './TR-views'
 
 type Evaluable = {
@@ -115,7 +115,7 @@ export const NavigationControls = {
     presentable: TaoPresentable,
     arguments_: TaoNavigationArguments,
   ): void {
-    const navigation = target ?? taoProps?.navigation
+    const navigation = target ?? TaoPropsControls.navigationInChain(taoProps)
     if (!navigation) {
       throw new Error(`Cannot present ${presentable.name}: no enclosing or explicit navigation target.`)
     }
@@ -129,7 +129,7 @@ export const NavigationControls = {
     presentable: TaoPresentable,
     arguments_: TaoNavigationArguments,
   ): void {
-    const navigation = target ?? taoProps?.navigation
+    const navigation = target ?? TaoPropsControls.navigationInChain(taoProps)
     if (!navigation) {
       throw new Error(`Cannot present ${presentable.name} as overlay: no enclosing or explicit navigation target.`)
     }
@@ -138,10 +138,11 @@ export const NavigationControls = {
 
   /** Dismiss delegates to the nearest enclosing navigation container. */
   Dismiss(taoProps: TaoProps | undefined): void {
-    if (!taoProps?.navigation) {
+    const navigation = TaoPropsControls.navigationInChain(taoProps)
+    if (!navigation) {
       throw new Error('Cannot dismiss: no enclosing navigation target.')
     }
-    taoProps.navigation.dismiss()
+    navigation.dismiss()
   },
 
   /** Replace swaps one app's root navigator by declaration identity. */

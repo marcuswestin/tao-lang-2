@@ -636,6 +636,32 @@ Describe('TR.Navigation', () => {
     Expect(slot.canGoBack).toBe(false)
   })
 
+  Test('resolves the nearest navigation through nested caller props', () => {
+    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const overlay = TR.Navigation.UI({ name: 'Overlay', render: () => null })
+    const outer = TR.Navigation.StackNav({ name: 'Outer', initial: home })
+    const nearest = TR.Navigation.StackNav({ name: 'Nearest', initial: home })
+    const nestedProps: TR.TaoProps = {
+      callerProps: {
+        callerProps: { navigation: outer },
+        navigation: nearest,
+      },
+    }
+
+    TR.Navigation.PresentIn(nestedProps, undefined, detail, {})
+    Expect(nearest.canGoBack).toBe(true)
+    Expect(outer.canGoBack).toBe(false)
+    TR.Navigation.Dismiss(nestedProps)
+    Expect(nearest.canGoBack).toBe(false)
+
+    TR.Navigation.PresentOverlay(nestedProps, undefined, overlay, {})
+    Expect(nearest.canGoBack).toBe(true)
+    Expect(outer.canGoBack).toBe(false)
+    TR.Navigation.Dismiss(nestedProps)
+    Expect(nearest.canGoBack).toBe(false)
+  })
+
   Test('keeps same-named generated app definitions isolated by identity and resets both', () => {
     const home = TR.Navigation.UI({ name: 'Home', render: () => null })
     const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
