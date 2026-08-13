@@ -44,6 +44,7 @@ Describe('Tao IDE extension smoke', () => {
     Expect(JSON.stringify(merged)).toContain('meta.embedded.block.ts.tao-lang')
     Expect(JSON.stringify(merged)).toContain('source.tsx')
     Expect(JSON.stringify(merged)).toContain('meta.template.expression.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('constant.character.escape.tao-lang')
     Expect(JSON.stringify(merged)).toContain('constant.numeric.tao-lang')
     Expect(mergeTaoTextMateGrammar(merged, overlayGrammar)).toEqual(merged)
   })
@@ -67,7 +68,7 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('reports structural and Typir diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
-      alias Greeting = "Hello"
+      let Greeting = "Hello"
       app Demo {
         render Greeting()
       }
@@ -81,7 +82,7 @@ Describe('Tao IDE extension smoke', () => {
       }
     `)
 
-    Expect(diagnostics).toContain('Only one root view or root stack declaration is allowed in app Demo.')
+    Expect(diagnostics).toContain('App Demo must declare exactly one Navigator (or transitional root view), found 0.')
     Expect(
       diagnostics.some(diagnostic =>
         diagnostic.includes('Render of Text has an argument that does not match any unbound parameter by type.')
@@ -94,8 +95,8 @@ Describe('Tao IDE extension smoke', () => {
       app Demo {
         view MainView
       }
-      alias First = Second
-      alias Second = First
+      let First = Second
+      let Second = First
       view MainView {
         render Text(First)
       }
@@ -171,7 +172,7 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('serves the move-render quick fix for render-not-last diagnostics', async () => {
     const fixture = await buildCodeActionFixture(
-      'view MainView {\n   render Text(Greeting)   alias Greeting = "hi"\n}\n',
+      'view MainView {\n   render Text(Greeting)   let Greeting = "hi"\n}\n',
     )
     try {
       const { provider, document } = fixture
@@ -188,7 +189,7 @@ Describe('Tao IDE extension smoke', () => {
       const edits = moveRender && 'edit' in moveRender
         ? moveRender.edit?.changes?.[document.textDocument.uri]
         : undefined
-      Expect(edits?.[0]?.newText).toBe('view MainView {\n   alias Greeting = "hi"\n   render Text(Greeting)\n}\n')
+      Expect(edits?.[0]?.newText).toBe('view MainView {\n   let Greeting = "hi"\n   render Text(Greeting)\n}\n')
     } finally {
       await fixture.cleanup()
     }
@@ -197,10 +198,10 @@ Describe('Tao IDE extension smoke', () => {
   Test('reports duplicate visible declarations through Langium services', async () => {
     const diagnostics = await validateFilesWithLanguageServerServices({
       '/__tao__/First.tao': `
-        project alias Shared = "First"
+        workspace let Shared = "First"
       `,
       '/__tao__/Second.tao': `
-        package alias Shared = "Second"
+        package let Shared = "Second"
       `,
     })
 
@@ -216,7 +217,7 @@ Describe('Tao IDE extension smoke', () => {
         app PackageApp { view MainView }
       `,
       'packages/@bar/views/Main.tao': `
-        project view MainView {
+        workspace view MainView {
           render inject \`\`\`ts
             return null
           \`\`\`

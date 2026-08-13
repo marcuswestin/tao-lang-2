@@ -93,7 +93,7 @@ Describe('tao check', () => {
 
         view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
     }, async (rootDir) => {
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
       const results = await runCheck(path)
@@ -110,7 +110,7 @@ Describe('tao check', () => {
 
         view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
     }, async (rootDir) => {
       const directory = FS.resolvePath('Packages/@cards/screens', rootDir)
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
@@ -128,7 +128,7 @@ Describe('tao check', () => {
 
         view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
     }, async (rootDir) => {
       const cwd = FS.resolvePath('Packages/@cards/screens', rootDir)
       const path = FS.resolvePath('Main.tao', cwd)

@@ -16,9 +16,10 @@ await runWithCommands(commands => {
   commands
     .name('dev')
     .argument('[appPath]', 'Tao app path to run in the dev loop.')
-    .action(async (appPath?: string) => {
+    .option('--app <name>', 'Select a named app when the file declares multiple apps.')
+    .action(async (appPath: string | undefined, options: { app?: string }) => {
       try {
-        const devLoop = await runDevLoop(appPath)
+        const devLoop = await runDevLoop(appPath, options.app)
         Platform.runtimeProcess.exit(devLoop)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))

@@ -44,6 +44,7 @@ async function runTests(repoRoot: string): Promise<void> {
 async function compileApp(
   repoRoot: string,
   appPath: string,
+  appName: string | undefined,
   reason: string,
   shouldRunParserGen: boolean,
 ): Promise<boolean> {
@@ -53,7 +54,7 @@ async function compileApp(
   }
 
   try {
-    return await compileAppWithoutCommandLock(repoRoot, appPath, reason, shouldRunParserGen)
+    return await compileAppWithoutCommandLock(repoRoot, appPath, appName, reason, shouldRunParserGen)
   } finally {
     CommandRunner.endCommand()
   }
@@ -63,6 +64,7 @@ async function compileApp(
 async function compileAppWithoutCommandLock(
   repoRoot: string,
   appPath: string,
+  appName: string | undefined,
   reason: string,
   shouldRunParserGen: boolean,
 ): Promise<boolean> {
@@ -72,7 +74,7 @@ async function compileAppWithoutCommandLock(
       await runJust(['_parser-gen'])
     }
     const result = await CLI.run(Repo.resolvePath('tao'), {
-      args: ['compile', appPath],
+      args: ['compile', appPath, ...(appName ? ['--app', appName] : [])],
       cwd: repoRoot,
       onOutput: TUI.devLoopOutputHandler('compile'),
     })
@@ -91,9 +93,9 @@ async function compileAppWithoutCommandLock(
 }
 
 /** recompileAndReload recompiles the selected app while a command key owns exclusivity, then reloads Expo. */
-async function recompileAndReload(repoRoot: string, appPath: string): Promise<void> {
+async function recompileAndReload(repoRoot: string, appPath: string, appName?: string): Promise<void> {
   CommandRunner.assertCommandRunning('recompile and reload')
-  const compiled = await compileAppWithoutCommandLock(repoRoot, appPath, 'manual reload', true)
+  const compiled = await compileAppWithoutCommandLock(repoRoot, appPath, appName, 'manual reload', true)
   if (!compiled) {
     throw new Errors.UserInputError('Reload skipped because compile failed.')
   }
