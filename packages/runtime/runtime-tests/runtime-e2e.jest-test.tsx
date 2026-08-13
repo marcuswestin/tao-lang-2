@@ -119,7 +119,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('dispatches hardware Back through the configured app reducer and cleans up its subscription', () => {
+  Test('dispatches visible and hardware Back through the configured app reducer and cleans up its subscription', () => {
     let handler: (() => boolean) | undefined
     let removes = 0
     const restoreReactNativeRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
@@ -145,18 +145,25 @@ Describe('Expo runtime', () => {
     try {
       const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
       const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+      const notice = TR.Navigation.UI({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
       const stack = TR.Navigation.StackNav({ name: 'HardwareBackTest', initial: home })
+      const overlays = TR.Navigation.OverlayNav({ name: 'HardwareBackOverlays' })
       const app = TR.Navigation.App({
         name: 'Hardware Back App',
         navigator: () => stack,
-        auxiliaries: () => ({}),
+        auxiliaries: () => ({ overlays }),
       })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
       Expect(handler?.()).toBe(false)
       act(() => {
         TR.Navigation.PresentIn(undefined, stack, detail, {})
+        TR.Navigation.PresentIn(undefined, overlays, notice, {})
       })
+      ExpectScreen(screen).toHaveText('Detail')
+      ExpectScreen(screen).toHaveText('Notice')
+      fireEvent.press(screen.getByLabelText('Back'))
+      Expect(screen.queryByText('Notice')).toBeNull()
       ExpectScreen(screen).toHaveText('Detail')
       let consumed = false
       act(() => {
@@ -171,6 +178,102 @@ Describe('Expo runtime', () => {
     } finally {
       restoreReactNativeRuntime.mockRestore()
     }
+  })
+
+  Test('layers stacked StackNav overlays absolutely and preserves covered overlay state', () => {
+    function StatefulOverlay(): ReactElement {
+      const [count, setCount] = useState(0)
+      return createElement(
+        RN.View,
+        null,
+        createElement(RN.Text, null, `Overlay count ${count}`),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Increment overlay',
+          onPress: () => setCount(value => value + 1),
+        }),
+      )
+    }
+
+    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+    const first = TR.Navigation.UI({ name: 'First overlay', render: () => createElement(StatefulOverlay) })
+    const second = TR.Navigation.UI({
+      name: 'Second overlay',
+      render: () => createElement(RN.Text, null, 'Second overlay'),
+    })
+    const stack = TR.Navigation.StackNav({ name: 'OverlayHostStack', initial: home })
+    const app = TR.Navigation.App({
+      name: 'Overlay Host App',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    act(() => {
+      TR.Navigation.PresentOverlay(undefined, stack, first, {})
+    })
+    fireEvent.press(screen.getByLabelText('Increment overlay'))
+    ExpectScreen(screen).toHaveText('Overlay count 1')
+
+    act(() => {
+      TR.Navigation.PresentOverlay(undefined, stack, second, {})
+    })
+    ExpectScreen(screen).toHaveText('Second overlay')
+    Expect(screen.queryByLabelText('Increment overlay')).toBeNull()
+    const styles = screen.UNSAFE_getAllByType(RN.View).map(view => RN.StyleSheet.flatten(view.props.style))
+    Expect(styles.some(style => style?.position === 'relative')).toBe(true)
+    Expect(styles.some(style =>
+      style?.position === 'absolute'
+      && style.top === 0
+      && style.right === 0
+      && style.bottom === 0
+      && style.left === 0
+      && style.zIndex === 1
+    )).toBe(true)
+
+    fireEvent.press(screen.getByLabelText('Back'))
+    Expect(screen.queryByText('Second overlay')).toBeNull()
+    ExpectScreen(screen).toHaveText('Overlay count 1')
+    fireEvent.press(screen.getByLabelText('Back'))
+    Expect(screen.queryByText('Overlay count 1')).toBeNull()
+    ExpectScreen(screen).toHaveText('Home')
+  })
+
+  Test('resolves contextual overlays to a SlotNav and dismisses its overlay stack before content', () => {
+    const first = TR.Navigation.UI({
+      name: 'Slot overlay one',
+      render: () => createElement(RN.Text, null, 'Slot overlay one'),
+    })
+    const second = TR.Navigation.UI({
+      name: 'Slot overlay two',
+      render: () => createElement(RN.Text, null, 'Slot overlay two'),
+    })
+    const home = TR.Navigation.UI({
+      name: 'Slot home',
+      render: (_arguments, taoProps) =>
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Open slot overlay',
+          onPress: () => TR.Navigation.PresentOverlay(taoProps, undefined, first, {}),
+        }, createElement(RN.Text, null, 'Slot home')),
+    })
+    const slot = TR.Navigation.SlotNav({ name: 'OverlayHostSlot', initial: home })
+    const app = TR.Navigation.App({
+      name: 'Slot Overlay Host App',
+      navigator: () => slot,
+      auxiliaries: () => ({}),
+    })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    fireEvent.press(screen.getByLabelText('Open slot overlay'))
+    act(() => {
+      TR.Navigation.PresentOverlay(undefined, slot, second, {})
+    })
+    ExpectScreen(screen).toHaveText('Slot overlay two')
+    Expect(screen.queryByText('Slot overlay one')).toBeNull()
+    fireEvent.press(screen.getByLabelText('Back'))
+    ExpectScreen(screen).toHaveText('Slot overlay one')
+    fireEvent.press(screen.getByLabelText('Back'))
+    ExpectScreen(screen).toHaveText('Slot home')
+    Expect(slot.back()).toBe(false)
   })
 
   Test('keeps covered navigation entries mounted and returns through the accessible root-safe back reducer', () => {

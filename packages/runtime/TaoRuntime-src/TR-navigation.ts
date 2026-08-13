@@ -122,6 +122,20 @@ export const NavigationControls = {
     navigation.present(presentable, arguments_)
   },
 
+  /** PresentOverlay layers a UI above an explicit nav or the nearest enclosing nav. */
+  PresentOverlay(
+    taoProps: TaoProps | undefined,
+    target: TaoNavigationValue | undefined,
+    presentable: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+  ): void {
+    const navigation = target ?? taoProps?.navigation
+    if (!navigation) {
+      throw new Error(`Cannot present ${presentable.name} as overlay: no enclosing or explicit navigation target.`)
+    }
+    navigation.presentOverlay(presentable, arguments_)
+  },
+
   /** Dismiss delegates to the nearest enclosing navigation container. */
   Dismiss(taoProps: TaoProps | undefined): void {
     if (!taoProps?.navigation) {
@@ -144,7 +158,7 @@ export const NavigationControls = {
     return target
   },
 
-  Back(target?: RuntimeNavigationStack | TaoNavigationValue | RuntimeAppDefinition): boolean {
+  Back(target?: { back(): boolean }): boolean {
     return (target ?? activeBackTarget)?.back() ?? false
   },
 
@@ -191,6 +205,8 @@ class RuntimePresentable {
 abstract class RuntimeNavigationValue implements Subscription {
   protected listeners = new Set<() => void>()
   protected version = 0
+  private nextOverlayEntryId = 1
+  private overlayEntries: PresentableEntry[] = []
 
   abstract readonly kind: 'stack' | 'slot' | 'overlay'
   abstract readonly name: string
@@ -206,17 +222,64 @@ abstract class RuntimeNavigationValue implements Subscription {
     return this
   }
 
-  abstract back(): boolean
-  abstract dismiss(): boolean
+  get canGoBack(): boolean {
+    return this.overlayEntries.length > 0 || this.canGoBackContent()
+  }
+
+  back(): boolean {
+    return this.dismissOverlay() || this.backContent()
+  }
+
+  dismiss(): boolean {
+    return this.dismissOverlay() || this.dismissContent()
+  }
+
   abstract present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void
-  abstract render(taoProps?: TaoProps): React.ReactNode
-  abstract reset(): void
+
+  presentOverlay(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
+    this.overlayEntries.push({
+      arguments: { ...arguments_ },
+      instanceId: this.nextOverlayEntryId++,
+      presentable,
+    })
+    this.emit()
+  }
+
+  render(taoProps?: TaoProps): React.ReactNode {
+    return React.createElement(NavigationSurface, {
+      content: this.renderContent(taoProps),
+      navigation: this,
+      overlays: this.overlayEntries,
+      taoProps,
+    })
+  }
+
+  reset(): void {
+    this.overlayEntries = []
+    this.resetContent()
+    this.emit()
+  }
+
+  protected abstract backContent(): boolean
+  protected abstract canGoBackContent(): boolean
+  protected abstract dismissContent(): boolean
+  protected abstract renderContent(taoProps?: TaoProps): React.ReactNode
+  protected abstract resetContent(): void
 
   protected emit(): void {
     this.version += 1
     for (const listener of this.listeners) {
       listener()
     }
+  }
+
+  private dismissOverlay(): boolean {
+    if (this.overlayEntries.length === 0) {
+      return false
+    }
+    this.overlayEntries.pop()
+    this.emit()
+    return true
   }
 }
 
@@ -242,11 +305,15 @@ class RuntimeStackNav extends RuntimeNavigationValue {
     this.emit()
   }
 
-  dismiss(): boolean {
-    return this.back()
+  protected canGoBackContent(): boolean {
+    return this.entries.length > 1
   }
 
-  back(): boolean {
+  protected dismissContent(): boolean {
+    return this.backContent()
+  }
+
+  protected backContent(): boolean {
     if (this.entries.length === 1) {
       return false
     }
@@ -255,12 +322,11 @@ class RuntimeStackNav extends RuntimeNavigationValue {
     return true
   }
 
-  reset(): void {
+  protected resetContent(): void {
     this.entries = [this.initialEntry()]
-    this.emit()
   }
 
-  render(taoProps?: TaoProps): React.ReactNode {
+  protected renderContent(taoProps?: TaoProps): React.ReactNode {
     return this.entries.map((entry, index) =>
       React.createElement(NavigationLevel, {
         children: entry.presentable.render(entry.arguments, navigationProps(taoProps, this)),
@@ -295,7 +361,7 @@ class RuntimeSlotNav extends RuntimeNavigationValue {
     this.emit()
   }
 
-  dismiss(): boolean {
+  protected dismissContent(): boolean {
     if (!this.presented) {
       return false
     }
@@ -304,22 +370,26 @@ class RuntimeSlotNav extends RuntimeNavigationValue {
     return true
   }
 
-  back(): boolean {
+  protected canGoBackContent(): boolean {
+    return this.presented !== undefined
+      || (isNavigation(this.definition.initial) && this.definition.initial.canGoBack)
+  }
+
+  protected backContent(): boolean {
     if (this.presented) {
-      return this.dismiss()
+      return this.dismissContent()
     }
     return isNavigation(this.definition.initial) ? this.definition.initial.back() : false
   }
 
-  reset(): void {
+  protected resetContent(): void {
     this.presented = undefined
     if (isNavigation(this.definition.initial)) {
       this.definition.initial.reset()
     }
-    this.emit()
   }
 
-  render(taoProps?: TaoProps): React.ReactNode {
+  protected renderContent(taoProps?: TaoProps): React.ReactNode {
     if (this.presented) {
       return this.presented.presentable.render(
         this.presented.arguments,
@@ -348,11 +418,15 @@ class RuntimeOverlayNav extends RuntimeNavigationValue {
     this.emit()
   }
 
-  dismiss(): boolean {
-    return this.back()
+  protected canGoBackContent(): boolean {
+    return this.entries.length > 0
   }
 
-  back(): boolean {
+  protected dismissContent(): boolean {
+    return this.backContent()
+  }
+
+  protected backContent(): boolean {
     if (this.entries.length === 0) {
       return false
     }
@@ -361,14 +435,19 @@ class RuntimeOverlayNav extends RuntimeNavigationValue {
     return true
   }
 
-  reset(): void {
+  protected resetContent(): void {
     this.entries = []
-    this.emit()
   }
 
-  render(taoProps?: TaoProps): React.ReactNode {
-    const entry = this.entries.at(-1)
-    return entry?.presentable.render(entry.arguments, navigationProps(taoProps, this)) ?? null
+  protected renderContent(taoProps?: TaoProps): React.ReactNode {
+    return this.entries.map((entry, index) =>
+      React.createElement(NavigationLevel, {
+        children: entry.presentable.render(entry.arguments, navigationProps(taoProps, this)),
+        fill: true,
+        hidden: index !== this.entries.length - 1,
+        key: entry.instanceId,
+      })
+    )
   }
 }
 
@@ -409,6 +488,11 @@ class RuntimeAppDefinition implements Subscription {
       }
     }
     return this.navigator.back()
+  }
+
+  get canGoBack(): boolean {
+    return Object.values(this.auxiliaries).some(auxiliary => auxiliary.canGoBack)
+      || this.navigator.canGoBack
   }
 
   reset(): void {
@@ -528,15 +612,38 @@ function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps 
   }
   React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
   usePlatformBack(props.app)
-  return React.createElement(
-    React.Fragment,
-    null,
-    navigator.kind === 'stack' && navigator.back.bind(navigator)
-      ? React.createElement(NavigationBackAffordance, { target: navigator, onlyWhenConsumed: true })
-      : null,
-    navigator.render(props.__tao),
-    ...auxiliaries.map(auxiliary => auxiliary.render(props.__tao)),
-  )
+  const overlayAuxiliaries = auxiliaries.filter(auxiliary => auxiliary.kind === 'overlay')
+  const contentAuxiliaries = auxiliaries.filter(auxiliary => auxiliary.kind !== 'overlay')
+  const runtime = requireReactNativeRuntime()
+  return React.createElement(runtime.View, {
+    children: [
+      React.createElement(
+        React.Fragment,
+        { key: 'content' },
+        props.app.canGoBack
+          ? React.createElement(NavigationBackAffordance, { target: props.app })
+          : null,
+        navigator.render(props.__tao),
+        ...contentAuxiliaries.map(auxiliary => auxiliary.render(props.__tao)),
+      ),
+      overlayAuxiliaries.length > 0
+        ? React.createElement(runtime.View, {
+          children: overlayAuxiliaries.map((auxiliary, index) =>
+            React.createElement(
+              React.Fragment,
+              { key: `${auxiliary.name}-${index}` },
+              auxiliary.render(props.__tao),
+            )
+          ),
+          key: 'app-overlays',
+          pointerEvents: 'box-none',
+          style: overlayLayerStyle,
+        })
+        : null,
+    ],
+    pointerEvents: 'box-none',
+    style: navigationHostStyle,
+  })
 }
 
 function useSubscription(subscription: Subscription): void {
@@ -560,35 +667,73 @@ function usePlatformBack(target: { back(): boolean }): void {
 }
 
 /** NavigationLevel hides covered stack entries without unmounting their local React state. */
-function NavigationLevel(props: { children?: React.ReactNode; hidden: boolean }): React.JSX.Element {
+function NavigationLevel(props: {
+  children?: React.ReactNode
+  fill?: boolean
+  hidden: boolean
+}): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
   return React.createElement(runtime.View, {
     accessibilityElementsHidden: props.hidden,
     children: props.children,
     importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
-    style: props.hidden ? { display: 'none' } : undefined,
+    style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
   })
 }
 
 /** NavigationBackAffordance exposes the same root-safe reducer through an accessible control. */
 function NavigationBackAffordance(props: {
-  onlyWhenConsumed?: boolean
   target: { back(): boolean }
 }): React.JSX.Element | null {
-  if (props.onlyWhenConsumed && !canNavigateBack(props.target)) {
-    return null
-  }
   return Views.Pressable(
-    { action: { invoke: () => props.target.back() }, title: 'Back' },
+    { action: { invoke: () => NavigationControls.Back(props.target) }, title: 'Back' },
     { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },
   )
 }
 
-function canNavigateBack(target: { back(): boolean }): boolean {
-  if (target instanceof RuntimeStackNav) {
-    return target.depth > 1
-  }
-  return false
+const navigationHostStyle = { flex: 1, position: 'relative' } as const
+const overlayLayerStyle = {
+  bottom: 0,
+  left: 0,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+  zIndex: 1,
+} as const
+const hiddenNavigationLevelStyle = { display: 'none' } as const
+const visibleOverlayLevelStyle = { flex: 1 } as const
+
+/** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
+function NavigationSurface(props: {
+  content?: React.ReactNode
+  navigation: TaoNavigationValue
+  overlays: PresentableEntry[]
+  taoProps?: TaoProps
+}): React.JSX.Element {
+  const runtime = requireReactNativeRuntime()
+  const overlays = props.overlays.length > 0
+    ? React.createElement(runtime.View, {
+      children: props.overlays.map((entry, index) =>
+        React.createElement(NavigationLevel, {
+          children: entry.presentable.render(
+            entry.arguments,
+            navigationProps(props.taoProps, props.navigation),
+          ),
+          fill: true,
+          hidden: index !== props.overlays.length - 1,
+          key: entry.instanceId,
+        })
+      ),
+      pointerEvents: 'box-none',
+      style: overlayLayerStyle,
+    })
+    : null
+  return React.createElement(
+    runtime.View,
+    { pointerEvents: 'box-none', style: navigationHostStyle },
+    props.content,
+    overlays,
+  )
 }
 
 function registerNavigation<ValueT extends RuntimeNavigationValue>(navigation: ValueT): ValueT {

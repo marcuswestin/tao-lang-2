@@ -617,6 +617,25 @@ Describe('TR.Navigation', () => {
     Expect(app.navigator).toBe(slot)
   })
 
+  Test('hosts overlays directly on every configured navigation value', () => {
+    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
+    const notice = TR.Navigation.UI({ name: 'Notice', render: () => null })
+    const stack = TR.Navigation.StackNav({ name: 'Stack', initial: home })
+    const slot = TR.Navigation.SlotNav({ name: 'Slot', initial: stack })
+
+    TR.Navigation.PresentOverlay(undefined, stack, notice, {})
+    TR.Navigation.PresentOverlay(undefined, stack, notice, {})
+    Expect(stack.canGoBack).toBe(true)
+    Expect(stack.back()).toBe(true)
+    Expect(stack.back()).toBe(true)
+    Expect(stack.back()).toBe(false)
+
+    TR.Navigation.PresentOverlay(undefined, slot, notice, {})
+    Expect(slot.canGoBack).toBe(true)
+    Expect(slot.dismiss()).toBe(true)
+    Expect(slot.canGoBack).toBe(false)
+  })
+
   Test('keeps same-named generated app definitions isolated by identity and resets both', () => {
     const home = TR.Navigation.UI({ name: 'Home', render: () => null })
     const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
