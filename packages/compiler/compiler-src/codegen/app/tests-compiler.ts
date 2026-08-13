@@ -27,13 +27,29 @@ export default {
     return gen.noop()
   },
 
+  TagPressStep(): Compiled {
+    return gen.noop()
+  },
+
   /** EnterTextStep compiles to no generated app output. */
   EnterTextStep(_enter: AST.EnterTextStep): Compiled {
     return gen.noop()
   },
 
+  TagEnterStep(): Compiled {
+    return gen.noop()
+  },
+
   /** SubmitInputStep compiles to no generated app output. */
   SubmitInputStep(_submit: AST.SubmitInputStep): Compiled {
+    return gen.noop()
+  },
+
+  TagSubmitStep(): Compiled {
+    return gen.noop()
+  },
+
+  SelectStep(): Compiled {
     return gen.noop()
   },
 
@@ -49,6 +65,18 @@ export default {
 
   /** ExpectInputValueStep compiles to no generated app output. */
   ExpectInputValueStep(_expectation: AST.ExpectInputValueStep): Compiled {
+    return gen.noop()
+  },
+
+  TagInputValueExpectation(): Compiled {
+    return gen.noop()
+  },
+
+  ExpectGroupStep(): Compiled {
+    return gen.noop()
+  },
+
+  ExpectScopeStep(): Compiled {
     return gen.noop()
   },
 } as const

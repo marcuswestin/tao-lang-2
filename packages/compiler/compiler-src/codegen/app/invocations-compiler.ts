@@ -25,11 +25,12 @@ export default {
     const view = invocation.view
     Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
     Assert(invocation.diagnostics.length === 0, 'validated render invocation has no binding diagnostics')
+    Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
 
     const renderArguments = Compile.RenderArguments(invocation)
     const taoProps = Compile.RenderTaoProps(render)
     const block = render.block
-    const children = AST.statementsOf(block)
+    const children = AST.statementsOf(block).filter(statement => !AST.isEventHandler(statement))
     if (children.length === 0) {
       return gen`<${gen.scopeName(view)}${renderArguments}${taoProps} />`
     }
@@ -46,7 +47,11 @@ export default {
 
   /** RenderArguments compiles render invocation arguments into JSX props. */
   RenderArguments(invocation: ASTUtils.ResolvedRenderInvocation): Compiled {
-    return gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })
+    return gen`
+      ${gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })}
+      ${gen.join(invocation.eventPairs, Compile.EventHandlerArgument, { separator: '' })}
+      ${invocation.implicitChange ? Compile.ImplicitChangeArgument(invocation.implicitChange) : ''}
+    `
   },
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
@@ -56,11 +61,49 @@ export default {
 
   /** Argument compiles a Tao render argument into a runtime value expression. */
   Argument(argument: AST.Argument): Compiled {
-    if (argument.type && AST.isItemLiteral(argument.value)) {
-      return Compile.ItemLiteral(argument.value, argument.type)
+    return Compile.Expression(argument.value)
+  },
+
+  /** EventHandlerArgument compiles an explicit control event into its action-valued prop. */
+  EventHandlerArgument(pair: ASTUtils.RenderEventBindingPair): Compiled {
+    return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${Compile.EventHandlerAction(pair)}}`
+  },
+
+  /** EventHandlerAction compiles a named or inline Tao event callback. */
+  EventHandlerAction(pair: ASTUtils.RenderEventBindingPair): Compiled {
+    const handler = pair.handler
+    if (handler.action) {
+      return Compile.Expression(handler.action)
     }
-    const value = argument.value
-    Assert.is(value, AST.isExpression, 'validated argument value is an expression')
-    return Compile.Expression(value)
+    Assert.defined(handler.block, 'inline event handler has an action block')
+    const parameterType = Type.ofParameter(pair.parameter)
+    Assert(
+      parameterType.kind === 'primitive' && parameterType.primitive === 'action',
+      'validated event parameter is action-valued',
+    )
+    const eventInput = parameterType.kind === 'primitive' && parameterType.primitive === 'action'
+      ? parameterType.parameters[0]
+      : undefined
+    return gen`
+      TR.Action((${
+      eventInput
+        ? gen`_TaoEventValue: ${Compile.RuntimeType(eventInput.type)}`
+        : ''
+    }) => {
+        return TR.BlockScope(_Scope, _Scope => {
+          ${handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : ''}
+          ${Compile.ActionBlockBody(handler.block)}
+        })
+      })
+    `
+  },
+
+  /** ImplicitChangeArgument compiles TextInput-style direct state binding. */
+  ImplicitChangeArgument(binding: ASTUtils.ImplicitChangeBinding): Compiled {
+    return gen`
+      ${gen.Name({ name: Type.parameterName(binding.parameter) })}={TR.Action(
+        (_TaoEventValue: TR.Value<string>) => TR.Set(${gen.scopeName(binding.state)}, () => _TaoEventValue),
+      )}
+    `
   },
 } as const

@@ -52,11 +52,14 @@ function CompileExpressionJsType(expression: AST.Expression): Compiled {
         none: () => gen`null`,
         text: () => gen`string`,
         time: () => gen`number`,
+        nav: () => gen`TR.NavigationValue`,
+        ui: () => gen`TR.Presentable`,
       }),
     list: () => gen`any[]`,
     item: () => gen`any`,
     entity: () => gen`any`,
     unresolved: () => gen`any`,
+    union: () => gen`any`,
   })
 }
 

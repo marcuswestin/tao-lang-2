@@ -17,7 +17,7 @@ export const ActionsCompiler = {
       ${gen.scopeName(action)} = TR.Action((${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
         return TR.BlockScope(_Scope, _Scope => {
           ${gen.list(parameters, Compile.ActionParameterBinding)}
-          ${gen.block(action, Compile.ActionStatement)}
+          ${Compile.ActionBlockBody(action.block)}
         })
       })
     `
@@ -28,7 +28,7 @@ export const ActionsCompiler = {
     return gen`
       TR.Action(() => {
         return TR.BlockScope(_Scope, _Scope => {
-          ${gen.block(action, Compile.ActionStatement)}
+          ${Compile.ActionBlockBody(action.block)}
         })
       })
     `
@@ -54,15 +54,21 @@ export const ActionsCompiler = {
   ActionStatement(statement: AST.ActionStatement): Compiled {
     return Switch.type(statement, {
       CreateStatement: Compile.CreateStatement,
-      BackStatement: Compile.BackStatement,
+      ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
+      DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
-      PresentStatement: Compile.PresentStatement,
+      GuardActionStatement: Compile.GuardActionStatement,
+      ReplaceStatement: Compile.ReplaceStatement,
       SetStatement: Compile.SetStatement,
       ToggleStatement: Compile.ToggleStatement,
       UpdateStatement: Compile.UpdateStatement,
-      WhenActionStatement: Compile.WhenActionStatement,
     })
+  },
+
+  /** ActionBlockBody compiles one callback-owned action block. */
+  ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
+    return gen.list(block?.statements ?? [], Compile.ActionStatement)
   },
 
   /** DoStatement compiles Tao action invocation. */
@@ -84,23 +90,26 @@ export const ActionsCompiler = {
     return gen`TR.Toggle(${gen.scopeName(state)})`
   },
 
-  /** WhenActionStatement runs only the first matching action branch. */
-  WhenActionStatement(statement: AST.WhenActionStatement): Compiled {
-    return gen`TR.WhenAction([
+  /** GuardActionStatement stops only its enclosing action-block callback after a match. */
+  GuardActionStatement(statement: AST.GuardActionStatement): Compiled {
+    return gen`if (TR.GuardAction(${Compile.Expression(statement.subject)}, [
       ${
       gen.list(
-        statement.branches,
+        guardActionBranches(statement),
         branch =>
-          gen`[() => ${Compile.Expression(branch.condition)}, () => {
-          ${gen.list(branch.block.statements, Compile.ActionStatement)}
-        }],`,
+          gen`[${gen.jsLiteral(branch.case)}, _TaoCasePayload => TR.BlockScope(_Scope, _Scope => {
+          ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
+          ${Compile.ActionBlockBody(branch.block)}
+        })],`,
       )
     }
-    ], () => {
-      ${gen.list(statement.otherwise.block.statements, Compile.ActionStatement)}
-    })`
+    ])) return`
   },
 } as const
+
+function guardActionBranches(statement: AST.GuardActionStatement): AST.GuardActionBranch[] {
+  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
+}
 
 function actionParameters(action: AST.ActionDeclaration): ActionParameter[] {
   return AST.parametersOf(action).map((parameter, index) => ({ index, parameter }))

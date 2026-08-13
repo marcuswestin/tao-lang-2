@@ -36,6 +36,18 @@ export type TaoTestInputValueExpectation = {
   source: TaoTestSourceLocation
 }
 
+export type TaoTestGroupedExpectation =
+  | { kind: 'match'; missing: boolean; selector: 'label' | 'placeholder' | 'text'; target: string }
+  | { kind: 'inputValue'; value: string }
+
+/** TaoTestExpectationGroupStep preserves grouped assertions and an optional tag scope in test IR. */
+export type TaoTestExpectationGroupStep = {
+  kind: 'expectGroup'
+  scopeTag?: string
+  expectations: TaoTestGroupedExpectation[]
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestPressStep declares one v0 selector-targeted press action. */
 export type TaoTestPressStep = {
   kind: 'press'
@@ -64,7 +76,6 @@ export type TaoTestSubmitStep = {
 /** TaoTestDataStatusStep declares a deterministic provider state transition. */
 export type TaoTestDataStatusStep = {
   kind: 'dataStatus'
-  dataName: string
   status: 'error' | 'loading' | 'ready'
   message: string
   source: TaoTestSourceLocation
@@ -76,14 +87,25 @@ export type TaoTestBackStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestSelectStep scopes nested operations to one 1-based tagged loop row. */
+export type TaoTestSelectStep = {
+  kind: 'select'
+  tag: string
+  index: number
+  steps: TaoTestStep[]
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
 export type TaoTestStep =
   | TaoTestBackStep
   | TaoTestDataStatusStep
   | TaoTestEnterStep
   | TaoTestExpectation
+  | TaoTestExpectationGroupStep
   | TaoTestInputValueExpectation
   | TaoTestPressStep
+  | TaoTestSelectStep
   | TaoTestSubmitStep
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
@@ -173,9 +195,38 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
     DataStatusStep: compileDataStatusStep,
     EnterTextStep: compileEnterTextStep,
     ExpectInputValueStep: compileInputValueExpectation,
+    TagInputValueExpectation: expectation => ({
+      kind: 'expectInputValue',
+      selector: 'tag',
+      target: tagName(expectation.tag),
+      value: expectation.value,
+      source: sourceLocation(expectation),
+    }),
     ExpectTextStep: compileExpectation,
+    ExpectGroupStep: step => compileExpectationGroup(step, undefined),
+    ExpectScopeStep: step => compileExpectationGroup(step, tagName(step.tag)),
     PressTextStep: compilePressTextStep,
+    TagPressStep: step => ({
+      kind: 'press',
+      selector: 'tag',
+      text: tagName(step.tag),
+      source: sourceLocation(step),
+    }),
+    SelectStep: compileSelectStep,
     SubmitInputStep: compileSubmitInputStep,
+    TagSubmitStep: step => ({
+      kind: 'submit',
+      selector: 'tag',
+      target: tagName(step.tag),
+      source: sourceLocation(step),
+    }),
+    TagEnterStep: step => ({
+      kind: 'enter',
+      selector: 'tag',
+      target: tagName(step.tag),
+      value: step.value,
+      source: sourceLocation(step),
+    }),
   })
 }
 
@@ -186,11 +237,45 @@ function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {
 function compileDataStatusStep(step: AST.DataStatusStep): TaoTestDataStatusStep {
   return {
     kind: 'dataStatus',
-    dataName: step.data.$refText,
     status: step.status || 'error',
     message: step.message || '',
     source: sourceLocation(step),
   }
+}
+
+function compileExpectationGroup(
+  step: AST.ExpectGroupStep | AST.ExpectScopeStep,
+  scopeTag: string | undefined,
+): TaoTestExpectationGroupStep {
+  return {
+    kind: 'expectGroup',
+    ...(scopeTag ? { scopeTag } : {}),
+    expectations: step.block.expectations.map(expectation =>
+      expectation.selector
+        ? {
+          kind: 'match' as const,
+          missing: expectation.missing,
+          selector: expectation.selector,
+          target: expectation.value,
+        }
+        : { kind: 'inputValue' as const, value: expectation.value }
+    ),
+    source: sourceLocation(step),
+  }
+}
+
+function compileSelectStep(step: AST.SelectStep): TaoTestSelectStep {
+  return {
+    kind: 'select',
+    tag: tagName(step.tag),
+    index: step.index,
+    steps: step.block.statements.filter(AST.isCheckStep).filter(isRunnableTestStep).map(compileStep),
+    source: sourceLocation(step),
+  }
+}
+
+function tagName(tag: string): string {
+  return tag.slice(1)
 }
 
 function compileEnterTextStep(enter: AST.EnterTextStep): TaoTestEnterStep {
