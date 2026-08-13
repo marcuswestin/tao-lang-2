@@ -1,28 +1,60 @@
 # Follow-ups - Add navigation and routing MVP
 
-Minimal non-normative examples for syntax ideas preserved from the deleted exploration live in `Deferred syntax explorations.md`.
+This is the live record of navigation work that is still unimplemented. The implemented contract
+lives in `Spec/Tao Presentation and Navigation.md`; the research record and its ledgers are archived
+under `Roadmap/Archive/Add navigation and routing MVP/`. Rationale for the families below survives
+there, but this file owns what remains to be decided or built.
+
+**Presentation modes replaced overlay and toast hosts.** The research record settled on targeting a
+named `@overlays` / `@toasts` host and explicitly rejected call-site placement. The WordFlower
+tranche after the navigation MVP reversed that: overlay hosting is a capability of every nav, so
+`present X() as overlay` layers above the nearest enclosing nav (with `in <target>` still overriding
+scope) and `present X() as toast (Key: "…", Duration: 3.seconds)` is always app-level and transient.
+Keyed app auxiliaries remain in the language for app-specific hosts such as windows. Entries below
+are written against the current model.
 
 ## Ordered Implementation Projects
 
 ### FOLLOW-NAV-001: Selection, Split, And Keyed Navigation
 
-Implement typed keyed objects including direct owner-scoped entries, owner-wide target-key uniqueness, explicit keyed-property fallback, `key of Items`, compiler-created selection/split items, static and dynamic SelectionNav, SplitNav, keyed and relative path segments, directional delegation, pane reveal, programmatic target activation, adaptive display including drawer, and occurrence-key behavior.
+Static `SelectionNav` with keyed items, `Initial @key`, `Display`, adaptive drawer display, and
+target-only activation (`present App@key`) are decided in the WordFlower Next contract and are being
+implemented there. Still open here: `SplitNav` and panes, dynamic selection, `key of Items` typing,
+compiler-created selection/split items, keyed and relative path segments beyond app auxiliaries,
+directional delegation, pane reveal, and occurrence-key behavior.
 
-### FOLLOW-NAV-002: Window And Toast Auxiliaries
+### FOLLOW-NAV-002: Window Auxiliaries And Toast Delivery
 
-App auxiliary registration and `OverlayNav` shipped with the WordFlower Next tranche. Extend that
-model with WindowHost/Window, ToastHost/Toast, reducer-owned toast expiration, native
-dismissal/close events, key-based focus, safe stacking, and platform support diagnostics. Settle
-refreshed Toast child-occurrence behavior under `DEF-NAV-017` before interactive toasts are
-admitted.
+App auxiliary registration shipped with the navigation MVP; keyed toasts are decided as a
+presentation mode in the WordFlower Next contract. Still open here: `WindowHost`/`Window` as keyed
+auxiliaries, reducer-owned toast expiration, native dismissal and close events, key-based focus,
+safe stacking, and platform-support diagnostics. `DEF-NAV-017` blocks interactive toasts and must be
+settled while toasts are implemented.
 
-### FOLLOW-NAV-003: Restoration, Routes, And Entity Recovery
+### FOLLOW-NAV-003: Restoration, Routes, Entity Recovery, And Project Identity
 
-Implement the versioned presentation-state schema, round-trip restoration, invalid-state fallback, loading/missing/unauthorized entity references, stable public route declarations, and deep-link transactions that do not expose internal mount paths. Settle the source-facing restoration API under `DEF-NAV-013` before implementation planning.
+Implement the versioned presentation-state schema, round-trip restoration, invalid-state fallback,
+stable public route declarations, and deep-link transactions that do not expose internal mount
+paths. Loading, missing, and unauthorized entity references are decided as entity availability
+guards in the WordFlower Next contract. Settle the source-facing restoration API under
+`DEF-NAV-013` before implementation planning.
+
+Restorable descriptor identity depends on a checked-in project ID, whose contract is settled:
+
+- Every project forming restorable UI or nav descriptors has one opaque immutable `id` in its
+  project metadata; Tao never generates identity.
+- `tao create <id>` uses the new project's directory name as the checked-in ID, and
+  `tao project id <id> [path]` migrates an existing project as a deliberate, reviewable command.
+- Clones and published artifacts retain the ID; an independent fork supplies a replacement with
+  `--replace`.
+- A missing ID produces a diagnostic naming the migration command. It never falls back to a
+  filesystem path, remote URL, lockfile key, or per-run value.
 
 ### FOLLOW-NAV-004: Dialogue Scheduling
 
-Implement process-local `ask`/`respond`, exactly-once completion, platform cancellation, concurrent ask policy, native-dismiss races, and optional result typing. Durable continuations remain out of scope.
+`dialogue … responds`, `ask`, and `respond` with optional results are decided in the WordFlower Next
+contract. Still open here: exactly-once completion guarantees, platform cancellation, concurrent-ask
+policy, and native-dismiss races. Durable continuations remain out of scope under `DEF-NAV-005`.
 
 ### FOLLOW-NAV-005: Repository Conformance (absorbed)
 
@@ -67,7 +99,9 @@ Choose syntax for platform- and capability-specific definitions as a language-wi
 
 ### DEF-NAV-009: Values Across Suspension
 
-Decide whether live entity references crossing `ask` are revalidated automatically, exposed through an explicit availability guard, or restricted to IDs and snapshots. This is separate from presentation-parameter restorability because the suspended action resumes in a changed world.
+Partly settled: entity availability guards are the explicit-guard answer, and `snapshot` is the
+frozen-copy escape hatch. Still open: whether a live reference crossing `ask` is revalidated
+automatically before the action resumes, or whether the resumed action must guard it itself.
 
 ### DEF-NAV-010: Unsafe Native Boundaries
 
