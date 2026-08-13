@@ -8,5 +8,8 @@ approvals_reviewer = "auto_review"
 [permissions.tao-workspace]
 extends = ":workspace"
 
+[permissions.tao-workspace.filesystem]
+"~/code/tao-lang-2/.git" = "write"
+
 [permissions.tao-workspace.filesystem.":workspace_roots"]
 "**/.env*" = "deny"
