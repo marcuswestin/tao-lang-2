@@ -1,4 +1,4 @@
-use WordFlower, WordFlowerFoundationTest from ./
+use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest from ./
 
 test "WordFlower functional MVP" {
    check "starts empty and keeps invalid creates inert" {
