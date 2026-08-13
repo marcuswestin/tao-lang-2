@@ -77,6 +77,12 @@ Describe('functional core compiler', () => {
         render Stack() {
           if Result is Confirmed { Text("Confirmed") }
           loop Documents / Document {
+            guard Document {
+              loading -> { Text("Loading") }
+              missing -> { Text("Missing") }
+              unauthorized -> { Text("Unauthorized") }
+              error -> Message { Text(Message) }
+            }
             if Document.Final is Final { Text("Final") }
             if Document.Final is Draft { Text("Draft") }
           }
@@ -92,6 +98,9 @@ Describe('functional core compiler', () => {
     Expect(code).toContain('TR.IsCase(_Scope.Result.evaluate(), _Scope.ConfirmResult.Confirmed)')
     Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(true))')
     Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(false))')
+    Expect(code).toContain('TR.GuardRender(_Scope.Document.evaluate(), [')
+    Expect(code).toContain('["missing", _TaoCasePayload =>')
+    Expect(code).toContain('["unauthorized", _TaoCasePayload =>')
     Expect(code.match(/TR\.If\(/g)).toHaveLength(4)
   })
 

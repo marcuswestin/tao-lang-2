@@ -113,6 +113,31 @@ Describe('functional core formatter', () => {
     )
   })
 
+  Test('formats grouped entity availability guards and their error payload', async () => {
+    await testFormatCode(
+      `view DocumentScreen Document{render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Message{Text(Message)}}DocumentEditor(Document)}}`,
+      `
+        view DocumentScreen Document {
+           render Stack() {
+              guard Document {
+                 loading -> {
+                    Text("Loading")
+                 }
+                 missing -> {
+                    Text("Missing")
+                 }
+                 unauthorized -> {
+                    Text("Unauthorized")
+                 }
+                 error -> Message {
+                    Text(Message)
+              }  }
+              DocumentEditor(Document)
+        }  }
+      `,
+    )
+  })
+
   Test('formats positional action callback signatures compactly', async () => {
     await testFormatCode(
       `view Field Change is action ( text,number ),Submit is action ( ){render Text("Field")}`,

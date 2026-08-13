@@ -1,6 +1,10 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
-import type { TaoDataProvider, TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
+import type {
+  TaoDataProvider,
+  TaoDataSchemaDefinition,
+  TaoEntityAvailability,
+} from '../TaoRuntime-src/TR-data'
 
 const noteDefinition: TaoDataSchemaDefinition = {
   name: 'RuntimeNotes',
@@ -94,6 +98,39 @@ Describe('TR.Data provider foundation', () => {
     Expect(() => TR.Data.Create(schema, 'Note', {})).toThrow(
       "Create of 'Note' is missing required field 'Title'.",
     )
+  })
+
+  Test('derives entity guard availability while preserving a deleted handle identifier', () => {
+    const schema = TR.Data.Schema(noteDefinition, TR.Data.MemoryProvider())
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('Transient') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0] as Record<string, unknown>
+    const cases: string[] = []
+    const branches = [
+      ['loading', () => cases.push('loading')],
+      ['missing', () => cases.push('missing')],
+      ['unauthorized', () => cases.push('unauthorized')],
+      ['error', (message: TR.Value<string>) => cases.push(`error: ${message.jsValue}`)],
+    ] as const
+
+    Expect(TR.Data.EntityAvailability(note)).toEqual({ status: 'available' })
+    Expect(TR.GuardAction(TR.Value(note), branches)).toBe(false)
+
+    schema.setStatus('loading', '')
+    Expect(TR.GuardAction(TR.Value(note), branches)).toBe(true)
+    schema.setStatus('error', 'Provider unavailable')
+    Expect(TR.GuardAction(TR.Value(note), branches)).toBe(true)
+    schema.setStatus('ready', '')
+
+    const id = note['Id']
+    TR.Data.Delete(TR.Value(note))
+    Expect(note['Id']).toBe(id)
+    Expect(TR.Data.Read(note, 'Id')).toBe(id)
+    Expect(TR.Data.EntityAvailability(note)).toEqual({ status: 'missing' })
+    Expect(TR.GuardAction(TR.Value(note), branches)).toBe(true)
+    Expect(cases).toEqual(['loading', 'error: Provider unavailable', 'missing'])
+
+    const reservedProviderState: TaoEntityAvailability = { status: 'unauthorized' }
+    Expect(reservedProviderState.status).toBe('unauthorized')
   })
 
   Test('keeps the text literal "now" distinct from the time clock default', () => {

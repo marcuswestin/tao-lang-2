@@ -209,7 +209,7 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(messages.filter(message => message === ViewsValidator.messages.taggedLoopRoot)).toHaveLength(2)
   })
 
-  Test('retires legacy query status, collection empty, and public entity ID members', async () => {
+  Test('retires legacy query status and collection empty members while exposing stable entity IDs', async () => {
     const result = await testValidateCodeWithErrors(`
       data Items / Item { Title text }
       app DataApp { view MainView }
@@ -230,7 +230,7 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(messages).toContain(typeValidationMessages.memberNotItem('Loading'))
     Expect(messages).toContain(typeValidationMessages.memberNotItem('Error'))
     Expect(messages).toContain(typeValidationMessages.memberNotItem('Empty'))
-    Expect(messages).toContain(typeValidationMessages.unknownMember('Item', 'Id'))
+    Expect(messages).not.toContain(typeValidationMessages.unknownMember('Item', 'Id'))
   })
 
   Test('scopes parameter defaults to preceding parameters only', async () => {

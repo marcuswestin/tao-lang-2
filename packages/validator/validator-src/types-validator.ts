@@ -464,6 +464,11 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       continue
     }
     if (current.kind === 'entity') {
+      if (member === 'Id') {
+        current = { kind: 'primitive', primitive: 'text' }
+        typeName = 'text'
+        continue
+      }
       const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
       if (!field) {
         ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)

@@ -5,6 +5,11 @@ type DataStatus = 'error' | 'loading' | 'ready'
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'
 
+/** TaoEntityAvailability is the provider-neutral live state of one entity handle. */
+export type TaoEntityAvailability =
+  | { status: 'available' | 'loading' | 'missing' | 'unauthorized' }
+  | { message: string; status: 'error' }
+
 export type TaoDataField = {
   defaultNow?: true
   defaultValue?: boolean | number | string
@@ -232,6 +237,12 @@ export const DataControls = {
   /** IsEntityHandle lets the TR facade delegate member reads without importing runtime implementation types. */
   IsEntityHandle(value: unknown): boolean {
     return entityHandle(value) !== undefined
+  },
+
+  /** EntityAvailability derives the exceptional guard state of a live entity handle. */
+  EntityAvailability(value: unknown): TaoEntityAvailability | undefined {
+    const handle = entityHandle(value)
+    return handle ? metadataOf(handle).schema.availability(handle) : undefined
   },
 
   /** Settle waits for the active provider load and every save enqueued before this call. */
@@ -507,6 +518,25 @@ class RuntimeDataSchema {
       throw new Error(`${context} refers to missing ${expectedEntity} '${metadata.id}'.`)
     }
     return metadata.id
+  }
+
+  availability(handle: RuntimeEntityHandle): TaoEntityAvailability {
+    const metadata = metadataOf(handle)
+    if (metadata.schema !== this) {
+      return { status: 'missing' }
+    }
+    if (this.status === 'loading') {
+      return { status: 'loading' }
+    }
+    if (this.status === 'error') {
+      return { message: this.error, status: 'error' }
+    }
+    if (metadata.generation !== this.generation) {
+      return { status: 'missing' }
+    }
+    return this.storedRow(metadata.entity, metadata.id)
+      ? { status: 'available' }
+      : { status: 'missing' }
   }
 
   async settle(): Promise<void> {

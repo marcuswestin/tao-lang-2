@@ -752,6 +752,10 @@ class TypeResolutionContext {
         continue
       }
       if (current.kind === 'entity') {
+        if (member === 'Id') {
+          current = primitiveType('text')
+          continue
+        }
         const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
         if (!field) {
           return unresolvedType()

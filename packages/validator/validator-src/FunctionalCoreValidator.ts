@@ -45,7 +45,7 @@ const messages = {
   invalidCasePayload: "Only an 'error -> Name' case may introduce an error-message value.",
   listElement: 'List elements must have compatible types.',
   renderControlPlacement: '`when`, `guard`, `if`, and `for` rendering must be nested inside a render child block.',
-  subjectCases: '`when` and `guard` subjects must be text, list, query, or boolean values.',
+  subjectCases: '`when` and `guard` subjects must be text, list, query, entity, or boolean values.',
   unaryBoolean: "Unary 'not' requires a boolean value.",
   unaryNumber: "Unary '-' requires a number value.",
 } as const
@@ -317,7 +317,7 @@ function validateSubjectCases(
   }
 }
 
-type SubjectCaseCategory = 'boolean' | 'list' | 'query' | 'text' | 'unresolved' | 'unsupported'
+type SubjectCaseCategory = 'boolean' | 'entity' | 'list' | 'query' | 'text' | 'unresolved' | 'unsupported'
 
 function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
   if (
@@ -333,6 +333,9 @@ function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
   if (type.kind === 'list') {
     return 'list'
   }
+  if (type.kind === 'entity') {
+    return 'entity'
+  }
   if (type.kind === 'primitive' && type.primitive === 'text') {
     return 'text'
   }
@@ -346,6 +349,8 @@ function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
   switch (category) {
     case 'query':
       return new Set(['empty', 'loading', 'error'])
+    case 'entity':
+      return new Set(['loading', 'missing', 'unauthorized', 'error'])
     case 'list':
     case 'text':
       return new Set(['empty'])
@@ -357,7 +362,10 @@ function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
 }
 
 function subjectCaseLabel(category: SubjectCaseCategory): string {
-  return category === 'unsupported' ? 'this subject type' : `a ${category} subject`
+  if (category === 'unsupported') {
+    return 'this subject type'
+  }
+  return category === 'entity' ? 'an entity subject' : `a ${category} subject`
 }
 
 function guardActionBranches(statement: AST.GuardActionStatement): AST.GuardActionBranch[] {

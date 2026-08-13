@@ -393,7 +393,14 @@ namespace TR {
   /** EnumCaseIdentity is the opaque runtime token owned by one enum declaration and case. */
   export type EnumCaseIdentity = Readonly<{ identity: symbol }>
   /** SubjectCaseName declares runtime-recognized built-in subject states. */
-  export type SubjectCaseName = 'empty' | 'loading' | 'error' | 'true' | 'false'
+  export type SubjectCaseName =
+    | 'empty'
+    | 'loading'
+    | 'missing'
+    | 'unauthorized'
+    | 'error'
+    | 'true'
+    | 'false'
   /** CaseBranch maps one source case name to a payload-aware lazy body. */
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
@@ -423,6 +430,19 @@ namespace TR {
 type SubjectCaseMatch = { matched: boolean; payload: unknown }
 
 function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
+  const entity = DataControls.EntityAvailability(value)
+  if (entity) {
+    if (caseName === 'error') {
+      return {
+        matched: entity.status === 'error',
+        payload: entity.status === 'error' ? entity.message : undefined,
+      }
+    }
+    if (caseName === 'loading' || caseName === 'missing' || caseName === 'unauthorized') {
+      return { matched: entity.status === caseName, payload: undefined }
+    }
+    return { matched: false, payload: undefined }
+  }
   const query = queryStatus(value)
   if (caseName === 'loading') {
     return { matched: query?.status === 'loading', payload: undefined }

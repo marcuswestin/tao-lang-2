@@ -77,6 +77,12 @@ Describe('functional core validator', () => {
         state Result = Confirmed
         action Close { if Result is Confirmed { } }
         render Stack() {
+          guard Document {
+            loading -> { Text("Loading") }
+            missing -> { Text(Document.Id) }
+            unauthorized -> { Text("Unauthorized") }
+            error -> Message { Text(Message) }
+          }
           if Result is Confirmed { Text("Confirmed") }
           if Document.Final is Draft { Text("Draft") }
         }
@@ -96,7 +102,13 @@ Describe('functional core validator', () => {
           if Result is Confirmed { }
           if Document.Final is Inactive { }
         }
-        render Stack() { if "yes" { Text("Wrong") } }
+        render Stack() {
+          guard Document {
+            empty -> { Text("Wrong") }
+            missing -> Message { Text(Message) }
+          }
+          if "yes" { Text("Wrong") }
+        }
       }
       ${runtimeViews}
     `)
@@ -105,6 +117,8 @@ Describe('functional core validator', () => {
     Expect(errors.filter(error => error === FunctionalCoreValidator.messages.ifCondition)).toHaveLength(2)
     Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('Confirmed', 'OtherResult'))
     Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('Inactive', 'boolean'))
+    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('empty', 'an entity subject'))
+    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCasePayload)
   })
 
   Test('unifies nested list values without treating unlike element types as compatible', async () => {

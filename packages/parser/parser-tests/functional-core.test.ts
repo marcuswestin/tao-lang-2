@@ -81,6 +81,12 @@ Describe('functional core parser', () => {
           if Result is Confirmed { }
         }
         render Stack() {
+          guard Document {
+            loading -> { Text("Loading") }
+            missing -> { Text("Missing") }
+            unauthorized -> { Text("Unauthorized") }
+            error -> Message { Text(Message) }
+          }
           if Result is Confirmed { Text("Confirmed") }
           if Document.Final is Draft { Text("Draft") }
         }
@@ -103,6 +109,21 @@ Describe('functional core parser', () => {
 
     const render = AST.blockStatementOf(main, { find: AST.isRenderStatement })
     Expect.Is(render, AST.isRenderStatement)
+    const availabilityGuard = AST.statementsOf(render.block).find(AST.isGuardRenderStatement)
+    Expect.Is(availabilityGuard, AST.isGuardRenderStatement)
+    Expect(availabilityGuard.caseBlock?.branches.map(branch => branch.case)).toEqual([
+      'loading',
+      'missing',
+      'unauthorized',
+      'error',
+    ])
+    const errorBranch = availabilityGuard.caseBlock?.branches.at(-1)
+    Expect.Is(errorBranch, AST.isGuardRenderBranch)
+    const errorText = errorBranch.block?.statements[0]
+    Expect.Is(errorText, AST.isViewRender)
+    const errorMessage = AST.argumentsOf(errorText)[0]?.value
+    Expect.Is(errorMessage, AST.isValueReference)
+    Expect(errorMessage.target.ref).toBe(errorBranch.payload)
     const renderIfs = AST.statementsOf(render.block).filter(AST.isIfRenderStatement)
     Expect(renderIfs).toHaveLength(2)
     const dataCase = renderIfs[1]?.condition
