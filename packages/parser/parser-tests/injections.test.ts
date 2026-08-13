@@ -23,7 +23,7 @@ Describe('Tao injection parser', () => {
 
   Test('parses inject arguments', async () => {
     const parseResult = await testParseCode(`
-      alias UserName = "Ro"
+      let UserName = "Ro"
       view Native Value is text {
         render inject Value, Name UserName, Count 3, Greeting "Hello" \`\`\`ts
           return null

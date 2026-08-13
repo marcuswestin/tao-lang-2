@@ -6,25 +6,26 @@ Describe('functional core parser', () => {
   Test('parses expressions, functions, total conditionals, actions, and iteration', async () => {
     const result = await testParseCode(`
       function HasCount Count is number returns boolean = Count > 0 and not false
-      function Label Count is number returns text = when
-        Count > 1 -> interpolate "Count: ", Count + 1
+      function Label Count is number returns text = when (Count > 1) {
+        true -> "Count: { Count + 1 }"
         otherwise -> "Empty"
+      }
       view Main {
         state Ready = false
         action Flip {
-          when
-            Ready -> { toggle Ready }
-            otherwise -> { toggle Ready }
+          guard Ready true -> { toggle Ready }
+          toggle Ready
         }
         render Stack(){
-          when
-            HasCount(2) -> {
+          when HasCount(2) {
+            true -> {
             Text(Label(2))
             }
             otherwise -> {
             Text("Empty")
             }
-          for Name in ["Inbox" "Today"] {
+          }
+          loop ["Inbox", "Today"] / Name {
             Text(Name)
           }
         }
@@ -60,14 +61,39 @@ Describe('functional core parser', () => {
     Expect(loopValue.target.ref).toBe(loop)
   })
 
-  Test('requires otherwise in value, render, and action conditionals', async () => {
-    const value = await parseCodeWithErrors('let Result = when true -> "yes"')
-    const render = await parseCodeWithErrors('view Main { render Stack() { when true -> { Text("yes") } } }')
-    const action = await parseCodeWithErrors('action Run { when true -> { } }')
+  Test('requires otherwise in value and render subject cases while allowing single-case guards', async () => {
+    const value = await parseCodeWithErrors('let Result = when true { true -> "yes" }')
+    const render = await parseCodeWithErrors('view Main { render Stack() { when true { true -> { Text("yes") } } } }')
+    const action = await testParseCode('action Run { guard true true -> { } }')
 
     Expect(value.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
     Expect(render.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(action.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(action.entry.document.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('parses and links scalar expressions inside interpolated strings', async () => {
+    const result = await testParseCode(`
+      let Name = "Ada"
+      let Greeting = "Hello { Name }; next is { 1 + 2 }; choice is { when true { true -> "yes" otherwise -> "no" } }."
+      let Escaped = "literal \\{ brace, \\"quote\\", and \\\\ slash"
+    `)
+
+    const aliases = result.entry.ast.statements.filter(AST.isAliasDeclaration)
+    const name = aliases[0]
+    const greeting = aliases[1]
+    const escaped = aliases[2]
+    Expect.Is(name, AST.isAliasDeclaration)
+    Expect.Is(greeting, AST.isAliasDeclaration)
+    Expect.Is(greeting.value, AST.isInterpolatedString)
+    const interpolations = greeting.value.parts.filter(AST.isStringInterpolation)
+    Expect(interpolations).toHaveLength(3)
+    Expect.Is(interpolations[0]?.expression, AST.isValueReference)
+    Expect(interpolations[0]?.expression.target.ref).toBe(name)
+    Expect.Is(interpolations[1]?.expression, AST.isBinaryExpression)
+    Expect.Is(interpolations[2]?.expression, AST.isWhenExpression)
+    Expect.Is(escaped, AST.isAliasDeclaration)
+    Expect.Is(escaped.value, AST.isStringLiteral)
+    Expect(escaped.value.value).toBe('literal { brace, "quote", and \\ slash')
   })
 
   Test('parses typed parameter defaults across declarations', async () => {

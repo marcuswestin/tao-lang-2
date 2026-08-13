@@ -11,7 +11,10 @@ TypeDeclaration:
     visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;
 
 TypeExpression:
-    ItemTypeExpression | TypeReference;
+    UnionTypeExpression | ItemTypeExpression | TypeReference;
+
+UnionTypeExpression:
+    members+=TypeReference ('|' members+=TypeReference)+;
 
 ItemTypeExpression:
     '{' properties+=TypeProperty* '}';
@@ -41,7 +44,7 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action';
+    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action' | 'ui' | 'nav';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

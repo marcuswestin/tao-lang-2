@@ -20,11 +20,11 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           use MainView from @cards/screens
         `,
         'Packages/@cards/Title.tao': `
-          package alias Title = "Package title"
+          package let Title = "Package title"
         `,
         'Packages/@cards/screens/Main.tao': `
           use Title
-          project view MainView {
+          workspace view MainView {
             render Text(Title)
           }
           view Text Value is text {
@@ -60,14 +60,14 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           use MainView from @bar
         `,
         'one/@bar/Main.tao': `
-          project view MainView {
+          workspace view MainView {
             render inject ${tsFence}
               return null
             ${fence}
           }
         `,
         'two/@bar/Main.tao': `
-          project view MainView {
+          workspace view MainView {
             render inject ${tsFence}
               return null
             ${fence}

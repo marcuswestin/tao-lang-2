@@ -16,6 +16,32 @@ Describe('minimal Tao lexer', () => {
     Expect(tokenImages(result)).toEqual(['"hello world"', '"hello \\"world\\""'])
   })
 
+  Test('switches lexer modes for interpolated strings and nested expression braces', () => {
+    const result = expectLexes('"Hello { Name }, { action { } }!"')
+
+    Expect(tokenNames(result)).toEqual([
+      'INTERPOLATED_STRING_START',
+      'STRING_TEXT',
+      'INTERPOLATION_START',
+      'ID',
+      '}',
+      'STRING_TEXT',
+      'INTERPOLATION_START',
+      'action',
+      '{',
+      '}',
+      '}',
+      'STRING_TEXT',
+      'STRING_END',
+    ])
+  })
+
+  Test('keeps escaped braces in ordinary strings', () => {
+    const result = expectLexes('"literal \\{ brace, \\"quote\\", and \\\\ slash"')
+
+    Expect(tokenNames(result)).toEqual(['STRING'])
+  })
+
   Test('ignores line and block comments', () => {
     const result = expectLexes('view // comment\nMainView /* block */')
 

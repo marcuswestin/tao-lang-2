@@ -5,7 +5,7 @@ import { Switch } from '@shared'
 export type TaoType =
   | {
     kind: 'primitive'
-    primitive: 'text' | 'number' | 'boolean' | 'time' | 'none'
+    primitive: 'text' | 'number' | 'boolean' | 'time' | 'none' | 'ui' | 'nav'
     nominal?: AST.TypeDefinition
   }
   | {
@@ -16,8 +16,13 @@ export type TaoType =
   }
   | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
-  | { kind: 'entity'; entity: AST.DataEntity }
+  | { kind: 'entity'; entity: DataEntityDefinition }
+  | { kind: 'union'; members: readonly TaoType[] }
   | { kind: 'unresolved' }
+
+export type DataEntityDefinition = AST.EntityDataDeclaration
+export type DataFieldDefinition = AST.EntityDataField
+export type QueryDefinition = AST.EntityQueryDeclaration
 
 /** TaoActionParameter declares one positional input accepted by an action value. */
 export type TaoActionParameter = {
@@ -95,6 +100,7 @@ export class Type {
       list: () => 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
       entity: type => dataEntityName(type.entity),
+      union: type => type.members.map(Type.displayName).join(' | '),
     })
   }
 
@@ -119,8 +125,30 @@ export class Type {
   }
 
   /** ofExpression resolves the static Tao type of a value expression. */
-  static ofExpression(expression: AST.Expression): TaoType {
-    return new TypeResolutionContext().ofExpression(expression)
+  static ofExpression(expression: AST.Expression | AST.ConfiguredValue): TaoType {
+    return AST.isConfiguredValue(expression)
+      ? Type.ofConfiguredValue(expression)
+      : new TypeResolutionContext().ofExpression(expression)
+  }
+
+  /** ofValueDeclaration resolves the runtime value type introduced by one linked value declaration. */
+  static ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
+    return new TypeResolutionContext().ofValueDeclaration(declaration)
+  }
+
+  /** atMemberPath resolves a member suffix from an already-resolved root type. */
+  static atMemberPath(root: TaoType, members: readonly string[]): TaoType {
+    return new TypeResolutionContext().atMemberPath(root, members)
+  }
+
+  /** ofConfiguredValue resolves one closed stdlib configuration constructor. */
+  static ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
+    return value.type.ref ? Type.ofDefinition(value.type.ref) : unresolvedType()
+  }
+
+  /** ofValue resolves an ordinary expression or configured runtime value. */
+  static ofValue(value: AST.Expression | AST.ConfiguredValue): TaoType {
+    return AST.isConfiguredValue(value) ? Type.ofConfiguredValue(value) : Type.ofExpression(value)
   }
 
   /** ofAction resolves the positional callback signature of a named Tao action. */
@@ -130,10 +158,7 @@ export class Type {
 
   /** ofArgument resolves the static Tao type an invocation argument contributes for binding. */
   static ofArgument(argument: AST.Argument): TaoType {
-    if (argument.type) {
-      return Type.ofReference(argument.type)
-    }
-    return AST.isExpression(argument.value) ? Type.ofExpression(argument.value) : unresolvedType()
+    return Type.ofExpression(argument.value)
   }
 
   /** constructorReferenceItemType resolves a typed constructor type prefix to an item shape, when it has one. */
@@ -154,8 +179,19 @@ export class Type {
     return property.type ? undefined : visibleTypeDeclaration(property, property.name)
   }
 
+  /** visibleDeclaration resolves a type name in the lexical file/import scope of a node. */
+  static visibleDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
+    return visibleTypeDeclaration(node, name)
+  }
+
   /** isAssignable returns whether an actual value type can satisfy an expected parameter/property type. */
   static isAssignable(actual: TaoType, expected: TaoType): boolean {
+    if (expected.kind === 'union') {
+      return expected.members.some(member => Type.isAssignable(actual, member))
+    }
+    if (actual.kind === 'union') {
+      return actual.members.every(member => Type.isAssignable(member, expected))
+    }
     if (!typesHaveCompatibleBase(actual, expected)) {
       return false
     }
@@ -186,17 +222,21 @@ export class Type {
     }, undefined)
   }
 
-  /** entityOfReference resolves the canonical Schema.Entity entity type reference. */
-  static entityOfReference(reference: AST.NamedTypeReference): AST.DataEntity | undefined {
-    if (reference.members.length !== 1) {
-      return undefined
-    }
-    const schema = visibleDataDeclaration(reference, reference.root)
-    return schema ? Type.dataEntity(schema, reference.members[0]!) : undefined
+  /** entityOfReference resolves a top-level entity's singular type name. */
+  static entityOfReference(reference: AST.NamedTypeReference): DataEntityDefinition | undefined {
+    return reference.members.length === 0
+      ? visibleEntityDataDeclarations(reference).find(entity => entity.singularName === reference.root)
+      : undefined
   }
 
   /** isCastCompatible returns whether a value can be type-fixed through typed value creation. */
   static isCastCompatible(actual: TaoType, target: TaoType): boolean {
+    if (target.kind === 'union') {
+      return target.members.some(member => Type.isCastCompatible(actual, member))
+    }
+    if (actual.kind === 'union') {
+      return actual.members.every(member => Type.isCastCompatible(member, target))
+    }
     if (!typesHaveCompatibleBase(actual, target)) {
       return false
     }
@@ -229,6 +269,9 @@ export class Type {
     if (type.kind === 'entity') {
       return `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`
     }
+    if (type.kind === 'union') {
+      return `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`
+    }
     return type.kind
   }
 
@@ -238,17 +281,54 @@ export class Type {
   }
 
   /** queryEntity resolves the entity selected by one query declaration. */
-  static queryEntity(query: AST.QueryDeclaration): AST.DataEntity | undefined {
-    return query.data.ref?.block.entities.find(entity => entity.collectionName === query.collectionName)
+  static queryEntity(query: QueryDefinition): DataEntityDefinition | undefined {
+    if (query.source) {
+      const source = Type.ofMemberAccess(query.source)
+      return source.kind === 'list' && source.element?.kind === 'entity' ? source.element.entity : undefined
+    }
+    const sourceName = query.sourceName ?? query.name
+    return Type.visibleDataEntities(query).find(entity => entity.name === sourceName)
   }
 
-  /** dataEntity resolves a schema entity by its singular source name. */
-  static dataEntity(data: AST.DataDeclaration | undefined, name: string): AST.DataEntity | undefined {
-    return data?.block.entities.find(entity => entity.name === name)
+  /** dataEntityName returns the durable singular name stored in provider envelopes. */
+  static dataEntityName(entity: DataEntityDefinition): string {
+    return entity.singularName
+  }
+
+  /** dataCollectionName returns the plural source name exposed to queries. */
+  static dataCollectionName(entity: DataEntityDefinition): string {
+    return entity.name
+  }
+
+  /** dataFields returns the stored and inferred field declarations of one entity. */
+  static dataFields(entity: DataEntityDefinition): DataFieldDefinition[] {
+    return entity.block.entries.filter(AST.isEntityDataField)
+  }
+
+  /** topLevelDataEntities returns the current provider-neutral catalog declarations in a file. */
+  static topLevelDataEntities(node: AST.Node): AST.EntityDataDeclaration[] {
+    const root = AST.findRoot(node)
+    return AST.isTaoFile(root) ? root.statements.filter(AST.isEntityDataDeclaration) : []
+  }
+
+  /** visibleDataEntities returns local plus use-imported catalog declarations for a node. */
+  static visibleDataEntities(node: AST.Node): AST.EntityDataDeclaration[] {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return []
+    }
+    return [
+      ...root.statements.filter(AST.isEntityDataDeclaration),
+      ...root.statements
+        .filter(AST.isUseStatement)
+        .flatMap(useStatement =>
+          useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isEntityDataDeclaration)
+        ),
+    ]
   }
 
   /** dataFieldType resolves the value type stored by a schema field. */
-  static dataFieldType(field: AST.DataField): TaoType {
+  static dataFieldType(field: DataFieldDefinition): TaoType {
     if (field.primitive === 'text') {
       return primitiveType('text')
     }
@@ -261,7 +341,16 @@ export class Type {
     if (field.primitive === 'time') {
       return primitiveType('time')
     }
-    return field.relation?.ref ? { kind: 'entity', entity: field.relation.ref } : unresolvedType()
+    if (field.negativeName) {
+      return primitiveType('boolean')
+    }
+    const entities = Type.topLevelDataEntities(field)
+    const direct = entities.find(entity => entity.singularName === field.name)
+    if (direct) {
+      return { kind: 'entity', entity: direct }
+    }
+    const inverse = entities.find(entity => entity.name === field.name)
+    return inverse ? { kind: 'list', element: { kind: 'entity', entity: inverse } } : unresolvedType()
   }
 
   /** definitionOfReference resolves a named type reference, including qualified item fields. */
@@ -272,11 +361,6 @@ export class Type {
 
   /** rootOfReference resolves the root definition and unresolved suffix of a named type reference. */
   static rootOfReference(reference: AST.NamedTypeReference): TypeReferenceRoot {
-    const localParameterType = localInvocationParameterType(reference, reference.root)
-    if (localParameterType) {
-      return { definition: localParameterType, remainingMembers: reference.members }
-    }
-
     const owner = visibleParameterizedDeclaration(reference, reference.root)
     if (owner) {
       const [member, ...remainingMembers] = reference.members
@@ -401,7 +485,7 @@ function primitivesDiffer(actual: TaoType, expected: TaoType): boolean {
 }
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
-  return isUnresolvedType(type) || type.kind === 'entity' ? undefined : type.nominal
+  return isUnresolvedType(type) || type.kind === 'entity' || type.kind === 'union' ? undefined : type.nominal
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -483,10 +567,11 @@ class TypeResolutionContext {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
       BooleanLiteral: () => primitiveType('boolean'),
+      EmptyExpression: () => primitiveType('boolean'),
       WhenExpression: when => this.whenExpressionType(when),
       FunctionCallExpression: call =>
         call.function.ref ? this.ofReference(call.function.ref.returnType) : unresolvedType(),
-      InterpolationExpression: () => primitiveType('text'),
+      InterpolatedString: () => primitiveType('text'),
       ListLiteral: list => this.listLiteralType(list),
       MemberAccessExpression: access => this.ofMemberAccess(access),
       NoneLiteral: () => primitiveType('none'),
@@ -494,7 +579,7 @@ class TypeResolutionContext {
       StringLiteral: () => primitiveType('text'),
       TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
       UnaryExpression: unary => unary.operator === 'not' ? primitiveType('boolean') : primitiveType('number'),
-      ValueReference: reference => this.valueDeclarationType(reference.target.ref),
+      ValueReference: reference => this.ofValueDeclaration(reference.target.ref),
     })
   }
 
@@ -526,27 +611,21 @@ class TypeResolutionContext {
   }
 
   ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
-    if (AST.isQueryDeclaration(expression.target.ref)) {
-      const [first, ...remaining] = expression.members
-      if (first === 'Loading') {
-        return remaining.length === 0 ? primitiveType('boolean') : unresolvedType()
-      }
-      if (first === 'Error') {
-        return this.atMemberPath(primitiveType('text'), remaining)
-      }
-    }
-    const rootType = this.valueDeclarationType(expression.target.ref)
+    const rootType = this.ofValueDeclaration(expression.target.ref)
     return this.atMemberPath(rootType, expression.members)
   }
 
-  private valueDeclarationType(declaration: AST.ValueDeclaration | undefined): TaoType {
+  ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: declaration => this.ofAction(declaration),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
+      CasePayload: () => primitiveType('text'),
+      EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
+      EntityQueryDeclaration: query => this.queryDeclarationType(query),
       ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
-      QueryDeclaration: query => this.queryDeclarationType(query),
       StateDeclaration: state => this.stateDeclarationType(state),
+      UiDeclaration: () => primitiveType('ui'),
       undefined: unresolvedType,
     })
   }
@@ -560,7 +639,7 @@ class TypeResolutionContext {
     )
   }
 
-  private queryDeclarationType(query: AST.QueryDeclaration): TaoType {
+  private queryDeclarationType(query: QueryDefinition): TaoType {
     const entity = Type.queryEntity(query)
     return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }
   }
@@ -576,7 +655,9 @@ class TypeResolutionContext {
     }
     this.seenAliases.add(alias)
     try {
-      return this.ofExpression(alias.value)
+      return AST.isConfiguredValue(alias.value)
+        ? Type.ofConfiguredValue(alias.value)
+        : this.ofExpression(alias.value)
     } finally {
       this.seenAliases.delete(alias)
     }
@@ -602,16 +683,9 @@ class TypeResolutionContext {
     return this.seenStates.has(declaration)
   }
 
-  private atMemberPath(root: TaoType, members: readonly string[]): TaoType {
+  atMemberPath(root: TaoType, members: readonly string[]): TaoType {
     let current = root
     for (const member of members) {
-      if (
-        (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text'))
-        && member === 'Empty'
-      ) {
-        current = primitiveType('boolean')
-        continue
-      }
       if (
         (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text'))
         && member === 'Count'
@@ -620,11 +694,7 @@ class TypeResolutionContext {
         continue
       }
       if (current.kind === 'entity') {
-        if (member === 'Id') {
-          current = primitiveType('text')
-          continue
-        }
-        const field = current.entity.block.fields.find(candidate => candidate.name === member)
+        const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
         if (!field) {
           return unresolvedType()
         }
@@ -682,6 +752,10 @@ class TypeResolutionContext {
       ItemTypeExpression: item => ({ kind: 'item', item }),
       NamedTypeReference: reference => this.ofReference(reference),
       PrimitiveTypeReference: reference => this.ofReference(reference),
+      UnionTypeExpression: union => ({
+        kind: 'union',
+        members: union.members.map(member => this.ofReference(member)),
+      }),
     })
   }
 }
@@ -696,6 +770,8 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     none: () => ({ kind: 'primitive', primitive: 'none' }),
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),
+    nav: () => ({ kind: 'primitive', primitive: 'nav' }),
+    ui: () => ({ kind: 'primitive', primitive: 'ui' }),
   })
 }
 
@@ -707,9 +783,8 @@ function definitionIdentityName(type: AST.TypeDefinition): string {
   return `${AST.getDocument(type).uri.path}#${Type.definitionName(type)}`
 }
 
-function dataEntityName(entity: AST.DataEntity): string {
-  const data = entity.$container.$container
-  return AST.isDataDeclaration(data) ? `${data.name}.${entity.name}` : entity.name
+function dataEntityName(entity: DataEntityDefinition): string {
+  return entity.singularName
 }
 
 function unresolvedType(): TaoType {
@@ -794,19 +869,19 @@ function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclarati
   return typeDeclarationsInFile(root).find(type => type.name === name)
 }
 
-function visibleDataDeclaration(node: AST.Node, name: string): AST.DataDeclaration | undefined {
+function visibleEntityDataDeclarations(node: AST.Node): AST.EntityDataDeclaration[] {
   const root = AST.findRoot(node)
   if (!AST.isTaoFile(root)) {
-    return undefined
+    return []
   }
   return [
-    ...root.statements.filter(AST.isDataDeclaration),
+    ...root.statements.filter(AST.isEntityDataDeclaration),
     ...root.statements
       .filter(AST.isUseStatement)
       .flatMap(useStatement =>
-        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDataDeclaration)
+        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isEntityDataDeclaration)
       ),
-  ].find(data => data.name === name)
+  ]
 }
 
 function typeDeclarationsInFile(file: AST.TaoFile): AST.TypeDeclaration[] {
@@ -879,46 +954,6 @@ function parameterTypeDeclarationNamed(
   return AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === name)?.inlineType
 }
 
-function localInvocationParameterType(
-  reference: AST.NamedTypeReference,
-  name: string,
-): AST.ParameterTypeDeclaration | undefined {
-  const argument = owningArgumentTypeReference(reference)
-  if (!argument) {
-    return undefined
-  }
-  const invocation = argument.$container.$container
-  const declaration = invocationTargetDeclaration(invocation)
-  return declaration ? parameterTypeDeclarationNamed(declaration, name) : undefined
-}
-
-function owningArgumentTypeReference(reference: AST.NamedTypeReference): AST.Argument | undefined {
-  const argument = reference.$container
-  return AST.isArgument(argument) && argument.type === reference ? argument : undefined
-}
-
-function invocationTargetDeclaration(
-  invocation: AST.Render | AST.DoStatement | AST.FunctionCallExpression | AST.PresentStatement,
-): AST.ParameterizedDeclaration | undefined {
-  if (AST.isRender(invocation)) {
-    return invocation.view?.ref
-  }
-  if (AST.isFunctionCallExpression(invocation)) {
-    return invocation.function.ref
-  }
-  if (AST.isPresentStatement(invocation)) {
-    return invocation.stack.ref?.block.destinations.find(destination =>
-      destination.view.$refText === invocation.destinationName
-    )?.view.ref
-  }
-  const action = invocation.action
-  if (!AST.isValueReference(action)) {
-    return undefined
-  }
-  const target = action.target.ref
-  return AST.isActionDeclaration(target) ? target : undefined
-}
-
 function itemConstructorProperty(reference: AST.NamedTypeReference, name: string): AST.TypeProperty | undefined {
   const itemType = owningItemLiteralType(reference)
   return itemType ? propertyNamed(itemType, name) : undefined
@@ -942,9 +977,6 @@ function itemLiteralType(item: AST.ItemLiteral): AST.ItemTypeExpression | undefi
   const parent = item.$container
   if (AST.isTypedConstructor(parent)) {
     return Type.constructorReferenceItemType(parent.type)
-  }
-  if (AST.isArgument(parent) && parent.type && parent.value === item) {
-    return itemShape(Type.ofReference(parent.type))
   }
   return undefined
 }

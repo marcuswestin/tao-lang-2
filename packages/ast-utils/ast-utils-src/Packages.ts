@@ -405,13 +405,13 @@ export namespace Packages {
     if (resolution.relation === 'same-file') {
       return true
     }
-    if (visibility === undefined || resolution.relation === 'invalid') {
+    if (visibility === undefined || visibility === 'file' || resolution.relation === 'invalid') {
       return false
     }
     if (visibility === 'package') {
       return resolution.relation === 'same-package'
     }
-    if (visibility === 'project') {
+    if (visibility === 'workspace') {
       return resolution.relation === 'same-directory'
         || resolution.relation === 'same-package'
         || resolution.relation === 'same-project-package'
@@ -421,7 +421,8 @@ export namespace Packages {
 
   /** visibilityOf returns the optional visibility marker on a declaration. */
   export function visibilityOf(declaration: AST.Declaration): AST.DeclarationVisibility | undefined {
-    return 'visibility' in declaration ? declaration.visibility : undefined
+    const visibility = 'visibility' in declaration ? declaration.visibility : undefined
+    return visibility === 'file' ? undefined : visibility
   }
 
   function workspaceFilePath(file: AST.TaoFile): string {
