@@ -1,6 +1,5 @@
 use Local from @tao/data
-use Memory from @tao-next/data // the self-hosted stdlib sketch: copyable navs and datasources
-use StackNav from @tao-next/nav
+use Memory, StackNav from @tao-next // the self-hosted stdlib sketch: copyable navs and datasources
 use SelectionNav, SlotNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
@@ -113,7 +112,7 @@ data Workspaces / Workspace { // top-level data: the plural collection, then the
    // Modifiers take values: `now` is a function value the runtime invokes per create, the same way
    // `Initial WorkspaceList` passes a ui that mounts later. Invoking still always needs parens.
    CreatedAt time (default now) // modifications inside parentheses, comma separated
-   Pinned yes / no // yes / no defaults to no
+   Pinned yes / no // yes / no defaults to no; declared for demonstration, not yet used by the app
    Documents (relation Documents, auto-delete) // `auto-delete` translates to `on delete cascade` on the other entity
 
    // Blank line between properties and modifiers
@@ -125,7 +124,7 @@ data Documents / Document {
    Title text
    Body text (default "")
    Final yes / no Draft // yes/no accepts an optional no-case alias name
-   Public yes / no Private (default Public) // yes/no also accepts default
+   Public yes / no Private (default Public) // yes/no also accepts default; demonstrative, not yet used
    CreatedAt time (default now)
    Workspace (relation Workspace) // `on delete ..` etc are modifications
    Paragraphs (auto-delete) // `relation ...` is optional if the name matches a data declaration.
