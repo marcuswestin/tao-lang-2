@@ -26,9 +26,10 @@ export const NavigationCompiler = {
 
   /** ReplaceStatement replaces an app root through the selected app definition. */
   ReplaceStatement(statement: AST.ReplaceStatement): Compiled {
+    const app = resolveRef(statement.app)
     return gen`TR.Navigation.Replace(
       ${Compile.Expression(statement.navigator)},
-      ${gen.jsLiteral(resolveRef(statement.app).name)},
+      ${appDefinitionReference(app)},
     )`
   },
 
@@ -43,8 +44,14 @@ function compileNavigationTarget(target: AST.NavigationTarget): Compiled {
   }
   Assert.defined(target.app, 'validated app auxiliary target resolves its app')
   Assert.defined(target.key, 'validated app auxiliary target has a key')
+  const app = resolveRef(target.app)
   return gen`TR.Navigation.Target(
-    ${gen.jsLiteral(resolveRef(target.app).name)},
+    ${appDefinitionReference(app)},
     ${gen.jsLiteral(target.key.slice(1))},
   )`
+}
+
+/** appDefinitionReference preserves the selected declaration's generated module identity. */
+function appDefinitionReference(app: AST.AppDeclaration): Compiled {
+  return gen.Name({ name: `_TaoAppDefinition_${app.name}` })
 }

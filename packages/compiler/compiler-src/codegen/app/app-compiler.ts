@@ -14,7 +14,6 @@ export default {
       const definition = { name: `_TaoAppDefinition_${app.name}` }
       return gen`
         const ${gen.Name(definition)} = TR.Navigation.App({
-          key: ${gen.jsLiteral(app.name)},
           name: ${gen.jsLiteral(appName)},
           navigator: () => ${compileAppValue(navigator.value)},
           auxiliaries: () => ({

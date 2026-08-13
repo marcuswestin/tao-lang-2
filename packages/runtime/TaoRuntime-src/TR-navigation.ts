@@ -41,7 +41,6 @@ export type TaoOverlayNavDefinition = {
 
 export type TaoAppDefinition = {
   auxiliaries(): Record<string, TaoNavigationValue>
-  key: string
   name: string
   navigator(): TaoNavigationValue
 }
@@ -65,7 +64,7 @@ type Subscription = {
 
 const legacyStacks = new Set<RuntimeNavigationStack>()
 const navigationValues = new Set<RuntimeNavigationValue>()
-const apps = new Map<string, RuntimeAppDefinition>()
+const appDefinitions = new Set<RuntimeAppDefinition>()
 let activeBackTarget: { back(): boolean } | undefined
 
 /** NavigationControls is the deterministic generated-code API for Tao navigation. */
@@ -97,7 +96,7 @@ export const NavigationControls = {
   /** App creates a lazy, resettable process-local app navigation definition. */
   App(definition: TaoAppDefinition): RuntimeAppDefinition {
     const app = new RuntimeAppDefinition(definition)
-    apps.set(definition.key, app)
+    appDefinitions.add(app)
     return app
   },
 
@@ -131,24 +130,16 @@ export const NavigationControls = {
     taoProps.navigation.dismiss()
   },
 
-  /** Replace swaps one app's root navigator by declaration key. */
-  Replace(navigator: TaoNavigationValue, appKey: string): void {
-    const app = apps.get(appKey)
-    if (!app) {
-      throw new Error(`Cannot replace unknown app '${appKey}'.`)
-    }
+  /** Replace swaps one app's root navigator by declaration identity. */
+  Replace(navigator: TaoNavigationValue, app: RuntimeAppDefinition): void {
     app.replace(navigator)
   },
 
   /** Target resolves a strict keyed auxiliary on a generated app definition. */
-  Target(appKey: string, key: string): TaoNavigationValue {
-    const app = apps.get(appKey)
-    if (!app) {
-      throw new Error(`Cannot target unknown app '${appKey}'.`)
-    }
+  Target(app: RuntimeAppDefinition, key: string): TaoNavigationValue {
     const target = app.auxiliaries[key]
     if (!target) {
-      throw new Error(`App ${appKey} has no auxiliary navigator '@${key}'.`)
+      throw new Error(`App ${app.definition.name} has no auxiliary navigator '@${key}'.`)
     }
     return target
   },
@@ -166,7 +157,7 @@ export const NavigationControls = {
     for (const navigation of navigationValues) {
       navigation.reset()
     }
-    for (const app of apps.values()) {
+    for (const app of appDefinitions) {
       app.reset()
     }
   },

@@ -598,7 +598,6 @@ Describe('TR.Navigation', () => {
     const overlays = TR.Navigation.OverlayNav({ name: 'Overlays' })
     const replacement = TR.Navigation.StackNav({ name: 'Replacement', initial: detail })
     const app = TR.Navigation.App({
-      key: 'ConfiguredNavigationTest',
       name: 'Configured navigation test',
       navigator: () => slot,
       auxiliaries: () => ({ overlays }),
@@ -608,14 +607,46 @@ Describe('TR.Navigation', () => {
     Expect(stack.back()).toBe(true)
     TR.Navigation.PresentIn(undefined, slot, detail, {})
     Expect(slot.dismiss()).toBe(true)
-    const target = TR.Navigation.Target('ConfiguredNavigationTest', 'overlays')
+    const target = TR.Navigation.Target(app, 'overlays')
     Expect(target).toBe(overlays)
     TR.Navigation.PresentIn(undefined, target, detail, {})
     Expect(app.back()).toBe(true)
-    TR.Navigation.Replace(replacement, 'ConfiguredNavigationTest')
+    TR.Navigation.Replace(replacement, app)
     Expect(app.navigator).toBe(replacement)
     TR.Navigation.beginTest()
     Expect(app.navigator).toBe(slot)
+  })
+
+  Test('keeps same-named generated app definitions isolated by identity and resets both', () => {
+    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const firstRoot = TR.Navigation.StackNav({ name: 'First root', initial: home })
+    const secondRoot = TR.Navigation.StackNav({ name: 'Second root', initial: home })
+    const firstOverlay = TR.Navigation.OverlayNav({ name: 'First overlays' })
+    const secondOverlay = TR.Navigation.OverlayNav({ name: 'Second overlays' })
+    const first = TR.Navigation.App({
+      name: 'Same declaration name',
+      navigator: () => firstRoot,
+      auxiliaries: () => ({ overlays: firstOverlay }),
+    })
+    const second = TR.Navigation.App({
+      name: 'Same declaration name',
+      navigator: () => secondRoot,
+      auxiliaries: () => ({ overlays: secondOverlay }),
+    })
+
+    Expect(TR.Navigation.Target(first, 'overlays')).toBe(firstOverlay)
+    Expect(TR.Navigation.Target(second, 'overlays')).toBe(secondOverlay)
+    TR.Navigation.PresentIn(undefined, firstOverlay, detail, {})
+    TR.Navigation.PresentIn(undefined, secondOverlay, detail, {})
+    TR.Navigation.Replace(secondRoot, first)
+    Expect(first.navigator).toBe(secondRoot)
+    Expect(second.navigator).toBe(secondRoot)
+
+    TR.Navigation.beginTest()
+    Expect(first.navigator).toBe(firstRoot)
+    Expect(firstOverlay.back()).toBe(false)
+    Expect(secondOverlay.back()).toBe(false)
   })
 })
 

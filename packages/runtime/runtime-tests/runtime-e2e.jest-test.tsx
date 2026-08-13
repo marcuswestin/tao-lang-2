@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals'
 import { RuntimeTesting } from '@runtime/testing/runtime-testing'
 import TR from '@runtime/TR'
-import { Repo } from '@shared'
+import { FS, Repo } from '@shared'
 import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, type ReactNode, useState } from 'react'
@@ -147,7 +147,6 @@ Describe('Expo runtime', () => {
       const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
       const stack = TR.Navigation.StackNav({ name: 'HardwareBackTest', initial: home })
       const app = TR.Navigation.App({
-        key: 'HardwareBackApp',
         name: 'Hardware Back App',
         navigator: () => stack,
         auxiliaries: () => ({}),
@@ -198,7 +197,6 @@ Describe('Expo runtime', () => {
     const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
     stack = TR.Navigation.StackNav({ name: 'RuntimeNavigationHostTest', initial: home })
     const app = TR.Navigation.App({
-      key: 'RuntimeNavigationHostApp',
       name: 'Runtime Navigation Host App',
       navigator: () => stack,
       auxiliaries: () => ({}),
@@ -216,6 +214,59 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Home count 1')
     Expect(screen.queryByLabelText('Back')).toBeNull()
     Expect(stack.back()).toBe(false)
+  })
+
+  Test('keeps same-named generated app targets bound to their declaring module', async () => {
+    const appSource = (label: string) => `
+      use OverlayNav, StackNav from @tao/nav
+      use Col, FormButton, Text from @tao/ui
+
+      app SharedGeneratedApp {
+        Name "${label}"
+        Navigator StackNav { Initial Home }
+        @overlays OverlayNav { }
+      }
+
+      workspace ui Home {
+        action Open {
+          present Notice() in SharedGeneratedApp@overlays
+        }
+        render Col() {
+          Text("${label} home")
+          FormButton("Open ${label}") { on press Open }
+        }
+      }
+
+      workspace ui Notice {
+        render Text("${label} notice")
+      }
+    `
+
+    await withTaoFiles('tao-runtime-first-app-identity-', { 'App.tao': appSource('First') }, async firstPaths => {
+      const first = await compileAndRenderApp(firstPaths['App.tao']!)
+      await withTaoFiles(
+        'tao-runtime-second-app-identity-',
+        { 'App.tao': appSource('Second') },
+        async secondPaths => {
+          const generatedRoot = FS.resolvePath(
+            `_gen_tao-app-test/app-identity/${RuntimeTesting.TestRunId.create()}`,
+            Repo.resolvePath('packages/runtime'),
+          )
+          try {
+            const second = await RuntimeTesting.TestCompiler.Worker.compileApp(secondPaths['App.tao']!, {
+              runtimePackageRoot: generatedRoot,
+            })
+            // Evaluating the second generated module used to overwrite the first app's name-table entry.
+            Expect((require(second.testAppPath) as { default?: unknown }).default).toBeDefined()
+
+            fireEvent.press(first.getByText('Open First'))
+            ExpectScreen(first).toHaveText('First notice')
+          } finally {
+            await FS.remove(generatedRoot)
+          }
+        },
+      )
+    })
   })
 
   Test('runs Tao text expectations with duplicate rendered text', async () => {
