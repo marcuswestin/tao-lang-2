@@ -6,16 +6,20 @@ design record is explicitly future-facing.
 ## Implemented value and control-flow contract
 
 The current value core supports `text`, `number`, `boolean`, `none`, homogeneous lists, nominal
-custom values and items, configured `ui`/`nav` values, and schema-specific live entity types. `time`
-is a distinct data-field type whose current producing form is data-only `default now()`. Text, lists,
-and queries support `Value is empty`; lists and queries retain `.Count`. Public `.Empty`, `.Loading`,
-`.Error`, and entity `.Id` members are retired.
+custom values and items, configured `ui`/`nav`/`datasource` values, and schema-specific live entity
+types. `time` is a distinct data-field type whose current producing form is data-only `(default now)`;
+the runtime applies `now` separately for every created row. Text, lists, and queries support
+`Value is empty`; lists and queries retain `.Count`. `Value is <Case>` is the general boolean case
+test for enum values, boolean data fields, and built-in subject cases. Public `.Empty`, `.Loading`,
+and `.Error` members are retired. Every entity handle exposes stable text `.Id`, including after its
+row becomes missing; application code may retain that identity without gaining access to raw rows.
 
 The executable language includes precedence-aware arithmetic, comparison, equality, and boolean
 expressions; pure functions; immutable `let`; reactive `state`; named and inline actions; `set`,
 compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
-`loop`; first-class `view`, `layout`, `ui`, and configured `nav` values; closed role unions such as
-`Presentable is ui | nav`; top-level data/query/write forms; and typed injection.
+`loop`; first-class `view`, `layout`, `ui`, `dialogue`, and configured `nav` values; closed role unions
+such as `Presentable is ui | nav`; top-level data/query/write forms; declaration-owned configuration;
+dialogue `ask`/`respond`; and typed injection.
 
 Optional item fields, `match`, heterogeneous lists, richer collection transforms, and async remain
 future work.
@@ -67,6 +71,18 @@ Operator precedence is unary, multiplication/division, addition/subtraction, com
 `and`, then `or`. Arithmetic operands are numbers except for `text + text`; ordered comparisons
 require numbers; boolean operators require booleans.
 
+### Product functions
+
+A product function is a top-level, expression-bodied, pure declaration:
+
+```tao
+function DocumentLabel Title is text returns text = "Document: { Title }"
+```
+
+Calls use the same non-positional owner binder as other invocations. Parameters are immutable, the
+declared return type must accept the expression result, and the body cannot read reactive state or
+perform actions, data writes, presentation, dialogue, or injection.
+
 ### Action callback contracts and control events
 
 `action()` accepts no values; `action(text)` accepts one text value; further inputs are
@@ -107,10 +123,25 @@ when Ready {
 }
 ```
 
-`otherwise` is required. Value branches must have compatible results. Exact boolean cases preserve
-ordinary boolean conditionals. Query subjects additionally support mutually exclusive `loading`,
-`error -> Message`, and ready `empty` cases. Render branches use blocks. Action control flow uses
-guards rather than an action `when` statement.
+`otherwise` is required for every supported `when`; it is always exhaustive. Value branches must
+have compatible results. Exact boolean cases preserve ordinary boolean conditionals. Query subjects
+add mutually exclusive `loading`, `error -> Message`, and ready `empty` cases. Render branches use
+blocks. This tranche did not introduce an action-statement `when`; actions use guards and one-sided
+`if`.
+
+### One-sided `if`
+
+`if` accepts one boolean condition and one block:
+
+```tao
+if Result is Confirmed {
+   dismiss
+}
+```
+
+It never takes `else`. A conditional with two or more outcomes is modeled by exhaustive `when` in
+the contexts where `when` is supported. `Value is <Case>` can appear anywhere a boolean expression
+is accepted; the declaration-linked case must belong to that value.
 
 ### Block-scoped guards
 
@@ -131,13 +162,39 @@ called action's current block; execution after `do Callee()` in the caller conti
 a nested event handler stops only that handler block. A render guard renders its matched handler and
 skips only later siblings in the same render block.
 
+An entity subject additionally supports `loading`, `missing`, `unauthorized`, and `error -> Message`.
+If the runtime reports none of those exceptional cases, execution falls through with the live
+entity handle:
+
+```tao
+guard Document {
+   loading -> { Spinner() }
+   missing -> { Text("Missing { Document.Id }") }
+   unauthorized -> { Text("No access") }
+   error -> Message { Text(Message) }
+}
+DocumentEditor(Document)
+```
+
+The handle keeps `.Id` through every availability state. The guard implements runtime dispatch and
+fall-through in this tranche; static flow narrowing and rejection of unguarded field access remain
+deferred.
+
+### Dialogue
+
+`dialogue Name <Parameters> responds <Enum>` is response-demanding presentable content. `ask`
+creates a fresh stacked occurrence and suspends its action until that occurrence answers.
+`respond Case` supplies the declared enum case; bare `respond`, Back, or dismissal supplies `none`.
+Each occurrence owns its resolver, so nested or repeated asks cannot answer one another.
+
 ### Collections and entities
 
 List literals are homogeneous and comma-separated. Rendering iteration uses
 `loop Collection / Binder`; the binder type is inferred from the collection element and is scoped to
 the loop body. Queries are reactive lists of live entities. Relationship fields accept and return
 the declared related entity type, never arbitrary text. Strict `update` and `delete` require such a
-live handle. Runtime entity identity supplies row keys but is not public Tao surface.
+live handle. Runtime entity identity supplies row keys, while the handle's stable `.Id` is public Tao
+surface; raw provider rows and ID-based test selectors remain private.
 
 ## Future type-system design record
 
@@ -157,7 +214,10 @@ In these examples, `=>` means "is equivalent to". It is not part of tao syntax.
 
 Everything in Tao is "typed". This means that Tao can ensure that you don't put one type of value where another different one is expected.
 
-Tao's scalar and structural core types include `text`, `number`, `boolean`, `item`, and `list`. Callable declaration kinds include `action`, `function`, `view`, `frame`, `layout`, `ui`, `nav`, and `dialogue`; each declaration name is a value of its corresponding callable type.
+Tao's scalar and structural core types include `text`, `number`, `boolean`, `item`, and `list`.
+Callable declaration kinds include `action`, `function`, `view`, `frame`, `layout`, `ui`, and
+`dialogue`; each declaration name is a value of its corresponding callable type. `nav` and
+`datasource` instead declare configurable types bound to runtime protocols.
 
 Each one can be expressed as "literals", e.g
 
@@ -167,7 +227,8 @@ Each one can be expressed as "literals", e.g
 - `item`: `Person { Name "Ro" Age 40 }`, `Person { }` (empty item of type `Person`)
 - `list`: `[1 2 3]`, `[ ]` (empty list)
 - `action`: `action Name { ... }` (declaration), `action { ... }` (inline)
-- callable declarations: `view Name { ... }`, `ui Detail { ... }`, `nav Stack { ... }`, `action Save { ... }`, and the other declaration kinds above
+- callable declarations: `view Name { ... }`, `ui Detail { ... }`, `action Save { ... }`, and the
+  other callable kinds above
 
 ```tao
 // The `number` type represents any number value (inside the range -2^53 + 1 to 2^64 - 1):
@@ -364,7 +425,9 @@ view Example {
 }
 ```
 
-The `render` keyword is valid inside render-bearing declarations: `view`, `frame`, `layout`, `ui`, `nav`, and `dialogue`. App roots mount a nav rather than rendering ordinary content directly.
+The `render` keyword is valid inside render-bearing declarations: `view`, `frame`, `layout`, `ui`,
+and `dialogue`. A `nav` is a configured runtime-kind declaration, not a render body. App roots mount
+a configured nav rather than rendering ordinary content directly.
 
 Inside a render child block, the `render` keyword can be dropped, while invocation parentheses remain required:
 
@@ -459,7 +522,9 @@ let DisplayName = when
   otherwise -> "Guest"
 ```
 
-Another example, a "T minus ..." countdown timer that updates as every second passes. The `on ... -> { ... }` line uses future interaction/event syntax and is illustrative here:
+Another example, a "T minus ..." countdown timer that updates as every second passes. Both the
+`on ... -> { ... }` timer event and unit-valued `N.seconds` syntax remain future design; current toast
+durations are plain numbers of seconds.
 
 ```tao
 use every from @tao/time
@@ -575,14 +640,20 @@ Name is Alias => false
 text is Name => false
 ```
 
-Typed construction has these forms:
+Typed construction and immutable patching have these forms:
 
 ```tao
-<Type> <Literal>     // constructs a typed literal-shaped value, e.g. Name "Ro", Age 40, Person { ... }
-<ValueA> with <ValueB> // merges two values
+<Type> <Literal>       // constructs a typed literal-shaped value, e.g. Name "Ro", Age 40
+<Type> { ... }         // instantiates an item or configurable declaration with a bare block
+<Value> with { ... }   // merge-copies an existing value with a patch
 ```
 
 `with` produces a new value by overlaying the right value onto the left value. It never mutates the original.
+
+Construction never takes `with`: `Local { StorageKey "WordFlower" }` and
+`StackNav { Initial Home }` instantiate declared types. `with` always begins from an existing value.
+In an app variant, property-position `Navigator with { Display "drawer" }` means “merge-copy the
+original app's Navigator property”; omitting `with` replaces the whole property.
 
 For item values, matching properties from the right value replace matching properties from the left value, and properties that are only present on one side remain present in the result. For configured declaration values, the right block may replace public declaration properties only. Internal `let` bindings and runtime-owned state are not properties and cannot be patched.
 
@@ -707,7 +778,35 @@ state LastName "Doe"
   => typeof LastName is stateful LastName
 ```
 
-## Future design: callable declarations
+## Declaration-owned configuration
+
+Apps, `nav`, and `datasource` declarations already use a declaration-owned configured-value model.
+The linked declaration is the source of truth for property names and types; validation, formatting,
+and compilation do not dispatch on shipped names. A bare block constructs a descriptor, `with`
+patches an existing descriptor, and the descriptor retains its declaration identity across imports,
+aliases, and generated modules.
+
+````tao
+public nav CopiedStack {
+   Initial ui
+
+   implement inject nav ```ts
+      return TR.NavKind.Stack()
+   ```
+}
+
+let HomeNav = CopiedStack {
+   Initial Home
+}
+````
+
+`implement inject nav|provider` is a top-level, visible declaration binding rather than app or
+configuration content. It supplies the published `TR.NavKind` or `TR.DataProvider` protocol value.
+Third-party declarations and the shipped `StackNav` and `Memory` declarations use the same path and
+must pass the published conformance suites. An app variant retains its originating app declaration
+identity while replacing or patching public app properties.
+
+## Future design: other callable declarations
 
 ```tao
 view <ViewName> <Parameters> { <Body> }
@@ -717,7 +816,10 @@ action <ActionName> <Parameters> { <Body> }
   => defines a callable action value named <ActionName>
 ```
 
-Apps, functions, frames, layouts, UI, navs, and dialogues use the same declaration-property and configured-value model. Their distinct keywords add role-specific validation and behavior; they do not introduce separate argument systems. An app is not invoked as UI, but `App with { ... }` creates another immutable launch configuration that retains the originating app declaration ID.
+Functions, frames, layouts, UI, and dialogues are intended to converge on the same property and
+argument model. Their distinct keywords add role-specific behavior; they do not need separate
+argument systems. The shipped `nav` keyword already belongs to the configuration-declaration model
+above and is not a render-bearing callable declaration.
 
 A declaration name denotes its callable definition. In this future configured-value model, a context that requires a configured value might implicitly apply a declaration with no required properties; presentation would still spell the call `present HomeUi()`. A context that expects a callable-definition type would receive the definition without applying it. An unconstrained `let Home = HomeUi` would therefore bind the definition; an explicit configured descriptor would require a dedicated configured-value form. Parameterized declarations would always require normal application.
 
@@ -803,10 +905,11 @@ The invocation-only `<Type>: <Value>` form remains valid when a caller needs to 
 
 Item construction and declaration invocation use the same owner-qualified matching algorithm. Render children do not: ordinary render expressions in a caller block remain children and are never consumed as declaration properties solely because their types happen to match. Named render slots are also separate from property slots.
 
-A keyed collection property written `{ @ EntryType }` accepts arbitrary stable entries such as `@home { ... }`. A caller may place literal keyed entries directly in the configured declaration when owner-qualified matching can assign them to one keyed-collection property:
+A configurable declaration may declare one direct keyed-item contract with `@key { ... }`. Its
+configured values then accept stable entries such as `@home { ... }` directly:
 
 ```tao
-Nav.SelectionNav {
+SelectionNav {
    Initial @home
 
    @home {
@@ -816,13 +919,21 @@ Nav.SelectionNav {
 }
 ```
 
-This is equivalent to wrapping the entry in `Items { ... }`; `Items` remains available for an empty, prebuilt, computed, or otherwise explicitly named collection. Direct entries are aggregated before property matching. If their entry types admit more than one complete keyed-property assignment, the caller must name the destination property. Supplying both direct entries and an explicit value for the same property is a duplicate-property error.
+Direct entries bind the declaration's single `@key` contract; there is no implicit shipped `Items`
+property. A declaration with no `@key` rejects keyed entries. Configuring a duplicate key is an
+error, and a constructor for a keyed declaration requires at least one item.
 
-Every targetable key owned by one configured declaration belongs to that owner's key namespace and must be unique there, whether supplied directly or through an explicit property and even when different keyed properties receive the entries. A nested configured declaration begins a new namespace. Ordinary non-targetable keyed data remains scoped to its property and may reuse names. Property names such as `Items`, `Panes`, and `Auxiliaries` organize descriptor data but do not become target-path segments.
+Every targetable key owned by one configured declaration belongs to that owner's key namespace. A
+nested configured declaration begins a new namespace. Property names do not become target-path
+segments.
 
-Each entry creates an owner-qualified key value throughout the containing invocation. A dependent property may accept `key of Items`, meaning one key assigned to that configured `Items` property. References such as `Initial @home` resolve independently of source order and cannot escape their configured owner without an explicitly declared key type.
+Each entry creates an owner-qualified key value throughout the containing configuration. A property
+declared as `key`, such as SelectionNav's `Initial`, must reference one of those entries. References
+such as `Initial @home` resolve independently of source order and cannot escape their configured
+owner.
 
-Direct keyed entries in `Value with { ... }` configure and replace the complete matched keyed-collection property, exactly like its explicit property form. They do not introduce implicit key-by-key merging.
+Direct keyed entries in `Value with { ... }` replace the configured keyed collection as a whole;
+they do not introduce implicit key-by-key merging.
 
 Actions, functions, views, UI, navs, dialogues, frames, and layouts all use these declaration-property and argument rules.
 

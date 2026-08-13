@@ -41,7 +41,10 @@ Presentation adds separate declaration roles without changing these visual roles
 
 - `ui` is presentable content whose visual body follows the same render rules as a `view`.
 - `dialogue` is response-demanding content whose body follows the same render rules.
-- `nav` is a presentation container, not ordinary render content. A nav may be mounted only as an app navigator, app auxiliary, or child of another nav. Rendering a nav inside a `view` or `ui` is a validation error.
+- `nav` declares a package-configured presentation kind and binds its runtime behavior through
+  `implement inject nav`; it is not a render-bearing visual declaration. A configured nav may be
+  mounted only as an app navigator, a genuine app auxiliary, or content of another nav. Rendering a
+  nav inside a `view` or `ui` is a validation error.
 
 See `Tao Presentation and Navigation.md` for presentation behavior.
 
@@ -116,7 +119,11 @@ Basic transitional UI elements:
 - `Spinner`: a loading indicator.
 - `Progress`: a progress bar indicator.
 
-Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces are UI values presented into an overlay nav, while response-demanding modal conversations are dialogues invoked with `ask`; see `Tao Presentation and Navigation.md`. Visual portal and layer primitives remain a separate deferred design question.
+Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces use
+`present X() as overlay`, which layers above the nearest nav or an explicit `in` target. Every nav
+owns that overlay layer. Response-demanding conversations are dialogues invoked with `ask`; see
+`Tao Presentation and Navigation.md`. Raw visual portals and general in-layout layering remain a
+separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
@@ -185,11 +192,16 @@ Properties, unnamed render children, and named render slots are distinct channel
 - Ordinary render expressions in a caller content block remain children. They are never consumed as properties solely because their types match.
 - `@name` fills a named render slot.
 - `@@content` places unnamed children inside a `frame` or `layout` implementation.
-- Keyed objects such as navigation `Items { @home ... }` are data properties, not visual render slots.
+- Keyed navigation entries bind the configured nav declaration's direct `@key { ... }` contract;
+  they are not visual render slots or an implicit `Items` property.
 
 `@name` consistently introduces or refers to an owner-scoped name. Render slots and keyed entries are different typed roles under that shared naming model: a render slot is declared by the reusable UI surface, while a keyed entry is declared in one configured value and may be targetable when its accepted entry type permits it.
 
-Direct `@name` entries share one namespace within their immediate configured owner. Nested configured values begin new namespaces. A direct name must resolve to exactly one declared render slot or compatible open keyed property; Tao gives neither role precedence. If more than one channel or keyed property could accept it, validation reports an ambiguity and the caller must write the property explicitly, such as `Items { @home { ... } }`. A duplicate direct name in one owner is invalid.
+Direct `@name` entries share one namespace within their immediate configured owner. Nested configured
+values begin new namespaces. In the implemented surface, a configured nav may declare one `@key`
+item contract and each direct key binds it; a declaration without that contract rejects keyed entries.
+A render declaration's direct `@name` remains a visual slot. A duplicate direct name in one owner is
+invalid.
 
 Only a targetable keyed entry creates an owner-qualified target such as `WordFlower@home`. A render slot never becomes a navigation target merely because it uses `@`.
 
@@ -448,7 +460,7 @@ layout FeedPage {
 }
 ```
 
-Use a future layer concept for things that intentionally escape normal flow:
+Use a future layout-layer concept for render children that intentionally escape normal flow:
 
 ```tao
 // Future-ish shape, not settled syntax.
@@ -461,7 +473,10 @@ This keeps three ideas separate:
 - scrolling: content is larger, and the user moves through it
 - layering: content intentionally appears above or outside normal flow
 
-Raw absolute positioning, raw overflow flags, z-index-like layering, popovers, portals, and toasts all need more design. They should not sneak into ordinary layout syntax just because the runtime has a prop for them.
+This future layout term is distinct from settled presentation modes. `as overlay` already produces a
+nav-owned absolute layer, and `as toast (Key:, Duration:)` already produces app-level transient
+content. Raw absolute positioning, overflow flags, z-index-like layout, popovers, and portals still
+need design and should not sneak into ordinary layout syntax merely because the runtime has a prop.
 
 ## Misc
 
@@ -496,7 +511,8 @@ This document is not a deterministic implementation spec. It is the intended sha
 Some things are known to belong in or near Tao layout, but still need their own design pass:
 
 - `nudge`: small post-layout movement that does not affect siblings
-- `overlay`: positioned content above normal flow
+- `overlay`: a possible in-layout positioning term, distinct from implemented presentation
+  `as overlay`
 - scroll containers
 - safe-area and keyboard-aware helpers
 - design-token spacing and size values

@@ -4,7 +4,7 @@ import type { ValidationContext } from './validation'
 
 /** configurationValidationMessages declares self-hosted construct diagnostics. */
 export const configurationValidationMessages = {
-  topLevel: (kind: string) => `${kind} declarations are only allowed at package top level.`,
+  topLevel: (kind: string) => `${kind} declarations are only allowed as top-level declarations.`,
   visible: (kind: string) => `${kind} declarations must declare package, workspace, or public visibility.`,
   duplicateProperty: (name: string) => `Configuration property '${name}' is declared more than once.`,
   duplicateKey: 'A configuration declaration can declare at most one @key item contract.',

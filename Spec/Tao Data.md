@@ -13,59 +13,133 @@ A declaration names its plural collection first and its stored singular entity s
 ```tao
 data Workspaces / Workspace {
    Name text
-   CreatedAt time, default now()
-   Documents
+   CreatedAt time (default now)
+   Pinned yes / no
+   Documents (relation Documents, auto-delete)
    index CreatedAt
    order by CreatedAt
 }
 
 data Documents / Document {
    Title text
-   Body text, default ""
-   Final / Draft, default Draft
-   CreatedAt time, default now()
-   Workspace, on delete cascade
+   Body text (default "")
+   Final yes / no Draft
+   Public yes / no Private (default Public)
+   CreatedAt time (default now)
+   Workspace (relation Workspace)
+   Paragraphs (auto-delete)
    index CreatedAt
    order by CreatedAt
 }
+
+data Paragraphs / Paragraph {
+   Text text
+   Ordering number
+   Document
+   index Ordering
+   order by Ordering
+}
 ```
 
-Primitive fields support `text`, `number`, `boolean`, and `time`. `now()` is the implemented time
-default. Boolean fields are declared as their two case names; writes and filters use those names.
-Field modifiers are comma-separated. Indexes are separate statements, and one default `order by`
-may be declared for the entity.
+Fields use `Name type (modifiers)`. Primitive types are `text`, `number`, `boolean`, and `time`.
+Modifiers are parenthesized and comma-separated. Literal defaults are values of the field's type.
+The bare `now` value is valid only as a `time` default; generated schema metadata preserves it as a
+clock default and the runtime samples it separately for every create. It is not evaluated while
+parsing or compiling, and the text literal `"now"` remains ordinary text.
+
+A case-named boolean has the form `Name yes / no [NoAlias] [(default Case)]`. Its positive case is
+the field name. With no alias, the `no` side is unnamed; otherwise the alias is its case name, as in
+`Final yes / no Draft`. The `no` side is the default unless a declared case is selected by
+`(default Case)`. `Pinned` and `Public` above demonstrate the unaliased and explicit-default forms.
+They exercise declaration syntax and do not require product journeys. Writes, `is <Case>` tests,
+and boolean query filters use named declared cases rather than raw spelling conventions.
+
+Indexes are separate statements, and one default `order by` may be declared for the entity.
 
 A bare singular name such as `Workspace` is a stored to-one relationship when it names another
-entity. A bare plural name such as `Documents` is the inferred inverse to-many relationship. A
-stored relationship may add `on delete cascade`; otherwise deletion is restricted while another
-row refers to the target. Relationship values are live entity handles, never public text IDs.
+entity. A bare plural name such as `Paragraphs` is an inferred inverse to-many relationship. The
+`relation` modifier states the related declaration explicitly when inference is insufficient.
+`auto-delete` belongs on the owner's inverse collection: deleting that owner transitively deletes
+the related rows in the collection. A stored to-one relationship does not declare cascade policy;
+without owner-side `auto-delete`, deletion is restricted while another row refers to the target.
+Relationship values are live entity handles, not text IDs.
 
 ## App datasource configuration
 
-The catalog does not own provider identity. An app mounts either the keyless `Memory` provider or
-the configured `Local` provider:
+The catalog does not own provider identity. An app constructs a datasource from a declaration. A
+constructor takes a bare block; `with` is reserved for immutable patches of an existing value:
 
 ```tao
-use Local from @tao/data
+use Local, Memory from @tao/data
 
 app WordFlower {
    Name "WordFlower"
    Navigator WordFlowerNavigator
-   Datasource Local with {
+   Datasource Local {
       StorageKey "WordFlowerData"
+   }
+}
+
+let WordFlowerDemo = WordFlower with {
+   Datasource Memory
+}
+
+workspace let WordFlowerPreview = WordFlower with {
+   Datasource with {
+      StorageKey "WordFlowerPreviewData"
    }
 }
 ```
 
-`StorageKey` is required and nonempty for `Local`. It is unique within the app's datasource
-configuration and belongs to that configured provider—not to a display `Name`, source filename, or
-data declaration. `Memory` has no key. Local persists the version-1 envelope containing schema
-version, rows, and next generated ID; the explicit key preserves rehydration and next-ID continuity.
-A load, format, version, or save failure becomes provider error state and never silently falls back
-to memory.
+`Local { ... }` is construction, and its declaration requires a text `StorageKey`. `Memory` declares
+no properties, so bare `Datasource Memory` constructs its all-defaulted value. A property-position
+`Datasource with { ... }` patch starts from the datasource held by the base app; it does not mutate
+that app or reconstruct by provider name. The same patch rule applies to a configured datasource
+named with `let`.
+
+The storage key belongs to the configured provider—not to a display `Name`, source filename, or
+data declaration. Local persists the version-1 envelope containing schema version, rows, and the
+next generated ID; an explicit key preserves rehydration and next-ID continuity. A load, format,
+version, or persist failure becomes provider error state and never silently falls back to memory.
+
+## Self-hosted datasource declarations
+
+`Local` and `Memory` are ordinary public Tao declarations in `@tao/data`, not compiler-known names:
+
+````tao
+public datasource Local {
+   StorageKey text
+
+   implement inject provider ```ts
+      return TR.DataProvider.Local()
+   ```
+}
+
+public datasource Memory {
+   implement inject provider ```ts
+      return TR.DataProvider.Memory()
+   ```
+}
+````
+
+A `datasource` declaration is top-level rather than nested, has `package`, `workspace`, or `public`
+visibility, and binds exactly one `implement inject provider`. Its declared properties are the
+complete generic configuration contract: construction and patch validation read their names and
+types from the linked declaration, so copied and third-party datasources receive the same unknown,
+duplicate, missing, and type diagnostics without a shipped-name table.
+
+The injected package-scope value is evaluated once for that declaration and satisfies the published
+`TR.DataProvider` full-snapshot protocol. `load(storageKey)` returns the starting serialized snapshot
+or no value; `persist(storageKey, snapshot)` accepts complete committed snapshots in order and must
+propagate rejection. `TR.testProvider` checks empty load, exact round trips, storage-key and provider
+instance boundaries, ordered replacement, and rejection behavior. Instances must be isolated or
+share one coherent stateless storage boundary. The shipped Memory and Local implementations pass
+that suite. Memory is process-local and instance-isolated; Local delegates its storage boundary to
+AsyncStorage.
 
 Remote sync, authentication, permissions, migrations, transactions, pagination, aggregation, and
-provider-specific query features remain deferred.
+provider-specific query features remain deferred. They require new provider families rather than
+leaking incremental or remote semantics into this full-snapshot protocol.
 
 ## Queries
 
@@ -76,11 +150,11 @@ before first use and before control flow:
 query Workspaces { }
 
 query Drafts from Workspace.Documents {
-   where Draft
+   where is Draft
 }
 
 query Workspace.Documents as FinishedDocuments {
-   where Final
+   where is Final
    order by CreatedAt desc
 }
 ```
@@ -88,8 +162,9 @@ query Workspace.Documents as FinishedDocuments {
 The source is either a root plural or a plural relationship. A query may keep the source name, use
 `Name from Source`, or use `Source as Name`. Repeated `where` clauses combine with AND. Primitive
 comparisons support `==`, `!=`, `<`, `<=`, `>`, and `>=`; boolean cases are filtered by case name.
-One explicit order may override the source entity's default order. Generated hooks are hoisted while
-preserving lexical visibility and the authored declaration-order rules.
+Boolean filters use `where is <Case>`. One explicit order may override the source entity's default
+order. Generated hooks are hoisted while preserving lexical visibility and the authored
+declaration-order rules.
 
 Queries and lists expose `.Count`. Emptiness is tested with `Value is empty`. Query status cases are
 mutually exclusive:
@@ -134,13 +209,38 @@ loop Drafts / Document {
 ```
 
 The binder's type is inferred from the collection element. Runtime rendering uses entity identity
-for React keys and an index fallback for non-entity lists. Stable entity IDs remain runtime-private;
-there is no public `.Id` member or ID-based test selector.
+for React keys and an index fallback for non-entity lists. Every entity handle exposes a stable,
+read-only text `.Id`. The handle retains that ID after its row is deleted, so exceptional UI can
+identify the missing entity without turning relationships back into string IDs. The generated ID is
+data, not a Tao test selector; ID-based selection remains retired.
+
+## Entity availability guards
+
+Entity handles can be guarded before ordinary field access:
+
+```tao
+guard Document {
+   loading -> { Text("Loading document…") }
+   missing -> { Text("Document { Document.Id } no longer exists.") }
+   unauthorized -> { Text("You no longer have access to this document.") }
+   error -> Message { Text("Could not load document: { Message }") }
+}
+
+Text(Document.Title)
+```
+
+`loading`, `missing`, `unauthorized`, and `error -> Message` are the exceptional entity cases. If
+none matches, the entity is available and execution or rendering falls through to the statements
+after the guard. A matched action guard skips the rest of its action block; a matched render guard
+renders its branch instead of the rest of its enclosing render block. A deleted handle becomes
+`missing` while retaining `.Id`. Memory and Local currently produce loading, missing, and error;
+`unauthorized` is the implemented provider-neutral case reserved for a provider that can report it.
 
 ## Deterministic provider-state tests
 
-Every Tao check receives a fresh Memory replacement for the launched app's datasource. Bare status
-steps drive that active provider without touching durable storage:
+Every Tao check receives a fresh instance of the shipped Memory provider in place of the launched
+app's datasource. The app's configured provider cannot overwrite that isolation. Bare status steps
+drive the active schema without touching durable storage:
 
 ```tao
 data loading

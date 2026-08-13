@@ -71,7 +71,8 @@ let SignedOutNav = StackNav {
    Initial SignedOut
 }
 
-// Direct keys bind to selection Items and share this configured nav's target-key namespace.
+// Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
+// target-key namespace.
 let WordFlowerNavigator = SelectionNav {
    Initial @home
    Display "automatic"
@@ -107,11 +108,11 @@ enum ConfirmResult {
 
 data Workspaces / Workspace { // top-level data: the plural collection, then the singular entity it stores — the same `Plural / Singular` order as `loop`
    Name text
-   // Modifiers take values: `now` is a function value the runtime invokes per create, the same way
-   // `Initial WorkspaceList` passes a ui that mounts later. Invoking still always needs parens.
+   // Modifiers take values: `now` is a deferred runtime default sampled separately for each create,
+   // while `Initial WorkspaceList` likewise passes a ui that mounts later.
    CreatedAt time (default now) // modifications inside parentheses, comma separated
    Pinned yes / no // yes / no defaults to no; declared for demonstration, not yet used by the app
-   Documents (relation Documents, auto-delete) // `auto-delete` translates to `on delete cascade` on the other entity
+   Documents (relation Documents, auto-delete) // deleting this owner also deletes its related Documents
 
    // Blank line between properties and modifiers
    index CreatedAt // index is declared separately

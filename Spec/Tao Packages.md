@@ -1,6 +1,12 @@
 # Tao Project and Packages
 
-Status: partially implemented design draft. The current implementation supports local `project { name "..." remote none license ... }` metadata, `file`/`package`/`workspace`/`public` declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...` stdlib paths, bare same-package `use Foo`, and local `@package[/subfolder]` imports through an in-memory workspace package index. Project IDs, `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other CLI package commands, and package publishing remain future work.
+Status: partially implemented design draft. The current implementation supports local
+`project { name "..." remote none license ... }` metadata, `file`/`package`/`workspace`/`public`
+declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
+stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports through an in-memory
+workspace package index, and public self-hosted `nav` and `datasource` declarations. Project IDs,
+`tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other
+CLI package commands, and package publishing remain future work.
 
 ## Creating a Tao Project
 
@@ -14,6 +20,7 @@ Status: partially implemented design draft. The current implementation supports 
 - The app selects a primary navigator; see `Tao Presentation and Navigation.md` for its behavior.
 
 ```tao
+use Local from @tao/data
 use StackNav from @tao/nav
 use Col, FormButton, Text from @tao/ui
 
@@ -25,13 +32,16 @@ project {
 
 data Messages / Message {
    Text text
-   CreatedAt time, default now()
+   CreatedAt time (default now)
    order by CreatedAt
 }
 
 app ChatApp {
    Name "Chat"
    Navigator StackNav { Initial ThreadListUi }
+   Datasource Local {
+      StorageKey "ChatData"
+   }
 }
 
 ui ThreadListUi {
@@ -149,6 +159,47 @@ Packages can make code available to other packages, and even other workspaces.
 - A cyclic import graph with an acyclic value-dependency graph initializes successfully in dependency order.
 - Generated modules must preserve this model rather than exposing JavaScript temporal-dead-zone or partial-module behavior.
 
+### Package-owned protocol declarations and identity
+
+Navigation kinds and datasource providers are self-hosted by ordinary package declarations. The
+stdlib definitions are the proof rather than compiler exceptions:
+
+````tao
+public nav StackNav {
+   Initial ui
+
+   implement inject nav ```ts
+      return TR.NavKind.Stack()
+   ```
+}
+
+public datasource Memory {
+   implement inject provider ```ts
+      return TR.DataProvider.Memory()
+   ```
+}
+````
+
+These declarations are top-level rather than nested and require `package`, `workspace`, or `public`
+visibility. Their physical file location does not change this rule: package scope describes
+declaration ownership, not a requirement to live in an `@package` folder. Each binds exactly one
+package-scope implementation with
+`implement inject nav` or `implement inject provider`. The injected expression is evaluated once
+when its defining generated module initializes. `TR.NavKind` and `TR.DataProvider` are published
+protocols, with `TR.testNavKind` and `TR.testProvider` conformance suites. The shipped `StackNav`
+and `Memory` declarations use the same mechanism available to copied or third-party packages.
+
+Configuration is declaration-driven. The validator reads ordinary property names, types, required
+entries, and keyed-item shape from the linked declaration; it does not branch on names such as
+`StackNav`, `Local`, or `Memory`. A bare block constructs a configured value. `with` patches an
+existing value while retaining the originating declaration and leaving the base unchanged.
+
+Every generated protocol declaration owns a unique runtime identity. Its defining module exports
+that binding, and imports and value aliases carry the same binding rather than looking the name up
+again. Two generated modules may therefore declare the same spelling without overwriting or
+cross-wiring each other. Configuration, mounted navigation targets, and provider selection retain
+the declaration object across module boundaries and import traversal order.
+
 ## Using external Tao Projects and packages
 
 - To import another tao project and its packages you list them in `project { ... }` with `requires ...`:
@@ -236,5 +287,5 @@ Packages can make code available to other packages, and even other workspaces.
   }
   ```
 
-- Packages may export configured navigation, data, design, asset, permission, localization, and other capability values. The app imports and selects only properties supported by its typed app surface. The current app contract has required `Name` and `Navigator` properties plus optional `Auxiliaries`; see `Tao Presentation and Navigation.md`.
+- Packages may export configured navigation, data, design, asset, permission, localization, and other capability values. The app imports and selects only properties supported by its typed app surface. The current app contract has required `Name` and `Navigator`, an optional `Datasource`, and keyed auxiliary nav entries only for genuine app-specific hosts such as windows. Every nav hosts its own overlays, and toasts are app-level transient presentation, so neither is modeled as an auxiliary. See `Tao Presentation and Navigation.md`.
 - A general app-capability bundle and ambient `app.*` access model are not part of the current contract. Their ownership and lookup semantics remain deferred under `LANG-003` in `Roadmap/Deferred Tao language decisions.md`.

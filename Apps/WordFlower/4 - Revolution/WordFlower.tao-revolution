@@ -1,8 +1,13 @@
 use InstantDB from @instantdb
-use Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, Window, WindowHost from @tao/nav
+use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, Window, WindowHost from @tao/nav
 use Checkbox, Col, FormButton, Icon, Image, List, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
 use every from @tao/time
+
+// @tao/nav and @tao/data are self-hosted: public declarations carry their own identity rather than
+// relying on name tables. Generic property validation reads their config shape, and package-scope
+// `implement inject` binds them to the published TR.NavKind and TR.DataProvider protocols. StackNav
+// and Memory are the proof implementations, and each protocol ships a conformance suite.
 
 // WordFlower/Revolution is the tier beyond the v1 release: functionality Tao eventually intends to
 // cover that the MVP deliberately does not ship. It contains everything in `../3 - MVP` plus the
@@ -44,7 +49,6 @@ use every from @tao/time
 //   - Concurrent event policy: queue, single-flight, cancel-previous, exclusive (DEF-NAV-011)
 //   - Result values with try/catch/finally and exhaustive case matching (LANG-021)
 //   - `blur self`, field-bound inputs, and AI/package actions (LANG-016, LANG-019, LANG-020)
-//   - Entity availability guards for live references held across `ask` (DEF-NAV-009)
 // Presentation
 //   - Public routes and deep links, without exposing internal mounted paths (LANG-022, DEF-NAV-001)
 //   - Addressing a specific window/toast/dynamic-selection occurrence by runtime key (DEF-NAV-016)
@@ -186,10 +190,13 @@ let WordFlowerNavigator = SelectionNav {
    Initial @home
    Display "automatic"
 
-   // Direct keys bind to Items and share this configured nav's target-key namespace.
+   // Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
+   // target-key namespace.
+   // Icon and Badge are Revolution-only future extensions to the keyed-item declaration; shipped
+   // SelectionNav items declare Label and Content.
    @home {
       Label "Home"
-      Icon "house" // selection items carry optional icons and badges
+      Icon "house"
       Content HomeStack
    }
    @workspace {
@@ -205,10 +212,12 @@ let WordFlowerNavigator = SelectionNav {
    }
 }
 
-// An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
-// Overlay and toast hosting are universal capabilities, so no app declares them; keyed auxiliary
-// entries remain for app-specific hosts such as windows, and their keys are navigation targets.
-// A Local datasource is configured as `Datasource Local with { StorageKey "WordFlowerData" }`;
+// An app mounts navs, it does not render content directly. `Navigator` is the primary nav. Every nav
+// owns an absolute overlay lane above its content, so no app declares an overlay host; overlays stack
+// while covered entries stay mounted but hidden, and Back/dismiss use the app reducer. Toasts are
+// app-level, transient, replace the same key rather than stacking, and neither consume Back nor expose
+// plain dismissal. Keyed auxiliary entries remain for app-specific hosts such as windows.
+// A Local datasource is constructed as `Datasource Local { StorageKey "WordFlowerData" }`;
 // Memory is keyless, while remote providers own their provider-specific configuration below.
 app WordFlower {
    Name "WordFlower"
@@ -216,12 +225,13 @@ app WordFlower {
    Navigator WordFlowerNavigator
 
    // Declaring a nav does not mount it. App-owned direct keys mount app-specific hosts.
-   // Overlay and toast hosting need no declaration; a presentation names the mode instead:
+   // Overlay and toast hosting need no declaration; a presentation names the mode instead.
+   // Layout and Dismissible below are Revolution-only future overlay-presentation modifiers:
    //   present X() as overlay (Layout: "sheet", Dismissible: true)
    // Layout is one of "sheet" | "popover" | "full-screen" | "palette" | "inspector" | "floating".
    @windows WindowHost { }
 
-   Datasource InstantDB with { // remote syncing provider; Local stays for tests and offline development
+   Datasource InstantDB { // constructing a datasource uses a bare block; `with` patches an existing value
       AppId "wordflower-mvp"
    }
 }
@@ -229,12 +239,12 @@ app WordFlower {
 // `with` copies public properties into a configured variant. WordFlower and WordFlowerNavigator are unchanged.
 let WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator WordFlowerNavigator with { Display "drawer" }
+   Navigator with { Display "drawer" } // property-position `with` merge-copies WordFlower.Navigator
 }
 
 let WordFlowerStage = WordFlower with {
    Name "WordFlower - Stage"
-   Datasource InstantDB with {
+   Datasource InstantDB {
       AppId "wordflower-stage"
    }
 }
@@ -259,7 +269,7 @@ let StarterPrompt = WritingPrompt {
    PromptTags: PromptTags ["daily", "warmup"]
 }
 
-enum ConfirmResult { // enum shape is directional; two-state fields prefer boolean cases like Final / Draft
+enum ConfirmResult { // enum shape is directional; two-state fields prefer `Final yes / no Draft`
    Confirmed
 }
 
@@ -282,8 +292,9 @@ type DailyPrompt is WritingPrompt + { PromptStreak number }
 
 data Workspaces / Workspace {
    Name text
-   CreatedAt time, default now()
-   Documents
+   CreatedAt time (default now) // the runtime applies the deferred `now` value for each create
+   Pinned yes / no // demonstrative; not yet used by the app
+   Documents (relation Documents, auto-delete)
 
    index CreatedAt
    order by CreatedAt
@@ -291,11 +302,12 @@ data Workspaces / Workspace {
 
 data Documents / Document {
    Title text
-   Body text, default ""
-   Final / Draft, default Draft
-   CreatedAt time, default now()
-   Workspace, on delete cascade
-   Paragraphs
+   Body text (default "")
+   Final yes / no Draft
+   Public yes / no Private (default Public) // demonstrative; not yet used by the app
+   CreatedAt time (default now)
+   Workspace (relation Workspace)
+   Paragraphs (auto-delete)
 
    index CreatedAt
    order by CreatedAt
@@ -304,8 +316,8 @@ data Documents / Document {
 data Paragraphs / Paragraph {
    Text text
    Ordering number
-   Document, on delete cascade
-   optional Parent Paragraph // relations may be optional and self-referential
+   Document
+   Parent Paragraph (optional) // relations may be optional and self-referential
 
    index Ordering
    order by Ordering
@@ -384,13 +396,14 @@ ui WorkspaceList {
    }
 }
 
-// Presented into the app's overlay host; overlays stack above content and are dismissible.
+// Presented above the nearest enclosing nav; `in <target>` would override that contextual scope.
+// Overlays stack above its content while covered entries stay mounted and hidden.
 ui WorkspaceNameNotice {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name")
       #dismissNotice
       FormButton("Dismiss") {
-         on press -> { dismiss } // the nearest enclosing nav is the overlay host that presented this
+         on press -> { dismiss } // dismissal routes through the nearest host's app reducer
       }
    }
 }
@@ -400,10 +413,10 @@ workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the sam
    state DocumentTitle = ""
    let SectionLabel = "Drafts"
    query Drafts from Workspace.Documents {
-      where Draft
+      where is Draft
    }
    query FinishedDocuments from Workspace.Documents {
-      where Final
+      where is Final
    }
    action SaveWorkspace {
       guard WorkspaceNameDraft empty
@@ -523,36 +536,40 @@ ui WorkspaceChooser {
    }
 }
 
-// A nav definition declares public properties and produces one root nav descriptor.
-nav WorkspaceSplit Workspace {
-   render SplitNav {
-      Axis "horizontal"
+// Product code composes a nav value with an ordinary function. The `nav` declaration keyword is
+// reserved for self-hosted package configuration declarations bound by `implement inject nav`.
+function WorkspaceSplit Workspace returns nav = SplitNav {
+   Axis "horizontal"
 
-      // Direct keys bind to Panes. The nested SelectionNav starts its own key namespace.
-      @files {
-         // A ui with bound arguments is a presentable value; it renders only when the nav mounts it.
-         Content SlotNav { Initial FileTree(Workspace) }
-         Title "Files"
-         IdealSize 280
-         CollapsePriority 2
-      }
-      @documents {
-         Content SelectionNav {
-            Items { }
-            Display "tabs"
-            Dynamic true
-         }
-         Title "Documents"
-         Grow 1
-         CollapsePriority 3
-      }
-      @inspector {
-         Content SlotNav { }
-         Title "Inspector"
-         IdealSize 340
-         CollapsePriority 1
-      }
+   // Direct keys bind to Panes. The nested DynamicSelectionNav starts its own key namespace.
+   @files {
+      // A ui with bound arguments is a presentable value; it renders only when the nav mounts it.
+      Content SlotNav { Initial FileTree(Workspace) }
+      Title "Files"
+      IdealSize 280
+      CollapsePriority 2
    }
+   @documents {
+      // DynamicSelectionNav is an inherited MVP-target future declaration. Unlike shipped
+      // SelectionNav, it may begin empty and receive tabs at runtime, so it has no Initial or
+      // static keyed items.
+      Content DynamicSelectionNav {
+         Display "tabs"
+      }
+      Title "Documents"
+      Grow 1
+      CollapsePriority 3
+   }
+   @inspector {
+      Content SlotNav { Initial EmptyInspector }
+      Title "Inspector"
+      IdealSize 340
+      CollapsePriority 1
+   }
+}
+
+ui EmptyInspector {
+   render Text("Select a paragraph")
 }
 
 workspace ui FileTree Workspace {
@@ -600,7 +617,7 @@ workspace ui DocumentScreen Document {
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
-         missing -> { Text("This document no longer exists.") } // availability does not expose the handle's runtime ID
+         missing -> { Text("Document { Document.Id } no longer exists.") } // a handle keeps its Id after the row is gone
          unauthorized -> { Text("You no longer have access to this document.") }
          error -> Message { Text("The document could not be loaded: { Message }") }
       }
@@ -621,8 +638,8 @@ workspace view DocumentEditor Document {
          Body: BodyDraft
       }
       set SaveCount += 1
-      // A keyed toast replaces the same key instead of stacking; modifiers go in parentheses.
-      present SavedToast() as toast (Key: "document-saved", Duration: 3.seconds)
+      // A keyed toast replaces the same key instead of stacking. Duration is a number of seconds.
+      present SavedToast() as toast (Key: "document-saved", Duration: 3)
    }
    action CloseDocument {
       // `ask` suspends the action until the dialogue responds; a bare `respond` answers none.
@@ -858,6 +875,8 @@ workspace ui ReadingView Document {
    }
 }
 
+// Unit literals below are Revolution-only and remain deferred beyond the current tranche; toast
+// Duration above intentionally takes a plain number of seconds.
 // A publishing flow: string-valued enum arguments, and a presentation that answers with a result.
 workspace ui ExportPanel Document {
    state Format = ExportFormat."markdown"
@@ -869,6 +888,7 @@ workspace ui ExportPanel Document {
          Presented -> { log "export started" }
          Failed -> Error { present ExportFailure(Error) as overlay }
          FellBack -> Fallback { log Fallback }
+         otherwise -> { log "export status unavailable" }
       }
    }
 
