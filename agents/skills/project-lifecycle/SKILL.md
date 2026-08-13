@@ -10,7 +10,7 @@ Use only the phase Ro requested. Do not advance to another phase without clear a
 
 ## Shared Context
 
-- Read `Roadmap.md`, the active task folder, current Git state, and relevant source before acting.
+- Read `Apps/WordFlower/README.md` first for language work: a project is normally one tranche of the Next contract. Then read `Roadmap.md`, the active task folder, current Git state, and relevant source.
 - Use `old-repo-porting` when comparable behavior exists in `~/code/tao-lang` and `runtime-codegen` when generated TypeScript or `TR` changes.
 - Keep `Roadmap.md` current and task details in `Roadmap/<Task>/`. Archive whole completed task folders only during merge.
 - Treat reviewer output as evidence. Verify findings locally and apply only confirmed, in-scope improvements.
@@ -19,7 +19,7 @@ Use only the phase Ro requested. Do not advance to another phase without clear a
 
 ### Decide
 
-Rank next-project candidates by Tao value, dependency order, risk, implementation readiness, and Ro's stated priorities. Recommend one and wait for Ro to choose before changing roadmap files.
+Rank next-project candidates by Tao value, dependency order, risk, implementation readiness, and Ro's stated priorities. For language work, candidates are coherent gaps between `1 - Current` and `3 - MVP`. Recommend one and wait for Ro to choose before changing roadmap files.
 
 ### Research
 
