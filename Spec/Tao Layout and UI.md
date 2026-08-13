@@ -2,7 +2,18 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `view` and `layout` declarations, explicit `render` roots, basic stdlib layout views, render child blocks, runtime-backed `TextInput` and `FormButton` controls with labels/IDs/disabled and submitting state, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. Render arguments are always parenthesized, and layout remains a distinct following clause: `render View(args) [layout] { children }` or `View(args) [layout] { children }`. The repo does not yet implement `frame`, `@@content`, named render slots, visual style entries, or the complete merge/lowering contract described here. The old repo implemented most of this layout contract with the older `ui`, `items`, and `@@children` spellings; this document keeps the behavior that still fits and updates the public names to `view`, `content`, and `@@content`.
+Current implementation status: this repo currently has `view`, `ui`, and `layout` declarations,
+explicit `render` roots, basic stdlib layout views, render child blocks, runtime-backed `TextInput`
+and `FormButton` controls with labels, placeholders, disabled and submitting state, private `#tag`
+test metadata, control configuration through `on press|change|submit`, direct-state two-way text
+input binding, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`,
+`width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. Render arguments are
+always parenthesized, and layout remains a distinct following clause: `render View(args) [layout]
+{ children }` or `View(args) [layout] { children }`. Tags merge into an existing concrete native
+root and do not add a layout node. The repo does not yet implement `frame`, `@@content`, named render
+slots, visual style entries, or the complete merge/lowering contract described here. The old repo
+implemented most of this layout contract with older spellings; this document keeps the behavior that
+still fits and uses the current public `view`, `ui`, `content`, and `@@content` names.
 
 ## Layout Introduction
 
@@ -68,6 +79,32 @@ Basic interactive UI elements:
 - `TextInput`: a text input with options like a placeholder, a label, etc.
 - `ImageInput`: a button that allows the user to select an image, with options like where to store it, etc.
 - `Checkbox`: a checkbox for a boolean value, with options like a label and disabled state, etc.
+
+#### Control events and two-way inputs
+
+Controls expose standard action-valued slots named `Press`, `Change`, and `Submit`. Callers configure those slots canonically in the control's block:
+
+```tao
+TextInput(Value: Draft, Label: "Title") {
+   on change -> Entered { set Draft = Entered }
+   on submit Save
+}
+
+FormButton("Save") {
+   on press Save
+}
+```
+
+`on press` and `on submit` satisfy `action()` slots. `on change` satisfies `action(text)` and an inline handler may name that text payload after `->`. A named action reference must have the same callback contract. Configuring the same event twice, combining an event with an ordinary argument for the same slot, or using an event on a view without the standard slot is an error.
+
+For a text control with `Value is text, Change is action(text)`, omitting `on change` synthesizes the usual two-way update only when the explicitly labeled `Value:` expression directly references writable text `state`:
+
+```tao
+state Draft = ""
+TextInput(Value: Draft, Label: "Title")
+```
+
+Computed values, aliases, parameters, entity fields, and unlabeled arguments are not writable bindings; they require an explicit `on change`. An explicit change handler replaces the synthesized update. Disabled controls suppress their configured native press/change/submit delivery in the runtime.
 
 Common complex container UI elements:
 

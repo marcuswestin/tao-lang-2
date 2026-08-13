@@ -1,95 +1,108 @@
-# Tao Presentation And Navigation
+# Tao Presentation and Navigation
 
-Status: authoritative implemented MVP.
+Status: authoritative implemented contract for the current WordFlower tranche.
 
-Tao applications select either one root view or one app-owned stack. The stack is the MVP navigation container: it has one initial destination that requires no supplied arguments, a closed set of typed destination views, ordered presentation history, state-preserving covered entries, and deterministic back behavior.
-
-## Declaring a stack
+Tao separates embeddable `view` values from first-class `ui` values that may enter an app's
+presentation tree. A configured `nav` is also presentable. The minimal common role is:
 
 ```tao
-project stack MainNavigation {
-   initial WorkspaceList
-   destination WorkspaceList
-   destination WorkspaceDetail
-   destination DocumentEditor
-}
+public type Presentable is ui | nav
+```
+
+Apps mount navigation; they do not render ordinary content directly.
+
+## Apps and configured navigation
+
+```tao
+use Local from @tao/data
+use OverlayNav, StackNav from @tao/nav
 
 app WordFlower {
-   datasource WordFlowerData through Local
-   stack MainNavigation
+   Name "WordFlower"
+   Navigator StackNav {
+      Initial WorkspaceList
+   }
+   @overlays OverlayNav { }
+   Datasource Local with {
+      StorageKey "WordFlowerData"
+   }
 }
 ```
 
-Each `destination` references a `view`. The destination inherits that view's parameter signature, including entity types and typed defaults, so the view declaration is the single source of truth for its inputs:
+`Name` is display text. `Navigator` is the primary configured nav. Keyed entries such as
+`@overlays` are app-owned auxiliary navs and stable strict targets. `Datasource` configures the app's
+provider; Local's explicit storage identity is specified in `Tao Data.md`.
+
+An app value has process-local identity. A configured nav value also has stable process-local
+identity: naming it with `let` and mounting or targeting that value refers to the same runtime nav.
+Restoration across launches, public occurrence handles, routes, and project IDs remain deferred.
+
+One source module may declare several apps. Generated modules expose a named registry and retain the
+selected app as their default export. `run AppName` selects from that registry directly. Ordinary
+tooling uses `tao compile PATH --app NAME` and `dev PATH --app NAME`. If a multi-app file is given
+without `--app`, an interactive terminal asks which app to use; a noninteractive process fails before
+code generation or Expo startup, lists the available names, and gives an actionable `--app` example.
+Filename and source order never select an app.
+
+## Navigation containers
+
+The implemented containers are:
+
+- `StackNav { Initial <ui> }`: keeps ordered push history. Covered entries stay mounted but
+  hidden visually and from accessibility traversal, preserving their local state.
+- `SlotNav { Initial <ui-or-nav> }`: shows one presentable value at a time. Dismissing presented
+  content restores its configured initial value.
+- `OverlayNav { }`: stacks dismissible content above the covered app tree.
+
+The configured `Initial` value is a presentable, not an invoked rendered element: a `ui` for
+StackNav, and a `ui` or `nav` for SlotNav (nav entries inside stacks remain deferred). The initial value
+must be mountable without supplied runtime arguments.
+
+Selection, split, window, toast, routes, deep links, restoration, animation policy, navigation
+results, and lifecycle hooks remain deferred.
+
+## Presenting, dismissing, and replacing
+
+Presentation is an invocation and always includes parentheses:
 
 ```tao
-project view WorkspaceList {
-   render Text("Workspaces")
-}
-
-project view WorkspaceDetail Workspace is WordFlowerData.Workspace {
-   render Text(Workspace.Name)
-}
+present WorkspaceDetail(Workspace)
+present WorkspaceNameNotice() in WordFlower@overlays
+present FoundationSlot() in FoundationNavigator
 ```
 
-A stack declares each destination once. Its `initial` name must match one declared destination, and the initial destination must declare no required parameters. All-defaulted parameters are allowed and use their view defaults when the runtime mounts the argument-free initial entry. An `app` contains exactly one `view` or `stack` root; datasource bindings may precede that root.
+With no explicit target, Tao delivers to the nearest enclosing nav that can present the value. An
+explicit target is either a configured nav value, an app auxiliary such as `WordFlower@overlays`, or
+another statically valid configured target. Targets resolve by identity and must exist; Tao never
+falls back to a similarly named or currently visible container.
 
-## Presenting a destination
+Arguments use the shared owner binder. `Name: Value` selects a parameter owned by the invoked `ui`;
+unlabeled values bind uniquely by exact or nominal type. Unknown, duplicate, ambiguous, missing, or
+incorrectly typed arguments are diagnostics, and source order never disambiguates.
 
-Presentation is an action statement:
+`dismiss` delegates to the nearest enclosing nav. It pops an overlay or stack entry and restores a
+SlotNav's initial value. Dismissal at a root-safe state changes nothing.
 
 ```tao
-action OpenWorkspace Workspace is WordFlowerData.Workspace {
-   present MainNavigation.WorkspaceDetail(.Workspace Workspace)
-}
+replace FoundationNavigator in WordFlowerFoundationTest
 ```
 
-Parentheses are mandatory, including for an argument-free destination: `present MainNavigation.Settings()`. Presentation arguments use the same typed binding as render and action invocations. `.Parameter Value` explicitly selects a parameter and is required to override a defaulted destination parameter; unnamed values bind only when the remaining required parameter match is unambiguous.
+`replace <nav> in <App>` is the app root operation. It replaces that app's mounted root with the
+given configured nav; it does not append a stack occurrence.
 
-A successful presentation pushes a new occurrence onto that stack. Presenting the same destination and semantic value again still creates a distinct history entry. Generated code contains destination descriptors and delegates history changes to `TR.Navigation`; application-specific routing logic is not injected by hand.
+## Back and identity
 
-Entity-valued destination arguments remain live. The navigation host subscribes to data revisions, so a destination reading `Document.Title` or `Document.Workspace.Name` rerenders after that row or relationship changes.
+Stack occurrences have runtime-private identity. Presenting the same `ui` and semantic arguments
+again still creates a distinct occurrence. Entity-valued parameters remain live, and navigation
+hosts subscribe to data revisions so presented content observes writes.
 
-## Covered entries and back
+The runtime's native Back control, platform hardware back, and Tao test `back` step dispatch through
+the same root-safe reducer. Back pops the nearest active stack occurrence and reveals the preserved
+covered instance. Each behavior check resets all mounted navigation state before it starts.
 
-Every presented entry receives a stable occurrence identity. Covered entries remain mounted but are hidden visually and from accessibility traversal, preserving their local React/Tao state. Popping the top entry therefore reveals the exact prior destination instance rather than reconstructing it.
+## UI and layout boundary
 
-At depth greater than one, the stack host supplies an accessible `Back` control. Platform hardware back, the automatic control, and explicit Tao back actions all use the same reducer:
-
-```tao
-action ReturnToPrevious {
-   back MainNavigation
-}
-```
-
-`back Stack` pops one entry. Back at the initial entry is a safe no-op; a hardware event is consumed only when an entry was popped.
-
-Tao behavior checks may use the test-only `back` step to invoke the currently mounted stack's same root-safe reducer. Cached stack descriptors reset to their initial entry before every check, so checks do not share history.
-
-## Presentation boundary
-
-Views remain presentable UI; a `stack` is an app root and cannot be rendered as an ordinary child view. The layout system continues to own visual layout within each destination. Root destination views receive the same app-shell layout props as a direct app root.
-
-Rendering, action invocation, function invocation, and presentation all delimit arguments with parentheses. A render layout clause remains outside the argument list:
-
-```tao
-render WorkspaceCard(.Workspace Workspace) [fill, gap 8] {
-   Text(Workspace.Name)
-}
-```
-
-## Diagnostics
-
-Validation reports:
-
-- duplicate destinations;
-- a missing initial destination or one with required parameters;
-- presentation of an undeclared destination;
-- missing, extra, ambiguous, duplicated, or incorrectly typed destination arguments;
-- invalid app root count or root statements.
-
-Accepted navigation syntax formats deterministically.
-
-## Deliberate deferrals
-
-The MVP does not include tabs or selection navigation, split views, slots, overlays, modals, windows, toasts, target paths, replacement, restoration across app launches, deep links, public routes, animation policy, navigation results, guards, or lifecycle hooks. These remain future design work and should not be inferred from the implemented stack.
+`ui` is presentable content; `view` remains embeddable content. Both use ordinary render and layout
+rules internally. A nav is mounted at an app root, as an app auxiliary, or inside another nav; it is
+not an ordinary child view. Tags used by Tao tests attach metadata to concrete rendered roots and do
+not add navigation or layout nodes.

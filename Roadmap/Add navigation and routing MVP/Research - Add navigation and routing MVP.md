@@ -168,9 +168,11 @@ Delegation tracks visited mounts and never re-enters a child that already return
 
 The runtime schedules toast expiration into the reducer using host, occurrence, and generation identity. Keyed refresh increments generation and invalidates older timers. Providers report early native dismissal rather than removing local state independently.
 
-### DEC-NAV-032: Declaration identity uses an immutable project ID
+### DEC-NAV-032: Stable declaration identity is deferred
 
-The developer supplies an opaque logical project ID in checked-in project metadata; Tao never generates one. `tao create <id>` uses the new project's directory name as its ID. `tao project id <id> [path]` migrates an existing project without changing an existing ID, while `tao project id <new-id> [path] --replace` explicitly gives an independent fork a new identity. The ID survives later path, remote, and revision changes. Dependency declarations use the required project's ID rather than the lockfile key or resolved commit. The declaration-ID algorithm is versioned separately from source revisions and presentation-state schema versions.
+The current tranche uses process-local semantic and occurrence identities. A checked-in project ID,
+stable declaration-ID algorithm, persistence, restoration, and routes remain explicit follow-ups and
+must not be prerequisites for StackNav, SlotNav, OverlayNav, or app-root operation semantics.
 
 ### DEC-NAV-033: Targetable keys use one owner namespace
 
@@ -192,17 +194,17 @@ The full target MVP retains its `Design` and `Datasource` capabilities. They are
 
 The next implementation project contains only:
 
-- Add `let` with temporary deprecated `alias` compatibility. Migrate only semantically equivalent bindings required by this slice; do not blindly rewrite declaration-like or cycle-sensitive aliases.
+- Add immutable `let` and retire `alias`. Migrate only semantically equivalent bindings required by this slice; do not blindly rewrite declaration-like or cycle-sensitive aliases.
 - Owner-qualified declaration properties, optional/default normalization, zero-required contextual application, invocation binding, configured-value `with`, and the minimal closed-union grammar/assignability required by `Presentable`.
 - Core UI/nav descriptor and extensible target IR.
-- Stable declaration IDs derived from the immutable logical project ID, package, module, declaration kind, and name; canonical normalized properties including defaults, `none`, nested descriptors, and entity-reference tokens; structural descriptor equality/hashing; and restorable-property validation. Keyed-collection canonicalization and persistence I/O remain deferred.
+- Process-local semantic and occurrence identities, canonical configured descriptors, and structural descriptor equality sufficient for one app run. Stable project-derived IDs, restorability validation, and persistence remain deferred.
 - The configured app schema, `run` of configured app values, root hosting and root-operation compatibility, SlotNav, and StackNav. Existing executable root-view apps must migrate atomically or use an explicitly temporary compatibility bridge with removal criteria.
 - `present`, `replace`, and `dismiss` with contextual delivery, configured-descriptor targets, and the active app root target. Keyed path segments, relative keyed targets, and target-only activation land with Selection and Split.
 - A pure semantic reducer, source/native intent envelopes, separate revisioned provider acknowledgements, the provider payload/rejection contract, and native back reconciliation.
-- The `file`/`package`/`workspace`/`public` vocabulary for declarations needed by this slice, with deprecated `project`/`publish` compatibility and explicit removal criteria. Repository-wide migration remains follow-up work.
+- The `file`/`package`/`workspace`/`public` vocabulary for declarations needed by this slice, with the former visibility words retired. Unrelated repository-wide migration remains follow-up work.
 - Focused parser, formatter, resolver, validator, compiler, runtime, source-action, Test App, and WordFlower migration work required by that slice.
 
-Keyed collection syntax/scoping, app `Auxiliaries`, compiler-created keyed wrappers, Selection, Split, keyed/relative path segments, target-only activation, `Occurrence`, Overlay, Window, Toast, persisted restoration/routes, and Dialogue remain documented target behavior but are follow-up implementation projects.
+Keyed collection syntax/scoping beyond app-owned auxiliaries, compiler-created keyed wrappers, Selection, Split, Window, Toast, persisted restoration/routes, stable project IDs, and Dialogue remain documented target behavior but are follow-up implementation projects. The WordFlower Next tranche includes app-owned OverlayNav auxiliaries, strict configured and `App@key` targets, and process-local identities.
 
 ## Traceability
 
@@ -246,4 +248,7 @@ The repo-owned external reviewer wave produced no usable third-party result beca
 
 ## Planning Conclusion
 
-The next agent should use the planning prompt in this folder and write a project plan for the first implementation scope only. It must not silently pull later nav families into the foundation project.
+The WordFlower Next tranche absorbed the executable process-local foundation: configured apps,
+StackNav, SlotNav, OverlayNav auxiliaries, strict targets, contextual presentation, dismiss,
+replacement, and unified Back. Selection, Split, Window, Toast, stable IDs, restoration, routes, and
+dialogues remain in the ordered follow-ups above.
