@@ -19,7 +19,7 @@ Only `1 - Current` is executable. The others use their own file extensions (`.ta
 
 ## Next is the sprint contract
 
-`2 - Next` holds the tranche of decided syntax and semantics that implementation moves into `1 - Current`, slice by slice. Decisions live there as working code plus comments: the file's header lists the tranche, and every construct in the sketch is the agreed target form. `3 - MVP` and `4 - Revolution` always stay in sync with those decisions.
+`2 - Next` holds the tranche of decided syntax and semantics that implementation moves into `1 - Current`, slice by slice. Decisions live there as working code plus comments: the file's header lists the tranche, and every construct in the sketch is the agreed target form. `3 - MVP` and `4 - Revolution` are reconciled with those decisions once per tranche, as its final step.
 
 ## Moving Next into Current
 
@@ -29,14 +29,15 @@ Work the tranche one slice at a time; a slice is one decision group from Next's 
 2. **Migrate Current.** Rewrite `1 - Current/WordFlower.tao` and its journeys to the new form, matching Next's spelling exactly, and extend the journeys to prove the new behavior. Migrate any Test Apps and specs the slice touches in the same change.
 3. **Verify and commit.** Focused tests while working, `./agent verify` before committing; every commit leaves Current green.
 4. **Repeat** until Current expresses everything Next expresses. The tranche is done when the two files say the same thing — Next just says it with decision comments.
+5. **Reconcile the later versions.** As the final step of the tranche, fold every decision Next settled — including changes discovered during implementation — into `3 - MVP` and `4 - Revolution` in one pass.
 
-A change of mind mid-sprint goes through Next first: amend the sketch, propagate to MVP and Revolution, then implement. Current never leads; it follows Next.
+A change of mind mid-sprint goes through Next first: amend the sketch, then implement. Current never leads; it follows Next. Mid-tranche amendments accumulate in Next alone and reach MVP and Revolution in the final reconciliation pass.
 
 When the tranche is absorbed, reconcile `3 - MVP` with what implementation taught us, then cut a new Next from the gap between Current and MVP.
 
 ## Synchronization rule
 
-**`2 - Next`, `3 - MVP`, and `4 - Revolution` are always kept in sync.** When a decision is made in Next, it is reflected in MVP and Revolution in the same change — the same syntax, the same semantics, the same spelling. The three later versions never disagree about a settled decision; they differ only in how much functionality they contain.
+**`2 - Next`, `3 - MVP`, and `4 - Revolution` agree at every tranche boundary.** While a tranche is open, Next may run ahead — implementation feedback amends it freely. When the tranche completes, every settled decision is reflected into MVP and Revolution in one reconciliation pass — the same syntax, the same semantics, the same spelling — so changes move over exactly once. After that pass the three versions never disagree about a settled decision; they differ only in how much functionality they contain.
 
 If reflecting a Next decision reveals a **contradiction** — the decision cannot express something MVP or Revolution depends on, or it conflicts with a decision those versions already assume — that contradiction is a blocker: **it must be resolved before Next becomes Current.** Resolve it by amending the Next decision, by changing what MVP/Revolution require, or by explicitly deferring the conflicting capability. Never implement a Next decision that leaves a known contradiction standing in a later version, and never silently drop the conflicting capability from MVP or Revolution to make the decision fit.
 
