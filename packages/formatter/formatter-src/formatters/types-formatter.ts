@@ -3,7 +3,7 @@ import type { FormatHandlers } from '../formatting'
 export default {
   /** TypeDeclaration formats `type Name is ...` declarations. */
   TypeDeclaration(f) {
-    f.oneSpaceAfter('package', 'project', 'publish', 'type')
+    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'type')
     f.oneSpaceAround('is')
   },
 
@@ -11,6 +11,11 @@ export default {
   ItemTypeExpression(f) {
     f.indentedBraceBlock(f.node.properties)
     f.lineSeparatedList(f.node.properties)
+  },
+
+  /** UnionTypeExpression keeps closed-union members readable. */
+  UnionTypeExpression(f) {
+    f.oneSpaceAround('|')
   },
 
   /** TypeProperty formats explicit `Name is Type` item fields and shorthand same-name fields. */

@@ -4,31 +4,30 @@ import { testFormatCode } from './test-format'
 Describe('functional core formatter', () => {
   Test('formats functions, total conditionals, toggle, and iteration deterministically', async () => {
     await testFormatCode(
-      `function Label Count is number returns text=when Count>0->interpolate "Count: ",Count+1 otherwise->"Empty"\nview Main{state Ready=false action Flip{when Ready->{toggle Ready}otherwise->{toggle Ready}}render Stack() {when Count>0 and not false->{Text(Label(Count))}otherwise->{Text("Empty")}for Name in["Inbox" "Today"]{Text(Name)}}}`,
+      `function Label Count is number returns text=when(Count>0){true->"Count: {Count+1}" otherwise->"Empty"}\nview Main{state Ready=false action Flip{guard Ready true->{toggle Ready}toggle Ready}render Stack() {when(Count>0 and not false){true->{Text(Label(Count))}otherwise->{Text("Empty")}}loop["Inbox","Today"]/Name{Text(Name)}}}`,
       `
-        function Label Count is number returns text = when
-           Count > 0 -> interpolate "Count: ", Count + 1
+        function Label Count is number returns text = when (Count > 0) {
+           true -> "Count: { Count + 1 }"
            otherwise -> "Empty"
+        }
 
         view Main {
            state Ready = false
            action Flip {
-              when
-                 Ready -> {
-                    toggle Ready
-                 }
-                 otherwise -> {
-                    toggle Ready
-           }  }
+              guard Ready true -> {
+                 toggle Ready
+              }
+              toggle Ready
+           }
            render Stack() {
-              when
-                 Count > 0 and not false -> {
+              when (Count > 0 and not false) {
+                 true -> {
                     Text(Label(Count))
                  }
                  otherwise -> {
                     Text("Empty")
-                 }
-              for Name in ["Inbox" "Today"] {
+              }  }
+              loop ["Inbox", "Today"] / Name {
                  Text(Name)
         }  }  }
       `,
@@ -37,36 +36,37 @@ Describe('functional core formatter', () => {
 
   Test('indents comments with value, action, and render when branches', async () => {
     await testFormatCode(
-      `function Choice returns text=when\n// value preferred\ntrue->"yes"\n// value fallback\notherwise->"no"\nview Main{state Ready=true action Flip{when\n// action preferred\nReady->{toggle Ready}\n// action fallback\notherwise->{toggle Ready}}render Stack(){when\n// render preferred\nReady->{Text("yes")}\n// render fallback\notherwise->{Text("no")}}}`,
+      `function Choice returns text=when true{\n// value preferred\ntrue->"yes"\n// value fallback\notherwise->"no"}\nview Main{state Ready=true action Flip{guard Ready{\n// action preferred\ntrue->{toggle Ready}\n// action fallback\nfalse->{toggle Ready}}}render Stack(){when Ready{\n// render preferred\ntrue->{Text("yes")}\n// render fallback\notherwise->{Text("no")}}}}`,
       `
-        function Choice returns text = when
+        function Choice returns text = when true {
            // value preferred
            true -> "yes"
            // value fallback
            otherwise -> "no"
+        }
 
         view Main {
            state Ready = true
            action Flip {
-              when
+              guard Ready {
                  // action preferred
-                 Ready -> {
+                 true -> {
                     toggle Ready
                  }
                  // action fallback
-                 otherwise -> {
+                 false -> {
                     toggle Ready
-           }  }
+           }  }  }
            render Stack() {
-              when
+              when Ready {
                  // render preferred
-                 Ready -> {
+                 true -> {
                     Text("yes")
                  }
                  // render fallback
                  otherwise -> {
                     Text("no")
-        }  }  }
+        }  }  }  }
       `,
     )
   })
@@ -98,6 +98,16 @@ Describe('functional core formatter', () => {
         view Field Change is action(text, number), Submit is action() {
            render Text("Field")
         }
+      `,
+    )
+  })
+
+  Test('formats interpolated expressions without changing literal text or escapes', async () => {
+    await testFormatCode(
+      `let Greeting="Hello {Name}, next {1+2}!"\nlet Escaped="literal \\{ brace and \\\\ slash"`,
+      `
+        let Greeting = "Hello { Name }, next { 1 + 2 }!"
+        let Escaped = "literal \\{ brace and \\\\ slash"
       `,
     )
   })

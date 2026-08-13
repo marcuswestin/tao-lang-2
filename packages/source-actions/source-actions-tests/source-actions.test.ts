@@ -84,8 +84,8 @@ Describe('organizeSource use statements', () => {
         use Two from ./z-local
         use One from ./a-local
         use Text from @tao/ui
-        alias First = One
-        alias Second = Two
+        let First = One
+        let Second = Two
         view MainView {
            render Text("hi")
         }
@@ -95,8 +95,8 @@ Describe('organizeSource use statements', () => {
         use One from ./a-local
         use Two from ./z-local
 
-        alias First = One
-        alias Second = Two
+        let First = One
+        let Second = Two
 
         view MainView {
            render Text("hi")
@@ -171,7 +171,7 @@ Describe('organizeSource canonical statement order', () => {
   Test('moves app declarations after imports and keeps other statements after the app', async () => {
     await testOrganizeSource(
       `
-        alias Greeting = "hi"
+        let Greeting = "hi"
         app MyApp {
            view MainView
         }
@@ -187,7 +187,7 @@ Describe('organizeSource canonical statement order', () => {
            view MainView
         }
 
-        alias Greeting = "hi"
+        let Greeting = "hi"
 
         view MainView {
            render Text(Greeting)
@@ -231,9 +231,9 @@ Describe('organizeSource canonical statement order', () => {
   Test('preserves the relative order of non-app statements', async () => {
     await testOrganizeSource(
       `
-        alias Second = First
+        let Second = First
         app MyApp { view MainView }
-        alias First = "1"
+        let First = "1"
         view MainView { render Text(First) }
         use Text from @tao/ui
       `,
@@ -244,8 +244,8 @@ Describe('organizeSource canonical statement order', () => {
            view MainView
         }
 
-        alias Second = First
-        alias First = "1"
+        let Second = First
+        let First = "1"
 
         view MainView {
            render Text(First)
@@ -509,14 +509,14 @@ Describe('moveRendersLast', () => {
     const document = await parseDocument(`
       view MainView {
          render Text(Greeting)
-         alias Greeting = "hi"
+         let Greeting = "hi"
       }
     `)
 
     Expect(await SourceActions.moveRendersLast(document)).toBe(`${
       Text.stripIndent(`
       view MainView {
-         alias Greeting = "hi"
+         let Greeting = "hi"
          render Text(Greeting)
       }
     `)
@@ -524,12 +524,12 @@ Describe('moveRendersLast', () => {
   })
 
   Test('splits same-line view statements safely when moving renders', async () => {
-    const document = await parseRawDocument('view MainView { render Text(Greeting) alias Greeting = "hi" }')
+    const document = await parseRawDocument('view MainView { render Text(Greeting) let Greeting = "hi" }')
 
     Expect(await SourceActions.moveRendersLast(document)).toBe(`${
       Text.stripIndent(`
       view MainView {
-         alias Greeting = "hi"
+         let Greeting = "hi"
          render Text(Greeting)
       }
     `)
@@ -541,16 +541,16 @@ Describe('moveRendersLast', () => {
       view MainView {
          // render comment
          render Text(Greeting)
-         // alias comment
-         alias Greeting = "hi"
+         // let comment
+         let Greeting = "hi"
       }
     `)
 
     Expect(await SourceActions.moveRendersLast(document)).toBe(`${
       Text.stripIndent(`
       view MainView {
-         // alias comment
-         alias Greeting = "hi"
+         // let comment
+         let Greeting = "hi"
          // render comment
          render Text(Greeting)
       }
@@ -563,14 +563,14 @@ Describe('moveRendersLast', () => {
       view MainView {
          // render { comment
          render Text(Greeting)
-         alias Greeting = "hi"
+         let Greeting = "hi"
       }
     `)
 
     Expect(await SourceActions.moveRendersLast(document)).toBe(`${
       Text.stripIndent(`
       view MainView {
-         alias Greeting = "hi"
+         let Greeting = "hi"
          // render { comment
          render Text(Greeting)
       }
@@ -581,7 +581,7 @@ Describe('moveRendersLast', () => {
   Test('produces no edit when render is already last', async () => {
     const document = await parseDocument(`
       view MainView {
-         alias Greeting = "hi"
+         let Greeting = "hi"
          render Text(Greeting)
       }
     `)
@@ -608,7 +608,7 @@ Describe('fixSource', () => {
       use Text,Button from @tao/ui
       view MainView {
          render Text(Greeting)
-         alias Greeting = "hi"
+         let Greeting = "hi"
       }
     `)
     const fixed = await SourceActions.fixSource(document, await sourceActionOptionsFor(document))
@@ -622,7 +622,7 @@ Describe('fixSource', () => {
       }
 
       view MainView {
-         alias Greeting = "hi"
+         let Greeting = "hi"
          render Text(Greeting)
       }
     `)
@@ -636,7 +636,7 @@ Describe('fixSource', () => {
     try {
       await FS.writeText(
         FS.resolvePath('Local.tao', tmpDir),
-        'publish view LocalText Value is text { }\n',
+        'public view LocalText Value is text { }\n',
       )
       const document = await parseRawDocumentAt(
         `${
@@ -645,7 +645,7 @@ Describe('fixSource', () => {
           use LocalText, MissingLocal from ./Local
           view MainView {
              render Text(Greeting)
-             alias Greeting = "hi"
+             let Greeting = "hi"
           }
         `)
         }\n`,
@@ -658,7 +658,7 @@ Describe('fixSource', () => {
         use MissingLocal from ./Local
 
         view MainView {
-           alias Greeting = "hi"
+           let Greeting = "hi"
            render Text(Greeting)
         }
       `)

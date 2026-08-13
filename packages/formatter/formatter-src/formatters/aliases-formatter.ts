@@ -1,9 +1,9 @@
 import type { FormatHandlers } from '../formatting'
 
 export default {
-  /** AliasDeclaration preserves its parsed binding keyword while normalizing spacing. */
+  /** AliasDeclaration normalizes canonical immutable `let` bindings. */
   AliasDeclaration(f) {
-    f.oneSpaceAfter('package', 'project', 'publish', 'let', 'alias')
+    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'let')
     f.oneSpaceAround('=')
   },
 } satisfies Partial<FormatHandlers>

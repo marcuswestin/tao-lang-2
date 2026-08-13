@@ -18,7 +18,7 @@ export const ActionsFormatter = {
 
   /** ActionDeclaration formats a named action header and body. */
   ActionDeclaration(f) {
-    f.oneSpaceAfter('package', 'project', 'publish', 'action')
+    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'action')
     f.oneSpaceBeforeProperty('parameterList')
   },
 
@@ -30,19 +30,24 @@ export const ActionsFormatter = {
     f.oneSpaceAfter('toggle')
   },
 
-  /** WhenActionStatement puts each branch and its required fallback on an indented line. */
-  WhenActionStatement(f) {
-    f.indentedLines([...f.node.branches, f.node.otherwise])
+  /** GuardActionStatement separates its subject from either single or grouped cases. */
+  GuardActionStatement(f) {
+    f.oneSpaceAfter('guard')
+    f.oneSpaceBeforeProperty('caseBlock', 'single')
   },
 
-  /** WhenActionBranch spaces its condition against the branch arrow. */
-  WhenActionBranch(f) {
-    f.oneSpaceBefore('->')
+  /** GuardActionCaseBlock puts each case on one indented line. */
+  GuardActionCaseBlock(f) {
+    f.indentedBraceBlock(f.node.branches)
+    f.lineSeparatedList(f.node.branches)
   },
 
-  /** WhenActionOtherwise spaces the fallback keyword against the branch arrow. */
-  WhenActionOtherwise(f) {
+  /** GuardActionBranch formats its optional handler and error payload. */
+  GuardActionBranch(f) {
     f.oneSpaceBefore('->')
+    if (f.node.payload !== undefined) {
+      f.oneSpaceAfter('->')
+    }
   },
 
   /** DoStatement formats action invocation spacing. */
