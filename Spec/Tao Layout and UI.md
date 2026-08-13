@@ -55,10 +55,12 @@ Flexible `layout` containers:
 - `Row`: lays out its content horizontally on a single line with flexible width
 - `WrappingRow`: lays out its content horizontally and allows it to wrap onto multiple lines, with flexible total width
 
-Rigid `frame` containers:
+Hugging containers:
 
 - `Stack`: hugs its content and lays it out top-to-bottom
 - `Box`: hugs its content and lays it out horizontally
+
+All five ship today as `layout` declarations. The separate `frame` role is intended, not implemented.
 
 UI containers usually do not paint pixels themselves. Instead, they focus on how visible content is arranged and sized.
 
@@ -68,17 +70,17 @@ Tao provides common `view` UI elements and view-like stdlib components. They are
 
 Basic content UI elements:
 
-- `Text`: displays text and allows you to style its typography, color, etc.
-- `Image`: displays an image and allows you to size and transform it, etc.
-- `Icon`: a specialized version of `Image` that is used to display icons, including system icons.
+Shipped today, alongside the containers above: `Text`, `TextFrame`, `TextMultiline`, `Number`,
+`Button`, `TextInput`, and `FormButton`. `TextInput` and `FormButton` carry the label, placeholder,
+disabled, and submitting properties that forms rely on.
 
-Basic interactive UI elements:
+Intended, not implemented:
 
-- `Pressable`: a pressable surface. Its exact `view`/`frame` classification is still part of the broader UI design.
-- `Button`: a button with options like an icon, a label, etc.
-- `TextInput`: a text input with options like a placeholder, a label, etc.
-- `ImageInput`: a button that allows the user to select an image, with options like where to store it, etc.
-- `Checkbox`: a checkbox for a boolean value, with options like a label and disabled state, etc.
+- `Image`: displays an image and allows you to size and transform it.
+- `Icon`: a specialized `Image` for icons, including system icons.
+- `Pressable`: a pressable surface. Its exact role classification is part of the broader UI design.
+- `ImageInput`: a button that lets the user select an image, with options such as where to store it.
+- `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
 
 #### Control events and two-way inputs
 
@@ -106,26 +108,21 @@ TextInput(Value: Draft, Label: "Title")
 
 Computed values, aliases, parameters, entity fields, and unlabeled arguments are not writable bindings; they require an explicit `on change`. An explicit change handler replaces the synthesized update. Disabled controls suppress their configured native press/change/submit delivery in the runtime.
 
-Common complex container UI elements:
-
-- `List`: a list of items, with options like a header and footer, etc.
-- `ScrollView`: a scrollable container that allows the user to scroll through its content.
-
-Basic transitional UI elements:
-
-- `Spinner`: a loading indicator.
-- `Progress`: a progress bar indicator.
+Also intended: `List` (a list of items with header and footer options), `ScrollView` (a scrollable
+container), `Spinner` (a loading indicator), and `Progress` (a progress indicator). Rendering a
+collection today uses `loop` inside an ordinary container.
 
 Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces are UI values presented into an overlay nav, while response-demanding modal conversations are dialogues invoked with `ask`; see `Tao Presentation and Navigation.md`. Visual portal and layer primitives remain a separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
-When creating a UI element, you can allow for parts of the UI to be rendered by the caller. This is done using `@<name>` render slots.
+Intended, not implemented; the slot-presence test shown below is illustrative rather than settled
+syntax. When creating a UI element, you can allow for parts of the UI to be rendered by the caller. This is done using `@<name>` render slots.
 
 ```tao
 use Icon, Text, Box, Row from @tao/ui
 
-view Label Title text {
+view Label Title is text {
    @icon = empty
 
    render Box() {
@@ -288,7 +285,9 @@ Row() [content spread center] {
 
 Col() [content top stretch] {
    Text("fills the column width")
-   Button("Continue", Continue)
+   FormButton("Continue") {
+      on press Continue
+   }
 }
 ```
 
@@ -358,15 +357,19 @@ layout ToolbarArea {
 }
 
 ToolbarArea() [gap 8] {
-   Button("Cancel", Cancel)
-   Button("Save", Save)
+   FormButton("Cancel") {
+      on press Cancel
+   }
+   FormButton("Save") {
+      on press Save
+   }
 }
 ```
 
 If the declaration has fixed siblings and caller content, put `@@content` inside an explicit inner host when caller layout should affect only caller content:
 
 ```tao
-frame LabeledSection text Label {
+frame LabeledSection Label is text {
    render Stack() [gap 12, pad 16] {
       Text(Label)
 
