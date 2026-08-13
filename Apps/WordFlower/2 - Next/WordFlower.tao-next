@@ -1,46 +1,101 @@
 use Local from @tao/data
-use OverlayNav, SlotNav, StackNav from @tao/nav
+use Memory from @tao-next/data // the self-hosted stdlib sketch: copyable navs and datasources
+use StackNav from @tao-next/nav
+use OverlayNav, SelectionNav, SlotNav, Toast, ToastHost from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
 // This tranche decides (the process contract is ../README.md):
-// - Arguments: `Name:` labels, unlabeled type-based binding, comma-separated, never positional
-// - Interpolated strings "{ Expression }"
-// - `is empty` expressions and the empty/loading/error case vocabulary (`.Empty` retired)
-// - Block-scoped `guard` in actions and renders (a match skips the rest of its enclosing block);
-//   one subject per guard
-// - `when` subject form for values and renders
-// - `data Plural / Singular` top-level declarations with comma modifiers, `index`, default
-//   `order by`, relation elision, and boolean case fields written and filtered by name
-// - `loop Plural / Singular` list rendering
-// - `query [Name from] Source { ... }` including relation sources and inline placement
-//   (declared before use, and before any conditional)
-// - Two-way input binding; `on press|change|submit` with action references or inline handlers
-// - `ui` role; app Navigator/@overlays/Datasource block; `present Name(Args)` with required
-//   parentheses; `dismiss`; StackNav/SlotNav/OverlayNav; `replace <nav> in <App>`
-// - `#tag` render metadata and test vocabulary: `press`/`enter`/`submit` with `#tag`, `select #tag[1-based]`,
-//   grouped `expect { ... }`, bare `data loading|error|ready` steps
-// - Visibility words: `file` (default, written by omission), `package`, `workspace`, `public`
-// - Custom types with value-literal constructors; view-local and block-shadowed `let`;
-//   number state with compound `set`; typed injection
-// - Multi-app compile/dev selection: `--app Name`, or an interactive prompt when a TTY is available;
-//   noninteractive commands with no selection fail rather than guessing
+// - `SelectionNav` with keyed items (`@key { Label, Content }`), `Initial @key`, `Display`, and
+//   target-only activation: `present App@key` reveals an item without new content
+// - Configured `with` variants: `Nav with { Display "drawer" }` and app variants that override
+//   Name, Navigator, or Datasource without changing the original
+// - A third data level (Paragraphs) and entity availability guards:
+//   `guard Entity { loading / missing / unauthorized / error -> Message }` with available fall-through;
+//   a handle keeps its Id after its row is gone
+// - `dialogue Name <Params> responds <Enum>`; `ask` suspends the action until the dialogue answers;
+//   `respond Case` answers, bare `respond` answers none; results match with `when`
+// - Keyed toasts: `present Toast { Content: X, Key: "...", Duration: 3.seconds } in App@toasts`;
+//   `N.seconds` is the first unit literal
+// - `snapshot Entity` immutable copies, typed `Entity.Snapshot`
+// - `async { ... }` runs its block without delaying the statements after it
+// - Pure functions in product code (`function Name Params returns type = expression`)
+// - Data fields as `Name type (modifiers)`: parenthesized comma-separated modifiers, booleans as
+//   `Name yes / no [NoAlias] [(default Case)]`, owner-side `auto-delete`, values (like `now`)
+//   that the runtime applies later
+// - Types instantiate with a bare block (`Datasource Local { ... }`); `with` patches values, and a
+//   property-position `with` (`Navigator with { ... }`) merge-copies the original's property
+// - Self-hosted navs and datasources: a package declares config properties in Tao and binds
+//   semantics with `implement inject` against the published TR protocols (see `@tao-next/`)
+//
+// Splits, windows, design, and the remote provider stay in `../3 - MVP` for later tranches.
+// All tranche-1 forms below are implemented and unchanged. Per ../README.md, `3 - MVP` and
+// `4 - Revolution` are reconciled with this tranche's decisions ONCE, as the final step after
+// Current absorbs Next — mid-tranche amendments to Next accumulate here first.
+
 project {
    name "WordFlower"
    remote none
    license MIT
 }
 
+// A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
+let HomeStack = StackNav {
+   Initial WorkspaceList
+}
+let WorkspaceNav = SlotNav {
+   Initial WorkspaceChooser
+}
+let SettingsStack = StackNav {
+   Initial Settings
+}
+let SignedOutNav = StackNav {
+   Initial SignedOut
+}
+
+// Direct keys bind to selection Items and share this configured nav's target-key namespace.
+let WordFlowerNavigator = SelectionNav {
+   Initial @home
+   Display "automatic"
+   @home {
+      Label "Home"
+      Content HomeStack
+   }
+   @workspace {
+      Label "Workspace"
+      Content WorkspaceNav
+   }
+   @settings {
+      Label "Settings"
+      Content SettingsStack
+}  }
+
 // An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
 // entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
 app WordFlower {
    Name "WordFlower"
-   Navigator StackNav {
-      Initial WorkspaceList // Initial expects a ui, not a rendered element. So WorkspaceList is passed as a value, not as invoked result.
-   }
+   Navigator WordFlowerNavigator
    @overlays OverlayNav { }
-   Datasource Local with {
+   @toasts ToastHost { }
+   Datasource Local { // Local is a type, which gets instantiated, so no `with`
       StorageKey "WordFlowerData"
 }  }
+
+// `with` copies public properties of a *value* into a new value; WordFlower itself is unchanged.
+let WordFlowerDrawer = WordFlower with {
+   Name "WordFlower - Drawer Preview"
+   Navigator with { // this short-hands `Navigator WordFlower.Navigator with { ... }`. If you drop `with`, it would be an overwrite instead of a merge-copy
+      Display "drawer"
+}  }
+
+// Overwriting a property in a variant (no `with`): the demo app swaps the whole datasource.
+let WordFlowerDemo = WordFlower with {
+   Name "WordFlower Demo"
+   Datasource Memory // Memory is keyless; a bare name instantiates an all-defaulted type
+}
+
+enum ConfirmResult {
+   Confirmed
+}
 
 app WordFlowerFoundationTest {
    Name "WordFlower Navigation Foundation Test"
@@ -50,20 +105,37 @@ app WordFlowerFoundationTest {
 
 data Workspaces / Workspace { // top-level data: the plural collection, then the singular entity it stores — the same `Plural / Singular` order as `loop`
    Name text
-   CreatedAt time, default now() // modifications are comma separated; index is declared separately
-   Documents // `relation Documents` can be omitted if the name matches a data declaration
+   // Modifiers take values: `now` is a function value the runtime invokes per create, the same way
+   // `Initial WorkspaceList` passes a ui that mounts later. Invoking still always needs parens.
+   CreatedAt time (default now) // modifications inside parentheses, comma separated
+   Pinned yes / no // yes / no defaults to no
+   Documents (relation Documents, auto-delete) // `auto-delete` translates to `on delete cascade` on the other entity
+
+   // Blank line between properties and modifiers
    index CreatedAt // index is declared separately
    order by CreatedAt // default order, defaults to asc
 }
 
 data Documents / Document {
    Title text
-   Body text, default ""
-   Final / Draft, default Draft // booleans are <yesName> / <noName>
-   CreatedAt time, default now()
-   Workspace, on delete cascade // `relation Workspace` can be omitted if the name matches a data declaration
+   Body text (default "")
+   Final yes / no Draft // yes/no accepts an optional no-case alias name
+   Public yes / no Private (default Public) // yes/no also accepts default
+   CreatedAt time (default now)
+   Workspace (relation Workspace) // `on delete ..` etc are modifications
+   Paragraphs (auto-delete) // `relation ...` is optional if the name matches a data declaration.
+
    index CreatedAt
-   order by CreatedAt // default order, defaults to asc
+   order by CreatedAt
+}
+
+data Paragraphs / Paragraph {
+   Text text
+   Ordering number
+   Document // `relation ...` is optional if the name matches a data declaration
+
+   index Ordering
+   order by Ordering
 }
 
 let Tagline = "A quiet place for words that matter."
@@ -88,6 +160,8 @@ let StarterPrompt = WritingPrompt {
    PromptMinutes: 10
    StarterTags // unlabeled: binds the PromptTags field by type
 }
+
+function DocumentLabel Title is text returns text = "Document: { Title }"
 
 // `ui` is content that can enter the app's presentation tree; `view` stays embeddable content.
 // There is no separate destination list: presenting a `ui` is the whole navigation contract.
@@ -135,6 +209,12 @@ ui WorkspaceList {
       FormButton("Add workspace", Disabled: WorkspaceName is empty) {
          on press AddWorkspace
       }
+      #activateWorkspaceTab
+      FormButton("Go to workspaces") {
+         // Target-only activation: presenting a bare key reveals that item without new content
+         on press -> {
+            present WordFlower@workspace
+      }  }
       guard Workspaces empty -> { // Guarding a single condition can be done without brackets `{ empty -> ... }`
          Text("No workspaces yet")
          Text("Create one to start capturing documents.")
@@ -252,7 +332,7 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
                   #edit
                   FormButton("Open document") {
                      on press -> {
-                        present DocumentEditor(Document)
+                        present DocumentScreen(Document)
                   }  }
                   #finish
                   FormButton("Finish document") {
@@ -289,9 +369,29 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
                      delete Document
 }  }  }  }  }  }  }
 
-workspace ui DocumentEditor Document {
+// The presented entry guards entity availability; the editor below assumes an available document.
+workspace ui DocumentScreen Document {
+   render Col() [fill] {
+      guard Document {
+         loading -> {
+            Text("Loading document…")
+         }
+         missing -> {
+            Text("Document { Document.Id } no longer exists.") // a handle keeps its Id after the row is gone
+         }
+         unauthorized -> {
+            Text("You no longer have access to this document.")
+         }
+         error -> Message {
+            Text("The document could not be loaded: { Message }")
+      }  }
+      DocumentEditor(Document)
+}  }
+
+workspace view DocumentEditor Document {
    state TitleDraft = Document.Title
    state BodyDraft = Document.Body
+   state ParagraphText = ""
    state SaveCount = 0
    action SetBodyDraft Value is text { // an action reference bound to an event receives the payload through its parameters
       set BodyDraft = Value
@@ -303,9 +403,35 @@ workspace ui DocumentEditor Document {
          Body: BodyDraft
       }
       set SaveCount += 1 // compound `set` composes with number state
+      // A keyed toast replaces the previous occurrence with the same key instead of stacking
+      present Toast {
+         Content: SavedToast
+         Key: "document-saved"
+         Duration: 3.seconds // `N.seconds` is the first unit literal
+      } in WordFlower@toasts
    }
+   action AddParagraph {
+      guard ParagraphText empty
+      // `async` runs its block without delaying the statements after it
+      async {
+         create Paragraph {
+            Text: ParagraphText
+            Ordering: Paragraphs.Count + 1
+            Document
+      }  }
+      set ParagraphText = ""
+   }
+   action CloseDocument {
+      // `ask` suspends this action until the dialogue responds; a bare `respond` answers none
+      let Result = ask ConfirmCloseDialogue(Document)
+      when Result {
+         Confirmed -> {
+            dismiss
+         }
+         otherwise -> { } // cancelled
+   }  }
    render Col() [fill, content top stretch, gap 10, pad 16] {
-      Text("Edit document") [width fill]
+      Text(DocumentLabel(Document.Title)) [width fill]
       Text("Workspace: { Document.Workspace.Name }")
       #editDocumentTitle
       TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
@@ -325,7 +451,103 @@ workspace ui DocumentEditor Document {
       Text("Saved title: { Document.Title }")
       Text("Saved body: { Document.Body }")
       Text("Saves this session: { SaveCount }")
+
+      query Paragraphs from Document.Paragraphs { }
+      Text("Paragraphs: { Paragraphs.Count }")
+      #newParagraph
+      TextInput(Value: ParagraphText, Label: "New paragraph", Placeholder: "Add a paragraph") {
+         on submit AddParagraph
+      }
+      #paragraphs
+      loop Paragraphs / Paragraph {
+         Col() [gap 6, pad 10] {
+            Text(Paragraph.Text)
+      }  }
+      #snapshotDocument
+      FormButton("Snapshot") {
+         on press -> {
+            // A snapshot is an immutable copy; the live handle keeps updating elsewhere
+            let Snapshot = snapshot Document
+            present DocumentSnapshot(Snapshot) in WordFlower@overlays
+      }  }
+      #closeDocument
+      FormButton("Close document") {
+         on press CloseDocument
+      }
 }  }
+
+ui SavedToast {
+   render Text("Saved")
+}
+
+ui DocumentSnapshot Snapshot is Document.Snapshot {
+   render Col() [gap 6, pad 10] {
+      Text("Captured version")
+      Text(Snapshot.Title)
+      #dismissSnapshot
+      FormButton("Dismiss") {
+         on press -> {
+            dismiss
+}  }  }  }
+
+// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none.
+dialogue ConfirmCloseDialogue Document responds ConfirmResult {
+   render Col() [gap 6, pad 10] {
+      Text("Close { Document.Title }?")
+      #confirmClose
+      FormButton("Close") {
+         on press -> {
+            respond Confirmed
+      }  }
+      #cancelClose
+      FormButton("Cancel") {
+         on press -> {
+            respond // bare respond answers none
+}  }  }  }
+
+ui WorkspaceChooser {
+   query Workspaces { }
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      Text("Choose a workspace")
+      guard Workspaces empty -> {
+         Text("No workspaces yet")
+      }
+      #chooseWorkspace
+      loop Workspaces / Workspace {
+         #choose
+         FormButton(Workspace.Name) {
+            on press -> {
+               // A configured nav value locates its one equal active mount
+               present WorkspaceDocuments(Workspace) in WorkspaceNav
+}  }  }  }  }
+
+workspace ui WorkspaceDocuments Workspace {
+   query Documents from Workspace.Documents { }
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      Text("Documents in { Workspace.Name }")
+      guard Documents empty -> {
+         Text("No documents yet")
+      }
+      #workspaceDocuments
+      loop Documents / Document {
+         #openDocument
+         FormButton(Document.Title) {
+            on press -> {
+               present DocumentScreen(Document)
+}  }  }  }  }
+
+ui Settings {
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      Text("Settings")
+      #resetSignedOut
+      FormButton("Reset to signed out") {
+         on press -> {
+            replace SignedOutNav in WordFlower
+}  }  }  }
+
+ui SignedOut {
+   render Text("Signed out")
+}
 
 // Typed TS injection stays the permanent escape hatch for behavior Tao does not own.
 view WordCount Value is text {
