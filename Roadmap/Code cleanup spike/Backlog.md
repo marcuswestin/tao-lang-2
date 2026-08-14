@@ -2,8 +2,8 @@
 
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
-Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 91 commits, 2026-08-14
+Last full sweep: closure sweeps A and B after 91 commits, 2026-08-14
+Last touched-package re-sweep: after 97 implementation commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -203,9 +203,9 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | ast-utils data-write binding phases                                       | R2              |                  +44 |        1/44 | Split default pruning, ambiguity analysis, unmatched reporting, and missing-field reporting, removing the 85-line owner and reducing the source count from 59 to 58.                               |
 | done               | ast-utils argument-binding phases                                         | R2              |                  +26 |        1/26 | Split named, optional-pruning, duplicate, exact, assignable, ambiguity, unmatched, and missing phases, reducing the 109-line resolver to 24 lines and the source count from 58 to 57.              |
 | parked             | ast-utils invocation diagnostic reporting                                 | R2              |  no clean phase seam |         n/a | The natural split leaves two roughly 50–65-line exhaustive Switch reporters, retaining or increasing R2 violations; a handler-table rewrite would be churn.                                        |
-| parked             | dev review streaming lifecycle                                            | R2              |       440-line floor |         n/a | Exact five-case parity still required +277/-163 to externalize shared state and timers; restore byte-identical HEAD because the honest split exceeds ~300 changed lines.                           |
+| parked             | dev review streaming lifecycle                                            | R2              |       440-line floor |         n/a | Exact five-case parity confirmed behavior, but externalizing shared state and timers required +277/-163; restored byte-identical HEAD because the honest split exceeds ~300 changed lines.         |
 | done               | dev reviewer launch lifecycle                                             | R2              |                  +37 |        1/37 | Split preparation, artifact paths, streaming invocation, and metadata assembly, reducing the 86-line launcher to 14 lines and the source count from 57 to 56 while preserving persistence order.   |
-| review             | 56 source functions over 40 lines or nesting depth three                  | R2              |          final sweep |         n/a | No further owner passes value review after the launch extraction; the two independent final sweeps must confirm the hard stop.                                                                     |
+| done               | 56 source functions over 40 lines or nesting depth three                  | R2              |             reviewed |         n/a | Final structural Sweep A value-reviewed all 56 mechanical hits; none clears the cohesion, line-growth, and branch/complexity value bars.                                                           |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                                   |
 | done               | `packages/dev/dev-src/commands/code-review/planner.ts` timeouts           | R6 / charter 4  |                   11 |        6/11 | Reuse the two owning review-timeout constants across six provider outcomes, collapsing the repeated values and net-deleting five lines.                                                            |
 | done               | repeated Android, compiler assertion, and unexpected-error messages       | R12 / charter 4 |                   26 |        6/26 | Replace ten byte-identical message literals in four owners with four local constants; four abstractions each pay at two or three sites.                                                            |
@@ -230,7 +230,23 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | closed-union dispatch across ast-utils, compiler, validator, runtime | R13  |            347 |      14/347 | Convert all fourteen audited closed-union sites to shared Switch helpers, net-delete 21 code lines, and leave open-input/stateful false positives unchanged.                   |
 | baseline-satisfied | all non-generated package source                                     | R7   |              0 |         n/a | The baseline contains no native `switch`, no direct Langium import outside the parser owner, and direct Node filesystem/process imports are confined to shared wrapper owners. |
 
+## Post-wrap R4/R5 resolution
+
+The specifically deferred follow-up is complete: seven items qualified and were implemented; the
+Switch tail was rejected after stack-parity revalidation. Nothing remains deferred.
+
+| Status   | Location                                                        | Rule | Evidence-backed result                                                                                                                                                            |
+| -------- | --------------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| done     | `packages/validator/validator-src/diagnostic-codes.ts`          | R5   | Repo-wide search found no use beyond the declaration; delete the empty object/comment in `3a207dd3`.                                                                              |
+| done     | `packages/dev/dev-src/commands/code-review/lenses.ts`           | R5   | Repo-wide search found no external consumer; remove both export modifiers in `3a207dd3`.                                                                                          |
+| done     | validator app value-reference dispatch                          | R4   | Merge byte-identical branches in `248ba919`, net -4 with identical diagnostics.                                                                                                   |
+| done     | `packages/parser/parser-src/ast-structure.ts` ownership helpers | R4   | Share one private ancestor predicate across six preserved public wrappers in `1fc4e65d`, net -30.                                                                                 |
+| done     | `packages/parser/parser-src/value-scope.ts`                     | R4   | Keep declaration layering and boolean descriptions separate in `8772ce9e`, net -29.                                                                                               |
+| done     | ast-utils argument/data-write/item-property binding reporters   | R4   | Share both three-owner duplicate-type families in `57c2b172`, net -2 with diagnostic and node-identity parity.                                                                    |
+| done     | validator declaration-to-`TaoType` tails                        | R4   | Share the three-site configuration declaration tail in `67822817`, net -4 with diagnostic parity.                                                                                 |
+| rejected | `packages/shared/shared-src/core/Switch_TypeSafe.ts`            | R4   | A shared invocation tail changes missing-handler and handler-thrown stack frames; parity-preserving alternatives lose the net reduction or add platform-specific stack rewriting. |
+
 ## Findings outside the spike
 
-None yet. Suspected bugs, performance work, public API changes, grammar changes, dependency changes,
+None. Suspected bugs, performance work, public API changes, grammar changes, dependency changes,
 and one-off smells without a rule belong here rather than in code.
