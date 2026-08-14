@@ -5,9 +5,9 @@ import {
   resolveArgumentBindings,
   resolveDataWriteBindings,
   resolveFunctionInvocation,
-  resolveItemPropertyBindings,
   resolveRenderInvocation,
 } from './invocations'
+import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
@@ -38,9 +38,9 @@ export namespace ASTUtils {
   export type DataWriteBindingResult = import('./invocations').DataWriteBindingResult
   export type DataEntityDefinition = import('./Type').DataEntityDefinition
   export type DataFieldDefinition = import('./Type').DataFieldDefinition
-  export type ItemPropertyBindingDiagnostic = import('./invocations').ItemPropertyBindingDiagnostic
-  export type ItemPropertyBindingPair = import('./invocations').ItemPropertyBindingPair
-  export type ItemPropertyBindingResult = import('./invocations').ItemPropertyBindingResult
+  export type ItemPropertyBindingDiagnostic = import('./item-property-bindings').ItemPropertyBindingDiagnostic
+  export type ItemPropertyBindingPair = import('./item-property-bindings').ItemPropertyBindingPair
+  export type ItemPropertyBindingResult = import('./item-property-bindings').ItemPropertyBindingResult
   export type ImplicitChangeBinding = import('./invocations').ImplicitChangeBinding
   export type LayoutTermValue = import('./layouts').LayoutTermValue
   export type RenderEventBindingDiagnostic = import('./invocations').RenderEventBindingDiagnostic
