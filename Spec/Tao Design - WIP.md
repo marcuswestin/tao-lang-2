@@ -1,6 +1,6 @@
 # Tao Design
 
-Status: intended design draft for the design *language*. Nothing here is implemented. Tooling, artifacts, and rollout live in `Roadmap/Add Tao design system MVP/Design tooling and rollout.md`.
+Status: intended design draft for the design _language_. Nothing here is implemented. Tooling, artifacts, and rollout live in `Roadmap/Add Tao design system MVP/Design tooling and rollout.md`.
 
 Current implementation status: this repo currently has bracketed layout clauses, runtime layout lowering through `TR.Layout`, a default app shell, and stdlib view/layout primitives that receive Tao-owned props. It does not yet implement Tao-authored design declarations, visual spec entries, design tokens, semantic tokens, recipes, `tao design` commands, design diagnostics, screenshot comparison, design lockfiles, or AI-assisted design iteration.
 

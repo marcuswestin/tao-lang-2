@@ -60,8 +60,7 @@ policy, and native-dismiss races. Durable continuations remain out of scope unde
 
 The WordFlower Next tranche migrated executable sources to `let`, retired the former binding and
 visibility spellings, removed obsolete source navigation APIs, and added Current/Test App coverage.
-Future work moves target examples out of `.tao-future` only as each becomes executable and adds
-source actions only where a later migration is semantically mechanical.
+Future work adds source actions only where a later migration is semantically mechanical.
 
 ## Deferred Design
 
