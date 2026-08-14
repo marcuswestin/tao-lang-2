@@ -1,10 +1,25 @@
 import { Diagnostics, FS, Text } from '@shared'
-import { Expect, mkTestDir } from '@shared/test'
+import { Expect, mkTestDir, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 
 export const tsFence = '```ts'
 export const fence = '```'
+
+export type ValidatedFiles = Awaited<ReturnType<typeof Workspace.validate>>
+
+export async function withValidatedFiles<
+  const Files extends Record<string, string>,
+  EntryFile extends keyof Files & string,
+>(
+  entryFile: EntryFile,
+  files: Files,
+  testFunction: (validated: ValidatedFiles) => Promise<void> | void,
+): Promise<void> {
+  await withTaoFiles('tao-validator-', files, async paths => {
+    await testFunction(await Workspace.validate(paths[entryFile]))
+  })
+}
 
 export async function withValidationParse<T>(
   source: string,
