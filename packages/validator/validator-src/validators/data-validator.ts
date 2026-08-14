@@ -1,8 +1,8 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { dataWriteValidationChecks, dataWriteValidationMessages } from './data-write-validator'
 
 /** dataValidationMessages declares structural and type diagnostics for Tao data. */
 export const dataValidationMessages = {
@@ -38,38 +38,16 @@ export const dataValidationMessages = {
     `Relationship field '${name}' supports only == and !=, not '${operator}'.`,
   booleanComparison: (name: string, operator: string) =>
     `Boolean field '${name}' supports only == and !=, not '${operator}'.`,
-  fieldType: (field: string, expected: string, actual: string) =>
-    `Data field '${field}' expects ${expected}, got ${actual}.`,
+  ...dataWriteValidationMessages,
   defaultType: (field: string, expected: string, actual: string) =>
     `Default for data field '${field}' expects ${expected}, got ${actual}.`,
   nowDefault: (field: string) => `Only time field '${field}' can default to now.`,
-  duplicateWriteField: (name: string) => `Data write provides field '${name}' more than once.`,
-  missingCreateField: (entity: string, name: string) => `Create of '${entity}' is missing field '${name}'.`,
-  unmatchedWrite: (entity: string) =>
-    `Data write for '${entity}' has a value that does not match any unbound field by type.`,
-  ambiguousWrite: (entity: string, fields: readonly ASTUtils.DataFieldDefinition[]) =>
-    `Data write for '${entity}' has a value that matches multiple fields by type: ${
-      fields.map(field => field.name).join(', ')
-    }.`,
-  ambiguousDataField: (entity: string, field: string) =>
-    `Data write for '${entity}' has multiple values that match field '${field}' by type.`,
-  duplicateFieldType: (entity: string, field: string) =>
-    `Data entity '${entity}' has more than one unbound field with the same type near '${field}'.`,
-  duplicateWriteType: (entity: string) =>
-    `Data write for '${entity}' has more than one unlabeled value with the same exact type.`,
-  unknownWriteLabel: (entity: string, name: string) =>
-    `Entity '${entity}' has no field named '${name}'; labels resolve only the written owner's fields, not visible types.`,
-  rowTarget: (operation: string) => `${operation} expects a row handle produced by a Tao query.`,
 } as const
 
 /** dataValidationChecks validates reactive queries and strict row writes. */
 export const dataValidationChecks = {
   [AST.EntityQueryDeclaration.$type]: validateEntityQuery,
-  [AST.CreateStatement.$type]: validateCreate,
-  [AST.UpdateStatement.$type]: validateUpdate,
-  [AST.DeleteStatement.$type]: (deleteStatement, ctx) => {
-    validateRowTarget(deleteStatement.target, 'delete', ctx)
-  },
+  ...dataWriteValidationChecks,
 } satisfies NodeValidationChecks
 
 /** validateDataFile validates the top-level data entity catalog. */
@@ -248,12 +226,6 @@ function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: Va
   }
 }
 
-function validateCreate(create: AST.CreateStatement, ctx: ValidationContext): void {
-  if (create.entity.ref) {
-    validateWriteFields(create.entity.ref, create.block.fields, true, ctx)
-  }
-}
-
 function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationContext): void {
   const defaults = field.modifiers.filter(modifier => modifier.defaultValue || modifier.defaultCase)
   const modifier = defaults[0]
@@ -305,91 +277,6 @@ function validateBooleanCaseNames(
       continue
     }
     owners.set(field.negativeName, field)
-  }
-}
-
-function validateUpdate(update: AST.UpdateStatement, ctx: ValidationContext): void {
-  const type = validateRowTarget(update.target, 'update', ctx)
-  if (type?.kind !== 'entity') {
-    return
-  }
-  validateWriteFields(type.entity, update.block.fields, false, ctx)
-}
-
-function validateRowTarget(
-  target: AST.Expression,
-  operation: string,
-  ctx: ValidationContext,
-): ASTUtils.TaoType | undefined {
-  const type = Type.ofExpression(target)
-  if (type.kind === 'unresolved') {
-    return type
-  }
-  if (type.kind !== 'entity') {
-    ctx.error(dataValidationMessages.rowTarget(operation), target)
-  }
-  return type
-}
-
-function validateWriteFields(
-  entity: ASTUtils.DataEntityDefinition,
-  fields: readonly AST.DataWriteField[],
-  requireAll: boolean,
-  ctx: ValidationContext,
-): void {
-  const result = ASTUtils.resolveDataWriteBindings(entity, fields, requireAll)
-  for (const diagnostic of result.diagnostics) {
-    Switch.kind(diagnostic, {
-      'missing-data-field': diagnostic => {
-        ctx.error(
-          dataValidationMessages.missingCreateField(Type.dataEntityName(entity), diagnostic.field.name),
-          fields[0]?.$container ?? entity,
-        )
-      },
-      'unmatched-write': diagnostic => {
-        ctx.error(dataValidationMessages.unmatchedWrite(Type.dataEntityName(entity)), diagnostic.write)
-      },
-      'ambiguous-write': diagnostic => {
-        ctx.error(
-          dataValidationMessages.ambiguousWrite(Type.dataEntityName(entity), diagnostic.fields),
-          diagnostic.write,
-        )
-      },
-      'ambiguous-data-field': diagnostic => {
-        ctx.error(
-          dataValidationMessages.ambiguousDataField(Type.dataEntityName(entity), diagnostic.field.name),
-          fields[0]?.$container ?? entity,
-        )
-      },
-      'duplicate-field-type': diagnostic => {
-        ctx.error(
-          dataValidationMessages.duplicateFieldType(Type.dataEntityName(entity), diagnostic.field.name),
-          fields[0]?.$container ?? entity,
-        )
-      },
-      'duplicate-write-type': diagnostic => {
-        ctx.error(dataValidationMessages.duplicateWriteType(Type.dataEntityName(entity)), diagnostic.write)
-      },
-      'unknown-named-field': diagnostic => {
-        ctx.error(
-          dataValidationMessages.unknownWriteLabel(Type.dataEntityName(entity), diagnostic.name),
-          diagnostic.write,
-        )
-      },
-      'duplicate-named-field': diagnostic => {
-        ctx.error(dataValidationMessages.duplicateWriteField(diagnostic.field.name), diagnostic.write)
-      },
-      'named-field-type': diagnostic => {
-        ctx.error(
-          dataValidationMessages.fieldType(
-            diagnostic.field.name,
-            Type.displayName(Type.dataFieldType(diagnostic.field)),
-            Type.displayName(Type.ofExpression(diagnostic.write.value)),
-          ),
-          diagnostic.write,
-        )
-      },
-    })
   }
 }
 
