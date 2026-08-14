@@ -44,8 +44,8 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
     workspaceFiles: context.workspaceFiles,
   })
   for (const file of context.workspaceFiles) {
-    Validate.TaoFile(file, ctx)
-    Validate.TypirProblems(file, context.typir, ctx)
+    const nodes = Validate.TaoFile(file, ctx)
+    Validate.TypirProblems(file, nodes, context.typir, ctx)
   }
 
   return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])

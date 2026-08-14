@@ -40,12 +40,13 @@ const nodeValidationChecks = NodeValidation.compile(
   ] satisfies readonly NodeValidationChecks[],
 )
 
-function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
+function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AST.Node[] {
   AppValidator.validate(file, ctx)
   validateProjectFile(file, ctx)
   AliasesValidator.validateFile(file, ctx)
   validateDataFile(file, ctx)
-  NodeValidation.validate(AST.streamAllContents(file), file, ctx, nodeValidationChecks)
+  const nodes = AST.streamAllContents(file)
+  NodeValidation.validate(nodes, file, ctx, nodeValidationChecks)
   validateNavigationFile(file, ctx)
 
   const document = AST.getDocument(file)
@@ -53,6 +54,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
     validateVisibleDeclarations(ctx, file)
     validateUseStatements(file, ctx)
   }
+  return nodes
 }
 
 /** Validate exposes Tao AST validation passes. */

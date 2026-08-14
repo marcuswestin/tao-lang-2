@@ -22,10 +22,11 @@ function inferExpressionType(
 /** validateTypirProblems reports Typir validation problems as Tao validator diagnostics. */
 function validateTypirProblems(
   file: AST.TaoFile,
+  nodes: readonly AST.Node[],
   typir: TaoTypirServices,
   ctx: ValidationContext,
 ): void {
-  for (const problem of collectTypirProblems(file, typir)) {
+  for (const problem of collectTypirProblems(file, nodes, typir)) {
     const node = AST.isNode(problem.languageNode) ? problem.languageNode : file
     ctx.error(problem.message, node)
   }
@@ -33,11 +34,12 @@ function validateTypirProblems(
 
 function collectTypirProblems(
   file: AST.TaoFile,
+  nodes: readonly AST.Node[],
   typir: TaoTypirServices,
 ): ValidationProblem<TaoSpecificsForProblems>[] {
   return [
     ...typir.validation.Collector.validateBefore(file),
-    ...AST.streamAllContents(file).flatMap(node => typir.validation.Collector.validate(node)),
+    ...nodes.flatMap(node => typir.validation.Collector.validate(node)),
     ...typir.validation.Collector.validateAfter(file),
   ]
 }
