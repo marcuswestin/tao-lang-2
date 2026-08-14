@@ -60,96 +60,132 @@ function validateEntityCatalog(file: AST.TaoFile, ctx: ValidationContext): void 
   reportDuplicates(entities, entity => entity.name, dataValidationMessages.duplicateCollection, ctx)
   reportDuplicates(entities, entity => entity.singularName, dataValidationMessages.duplicateEntity, ctx)
   for (const entity of entities) {
-    const fields = entity.block.entries.filter(AST.isEntityDataField)
-    reportDuplicates(
-      fields,
-      field => field.name,
-      name => dataValidationMessages.duplicateField(entity.singularName, name),
-      ctx,
+    validateEntityDefinition(entity, ctx)
+  }
+}
+
+function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: ValidationContext): void {
+  const fields = entity.block.entries.filter(AST.isEntityDataField)
+  reportDuplicates(
+    fields,
+    field => field.name,
+    name => dataValidationMessages.duplicateField(entity.singularName, name),
+    ctx,
+  )
+  validateBooleanCaseNames(entity, fields, ctx)
+  const indexes = entity.block.entries.filter(AST.isDataIndex)
+  reportDuplicates(indexes, index => index.fieldName, name => `Index '${name}' is declared more than once.`, ctx)
+  const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
+  for (const duplicate of orders.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateOrder, duplicate)
+  }
+  for (const field of fields) {
+    validateEntityField(entity, field, ctx)
+  }
+  for (const index of indexes) {
+    if (!fields.some(field => field.name === index.fieldName)) {
+      ctx.error(dataValidationMessages.unknownField(entity.singularName, index.fieldName), index)
+    }
+  }
+  for (const order of orders) {
+    const field = fields.find(candidate => candidate.name === order.fieldName)
+    if (!field) {
+      ctx.error(dataValidationMessages.unknownField(entity.singularName, order.fieldName), order)
+    } else if (Type.dataFieldType(field).kind === 'list') {
+      ctx.error(dataValidationMessages.relationOrder(field.name), order)
+    }
+  }
+}
+
+type EntityFieldModifierGroups = {
+  readonly autoDeletes: readonly AST.EntityDataFieldModifier[]
+  readonly defaults: readonly AST.EntityDataFieldModifier[]
+  readonly relations: readonly AST.EntityDataFieldModifier[]
+}
+
+function validateEntityField(
+  entity: AST.EntityDataDeclaration,
+  field: AST.EntityDataField,
+  ctx: ValidationContext,
+): void {
+  if (field.name === 'Id') {
+    ctx.error(dataValidationMessages.reservedField(entity.singularName, field.name), field)
+  }
+  const modifiers: EntityFieldModifierGroups = {
+    relations: field.modifiers.filter(modifier => modifier.relationName),
+    defaults: field.modifiers.filter(modifier => modifier.defaultValue || modifier.defaultCase),
+    autoDeletes: field.modifiers.filter(modifier => modifier.autoDelete),
+  }
+  for (const duplicate of modifiers.relations.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'relation'), duplicate)
+  }
+  for (const duplicate of modifiers.defaults.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'default'), duplicate)
+  }
+  for (const duplicate of modifiers.autoDeletes.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'auto-delete'), duplicate)
+  }
+  if (field.primitive || field.boolean) {
+    for (const modifier of modifiers.relations) {
+      ctx.error(dataValidationMessages.relationModifier(field.name), modifier)
+    }
+    for (const modifier of modifiers.autoDeletes) {
+      ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
+    }
+  } else {
+    validateRelationshipDataField(entity, field, modifiers, ctx)
+  }
+  validateEntityFieldDefault(field, ctx)
+}
+
+function validateRelationshipDataField(
+  entity: AST.EntityDataDeclaration,
+  field: AST.EntityDataField,
+  modifiers: EntityFieldModifierGroups,
+  ctx: ValidationContext,
+): void {
+  const relationName = Type.dataFieldRelationName(field)
+  const relation = Type.dataFieldRelationEntity(field)
+  const inverse = Type.dataFieldIsInverseRelation(field)
+  if (!relation) {
+    ctx.error(dataValidationMessages.unknownRelation(entity.singularName, relationName), field)
+  }
+  for (const modifier of modifiers.defaults) {
+    ctx.error(dataValidationMessages.relationDefault(field.name), modifier)
+  }
+  if (!inverse) {
+    for (const modifier of modifiers.autoDeletes) {
+      ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
+    }
+  }
+  if (relation && inverse) {
+    validateInverseRelationship(entity, field, relation, ctx)
+  }
+}
+
+function validateInverseRelationship(
+  entity: AST.EntityDataDeclaration,
+  field: AST.EntityDataField,
+  relation: AST.EntityDataDeclaration,
+  ctx: ValidationContext,
+): void {
+  const inverseFields = Type.dataFields(relation).filter(candidate => {
+    const candidateType = Type.dataFieldType(candidate)
+    return candidateType.kind === 'entity' && candidateType.entity === entity
+  })
+  if (inverseFields.length === 0) {
+    ctx.error(
+      `Inverse relationship '${entity.singularName}.${field.name}' requires a stored relationship from '${relation.singularName}' back to '${entity.singularName}'.`,
+      field,
     )
-    validateBooleanCaseNames(entity, fields, ctx)
-    const indexes = entity.block.entries.filter(AST.isDataIndex)
-    reportDuplicates(indexes, index => index.fieldName, name => `Index '${name}' is declared more than once.`, ctx)
-    const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
-    for (const duplicate of orders.slice(1)) {
-      ctx.error(dataValidationMessages.duplicateOrder, duplicate)
-    }
-    for (const field of fields) {
-      if (field.name === 'Id') {
-        ctx.error(dataValidationMessages.reservedField(entity.singularName, field.name), field)
-      }
-      const relationModifiers = field.modifiers.filter(modifier => modifier.relationName)
-      const defaults = field.modifiers.filter(modifier => modifier.defaultValue || modifier.defaultCase)
-      const autoDeletes = field.modifiers.filter(modifier => modifier.autoDelete)
-      for (const duplicate of relationModifiers.slice(1)) {
-        ctx.error(dataValidationMessages.duplicateModifier(field.name, 'relation'), duplicate)
-      }
-      for (const duplicate of defaults.slice(1)) {
-        ctx.error(dataValidationMessages.duplicateModifier(field.name, 'default'), duplicate)
-      }
-      for (const duplicate of autoDeletes.slice(1)) {
-        ctx.error(dataValidationMessages.duplicateModifier(field.name, 'auto-delete'), duplicate)
-      }
-      if (field.primitive || field.boolean) {
-        for (const modifier of relationModifiers) {
-          ctx.error(dataValidationMessages.relationModifier(field.name), modifier)
-        }
-        for (const modifier of autoDeletes) {
-          ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
-        }
-      } else {
-        const relationName = Type.dataFieldRelationName(field)
-        const relation = Type.dataFieldRelationEntity(field)
-        const inverse = Type.dataFieldIsInverseRelation(field)
-        if (!relation) {
-          ctx.error(dataValidationMessages.unknownRelation(entity.singularName, relationName), field)
-        }
-        if (defaults.length > 0) {
-          for (const modifier of defaults) {
-            ctx.error(dataValidationMessages.relationDefault(field.name), modifier)
-          }
-        }
-        if (autoDeletes.length > 0 && !inverse) {
-          for (const modifier of autoDeletes) {
-            ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
-          }
-        }
-        if (relation && inverse) {
-          const inverseFields = Type.dataFields(relation).filter(candidate => {
-            const candidateType = Type.dataFieldType(candidate)
-            return candidateType.kind === 'entity' && candidateType.entity === entity
-          })
-          if (inverseFields.length === 0) {
-            ctx.error(
-              `Inverse relationship '${entity.singularName}.${field.name}' requires a stored relationship from '${relation.singularName}' back to '${entity.singularName}'.`,
-              field,
-            )
-          } else if (inverseFields.length > 1) {
-            ctx.error(
-              dataValidationMessages.ambiguousInverseRelation(
-                `${entity.singularName}.${field.name}`,
-                relation.singularName,
-              ),
-              field,
-            )
-          }
-        }
-      }
-      validateEntityFieldDefault(field, ctx)
-    }
-    for (const index of indexes) {
-      if (!fields.some(field => field.name === index.fieldName)) {
-        ctx.error(dataValidationMessages.unknownField(entity.singularName, index.fieldName), index)
-      }
-    }
-    for (const order of orders) {
-      const field = fields.find(candidate => candidate.name === order.fieldName)
-      if (!field) {
-        ctx.error(dataValidationMessages.unknownField(entity.singularName, order.fieldName), order)
-      } else if (Type.dataFieldType(field).kind === 'list') {
-        ctx.error(dataValidationMessages.relationOrder(field.name), order)
-      }
-    }
+  } else if (inverseFields.length > 1) {
+    ctx.error(
+      dataValidationMessages.ambiguousInverseRelation(
+        `${entity.singularName}.${field.name}`,
+        relation.singularName,
+      ),
+      field,
+    )
   }
 }
 
