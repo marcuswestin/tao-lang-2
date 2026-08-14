@@ -1,3 +1,4 @@
+import { Errors } from '@shared/core'
 import React from 'react'
 import { DataControls } from './TR-data'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -22,8 +23,14 @@ export type TaoSelectionNavItemDefinition = {
   label: Evaluable
 }
 
+export type TaoAppDeclaration = Readonly<{
+  identity: symbol
+  name: string
+}>
+
 export type TaoAppDefinition = {
   auxiliaries(): Record<string, TaoNavigationInput>
+  declaration?: TaoAppDeclaration
   name: string
   navigator(): TaoNavigationInput
 }
@@ -156,6 +163,11 @@ let activeBackTarget: { back(): boolean } | undefined
 
 /** NavigationControls is the deterministic generated-code API for Tao navigation. */
 export const NavigationControls = {
+  /** AppDeclaration creates one process-local source declaration identity for app configurations. */
+  AppDeclaration(name: string): TaoAppDeclaration {
+    return Object.freeze({ identity: Symbol(name), name })
+  },
+
   /** Declaration binds one Tao declaration identity to its package-scope implementation. */
   Declaration(name: string, kind: TaoNavKind<any, any>): TaoImplementedNavDeclaration {
     const declaration = { ...createNavDeclaration(name), kind }
@@ -281,9 +293,9 @@ export const NavigationControls = {
     navigation.dismiss()
   },
 
-  /** Replace swaps one app's root navigator by declaration identity. */
-  Replace(navigator: TaoNavigationInput, app: RuntimeAppDefinition): void {
-    app.replace(navigator)
+  /** Replace swaps the matching enclosing app occurrence's root navigator. */
+  Replace(taoProps: TaoProps | undefined, navigator: TaoNavigationInput, target: RuntimeAppDefinition): void {
+    resolveStrictAppTarget(taoProps, target, 'replace').replace(navigator)
   },
 
   /** Patch creates a configured navigation copy without mutating the base value. */
@@ -305,15 +317,17 @@ export const NavigationControls = {
     )
   },
 
-  /** Activate reveals one keyed selection item without creating a presentation entry. */
-  Activate(app: RuntimeAppDefinition, key: string): void {
+  /** Activate reveals one keyed item on the matching enclosing app occurrence. */
+  Activate(taoProps: TaoProps | undefined, target: RuntimeAppDefinition, key: string): void {
+    const app = resolveStrictAppTarget(taoProps, target, 'activate')
     if (!app.navigator.activate(key)) {
       throw new Error(`App ${app.definition.name} has no selection item '@${key}'.`)
     }
   },
 
-  /** Target resolves a strict keyed auxiliary on a generated app definition. */
-  Target(app: RuntimeAppDefinition, key: string): TaoNavigationValue {
+  /** Target resolves a keyed auxiliary on the matching enclosing app occurrence. */
+  Target(taoProps: TaoProps | undefined, targetApp: RuntimeAppDefinition, key: string): TaoNavigationValue {
+    const app = resolveStrictAppTarget(taoProps, targetApp, 'target')
     const target = app.auxiliaries[key]
     if (!target) {
       throw new Error(`App ${app.definition.name} has no auxiliary navigator '@${key}'.`)
@@ -341,6 +355,24 @@ export type TaoPresentable = RuntimePresentable
 export type TaoDialogue = RuntimeDialogue
 export type TaoNavigationValue = RuntimeNavigationValue
 export type TaoRuntimeApp = RuntimeAppDefinition
+
+function resolveStrictAppTarget(
+  taoProps: TaoProps | undefined,
+  target: RuntimeAppDefinition,
+  operation: 'activate' | 'replace' | 'target',
+): RuntimeAppDefinition {
+  const app = TaoPropsControls.appInChain(
+    taoProps,
+    candidate => candidate.declaration.identity === target.declaration.identity,
+  )
+  if (app) {
+    return app
+  }
+  throw new Errors.UnexpectedBehaviorError(
+    `Cannot ${operation} app '${target.declaration.name}': no enclosing instance matches its declaration.`,
+    { details: { appDeclaration: target.declaration.name, operation } },
+  )
+}
 
 /** RuntimePresentable is an evaluable UI descriptor used by aliases and configured navs. */
 class RuntimePresentable {
@@ -992,7 +1024,11 @@ class RuntimeAppDefinition implements Subscription {
   private toastEntries = new Map<string, ToastEntry>()
   private version = 0
 
-  constructor(readonly definition: TaoAppDefinition) {}
+  readonly declaration: TaoAppDeclaration
+
+  constructor(readonly definition: TaoAppDefinition) {
+    this.declaration = definition.declaration ?? NavigationControls.AppDeclaration(definition.name)
+  }
 
   readonly subscribe = (listener: () => void): () => void => {
     this.listeners.add(listener)

@@ -36,6 +36,7 @@ export const NavigationCompiler = {
   SelectionActivateStatement(statement: AST.SelectionActivateStatement): Compiled {
     const app = resolveRef(statement.app)
     return gen`TR.Navigation.Activate(
+      _ViewProps.__tao,
       ${appDefinitionReference(app)},
       ${gen.jsLiteral(statement.key.slice(1))},
     )`
@@ -50,6 +51,7 @@ export const NavigationCompiler = {
   ReplaceStatement(statement: AST.ReplaceStatement): Compiled {
     const app = resolveRef(statement.app)
     return gen`TR.Navigation.Replace(
+      ${enclosingTaoProps(statement)},
       ${Compile.Expression(statement.navigator)},
       ${appDefinitionReference(app)},
     )`
@@ -68,9 +70,14 @@ function compileNavigationTarget(target: AST.NavigationTarget): Compiled {
   Assert.defined(target.key, 'validated app auxiliary target has a key')
   const app = resolveRef(target.app)
   return gen`TR.Navigation.Target(
+    _ViewProps.__tao,
     ${appDefinitionReference(app)},
     ${gen.jsLiteral(target.key.slice(1))},
   )`
+}
+
+function enclosingTaoProps(node: AST.Node): Compiled {
+  return AST.findOwningView(node) ? gen`_ViewProps.__tao` : gen`undefined`
 }
 
 /** appDefinitionReference preserves the selected declaration's generated module identity. */

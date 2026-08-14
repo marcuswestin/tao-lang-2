@@ -220,7 +220,8 @@ Describe('Tao compiler', () => {
   })
 
   Test('compiles configured apps, first-class ui, strict targets, dismiss, and replacement', async () => {
-    const compiled = await Compiler.compileCode(`
+    const compiled = await Compiler.compileCode(
+      `
       use SelectionNav, SlotNav, StackNav from @tao/nav
       let ResetNavigator = StackNav { Initial Home }
       app NavigationApp {
@@ -232,6 +233,7 @@ Describe('Tao compiler', () => {
         }
         @window SlotNav { Initial Detail }
       }
+      let NavigationVariant = NavigationApp with { Name "Navigation Variant" }
       ui Home {
         action Open { present Detail() in NavigationApp@window }
         action OpenOverlay { present Detail() as overlay in NavigationApp@window }
@@ -244,7 +246,9 @@ Describe('Tao compiler', () => {
         render Empty()
       }
       view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+    `,
+      { appName: 'NavigationVariant' },
+    )
 
     Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Navigation.App({')
@@ -254,13 +258,20 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('TR.Navigation.PresentOverlay(')
     Expect(compiled.code).toContain('TR.Navigation.Activate(')
     Expect(compiled.code).toContain('"workspace"')
-    Expect(/TR\.Navigation\.Target\(\s+_TaoAppDefinition_NavigationApp,/.test(compiled.code)).toBe(true)
+    Expect(
+      /TR\.Navigation\.Target\(\s+_ViewProps\.__tao,\s+_TaoAppDefinition_NavigationApp,/.test(compiled.code),
+    ).toBe(true)
+    Expect(
+      /TR\.Navigation\.Activate\(\s+_ViewProps\.__tao,\s+_TaoAppDefinition_NavigationApp,/.test(compiled.code),
+    ).toBe(true)
     Expect(compiled.code).toContain('TR.Navigation.Dismiss(_ViewProps.__tao)')
     Expect(compiled.code).toContain('TR.Navigation.Replace(')
     Expect(
-      /TR\.Navigation\.Replace\(\s+_Scope\.ResetNavigator\.evaluate\(\),\s+_TaoAppDefinition_NavigationApp,/
+      /TR\.Navigation\.Replace\(\s+_ViewProps\.__tao,\s+_Scope\.ResetNavigator\.evaluate\(\),\s+_TaoAppDefinition_NavigationApp,/
         .test(compiled.code),
     ).toBe(true)
+    Expect(compiled.code).toContain('declaration: TR.Navigation.AppDeclaration("NavigationApp")')
+    Expect(compiled.code).toContain('declaration: _TaoAppDefinition_NavigationApp.declaration')
     Expect(compiled.code).not.toContain('key: "NavigationApp"')
     Expect(compiled.code).toContain('<TR.Navigation.AppHost')
   })

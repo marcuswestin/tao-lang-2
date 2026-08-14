@@ -238,7 +238,11 @@ test "WordFlower selection and document depth" {
 
    check "a with-variant reconfigures the same app" {
       run WordFlowerDrawer
-      press text "Workspace"
+      press #activateWorkspaceTab
       expect text "Choose a workspace"
+      press text "Settings"
+      expect text "Settings"
+      press #resetSignedOut
+      expect text "Signed out"
    }
 }

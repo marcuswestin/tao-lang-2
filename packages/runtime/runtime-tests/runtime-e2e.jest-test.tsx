@@ -719,7 +719,7 @@ Describe('Expo runtime', () => {
 
     fireEvent.press(screen.getByText('Home'))
     ExpectScreen(screen).toHaveText('Home count 1')
-    act(() => TR.Navigation.Activate(app, 'settings'))
+    act(() => TR.Navigation.Activate({ app }, app, 'settings'))
     ExpectScreen(screen).toHaveText('Settings content')
     Expect(screen.queryByLabelText('Back')).toBeNull()
   })

@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { Errors } from '@shared/core'
 import { Describe, Expect, Test } from '@shared/test'
 import type { TaoLayout, TaoLayoutEntry } from '../TaoRuntime-src/TR-layout'
 
@@ -690,16 +691,17 @@ Describe('TR.Navigation', () => {
       navigator: () => slot,
       auxiliaries: () => ({ window }),
     })
+    const taoProps: TR.TaoProps = { app }
 
     TR.Navigation.PresentIn(undefined, stack, detail, {})
     Expect(stack.back()).toBe(true)
     TR.Navigation.PresentIn(undefined, slot, detail, {})
     Expect(slot.dismiss()).toBe(true)
-    const target = TR.Navigation.Target(app, 'window')
+    const target = TR.Navigation.Target(taoProps, app, 'window')
     Expect(target).toBe(window)
     TR.Navigation.PresentOverlay(undefined, target, detail, {})
     Expect(app.back()).toBe(true)
-    TR.Navigation.Replace(replacement, app)
+    TR.Navigation.Replace(taoProps, replacement, app)
     Expect(app.navigator).toBe(replacement)
     TR.Navigation.beginTest()
     Expect(app.navigator).toBe(slot)
@@ -802,11 +804,12 @@ Describe('TR.Navigation', () => {
       navigator: () => selection,
       auxiliaries: () => ({}),
     })
+    const taoProps: TR.TaoProps = { app }
 
     Expect(app.canGoBack).toBe(false)
-    TR.Navigation.Activate(app, 'settings')
+    TR.Navigation.Activate(taoProps, app, 'settings')
     Expect(app.canGoBack).toBe(false)
-    Expect(() => TR.Navigation.Activate(app, 'missing')).toThrow(
+    Expect(() => TR.Navigation.Activate(taoProps, app, 'missing')).toThrow(
       "App Selection App has no selection item '@missing'.",
     )
 
@@ -894,11 +897,11 @@ Describe('TR.Navigation', () => {
       auxiliaries: () => ({ window: secondWindow }),
     })
 
-    Expect(TR.Navigation.Target(first, 'window')).toBe(firstWindow)
-    Expect(TR.Navigation.Target(second, 'window')).toBe(secondWindow)
+    Expect(TR.Navigation.Target({ app: first }, first, 'window')).toBe(firstWindow)
+    Expect(TR.Navigation.Target({ app: second }, second, 'window')).toBe(secondWindow)
     TR.Navigation.PresentOverlay(undefined, firstWindow, detail, {})
     TR.Navigation.PresentOverlay(undefined, secondWindow, detail, {})
-    TR.Navigation.Replace(secondRoot, first)
+    TR.Navigation.Replace({ app: first }, secondRoot, first)
     Expect(first.navigator).toBe(secondRoot)
     Expect(second.navigator).toBe(secondRoot)
 
@@ -906,6 +909,75 @@ Describe('TR.Navigation', () => {
     Expect(first.navigator).toBe(firstRoot)
     Expect(firstWindow.back()).toBe(false)
     Expect(secondWindow.back()).toBe(false)
+  })
+
+  Test('resolves strict targets to an enclosing app variant by declaration identity', () => {
+    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.UI({ name: 'Settings', render: () => null })
+    const replacement = configuredStack('Signed out', home)
+    const variantSelection = configuredSelection({
+      display: TR.Value('drawer'),
+      initial: 'home',
+      items: {
+        home: { content: home, label: TR.Value('Home') },
+        settings: { content: settings, label: TR.Value('Settings') },
+      },
+      name: 'Variant selection',
+    })
+    const variantWindow = configuredSlot('Variant window', home)
+    let namedNavigatorLoads = 0
+    let namedAuxiliaryLoads = 0
+    const named = TR.Navigation.App({
+      name: 'Origin declaration',
+      navigator: () => {
+        namedNavigatorLoads += 1
+        return configuredStack('Named fallback', home)
+      },
+      auxiliaries: () => {
+        namedAuxiliaryLoads += 1
+        return { window: configuredSlot('Named window', home) }
+      },
+    })
+    const variant = TR.Navigation.App({
+      declaration: named.declaration,
+      name: 'Configured variant',
+      navigator: () => variantSelection,
+      auxiliaries: () => ({ window: variantWindow }),
+    })
+    const unrelated = TR.Navigation.App({
+      name: 'Nested unrelated app',
+      navigator: () => configuredStack('Unrelated root', home),
+      auxiliaries: () => ({}),
+    })
+    const nestedProps: TR.TaoProps = { app: unrelated, callerProps: { app: variant } }
+
+    TR.Navigation.Activate(nestedProps, named, 'settings')
+    Expect(TR.Navigation.Target(nestedProps, named, 'window')).toBe(variantWindow)
+    TR.Navigation.Replace(nestedProps, replacement, named)
+    Expect(variant.navigator).toBe(replacement)
+    Expect(namedNavigatorLoads).toBe(0)
+    Expect(namedAuxiliaryLoads).toBe(0)
+
+    const unmatchedOperations = [
+      ['activate', () => TR.Navigation.Activate({ app: unrelated }, named, 'settings')],
+      ['replace', () => TR.Navigation.Replace({ app: unrelated }, replacement, named)],
+      ['target', () => TR.Navigation.Target({ app: unrelated }, named, 'window')],
+    ] as const
+    for (const [operation, invoke] of unmatchedOperations) {
+      let unmatched: unknown
+      try {
+        invoke()
+      } catch (error) {
+        unmatched = error
+      }
+      Expect(unmatched).toBeInstanceOf(Errors.UnexpectedBehaviorError)
+      Expect((unmatched as Errors.UnexpectedBehaviorError).details).toEqual({
+        appDeclaration: 'Origin declaration',
+        operation,
+      })
+    }
+    Expect(namedNavigatorLoads).toBe(0)
+    Expect(namedAuxiliaryLoads).toBe(0)
   })
 })
 

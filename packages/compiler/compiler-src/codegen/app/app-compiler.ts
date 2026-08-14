@@ -15,6 +15,7 @@ export default {
       const definition = { name: `_TaoAppDefinition_${app.name}` }
       return gen`
         const ${gen.Name(definition)} = TR.Navigation.App({
+          declaration: TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}),
           name: ${gen.jsLiteral(appName)},
           navigator: () => ${compileAppValue(navigator.value)},
           auxiliaries: () => ({
@@ -49,6 +50,7 @@ export default {
     const auxiliaries = AST.blockStatements(rootApp(variant)).filter(AST.isAppAuxiliaryNavigator)
     return gen`
       const ${gen.Name(definition)} = TR.Navigation.App({
+        declaration: ${gen.Name({ name: `_TaoAppDefinition_${rootApp(variant).name}` })}.declaration,
         name: ${compileEffectiveAppName(variant)},
         navigator: () => ${navigator},
         auxiliaries: () => ({

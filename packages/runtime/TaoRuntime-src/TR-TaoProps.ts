@@ -68,12 +68,18 @@ function ambientContext(props: TaoProps | undefined): TaoAmbientContext {
   }
 }
 
-/** Finds the enclosing mounted app identity through generated caller props. */
-function appInChain(props: TaoProps | undefined): TaoRuntimeApp | undefined {
+/** Finds the nearest enclosing mounted app accepted by an optional declaration-identity match. */
+function appInChain(
+  props: TaoProps | undefined,
+  matches?: (app: TaoRuntimeApp) => boolean,
+): TaoRuntimeApp | undefined {
   if (!props) {
     return undefined
   }
-  return props.app ?? appInChain(props.callerProps)
+  if (props.app && (!matches || matches(props.app))) {
+    return props.app
+  }
+  return appInChain(props.callerProps, matches)
 }
 
 /** Finds the nearest independently asked dialogue occurrence through generated caller props. */
