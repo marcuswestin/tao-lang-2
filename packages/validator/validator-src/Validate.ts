@@ -27,6 +27,7 @@ const nodeValidationChecks = NodeValidation.compile(
     injectionValidationChecks,
     testValidationChecks,
     InvocationsValidator.checks,
+    FunctionalCoreValidator.checks,
     configurationValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
 )
@@ -39,7 +40,6 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   StateValidator.validate(file, ctx)
   AliasesValidator.validate(file, ctx)
   validateTypes(file, ctx)
-  FunctionalCoreValidator.validate(file, ctx)
   validateData(file, ctx)
   DialogueValidator.validate(file, ctx)
   validateNavigation(file, ctx)
@@ -57,7 +57,6 @@ export const Validate = {
   Aliases: AliasesValidator.validate,
   App: AppValidator.validate,
   Actions: ActionsValidator.validate,
-  FunctionalCore: FunctionalCoreValidator.validate,
   Data: validateData,
   Dialogues: DialogueValidator.validate,
   Navigation: validateNavigation,

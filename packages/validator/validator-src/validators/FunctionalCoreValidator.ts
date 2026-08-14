@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 const messages = {
@@ -52,77 +53,63 @@ const messages = {
 
 /** FunctionalCoreValidator validates pure expressions, functions, and render control flow. */
 export const FunctionalCoreValidator = {
+  checks: {
+    [AST.EnumDeclaration.$type]: validateEnum,
+    [AST.FunctionDeclaration.$type]: validateFunction,
+    [AST.FunctionCallExpression.$type]: validateFunctionCall,
+    [AST.BinaryExpression.$type]: validateBinary,
+    [AST.UnaryExpression.$type]: (expression, ctx) => {
+      const operand = Type.ofExpression(expression.operand)
+      const expected = expression.operator === 'not' ? 'boolean' : 'number'
+      if (!isPrimitive(operand, expected)) {
+        ctx.error(expression.operator === 'not' ? messages.unaryBoolean : messages.unaryNumber, expression)
+      }
+    },
+    [AST.CaseTestExpression.$type]: validateCaseTestExpression,
+    [AST.WhenExpression.$type]: (expression, ctx) => {
+      validateSubjectCases(expression.subject, expression.branches, ctx)
+      validateCompatibleBranches(
+        [...expression.branches.map(branch => branch.value), expression.otherwise.value],
+        ctx,
+      )
+    },
+    [AST.StringInterpolation.$type]: (interpolation, ctx) => {
+      const type = Type.ofExpression(interpolation.expression)
+      const supported = type.kind === 'primitive'
+        && ['text', 'number', 'boolean', 'none'].includes(type.primitive)
+      if (type.kind !== 'unresolved' && !supported) {
+        ctx.error(messages.interpolationPart, interpolation.expression)
+      }
+    },
+    [AST.ListLiteral.$type]: validateList,
+    [AST.WhenRenderStatement.$type]: (statement, ctx) => {
+      validateSubjectCases(statement.subject, statement.branches, ctx)
+      validateRenderControlPlacement(statement, ctx)
+    },
+    [AST.GuardRenderStatement.$type]: (statement, ctx) => {
+      validateSubjectCases(statement.subject, guardRenderBranches(statement), ctx)
+      validateRenderControlPlacement(statement, ctx)
+    },
+    [AST.GuardActionStatement.$type]: (statement, ctx) => {
+      validateSubjectCases(statement.subject, guardActionBranches(statement), ctx)
+    },
+    [AST.IfActionStatement.$type]: (statement, ctx) => {
+      validateIfCondition(statement.condition, ctx)
+    },
+    [AST.IfRenderStatement.$type]: (statement, ctx) => {
+      validateIfCondition(statement.condition, ctx)
+      validateRenderControlPlacement(statement, ctx)
+    },
+    [AST.ForStatement.$type]: (statement, ctx) => {
+      const collection = Type.ofExpression(statement.collection)
+      if (collection.kind !== 'unresolved' && collection.kind !== 'list') {
+        ctx.error(messages.forCollection, statement.collection)
+      }
+      validateRenderControlPlacement(statement, ctx)
+    },
+  } satisfies NodeValidationChecks,
   messages,
-  validate,
 } as const
-
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const declaration of AST.streamAllContents(file).filter(AST.isEnumDeclaration)) {
-    validateEnum(declaration, ctx)
-  }
-  for (const fn of AST.streamAllContents(file).filter(AST.isFunctionDeclaration)) {
-    validateFunction(fn, ctx)
-  }
-  for (const call of AST.streamAllContents(file).filter(AST.isFunctionCallExpression)) {
-    validateFunctionCall(call, ctx)
-  }
-  for (const expression of AST.streamAllContents(file).filter(AST.isBinaryExpression)) {
-    validateBinary(expression, ctx)
-  }
-  for (const expression of AST.streamAllContents(file).filter(AST.isUnaryExpression)) {
-    const operand = Type.ofExpression(expression.operand)
-    const expected = expression.operator === 'not' ? 'boolean' : 'number'
-    if (!isPrimitive(operand, expected)) {
-      ctx.error(expression.operator === 'not' ? messages.unaryBoolean : messages.unaryNumber, expression)
-    }
-  }
-  for (const expression of AST.streamAllContents(file).filter(AST.isCaseTestExpression)) {
-    validateCaseTestExpression(expression, ctx)
-  }
-  for (const expression of AST.streamAllContents(file).filter(AST.isWhenExpression)) {
-    validateSubjectCases(expression.subject, expression.branches, ctx)
-    validateCompatibleBranches(
-      [...expression.branches.map(branch => branch.value), expression.otherwise.value],
-      ctx,
-    )
-  }
-  for (const interpolation of AST.streamAllContents(file).filter(AST.isStringInterpolation)) {
-    const type = Type.ofExpression(interpolation.expression)
-    const supported = type.kind === 'primitive'
-      && ['text', 'number', 'boolean', 'none'].includes(type.primitive)
-    if (type.kind !== 'unresolved' && !supported) {
-      ctx.error(messages.interpolationPart, interpolation.expression)
-    }
-  }
-  for (const list of AST.streamAllContents(file).filter(AST.isListLiteral)) {
-    validateList(list, ctx)
-  }
-  for (const statement of AST.streamAllContents(file).filter(AST.isWhenRenderStatement)) {
-    validateSubjectCases(statement.subject, statement.branches, ctx)
-    validateRenderControlPlacement(statement, ctx)
-  }
-  for (const statement of AST.streamAllContents(file).filter(AST.isGuardRenderStatement)) {
-    validateSubjectCases(statement.subject, guardRenderBranches(statement), ctx)
-    validateRenderControlPlacement(statement, ctx)
-  }
-  for (const statement of AST.streamAllContents(file).filter(AST.isGuardActionStatement)) {
-    validateSubjectCases(statement.subject, guardActionBranches(statement), ctx)
-  }
-  for (const statement of AST.streamAllContents(file).filter(AST.isIfActionStatement)) {
-    validateIfCondition(statement.condition, ctx)
-  }
-  for (const statement of AST.streamAllContents(file).filter(AST.isIfRenderStatement)) {
-    validateIfCondition(statement.condition, ctx)
-    validateRenderControlPlacement(statement, ctx)
-  }
-  for (const statement of AST.streamAllContents(file).filter(AST.isForStatement)) {
-    const collection = Type.ofExpression(statement.collection)
-    if (collection.kind !== 'unresolved' && collection.kind !== 'list') {
-      ctx.error(messages.forCollection, statement.collection)
-    }
-    validateRenderControlPlacement(statement, ctx)
-  }
-}
 
 function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(fn.$container)) {
