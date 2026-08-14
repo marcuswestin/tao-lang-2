@@ -48,6 +48,7 @@ export default {
     const navigator = compileEffectiveNavigator(variant)
     const datasource = compileEffectiveDatasource(variant)
     const auxiliaries = AST.blockStatements(rootApp(variant)).filter(AST.isAppAuxiliaryNavigator)
+    // Cross-module apps require lazy derivation from the immediate base variant's runtime value.
     return gen`
       const ${gen.Name(definition)} = TR.Navigation.App({
         declaration: ${gen.Name({ name: `_TaoAppDefinition_${rootApp(variant).name}` })}.declaration,
