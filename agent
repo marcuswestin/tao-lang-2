@@ -9,9 +9,9 @@ BUILD_DIR="$SCRIPT_DIR/.artifacts/build/agent-dev"
 AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"
 BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
 INSTALL_STAMP="$BUILD_DIR/dev-deps.stamp"
-INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"
+INSTALL_LOCK="$BUILD_DIR/dev-deps.lockf"
 BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
-BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
+BUILD_LOCK="$BUILD_DIR/agent-dev.lockf"
 DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
 
 source "$DEV_PACKAGE_DIR/dev-src/cli/agent-worktree-profile.zsh"
@@ -57,22 +57,32 @@ function install_dev_deps() {
   exit 1
 }
 
+function run_with_lock() {
+  local lock_file="$1"
+  shift
+
+  if ! command -v lockf >/dev/null 2>&1; then
+    echo "Tao's agent bootstrap requires the system lockf command." >&2
+    return 1
+  fi
+
+  (
+    if ! lockf -s -t 30 9; then
+      echo "Timed out waiting for agent bootstrap lock: $lock_file" >&2
+      exit 1
+    fi
+    "$@"
+  ) 9>"$lock_file"
+}
+
+function install_dev_deps_if_needed() {
+  needs_install || return 0
+  install_dev_deps
+}
+
 function ensure_dev_deps() {
-  if ! needs_install; then
-    return
-  fi
-
-  if mkdir "$INSTALL_LOCK" 2>/dev/null; then
-    trap 'rm -rf "$INSTALL_LOCK"' EXIT INT TERM
-    tao_record_lock_owner "$INSTALL_LOCK"
-    needs_install && install_dev_deps
-    rm -rf "$INSTALL_LOCK"
-    trap - EXIT INT TERM
-    return
-  fi
-
-  tao_wait_for_lock "$INSTALL_LOCK" || exit 1
-  needs_install && ensure_dev_deps
+  needs_install || return 0
+  run_with_lock "$INSTALL_LOCK" install_dev_deps_if_needed
 }
 
 function needs_build() {
@@ -101,22 +111,14 @@ function build_agent() {
   touch "$BUILD_STAMP"
 }
 
+function build_agent_if_needed() {
+  needs_build || return 0
+  build_agent
+}
+
 function ensure_agent_build() {
-  if ! needs_build; then
-    return
-  fi
-
-  if mkdir "$BUILD_LOCK" 2>/dev/null; then
-    trap 'rm -rf "$BUILD_LOCK"' EXIT INT TERM
-    tao_record_lock_owner "$BUILD_LOCK"
-    needs_build && build_agent
-    rm -rf "$BUILD_LOCK"
-    trap - EXIT INT TERM
-    return
-  fi
-
-  tao_wait_for_lock "$BUILD_LOCK" || exit 1
-  needs_build && ensure_agent_build
+  needs_build || return 0
+  run_with_lock "$BUILD_LOCK" build_agent_if_needed
 }
 
 ensure_dev_deps

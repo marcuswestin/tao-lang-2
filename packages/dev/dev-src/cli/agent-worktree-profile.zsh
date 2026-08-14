@@ -52,33 +52,3 @@ function tao_bun_temp_dir() {
 
   print -r -- "${fallback_dir:A}/"
 }
-
-# Record and wait on bootstrap locks without letting killed owners block future agents forever.
-function tao_record_lock_owner() {
-  local lock_dir="$1"
-  print -r -- "$$" > "$lock_dir/owner-pid"
-}
-
-function tao_wait_for_lock() {
-  local lock_dir="$1"
-  local max_attempts="${2:-300}"
-  local attempt=0
-  local owner_pid
-
-  while [[ -d "$lock_dir" ]]; do
-    if [[ -r "$lock_dir/owner-pid" ]]; then
-      owner_pid="$(<"$lock_dir/owner-pid")"
-      if [[ "$owner_pid" != <-> ]] || ! kill -0 "$owner_pid" 2>/dev/null; then
-        rm -rf "$lock_dir"
-        continue
-      fi
-    fi
-
-    if (( attempt >= max_attempts )); then
-      echo "Timed out waiting for active bootstrap lock: $lock_dir" >&2
-      return 1
-    fi
-    sleep 0.1
-    (( attempt += 1 ))
-  done
-}
