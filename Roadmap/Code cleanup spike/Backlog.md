@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 77 commits, 2026-08-14
+Last touched-package re-sweep: after 78 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -189,7 +189,8 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` global registry              | R3              |    16 moved, net +54 |        1/16 | Extract schema/test registries and global subscriptions into a 70-line owner, preserving test-mode timing and local-version/global-revision/local-listener/global-listener observation order.      |
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` schema state machine         | R3              |    425 moved, net +8 |       1/425 | Extract the byte-identical schema state machine into a cohesive 433-line owner, leaving a 253-line public contracts/DataControls facade and an acyclic nine-module data family.                    |
 | done               | 5 non-chartered source files currently over 400 lines                     | R3              |     inspect per seam |       2/TBD | Both qualifying owners are split; the remaining cohesive `Type`, `value-scope`, `TR`, `Packages`, and data-schema owners have no worthwhile second concept.                                        |
-| queued             | 70 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                                    |
+| done               | `packages/parser/parser-src/parser.ts` reachable-document loading         | R2              |                  +10 |        1/10 | Extract sequential referenced-document loading from the breadth-first queue, removing the only depth-four parser function and reducing the mechanical source count from 70 to 69.                  |
+| queued             | 69 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      14/TBD | Fourteen still pass value review after the parser extraction; decompose them into meaningful named steps without changing ordering or public surfaces.                                             |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                                   |
 | done               | `packages/dev/dev-src/commands/code-review/planner.ts` timeouts           | R6 / charter 4  |                   11 |        6/11 | Reuse the two owning review-timeout constants across six provider outcomes, collapsing the repeated values and net-deleting five lines.                                                            |
 | done               | repeated Android, compiler assertion, and unexpected-error messages       | R12 / charter 4 |                   26 |        6/26 | Replace ten byte-identical message literals in four owners with four local constants; four abstractions each pay at two or three sites.                                                            |
