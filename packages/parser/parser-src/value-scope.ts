@@ -168,23 +168,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createUiScope(node: AST.ContextualPresentStatement): Langium.Scope {
-    const root = AST.findRoot(node)
-    if (!AST.isTaoFile(root)) {
-      return this.createScopeForNodes([])
-    }
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isUiDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isUiDeclaration), scope)
-    return scope
+    return this.createDeclarationScope(node, AST.isUiDeclaration)
   }
 
   private createDialogueScope(node: AST.AskStatement): Langium.Scope {
-    const root = AST.findRoot(node)
-    if (!AST.isTaoFile(root)) {
-      return this.createScopeForNodes([])
-    }
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isDialogueDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isDialogueDeclaration), scope)
-    return scope
+    return this.createDeclarationScope(node, AST.isDialogueDeclaration)
   }
 
   private createResponseCaseScope(node: AST.RespondStatement): Langium.Scope {
@@ -204,32 +192,27 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createViewScope(render: AST.Render): Langium.Scope {
-    const root = AST.findRoot(render)
-    if (!AST.isTaoFile(root)) {
-      return this.createScopeForNodes([])
-    }
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isRenderableDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(render, AST.isRenderableDeclaration), scope)
-    return scope
+    return this.createDeclarationScope(render, AST.isRenderableDeclaration)
   }
 
   private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {
-    const root = AST.findRoot(call)
-    if (!AST.isTaoFile(root)) {
-      return this.createScopeForNodes([])
-    }
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isFunctionDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(call, AST.isFunctionDeclaration), scope)
-    return scope
+    return this.createDeclarationScope(call, AST.isFunctionDeclaration)
   }
 
   private createAppViewScope(node: AST.AppView): Langium.Scope {
+    return this.createDeclarationScope(node, AST.isViewDeclaration)
+  }
+
+  private createDeclarationScope<DeclarationT extends AST.Declaration>(
+    node: AST.Node,
+    isDeclaration: (node: AST.Node) => node is DeclarationT,
+  ): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isViewDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isViewDeclaration), scope)
+    let scope = this.createScopeForNodes(root.statements.filter(isDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(node, isDeclaration), scope)
     return scope
   }
 
@@ -257,17 +240,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!entity) {
       return outer
     }
-    const document = AST.getDocument(entity)
-    const descriptions = entity.block.entries.filter(AST.isEntityDataField).flatMap(field => {
-      if (!field.boolean) {
-        return []
-      }
-      const cases = [this.descriptions.createDescription(field, field.name, document)]
-      if (field.negativeName) {
-        cases.push(this.descriptions.createDescription(field, field.negativeName, document))
-      }
-      return cases
-    })
+    const descriptions = entity.block.entries
+      .filter(AST.isEntityDataField)
+      .flatMap(field => this.booleanFieldCaseDescriptions(field))
     return this.createScope(descriptions, outer)
   }
 
@@ -277,17 +252,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!entity) {
       return this.createScopeForNodes([])
     }
-    const descriptions = entity.block.entries.filter(AST.isEntityDataField).flatMap(field => {
-      if (!field.boolean) {
-        return []
-      }
-      const document = AST.getDocument(field)
-      const cases = [this.descriptions.createDescription(field, field.name, document)]
-      if (field.negativeName) {
-        cases.push(this.descriptions.createDescription(field, field.negativeName, document))
-      }
-      return cases
-    })
+    const descriptions = entity.block.entries
+      .filter(AST.isEntityDataField)
+      .flatMap(field => this.booleanFieldCaseDescriptions(field))
     return this.createScope(descriptions)
   }
 
@@ -304,20 +271,24 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const fields = visibleEntityDataDeclarations(test).flatMap(entity =>
       entity.block.entries.filter(AST.isEntityDataField).filter(field => field.boolean)
     )
-    const caseDescriptions = (field: AST.EntityDataField) => {
-      const document = AST.getDocument(field)
-      const cases = [this.descriptions.createDescription(field, field.name, document)]
-      if (field.negativeName) {
-        cases.push(this.descriptions.createDescription(field, field.negativeName, document))
-      }
-      return cases
-    }
-    let scope = this.createScope(fields.flatMap(caseDescriptions))
+    let scope = this.createScope(fields.flatMap(field => this.booleanFieldCaseDescriptions(field)))
     scope = this.createScopeForNodes(enumCases, scope)
     if (exactField) {
-      scope = this.createScope(caseDescriptions(exactField), scope)
+      scope = this.createScope(this.booleanFieldCaseDescriptions(exactField), scope)
     }
     return scope
+  }
+
+  private booleanFieldCaseDescriptions(field: AST.EntityDataField) {
+    if (!field.boolean) {
+      return []
+    }
+    const document = AST.getDocument(field)
+    const cases = [this.descriptions.createDescription(field, field.name, document)]
+    if (field.negativeName) {
+      cases.push(this.descriptions.createDescription(field, field.negativeName, document))
+    }
+    return cases
   }
 
   private createRunAppScope(
