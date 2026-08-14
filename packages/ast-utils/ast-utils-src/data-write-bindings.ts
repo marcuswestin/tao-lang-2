@@ -29,6 +29,19 @@ export type DataWriteBindingResult = {
   diagnostics: DataWriteBindingDiagnostic[]
 }
 
+type DataWriteAmbiguities = {
+  ambiguousFields: Set<DataFieldDefinition>
+  ambiguousWrites: Set<AST.DataWriteField>
+}
+
+type RemainingDataWriteDiagnosticsOptions = {
+  diagnostics: DataWriteBindingDiagnostic[]
+  duplicateWriteTypes: ReadonlySet<string>
+  remainingFields: Set<DataFieldDefinition>
+  remainingWrites: Set<AST.DataWriteField>
+  requireAll: boolean
+}
+
 /** resolveDataWriteBindings binds create/update values to the target entity's fields by label or type. */
 export function resolveDataWriteBindings(
   entity: DataEntityDefinition,
@@ -43,13 +56,7 @@ export function resolveDataWriteBindings(
 
   bindNamedDataWriteFields(remainingWrites, remainingFields, pairs, diagnostics)
   bindBooleanCaseDataWriteFields(remainingWrites, remainingFields, pairs)
-  // Defaulted fields may be omitted and are not eligible for unlabeled type binding. They can
-  // still be written explicitly by label, while boolean cases bind by declaration identity above.
-  for (const field of remainingFields) {
-    if (hasDataFieldDefault(field)) {
-      remainingFields.delete(field)
-    }
-  }
+  removeDefaultedDataFields(remainingFields)
   if (remainingWrites.size > 0) {
     reportDuplicateDataFieldTypes([...remainingFields], diagnostics)
   }
@@ -62,8 +69,69 @@ export function resolveDataWriteBindings(
     matches: dataWriteTypesAreAssignable,
     blockedWriteTypes: duplicateWriteTypes,
   })
+  reportRemainingDataWriteDiagnostics({
+    diagnostics,
+    duplicateWriteTypes,
+    remainingFields,
+    remainingWrites,
+    requireAll,
+  })
 
+  return {
+    pairs: pairs.toSorted((left, right) => fields.indexOf(left.field) - fields.indexOf(right.field)),
+    diagnostics,
+  }
+}
+
+function removeDefaultedDataFields(fields: Set<DataFieldDefinition>): void {
+  // Defaulted fields may be omitted and are not eligible for unlabeled type binding. They can
+  // still be written explicitly by label, while boolean cases bind by declaration identity first.
+  for (const field of fields) {
+    if (hasDataFieldDefault(field)) {
+      fields.delete(field)
+    }
+  }
+}
+
+function reportRemainingDataWriteDiagnostics(
+  {
+    diagnostics,
+    duplicateWriteTypes,
+    remainingFields,
+    remainingWrites,
+    requireAll,
+  }: RemainingDataWriteDiagnosticsOptions,
+): void {
   const graph = dataWriteMatchGraph(remainingWrites, remainingFields, duplicateWriteTypes)
+  const ambiguities = reportDataWriteAmbiguities(graph, remainingWrites, duplicateWriteTypes, diagnostics)
+  for (const write of remainingWrites) {
+    if (ambiguities.ambiguousWrites.has(write)) {
+      continue
+    }
+    const actual = Type.ofExpression(write.value)
+    const key = Type.identityKey(actual)
+    const writeIsUnmatched = actual.kind !== 'unresolved'
+      && !(key && duplicateWriteTypes.has(key))
+      && !(graph.targetsByCandidate.get(write)?.length)
+    if (writeIsUnmatched) {
+      diagnostics.push({ kind: 'unmatched-write', write })
+    }
+  }
+  if (requireAll) {
+    for (const field of remainingFields) {
+      if (!ambiguities.ambiguousFields.has(field) && !hasDataFieldDefault(field)) {
+        diagnostics.push({ kind: 'missing-data-field', field })
+      }
+    }
+  }
+}
+
+function reportDataWriteAmbiguities(
+  graph: MatchGraph<AST.DataWriteField, DataFieldDefinition>,
+  remainingWrites: Set<AST.DataWriteField>,
+  duplicateWriteTypes: ReadonlySet<string>,
+  diagnostics: DataWriteBindingDiagnostic[],
+): DataWriteAmbiguities {
   const ambiguousWrites = new Set<AST.DataWriteField>()
   const ambiguousFields = new Set<DataFieldDefinition>()
   for (const write of remainingWrites) {
@@ -89,31 +157,7 @@ export function resolveDataWriteBindings(
       matches.forEach(write => ambiguousWrites.add(write))
     }
   }
-  for (const write of remainingWrites) {
-    if (ambiguousWrites.has(write)) {
-      continue
-    }
-    const actual = Type.ofExpression(write.value)
-    const key = Type.identityKey(actual)
-    const writeIsUnmatched = actual.kind !== 'unresolved'
-      && !(key && duplicateWriteTypes.has(key))
-      && !(graph.targetsByCandidate.get(write)?.length)
-    if (writeIsUnmatched) {
-      diagnostics.push({ kind: 'unmatched-write', write })
-    }
-  }
-  if (requireAll) {
-    for (const field of remainingFields) {
-      if (!ambiguousFields.has(field) && !hasDataFieldDefault(field)) {
-        diagnostics.push({ kind: 'missing-data-field', field })
-      }
-    }
-  }
-
-  return {
-    pairs: pairs.toSorted((left, right) => fields.indexOf(left.field) - fields.indexOf(right.field)),
-    diagnostics,
-  }
+  return { ambiguousFields, ambiguousWrites }
 }
 
 function bindBooleanCaseDataWriteFields(
