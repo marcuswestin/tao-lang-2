@@ -23,16 +23,16 @@ export type TaoType =
 
 export type DataEntityDefinition = AST.EntityDataDeclaration
 export type DataFieldDefinition = AST.EntityDataField
-export type QueryDefinition = AST.EntityQueryDeclaration
+type QueryDefinition = AST.EntityQueryDeclaration
 
 /** TaoActionParameter declares one positional input accepted by an action value. */
-export type TaoActionParameter = {
+type TaoActionParameter = {
   type: TaoType
   optional: boolean
 }
 
 /** TypeReferenceRoot declares the root definition and remaining member path for a named type reference. */
-export type TypeReferenceRoot = {
+type TypeReferenceRoot = {
   definition?: AST.TypeDefinition
   remainingMembers: readonly string[]
 }

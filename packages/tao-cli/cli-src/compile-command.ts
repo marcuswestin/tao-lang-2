@@ -9,7 +9,7 @@ export type CompileResult = {
 }
 
 /** runCompile compiles the Tao app at `appPath` into the local runtime package. */
-export type CompileCommandOptions = {
+type CompileCommandOptions = {
   appName?: string
   interactive?: boolean
   input?: Readable

@@ -32,7 +32,7 @@ export type ArgumentBindingDiagnostic =
   | { kind: 'unmatched-argument'; argument: AST.Argument }
   | { kind: 'missing-argument'; parameter: AST.ParameterDeclaration }
 
-export type ArgumentBindingResult = {
+type ArgumentBindingResult = {
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }

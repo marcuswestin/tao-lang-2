@@ -9,10 +9,10 @@ type AiUsageOptions = {
 }
 
 /** AiUsageWindow normalizes one provider rate-limit window. */
-export type AiUsageWindow = UsageWindowSummary
+type AiUsageWindow = UsageWindowSummary
 
 /** AiUsageProvider summarizes one provider's budget or the reason it is unavailable. */
-export type AiUsageProvider = UsageProviderSummary
+type AiUsageProvider = UsageProviderSummary
 
 const DEFAULT_PROVIDER = 'codex'
 const DEFAULT_SOURCE = 'oauth'
@@ -34,7 +34,7 @@ export function registerAiUsageCommand(commands: Command): void {
 }
 
 /** runAiUsage fetches codexbar usage and prints a normalized AI provider budget summary. */
-export async function runAiUsage(options: AiUsageOptions = {}): Promise<number> {
+async function runAiUsage(options: AiUsageOptions = {}): Promise<number> {
   const provider = options.provider ?? DEFAULT_PROVIDER
   const source = options.source ?? DEFAULT_SOURCE
   const args = ['usage', '--provider', provider, '--source', source, '--format', 'json']

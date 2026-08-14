@@ -8,7 +8,7 @@ const LETTERED_APP_CHOICES = 25
 const MAX_APP_CHOICES = NUMBERED_APP_CHOICES + LETTERED_APP_CHOICES
 
 /** TaoDevSelectionOptions supplies terminal state and the current app for selection. */
-export type TaoDevSelectionOptions = {
+type TaoDevSelectionOptions = {
   current?: TaoDevApp
   input?: Readable
   interactive?: boolean

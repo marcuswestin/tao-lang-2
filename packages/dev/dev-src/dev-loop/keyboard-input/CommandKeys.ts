@@ -8,7 +8,7 @@ type ActionCommandKey = Exclude<CommandKey, '\u0003'>
 type CommandHandler = (context: CommandKeyContext) => Promise<boolean | void> | void
 
 /** CommandKeyContext provides dependencies for a dev-loop key action. */
-export type CommandKeyContext = {
+type CommandKeyContext = {
   appName?: string
   appPath: string
   finish: (exitCode: number) => Promise<void>

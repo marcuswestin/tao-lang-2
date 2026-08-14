@@ -1,7 +1,7 @@
 import { Box } from 'ink'
 import React from 'react'
 
-export type DashboardGridProps<T> = {
+type DashboardGridProps<T> = {
   height: number
   items: readonly T[]
   layout: ColumnLayout

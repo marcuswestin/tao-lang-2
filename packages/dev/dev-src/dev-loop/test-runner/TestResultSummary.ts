@@ -20,7 +20,7 @@ type TotalTestSummary = {
   total: number
 }
 
-export type ResultSummaryOptions = {
+type ResultSummaryOptions = {
   includeFailureOutput?: boolean
   failureOutputLineLimit?: number
 }

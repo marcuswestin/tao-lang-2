@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 71 commits, 2026-08-14
+Last touched-package re-sweep: after 72 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -202,7 +202,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | validator Typir initialization and invocation validator              | R5   |             -7 |         1/7 | Remove the only call, exported object member, type-only import, and implementation of a deliberately empty validation hook.                                                    |
 | done               | compiler, formatter, and source-actions internal module exports      | R5   |             36 |       18/36 | Make 17 file-local types private and delete one unused `Compile` re-export, net two lines; retain the package-facing test-plan and formatter/action types.                     |
 | done               | primitive data types and recursive type-definition dispatch          | R4   |            -15 |        5/15 | Collapse five identical primitive-field branches and two identical type-definition branches into one branch per concept, deleting 15 lines.                                    |
-| queued             | file-local exports across eight packages                             | R5   |            ~51 |       50/51 | After overlapping R3 moves settle, remove 49 unnecessary export modifiers and one wholly dead type; retain package and test-facing surfaces.                                   |
+| done               | file-local exports across seven packages                             | R5   |             -5 |       44/48 | Remove 43 unnecessary export modifiers, one wholly dead type, and its redundant forwarding re-export while retaining package, public runtime, and test-facing surfaces.        |
 | done               | `packages/validator/validator-src/validators/ActionsValidator.ts`    | R9   |             -3 |         1/3 | Delete the decorative `Private` separator that only restated TypeScript visibility, net-deleting three lines.                                                                  |
 | queued             | internal signatures and literal boolean call sites across packages   | R11  |       ~360–420 |     30/~400 | After overlapping R3 moves settle, replace 15 over-wide signatures and 15 literal boolean call sites with concept-shaped options across 21 functions and 44 callers.           |
 | done               | `packages/shared/shared-tests/shared.test.ts`                        | R7   |              2 |         1/2 | Preserve formatter-sorted imports; baseline `./agent verify` exposed and corrected this pre-existing formatting violation.                                                     |

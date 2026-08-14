@@ -2,7 +2,7 @@ import type { AST } from '@parser'
 import type { ValidationContext } from '../validation'
 
 /** LayoutConflictMessages declares diagnostic text for layout conflict validation. */
-export type LayoutConflictMessages = {
+type LayoutConflictMessages = {
   conflictingEntries(left: string, right: string): string
   duplicateEntry(key: string): string
 }

@@ -54,7 +54,7 @@ export type TaoAppDefinition = {
 }
 
 export type TaoNavigationPatch = Readonly<Record<string, unknown>>
-export type TaoNavigationConfiguration = Readonly<Record<string, unknown>>
+type TaoNavigationConfiguration = Readonly<Record<string, unknown>>
 export type TaoConfiguredNavigation = Readonly<{
   config: TaoNavigationConfiguration
   declaration: TaoImplementedNavDeclaration
@@ -63,7 +63,7 @@ export type TaoConfiguredNavigation = Readonly<{
 
 export type TaoNavigationInput = TaoNavigationValue | TaoConfiguredNavigation
 
-export type TaoToastPresentationOptions = {
+type TaoToastPresentationOptions = {
   duration: Evaluable
   key: Evaluable
 }

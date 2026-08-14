@@ -64,11 +64,8 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
   Expect.Is = ExpectIs
 }
 
-/** DynamicMatcher represents assertion matcher chains from the active test runner. */
-export type DynamicMatcher = ((...args: any[]) => any) & Record<string, any>
-
 /** ExpectApi wraps an active test runner expect function with Tao narrowing helpers. */
-export type ExpectApi = TestRunnerExpect & {
+type ExpectApi = TestRunnerExpect & {
   Is: <T>(value: unknown, guard: (value: unknown) => value is T) => asserts value is T
 }
 
@@ -88,10 +85,10 @@ export type TestRuntime = {
 }
 
 /** TestRunnerExpect describes the callable expect API from a test runner. */
-export type TestRunnerExpect = (<T = unknown>(value?: T, ...args: any[]) => any) & Record<string, any>
+type TestRunnerExpect = (<T = unknown>(value?: T, ...args: any[]) => any) & Record<string, any>
 
 /** TestRunnerFunction describes callable test runner grouping and hook APIs. */
-export type TestRunnerFunction = ((...args: any[]) => any) & Record<string, any>
+type TestRunnerFunction = ((...args: any[]) => any) & Record<string, any>
 
 let testRuntime: TestRuntime | undefined
 

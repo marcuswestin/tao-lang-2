@@ -5,7 +5,7 @@ const RELEASE_TIMEOUT_MS = 5_000
 const RELEASE_POLL_MS = 250
 
 /** Listener describes one process listening on a TCP port. */
-export type Listener = {
+type Listener = {
   command: string
   name?: string
   pid: number

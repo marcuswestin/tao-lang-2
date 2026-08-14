@@ -21,21 +21,21 @@ export { type ProviderBudgetStatus, providersFromBudgetSummary, type ReviewPlanP
 
 export type ReviewProfile = 'architecture' | 'light' | 'standard' | 'stringent'
 
-export type PlannedReviewer = ReviewerManifestEntry & {
+type PlannedReviewer = ReviewerManifestEntry & {
   budgetStatus: ProviderBudgetStatus
   provider: ReviewPlanProvider
   reason: string
   remainingPercent?: number
 }
 
-export type SkippedReviewer = {
+type SkippedReviewer = {
   budgetStatus: ProviderBudgetStatus
   provider: ReviewPlanProvider
   reason: string
   remainingPercent?: number
 }
 
-export type ReviewPlan = {
+type ReviewPlan = {
   budgetPath?: string
   generatedAt: string
   manifestPath?: string

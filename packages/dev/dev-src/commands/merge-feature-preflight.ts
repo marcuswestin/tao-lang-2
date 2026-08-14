@@ -6,13 +6,13 @@ type MergeFeaturePreflightOptions = {
 }
 
 /** MergeFeaturePreflightIssue describes one preflight blocker or warning. */
-export type MergeFeaturePreflightIssue = {
+type MergeFeaturePreflightIssue = {
   level: 'blocker' | 'warning'
   message: string
 }
 
 /** MergeFeaturePreflightReport summarizes read-only merge readiness checks. */
-export type MergeFeaturePreflightReport = {
+type MergeFeaturePreflightReport = {
   branch: string
   blockers: MergeFeaturePreflightIssue[]
   commitsAheadOfMain?: number
@@ -36,7 +36,7 @@ export function registerMergeFeaturePreflightCommand(commands: Command): void {
 }
 
 /** runMergeFeaturePreflight runs read-only Git checks for project-7 merges. */
-export async function runMergeFeaturePreflight(options: MergeFeaturePreflightOptions = {}): Promise<number> {
+async function runMergeFeaturePreflight(options: MergeFeaturePreflightOptions = {}): Promise<number> {
   const report = await buildMergeFeaturePreflightReport(Repo.getRoot())
 
   if (options.json === true) {
@@ -49,7 +49,7 @@ export async function runMergeFeaturePreflight(options: MergeFeaturePreflightOpt
 }
 
 /** buildMergeFeaturePreflightReport inspects Git state without mutating it. */
-export async function buildMergeFeaturePreflightReport(repoRoot: string): Promise<MergeFeaturePreflightReport> {
+async function buildMergeFeaturePreflightReport(repoRoot: string): Promise<MergeFeaturePreflightReport> {
   const gitFailures: string[] = []
   const branch = (await checkedGitText(repoRoot, ['branch', '--show-current'], gitFailures)).trim()
   const statusBranch = (await checkedGitText(repoRoot, ['status', '--short', '--branch'], gitFailures)).trimEnd()

@@ -2,13 +2,11 @@ import * as Shared from '@shared'
 import { OutputText } from '../OutputText'
 import { TestResultSummary } from './TestResultSummary'
 
-export type { ResultSummaryOptions } from './TestResultSummary'
-
 /** SuiteStatus declares the lifecycle state of one test suite process. */
 export type SuiteStatus = 'failed' | 'passed' | 'pending' | 'running'
 
 /** TestSuite declares one executable test suite. */
-export type TestSuite = {
+type TestSuite = {
   name: string
   command: string
   args: string[]
@@ -30,7 +28,7 @@ type SuiteCommandResult = Shared.CLI.CommandCloseResult & {
   error?: Error
 }
 
-export type RunSuiteProcessesOptions = {
+type RunSuiteProcessesOptions = {
   jobs?: number
   onChange: () => void
   onComplete?: (state: SuiteState) => void

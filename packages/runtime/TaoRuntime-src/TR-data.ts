@@ -79,7 +79,7 @@ export type TaoDatasourceDeclaration = Readonly<{
   provider: TaoDataProvider
 }>
 
-export type TaoDatasourceConfiguration = Readonly<Record<string, unknown>>
+type TaoDatasourceConfiguration = Readonly<Record<string, unknown>>
 
 /** TaoConfiguredDatasource is an immutable declaration-owned provider configuration. */
 export type TaoConfiguredDatasource = Readonly<{

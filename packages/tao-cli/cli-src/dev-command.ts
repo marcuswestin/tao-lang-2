@@ -5,7 +5,7 @@ import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
 import { selectTaoDevApp, type TaoDevSelectionResult } from './dev-app-selection'
 
 /** TaoDevCommandOptions supplies explicit selection, terminal state, and a focused loop seam. */
-export type TaoDevCommandOptions = {
+type TaoDevCommandOptions = {
   appName?: string
   input?: Readable
   interactive?: boolean
