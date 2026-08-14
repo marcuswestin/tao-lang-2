@@ -32,6 +32,12 @@ function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: Vali
     ctx.error(configurationValidationMessages.visible(kind), declaration)
   }
 
+  validateConfigurationProperties(declaration, ctx)
+  validateConfigurationKeyDeclarations(declaration, ctx)
+  validateConfigurationImplementations(declaration, ctx)
+}
+
+function validateConfigurationProperties(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const seen = new Set<string>()
   for (const property of AST.configurationPropertiesOf(declaration)) {
     if (seen.has(property.name)) {
@@ -45,7 +51,9 @@ function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: Vali
       ctx.error(configurationValidationMessages.keyProperty(property.name), property.type)
     }
   }
+}
 
+function validateConfigurationKeyDeclarations(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const keys = declaration.block.entries.filter(AST.isConfigurationKeyDeclaration)
   if (keys.length > 1) {
     for (const key of keys.slice(1)) {
@@ -72,7 +80,9 @@ function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: Vali
       }
     }
   }
+}
 
+function validateConfigurationImplementations(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const implementations = declaration.block.entries.filter(AST.isConfigurationImplementation)
   if (implementations.length === 0) {
     ctx.error(configurationValidationMessages.missingImplementation(declaration.name), declaration)
