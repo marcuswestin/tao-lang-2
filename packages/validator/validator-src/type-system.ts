@@ -5,7 +5,6 @@ import { InferenceRuleNotApplicable, type Type as TypirType } from 'typir'
 import type { LangiumTypeSystemDefinition } from 'typir-langium'
 import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
 import { ActionsValidator } from './validators/ActionsValidator'
-import { InvocationsValidator } from './validators/invocations-validator'
 import { StateValidator } from './validators/StateValidator'
 
 const statefulPrimitiveTypes = ['text', 'number', 'boolean'] as const satisfies readonly AST.PrimitiveType[]
@@ -113,7 +112,6 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
 
     ActionsValidator.registerTypeValidation(typir)
     StateValidator.registerTypeValidation(typir)
-    InvocationsValidator.registerTypeValidation(typir)
   }
 
   /** onNewAstNode handles AST-instance-specific type creation. */

@@ -1,7 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import type { TaoTypirServices } from '../TypeSystemHelpers'
 import type { ValidationContext } from '../validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
@@ -41,7 +40,6 @@ const invocationValidationMessages = {
 /** InvocationsValidator validates render invocations through shared type-based binding diagnostics. */
 export const InvocationsValidator = {
   messages: invocationValidationMessages,
-  registerTypeValidation,
   validate,
 }
 
@@ -51,9 +49,6 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     reportInvocationDiagnostics(render, ctx)
   }
 }
-
-/** registerTypeValidation is intentionally empty; render argument assignability is checked by AST binding. */
-function registerTypeValidation(_typir: TaoTypirServices): void {}
 
 function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext): void {
   const invocation = ASTUtils.resolveRenderInvocation(render)
