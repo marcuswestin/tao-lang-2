@@ -39,11 +39,22 @@ function needs_install() {
 
 function install_dev_deps() {
   # Clonefile installation is not available across Codex's linked-worktree sandbox boundary.
-  if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile --cwd "$SCRIPT_DIR" 2>&1)"; then
-    echo "$install_output" >&2
-    exit 1
+  local install_output
+  if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile --cwd "$SCRIPT_DIR" 2>&1)"; then
+    touch "$INSTALL_STAMP"
+    return
   fi
-  touch "$INSTALL_STAMP"
+
+  # Bun can leave a resumable partial install after a transient sandbox temp-directory denial.
+  if [[ "$install_output" == *"unable to write files to tempdir: PermissionDenied"* ]] &&
+    install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile --cwd "$SCRIPT_DIR" 2>&1)"
+  then
+    touch "$INSTALL_STAMP"
+    return
+  fi
+
+  echo "$install_output" >&2
+  exit 1
 }
 
 function wait_for_lock() {

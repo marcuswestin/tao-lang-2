@@ -40,14 +40,15 @@ function tao_bun_temp_dir() {
   darwin_temp_dir="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)" || darwin_temp_dir=""
   if [[ -n "$darwin_temp_dir" && -d "$darwin_temp_dir" && -w "$darwin_temp_dir" ]]; then
     # Codex grants the physical /private/var path; macOS reports its /var symlink.
-    print -r -- "${darwin_temp_dir:A}"
+    # Bun 1.3 also requires TMPDIR's trailing separator for this physical path.
+    print -r -- "${darwin_temp_dir:A}/"
     return
   fi
 
   if [[ -n "${TMPDIR:-}" && -d "$TMPDIR" && -w "$TMPDIR" ]]; then
-    print -r -- "$TMPDIR"
+    print -r -- "${TMPDIR:A}/"
     return
   fi
 
-  print -r -- "$fallback_dir"
+  print -r -- "${fallback_dir:A}/"
 }

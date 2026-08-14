@@ -84,16 +84,17 @@ Describe('agent worktree profile bootstrap', () => {
       const result = await runProfileScript('tao_bun_temp_dir "$2"', fixture, fallback)
 
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout.trim()).toBe(await FS.realPath(fixture.systemTemp))
+      Expect(result.stdout.trim()).toBe(`${await FS.realPath(fixture.systemTemp)}/`)
     } finally {
       await FS.remove(testRoot)
     }
   })
 
-  Test('uses the sandbox-compatible Bun installation contract', async () => {
+  Test('uses the sandbox-compatible Bun installation contract and bounded retry', async () => {
     const source = await FS.readText(Repo.resolvePath('agent'))
 
     Expect(source).toContain('TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile')
+    Expect(source).toContain('unable to write files to tempdir: PermissionDenied')
     Expect(source).not.toContain('BUN_TMPDIR=')
   })
 })
