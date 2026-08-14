@@ -2,8 +2,7 @@
 
 Date: 2026-08-14\
 Branch: `feat/cleanup-spike`\
-Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
-Cleanup implementation head: `67822817`
+Base: `feat/wordflower-tranche-3`
 
 ## Outcome
 
@@ -131,145 +130,6 @@ flow. No cast, stringification, or invented discriminator is allowed merely to f
 
 No repeated repo-wide pattern justified R14.
 
-## Commit ledger by rule
-
-### R1 (1)
-
-- `a33229ab` name compound repository decisions
-
-### R2 (14)
-
-- `04a51d10` split reachable document loading
-- `b35c146e` split data definition validation
-- `495c9c2b` split merge preflight analysis
-- `92591902` split configuration validation phases
-- `e51435c1` split modern app validation phases
-- `016e454a` split contextual presentation validation
-- `d2dcea34` split entity catalog validation
-- `87a0b124` split item property binding phases
-- `8f8f63a6` split Typir registration phases
-- `6605206b` split configuration block validation
-- `7d685177` split configured item binding phases
-- `f2c00908` split data write binding phases
-- `320e6e7b` split argument binding phases
-- `f4d28f50` split reviewer launch phases
-
-### R3 (31)
-
-- `39ecab3c` group feature validators by concept
-- `15d3eacb` extract navigation runtime registry
-- `f4a66f96` extract navigation presentables
-- `ea42f6b9` extract navigation state contracts
-- `f6a6e5ff` extract navigation rendering surfaces
-- `db0f650a` extract shared navigation state
-- `53da23c0` extract navigation value helpers
-- `43fe52fd` extract Stack and Slot mounts
-- `92b83f30` complete concrete navigation mounts
-- `b1284083` extract navigation configuration
-- `a022b3f2` extract navigation kinds
-- `03e2cbf5` extract navigation conformance
-- `43de6da4` extract app navigation state
-- `2f5782fa` complete navigation module split
-- `fef147fa` split test result summaries
-- `8f921c60` split review provider availability
-- `a3d54ec9` split data write validation
-- `897c910b` split pure function validation
-- `fd40ed53` split configured value validation
-- `4e8b1bcb` split configured item validation
-- `b6d9b062` extract shared type-binding matches
-- `0ec4d17a` extract item-property bindings
-- `0532474f` extract data-write bindings
-- `604beeed` extract argument bindings
-- `d10c2178` extract data providers
-- `bb34c800` extract data definition validation
-- `6a582b56` extract data persistence
-- `077e7bba` extract data entity handles
-- `1b8934b4` extract data row values
-- `127eaf0d` extract data registry
-- `da9ada11` extract data schema
-
-### R4 (13)
-
-- `7b0baa27` introduce typed validator node dispatch
-- `b639c173` consolidate test-validator node passes
-- `038547fe` dispatch functional-core validation per node
-- `d0f739ca` dispatch type action and view validation
-- `272774e4` dispatch data dialogue and navigation validation
-- `2cf03d41` dispatch state and alias validation per node
-- `c119d8cc` reuse the validator traversal for Typir
-- `e2771d92` collapse repeated type branches
-- `248ba919` consolidate app value reference dispatch
-- `1fc4e65d` share owning ancestor traversal
-- `8772ce9e` consolidate value scope layering
-- `57c2b172` share duplicate type reporting
-- `67822817` share configuration declaration types
-
-### R5 (4)
-
-- `a829e340` delete the empty invocation Typir hook
-- `fac0f46f` hide unused internal module exports
-- `70b6248e` privatize file-local declarations
-- `3a207dd3` remove unused cleanup symbols
-
-### R6 (1)
-
-- `287a232e` reuse review timeout constants
-
-### R7 (2)
-
-- `e6968edf` restore shared-test formatter conformance
-- `389ceaad` route process access through Platform
-
-### R8 (0)
-
-No rename passed the evidence and value bar.
-
-### R9 (1)
-
-- `e8410964` delete decorative visibility comment
-
-### R10 (21)
-
-- `403f3960` split layout validator tests
-- `3b7c11b6` split action and state validator tests
-- `3ed8f33f` split alias and invocation validator tests
-- `c84ca457` split type and expression validator tests
-- `e97f34f7` split app and view validator tests
-- `b65e7920` split structural validator tests
-- `54b43edc` split use and import validator tests
-- `2ac1b94f` finish validator test split
-- `3170847e` split navigation runtime tests
-- `2408ec37` split Tao test runtime coverage
-- `192caef6` split runtime language value tests
-- `dba3cd8b` split runtime data tests
-- `ec83bcf1` split runtime app shell tests
-- `142c469a` split runtime layout tests
-- `7ce78183` finish runtime E2E test split
-- `f62df6e6` move TR data runtime tests
-- `dac9f5e5` split TR navigation tests
-- `9a1e57f3` split compiler file tests
-- `e607e68d` split formatter injection tests
-- `8ea611eb` split parser type tests
-- `4e873735` finish parser test split
-
-### R11 (5)
-
-- `7296c797` name invocation binding options
-- `6c44bacf` name runtime helper options
-- `f8c298e4` name source pipeline options
-- `80b0b0bc` name developer workflow options
-- `1561f7a7` name validator helper options
-
-### R12 (1)
-
-- `648be2ea` centralize repeated owning-module messages
-
-### R13 (3)
-
-- `30a73576` dispatch closed unions exhaustively
-- `35c122a4` finish runtime closed-union dispatch
-- `6f67ee16` finish sequential union dispatch
-
 ## Closure sweeps
 
 Sweep A covered structural rules R1, R2, R3, R10, and R11 across all 301 tracked non-generated
@@ -294,13 +154,13 @@ evidence; none remains deferred.
 
 | Status   | Item                                     | Evidence and result                                                                                                                                                                                                                                                                                  |
 | -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| complete | validator diagnostic codes               | Repo-wide symbol search found only the empty declaration; `3a207dd3` deletes it and its comment.                                                                                                                                                                                                     |
-| complete | dev review lens exports                  | Repo-wide external-consumer search was empty; `3a207dd3` makes both constants file-local.                                                                                                                                                                                                            |
-| complete | app value-reference dispatch             | `248ba919` merges the byte-identical branches, net -4; diagnostic text/order/ranges were identical.                                                                                                                                                                                                  |
-| complete | parser owning-ancestor traversal         | `1fc4e65d` preserves all six public signatures behind one private predicate traversal, net -30.                                                                                                                                                                                                      |
-| complete | parser value scopes                      | `8772ce9e` uses separate declaration-layering and boolean-case helpers, net -29.                                                                                                                                                                                                                     |
-| complete | ast-utils binding reporters              | `57c2b172` shares both duplicate-type families across all three owners, net -2; the combined eleven-diagnostic snapshot preserved text/order/ranges and AST-node identity.                                                                                                                           |
-| complete | validator declaration-to-type resolution | `67822817` shares the three-site configuration tail, net -4; the focused four-diagnostic snapshot was identical.                                                                                                                                                                                     |
+| complete | validator diagnostic codes               | Repo-wide symbol search found only the empty declaration; the spike deletes it and its comment.                                                                                                                                                                                                      |
+| complete | dev review lens exports                  | Repo-wide external-consumer search was empty; the spike makes both constants file-local.                                                                                                                                                                                                             |
+| complete | app value-reference dispatch             | The spike merges the byte-identical branches, net -4; diagnostic text/order/ranges were identical.                                                                                                                                                                                                   |
+| complete | parser owning-ancestor traversal         | The spike preserves all six public signatures behind one private predicate traversal, net -30.                                                                                                                                                                                                       |
+| complete | parser value scopes                      | The spike uses separate declaration-layering and boolean-case helpers, net -29.                                                                                                                                                                                                                      |
+| complete | ast-utils binding reporters              | The spike shares both duplicate-type families across all three owners, net -2; the combined eleven-diagnostic snapshot preserved text/order/ranges and AST-node identity.                                                                                                                            |
+| complete | validator declaration-to-type resolution | The spike shares the three-site configuration tail, net -4; the focused four-diagnostic snapshot was identical.                                                                                                                                                                                      |
 | rejected | shared Switch invocation tail            | Any shared invocation helper adds an internal frame to missing-handler and handler-thrown stacks. Caller-side error construction or stack rewriting preserves the old frame shape only by losing the net reduction or adding platform-specific complexity. The six public variants remain unchanged. |
 
 ## Deliberately left alone
