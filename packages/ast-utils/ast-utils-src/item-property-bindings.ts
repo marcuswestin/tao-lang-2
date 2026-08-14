@@ -28,49 +28,98 @@ export type ItemPropertyBindingResult = {
   diagnostics: ItemPropertyBindingDiagnostic[]
 }
 
+type ItemPropertyBindingState = {
+  diagnostics: ItemPropertyBindingDiagnostic[]
+  pairs: ItemPropertyBindingPair[]
+  remainingExpected: Set<AST.TypeProperty>
+  remainingProperties: Set<AST.ItemProperty>
+}
+
+type ItemPropertyAmbiguities = {
+  ambiguousExpected: Set<AST.TypeProperty>
+  ambiguousProperties: Set<AST.ItemProperty>
+  unresolvedProperties: number
+}
+
 /** resolveItemPropertyBindings binds item constructor property values to item type fields by type. */
 export function resolveItemPropertyBindings(
   expectedProperties: readonly AST.TypeProperty[],
   properties: readonly AST.ItemProperty[],
 ): ItemPropertyBindingResult {
-  const diagnostics: ItemPropertyBindingDiagnostic[] = []
-  const pairs: ItemPropertyBindingPair[] = []
-  const remainingExpected = new Set(expectedProperties)
-  const remainingProperties = new Set(properties)
-
-  bindNamedItemProperties(remainingProperties, remainingExpected, pairs, diagnostics)
-  if (remainingProperties.size > 0) {
-    reportDuplicatePropertyTypes([...remainingExpected], diagnostics)
+  const state: ItemPropertyBindingState = {
+    diagnostics: [],
+    pairs: [],
+    remainingExpected: new Set(expectedProperties),
+    remainingProperties: new Set(properties),
   }
-  const duplicateProvidedPropertyTypes = reportDuplicateProvidedPropertyTypes(properties, diagnostics)
+  bindNamedItemProperties(state)
+  if (state.remainingProperties.size > 0) {
+    reportDuplicatePropertyTypes([...state.remainingExpected], state.diagnostics)
+  }
+  const duplicateProvidedPropertyTypes = reportDuplicateProvidedPropertyTypes(properties, state.diagnostics)
+  bindUnlabeledItemProperties(state, duplicateProvidedPropertyTypes)
+  reportRemainingItemPropertyDiagnostics(state, duplicateProvidedPropertyTypes)
+  return {
+    pairs: pairsByExpectedPropertyOrder(expectedProperties, state.pairs),
+    diagnostics: state.diagnostics,
+  }
+}
 
-  bindItemProperties(
-    remainingProperties,
-    remainingExpected,
-    pairs,
-    {
-      matches: propertyTypesExactlyMatch,
-      blockedPropertyTypes: duplicateProvidedPropertyTypes,
-    },
-  )
-  bindItemProperties(
-    remainingProperties,
-    remainingExpected,
-    pairs,
-    {
-      matches: propertyTypesAreAssignable,
-      blockedPropertyTypes: duplicateProvidedPropertyTypes,
-    },
-  )
+function bindUnlabeledItemProperties(
+  state: ItemPropertyBindingState,
+  duplicateProvidedPropertyTypes: ReadonlySet<string>,
+): void {
+  bindItemProperties(state, {
+    matches: propertyTypesExactlyMatch,
+    blockedPropertyTypes: duplicateProvidedPropertyTypes,
+  })
+  bindItemProperties(state, {
+    matches: propertyTypesAreAssignable,
+    blockedPropertyTypes: duplicateProvidedPropertyTypes,
+  })
+}
 
-  const matchGraph = propertyMatchGraph(remainingProperties, remainingExpected, duplicateProvidedPropertyTypes)
-  const ambiguousProperties = new Set<AST.ItemProperty>()
-  const ambiguousExpected = new Set<AST.TypeProperty>()
-  let unresolvedProperties = 0
-  for (const property of remainingProperties) {
+function reportRemainingItemPropertyDiagnostics(
+  state: ItemPropertyBindingState,
+  duplicateProvidedPropertyTypes: ReadonlySet<string>,
+): void {
+  const matchGraph = propertyMatchGraph(
+    state.remainingProperties,
+    state.remainingExpected,
+    duplicateProvidedPropertyTypes,
+  )
+  const ambiguities = reportAmbiguousItemProperties(state, matchGraph, duplicateProvidedPropertyTypes)
+  for (const [expected, matches] of matchGraph.candidatesByTarget) {
+    if (matches.length > 1) {
+      state.diagnostics.push({
+        kind: 'ambiguous-field',
+        expected,
+        properties: matches,
+      })
+      ambiguities.ambiguousExpected.add(expected)
+      for (const property of matches) {
+        ambiguities.ambiguousProperties.add(property)
+      }
+    }
+  }
+  reportUnmatchedItemProperties(state, matchGraph, duplicateProvidedPropertyTypes, ambiguities)
+  reportMissingItemProperties(state, ambiguities)
+}
+
+function reportAmbiguousItemProperties(
+  state: ItemPropertyBindingState,
+  matchGraph: MatchGraph<AST.ItemProperty, AST.TypeProperty>,
+  duplicateProvidedPropertyTypes: ReadonlySet<string>,
+): ItemPropertyAmbiguities {
+  const ambiguities: ItemPropertyAmbiguities = {
+    ambiguousProperties: new Set(),
+    ambiguousExpected: new Set(),
+    unresolvedProperties: 0,
+  }
+  for (const property of state.remainingProperties) {
     const actualType = Type.ofExpression(property.value)
     if (actualType.kind === 'unresolved') {
-      unresolvedProperties += 1
+      ambiguities.unresolvedProperties += 1
       continue
     }
     const propertyKey = Type.identityKey(actualType)
@@ -79,32 +128,28 @@ export function resolveItemPropertyBindings(
     }
     const matches = matchGraph.targetsByCandidate.get(property) ?? []
     if (matches.length > 1) {
-      diagnostics.push({
+      state.diagnostics.push({
         kind: 'ambiguous-property',
         property,
         expected: matches,
       })
-      ambiguousProperties.add(property)
+      ambiguities.ambiguousProperties.add(property)
       for (const expected of matches) {
-        ambiguousExpected.add(expected)
+        ambiguities.ambiguousExpected.add(expected)
       }
     }
   }
-  for (const [expected, matches] of matchGraph.candidatesByTarget) {
-    if (matches.length > 1) {
-      diagnostics.push({
-        kind: 'ambiguous-field',
-        expected,
-        properties: matches,
-      })
-      ambiguousExpected.add(expected)
-      for (const property of matches) {
-        ambiguousProperties.add(property)
-      }
-    }
-  }
-  for (const property of remainingProperties) {
-    if (ambiguousProperties.has(property)) {
+  return ambiguities
+}
+
+function reportUnmatchedItemProperties(
+  state: ItemPropertyBindingState,
+  matchGraph: MatchGraph<AST.ItemProperty, AST.TypeProperty>,
+  duplicateProvidedPropertyTypes: ReadonlySet<string>,
+  ambiguities: ItemPropertyAmbiguities,
+): void {
+  for (const property of state.remainingProperties) {
+    if (ambiguities.ambiguousProperties.has(property)) {
       continue
     }
     const actualType = Type.ofExpression(property.value)
@@ -113,28 +158,31 @@ export function resolveItemPropertyBindings(
       && !(propertyKey && duplicateProvidedPropertyTypes.has(propertyKey))
       && !(matchGraph.targetsByCandidate.get(property)?.length)
     if (propertyIsUnmatched) {
-      diagnostics.push({
+      state.diagnostics.push({
         kind: 'unmatched-property',
         property,
       })
     }
   }
+}
 
-  for (const expected of remainingExpected) {
-    if (ambiguousExpected.has(expected)) {
+function reportMissingItemProperties(
+  state: ItemPropertyBindingState,
+  ambiguities: ItemPropertyAmbiguities,
+): void {
+  for (const expected of state.remainingExpected) {
+    if (ambiguities.ambiguousExpected.has(expected)) {
       continue
     }
-    if (unresolvedProperties > 0) {
-      unresolvedProperties -= 1
+    if (ambiguities.unresolvedProperties > 0) {
+      ambiguities.unresolvedProperties -= 1
       continue
     }
-    diagnostics.push({
+    state.diagnostics.push({
       kind: 'missing-property',
       expected,
     })
   }
-
-  return { pairs: pairsByExpectedPropertyOrder(expectedProperties, pairs), diagnostics }
 }
 
 function reportDuplicatePropertyTypes(
@@ -159,26 +207,21 @@ function reportDuplicatePropertyTypes(
   }
 }
 
-function bindNamedItemProperties(
-  remainingProperties: Set<AST.ItemProperty>,
-  remainingExpected: Set<AST.TypeProperty>,
-  pairs: ItemPropertyBindingPair[],
-  diagnostics: ItemPropertyBindingDiagnostic[],
-): void {
-  for (const property of [...remainingProperties]) {
+function bindNamedItemProperties(state: ItemPropertyBindingState): void {
+  for (const property of [...state.remainingProperties]) {
     const name = property.label
     if (!name) {
       continue
     }
-    const expected = [...remainingExpected].find(candidate => candidate.name === name)
+    const expected = [...state.remainingExpected].find(candidate => candidate.name === name)
     if (!expected) {
-      const declared = pairs.find(pair => pair.expected.name === name)?.expected
-      diagnostics.push(
+      const declared = state.pairs.find(pair => pair.expected.name === name)?.expected
+      state.diagnostics.push(
         declared
           ? { kind: 'duplicate-named-property', property, expected: declared }
           : { kind: 'unknown-named-property', property, name },
       )
-      remainingProperties.delete(property)
+      state.remainingProperties.delete(property)
       continue
     }
     const actualType = Type.ofExpression(property.value)
@@ -188,11 +231,11 @@ function bindNamedItemProperties(
       && expectedType.kind !== 'unresolved'
       && !Type.isCastCompatible(actualType, expectedType)
     ) {
-      diagnostics.push({ kind: 'named-property-type', property, expected })
+      state.diagnostics.push({ kind: 'named-property-type', property, expected })
     }
-    pairs.push({ property, expected })
-    remainingProperties.delete(property)
-    remainingExpected.delete(expected)
+    state.pairs.push({ property, expected })
+    state.remainingProperties.delete(property)
+    state.remainingExpected.delete(expected)
   }
 }
 
@@ -208,26 +251,24 @@ function pairsByExpectedPropertyOrder(
 }
 
 function bindItemProperties(
-  remainingProperties: Set<AST.ItemProperty>,
-  remainingExpected: Set<AST.TypeProperty>,
-  pairs: ItemPropertyBindingPair[],
+  state: ItemPropertyBindingState,
   { matches, blockedPropertyTypes }: {
     matches: (property: AST.ItemProperty, expected: AST.TypeProperty) => boolean
     blockedPropertyTypes: ReadonlySet<string>
   },
 ): void {
   bindUnambiguousPairs({
-    candidates: remainingProperties,
-    targets: remainingExpected,
+    candidates: state.remainingProperties,
+    targets: state.remainingExpected,
     isCandidateBlocked: property => {
       const propertyType = Type.identityKey(Type.ofExpression(property.value))
       return !!propertyType && blockedPropertyTypes.has(propertyType)
     },
     matches,
     bind: (property, expected) => {
-      pairs.push({ property, expected })
-      remainingProperties.delete(property)
-      remainingExpected.delete(expected)
+      state.pairs.push({ property, expected })
+      state.remainingProperties.delete(property)
+      state.remainingExpected.delete(expected)
     },
   })
 }
