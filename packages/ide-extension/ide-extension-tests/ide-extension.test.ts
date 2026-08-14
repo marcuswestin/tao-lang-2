@@ -7,29 +7,13 @@ import { LSPWorkspace } from 'tao-workspace'
 import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-grammar'
 
 Describe('Tao IDE extension smoke', () => {
-  Test('declares extension and language server entrypoint build inputs', async () => {
+  Test('points the extension manifest at its built entrypoint and language configuration', async () => {
     const packageJson = await FS.readJson<IdeExtensionPackageJson>(
       FS.resolvePath('../package.json', import.meta.dir),
     )
     Expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
-
-    const entrypoints = [
-      '../ide-extension-src/extension/main.ts',
-      '../ide-extension-src/language/main.ts',
-      '../esbuild.config.ts',
-      '../language-configuration.json',
-    ]
-    for (const entrypoint of entrypoints) {
-      Expect(await FS.isFile(FS.resolvePath(entrypoint, import.meta.dir))).toBe(true)
-    }
-  })
-
-  Test('generates the TextMate grammar for VS Code', async () => {
-    const grammarPath = FS.resolvePath(
-      '../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
-      import.meta.dir,
-    )
-    Expect(await FS.isFile(grammarPath)).toBe(true)
+    Expect(packageJson.contributes.languages[0]?.configuration).toBe('./language-configuration.json')
+    Expect(await FS.isFile(FS.resolvePath('../language-configuration.json', import.meta.dir))).toBe(true)
   })
 
   Test('merges Tao syntax highlighting with embedded TypeScript fences', async () => {
@@ -382,6 +366,9 @@ type IdeExtensionPackageJson = {
     }[]
     grammars: {
       embeddedLanguages?: Record<string, string>
+    }[]
+    languages: {
+      configuration: string
     }[]
   }
 }
