@@ -115,11 +115,14 @@ function contentSlots(
       continue
     }
     const slot = LayoutTerms.contentSlot(term, direction)
-    if (slot === 'main') {
-      slots.main = term
-    } else if (slot === 'cross') {
-      slots.cross = term
-    }
+    Switch(slot, {
+      main: () => {
+        slots.main = term
+      },
+      cross: () => {
+        slots.cross = term
+      },
+    })
   }
   return slots
 }

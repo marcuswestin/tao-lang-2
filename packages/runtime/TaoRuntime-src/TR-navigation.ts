@@ -1,4 +1,4 @@
-import { Errors } from '@shared/core'
+import { Errors, Switch } from '@shared/core'
 import React from 'react'
 import { DataControls } from './TR-data'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -1450,30 +1450,31 @@ function testNavKindProfile(
   mount: TaoNavMount<any, any>,
   detail: TaoPresentable,
 ): void {
-  if (profile === 'stack') {
-    kind.present(mount, detail, {})
-    kind.present(mount, detail, {})
-    assertNavKind(kind.dismiss(mount), 'Stack dismiss must pop the newest occurrence.')
-    assertNavKind(kind.canGoBack(mount), 'Stack dismiss must preserve the covered occurrence.')
-    assertNavKind(kind.back(mount), 'Stack back must pop the remaining presented occurrence.')
-    assertNavKind(!kind.dismiss(mount), 'Stack dismiss must be root-safe.')
-    return
-  }
-  if (profile === 'slot') {
-    kind.present(mount, detail, {})
-    kind.present(mount, detail, {})
-    assertNavKind(kind.dismiss(mount), 'Slot dismiss must restore Initial after replacement.')
-    assertNavKind(!kind.canGoBack(mount), 'Slot replacement must not accumulate history.')
-    assertNavKind(!kind.dismiss(mount), 'Slot dismiss must be root-safe.')
-    return
-  }
-
-  assertNavKind(kind.activate(mount, 'settings'), 'Selection must activate a declared keyed child.')
-  assertNavKind(!kind.canGoBack(mount), 'Selection activation must not create content history.')
-  assertNavKind(!kind.activate(mount, 'missing'), 'Selection must reject an unknown keyed child.')
-  kind.present(mount, detail, {})
-  assertNavKind(kind.back(mount), 'Selection back must pop content from the active keyed child.')
-  assertNavKind(!kind.canGoBack(mount), 'Selection back must restore the keyed child root.')
+  Switch(profile, {
+    stack: () => {
+      kind.present(mount, detail, {})
+      kind.present(mount, detail, {})
+      assertNavKind(kind.dismiss(mount), 'Stack dismiss must pop the newest occurrence.')
+      assertNavKind(kind.canGoBack(mount), 'Stack dismiss must preserve the covered occurrence.')
+      assertNavKind(kind.back(mount), 'Stack back must pop the remaining presented occurrence.')
+      assertNavKind(!kind.dismiss(mount), 'Stack dismiss must be root-safe.')
+    },
+    slot: () => {
+      kind.present(mount, detail, {})
+      kind.present(mount, detail, {})
+      assertNavKind(kind.dismiss(mount), 'Slot dismiss must restore Initial after replacement.')
+      assertNavKind(!kind.canGoBack(mount), 'Slot replacement must not accumulate history.')
+      assertNavKind(!kind.dismiss(mount), 'Slot dismiss must be root-safe.')
+    },
+    selection: () => {
+      assertNavKind(kind.activate(mount, 'settings'), 'Selection must activate a declared keyed child.')
+      assertNavKind(!kind.canGoBack(mount), 'Selection activation must not create content history.')
+      assertNavKind(!kind.activate(mount, 'missing'), 'Selection must reject an unknown keyed child.')
+      kind.present(mount, detail, {})
+      assertNavKind(kind.back(mount), 'Selection back must pop content from the active keyed child.')
+      assertNavKind(!kind.canGoBack(mount), 'Selection back must restore the keyed child root.')
+    },
+  })
 }
 
 function assertNavKind(condition: unknown, message: string): asserts condition {

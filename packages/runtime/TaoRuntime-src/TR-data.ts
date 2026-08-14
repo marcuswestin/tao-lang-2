@@ -1,3 +1,4 @@
+import { Switch } from '@shared/core'
 import React from 'react'
 import { DataLoadRecovery } from './TR-data-load-recovery'
 
@@ -933,22 +934,14 @@ function queryFilterValue(
 
 function matchesFilter(row: StoredRow, filter: TaoQueryFilter, expected: unknown): boolean {
   const actual = row[filter.field]
-  if (filter.operator === '==') {
-    return Object.is(actual, expected)
-  }
-  if (filter.operator === '!=') {
-    return !Object.is(actual, expected)
-  }
-  if (filter.operator === '<') {
-    return compare(actual, expected) < 0
-  }
-  if (filter.operator === '<=') {
-    return compare(actual, expected) <= 0
-  }
-  if (filter.operator === '>') {
-    return compare(actual, expected) > 0
-  }
-  return compare(actual, expected) >= 0
+  return Switch(filter.operator, {
+    '==': () => Object.is(actual, expected),
+    '!=': () => !Object.is(actual, expected),
+    '<': () => compare(actual, expected) < 0,
+    '<=': () => compare(actual, expected) <= 0,
+    '>': () => compare(actual, expected) > 0,
+    '>=': () => compare(actual, expected) >= 0,
+  })
 }
 
 function compare(left: unknown, right: unknown): number {
@@ -1101,13 +1094,12 @@ function validateDefinition(definition: TaoDataSchemaDefinition): void {
 }
 
 function valueMatchesKind(value: unknown, kind: DataPrimitive): boolean {
-  if (kind === 'boolean') {
-    return typeof value === 'boolean'
-  }
-  if (kind === 'number' || kind === 'time') {
-    return typeof value === 'number' && Number.isFinite(value)
-  }
-  return typeof value === 'string'
+  return Switch(kind, {
+    boolean: () => typeof value === 'boolean',
+    number: () => typeof value === 'number' && Number.isFinite(value),
+    text: () => typeof value === 'string',
+    time: () => typeof value === 'number' && Number.isFinite(value),
+  })
 }
 
 function valueType(value: unknown): string {
