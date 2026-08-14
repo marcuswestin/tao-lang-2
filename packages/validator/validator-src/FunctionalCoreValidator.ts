@@ -346,19 +346,15 @@ function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
 }
 
 function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
-  switch (category) {
-    case 'query':
-      return new Set(['empty', 'loading', 'error'])
-    case 'entity':
-      return new Set(['loading', 'missing', 'unauthorized', 'error'])
-    case 'list':
-    case 'text':
-      return new Set(['empty'])
-    case 'boolean':
-      return new Set(['true', 'false'])
-    default:
-      return new Set()
-  }
+  return Switch(category, {
+    boolean: () => new Set(['true', 'false']),
+    entity: () => new Set(['loading', 'missing', 'unauthorized', 'error']),
+    list: () => new Set(['empty']),
+    query: () => new Set(['empty', 'loading', 'error']),
+    text: () => new Set(['empty']),
+    unresolved: () => new Set<string>(),
+    unsupported: () => new Set<string>(),
+  })
 }
 
 function subjectCaseLabel(category: SubjectCaseCategory): string {
