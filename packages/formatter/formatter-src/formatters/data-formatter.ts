@@ -13,7 +13,7 @@ export default {
   },
 
   EntityDataField(f) {
-    f.oneSpaceBeforeProperty('primitive', 'boolean')
+    f.oneSpaceBeforeProperty('primitive', 'boolean', 'negativeName')
     f.oneSpaceAround('/')
     f.oneSpaceBefore('(')
     f.noSpaceAfter('(')
@@ -53,7 +53,7 @@ export default {
   },
 
   BooleanWhereClause(f) {
-    f.oneSpaceAfter('where')
+    f.oneSpaceAfter('where', 'is')
   },
 
   OrderClause(f) {

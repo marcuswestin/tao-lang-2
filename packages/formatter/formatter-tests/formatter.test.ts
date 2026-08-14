@@ -76,7 +76,7 @@ Describe('Tao formatter data declarations', () => {
         CreatedAt time(default now)
         Pinned yes / no
         Documents(relation Documents,auto-delete)}
-        data Documents/Document{Final yes / no Draft(default Draft) Workspace(relation Workspace)}
+        data Documents/Document{Final yes / no       Draft(default Draft) Workspace(relation Workspace)}
       `,
       `
         data Workspaces / Workspace {
@@ -376,7 +376,7 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('formats current query and loop headers', async () => {
     await testFormatCode(
-      `view Main Workspace{render Col(){query Drafts from Workspace.Documents{where is Draft}\nloop Drafts/Document{Text(Document.Title)}}}`,
+      `view Main Workspace{render Col(){query Drafts from Workspace.Documents{where   is   Draft}\nloop Drafts/Document{Text(Document.Title)}}}`,
       `
         view Main Workspace {
            render Col() {
