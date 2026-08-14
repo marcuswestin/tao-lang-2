@@ -170,16 +170,22 @@ function resolveRenderEventBindings(
     pairs.push({ handler, parameter })
   }
 
-  const implicitChange = resolveImplicitChangeBinding(render, view, argumentPairs, pairs, diagnostics)
+  const implicitChange = resolveImplicitChangeBinding(render, view, {
+    argumentPairs,
+    eventPairs: pairs,
+    diagnostics,
+  })
   return { pairs, implicitChange, diagnostics }
 }
 
 function resolveImplicitChangeBinding(
   render: AST.Render,
   view: AST.RenderableDeclaration,
-  argumentPairs: readonly RenderInvocationPair[],
-  eventPairs: readonly RenderEventBindingPair[],
-  diagnostics: RenderEventBindingDiagnostic[],
+  { argumentPairs, eventPairs, diagnostics }: {
+    argumentPairs: readonly RenderInvocationPair[]
+    eventPairs: readonly RenderEventBindingPair[]
+    diagnostics: RenderEventBindingDiagnostic[]
+  },
 ): ImplicitChangeBinding | undefined {
   const changeParameter = AST.parametersOf(view).find(candidate => Type.parameterName(candidate) === 'Change')
   if (

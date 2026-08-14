@@ -65,8 +65,14 @@ export function resolveArgumentBindings(
   reportDuplicateParameterTypes([...remainingParameters], diagnostics)
   const duplicateArgumentTypes = reportDuplicateArgumentTypes([...remainingArgs], diagnostics)
 
-  bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesExactlyMatch, duplicateArgumentTypes)
-  bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesAreAssignable, duplicateArgumentTypes)
+  bindArguments(remainingArgs, remainingParameters, pairs, {
+    matches: argumentTypesExactlyMatch,
+    blockedArgumentTypes: duplicateArgumentTypes,
+  })
+  bindArguments(remainingArgs, remainingParameters, pairs, {
+    matches: argumentTypesAreAssignable,
+    blockedArgumentTypes: duplicateArgumentTypes,
+  })
 
   const matchGraph = argumentMatchGraph(remainingArgs, remainingParameters, duplicateArgumentTypes)
   const ambiguousArguments = new Set<AST.Argument>()
@@ -214,8 +220,10 @@ function bindArguments(
   remainingArgs: Set<AST.Argument>,
   remainingParameters: Set<AST.ParameterDeclaration>,
   pairs: RenderInvocationPair[],
-  matches: (argument: AST.Argument, parameter: AST.ParameterDeclaration) => boolean,
-  blockedArgumentTypes: ReadonlySet<string> = new Set(),
+  { matches, blockedArgumentTypes }: {
+    matches: (argument: AST.Argument, parameter: AST.ParameterDeclaration) => boolean
+    blockedArgumentTypes: ReadonlySet<string>
+  },
 ): void {
   bindUnambiguousPairs({
     candidates: remainingArgs,

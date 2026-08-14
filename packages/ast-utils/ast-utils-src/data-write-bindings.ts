@@ -54,8 +54,14 @@ export function resolveDataWriteBindings(
     reportDuplicateDataFieldTypes([...remainingFields], diagnostics)
   }
   const duplicateWriteTypes = reportDuplicateWriteTypes([...remainingWrites], diagnostics)
-  bindDataWriteFields(remainingWrites, remainingFields, pairs, dataWriteTypesExactlyMatch, duplicateWriteTypes)
-  bindDataWriteFields(remainingWrites, remainingFields, pairs, dataWriteTypesAreAssignable, duplicateWriteTypes)
+  bindDataWriteFields(remainingWrites, remainingFields, pairs, {
+    matches: dataWriteTypesExactlyMatch,
+    blockedWriteTypes: duplicateWriteTypes,
+  })
+  bindDataWriteFields(remainingWrites, remainingFields, pairs, {
+    matches: dataWriteTypesAreAssignable,
+    blockedWriteTypes: duplicateWriteTypes,
+  })
 
   const graph = dataWriteMatchGraph(remainingWrites, remainingFields, duplicateWriteTypes)
   const ambiguousWrites = new Set<AST.DataWriteField>()
@@ -175,8 +181,10 @@ function bindDataWriteFields(
   remainingWrites: Set<AST.DataWriteField>,
   remainingFields: Set<DataFieldDefinition>,
   pairs: DataWriteBindingPair[],
-  matches: (write: AST.DataWriteField, field: DataFieldDefinition) => boolean,
-  blockedWriteTypes: ReadonlySet<string>,
+  { matches, blockedWriteTypes }: {
+    matches: (write: AST.DataWriteField, field: DataFieldDefinition) => boolean
+    blockedWriteTypes: ReadonlySet<string>
+  },
 ): void {
   bindUnambiguousPairs({
     candidates: remainingWrites,

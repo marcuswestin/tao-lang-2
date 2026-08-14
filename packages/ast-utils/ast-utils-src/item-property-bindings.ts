@@ -48,15 +48,19 @@ export function resolveItemPropertyBindings(
     remainingProperties,
     remainingExpected,
     pairs,
-    propertyTypesExactlyMatch,
-    duplicateProvidedPropertyTypes,
+    {
+      matches: propertyTypesExactlyMatch,
+      blockedPropertyTypes: duplicateProvidedPropertyTypes,
+    },
   )
   bindItemProperties(
     remainingProperties,
     remainingExpected,
     pairs,
-    propertyTypesAreAssignable,
-    duplicateProvidedPropertyTypes,
+    {
+      matches: propertyTypesAreAssignable,
+      blockedPropertyTypes: duplicateProvidedPropertyTypes,
+    },
   )
 
   const matchGraph = propertyMatchGraph(remainingProperties, remainingExpected, duplicateProvidedPropertyTypes)
@@ -207,8 +211,10 @@ function bindItemProperties(
   remainingProperties: Set<AST.ItemProperty>,
   remainingExpected: Set<AST.TypeProperty>,
   pairs: ItemPropertyBindingPair[],
-  matches: (property: AST.ItemProperty, expected: AST.TypeProperty) => boolean,
-  blockedPropertyTypes: ReadonlySet<string> = new Set(),
+  { matches, blockedPropertyTypes }: {
+    matches: (property: AST.ItemProperty, expected: AST.TypeProperty) => boolean
+    blockedPropertyTypes: ReadonlySet<string>
+  },
 ): void {
   bindUnambiguousPairs({
     candidates: remainingProperties,
