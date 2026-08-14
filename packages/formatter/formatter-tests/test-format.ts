@@ -1,9 +1,8 @@
 import { Text } from '@shared'
-import { Expect } from '@shared/test'
+import { Expect, fence, tsFence } from '@shared/test'
 import Formatter from '../formatter-src/formatter'
 
-export const tsFence = '```ts'
-export const fence = '```'
+export { fence, tsFence }
 
 const formatterSession = Formatter.createSession()
 
@@ -15,4 +14,14 @@ export async function testFormatCode(source: string, expected: string): Promise<
   Expect(formatted).toBe(expectedText)
   Expect(await formatterSession.formatCode(formatted)).toBe(expectedText)
   return formatted
+}
+
+/** formats returns a test callback that asserts canonical formatted source. */
+export function formats(source: string, expected: string): () => Promise<string> {
+  return async () => await testFormatCode(source, expected)
+}
+
+/** formatsUnchanged returns a test callback that asserts source is already canonical. */
+export function formatsUnchanged(source: string): () => Promise<string> {
+  return async () => await testFormatCode(source, source)
 }
