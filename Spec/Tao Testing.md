@@ -1,10 +1,10 @@
 # Tao Testing
 
-Status: design draft with an initial v0 implementation in progress. The current repo has package tests, an Expo runtime render harness, and a minimal Tao-native app smoke-test slice: `test`, `check`, `run <AppName>`, `expect text`, `expect missing text`, test-plan IR, and `tao test [path]`. It does not have `render` test subjects, state/action test steps, datasource test seeding, provider test adapters, or the richer CLI options described below yet.
+Status: design draft with an executable v0 implementation. The current repo has package tests, an Expo runtime render harness, and Tao-native app behavior steps: `test`, `check`, `run <AppName>`, `expect [missing] text|label|id|placeholder`, `expect input label|id|placeholder "..." value "..."`, `press text|label|id|placeholder`, `enter "value" into text|label|id|placeholder`, `submit text|label|id|placeholder`, bare `back`, deterministic `data Schema loading|ready|error "..."`, test-plan IR, and `tao test [path]`. Every check gets a fresh in-memory data provider and reset navigation history; `back` uses the active stack's ordinary root-safe reducer. The executable subset does not yet have focused `render` subjects, datasource row seeding, remote-provider adapters, assertion retrying, or the richer CLI options described below.
 
 This design starts with app and UI behavior tests. Tests can live in regular `.tao` files or sidecar `.test.tao` files. Package testing is deferred until Tao package semantics and app/UI testing are stable.
 
-Examples that launch an app through the currently implemented root `view` reflect the transitional runtime. The navigation foundation migrates intended app values to required `Name` and `Navigator` properties and makes `run` accept complete configured app values, as specified in `Tao Presentation and Navigation.md`.
+`run` accepts a declared app whose block selects either one root `view` or one root `stack`, as specified in `Tao Presentation and Navigation.md`.
 
 ## Goals
 
@@ -25,7 +25,7 @@ Non-goals for the first testing design:
 - No direct action invocation as a test step.
 - No generated TypeScript or React component inspection.
 - No default connection to real production datasources.
-- No Tao-owned in-memory datasource provider or automatic datasource row seeding in the first testing design.
+- No user-authored provider adapters or automatic datasource row seeding in the executable v0 surface.
 - No clock or time-control syntax in the first testing design.
 
 ## Roadmap Alignment
@@ -43,7 +43,7 @@ test "optional description" {
    let Foo = Foo "ASD"
 
    check "optional description" {
-      render ViewName Foo, Cats 1 with UserName "Henry" { }
+      render ViewName(Foo, Cats 1) with UserName "Henry" { }
 
       expect text "Henry has 1 cat"
       press text "Add cat"
@@ -81,7 +81,7 @@ Some things to notice:
 
 - `let Foo = ...` and `let AppNameStage = ...` are immutable test-local helper bindings visible to checks in the same `test`.
 - Each `check` starts its own app or focused render subject. Checks do not share runtime state.
-- `render ViewName Foo, Cats 1 with UserName "Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
+- `render ViewName(Foo, Cats 1) with UserName "Henry" { }` mounts `ViewName` with normal view parameters and a state override. `ViewName` must declare `UserName` as state; the override does not create new state.
 - `run AppName with { ... }` launches a one-off app expression without requiring a named staging app.
 - `run AppNameStage` launches a named app variant declared by applying `with { ... }` to an app object.
 - `expect text "..."`, `press text "..."`, `write "..."`, and later focused selectors operate through rendered UI and accessibility-visible behavior.
@@ -89,7 +89,7 @@ Some things to notice:
 The test runner should report each check with enough context to identify the suite, check, launch subject, and result. A focused render check can be displayed in a shape like:
 
 ```text
-test "optional description" check "optional description" render ViewName Foo, Cats 1 with UserName "Henry" { } passed
+test "optional description" check "optional description" render ViewName(Foo, Cats 1) with UserName "Henry" { } passed
 ```
 
 Inline tests share the file's normal scope and are stripped from app builds and publishes:
@@ -100,7 +100,7 @@ app RuntimeStdlibTests {
 }
 
 view MainView {
-   render Text "Runtime stdlib smoke"
+   render Text("Runtime stdlib smoke")
 }
 
 test "Runtime stdlib" {
@@ -236,13 +236,13 @@ The `run ... with { ... }` block is an app expression overlay. It is useful when
 ```tao
 test "focused UI behavior" {
    check "renders validation message" {
-      render ViewX ParamA "abc", ParamB "asd" { }
+      render ViewX(ParamA "abc", ParamB "asd") { }
 
       expect text "asd"
    }
 
    check "disabled save button ignores presses" {
-      render SaveControls ItemId "task-1" with CanSave.false { }
+      render SaveControls(ItemId "task-1") with CanSave.false { }
 
       expect text "Save"
       press text "Save"
@@ -250,15 +250,15 @@ test "focused UI behavior" {
    }
 
    check "task row renders staging data" {
-      render TaskRow TaskId "task-1" using app TodoStaging { }
+      render TaskRow(TaskId "task-1") using app TodoStaging { }
 
       expect text "Book dentist"
    }
 
    check "field row layout renders supplied controls" {
-      render FieldRow {
-         Text "Email"
-         TextInput Email
+      render FieldRow() {
+         Text("Email")
+         TextInput(Email)
       }
 
       expect text "Email"
@@ -268,9 +268,9 @@ test "focused UI behavior" {
 
 Render rules:
 
-- `render` uses the same Tao invocation shape as normal render code. The test language should not invent a separate parameter grammar.
+- `render` uses the same mandatory-parenthesis invocation shape as normal render code. Arguments end at `)`; any layout clause, test setup clause, or child block follows it.
 - If Tao accepts commas in render call sites, `render` checks should accept the same comma style.
-- `render <ViewName> <params> with <StateOverride>, ... { }` sets initial state for the mounted subject.
+- `render <ViewName>(<params>) with <StateOverride>, ... { }` sets initial state for the mounted subject.
 - State overrides must name existing state declarations on the rendered subject or its focused runtime context. They do not create new state.
 - The render block supplies child UI or named slot fills when the subject accepts them. An empty block is valid when there are no children or slots.
 - A focused render gets a minimal app shell and can optionally name an app capability context with `using app <AppName>`.
@@ -280,6 +280,8 @@ Render rules:
 This gives package-like confidence without introducing package unit tests. A package can test exported `view`, `frame`, `layout`, or `ui` declarations through a focused render subject. A nav requires a harness app because navs mount only at app roots, as app auxiliaries, or inside other navs. If a full harness app is needed, it should live at a workspace root, because package folders cannot declare apps.
 
 ## Data And Datasource Setup
+
+The executable v0 keeps the app's `data Schema { ... }` declaration separate from `datasource Schema through Local|Memory` in the app block. Regardless of that production choice, each check replaces the schema provider with a fresh Memory store. `data Schema loading`, `data Schema error "message"`, and `data Schema ready` can then drive visible provider states without touching durable data. The configured app variants below remain future design.
 
 Testing should keep Tao's schema model separate from provider configuration:
 
@@ -334,49 +336,43 @@ Draft meanings:
 - `app` selects the datasource capability it should run with.
 - A check targets the app or app variant whose datasource configuration is appropriate for the test.
 
-For now, `tao test` should not implement a Tao-owned in-memory provider. This keeps the first testing implementation closer to the current Expo runtime and avoids designing a fake provider before Tao's real datasource contract exists.
+The v0 Memory replacement is deliberately provider-level rather than a separate row DSL. It exercises the same schema/query/write runtime as Local while making checks isolated and deterministic. Authored seed rows, remote integration adapters, credentials, and cleanup policy remain future work.
 
 Consequences:
 
-- Datasource checks are integration-style checks against an explicitly configured datasource, such as a local provider, staging app id, or test account.
-- A datasource-backed check should target a named test, staging, or local app variant, or use an explicit `run App with { datasource... }` override. Running tests against production configuration should require explicit opt-in.
-- CI must provide the named datasource configuration or skip those checks.
-- Isolation, cleanup, setup row creation, and provider reset are provider/test-environment responsibilities for now.
+- Current checks are isolated behavior tests against the automatically substituted Memory provider.
+- Future integration checks may target a named local, staging, or remote app variant. Production configuration must require explicit opt-in.
+- CI must provide any future named remote configuration or skip those integration checks.
+- Provider reset is owned by the v0 runner; authored setup rows and remote cleanup remain future provider/test-environment responsibilities.
 - Future Tao-owned datasource seeding can still be added later, but it should build on the real `data` and `datasource` declarations instead of a separate test-only row DSL.
 
 ## Acting
 
 Test steps simulate user behavior. They run in source order. After each action, the runner waits for Tao state, rendering, datasource updates, and known runtime work to settle before continuing.
 
-V1 action steps:
+Current executable action steps:
 
 ```tao
 press text "Add next task"
 press label "New task title"
 press placeholder "Search"
-press id AddTaskButton
+press id "AddTaskButton"
 
-write "Buy oat milk"
-clear
-submit
-
+enter "Buy oat milk" into label "New task title"
+submit placeholder "Search"
 back
-scroll until text "Archived tasks"
 ```
 
 Rules:
 
 - `press` targets a rendered interactive element through an explicit selector. It does not call a Tao action by name.
 - `press text "..."` targets a user-visible interactive element by exact rendered or accessible text.
-- `press <input selector>` focuses an input.
-- `write "..."` writes into the currently focused editable control.
-- `clear` clears the currently focused editable control.
-- `submit` submits the currently focused editable control or form when the runtime supports it.
-- `back` uses the runtime's normal back/navigation behavior.
-- `scroll until <selector>` scrolls through the rendered surface until a selector is rendered or the assertion timeout expires.
-- Tests do not use sleeps. Waiting is modeled through auto-waiting assertions and runtime settling.
+- `enter "..." into <selector> "..."` changes exactly one matching input directly.
+- `submit <selector> "..."` submits exactly one matching input directly.
+- `back` uses the mounted app stack's normal reducer and safely does nothing at its root.
+- `write`, `clear`, scrolling, and sleep steps are not part of the executable v0.
 
-The older `type "..." into ...` shape is understandable, but `press <input selector>` followed by `write "..."` is more consistent with how users interact with apps: focus a control, then type. It also composes better with keyboard behavior, selection, replacement, and multi-step editing later.
+An eventual focus/`write` sequence may better model keyboard behavior, selection, replacement, and multi-step editing. The direct `enter ... into ...` form is intentionally deterministic and sufficient for the current behavior suites.
 
 ## Selectors
 
@@ -398,7 +394,7 @@ expect missing text "Loading tasks..."
 press text "Add next task"
 press label "New task title"
 press placeholder "Search"
-press id NameInput
+press id "NameInput"
 ```
 
 Text selectors are explicit in v1. There is no bare `press "..."` or bare `expect "..."` shorthand in this design, because bare strings become ambiguous once label, placeholder, role/name, id, and i18n selectors exist.
@@ -415,37 +411,37 @@ Those selectors require the Tao stdlib and runtime components to emit platform a
 
 ### Render IDs
 
-Unique strings are a good start, and they are straightforward to map to React Native Testing Library test-id queries. They are not enough when the same string appears several times, when text is translated, or when an element has no text.
+The current stdlib's interactive controls expose an optional `.Id "..."` parameter that lowers to React Native `testID`; tests select it with `id "..."`. Inline interpolation can produce per-row IDs. A general render-site ID syntax for arbitrary UI remains future work.
 
-The spec should add a render-id syntax that compiles to React Native `testID` and any equivalent runtime selector metadata.
+Candidate future general render-id syntaxes include:
 
 Candidate syntaxes:
 
 ```tao
-NameInput: TextInput Name
-@NameInput TextInput Name
-TextInput Name @NameInput
-TextInput Name: NameInput
-TextInput Name {
+NameInput: TextInput(Name)
+@NameInput TextInput(Name)
+TextInput(Name) @NameInput
+TextInput(Name): NameInput
+TextInput(Name) {
    id NameInput
 }
-TextInput Name [id NameInput]
+TextInput(Name) [id NameInput]
 ```
 
 Recommended direction: use a render ID prefix for authored Tao UI, and compile it to runtime test/accessibility identifiers:
 
 ```tao
-NameInput: TextInput Name
-SaveButton: Button "Save", Save
+NameInput: TextInput(Name)
+SaveButton: Button("Save", Save)
 ```
 
-Then tests target it explicitly:
+That future syntax would let tests target arbitrary rendered nodes explicitly:
 
 ```tao
-press id NameInput
+press id "NameInput"
 write "Ro"
-expect input id NameInput value "Ro"
-press id SaveButton
+expect input id "NameInput" value "Ro"
+press id "SaveButton"
 ```
 
 Why this shape:
@@ -491,29 +487,29 @@ Render slot direction from old repo work:
 
 ```tao
 view Button Label text, Press action {
-   Row {
+   Row() {
       @icon
-      Text Label
+      Text(Label)
 }  }
 
-Button "Foo", Save {
-   @icon Image SaveIcon
+Button("Foo", Save) {
+   @icon Image(SaveIcon)
 }
 ```
 
 Render IDs name concrete rendered nodes:
 
 ```tao
-NameInput: TextInput Name
-SaveButton: Button "Save", Save
+NameInput: TextInput(Name)
+SaveButton: Button("Save", Save)
 ```
 
 The distinction:
 
 - `@icon` declares, invokes, or fills a named hole in a view's render surface.
 - `NameInput:` assigns a stable ID to the concrete node produced at that render site.
-- `press id NameInput` targets the concrete rendered node.
-- `press id SaveButton` targets the whole labeled button, not any internal or slotted child.
+- `press id "NameInput"` targets the concrete rendered node.
+- `press id "SaveButton"` targets the whole labeled button, not any internal or slotted child.
 
 This gives tests stable handles without making slots double as test IDs.
 
@@ -527,11 +523,11 @@ V1 assertions:
 expect text "TODOs"
 expect missing text "Loading tasks..."
 
-expect id EmptyState
-expect missing id LoadingSpinner
+expect id "EmptyState"
+expect missing id "LoadingSpinner"
 
 expect input label "New task title" value ""
-expect input id NameInput value "Ro"
+expect input id "NameInput" value "Ro"
 ```
 
 Future element-state assertions:
@@ -587,19 +583,18 @@ Alternative assertion names considered:
 - `expect present "..."`: readable, but less specific than text/id/input selectors.
 - `expect not text "..."`: explicit inverse, but `expect missing text "..."` generalizes cleanly to all selector kinds.
 
-## Auto-Waiting And Determinism
+## Settling And Determinism
 
-Assertions and actions auto-wait by default.
+The executable v0 performs each action inside the React Native test harness's `act` boundary and observes the resulting rendered tree synchronously. It does not yet retry assertions or wait for arbitrary asynchronous app work.
 
-- Before a press, the target must exist, be rendered, be enabled, and be actionable for the selected runtime.
-- Before writing, an editable control must be focused and editable.
-- `expect text` and `expect missing text` retry until they pass or time out.
-- The runner waits for known Tao runtime work after each action, such as React updates, Tao state propagation, datasource provider flushes, and navigation completion.
-- Waiting uses the real test runner timeout and event-driven settling or short rendered-tree retries. There is no sleep step and no v1 virtual clock to advance.
+- A direct action target must match exactly one rendered node; input-value assertions also require exactly one input.
+- `expect` reads the current rendered tree and does not retry yet.
+- Tao state and navigation changes caused synchronously by a test event are flushed through `act`.
+- There is no sleep step, virtual clock, or public provider-flush step.
 - Each check runs with a fresh app/subject instance and reset runtime capabilities.
-- Datasource state comes from the configured datasource; provider cleanup or reset is outside the v1 runner unless a provider-specific integration environment adds it explicitly.
+- Each check receives a fresh Memory store even when the app selects Local; deterministic provider status steps do not touch durable data.
 
-This follows the useful behavior of modern UI test tools: retrying assertions, realistic user events, semantic selectors, and runtime synchronization instead of sleeps.
+Future adapters should add bounded retrying and event-driven settling without changing the test-plan ownership boundary or introducing sleeps into Tao source.
 
 ## CLI
 
@@ -627,16 +622,16 @@ CLI behavior:
 - `--fail-fast` stops after the first failing check.
 - Failure output includes the test name, check name, failing step, source location, selected runtime, rendered UI summary, and artifacts where the runtime supports them.
 
-The current v0 implementation exposes `tao test [path]` for Tao files with inline or sidecar test declarations. It still delegates execution to the runtime Jest harness; richer CLI filtering, watch mode, JSON output, artifacts, and alternate runtimes remain future work.
+The current v0 implementation exposes `tao test [path]` for Tao files with inline or sidecar test declarations. Press, text entry, input submission, and existence assertions resolve exact rendered text, accessibility labels, placeholders, or stable IDs through the runtime adapter. Input-value assertions accept label, placeholder, or ID selectors; `back` dispatches through the active stack. Each check receives isolated memory data, and `data Schema loading|ready|error "..."` drives provider status without external services or durable writes. Execution still delegates to the runtime Jest harness; richer CLI filtering, watch mode, JSON output, artifacts, retries, and alternate runtimes remain future work.
 
-## First Implementation Slice
+## Executable V0 Slice
 
-This spec should not block useful Test App coverage on the full CLI and runtime-adapter design. The first repo slice can be much smaller:
+The implemented repo slice intentionally stays smaller than the complete design:
 
-- Parse a minimal test subset: inline `test`, sidecar `.test.tao`, nested `check`, `run <AppName>`, `expect text`, and `expect missing text`.
-- Compile those checks to a small test-plan IR with source locations.
-- Execute app-subject checks through the existing Expo runtime Jest harness in `packages/runtime/runtime-tests/test-compile-app.tsx`, especially `compileAndRenderApp` and `testCompileApp`.
-- Defer `render`, `run ... with { ... }`, input actions, datasource-specific setup/reset, focused non-app subjects, and richer `tao test` options until after rendered smoke checks are running for `Apps/Test Apps/*`.
+- It parses inline `test`, sidecar `.test.tao`, nested `check`, `run <AppName>`, direct selectors, input-value assertions, data-status steps, and bare `back`.
+- It compiles checks to a small test-plan IR with source locations.
+- It executes full-app checks through the existing Expo runtime Jest harness.
+- It defers focused `render`, `run ... with { ... }`, focus/write sequences, row seeding, remote integration adapters, and richer `tao test` options.
 
 That path lets Test Apps start gaining Tao-authored behavior checks while preserving the broader design.
 
@@ -761,22 +756,22 @@ Navigation tests run an app and drive user-visible controls. They do not mount a
 ```tao
 test "Navigation foundation" {
    check "pushes a deterministic detail and handles back" {
-      run WriterFoundationTest
+      run WordFlowerFoundationTest
 
       expect text "Foundation home marker"
       expect missing text "Foundation detail marker"
       press text "Open deterministic detail"
       expect text "Foundation detail marker"
-      back
+      press id "back"
       expect text "Foundation home marker"
       expect missing text "Foundation detail marker"
    }
 }
 ```
 
-Invalid-target diagnostics use focused validator fixtures for statically impossible paths and a runtime harness that first unmounts an otherwise valid configured target before invoking it. The runtime check expects `navigation.target.not-found` and verifies that visible content is unchanged; it does not depend on a nonexistent control in the full Writer sketch.
+Invalid-target diagnostics use focused validator fixtures for statically impossible paths and a runtime harness that first unmounts an otherwise valid configured target before invoking it. The runtime check expects `navigation.target.not-found` and verifies that visible content is unchanged; it does not depend on a nonexistent control in the full WordFlower sketch.
 
-`expect diagnostic code ...` is planned syntax for structured development diagnostics. Tests should prefer stable diagnostic codes plus optional fields over matching prose. Navigation behavior follows `Tao Presentation and Navigation.md`: Tao statements reduce one semantic tree synchronously, while native back, selection, dismissal, and close events dispatch into that same reducer.
+`expect diagnostic code ...` remains planned syntax for structured development diagnostics. Static invalid destinations and arguments use focused validator fixtures. Navigation behavior follows `Tao Presentation and Navigation.md`: `present` and `back` synchronously update one runtime-owned stack, and native hardware back dispatches the same pop operation.
 
 ## Package Testing
 

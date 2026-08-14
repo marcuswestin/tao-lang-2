@@ -3,10 +3,27 @@ import { Switch } from '@shared'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
 export type TaoType =
-  | { kind: 'primitive'; primitive: 'text' | 'number' | 'action'; nominal?: AST.TypeDefinition }
-  | { kind: 'list'; nominal?: AST.TypeDefinition }
+  | {
+    kind: 'primitive'
+    primitive: 'text' | 'number' | 'boolean' | 'time' | 'none'
+    nominal?: AST.TypeDefinition
+  }
+  | {
+    kind: 'primitive'
+    primitive: 'action'
+    parameters: readonly TaoActionParameter[]
+    nominal?: AST.TypeDefinition
+  }
+  | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
+  | { kind: 'entity'; entity: AST.DataEntity }
   | { kind: 'unresolved' }
+
+/** TaoActionParameter declares one positional input accepted by an action value. */
+export type TaoActionParameter = {
+  type: TaoType
+  optional: boolean
+}
 
 /** TypeReferenceRoot declares the root definition and remaining member path for a named type reference. */
 export type TypeReferenceRoot = {
@@ -36,6 +53,8 @@ export class Type {
   /** referenceName returns the source-facing name of a Tao type reference. */
   static referenceName(type: AnyTypeReference): string {
     return Switch.type(type, {
+      ActionTypeReference: reference =>
+        `action(${reference.parameterTypes.map(parameter => Type.referenceName(parameter)).join(', ')})`,
       ConstructablePrimitiveTypeReference: reference => reference.primitive,
       NamedTypeReference: reference => {
         return [reference.root, ...reference.members].join('.')
@@ -67,9 +86,15 @@ export class Type {
   static displayName(type: TaoType): string {
     return Switch.kind(type, {
       unresolved: () => 'unresolved',
-      primitive: type => type.nominal ? Type.definitionName(type.nominal) : type.primitive,
+      primitive: type => {
+        if (type.nominal) {
+          return Type.definitionName(type.nominal)
+        }
+        return type.primitive === 'action' ? actionDisplayName(type) : type.primitive
+      },
       list: () => 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
+      entity: type => dataEntityName(type.entity),
     })
   }
 
@@ -96,6 +121,11 @@ export class Type {
   /** ofExpression resolves the static Tao type of a value expression. */
   static ofExpression(expression: AST.Expression): TaoType {
     return new TypeResolutionContext().ofExpression(expression)
+  }
+
+  /** ofAction resolves the positional callback signature of a named Tao action. */
+  static ofAction(action: AST.ActionDeclaration): TaoType {
+    return new TypeResolutionContext().ofAction(action)
   }
 
   /** ofArgument resolves the static Tao type an invocation argument contributes for binding. */
@@ -129,15 +159,48 @@ export class Type {
     if (!typesHaveCompatibleBase(actual, expected)) {
       return false
     }
+    if (actual.kind === 'list' && expected.kind === 'list' && !listTypeIsAssignable(actual, expected)) {
+      return false
+    }
+    if (isActionType(actual) && isActionType(expected) && !actionTypeIsAssignable(actual, expected)) {
+      return false
+    }
     if (nominalOf(expected)) {
       return actualSatisfiesExpectedNominal(actual, expected)
     }
     return true
   }
 
+  /** commonType returns a branch-safe type that every resolved input can satisfy. */
+  static commonType(types: readonly TaoType[]): TaoType | undefined {
+    if (types.length === 0 || types.some(isUnresolvedType)) {
+      return undefined
+    }
+
+    const candidates = types.filter(candidate => types.every(actual => Type.isAssignable(actual, candidate)))
+    return candidates.reduce<TaoType | undefined>((best, candidate) => {
+      if (!best) {
+        return candidate
+      }
+      return commonTypeCandidateIsPreferred(candidate, best) ? candidate : best
+    }, undefined)
+  }
+
+  /** entityOfReference resolves the canonical Schema.Entity entity type reference. */
+  static entityOfReference(reference: AST.NamedTypeReference): AST.DataEntity | undefined {
+    if (reference.members.length !== 1) {
+      return undefined
+    }
+    const schema = visibleDataDeclaration(reference, reference.root)
+    return schema ? Type.dataEntity(schema, reference.members[0]!) : undefined
+  }
+
   /** isCastCompatible returns whether a value can be type-fixed through typed value creation. */
   static isCastCompatible(actual: TaoType, target: TaoType): boolean {
     if (!typesHaveCompatibleBase(actual, target)) {
+      return false
+    }
+    if (isActionType(actual) && isActionType(target) && !actionTypeIsAssignable(actual, target)) {
       return false
     }
     const actualNominal = nominalOf(actual)
@@ -158,7 +221,13 @@ export class Type {
       return `${type.kind}:${definitionIdentityName(nominal)}`
     }
     if (isPrimitiveKind(type)) {
+      if (isActionType(type)) {
+        return `primitive:action(${type.parameters.map(actionParameterIdentityKey).join(',')})`
+      }
       return `${type.kind}:${type.primitive}`
+    }
+    if (type.kind === 'entity') {
+      return `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`
     }
     return type.kind
   }
@@ -166,6 +235,33 @@ export class Type {
   /** ofMemberAccess resolves the static type reached by a member access expression. */
   static ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
     return new TypeResolutionContext().ofMemberAccess(expression)
+  }
+
+  /** queryEntity resolves the entity selected by one query declaration. */
+  static queryEntity(query: AST.QueryDeclaration): AST.DataEntity | undefined {
+    return query.data.ref?.block.entities.find(entity => entity.collectionName === query.collectionName)
+  }
+
+  /** dataEntity resolves a schema entity by its singular source name. */
+  static dataEntity(data: AST.DataDeclaration | undefined, name: string): AST.DataEntity | undefined {
+    return data?.block.entities.find(entity => entity.name === name)
+  }
+
+  /** dataFieldType resolves the value type stored by a schema field. */
+  static dataFieldType(field: AST.DataField): TaoType {
+    if (field.primitive === 'text') {
+      return primitiveType('text')
+    }
+    if (field.primitive === 'number') {
+      return primitiveType('number')
+    }
+    if (field.primitive === 'boolean') {
+      return primitiveType('boolean')
+    }
+    if (field.primitive === 'time') {
+      return primitiveType('time')
+    }
+    return field.relation?.ref ? { kind: 'entity', entity: field.relation.ref } : unresolvedType()
   }
 
   /** definitionOfReference resolves a named type reference, including qualified item fields. */
@@ -211,6 +307,12 @@ function isPrimitiveKind(type: TaoType): type is Extract<TaoType, { kind: 'primi
   return type.kind === 'primitive'
 }
 
+function isActionType(
+  type: TaoType,
+): type is Extract<TaoType, { kind: 'primitive'; primitive: 'action' }> {
+  return type.kind === 'primitive' && type.primitive === 'action'
+}
+
 function isItemKind(type: TaoType): type is Extract<TaoType, { kind: 'item' }> {
   return type.kind === 'item'
 }
@@ -222,7 +324,76 @@ function itemShape(type: TaoType): AST.ItemTypeExpression | undefined {
 function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
   const bothTypesAreResolved = !isUnresolvedType(actual) && !isUnresolvedType(expected)
   const typesShareKind = actual.kind === expected.kind
-  return bothTypesAreResolved && typesShareKind && !primitivesDiffer(actual, expected)
+  if (!bothTypesAreResolved || !typesShareKind || primitivesDiffer(actual, expected)) {
+    return false
+  }
+  return actual.kind !== 'entity' || expected.kind !== 'entity' || actual.entity === expected.entity
+}
+
+function listTypeIsAssignable(
+  actual: Extract<TaoType, { kind: 'list' }>,
+  expected: Extract<TaoType, { kind: 'list' }>,
+): boolean {
+  if (!actual.element || !expected.element) {
+    return true
+  }
+  return Type.isAssignable(actual.element, expected.element)
+}
+
+function commonTypeCandidateIsPreferred(candidate: TaoType, current: TaoType): boolean {
+  if (candidate.kind === 'list' && current.kind === 'list') {
+    if (candidate.element && !current.element) {
+      return true
+    }
+    if (!candidate.element && current.element) {
+      return false
+    }
+  }
+
+  const candidateIsMoreSpecific = Type.isAssignable(candidate, current)
+    && !Type.isAssignable(current, candidate)
+  const currentIsMoreSpecific = Type.isAssignable(current, candidate)
+    && !Type.isAssignable(candidate, current)
+  if (candidateIsMoreSpecific !== currentIsMoreSpecific) {
+    return candidateIsMoreSpecific
+  }
+
+  return commonTypeCandidateKey(candidate) < commonTypeCandidateKey(current)
+}
+
+function commonTypeCandidateKey(type: TaoType): string {
+  if (type.kind === 'list') {
+    return `list(${type.element ? commonTypeCandidateKey(type.element) : ''})`
+  }
+  return Type.identityKey(type) ?? Type.displayName(type)
+}
+
+function actionTypeIsAssignable(
+  actual: Extract<TaoType, { kind: 'primitive'; primitive: 'action' }>,
+  expected: Extract<TaoType, { kind: 'primitive'; primitive: 'action' }>,
+): boolean {
+  const actualRequired = actual.parameters.filter(parameter => !parameter.optional).length
+  const expectedRequired = expected.parameters.filter(parameter => !parameter.optional).length
+  if (actualRequired > expectedRequired || actual.parameters.length < expected.parameters.length) {
+    return false
+  }
+  return expected.parameters.every((parameter, index) => {
+    const actualParameter = actual.parameters[index]
+    // Callback inputs are contravariant: an implementation must accept every value
+    // its declared callback contract permits the caller to provide.
+    return actualParameter !== undefined && Type.isAssignable(parameter.type, actualParameter.type)
+  })
+}
+
+function actionDisplayName(type: Extract<TaoType, { kind: 'primitive'; primitive: 'action' }>): string {
+  const parameters = type.parameters.map(parameter =>
+    `${Type.displayName(parameter.type)}${parameter.optional ? '?' : ''}`
+  )
+  return `action(${parameters.join(', ')})`
+}
+
+function actionParameterIdentityKey(parameter: TaoActionParameter): string {
+  return `${Type.identityKey(parameter.type) ?? 'unresolved'}${parameter.optional ? '?' : ''}`
 }
 
 function primitivesDiffer(actual: TaoType, expected: TaoType): boolean {
@@ -230,7 +401,7 @@ function primitivesDiffer(actual: TaoType, expected: TaoType): boolean {
 }
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
-  return isUnresolvedType(type) ? undefined : type.nominal
+  return isUnresolvedType(type) || type.kind === 'entity' ? undefined : type.nominal
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -270,7 +441,15 @@ class TypeResolutionContext {
 
   ofReference(type: AST.TypeReference): TaoType {
     return Switch.type(type, {
+      ActionTypeReference: reference =>
+        actionType(
+          reference.parameterTypes.map(parameter => ({ type: this.ofReference(parameter), optional: false })),
+        ),
       NamedTypeReference: reference => {
+        const entity = Type.entityOfReference(reference)
+        if (entity) {
+          return { kind: 'entity', entity }
+        }
         const definition = Type.definitionOfReference(reference)
         return definition ? this.ofDefinition(definition) : unresolvedType()
       },
@@ -282,6 +461,10 @@ class TypeResolutionContext {
     return Switch.type(type, {
       ConstructablePrimitiveTypeReference: reference => primitiveType(reference.primitive),
       NamedTypeReference: reference => {
+        const entity = Type.entityOfReference(reference)
+        if (entity) {
+          return { kind: 'entity', entity }
+        }
         const definition = Type.definitionOfReference(reference)
         return definition ? this.ofDefinition(definition) : unresolvedType()
       },
@@ -297,14 +480,45 @@ class TypeResolutionContext {
 
   ofExpression(expression: AST.Expression): TaoType {
     return Switch.type(expression, {
-      ActionExpression: () => primitiveType('action'),
-      ListLiteral: () => ({ kind: 'list' }),
+      ActionExpression: () => actionType([]),
+      BinaryExpression: binary => this.binaryExpressionType(binary),
+      BooleanLiteral: () => primitiveType('boolean'),
+      WhenExpression: when => this.whenExpressionType(when),
+      FunctionCallExpression: call =>
+        call.function.ref ? this.ofReference(call.function.ref.returnType) : unresolvedType(),
+      InterpolationExpression: () => primitiveType('text'),
+      ListLiteral: list => this.listLiteralType(list),
       MemberAccessExpression: access => this.ofMemberAccess(access),
+      NoneLiteral: () => primitiveType('none'),
       NumberLiteral: () => primitiveType('number'),
       StringLiteral: () => primitiveType('text'),
       TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
+      UnaryExpression: unary => unary.operator === 'not' ? primitiveType('boolean') : primitiveType('number'),
       ValueReference: reference => this.valueDeclarationType(reference.target.ref),
     })
+  }
+
+  private binaryExpressionType(expression: AST.BinaryExpression): TaoType {
+    if (['==', '!=', '<', '<=', '>', '>=', 'and', 'or'].includes(expression.operator)) {
+      return primitiveType('boolean')
+    }
+    const left = this.ofExpression(expression.left)
+    return expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text'
+      ? primitiveType('text')
+      : primitiveType('number')
+  }
+
+  private whenExpressionType(expression: AST.WhenExpression): TaoType {
+    const values = [...expression.branches.map(branch => branch.value), expression.otherwise.value]
+    return Type.commonType(values.map(value => this.ofExpression(value))) ?? unresolvedType()
+  }
+
+  private listLiteralType(list: AST.ListLiteral): TaoType {
+    if (list.elements.length === 0) {
+      return { kind: 'list' }
+    }
+    const element = Type.commonType(list.elements.map(candidate => this.ofExpression(candidate)))
+    return element ? { kind: 'list', element } : { kind: 'list' }
   }
 
   ofProperty(property: AST.TypeProperty): TaoType {
@@ -312,18 +526,48 @@ class TypeResolutionContext {
   }
 
   ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
+    if (AST.isQueryDeclaration(expression.target.ref)) {
+      const [first, ...remaining] = expression.members
+      if (first === 'Loading') {
+        return remaining.length === 0 ? primitiveType('boolean') : unresolvedType()
+      }
+      if (first === 'Error') {
+        return this.atMemberPath(primitiveType('text'), remaining)
+      }
+    }
     const rootType = this.valueDeclarationType(expression.target.ref)
     return this.atMemberPath(rootType, expression.members)
   }
 
   private valueDeclarationType(declaration: AST.ValueDeclaration | undefined): TaoType {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
-      ActionDeclaration: () => primitiveType('action'),
+      ActionDeclaration: declaration => this.ofAction(declaration),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
+      ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
+      QueryDeclaration: query => this.queryDeclarationType(query),
       StateDeclaration: state => this.stateDeclarationType(state),
       undefined: unresolvedType,
     })
+  }
+
+  ofAction(declaration: AST.ActionDeclaration): TaoType {
+    return actionType(
+      AST.parametersOf(declaration).map(parameter => ({
+        type: this.ofParameter(parameter),
+        optional: parameter.defaultValue !== undefined,
+      })),
+    )
+  }
+
+  private queryDeclarationType(query: AST.QueryDeclaration): TaoType {
+    const entity = Type.queryEntity(query)
+    return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }
+  }
+
+  private forStatementBindingType(statement: AST.ForStatement): TaoType {
+    const collection = this.ofExpression(statement.collection)
+    return collection.kind === 'list' ? collection.element ?? unresolvedType() : unresolvedType()
   }
 
   private aliasDeclarationType(alias: AST.AliasDeclaration): TaoType {
@@ -331,7 +575,11 @@ class TypeResolutionContext {
       return unresolvedType()
     }
     this.seenAliases.add(alias)
-    return this.ofExpression(alias.value)
+    try {
+      return this.ofExpression(alias.value)
+    } finally {
+      this.seenAliases.delete(alias)
+    }
   }
 
   private stateDeclarationType(state: AST.StateDeclaration): TaoType {
@@ -339,7 +587,11 @@ class TypeResolutionContext {
       return unresolvedType()
     }
     this.seenStates.add(state)
-    return this.ofExpression(state.value)
+    try {
+      return this.ofExpression(state.value)
+    } finally {
+      this.seenStates.delete(state)
+    }
   }
 
   private aliasAlreadySeen(declaration: AST.AliasDeclaration): boolean {
@@ -353,6 +605,32 @@ class TypeResolutionContext {
   private atMemberPath(root: TaoType, members: readonly string[]): TaoType {
     let current = root
     for (const member of members) {
+      if (
+        (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text'))
+        && member === 'Empty'
+      ) {
+        current = primitiveType('boolean')
+        continue
+      }
+      if (
+        (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text'))
+        && member === 'Count'
+      ) {
+        current = primitiveType('number')
+        continue
+      }
+      if (current.kind === 'entity') {
+        if (member === 'Id') {
+          current = primitiveType('text')
+          continue
+        }
+        const field = current.entity.block.fields.find(candidate => candidate.name === member)
+        if (!field) {
+          return unresolvedType()
+        }
+        current = Type.dataFieldType(field)
+        continue
+      }
       const itemType = isItemKind(current) ? current.item : undefined
       if (!itemType) {
         return unresolvedType()
@@ -371,11 +649,15 @@ class TypeResolutionContext {
       return unresolvedType()
     }
     this.seenTypeDefinitions.add(definition)
-    return Switch.type(definition, {
-      ParameterTypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
-      TypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
-      TypeProperty: property => this.typePropertyType(property),
-    })
+    try {
+      return Switch.type(definition, {
+        ParameterTypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
+        TypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
+        TypeProperty: property => this.typePropertyType(property),
+      })
+    } finally {
+      this.seenTypeDefinitions.delete(definition)
+    }
   }
 
   private typePropertyType(property: AST.TypeProperty): TaoType {
@@ -396,6 +678,7 @@ class TypeResolutionContext {
 
   private ofExpressionType(type: AST.TypeExpression): TaoType {
     return Switch.type(type, {
+      ActionTypeReference: reference => this.ofReference(reference),
       ItemTypeExpression: item => ({ kind: 'item', item }),
       NamedTypeReference: reference => this.ofReference(reference),
       PrimitiveTypeReference: reference => this.ofReference(reference),
@@ -403,18 +686,30 @@ class TypeResolutionContext {
   }
 }
 
-function primitiveType(primitive: AST.PrimitiveType): TaoType {
+function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
   return Switch(primitive, {
     text: () => ({ kind: 'primitive', primitive: 'text' }),
     number: () => ({ kind: 'primitive', primitive: 'number' }),
-    action: () => ({ kind: 'primitive', primitive: 'action' }),
+    boolean: () => ({ kind: 'primitive', primitive: 'boolean' }),
+    time: () => ({ kind: 'primitive', primitive: 'time' }),
+    action: () => actionType([]),
+    none: () => ({ kind: 'primitive', primitive: 'none' }),
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),
   })
 }
 
+function actionType(parameters: readonly TaoActionParameter[]): TaoType {
+  return { kind: 'primitive', primitive: 'action', parameters }
+}
+
 function definitionIdentityName(type: AST.TypeDefinition): string {
   return `${AST.getDocument(type).uri.path}#${Type.definitionName(type)}`
+}
+
+function dataEntityName(entity: AST.DataEntity): string {
+  const data = entity.$container.$container
+  return AST.isDataDeclaration(data) ? `${data.name}.${entity.name}` : entity.name
 }
 
 function unresolvedType(): TaoType {
@@ -422,13 +717,20 @@ function unresolvedType(): TaoType {
 }
 
 function withNominal(type: TaoType, nominal: AST.TypeDefinition): TaoType {
+  // Callback contracts are structural. Scoped parameter names must not prevent
+  // a matching named action from satisfying action(...) at another call site.
+  if (isActionType(type)) {
+    return type
+  }
   if (canCarryNominal(type)) {
     return { ...type, nominal }
   }
   return type
 }
 
-function canCarryNominal(type: TaoType): type is Exclude<TaoType, { kind: 'unresolved' }> {
+function canCarryNominal(
+  type: TaoType,
+): type is Extract<TaoType, { kind: 'primitive' | 'list' | 'item' }> {
   return isPrimitiveKind(type) || type.kind === 'list' || isItemKind(type)
 }
 
@@ -490,6 +792,21 @@ function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclarati
     return undefined
   }
   return typeDeclarationsInFile(root).find(type => type.name === name)
+}
+
+function visibleDataDeclaration(node: AST.Node, name: string): AST.DataDeclaration | undefined {
+  const root = AST.findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  return [
+    ...root.statements.filter(AST.isDataDeclaration),
+    ...root.statements
+      .filter(AST.isUseStatement)
+      .flatMap(useStatement =>
+        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDataDeclaration)
+      ),
+  ].find(data => data.name === name)
 }
 
 function typeDeclarationsInFile(file: AST.TaoFile): AST.TypeDeclaration[] {
@@ -581,10 +898,18 @@ function owningArgumentTypeReference(reference: AST.NamedTypeReference): AST.Arg
 }
 
 function invocationTargetDeclaration(
-  invocation: AST.Render | AST.DoStatement,
+  invocation: AST.Render | AST.DoStatement | AST.FunctionCallExpression | AST.PresentStatement,
 ): AST.ParameterizedDeclaration | undefined {
   if (AST.isRender(invocation)) {
     return invocation.view?.ref
+  }
+  if (AST.isFunctionCallExpression(invocation)) {
+    return invocation.function.ref
+  }
+  if (AST.isPresentStatement(invocation)) {
+    return invocation.stack.ref?.block.destinations.find(destination =>
+      destination.view.$refText === invocation.destinationName
+    )?.view.ref
   }
   const action = invocation.action
   if (!AST.isValueReference(action)) {

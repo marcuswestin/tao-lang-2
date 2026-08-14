@@ -2,7 +2,7 @@
 
 Perform a context-free, read-only architectural review. Assume no access to the design conversation. Do not edit, format, stage, commit, or run mutating commands.
 
-Read the active specifications, navigation research record, authoritative Writer app, nav stdlib stub, first implementation scope, and deferrals. Treat `Roadmap/Archive/` only as history.
+Read the active specifications, navigation research record, authoritative WordFlower app, nav stdlib stub, first implementation scope, and deferrals. Treat `Roadmap/Archive/` only as history.
 
 Report only substantial issues that could make implementation wrong, incomplete, inconsistent, unexpectedly complex, or unable to support legitimate apps. Check:
 

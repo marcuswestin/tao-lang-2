@@ -8,7 +8,7 @@ import { InvocationsValidator } from './invocations-validator'
 import { StateValidator } from './StateValidator'
 import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
 
-const statefulPrimitiveTypes = ['text', 'number'] as const satisfies readonly AST.PrimitiveType[]
+const statefulPrimitiveTypes = ['text', 'number', 'boolean'] as const satisfies readonly AST.PrimitiveType[]
 
 export type { TaoSpecifics, TaoTypirServices } from './TypeSystemHelpers'
 
@@ -22,6 +22,16 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
 
     typir.factory.Primitives.create({ primitiveName: 'number' })
       .inferenceRule({ filter: AST.isNumberLiteral })
+      .finish()
+
+    typir.factory.Primitives.create({ primitiveName: 'boolean' })
+      .inferenceRule({ filter: AST.isBooleanLiteral })
+      .finish()
+
+    typir.factory.Primitives.create({ primitiveName: 'time' }).finish()
+
+    typir.factory.Primitives.create({ primitiveName: 'none' })
+      .inferenceRule({ filter: AST.isNoneLiteral })
       .finish()
 
     typir.factory.Primitives.create({ primitiveName: 'action' })
@@ -43,6 +53,16 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
     }
 
     typir.Inference.addInferenceRulesForAstNodes({
+      BinaryExpression: (node) =>
+        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+          ?? InferenceRuleNotApplicable,
+      WhenExpression: (node) =>
+        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+          ?? InferenceRuleNotApplicable,
+      FunctionCallExpression: (node) =>
+        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+          ?? InferenceRuleNotApplicable,
+      InterpolationExpression: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
       MemberAccessExpression: (node) =>
         TypeSystemHelpers.taoType(Type.ofMemberAccess(node), typir)
           ?? InferenceRuleNotApplicable,
@@ -57,11 +77,16 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
         return Switch.type(target, {
           ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
           AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
+          ForStatement: () => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
           ParameterDeclaration: parameter =>
             TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
+          QueryDeclaration: () => InferenceRuleNotApplicable,
           StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
         })
       },
+      UnaryExpression: (node) =>
+        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+          ?? InferenceRuleNotApplicable,
       StateDeclaration: (node) => {
         const valueType = TypeSystemHelpers.safeInferType(typir, node.value)
         const underlying = TypeSystemHelpers.underlyingPrimitiveName(valueType)
@@ -110,6 +135,7 @@ function typirTypeForTypeExpression(
   typir: TaoTypirServices,
 ): TypirType | undefined {
   return Switch.type(type, {
+    ActionTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     ItemTypeExpression: () => TypeSystemHelpers.taoPrimitiveType('item', typir),
     NamedTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     PrimitiveTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),

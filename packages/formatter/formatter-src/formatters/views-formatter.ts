@@ -11,13 +11,17 @@ export default {
   /** RenderStatement formats `render` view and injection targets. */
   RenderStatement(f) {
     f.oneSpaceAfter('render')
-    f.oneSpaceBeforeProperty('argumentList')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
     f.oneSpaceBeforeProperty('layoutClause')
   },
 
   /** ViewRender formats a child view invocation and its arguments. */
   ViewRender(f) {
-    f.oneSpaceBeforeProperty('argumentList')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
     f.oneSpaceBeforeProperty('layoutClause')
   },
 

@@ -26,6 +26,14 @@ export default {
   /** Type references have no interior spacing. */
   PrimitiveTypeReference() {},
 
+  /** Action callback type references keep their positional signature compact. */
+  ActionTypeReference(f) {
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+    f.commaSpacedList()
+  },
+
   /** Constructor primitive type references have no interior spacing. */
   ConstructablePrimitiveTypeReference() {},
 

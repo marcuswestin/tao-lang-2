@@ -82,7 +82,7 @@ dismiss Presentation
 Owned by `DEF-NAV-002` and `DEF-NAV-013`.
 
 ```tao
-state SavedPresentation = serialize presentation Writer
+state SavedPresentation = serialize presentation WordFlower
 
 on app restore -> {
    let Restored = deserialize presentation SavedPresentation

@@ -7,11 +7,13 @@ import { Workspace } from '@workspace'
 import { ActionsValidator } from '../validator-src/ActionsValidator'
 import { AliasesValidator } from '../validator-src/aliases-validator'
 import { AppValidator } from '../validator-src/app-validator'
-import { useValidationCodes } from '../validator-src/diagnostic-codes'
+import { dataValidationMessages } from '../validator-src/data-validator'
+import { aliasValidationCodes, useValidationCodes } from '../validator-src/diagnostic-codes'
 import { ExpressionsValidator } from '../validator-src/expressions-validator'
 import { injectionValidationMessages } from '../validator-src/injections-validator'
 import { InvocationsValidator } from '../validator-src/invocations-validator'
 import { LayoutValidator } from '../validator-src/layout-validator'
+import { navigationValidationMessages } from '../validator-src/navigation-validator'
 import { projectValidationMessages } from '../validator-src/project-validator'
 import { StateValidator } from '../validator-src/StateValidator'
 import { testValidationMessages } from '../validator-src/tests-validator'
@@ -22,7 +24,7 @@ import Validator from '../validator-src/validator'
 import { ViewsValidator } from '../validator-src/views-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
-const kitchenSinkPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.tao')
+const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao')
 const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 const stateActionMvpPath = Repo.resolvePath('Apps/Test Apps/State Action MVP/State Action MVP.tao')
@@ -68,8 +70,264 @@ async function withValidatedFiles<
 }
 
 Describe('Tao validator structural diagnostics', () => {
-  Test('validates the current Kitchen Sink app', async () => {
-    const result = await Workspace.validate(kitchenSinkPath)
+  Test('validates app-owned stack destinations and typed presentations', async () => {
+    await testValidateCode(`
+      stack MainStack {
+        initial Home
+        destination Home
+        destination Detail
+      }
+      app NavigationApp { stack MainStack }
+      view Home Title is text default "Home" {
+        action Open { present MainStack.Detail(.Name "Workspace") }
+        render Detail("Inline")
+      }
+      view Detail Name is text {
+        action GoBack { back MainStack }
+        render Text(Name)
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      stack BrokenStack {
+        initial Missing
+        destination Home
+        destination Home
+        destination Detail
+      }
+      app BrokenApp { stack BrokenStack }
+      view Home { render Detail("Inline") }
+      view Detail Name is text {
+        action Broken {
+          present BrokenStack.Unknown()
+          present BrokenStack.Detail(.Name false)
+        }
+        render Text(Name)
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(navigationValidationMessages.missingInitial('BrokenStack', 'Missing'))
+    Expect(messages).toContain(navigationValidationMessages.duplicateDestination('BrokenStack', 'Home'))
+    Expect(messages).toContain(navigationValidationMessages.unknownDestination('BrokenStack', 'Unknown'))
+    Expect(messages).toContain(
+      navigationValidationMessages.namedArgumentType('Detail', 'Name', 'Detail.Name', 'boolean'),
+    )
+  })
+
+  Test('validates data schemas, queries, relationships, and strict writes', async () => {
+    await testValidateCode(`
+      project data Tasks {
+        Groups Group { Name text }
+        Items Item { Title text Done boolean Ordering number CreatedAt time indexed default now() }
+      }
+      app DataApp { datasource Tasks through Memory view MainView }
+      project view MainView {
+        query Tasks.Items as OpenItems {
+          where Done == false
+          order by Ordering asc
+        }
+        action Add {
+          create Tasks.Item { Title "Draft" Done false Ordering 1 }
+        }
+        render Stack(){
+          for Item in OpenItems {
+            Button("Update", action { update Item { Done true } })
+            Button("Delete", action { delete Item })
+          }
+        }
+      }
+      layout Stack { render inject ${tsFence} return null ${fence} }
+      view Button Title is text, Press is action { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      data Bad {
+        Groups Group { Name text }
+        Items Item { Id text Title text Title number Group relation Group Missing relation MissingEntity }
+      }
+      app BadApp { view MainView }
+      project view MainView {
+        state Draft = ""
+        query Bad.Unknown as Rows { order by Missing asc }
+        action Add {
+          create Bad.Item { Title true Unknown "x" }
+          delete Draft
+        }
+        render inject ${tsFence} return null ${fence}
+      }
+      view Detail Group is Bad.Group {
+        query Bad.Items as Rows { where Group > Group }
+        render inject ${tsFence} return null ${fence}
+      }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(dataValidationMessages.duplicateField('Item', 'Title'))
+    Expect(messages).toContain(dataValidationMessages.reservedField('Item', 'Id'))
+    Expect(messages).toContain(dataValidationMessages.unknownRelation('Item', 'MissingEntity'))
+    Expect(messages).toContain(dataValidationMessages.relationComparison('Group', '>'))
+    Expect(messages).toContain(dataValidationMessages.unknownCollection('Bad', 'Unknown'))
+    Expect(messages).toContain(dataValidationMessages.fieldType('Title', 'text', 'boolean'))
+    Expect(messages).toContain(dataValidationMessages.unknownField('Item', 'Unknown'))
+    Expect(messages).toContain(dataValidationMessages.rowTarget('delete'))
+  })
+
+  Test('validates datasource bindings, entity relations, literal defaults, and strict creates', async () => {
+    await testValidateCode(`
+      data Tasks {
+        Workspaces Workspace { Name text }
+        Items Item { Title text CreatedAt time indexed default now() Workspace relation Workspace on delete cascade }
+      }
+      app DataApp { datasource Tasks through Memory view MainView }
+      view MainView { render Text("Main") }
+      view Detail Workspace is Tasks.Workspace {
+        action Add { create Tasks.Item { Title "Draft" Workspace Workspace } }
+        render Text("Detail")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      data Bad {
+        Workspaces Workspace { Name text }
+        Items Item { Required text WrongNow number default now() Workspace relation Workspace }
+      }
+      app BadApp {
+        datasource Bad through Unknown
+        datasource Bad through Memory
+        datasource Bad through Memory
+        view MainView
+      }
+      view MainView {
+        let Invalid = Bad.Workspace { }
+        action Add { create Bad.Item { Workspace "workspace-1" } }
+        render Text("Main")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(AppValidator.messages.unknownProvider('Unknown'))
+    Expect(messages).toContain(AppValidator.messages.duplicateDatasource('BadApp', 'Bad'))
+    Expect(messages).toContain(dataValidationMessages.nowDefault('WrongNow'))
+    Expect(messages).toContain(dataValidationMessages.missingCreateField('Item', 'Required'))
+    Expect(messages).toContain(dataValidationMessages.fieldType('Workspace', 'Bad.Workspace', 'text'))
+    Expect(messages).toContain(typeValidationMessages.constructorShape('Bad.Workspace', 'Workspace'))
+  })
+
+  Test('requires project data declarations to be local or explicitly imported at every use site', async () => {
+    const files = {
+      'Main.tao': `
+        use Visible from ./Data.tao
+        app DataApp { datasource Visible through Memory view MainView }
+        view Text Value is text { render inject ${tsFence} return null ${fence} }
+        view MainView {
+          query Hidden.Rows as Rows
+          action Add { create Hidden.Row { Name "Draft" } }
+          render Text("Ready")
+        }
+        test "Data status" {
+          check "hidden" {
+            run DataApp
+            data Hidden ready
+          }
+        }
+      `,
+      'Data.tao': `
+        project data Visible { Rows Row { Name text } }
+        project data Hidden { Rows Row { Name text } }
+      `,
+    }
+
+    await withValidatedFiles('Main.tao', files, async result => {
+      const unresolved = "Could not resolve reference to DataDeclaration named 'Hidden'."
+      Expect(validationErrorMessages(result).filter(message => message === unresolved)).toHaveLength(3)
+    })
+
+    await withValidatedFiles('Main.tao', {
+      ...files,
+      'Main.tao': files['Main.tao'].replace('use Visible', 'use Visible, Hidden'),
+    }, async result => {
+      Expect(validationErrorMessages(result)).toEqual([])
+    })
+  })
+
+  Test('keeps private data declarations unavailable across files even when imported by name', async () => {
+    await withValidatedFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use Private from ./Data.tao
+          app DataApp { view MainView }
+          view Text Value is text { render inject ${tsFence} return null ${fence} }
+          view MainView {
+            query Private.Rows as Rows
+            action Add { create Private.Row { Name "Draft" } }
+            render Text("Ready")
+          }
+          test "Data status" {
+            check "private" {
+              run DataApp
+              data Private ready
+            }
+          }
+        `,
+        'Data.tao': `
+          data Private { Rows Row { Name text } }
+        `,
+      },
+      async result => {
+        const unresolved = "Could not resolve reference to DataDeclaration named 'Private'."
+        Expect(validationErrorMessages(result).filter(message => message === unresolved)).toHaveLength(3)
+      },
+    )
+  })
+
+  Test('limits query status members to the query root', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Tasks { Items Item { Title text } }
+      app DataApp { datasource Tasks through Memory view MainView }
+      view MainView {
+        query Tasks.Items as Items
+        render Text(Items.Count.Error)
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.memberNotItem('Error'))
+  })
+
+  Test('scopes parameter defaults to preceding parameters only', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app DefaultsApp { view MainView }
+      view MainView { render inject ${tsFence} return null ${fence} }
+      view Child First is text default "first", Second is text default First, Third is text default Fourth, Fourth is text default "fourth", Self is text default Self {
+        render inject ${tsFence} return null ${fence}
+      }
+    `)
+
+    const messages = validationErrorMessages(result)
+    Expect(messages).toContain("Could not resolve reference to ValueDeclaration named 'Fourth'.")
+    Expect(messages).toContain("Could not resolve reference to ValueDeclaration named 'Self'.")
+    Expect(messages).not.toContain("Could not resolve reference to ValueDeclaration named 'First'.")
+  })
+
+  Test('rejects prototype-mutating runtime scope names', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app ScopeApp { view MainView }
+      let __proto__ = "unsafe"
+      view MainView __proto__ is text {
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const messages = validationErrorMessages(result)
+    Expect(messages.filter(message => message === AliasesValidator.messages.reservedName('__proto__'))).toHaveLength(2)
+  })
+
+  Test('validates the current WordFlower app', async () => {
+    const result = await Workspace.validate(wordFlowerPath)
 
     Expect(validationErrorMessages(result)).toEqual([])
   })
@@ -173,7 +431,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         state Count = 3
         alias DisplayCount = Count
-        render Text "hi"
+        render Text("hi")
       }
     `,
       ({ result, workspace }) => {
@@ -204,7 +462,7 @@ Describe('Tao validator structural diagnostics', () => {
         type Person is text
         alias LocalPerson = Person "Ada"
         view MainView {
-          render Text LocalPerson
+          render Text(LocalPerson)
         }
         view Text Value is text { }
       `,
@@ -243,7 +501,7 @@ Describe('Tao validator structural diagnostics', () => {
   Test('rejects unsupported top-level statements', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      render MainView
+      render MainView()
       view MainView { }
     `)
 
@@ -299,7 +557,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView Label is text {
-        render Text Label
+        render Text(Label)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -347,7 +605,7 @@ Describe('Tao validator structural diagnostics', () => {
         action AddOne {
           set Count += 1
         }
-        render Text "ok"
+        render Text("ok")
       }
     `)
   })
@@ -356,7 +614,7 @@ Describe('Tao validator structural diagnostics', () => {
     const layoutResult = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Stack
+        render Stack()
       }
       layout Stack {
         state Count = 0
@@ -373,7 +631,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Text "hi" {
+        render Text("hi") {
           action AddOne { }
         }
       }
@@ -403,13 +661,13 @@ Describe('Tao validator structural diagnostics', () => {
           set Count += Step
         }
         action AddFive {
-          do AddStep 5
+          do AddStep(5)
         }
-        render Button "Add", AddFive {
-          Number DisplayCount
-          Button "Reset", action {
+        render Button("Add", AddFive) {
+          Number(DisplayCount)
+          Button("Reset", action {
             set Count = 0
-          }
+          })
         }
       }
     `)
@@ -427,13 +685,13 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         state Count = 0
         action AddTwo {
-          do AddOne
-          do AddOne
+          do AddOne()
+          do AddOne()
         }
         action AddOne {
           set Count += 1
         }
-        render Button "Shared", SharedAction
+        render Button("Shared", SharedAction)
       }
     `)
   })
@@ -448,10 +706,10 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         alias LaterClick = action {
-          do AddOne
+          do AddOne()
         }
         action AddOne { }
-        render Button "Add", LaterClick
+        render Button("Add", LaterClick)
       }
     `)
   })
@@ -467,7 +725,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         alias LaterClick = AddOne
         action AddOne { }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -488,7 +746,7 @@ Describe('Tao validator structural diagnostics', () => {
         state Count = InitialCount
         alias Greeting = LateGreeting
         alias Save = SharedAction
-        render Text Greeting
+        render Text(Greeting)
       }
       alias InitialCount = 1
       alias LateGreeting = "Hello"
@@ -510,18 +768,18 @@ Describe('Tao validator structural diagnostics', () => {
           set Count += Step
         }
         action DynamicArgs {
-          do action { } 1
+          do action { }(1)
         }
         action Missing {
-          do AddStep
+          do AddStep()
         }
         action Extra {
-          do AddStep 1, 2
+          do AddStep(1, 2)
         }
         action WrongType {
-          do AddStep "one"
+          do AddStep("one")
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -549,12 +807,12 @@ Describe('Tao validator structural diagnostics', () => {
         action AmbiguousArgument Base, Middle { }
         action AmbiguousParameter Base { }
         action CallActions {
-          do AddStep 1, 2
-          do AmbiguousScoped 1
-          do AmbiguousArgument Leaf: "x"
-          do AmbiguousParameter Name: "x", Title: "y"
+          do AddStep(1, 2)
+          do AmbiguousScoped(1)
+          do AmbiguousArgument(Leaf: "x")
+          do AmbiguousParameter(Name: "x", Title: "y")
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -582,7 +840,7 @@ Describe('Tao validator structural diagnostics', () => {
         action Break {
           set Current = "not a person"
         }
-        render Text Current.Missing
+        render Text(Current.Missing)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -610,9 +868,9 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         action Save Base { }
         action CallSave {
-          do Save Leaf: "x"
+          do Save(Leaf: "x")
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
   })
@@ -628,9 +886,9 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         action Run {
-          do Save
+          do Save()
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
   })
@@ -645,9 +903,9 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         action CallMissing {
-          do Missing 1
+          do Missing(1)
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -663,17 +921,169 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Wrapper action { }
+        render Wrapper(action { })
       }
       view Wrapper Callback is action {
         action CallCallback {
-          do Callback 1
+          do Callback(1)
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
     Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.dynamicActionArguments)
+  })
+
+  Test('validates callback signatures and positional dynamic action invocation', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Change Value is text { }
+        action Submit { }
+        render Forwarder(.Change Change, .Submit Submit)
+      }
+      view Forwarder Change is action(text), Submit is action() {
+        render Field(.Change Change, .Submit Submit)
+      }
+      view Field Change is action(text), Submit is action() {
+        action Relay Value is text {
+          do Change(Value)
+        }
+        action Send {
+          do Submit()
+        }
+        render Text("Ready")
+      }
+    `)
+  })
+
+  Test('rejects incompatible callback values and invalid dynamic callback calls', async () => {
+    const contracts = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Change Value is number { }
+        render Field(.Change Change, .Submit Change)
+      }
+      view Field Change is action(text), Submit is action() {
+        render Text("Ready")
+      }
+    `)
+    const dynamicCalls = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Change Value is text { }
+        render Wrapper(Change)
+      }
+      view Wrapper Callback is action(text) {
+        action Call {
+          do Callback()
+          do Callback(1)
+          do Callback(.Value "named")
+        }
+        render Text("Ready")
+      }
+    `)
+
+    const contractMessages = validationErrorMessages(contracts)
+    Expect(contractMessages).toContain(
+      invocationValidationMessages.namedArgumentType('Field', 'Change', 'action(text)', 'action(Change.Value)'),
+    )
+    Expect(contractMessages).toContain(
+      invocationValidationMessages.namedArgumentType('Field', 'Submit', 'action()', 'action(Change.Value)'),
+    )
+    const dynamicMessages = validationErrorMessages(dynamicCalls)
+    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionArity(1, 0))
+    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'))
+    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionNamedArgument)
+  })
+
+  Test('validates computed action callbacks and honors their optional parameters', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Message is text
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action First Message { }
+        action Second Message { }
+        action Optional Message default "Saved" { }
+        let Chosen = when true -> First otherwise -> Second
+        let OptionalCallback = when true -> Optional otherwise -> Optional
+        action Call {
+          do Chosen(1)
+          do OptionalCallback()
+          do OptionalCallback("Saved", "extra")
+        }
+        render Text("Ready")
+      }
+    `)
+
+    const messages = validationErrorMessages(result)
+    Expect(messages).toContain(ActionsValidator.messages.dynamicActionArgumentType(1, 'Message', 'number'))
+    Expect(messages).toContain(ActionsValidator.messages.dynamicActionArgumentCount(0, 1, 2))
+    Expect(messages).not.toContain(ActionsValidator.messages.dynamicActionArity(1, 0))
+  })
+
+  Test('validates action callbacks reached through typed item members', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type CallbackHolder is { Callback is action(text) }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Receive Value is text { }
+        let Holder = CallbackHolder { Receive }
+        action Call { do Holder.Callback(1) }
+        render Text("Ready")
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'),
+    )
+  })
+
+  Test('infers a safe action type for compatible when branches regardless of order', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      type Message is text
+      layout Stack { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Short Message { }
+        action Long Message, Count is number default 1 { }
+        render Stack(){
+          Consumer(.Callback when false -> Long otherwise -> Short)
+          Consumer(.Callback when false -> Short otherwise -> Long)
+        }
+      }
+      view Consumer Callback is action(text, number) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const messages = validationErrorMessages(result)
+    const unsafeCallback = invocationValidationMessages.namedArgumentType(
+      'Consumer',
+      'Callback',
+      'action(text, number)',
+      'action(Message)',
+    )
+    Expect(messages.filter(message => message === unsafeCallback)).toHaveLength(2)
+    Expect(messages).not.toContain('`when` branches must produce compatible value types.')
+  })
+
+  Test('does not allow type fixing to launder an incompatible action signature', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Wrapper(action(text): action { })
+      }
+      view Wrapper Callback is action(text) {
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.typeFixIncompatible('action(text)'))
   })
 
   Test('rejects action parameters that shadow visible state declarations', async () => {
@@ -689,7 +1099,7 @@ Describe('Tao validator structural diagnostics', () => {
         action Add Count is number {
           set Count += Count
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -711,9 +1121,9 @@ Describe('Tao validator structural diagnostics', () => {
         }
         alias CallAdd = AddStep
         action Missing {
-          do CallAdd
+          do CallAdd()
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -732,9 +1142,9 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         action Run {
-          do First
+          do First()
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -760,7 +1170,7 @@ Describe('Tao validator structural diagnostics', () => {
         action BadCompound {
           set Name += "!"
         }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -772,7 +1182,7 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
-  Test('rejects action-valued state and set targets used before declaration', async () => {
+  Test('rejects action-valued state and mutation targets used before declaration', async () => {
     const actionState = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view Text Value is text {
@@ -782,7 +1192,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         state Click = action { }
-        render Text "hi"
+        render Text("hi")
       }
     `)
     const lateSetTarget = await testValidateCodeWithErrors(`
@@ -797,12 +1207,24 @@ Describe('Tao validator structural diagnostics', () => {
           set Count += 1
         }
         state Count = 0
-        render Text "hi"
+        render Text("hi")
+      }
+    `)
+    const lateToggleTarget = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view MainView {
+        action Flip {
+          toggle Ready
+        }
+        state Ready = false
+        render Text("hi")
       }
     `)
 
     Expect(validationErrorMessages(actionState)).toContain(StateValidator.messages.stateActionType('Click'))
     Expect(validationErrorMessages(lateSetTarget)).toContain(StateValidator.messages.usedBeforeDeclaration('Count'))
+    Expect(validationErrorMessages(lateToggleTarget)).toContain(StateValidator.messages.usedBeforeDeclaration('Ready'))
   })
 
   Test('rejects action-valued state', async () => {
@@ -815,7 +1237,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         state Click = action { }
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -832,7 +1254,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         state Count = Count
-        render Text "hi"
+        render Text("hi")
       }
     `)
     const mutualReference = await testValidateCodeWithErrors(`
@@ -845,7 +1267,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         state A = B
         state B = A
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -864,7 +1286,7 @@ Describe('Tao validator structural diagnostics', () => {
       view MainView {
         state Count = LaterCount
         alias LaterCount = 1
-        render Text "hi"
+        render Text("hi")
       }
     `)
 
@@ -875,7 +1297,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        Text "Hello"
+        Text("Hello")
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -938,8 +1360,8 @@ Describe('Tao validator structural diagnostics', () => {
     const extra = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
-        render Text "Again"
+        render Text("Hello")
+        render Text("Again")
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -956,7 +1378,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
         alias Greeting = "Again"
       }
       view Text Value is text {
@@ -987,7 +1409,7 @@ Describe('Tao validator structural diagnostics', () => {
         render inject ${tsFence}
           return null
         ${fence}
-        render MainView
+        render MainView()
       }
     `)
     const withAlias = await testValidateCodeWithErrors(`
@@ -1008,7 +1430,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Container {
+        render Container(){
           render inject ${tsFence}
             return null
           ${fence}
@@ -1035,13 +1457,13 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view ParameterEcho Label is text {
-        render Text Label
+        render Text(Label)
       }
       view MainView {
         alias Local = "Local"
-        render Stack {
-          Text Greeting
-          ParameterEcho Local
+        render Stack(){
+          Text(Greeting)
+          ParameterEcho(Local)
         }
       }
     `)
@@ -1062,12 +1484,12 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         alias Local = "Outer"
-        render Stack {
+        render Stack(){
           alias Local = "First"
-          Text Local
-          Stack {
+          Text(Local)
+          Stack(){
             alias Local = "Nested"
-            Text Local
+            Text(Local)
           }
         }
       }
@@ -1088,10 +1510,10 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
-          Text "First"
+        render Stack(){
+          Text("First")
           alias Later = "Second"
-          Text Later
+          Text(Later)
         }
       }
     `)
@@ -1113,14 +1535,14 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
-          Stack {
+        render Stack(){
+          Stack(){
             alias Local = "First"
-            Text Local
+            Text(Local)
           }
-          Stack {
+          Stack(){
             alias Local = "Second"
-            Text Local
+            Text(Local)
           }
         }
       }
@@ -1141,10 +1563,10 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
+        render Stack(){
           alias Local = "First"
           alias Local = "Second"
-          Text Local
+          Text(Local)
         }
       }
     `)
@@ -1166,11 +1588,11 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
-          Stack {
+        render Stack(){
+          Stack(){
             alias Local = "First"
             alias Local = "Second"
-            Text Local
+            Text(Local)
           }
         }
       }
@@ -1193,8 +1615,8 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
-          Stack {
+        render Stack(){
+          Stack(){
             alias Text = "shadow"
           }
         }
@@ -1214,8 +1636,8 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [claim 2, content top stretch, gap 12, pad 16, margin horizontal 4, width fill] {
-          Text "Label" [width fill, height fill]
+        render Col()[claim 2, content top stretch, gap 12, pad 16, margin horizontal 4, width fill] {
+          Text("Label") [width fill, height fill]
         }
       }
     `)
@@ -1226,14 +1648,14 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       use Col, Row, Text from @tao/ui
       view MainView {
-        render Col {
-          Row {
-            Text "Top" [aligned top]
-            Text "Bottom" [aligned bottom]
+        render Col(){
+          Row(){
+            Text("Top") [aligned top]
+            Text("Bottom") [aligned bottom]
           }
-          Col {
-            Text "Left" [aligned left]
-            Text "Right" [aligned right]
+          Col(){
+            Text("Left") [aligned left]
+            Text("Right") [aligned right]
           }
         }
       }
@@ -1245,12 +1667,12 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       use Col, Text from @tao/ui
       layout Screen {
-        render Col {
-          Text "Screen"
+        render Col(){
+          Text("Screen")
         }
       }
       view MainView {
-        render Screen [content center, gap 8]
+        render Screen()[content center, gap 8]
       }
     `)
   })
@@ -1262,12 +1684,12 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       use Col, Text from @tao/ui
       view Card {
-        render Col {
-          Text "Wrapped"
+        render Col(){
+          Text("Wrapped")
         }
       }
       view MainView {
-        render Card [content center]
+        render Card()[content center]
       }
     `)
     },
@@ -1278,8 +1700,8 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       use Row, Text from @tao/ui
       view MainView {
-        render Row [content left center] {
-          Text "Label"
+        render Row()[content left center] {
+          Text("Label")
         }
       }
     `)
@@ -1294,7 +1716,7 @@ Describe('Tao validator structural diagnostics', () => {
         \`\`\`
       }
       view MainView {
-        render Row [content left center]
+        render Row()[content left center]
       }
     `)
   })
@@ -1308,7 +1730,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [gap fill]
+        render Col()[gap fill]
       }
     `)
     const malformedClaim = await testValidateCodeWithErrors(`
@@ -1319,7 +1741,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [claim fill]
+        render Col()[claim fill]
       }
     `)
     const unknownHead = await testValidateCodeWithErrors(`
@@ -1330,7 +1752,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [unknown 1]
+        render Col()[unknown 1]
       }
     `)
     const unknownContentTerm = await testValidateCodeWithErrors(`
@@ -1341,21 +1763,21 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [content diagonal]
+        render Col()[content diagonal]
       }
     `)
     const emptyContent = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       use Row from @tao/ui
       view MainView {
-        render Row [content]
+        render Row()[content]
       }
     `)
     const longContent = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       use Row from @tao/ui
       view MainView {
-        render Row [content left center right]
+        render Row()[content left center right]
       }
     `)
     const malformedPad = await testValidateCodeWithErrors(`
@@ -1366,7 +1788,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [pad horizontal]
+        render Col()[pad horizontal]
       }
     `)
     const malformedMargin = await testValidateCodeWithErrors(`
@@ -1377,7 +1799,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [margin vertical]
+        render Col()[margin vertical]
       }
     `)
     const alignedStretch = await testValidateCodeWithErrors(`
@@ -1388,7 +1810,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [aligned stretch]
+        render Col()[aligned stretch]
       }
     `)
     const widthShrink = await testValidateCodeWithErrors(`
@@ -1399,7 +1821,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [width shrink]
+        render Col()[width shrink]
       }
     `)
     const removedExpand = await testValidateCodeWithErrors(`
@@ -1410,7 +1832,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [expand]
+        render Col()[expand]
       }
     `)
     const removedStretch = await testValidateCodeWithErrors(`
@@ -1421,7 +1843,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [stretch]
+        render Col()[stretch]
       }
     `)
     const zeroGap = await testValidateCodeWithErrors(`
@@ -1432,7 +1854,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [gap 0]
+        render Col()[gap 0]
       }
     `)
     const zeroPad = await testValidateCodeWithErrors(`
@@ -1443,7 +1865,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [pad 0]
+        render Col()[pad 0]
       }
     `)
     const zeroMargin = await testValidateCodeWithErrors(`
@@ -1454,7 +1876,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [margin left 0]
+        render Col()[margin left 0]
       }
     `)
     const zeroWidth = await testValidateCodeWithErrors(`
@@ -1465,7 +1887,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [width 0]
+        render Col()[width 0]
       }
     `)
     const zeroHeight = await testValidateCodeWithErrors(`
@@ -1476,7 +1898,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [height 0]
+        render Col()[height 0]
       }
     `)
     const zeroClaim = await testValidateCodeWithErrors(`
@@ -1487,7 +1909,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [claim 0]
+        render Col()[claim 0]
       }
     `)
 
@@ -1530,7 +1952,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [gap 8, gap 12]
+        render Col()[gap 8, gap 12]
       }
     `)
     const duplicateClaim = await testValidateCodeWithErrors(`
@@ -1541,7 +1963,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [claim 1, claim 2]
+        render Col()[claim 1, claim 2]
       }
     `)
     const compressRigid = await testValidateCodeWithErrors(`
@@ -1552,7 +1974,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [compress, rigid]
+        render Col()[compress, rigid]
       }
     `)
     const fillAlignment = await testValidateCodeWithErrors(`
@@ -1563,7 +1985,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, centered]
+        render Col()[fill, centered]
       }
     `)
     const fillClaim = await testValidateCodeWithErrors(`
@@ -1574,7 +1996,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, claim 2]
+        render Col()[fill, claim 2]
       }
     `)
     const fillWidth = await testValidateCodeWithErrors(`
@@ -1585,7 +2007,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, width fill]
+        render Col()[fill, width fill]
       }
     `)
     const fillHeight = await testValidateCodeWithErrors(`
@@ -1596,7 +2018,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, height fill]
+        render Col()[fill, height fill]
       }
     `)
     const claimRigid = await testValidateCodeWithErrors(`
@@ -1607,7 +2029,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [claim 2, rigid]
+        render Col()[claim 2, rigid]
       }
     `)
     await testValidateCode(`
@@ -1618,7 +2040,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [claim 2, compress]
+        render Col()[claim 2, compress]
       }
     `)
     await testValidateCode(`
@@ -1629,10 +2051,10 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, rigid]
+        render Col()[fill, rigid]
       }
       view OtherView {
-        render Col [width fill, height fill]
+        render Col()[width fill, height fill]
       }
     `)
     const padSide = await testValidateCodeWithErrors(`
@@ -1643,7 +2065,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [pad horizontal 8 left 4]
+        render Col()[pad horizontal 8 left 4]
       }
     `)
     const marginSide = await testValidateCodeWithErrors(`
@@ -1654,28 +2076,28 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [margin vertical 8 top 4]
+        render Col()[margin vertical 8 top 4]
       }
     `)
     const contentHorizontalAxis = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       use Row from @tao/ui
       view MainView {
-        render Row [content left right]
+        render Row()[content left right]
       }
     `)
     const contentCrossAxis = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       use Row from @tao/ui
       view MainView {
-        render Row [content baseline stretch]
+        render Row()[content baseline stretch]
       }
     `)
     const contentCenter = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       use Row from @tao/ui
       view MainView {
-        render Row [content center center]
+        render Row()[content center center]
       }
     `)
     const duplicateWidth = await testValidateCodeWithErrors(`
@@ -1686,7 +2108,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Col [width 100, width 200]
+        render Col()[width 100, width 200]
       }
     `)
 
@@ -1746,7 +2168,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Text Greeting
+        render Text(Greeting)
       }
     `)
 
@@ -1783,8 +2205,8 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
-          Text Local
+        render Stack(){
+          Text(Local)
           alias Local = "Hello"
         }
       }
@@ -1808,7 +2230,7 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       action Save { }
       view MainView {
-        render Text Save.Label
+        render Text(Save.Label)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -1865,7 +2287,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Name is text
       alias Name = Name "Ro"
       view MainView {
-        render Text Name
+        render Text(Name)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -1889,7 +2311,7 @@ Describe('Tao validator structural diagnostics', () => {
       app MyApp { view MainView }
       view MainView {
         alias Text = "Hello"
-        render Text Text
+        render Text(Text)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -1900,7 +2322,7 @@ Describe('Tao validator structural diagnostics', () => {
     const parameterShadow = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView Text is text {
-        render Text Text
+        render Text(Text)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -1924,10 +2346,10 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         alias OuterGreeting = Greeting
-        render Stack {
+        render Stack(){
           alias Greeting = "Inner"
-          Text Greeting
-          Text OuterGreeting
+          Text(Greeting)
+          Text(OuterGreeting)
         }
       }
       view Text Value is text {
@@ -1985,7 +2407,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Text First
+        render Text(First)
       }
     `)
 
@@ -1998,7 +2420,7 @@ Describe('Tao validator structural diagnostics', () => {
     const missing = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Tile "Open"
+        render Tile("Open")
       }
       view Tile Title is text, Count is number {
         render inject ${tsFence}
@@ -2009,7 +2431,7 @@ Describe('Tao validator structural diagnostics', () => {
     const extra = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Open", 1
+        render Text("Open", 1)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -2036,8 +2458,8 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
-          Tile 42
+        render Stack(){
+          Tile(42)
         }
       }
       view Tile Title is text, Count is number {
@@ -2054,7 +2476,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Tile "not a count"
+        render Tile("not a count")
       }
       view Tile Count is number {
         render inject ${tsFence}
@@ -2102,16 +2524,16 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Stack {
-          Profile DemoPerson
-          Summary Count: 2, "People"
+        render Stack(){
+          Profile(DemoPerson)
+          Summary(Count: 2, "People")
         }
       }
       type Count is number
       view Profile Person {
-        render Stack {
-          TextValue Person.Name
-          TextValue Person.Job.Title
+        render Stack(){
+          TextValue(Person.Name)
+          TextValue(Person.Job.Title)
         }
       }
       view Summary Label is text, Count {
@@ -2133,7 +2555,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Base is text
       type Name is Base
       view MainView {
-        render Pair Name: "Ada", Name: "Grace"
+        render Pair(Name: "Ada", Name: "Grace")
       }
       view Pair Base, Name {
         render inject ${tsFence}
@@ -2158,7 +2580,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Middle is Base
       type Leaf is Middle
       view MainView {
-        render Pair Leaf: "Ada", Leaf: "Grace"
+        render Pair(Leaf: "Ada", Leaf: "Grace")
       }
       view Pair Base, Middle {
         render inject ${tsFence}
@@ -2223,7 +2645,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Name is text
       type Title is text
       view MainView {
-        render Pair Name: "Ada", Title: "Engineer"
+        render Pair(Name: "Ada", Title: "Engineer")
       }
       view Pair Name, Title {
         render inject ${tsFence}
@@ -2237,7 +2659,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Name is text
       type Title is text
       view MainView {
-        render Pair "Ada", "Engineer"
+        render Pair("Ada", "Engineer")
       }
       view Pair Name, Title {
         render inject ${tsFence}
@@ -2257,11 +2679,45 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
+  Test('binds duplicate primitive parameter types by explicit argument name', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view MainView {
+        action Change Value is text { }
+        action Submit { }
+        render Field(.Value "Draft", .Change Change, .Submit Submit, .Label "Title", .Disabled false)
+      }
+      view Field Value is text, Change is action(text), Submit is action(), Label is text, Disabled is boolean {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView {
+        render Field(.Missing "Draft", .Value 3, .Value "Again")
+      }
+      view Field Value is text {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+    const messages = validationErrorMessages(invalid)
+    Expect(messages).toContain(invocationValidationMessages.unknownNamedArgument('Field', 'Missing'))
+    Expect(messages).toContain(
+      invocationValidationMessages.namedArgumentType('Field', 'Value', 'Field.Value', 'number'),
+    )
+    Expect(messages).toContain(invocationValidationMessages.duplicateNamedArgument('Field', 'Value'))
+  })
+
   Test('rejects ambiguous expected binding types', async () => {
     const ambiguousScopedParameters = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Pair "Ada"
+        render Pair("Ada")
       }
       view Pair First is text, Second is text {
         render inject ${tsFence}
@@ -2275,7 +2731,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Middle is Base
       type Leaf is Middle
       view MainView {
-        render Pair Leaf: "Ada"
+        render Pair(Leaf: "Ada")
       }
       view Pair Base, Middle {
         render inject ${tsFence}
@@ -2311,7 +2767,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Name is Base
       type Title is Base
       view MainView {
-        render Pair Name: "Ada", Title: "Grace"
+        render Pair(Name: "Ada", Title: "Grace")
       }
       view Pair Base {
         render inject ${tsFence}
@@ -2383,7 +2839,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Name is text
       alias DisplayName = Name "Ada"
       view MainView {
-        render Text DisplayName.First
+        render Text(DisplayName.First)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -2399,7 +2855,7 @@ Describe('Tao validator structural diagnostics', () => {
       }
       alias DemoPerson = Person { Name "Ada" }
       view MainView {
-        render Text DemoPerson.Missing
+        render Text(DemoPerson.Missing)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -2438,7 +2894,7 @@ Describe('Tao validator structural diagnostics', () => {
     const unresolvedMember = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Text Missing.First
+        render Text(Missing.First)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -2449,7 +2905,7 @@ Describe('Tao validator structural diagnostics', () => {
     const unresolvedArgument = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Text Missing
+        render Text(Missing)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -2545,10 +3001,10 @@ Describe('Tao validator structural diagnostics', () => {
         FamilyName
       }
       view MainView {
-        render Stack {
-          Text OuterName
-          Text Ada.Name
-          Text Ada.LastName
+        render Stack(){
+          Text(OuterName)
+          Text(Ada.Name)
+          Text(Ada.LastName)
         }
       }
       layout Stack {
@@ -2570,7 +3026,7 @@ Describe('Tao validator structural diagnostics', () => {
       type Age is number
       alias OuterAge = Age 42
       view MainView {
-        render Card Details: { OuterAge }
+        render Card(Details: { OuterAge })
       }
       view Card Details is {
         Age is number
@@ -2687,7 +3143,7 @@ Describe('Tao validator structural diagnostics', () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       view MainView {
-        render Tile 42, "extra"
+        render Tile(42, "extra")
       }
       view Tile Title is text {
         render inject ${tsFence}
@@ -2705,12 +3161,30 @@ Describe('Tao validator structural diagnostics', () => {
       view Text Value is text { }
       view Source Secret is text { }
       view Target {
-        render Text Secret
+        render Text(Secret)
       }
     `)
 
     Expect(validationErrorMessages(result).length).toBeGreaterThan(0)
     Expect(Diagnostics.hasSource(result.diagnostics, 'validator')).toBe(true)
+  })
+
+  Test('keeps toggle targets inside their lexical state scope', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app MyApp { view Target }
+      view Source {
+        state Ready = false
+        render inject ${tsFence} return null ${fence}
+      }
+      view Target {
+        action Flip { toggle Ready }
+        render inject ${tsFence} return null ${fence}
+      }
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      "Could not resolve reference to StateDeclaration named 'Ready'.",
+    )
   })
 
   Test('validates relative use imports across sibling files', async () => {
@@ -2721,7 +3195,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
@@ -2749,7 +3223,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Text CardValue
+        render Text(CardValue)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -2774,7 +3248,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Text CardName
+        render Text(CardName)
       }
       view Text Value is text {
         render inject ${tsFence}
@@ -2795,7 +3269,7 @@ Describe('Tao validator structural diagnostics', () => {
         use Name from ./Types.tao
         alias Name = Name "Ro"
         view MainView {
-          render Text Name
+          render Text(Name)
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -2822,7 +3296,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Name from ./Types.tao
         view MainView {
-          render Text Name
+          render Text(Name)
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -2850,7 +3324,7 @@ Describe('Tao validator structural diagnostics', () => {
         use Name from ./Types.tao
         alias DisplayName = Name "Ro"
         view MainView {
-          render Text DisplayName
+          render Text(DisplayName)
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -2877,7 +3351,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Text from ./Views.tao
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
@@ -2899,7 +3373,7 @@ Describe('Tao validator structural diagnostics', () => {
       use Text from @tao/ui
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
     `)
   })
@@ -2912,7 +3386,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
@@ -2960,7 +3434,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
@@ -2990,7 +3464,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': 'view Text Value is text {',
@@ -3031,12 +3505,12 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
         project view Text Value is text {
-          render MissingView
+          render MissingView()
         }
       `,
       },
@@ -3057,7 +3531,7 @@ Describe('Tao validator structural diagnostics', () => {
         use Text from ./
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
@@ -3087,7 +3561,7 @@ Describe('Tao validator structural diagnostics', () => {
         ${fence}
       }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
     `,
         'Views.tao': `
@@ -3169,7 +3643,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use OtherView from ./Other.tao
         view MainView {
-          render OtherView
+          render OtherView()
         }
         test "inline smoke" {
           check "renders" {
@@ -3329,6 +3803,46 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(selectorMessages.filter(message => message === testValidationMessages.selector('role'))).toHaveLength(2)
   })
 
+  Test('validates placeholder selectors, input-value selectors, and standalone test back', async () => {
+    await testValidateCode(`
+      app MyApp { view MainView }
+      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
+      test "Input" {
+        check "selectors" {
+          run MyApp
+          enter "Draft" into placeholder "Title"
+          submit placeholder "Title"
+          expect placeholder "Title"
+          expect input placeholder "Title" value "Draft"
+          back
+        }
+      }
+    `)
+    const invalidInputSelector = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
+      test "Input" {
+        check "selectors" {
+          run MyApp
+          expect input role "Title" value "Draft"
+        }
+      }
+    `)
+    const backBeforeRun = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
+      test "Navigation" {
+        check "order" {
+          back
+          run MyApp
+        }
+      }
+    `)
+
+    Expect(validationErrorMessages(invalidInputSelector)).toContain(testValidationMessages.inputSelector('role'))
+    Expect(validationErrorMessages(backBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
+  })
+
   Test('validates v0 test statement placement', async () => {
     const checkAtTopLevel = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
@@ -3398,7 +3912,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use OtherView from ./Other.tao
         view MainView {
-          render OtherView
+          render OtherView()
         }
       `,
         'Other.tao': `
@@ -3454,7 +3968,7 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         use Text from ./views
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'views/Views.tao': sharedTextSource,
@@ -3480,7 +3994,7 @@ Describe('Tao validator structural diagnostics', () => {
           ${fence}
         }
         view MainView {
-          render Text Local
+          render Text(Local)
         }
       `,
         'Views.tao': `
@@ -3511,7 +4025,7 @@ Describe('Tao validator structural diagnostics', () => {
         'features/@foo/forms/Main.tao': `
         use PackageTitle
         project view MainView {
-          render Text PackageTitle
+          render Text(PackageTitle)
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -3672,7 +4186,7 @@ Describe('Tao validator structural diagnostics', () => {
         'features/@outer/Main.tao': `
         use NestedAlias
         project view MainView {
-          render Text NestedAlias
+          render Text(NestedAlias)
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -3783,13 +4297,30 @@ Describe('Tao validator structural diagnostics', () => {
   })
 })
 
+Describe('Tao validator binding compatibility', () => {
+  Test('warns for legacy alias while accepting let without a warning', async () => {
+    const result = await Validator.validateCode(`
+      let Current = "current"
+      alias Legacy = "legacy"
+    `)
+    const warning = result.diagnostics.find(diagnostic =>
+      diagnostic.message === AliasesValidator.messages.deprecatedAlias('Legacy')
+    )
+
+    Expect(validationErrorMessages(result)).toEqual([])
+    Expect(warning?.severity).toBe('warning')
+    Expect(warning?.code).toBe(aliasValidationCodes.deprecatedAlias)
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'warning')).toHaveLength(1)
+  })
+})
+
 Describe('Tao validator use organization diagnostics', () => {
   Test('warns about unused imports with a quick-fix code', async () => {
     const result = await Validator.validateCode(`
       use Text, Stack from @tao/ui
       app MyApp { view MainView }
       view MainView {
-        render Text "hi"
+        render Text("hi")
       }
     `)
     const warning = result.diagnostics.find(diagnostic =>
@@ -3835,7 +4366,7 @@ Describe('Tao validator use organization diagnostics', () => {
       app MyApp { view MainView }
       use Text from @tao/ui
       view MainView {
-        render Text "hi"
+        render Text("hi")
       }
     `)
     const warning = result.diagnostics.find(diagnostic => diagnostic.message === useValidationMessages.useOutOfSection)
@@ -3850,7 +4381,7 @@ Describe('Tao validator use organization diagnostics', () => {
       use Text from @tao/ui
       app MyApp { view MainView }
       view MainView {
-        render Text "hi"
+        render Text("hi")
       }
     `)
 

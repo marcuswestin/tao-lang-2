@@ -13,6 +13,9 @@ export type ActionInvocationPair = RenderInvocationPair
 export type ArgumentBindingDiagnostic =
   | { kind: 'duplicate-parameter-type'; parameter: AST.ParameterDeclaration; type: string }
   | { kind: 'duplicate-argument-type'; argument: AST.Argument; type: string }
+  | { kind: 'unknown-named-argument'; argument: AST.Argument; name: string }
+  | { kind: 'duplicate-named-argument'; argument: AST.Argument; parameter: AST.ParameterDeclaration }
+  | { kind: 'named-argument-type'; argument: AST.Argument; parameter: AST.ParameterDeclaration }
   | {
     kind: 'ambiguous-argument'
     argument: AST.Argument
@@ -67,6 +70,16 @@ export type ResolvedActionInvocation = {
   invocation: AST.DoStatement
   action?: AST.ActionDeclaration
   pairs: ActionInvocationPair[]
+  diagnostics: ArgumentBindingDiagnostic[]
+}
+
+/** ResolvedNavigationInvocation declares one stack presentation and its destination bindings. */
+export type ResolvedNavigationInvocation = {
+  invocation: AST.PresentStatement
+  stack?: AST.StackDeclaration
+  destination?: AST.NavigationDestination
+  view?: AST.ViewDeclaration
+  pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }
 
@@ -220,6 +233,34 @@ export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedAc
   }
 }
 
+/** resolveNavigationInvocation resolves a stack destination and binds its typed view arguments. */
+export function resolveNavigationInvocation(invocation: AST.PresentStatement): ResolvedNavigationInvocation {
+  const stack = invocation.stack.ref
+  const destination = stack?.block.destinations.find(candidate =>
+    candidate.view.$refText === invocation.destinationName
+  )
+  const view = destination?.view.ref
+  if (!view) {
+    return {
+      invocation,
+      stack,
+      destination,
+      pairs: [],
+      diagnostics: [],
+    }
+  }
+
+  const bindings = resolveArgumentBindings(view, invocation)
+  return {
+    invocation,
+    stack,
+    destination,
+    view,
+    pairs: bindings.pairs,
+    diagnostics: bindings.diagnostics,
+  }
+}
+
 /** resolveActionTarget classifies an expression used as a Tao action value. */
 export function resolveActionTarget(expression: AST.Expression | undefined): ResolvedActionTarget {
   return resolveActionTargetWithSeenAliases(expression, new Set())
@@ -250,7 +291,7 @@ function reportDuplicatePropertyTypes(
 /** resolveArgumentBindings binds Tao arguments to parameters by exact type and unambiguous lineage. */
 function resolveArgumentBindings(
   declaration: AST.ParameterizedDeclaration,
-  invocation: AST.Render | AST.DoStatement,
+  invocation: AST.Render | AST.DoStatement | AST.PresentStatement,
 ): ArgumentBindingResult {
   const parameters = AST.parametersOf(declaration)
   const args = AST.argumentsOf(invocation)
@@ -259,8 +300,16 @@ function resolveArgumentBindings(
   const remainingParameters = new Set(parameters)
   const remainingArgs = new Set(args)
 
-  reportDuplicateParameterTypes(parameters, diagnostics)
-  const duplicateArgumentTypes = reportDuplicateArgumentTypes(args, diagnostics)
+  bindNamedArguments(remainingArgs, remainingParameters, pairs, diagnostics)
+  // Optional parameters are explicit-only for type-based view/action binding. This keeps a
+  // defaulted text/number/etc. parameter from competing with an unnamed required parameter.
+  for (const parameter of [...remainingParameters]) {
+    if (parameter.defaultValue !== undefined) {
+      remainingParameters.delete(parameter)
+    }
+  }
+  reportDuplicateParameterTypes([...remainingParameters], diagnostics)
+  const duplicateArgumentTypes = reportDuplicateArgumentTypes([...remainingArgs], diagnostics)
 
   bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesExactlyMatch, duplicateArgumentTypes)
   bindArguments(remainingArgs, remainingParameters, pairs, argumentTypesAreAssignable, duplicateArgumentTypes)
@@ -338,6 +387,43 @@ function resolveArgumentBindings(
   }
 
   return { pairs: pairsByParameterOrder(parameters, pairs), diagnostics }
+}
+
+function bindNamedArguments(
+  remainingArgs: Set<AST.Argument>,
+  remainingParameters: Set<AST.ParameterDeclaration>,
+  pairs: RenderInvocationPair[],
+  diagnostics: ArgumentBindingDiagnostic[],
+): void {
+  for (const argument of [...remainingArgs]) {
+    const name = argument.parameterName
+    if (!name) {
+      continue
+    }
+    const parameter = [...remainingParameters].find(candidate => Type.parameterName(candidate) === name)
+    if (!parameter) {
+      const declared = pairs.find(pair => Type.parameterName(pair.parameter) === name)?.parameter
+      diagnostics.push(
+        declared
+          ? { kind: 'duplicate-named-argument', argument, parameter: declared }
+          : { kind: 'unknown-named-argument', argument, name },
+      )
+      remainingArgs.delete(argument)
+      continue
+    }
+    const actual = Type.ofArgument(argument)
+    const expected = Type.ofParameter(parameter)
+    if (
+      actual.kind !== 'unresolved'
+      && expected.kind !== 'unresolved'
+      && !Type.isAssignable(actual, expected)
+    ) {
+      diagnostics.push({ kind: 'named-argument-type', argument, parameter })
+    }
+    pairs.push({ argument, parameter })
+    remainingArgs.delete(argument)
+    remainingParameters.delete(parameter)
+  }
 }
 
 function pairsByExpectedPropertyOrder(
@@ -544,6 +630,9 @@ function reportDuplicateArgumentTypes(
   const seen = new Set<string>()
   const duplicates = new Set<string>()
   for (const argument of args) {
+    if (argument.parameterName) {
+      continue
+    }
     const key = Type.identityKey(Type.ofArgument(argument))
     if (!key) {
       continue
@@ -601,6 +690,10 @@ function resolveActionTargetWithSeenAliases(
   }
   if (AST.isValueReference(expression)) {
     return resolveActionTargetReference(expression, seenAliases)
+  }
+  const type = Type.ofExpression(expression)
+  if (type.kind === 'primitive' && type.primitive === 'action') {
+    return { kind: 'dynamic' }
   }
   return UnresolvedActionTarget
 }

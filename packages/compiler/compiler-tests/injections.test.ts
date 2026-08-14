@@ -8,9 +8,9 @@ Describe('Tao injection compiler', () => {
   Test('compiles inject arguments', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
-      alias UserName = "Ro"
+      let UserName = "Ro"
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value, Name UserName, Count 3 ${tsFence}

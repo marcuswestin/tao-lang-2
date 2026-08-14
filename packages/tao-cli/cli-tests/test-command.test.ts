@@ -40,14 +40,14 @@ Describe('tao test', () => {
   Test('skips hidden future-source directories without reserving test directory names', async () => {
     await withTaoFixture({
       'Current.test.tao': 'test "Current" { }\n',
-      'Apps/MVP/.tao-future/Future.test.tao': 'test "Future" {',
-      'Apps/MVP/Current/Valid.test.tao': 'test "Valid current MVP" { }\n',
+      'Apps/WordFlower/.tao-archive/Future.test.tao': 'test "Future" {',
+      'Apps/WordFlower/1 - Current/Valid.test.tao': 'test "Valid current MVP" { }\n',
       'Roadmap/Feature/Syntax Sketches/Valid.test.tao': 'test "Valid syntax sketch" { }\n',
     }, async (rootDir) => {
       const found = await findTaoTestFiles(rootDir)
 
       Expect(found.map(path => FS.relativePath(rootDir, path))).toEqual([
-        'Apps/MVP/Current/Valid.test.tao',
+        'Apps/WordFlower/1 - Current/Valid.test.tao',
         'Current.test.tao',
         'Roadmap/Feature/Syntax Sketches/Valid.test.tao',
       ])
@@ -88,7 +88,7 @@ Describe('tao test', () => {
       Expect(validationErrors).toEqual([
         {
           path: brokenPath,
-          messages: ['App BrokenApp must declare exactly one root view, found 0.'],
+          messages: ['App BrokenApp must declare exactly one root view or root stack, found 0.'],
         },
       ])
     })

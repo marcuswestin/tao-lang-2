@@ -1,0 +1,32 @@
+use Col, FormButton, Text from @tao/ui
+
+app NavigationMVPApp {
+   stack NavigationMVP
+}
+
+project stack NavigationMVP {
+   initial Home
+   destination Home
+   destination Detail
+}
+
+project view Home {
+   state Visits = 0
+   action CountVisit {
+      set Visits += 1
+   }
+   action OpenDetail {
+      present NavigationMVP.Detail(.Name "Typed workspace")
+   }
+   render Col() [gap 10, pad 16] {
+      Text("Navigation MVP")
+      Text(interpolate "Home visits: ", Visits)
+      FormButton(.Title "Count visit", .Press CountVisit, .Id "count-visit")
+      FormButton(.Title "Open detail", .Press OpenDetail, .Id "open-detail")
+}  }
+
+project view Detail Name is text {
+   render Col() [gap 10, pad 16] {
+      Text("Detail")
+      Text(Name)
+}  }

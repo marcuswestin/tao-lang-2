@@ -8,7 +8,7 @@ test "Package Access" {
       expect text "Package sibling file works"
       expect text "Package sibling folder works"
       expect text "Package child folder works"
-      expect text "Project alias works"
+      expect text "Project let works"
       expect text "Project view works"
    }
 }

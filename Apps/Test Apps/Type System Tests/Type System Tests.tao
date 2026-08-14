@@ -22,25 +22,26 @@ type Person is {
    Job
 }
 
-alias FirstTitle = "Open"
-alias FirstCount = 1
-alias SecondTitle = "Done"
-alias SecondCount = 2
-alias DisplayName = Name "Ada"
-alias TypedDisplayName = Name "Grace"
-alias DemoTags = Tags ["types" "items" "lists"]
-alias EmptyTags = Tags []
-alias DemoJob = Job {
+let FirstTitle = "Open"
+let FirstCount = 1
+let SecondTitle = "Done"
+let SecondCount = 2
+let DisplayName = Name "Ada"
+let TypedDisplayName = Name "Grace"
+let DemoTags = Tags ["types" "items" "lists"]
+let EmptyTags = Tags []
+let DemoJob = Job {
    Level 2
    Title "Compiler engineer"
 }
-alias DemoPerson = Person {
+let DemoPerson = Person {
    DemoTags
    DemoJob
    Age 40
    DisplayName
 }
-alias Team = [
+let ScopeLabel = "File scope label"
+let Team = [
    DemoPerson
    Person {
       Name "Ro"
@@ -53,11 +54,13 @@ alias Team = [
 ]
 
 view Demo {
-   render Stack {
-      Tile FirstTitle, FirstCount
-      Tile SecondTitle, SecondCount
-      ProfileCard DemoPerson
-      ProfileCard Person: {
+   let OuterScopeLabel = ScopeLabel
+   render Stack() {
+      let ScopeLabel = "Nested scope label"
+      Tile(FirstTitle, FirstCount)
+      Tile(SecondTitle, SecondCount)
+      ProfileCard(DemoPerson)
+      ProfileCard(Person: {
          Tags ["runtime" "mobile"]
          Job {
             Level 3
@@ -65,12 +68,14 @@ view Demo {
          }
          Age 29
          Name "Kai"
-      }
-      SummaryLine Count: 2, "People in the team"
-      MemberLine DemoPerson.Job.Title, DemoPerson.Name
-      TeamList Team
-      TextValue TypedDisplayName
-      TextValue "Constructed primitive text"
+      })
+      SummaryLine(Count: 2, "People in the team")
+      MemberLine(DemoPerson.Job.Title, DemoPerson.Name)
+      TeamList(Team)
+      TextValue(TypedDisplayName)
+      TextValue("Constructed primitive text")
+      TextValue(OuterScopeLabel)
+      TextValue(ScopeLabel)
 }  }
 
 layout Stack {
@@ -86,17 +91,17 @@ view Tile Title is text, Count is number {
 }
 
 view ProfileCard Person {
-   render Stack {
-      TextValue Person.Name
-      NumberValue Person.Age
-      TextValue Person.Job.Title
-      TagList Person.Tags
+   render Stack() {
+      TextValue(Person.Name)
+      NumberValue(Person.Age)
+      TextValue(Person.Job.Title)
+      TagList(Person.Tags)
 }  }
 
 view MemberLine RoleTitle is Job.Title, Name {
-   render Stack {
-      TextValue Name
-      TextValue RoleTitle
+   render Stack() {
+      TextValue(Name)
+      TextValue(RoleTitle)
 }  }
 
 view SummaryLine Label is text, Count {

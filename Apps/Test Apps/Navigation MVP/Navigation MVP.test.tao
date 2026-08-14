@@ -1,0 +1,20 @@
+use NavigationMVPApp from ./
+
+test "Navigation MVP" {
+   check "presents a typed destination, preserves covered state, and returns through automatic back" {
+      run NavigationMVPApp
+
+      expect text "Navigation MVP"
+      expect text "Home visits: 0"
+      press id "count-visit"
+      expect text "Home visits: 1"
+      press id "open-detail"
+      expect missing text "Navigation MVP"
+      expect text "Detail"
+      expect text "Typed workspace"
+      back
+      expect text "Navigation MVP"
+      expect text "Home visits: 1"
+      expect missing text "Detail"
+   }
+}

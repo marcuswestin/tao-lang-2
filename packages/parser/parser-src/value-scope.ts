@@ -13,7 +13,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
-    if (context.property === 'target' && AST.isSetStatement(context.container)) {
+    if (
+      context.property === 'target'
+      && (AST.isSetStatement(context.container) || AST.isToggleStatement(context.container))
+    ) {
       return this.createStateScope(context.container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
@@ -21,6 +24,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (context.property === 'target' && AST.isMemberAccessExpression(context.container)) {
       return this.createValueScope(context.container)
+    }
+    if (context.property === 'relation' && AST.isDataField(context.container)) {
+      return this.createDataEntityScope(context.container)
+    }
+    if (context.property === 'function' && AST.isFunctionCallExpression(context.container)) {
+      return this.createFunctionScope(context.container)
     }
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
       return this.createUseImportScope(context.container)
@@ -30,6 +39,30 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
+    }
+    if (
+      context.property === 'data'
+      && (
+        AST.isAppDatasource(context.container)
+        || AST.isQueryDeclaration(context.container)
+        || AST.isCreateStatement(context.container)
+        || AST.isDataStatusStep(context.container)
+      )
+    ) {
+      return this.createDataScope(context.container)
+    }
+    if (context.property === 'view' && AST.isNavigationDestination(context.container)) {
+      return this.createAppViewScope(context.container)
+    }
+    if (
+      context.property === 'stack'
+      && (
+        AST.isAppStack(context.container)
+        || AST.isPresentStatement(context.container)
+        || AST.isBackStatement(context.container)
+      )
+    ) {
+      return this.createNavigationStackScope(context.container)
     }
     if (context.property === 'app' && AST.isRunStep(context.container)) {
       return this.createRunAppScope(context.container)
@@ -51,25 +84,34 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
     const owningView = AST.findOwningView(reference)
     if (owningView) {
-      scope = this.createScopeForParameters(owningView, scope)
+      scope = this.createScopeForParameters(owningView, scope, reference)
+    }
+
+    const owningFunction = AST.findOwningFunction(reference)
+    if (owningFunction) {
+      scope = this.createScopeForParameters(owningFunction, scope, reference)
     }
 
     for (const block of AST.ancestorBlocks(reference).reverse()) {
+      const forBinding = AST.forBindingOwnedByBlock(block)
+      if (forBinding) {
+        scope = this.createScopeForNodes([forBinding], scope)
+      }
       scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(block), scope)
     }
 
     const owningAction = AST.findOwningAction(reference)
     if (owningAction) {
-      scope = this.createScopeForParameters(owningAction, scope)
+      scope = this.createScopeForParameters(owningAction, scope, reference)
     }
 
     return scope
   }
 
-  private createStateScope(setStatement: AST.SetStatement): Langium.Scope {
+  private createStateScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
     let scope = this.createScopeForNodes([])
 
-    for (const block of AST.ancestorBlocks(setStatement).reverse()) {
+    for (const block of AST.ancestorBlocks(statement).reverse()) {
       scope = this.createScopeForNodes(statesOwnedByBlock(block), scope)
     }
 
@@ -86,14 +128,52 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  private createAppViewScope(appView: AST.AppView): Langium.Scope {
-    const root = AST.findRoot(appView)
+  private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {
+    const root = AST.findRoot(call)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isFunctionDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(call, AST.isFunctionDeclaration), scope)
+    return scope
+  }
+
+  private createAppViewScope(node: AST.AppView | AST.NavigationDestination): Langium.Scope {
+    const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(root.statements.filter(AST.isViewDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(appView, AST.isViewDeclaration), scope)
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isViewDeclaration), scope)
     return scope
+  }
+
+  private createDataScope(node: AST.Node): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isDataDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isDataDeclaration), scope)
+    return scope
+  }
+
+  private createNavigationStackScope(node: AST.AppStack | AST.PresentStatement | AST.BackStatement): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isStackDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isStackDeclaration), scope)
+    return scope
+  }
+
+  private createDataEntityScope(field: AST.DataField): Langium.Scope {
+    const entityBlock = field.$container
+    const entity = entityBlock.$container
+    const dataBlock = entity.$container
+    const data = dataBlock.$container
+    return AST.isDataDeclaration(data) ? this.createScopeForNodes(data.block.entities) : this.createScopeForNodes([])
   }
 
   private createRunAppScope(run: AST.RunStep): Langium.Scope {
@@ -111,10 +191,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createScopeForParameters(
-    declaration: AST.RenderableDeclaration | AST.ActionDeclaration,
+    declaration: AST.ParameterizedDeclaration,
     outerScope: Langium.Scope,
+    reference?: AST.Node,
   ): Langium.Scope {
-    const parameters = AST.parametersOf(declaration)
+    const parameters = visibleParametersAtReference(declaration, reference)
     const firstParameter = parameters[0]
     if (!firstParameter) {
       return outerScope
@@ -164,6 +245,27 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
 function statesOwnedByBlock(block: AST.Block): AST.StateDeclaration[] {
   return block.statements.filter(AST.isStateDeclaration)
+}
+
+function visibleParametersAtReference(
+  declaration: AST.ParameterizedDeclaration,
+  reference: AST.Node | undefined,
+): readonly AST.ParameterDeclaration[] {
+  const parameters = AST.parametersOf(declaration)
+  const defaultParameter = parameterOwningDefault(reference)
+  const index = defaultParameter ? parameters.indexOf(defaultParameter) : -1
+  return index >= 0 ? parameters.slice(0, index) : parameters
+}
+
+function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclaration | undefined {
+  let current = node
+  while (current) {
+    if (AST.isParameterDeclaration(current)) {
+      return current.defaultValue ? current : undefined
+    }
+    current = current.$container
+  }
+  return undefined
 }
 
 function parameterValueName(parameter: AST.ParameterDeclaration): string | undefined {

@@ -1,0 +1,43 @@
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app FormsInteractionMVP {
+   view MainView
+}
+
+function SubmittedLabel Title is text returns text = interpolate "Submitted: ", Title
+
+view MainView {
+   state Draft = ""
+   state Submitted = ""
+   state Submitting = false
+   state SubmissionCount = 0
+   action ChangeDraft Value is text {
+      set Draft = Value
+   }
+   action Submit {
+      when
+         Draft.Empty -> { }
+         otherwise -> {
+            set Submitted = Draft
+            set SubmissionCount += 1
+            set Submitting = true
+   }  }
+   render Col() [gap 10, pad 16] {
+      Text("New task")
+      TextInput(.Value Draft, .Change ChangeDraft, .Submit Submit, .Label "Task title", .Placeholder "Capture something", .Id "task-title")
+      when
+         Draft.Empty -> {
+            Text("Title is required")
+         }
+         otherwise -> {
+            Text(Draft)
+         }
+      FormButton(.Title "Save", .Press Submit, .Id "save", .Disabled Draft.Empty, .Submitting Submitting)
+      Text(interpolate "Submissions: ", SubmissionCount)
+      when
+         not Submitted.Empty -> {
+            Text(SubmittedLabel(Submitted))
+         }
+         otherwise -> {
+            Text("")
+}  }  }

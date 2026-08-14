@@ -1,0 +1,159 @@
+import { Type } from '@ast-utils'
+import { AST } from '@parser'
+import { Describe, Expect, Test } from '@shared/test'
+import { FunctionalCoreValidator } from '../validator-src/FunctionalCoreValidator'
+import { StateValidator } from '../validator-src/StateValidator'
+import { typeValidationMessages } from '../validator-src/types-validator'
+import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
+
+const runtimeViews = `
+  layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
+  view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+`
+
+Describe('functional core validator', () => {
+  Test('accepts a typed functional path with total value, render, and action conditionals', async () => {
+    await testValidateCode(`
+      app FunctionalApp { view Main }
+      function HasCount Count is number returns boolean = Count > 0 and not false
+      function Label Count is number returns text = when
+        Count > 0 -> interpolate "Count: ", Count
+        otherwise -> "Empty"
+      view Main {
+        state Ready = false
+        action Flip {
+          when
+            Ready -> { toggle Ready }
+            otherwise -> { toggle Ready }
+        }
+        render Stack(){
+          when
+            HasCount(2) -> {
+            Text(Label(2))
+            }
+            otherwise -> {
+            Text("Empty")
+            }
+          for Name in ["Inbox" "Today"] { Text(Name) }
+        }
+      }
+      ${runtimeViews}
+    `)
+  })
+
+  Test('reports actionable function, when, toggle, and collection errors', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app BrokenApp { view Main }
+      function Wrong Value is number returns boolean = Value + 1
+      function Timestamp At is time returns text = interpolate At
+      view Main {
+        state Count = 1
+        action InvalidToggle { toggle Count }
+        render Stack(){
+          when
+            1 -> { Text("Wrong condition") }
+            otherwise -> { Text("Fallback") }
+          for Value in "not a list" { Text(Value) }
+        }
+      }
+      ${runtimeViews}
+    `)
+    const errors = validationErrorMessages(result)
+
+    Expect(errors).toContain(FunctionalCoreValidator.messages.functionReturn('Wrong', 'boolean', 'number'))
+    Expect(errors).toContain(FunctionalCoreValidator.messages.conditionBoolean)
+    Expect(errors).toContain(FunctionalCoreValidator.messages.forCollection)
+    Expect(errors).toContain(FunctionalCoreValidator.messages.interpolationPart)
+    Expect(errors).toContain(StateValidator.messages.toggleStateType('Count', 'number'))
+  })
+
+  Test('unifies nested list values without treating unlike element types as compatible', async () => {
+    const accepted = await testValidateCode(`
+      let EmptyFirst = [[] [1]]
+      let EmptyLast = [[1] []]
+    `)
+    const emptyLists = accepted.entry.ast.statements.filter(AST.isAliasDeclaration)
+    const inferredTypes = emptyLists.map(declaration => Type.ofExpression(declaration.value))
+    const nestedNumberList = {
+      kind: 'list',
+      element: { kind: 'list', element: { kind: 'primitive', primitive: 'number' } },
+    }
+
+    Expect(inferredTypes).toEqual([nestedNumberList, nestedNumberList])
+
+    const result = await testValidateCodeWithErrors(`
+      let MixedElements = [1 2 "one"]
+      let MixedNested = [[1] [2] ["one"]]
+      let MixedBranches = when true -> 1 false -> 2 otherwise -> "one"
+    `)
+    const errors = validationErrorMessages(result)
+    const listDiagnostics = result.diagnostics.filter(diagnostic =>
+      diagnostic.message === FunctionalCoreValidator.messages.listElement
+    )
+    const branchDiagnostic = result.diagnostics.find(diagnostic =>
+      diagnostic.message === FunctionalCoreValidator.messages.conditionalBranch
+    )
+
+    Expect(errors).toContain(FunctionalCoreValidator.messages.listElement)
+    Expect(errors).toContain(FunctionalCoreValidator.messages.conditionalBranch)
+    Expect(listDiagnostics.some(diagnostic => diagnostic.nodeType === 'StringLiteral')).toBe(true)
+    Expect(branchDiagnostic?.nodeType).toBe('StringLiteral')
+  })
+
+  Test('accepts trailing typed defaults and requires named overrides for optional view parameters', async () => {
+    await testValidateCode(`
+      app DefaultsApp { view Main }
+      function Label Prefix is text, Value is text default "Save" returns text = interpolate Prefix, Value
+      view Main {
+        action Submit Message is text default "Saved" { }
+        render Card(){
+          LabelView("Plain")
+          LabelView("Title", .Hint "Hint")
+        }
+      }
+      layout Card Gap is number default 8 { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view LabelView Title is text, Hint is text default "Default hint" { render inject \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+  })
+
+  Test('reports invalid parameter defaults and non-trailing required parameters', async () => {
+    const result = await testValidateCodeWithErrors(`
+      function Wrong First is text default "one", Last is text returns text = First
+      view Main Title is text default 1 { render inject \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+    const errors = validationErrorMessages(result)
+
+    Expect(errors).toContain(typeValidationMessages.defaultParameterOrder('Last'))
+    Expect(errors).toContain(typeValidationMessages.defaultParameterType('Title', 'Main.Title', 'number'))
+  })
+
+  Test('allows functions to omit trailing defaults but rejects named function arguments', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app DefaultsApp { view Main }
+      function Label Value is text default "Save" returns text = Value
+      view Main { render Text(Label(.Value "Override")) }
+      ${runtimeViews}
+    `)
+    const errors = validationErrorMessages(result)
+
+    Expect(errors).toContain(FunctionalCoreValidator.messages.functionNamedArgument('Label'))
+  })
+
+  Test('reports the accepted argument range for functions with defaults', async () => {
+    const result = await testValidateCodeWithErrors(`
+      app DefaultsApp { view Main }
+      function Label Prefix is text, Value is text default "Save" returns text = interpolate Prefix, Value
+      view Main {
+        render Col(){
+          Text(Label())
+          Text(Label("A", "B", "C"))
+        }
+      }
+      ${runtimeViews}
+    `)
+    const errors = validationErrorMessages(result)
+
+    Expect(errors).toContain(FunctionalCoreValidator.messages.functionArgumentCount('Label', 1, 2, 0))
+    Expect(errors).toContain(FunctionalCoreValidator.messages.functionArgumentCount('Label', 1, 2, 3))
+  })
+})

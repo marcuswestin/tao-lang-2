@@ -17,7 +17,15 @@ export type TaoTypirServices = TypirLangiumServices<TaoSpecifics>
 const NO_DOCUMENT_ERROR = 'AST node has no document'
 
 const activeInferenceNodes = new WeakSet<AST.Node>()
-const primitiveTypes = ['text', 'number', 'action', 'item', 'list'] as const satisfies readonly AST.PrimitiveType[]
+const primitiveTypes = [
+  'text',
+  'number',
+  'boolean',
+  'time',
+  'action',
+  'item',
+  'list',
+] as const satisfies readonly AST.PrimitiveType[]
 
 /** TypeSystemHelpers groups Tao Typir helper functions. */
 export const TypeSystemHelpers = {
@@ -31,7 +39,7 @@ export const TypeSystemHelpers = {
 
 /** taoPrimitiveType returns the Typir primitive for a Tao primitive type. */
 function taoPrimitiveType(
-  type: AST.PrimitiveType | AST.TypeReference | ASTUtils.TaoType,
+  type: AST.PrimitiveType | 'none' | AST.TypeReference | ASTUtils.TaoType,
   typir: TaoTypirServices,
 ): TypirType | undefined {
   if (typeof type === 'string') {
@@ -59,6 +67,7 @@ function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | u
       type.nominal
         ? ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
         : taoPrimitiveType(type.kind, typir),
+    entity: () => undefined,
   })
 }
 

@@ -12,7 +12,7 @@ Describe('Tao compiler', () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value ${tsFence}
@@ -41,12 +41,12 @@ Describe('Tao compiler', () => {
       }
       view MainView {
         state Count = 0
-        alias DisplayCount = Count
+        let DisplayCount = Count
         action AddOne {
           set Count += 1
         }
-        render Button "Add", AddOne {
-          Number DisplayCount
+        render Button("Add", AddOne) {
+          Number(DisplayCount)
         }
       }
     `)
@@ -55,17 +55,115 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
-  Test('compiles dynamic action parameter invocations without arguments', async () => {
+  Test('compiles provider-neutral data schemas, reactive queries, and row writes', async () => {
+    const compiled = await Compiler.compileCode(`
+      data Tasks {
+        Workspaces Workspace { Name text }
+        Items Item { Title text Marker text default "now" Done boolean default false Ordering number CreatedAt time indexed default now() Workspace relation Workspace on delete cascade }
+      }
+      app MyApp { datasource Tasks through Memory view MainView }
+      project view MainView {
+        query Tasks.Items as Items {
+          where Done == false
+          order by Ordering desc
+        }
+        render Stack(){
+          for Item in Items {
+            Button("Update", action { update Item { Done true } })
+            Button("Delete", action { delete Item })
+          }
+        }
+      }
+      layout Stack {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view Button Title is text, Press is action {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view Detail Workspace is Tasks.Workspace, CreatedAt is time {
+        action AddRelated { create Tasks.Item { Title "Related" Ordering 2 Workspace Workspace } }
+        render Stack() { }
+      }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Data.Schema')
+    Expect(compiled.code).toContain('TR.Data.Query')
+    Expect(compiled.code).toContain('TR.Data.Create')
+    Expect(compiled.code).toContain('TR.Data.Update')
+    Expect(compiled.code).toContain('TR.Data.Delete')
+    Expect(compiled.code).toContain('TR.Data.Use')
+    Expect(compiled.code).not.toContain('TR.Data.Bind')
+    Expect(compiled.code).toContain('schemaVersion: 1')
+    Expect(compiled.code).toContain('defaultValue: "now"')
+    Expect(compiled.code).toContain('defaultNow: true')
+    Expect(compiled.code).toContain('relation: "Workspace"')
+    Expect(compiled.code).toContain("onDelete: 'cascade'")
+    Expect(compiled.code).toContain('CreatedAt: TR.Value<number>')
+  })
+
+  Test('emits prototype-sensitive data names as computed object keys', async () => {
+    const compiled = await Compiler.compileCode(`
+      data SafeData {
+        Rows __proto__ { __proto__ text }
+      }
+      app SafeApp { datasource SafeData through Memory view MainView }
+      view MainView {
+        action Add { create SafeData.__proto__ { __proto__ "safe" } }
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code.match(/\["__proto__"\]/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    Expect(compiled.code).not.toContain('"__proto__":')
+  })
+
+  Test('compiles app-owned stack destinations, presentation, and back behavior', async () => {
+    const compiled = await Compiler.compileCode(`
+      stack MainStack {
+        initial Home
+        destination Home
+        destination Detail
+      }
+      app NavigationApp { stack MainStack }
+      view Home Title is text default "Home" {
+        action Open { present MainStack.Detail(.Name "Workspace") }
+        render Detail("Inline")
+      }
+      view Detail Name is text {
+        action GoBack { back MainStack }
+        render Text(Name)
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Navigation.Stack')
+    Expect(compiled.code).toContain('TR.Navigation.Host')
+    Expect(compiled.code).toContain('TR.Navigation.Present')
+    Expect(compiled.code).toContain('TR.Navigation.Back')
+    Expect(compiled.code).toContain('Title={_NavigationArguments["Title"]}')
+    Expect(compiled.code).toContain('Name={_NavigationArguments["Name"]}')
+  })
+
+  Test('compiles typed dynamic action arguments in source order', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
-        render Wrapper action { }
+        action Receive Label is text, Count is number { }
+        render Wrapper(Receive)
       }
-      view Wrapper Callback is action {
+      view Wrapper Callback is action(text, number) {
         action CallCallback {
-          do Callback
+          do Callback("first", 2)
         }
-        render Text "Done"
+        render Text("Done")
       }
       view Text Value is text {
         render inject Value ${tsFence}
@@ -75,6 +173,28 @@ Describe('Tao compiler', () => {
     `)
 
     Expect(compiled.validation.diagnostics).toEqual([])
+    const code = compiled.files[0]?.code ?? ''
+    Expect(code).toContain('Callback: TR.Action<[TR.Value<string>, TR.Value<number>]>')
+    const first = code.indexOf('TR.Value("first")')
+    const second = code.indexOf('TR.Value(2)', first)
+    Expect(first).toBeGreaterThan(-1)
+    Expect(second).toBeGreaterThan(first)
+  })
+
+  Test('compiles action aliases as invokable callback values', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      view MainView {
+        let Save = action { }
+        action Run { do Save() }
+        render Text("Ready")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Alias(() => TR.Action')
+    Expect(compiled.code).toContain('TR.Do(_Scope.Save.evaluate())')
   })
 
   Test('compiles layout clauses into a generated app file', async () => {
@@ -82,8 +202,8 @@ Describe('Tao compiler', () => {
       use Col, Row from @tao/ui
       app LayoutApp { view MainView }
       layout Screen {
-        render Col [gap 4] {
-          Text "Wrapped"
+        render Col()[gap 4] {
+          Text("Wrapped")
         }
       }
       view Text Value is text {
@@ -92,11 +212,11 @@ Describe('Tao compiler', () => {
         ${fence}
       }
       view MainView {
-        render Col [fill, content top stretch, gap 12, pad 16] {
-          Row [content spread-inset center, gap 8] {
-            Text "Layout" [claim 2]
+        render Col()[fill, content top stretch, gap 12, pad 16] {
+          Row()[content spread-inset center, gap 8] {
+            Text("Layout") [claim 2]
           }
-          Screen [content center]
+          Screen()[content center]
         }
       }
     `)
@@ -113,7 +233,7 @@ Describe('Tao compiler', () => {
         app MultiFile { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello from imports"
+          render Text("Hello from imports")
         }
       `,
         'Views.tao': `
@@ -139,7 +259,7 @@ Describe('Tao compiler', () => {
         app MyApp { view MainView }
         use Text from ./
         view MainView {
-          render Text "Hello"
+          render Text("Hello")
         }
       `,
         'Views.tao': `
@@ -178,7 +298,7 @@ Describe('Tao compiler', () => {
       `,
         'lib/nested/@bar/views/Main.tao': `
         project view MainView {
-          render Text "Package import"
+          render Text("Package import")
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -210,7 +330,7 @@ Describe('Tao compiler', () => {
         'feature/@foo/forms/Main.tao': `
         use PackageTitle
         project view MainView {
-          render Text PackageTitle
+          render Text(PackageTitle)
         }
         view Text Value is text {
           render inject Value ${tsFence}
@@ -246,19 +366,19 @@ Describe('Tao compiler', () => {
         Role is text
       }
       type CurrentJob is InlineJob
-      alias DisplayName = Name "Ada"
-      alias DemoPerson = Person {
+      let DisplayName = Name "Ada"
+      let DemoPerson = Person {
         DisplayName
         Tags ["compiler" "runtime"]
         Job { Title "Engineer" }
       }
-      alias EmptyItem = item {}
-      alias DemoCurrentJob = CurrentJob { Role "Engineer" }
+      let EmptyItem = item {}
+      let DemoCurrentJob = CurrentJob { Role "Engineer" }
       view MainView {
-        render Stack {
-          TextValue DemoPerson.Name
-          ListValue DemoPerson.Tags
-          ItemValue item: {}
+        render Stack(){
+          TextValue(DemoPerson.Name)
+          ListValue(DemoPerson.Tags)
+          ItemValue(item: {})
         }
       }
       layout Stack {
@@ -296,7 +416,7 @@ Describe('Tao compiler', () => {
         use Name from ./Types.tao
         alias Name = Name "Ada"
         view MainView {
-          render TextValue Name
+          render TextValue(Name)
         }
         view TextValue Value is text {
           render inject Value ${tsFence}
@@ -323,20 +443,20 @@ Describe('Tao compiler', () => {
         app CircularApp { view MainView }
         use AView from ./
         view MainView {
-          render AView
+          render AView()
         }
       `,
         'A.tao': `
         use BView from ./
         project alias SharedTitle = "Cycle"
         project view AView {
-          render BView
+          render BView()
         }
       `,
         'B.tao': `
         use SharedTitle from ./
         project view BView {
-          render Leaf SharedTitle
+          render Leaf(SharedTitle)
         }
         view Leaf Value is text {
           render inject Value ${tsFence}
@@ -369,7 +489,7 @@ Describe('Tao compiler', () => {
         use AText from ../liba
         use BText from ../libb
         view MainView {
-          render AText "Hello"
+          render AText("Hello")
         }
       `,
         'liba/Views.tao': sharedViewSource('AText'),
@@ -401,7 +521,7 @@ Describe('Tao compiler', () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
-        render Text "Hello"
+        render Text("Hello")
       }
       view Text Value is text {
         render inject Value ${tsFence}
@@ -426,19 +546,25 @@ Describe('Tao compiler', () => {
       'tao-test-plan-',
       {
         'Main.test.tao': `
-        use MyApp from ./
+        use MyApp, MyData from ./
 
         test "Smoke" {
           check "renders" {
             run MyApp
             expect text "Hello"
             press text "Add"
+            enter "Draft" into label "Title"
+            submit id "title-input"
+            expect input placeholder "Title" value "Draft"
+            back
+            data MyData loading
             expect missing text "Loading"
           }
         }
       `,
         'Main.tao': `
-        app MyApp { view MainView }
+        project data MyData { }
+        app MyApp { datasource MyData through Memory view MainView }
         view MainView {
           render inject ${tsFence}
             return null
@@ -463,12 +589,22 @@ Describe('Tao compiler', () => {
         Expect(
           plan.suites[0]?.checks[0]?.steps.map(step => ({
             kind: step.kind,
-            selector: step.selector,
-            text: step.text,
+            ...('selector' in step ? { selector: step.selector } : {}),
+            ...('text' in step ? { text: step.text } : {}),
+            ...('target' in step ? { target: step.target } : {}),
+            ...('value' in step ? { value: step.value } : {}),
+            ...('dataName' in step
+              ? { dataName: step.dataName, status: step.status, message: step.message }
+              : {}),
           })),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },
           { kind: 'press', selector: 'text', text: 'Add' },
+          { kind: 'enter', selector: 'label', target: 'Title', value: 'Draft' },
+          { kind: 'submit', selector: 'id', target: 'title-input' },
+          { kind: 'expectInputValue', selector: 'placeholder', target: 'Title', value: 'Draft' },
+          { kind: 'back' },
+          { kind: 'dataStatus', dataName: 'MyData', status: 'loading', message: '' },
           { kind: 'expect', selector: 'text', text: 'Loading' },
         ])
         Expect(plan.suites[0]?.source.range).toBeDefined()

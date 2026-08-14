@@ -2,10 +2,13 @@ import { AST } from '@parser'
 import { ActionsValidator } from './ActionsValidator'
 import { AliasesValidator } from './aliases-validator'
 import { AppValidator } from './app-validator'
+import { validateData } from './data-validator'
 import { ExpressionsValidator } from './expressions-validator'
+import { FunctionalCoreValidator } from './FunctionalCoreValidator'
 import { validateInjections } from './injections-validator'
 import { InvocationsValidator } from './invocations-validator'
 import { LayoutValidator } from './layout-validator'
+import { validateNavigation } from './navigation-validator'
 import { validateProject } from './project-validator'
 import { StateValidator } from './StateValidator'
 import { validateTests } from './tests-validator'
@@ -26,6 +29,9 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   validateTests(file, ctx)
   validateTypes(file, ctx)
   InvocationsValidator.validate(file, ctx)
+  FunctionalCoreValidator.validate(file, ctx)
+  validateData(file, ctx)
+  validateNavigation(file, ctx)
 
   const document = AST.getDocument(file)
   if (document.uri.scheme === 'file') {
@@ -41,7 +47,10 @@ export const Validate = {
   Actions: ActionsValidator.validate,
   Injections: validateInjections,
   Invocations: InvocationsValidator.validate,
+  FunctionalCore: FunctionalCoreValidator.validate,
+  Data: validateData,
   Layouts: LayoutValidator.validate,
+  Navigation: validateNavigation,
   Project: validateProject,
   States: StateValidator.validate,
   TaoFile: validateTaoFile,

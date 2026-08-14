@@ -27,6 +27,15 @@ export type TaoTestExpectation = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestInputValueExpectation declares one selector-targeted native input value assertion. */
+export type TaoTestInputValueExpectation = {
+  kind: 'expectInputValue'
+  selector: string
+  target: string
+  value: string
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestPressStep declares one v0 selector-targeted press action. */
 export type TaoTestPressStep = {
   kind: 'press'
@@ -35,8 +44,47 @@ export type TaoTestPressStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestEnterStep declares text entry into one selected input. */
+export type TaoTestEnterStep = {
+  kind: 'enter'
+  selector: string
+  target: string
+  value: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestSubmitStep declares submission of one selected input. */
+export type TaoTestSubmitStep = {
+  kind: 'submit'
+  selector: string
+  target: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestDataStatusStep declares a deterministic provider state transition. */
+export type TaoTestDataStatusStep = {
+  kind: 'dataStatus'
+  dataName: string
+  status: 'error' | 'loading' | 'ready'
+  message: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestBackStep dispatches the active stack's platform-equivalent back operation. */
+export type TaoTestBackStep = {
+  kind: 'back'
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
-export type TaoTestStep = TaoTestExpectation | TaoTestPressStep
+export type TaoTestStep =
+  | TaoTestBackStep
+  | TaoTestDataStatusStep
+  | TaoTestEnterStep
+  | TaoTestExpectation
+  | TaoTestInputValueExpectation
+  | TaoTestPressStep
+  | TaoTestSubmitStep
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
 export type TaoTestCheck = {
@@ -109,11 +157,50 @@ function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation
   }
 }
 
+function compileInputValueExpectation(expectation: AST.ExpectInputValueStep): TaoTestInputValueExpectation {
+  return {
+    kind: 'expectInputValue',
+    selector: expectation.selector,
+    target: expectation.target,
+    value: expectation.value,
+    source: sourceLocation(expectation),
+  }
+}
+
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
+    BackTestStep: compileBackTestStep,
+    DataStatusStep: compileDataStatusStep,
+    EnterTextStep: compileEnterTextStep,
+    ExpectInputValueStep: compileInputValueExpectation,
     ExpectTextStep: compileExpectation,
     PressTextStep: compilePressTextStep,
+    SubmitInputStep: compileSubmitInputStep,
   })
+}
+
+function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {
+  return { kind: 'back', source: sourceLocation(step) }
+}
+
+function compileDataStatusStep(step: AST.DataStatusStep): TaoTestDataStatusStep {
+  return {
+    kind: 'dataStatus',
+    dataName: step.data.$refText,
+    status: step.status || 'error',
+    message: step.message || '',
+    source: sourceLocation(step),
+  }
+}
+
+function compileEnterTextStep(enter: AST.EnterTextStep): TaoTestEnterStep {
+  return {
+    kind: 'enter',
+    selector: enter.selector,
+    target: enter.target,
+    value: enter.value,
+    source: sourceLocation(enter),
+  }
 }
 
 function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
@@ -122,6 +209,15 @@ function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
     selector: press.selector,
     text: press.text,
     source: sourceLocation(press),
+  }
+}
+
+function compileSubmitInputStep(submit: AST.SubmitInputStep): TaoTestSubmitStep {
+  return {
+    kind: 'submit',
+    selector: submit.selector,
+    target: submit.target,
+    source: sourceLocation(submit),
   }
 }
 

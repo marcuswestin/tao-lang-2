@@ -10,10 +10,10 @@ const viewValidationMessages = {
   reservedParameter: (name: string) => `Parameter name '${name}' is reserved for generated view props.`,
   renderCount: (name: string) => `Renderable declaration '${name}' must declare exactly one render statement.`,
   renderLast: '`render` must be the last statement in a view or layout body.',
-  viewBody: 'Only alias, state, action, and render statements are allowed in view bodies.',
-  layoutBody: 'Only alias and render statements are allowed in layout bodies.',
-  renderBlock: 'Only alias, render, and view invocation statements are allowed in render child blocks.',
-  renderBlockAliasPlacement: 'Aliases in render blocks must be declared before child view invocations.',
+  viewBody: 'Only let, state, query, action, and render statements are allowed in view bodies.',
+  layoutBody: 'Only let and render statements are allowed in layout bodies.',
+  renderBlock: 'Only let, render, view invocation, when, and for statements are allowed in render child blocks.',
+  renderBlockAliasPlacement: '`let` bindings in render blocks must be declared before child view invocations.',
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view or layout body.',
 } as const
@@ -81,7 +81,12 @@ function validateRenderableBodyBlock(view: AST.RenderableDeclaration, ctx: Valid
 
 function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
   for (const statement of block.statements) {
-    if (AST.isAliasDeclaration(statement) || AST.isStateDeclaration(statement) || AST.isActionDeclaration(statement)) {
+    if (
+      AST.isAliasDeclaration(statement)
+      || AST.isStateDeclaration(statement)
+      || AST.isQueryDeclaration(statement)
+      || AST.isActionDeclaration(statement)
+    ) {
       continue
     }
     if (AST.isRenderStatement(statement)) {
@@ -128,6 +133,19 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
       if (statement.block) {
         validateRenderBlock(statement.block, ctx)
       }
+      continue
+    }
+    if (AST.isWhenRenderStatement(statement)) {
+      hasChildInvocation = true
+      for (const branch of statement.branches) {
+        validateRenderBlock(branch.block, ctx)
+      }
+      validateRenderBlock(statement.otherwise.block, ctx)
+      continue
+    }
+    if (AST.isForStatement(statement)) {
+      hasChildInvocation = true
+      validateRenderBlock(statement.block, ctx)
       continue
     }
     ctx.error(viewValidationMessages.renderBlock, statement)

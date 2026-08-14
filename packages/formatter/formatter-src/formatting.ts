@@ -12,8 +12,12 @@ export type NodeFormat<NodeT extends AST.Node> = {
   readonly node: NodeT
   /** oneSpaceBefore requests exactly one space before each present keyword. */
   oneSpaceBefore(...keywords: string[]): void
+  /** noSpaceBefore requests no whitespace before each present keyword. */
+  noSpaceBefore(...keywords: string[]): void
   /** oneSpaceAfter requests exactly one space after each present keyword. */
   oneSpaceAfter(...keywords: string[]): void
+  /** noSpaceAfter requests no whitespace after each present keyword. */
+  noSpaceAfter(...keywords: string[]): void
   /** oneSpaceAround requests exactly one space on both sides of each present keyword. */
   oneSpaceAround(...keywords: string[]): void
   /** oneSpaceBeforeProperty requests exactly one space before each present property value. */
@@ -28,6 +32,8 @@ export type NodeFormat<NodeT extends AST.Node> = {
   spaceSeparatedList(items: readonly AST.Node[]): void
   /** lineSeparatedList formats adjacent nodes with one newline between them. */
   lineSeparatedList(items: readonly AST.Node[]): void
+  /** indentedLines starts each listed node on its own line, one indent below the current node. */
+  indentedLines(items: readonly AST.Node[]): void
   /** indentedBraceBlock formats braces as `{ }` when empty, or one indented item per line with `}` on its own line. */
   indentedBraceBlock(items: readonly AST.Node[]): void
   /** singleLineBraceBlock formats a one-statement brace block as `{ statement }`. */
@@ -74,8 +80,14 @@ export function createNodeFormat<NodeT extends AST.Node>(
     oneSpaceBefore(...keywords) {
       formatter.keywords(...keywords).prepend(Formatting.oneSpace())
     },
+    noSpaceBefore(...keywords) {
+      formatter.keywords(...keywords).prepend(Formatting.noSpace())
+    },
     oneSpaceAfter(...keywords) {
       formatter.keywords(...keywords).append(Formatting.oneSpace())
+    },
+    noSpaceAfter(...keywords) {
+      formatter.keywords(...keywords).append(Formatting.noSpace())
     },
     oneSpaceAround(...keywords) {
       formatter.keywords(...keywords).surround(Formatting.oneSpace())
@@ -104,6 +116,9 @@ export function createNodeFormat<NodeT extends AST.Node>(
       for (const item of items.slice(1)) {
         formatter.node(item).prepend(Formatting.indent())
       }
+    },
+    indentedLines(items) {
+      prependIndentedLines(formatter, items)
     },
     indentedBraceBlock(items) {
       const open = formatter.keyword('{')
@@ -152,17 +167,40 @@ function separateLines<ItemT extends AST.Node>(
   for (let index = 1; index < items.length; index++) {
     const previous = items[index - 1]!
     const next = items[index]!
-    const separation = newLinesAction(linesBetween(previous, next), tabs)
-    // The separation goes above the item's leading comments so they stay attached below it.
-    const comments = leadingCommentLeaves(next, leaves)
-    if (comments.length === 0) {
-      formatter.node(next).prepend(separation)
-      continue
-    }
-    formatter.cst([comments[0]!]).prepend(separation)
-    formatter.cst(comments.slice(1)).prepend(newLinesAction(1, tabs))
-    formatter.node(next).prepend(newLinesAction(1, tabs))
+    prependLineWithLeadingComments(formatter, next, leaves, linesBetween(previous, next), tabs)
   }
+}
+
+function prependIndentedLines(
+  formatter: Langium.NodeFormatter<AST.Node>,
+  items: readonly AST.Node[],
+): void {
+  const first = items[0]
+  if (!first) {
+    return
+  }
+  const leaves = Langium.CstUtils.flattenCst(first.$cstNode!.root).toArray()
+  for (const item of items) {
+    prependLineWithLeadingComments(formatter, item, leaves, 1, 1)
+  }
+}
+
+function prependLineWithLeadingComments(
+  formatter: Langium.NodeFormatter<AST.Node>,
+  item: AST.Node,
+  leaves: readonly Langium.CstNode[],
+  separation: LineSeparation,
+  tabs: number,
+): void {
+  const comments = leadingCommentLeaves(item, leaves)
+  if (comments.length === 0) {
+    formatter.node(item).prepend(newLinesAction(separation, tabs))
+    return
+  }
+  // The separation goes above the item's leading comments so they stay attached below it.
+  formatter.cst([comments[0]!]).prepend(newLinesAction(separation, tabs))
+  formatter.cst(comments.slice(1)).prepend(newLinesAction(1, tabs))
+  formatter.node(item).prepend(newLinesAction(1, tabs))
 }
 
 // A leading comment owns its line; a comment trailing earlier source on the same line stays there.

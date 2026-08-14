@@ -1,0 +1,244 @@
+use Col, FormButton, Text, TextInput from @tao/ui
+
+project {
+   name "WordFlower"
+   remote none
+   license MIT
+}
+
+app WordFlower {
+   datasource WordFlowerData through Local
+   stack WordFlowerNavigation
+}
+
+let Tagline = "A quiet place for words that matter."
+
+type PromptTitle is text
+
+type PromptMinutes is number
+
+type PromptTags is list
+
+type WritingPrompt is {
+   PromptTitle
+   PromptMinutes
+   PromptTags
+}
+
+let StarterPrompt = WritingPrompt {
+   PromptTitle "Morning pages"
+   PromptMinutes 10
+   PromptTags ["daily" "warmup"]
+}
+
+project data WordFlowerData {
+   Workspaces Workspace {
+      Name text
+      CreatedAt time indexed default now()
+   }
+   Documents Document {
+      Title text
+      Body text default ""
+      Final boolean default false
+      CreatedAt time indexed default now()
+      Workspace relation Workspace on delete cascade
+}  }
+
+project stack WordFlowerNavigation {
+   initial WorkspaceList
+   destination WorkspaceList
+   destination WorkspaceDetail
+   destination DocumentEditor
+}
+
+project view WorkspaceList {
+   state WorkspaceDraft = ""
+   query WordFlowerData.Workspaces as Workspaces {
+      order by CreatedAt asc
+   }
+   action ChangeWorkspaceDraft Value is text {
+      set WorkspaceDraft = Value
+   }
+   action AddWorkspace {
+      when
+         WorkspaceDraft.Empty -> { }
+         otherwise -> {
+            create WordFlowerData.Workspace {
+               Name WorkspaceDraft
+            }
+            set WorkspaceDraft = ""
+   }  }
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      Text("WordFlower")
+      Text(Tagline)
+      when
+         Workspaces.Loading -> {
+            Text("Loading workspaces…")
+         }
+         not Workspaces.Error.Empty -> {
+            Text("Could not load WordFlower")
+            Text(Workspaces.Error)
+         }
+         otherwise -> {
+            TextInput(.Value WorkspaceDraft, .Change ChangeWorkspaceDraft, .Submit AddWorkspace, .Label "Workspace name", .Placeholder "Home", .Id "workspace-name")
+            when
+               WorkspaceDraft.Empty -> {
+                  Text("Workspace name is required")
+               }
+               otherwise -> {
+                  Text(WorkspaceDraft)
+               }
+            FormButton(.Title "Add workspace", .Press AddWorkspace, .Id "add-workspace", .Disabled WorkspaceDraft.Empty)
+            when
+               Workspaces.Empty -> {
+                  Text("No workspaces yet")
+                  Text("Create one to start capturing documents.")
+                  Text(interpolate "Starter prompt: ", StarterPrompt.PromptTitle)
+                  Text(interpolate "Try writing for ", StarterPrompt.PromptMinutes, " minutes")
+                  TagLine(StarterPrompt.PromptTags)
+               }
+               otherwise -> {
+                  for Workspace in Workspaces {
+                     Col() [gap 6, pad 10] {
+                        Text(Workspace.Name)
+                        FormButton(.Title "Open workspace", .Press action { present WordFlowerNavigation.WorkspaceDetail(.Workspace Workspace) }, .Id (interpolate "open-workspace-", Workspace.Id))
+                        FormButton(.Title "Delete workspace", .Press action { delete Workspace }, .Id (interpolate "delete-workspace-", Workspace.Id))
+}  }  }  }  }  }
+
+project view WorkspaceDetail Workspace is WordFlowerData.Workspace {
+   state WorkspaceNameDraft = Workspace.Name
+   state DocumentDraft = ""
+   query WordFlowerData.Documents as Drafts {
+      where Workspace == Workspace
+      where Final == false
+      order by CreatedAt asc
+   }
+   query WordFlowerData.Documents as FinishedDocuments {
+      where Workspace == Workspace
+      where Final == true
+      order by CreatedAt asc
+   }
+   let SectionLabel = "Drafts"
+   action ChangeDocumentDraft Value is text {
+      set DocumentDraft = Value
+   }
+   action ChangeWorkspaceNameDraft Value is text {
+      set WorkspaceNameDraft = Value
+   }
+   action SaveWorkspace {
+      when
+         WorkspaceNameDraft.Empty -> { }
+         otherwise -> {
+            update Workspace {
+               Name WorkspaceNameDraft
+   }  }  }
+   action AddDocument {
+      when
+         DocumentDraft.Empty -> { }
+         otherwise -> {
+            create WordFlowerData.Document {
+               Title DocumentDraft
+               Workspace Workspace
+            }
+            set DocumentDraft = ""
+   }  }
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      Text(interpolate "Workspace: ", Workspace.Name)
+      TextInput(.Value WorkspaceNameDraft, .Change ChangeWorkspaceNameDraft, .Submit SaveWorkspace, .Label "Workspace title", .Placeholder "Workspace title", .Id "workspace-title")
+      FormButton(.Title "Save workspace", .Press SaveWorkspace, .Id "save-workspace", .Disabled WorkspaceNameDraft.Empty)
+      Text(interpolate SectionLabel, ": ", Drafts.Count)
+      when
+         Drafts.Loading or FinishedDocuments.Loading -> {
+            Text("Loading documents…")
+         }
+         not Drafts.Error.Empty -> {
+            Text("Could not load documents")
+            Text(Drafts.Error)
+         }
+         not FinishedDocuments.Error.Empty -> {
+            Text("Could not load documents")
+            Text(FinishedDocuments.Error)
+         }
+         otherwise -> {
+            TextInput(.Value DocumentDraft, .Change ChangeDocumentDraft, .Submit AddDocument, .Label "New document title", .Placeholder "Draft the next chapter", .Id "new-document-title")
+            when
+               DocumentDraft.Empty -> {
+                  Text("Document title is required")
+               }
+               otherwise -> {
+                  Text(DocumentDraft)
+               }
+            FormButton(.Title "Add document", .Press AddDocument, .Id "add-document", .Disabled DocumentDraft.Empty)
+            when
+               Drafts.Empty -> {
+                  Text("No drafts")
+               }
+               otherwise -> {
+                  for Document in Drafts {
+                     Col() [gap 6, pad 10] {
+                        Text(Document.Title)
+                        FormButton(.Title "Open document", .Press action { present WordFlowerNavigation.DocumentEditor(.Document Document) }, .Id (interpolate "open-document-", Document.Id))
+                        FormButton(.Title "Finish document", .Press action { update Document {
+                           Final true
+                        } }, .Id (interpolate "finish-document-", Document.Id))
+                        FormButton(.Title "Delete document", .Press action { delete Document }, .Id (interpolate "delete-draft-", Document.Id))
+               }  }  }
+            when
+               FinishedDocuments.Empty -> {
+                  Text("No finished documents")
+               }
+               otherwise -> {
+                  let SectionLabel = "Finished"
+                  Text(SectionLabel)
+                  for Document in FinishedDocuments {
+                     Col() [gap 6, pad 10] {
+                        Text(Document.Title)
+                        FormButton(.Title "Reopen document", .Press action { update Document {
+                           Final false
+                        } }, .Id (interpolate "reopen-document-", Document.Id))
+                        FormButton(.Title "Delete finished document", .Press action { delete Document }, .Id (interpolate "delete-finished-document-", Document.Id))
+}  }  }  }  }  }
+
+project view DocumentEditor Document is WordFlowerData.Document {
+   state TitleDraft = Document.Title
+   state BodyDraft = Document.Body
+   state SaveCount = 0
+   action ChangeTitleDraft Value is text {
+      set TitleDraft = Value
+   }
+   action ChangeBodyDraft Value is text {
+      set BodyDraft = Value
+   }
+   action SaveDocument {
+      when
+         TitleDraft.Empty -> { }
+         otherwise -> {
+            update Document {
+               Title TitleDraft
+               Body BodyDraft
+            }
+            set SaveCount += 1
+   }  }
+   render Col() [fill, content top stretch, gap 10, pad 16] {
+      Text("Edit document") [width fill]
+      Text(interpolate "Workspace: ", Document.Workspace.Name)
+      TextInput(.Value TitleDraft, .Change ChangeTitleDraft, .Submit SaveDocument, .Label "Document title", .Placeholder "Document title", .Id "edit-document-title")
+      TextInput(.Value BodyDraft, .Change ChangeBodyDraft, .Submit SaveDocument, .Label "Document body", .Placeholder "Write the document body", .Id "edit-document-body") [claim 2]
+      WordCount(BodyDraft)
+      FormButton(.Title "Save document", .Press SaveDocument, .Id "save-document", .Disabled TitleDraft.Empty)
+      Text(interpolate "Saved title: ", Document.Title)
+      Text(interpolate "Saved body: ", Document.Body)
+      Text(interpolate "Saves this session: ", SaveCount)
+}  }
+
+view WordCount Value is text {
+   render inject Value ```ts
+      return <RN.Text>Words: {Value.trim() === '' ? 0 : Value.trim().split(/\s+/).length}</RN.Text>
+   ```
+}
+
+view TagLine Tags is list {
+   render inject Tags ```ts
+      return <RN.Text>Tagged: {Tags.join(', ')}</RN.Text>
+   ```
+}

@@ -1,12 +1,150 @@
 # Tao Type System
 
-This document describes the (intended) Tao type system.
+Status: the opening sections are authoritative for the implemented functional MVP. The later design record is explicitly future-facing.
 
-Current implementation status: this repo currently supports `text` and `number` literals, coarse `list` and `item` values, `view` and `layout` declarations, the transitional `alias` binding, the state/action MVP for view-local `state`, named/inline `action`, `set`, `do`, stateful reads, and reactive rerendering, simple custom `type` declarations, typed primitive/list/item construction by juxtaposition, member access, scoped parameter type declarations, value references, invocation-only typed argument labels with `:`, and exact-first type-based render/action/item-field binding. The intended language described below replaces value `alias` with immutable `let`, expands parameters into declaration properties, and adds the closed-union assignability needed by `Presentable`; that migration is not implemented yet. Boolean, typed list elements, operators beyond MVP compound `set`, interpolation, functions, `match`, optional item fields, extension is item, and richer collection inference remain future work.
+## Implemented functional MVP
 
-Any commented out code is WIP material and should be ignored.
+The current scalar/value core supports `text`, `number`, `boolean`, `none`, homogeneous lists, item values, and schema-specific live entity types. `time` is a distinct data-field type; time values currently enter Tao through entity fields, with data-only `default now()` as the clock-producing form. Text and lists expose `.Empty` as boolean and `.Count` as number. Entity values expose stable `Id`, declared fields, and live related entities through member access.
 
-## Basic typing
+The current executable language also supports:
+
+- precedence-aware arithmetic, comparison, equality, and boolean expressions;
+- explicit `interpolate` and the absence value `none`;
+- expression-bodied pure functions with an explicit `returns` type;
+- one required-total, ordered, lazy `when … otherwise` form across values, render blocks, and actions;
+- homogeneous list literals and `for … in` rendering;
+- canonical immutable `let` bindings; legacy `alias` is accepted only for compatibility and produces a deprecation warning;
+- view-local `state`, named and inline `action`, `set`, boolean-only `toggle`, `do`, and reactive rerendering;
+- structural `action(...)` callback contracts with checked positional inputs and default-aware named-action compatibility;
+- `view` and `layout` declarations, simple custom `type` declarations, typed primitive/list/item construction, item member access, and typed declaration parameters;
+- typed parameter defaults on views, layouts, actions, and functions;
+- exact-first type-based render/action/presentation/item-field binding, explicit `.Parameter Value` invocation bindings, and invocation-only `Type: Value` labels;
+- typed data queries/writes and typed stack destinations, described in `Tao Data.md` and `Tao Presentation and Navigation.md`.
+
+Template-literal sugar, optional types and item fields, `match`, type extension with `is item`, heterogeneous lists, configured-declaration property blocks, closed unions, and richer collection transforms remain future work.
+
+### Canonical calls and layout placement
+
+Rendering, action execution, pure-function calls, and destination presentation always delimit arguments with parentheses:
+
+```tao
+render Card(.Title "Inbox") [fill, gap 8] {
+   Text("Open")
+}
+
+do Save(.Draft Draft)
+let Label = CountLabel(Count)
+present MainNavigation.Detail(.Task Task)
+```
+
+Empty calls use `()`. A render layout clause and child block follow the closing parenthesis; layout is never part of the argument list. The `render` keyword may be omitted only for a child view invocation inside a render block, but the parentheses remain mandatory.
+
+Any expression of the required type can appear in an argument list, including a function call, `interpolate`, a binary expression, or a list literal. `.Parameter Value` binds by declared parameter name before type-based matching and disambiguates repeated underlying types.
+
+### Action callback contracts
+
+Reusable views declare the arguments they will supply when invoking an action value. `action()` accepts no arguments; `action(text)` accepts one text argument; additional inputs are comma-separated. Bare `action` remains compatible as the zero-argument form, but canonical APIs spell the contract explicitly.
+
+```tao
+view Field Change is action(text), Submit is action() {
+   action Relay Value is text {
+      do Change(Value)
+   }
+   action Send {
+      do Submit()
+   }
+   render Text("Ready")
+}
+
+view Editor {
+   state Draft = ""
+   action ChangeDraft Value is text {
+      set Draft = Value
+   }
+   action Save { }
+   render Field(.Change ChangeDraft, .Submit Save)
+}
+```
+
+Named actions infer their callback signature from their declared parameters. Inline `action { ... }` values are zero-argument. Contracts are structural, so a matching callback can be forwarded through multiple reusable views; an action with a wrong type or required arity is rejected. A named action may have additional trailing defaulted parameters when every call allowed by the callback contract remains safe.
+
+Named action declarations keep Tao's ordinary type-based and `.Parameter` argument binding. Invoking an action-typed value uses the positional order declared by `action(...)`, because a callback type intentionally carries types rather than source parameter names. The compiler preserves the signature in generated `TR.Action` types, and runtime-backed controls adapt native events to the declared Tao values. For example, the standard `TextInput.Change` contract is `action(text)`, while `TextInput.Submit`, `Button.Action`, and `FormButton.Press` are `action()`.
+
+### Functions and typed defaults
+
+Pure functions have lexical parameters, one expression body, an explicit return type, and positional calls:
+
+```tao
+function CountLabel Count is number returns text = interpolate "Count: ", Count
+function Step Count is number, Amount is number default 1 returns number = Count + Amount
+
+let Label = CountLabel(2)
+let Next = Step(2)
+```
+
+Function defaults may be omitted only from the trailing positional arguments; named `.Parameter` arguments are not valid for function calls. View, layout, action, and destination calls use normal type-based binding for required parameters. A defaulted parameter does not compete for an unnamed argument, so overriding it is explicit:
+
+```tao
+view Status Title is text, Tone is text default "quiet" {
+   render Text(interpolate Title, ": ", Tone)
+}
+
+render Status("Ready")
+render Status("Ready", .Tone "loud")
+```
+
+A required parameter cannot follow a defaulted parameter. A default must match its parameter type and may refer only to earlier parameters in the same declaration.
+
+### Total `when`
+
+Every conditional has one or more boolean branches and a required `otherwise`. Conditions run lazily in source order; only the first matching branch is evaluated or executed.
+
+```tao
+function Status Visible is boolean returns text = when
+   Visible -> "Open"
+   otherwise -> "Hidden"
+
+view Example {
+   state Count = 2
+   state Visible = true
+   action Hide {
+      when
+         Count > 0 -> {
+            toggle Visible
+            set Count = 0
+         }
+         otherwise -> { }
+   }
+   render Col() {
+      when
+         Visible -> {
+            Text(Status(Visible))
+         }
+         otherwise -> {
+            Text("Empty")
+         }
+      for Name in ["Inbox" "Today"] {
+         Text(Name)
+      }
+   }
+}
+```
+
+Value branches must produce compatible types. Render and action branches use blocks. `when` and `for` render statements are valid only inside a render child block and introduce lexical child scopes. There is no separate implemented `if` form.
+
+### Expressions, collections, and entities
+
+`interpolate` concatenates text, number, boolean, and `none` parts; `none` contributes empty text. Operator precedence is unary, multiplication/division, addition/subtraction, comparison, equality, `and`, then `or`. Equality uses `==` and `!=`. Arithmetic operands are numbers except for `text + text`; ordered expression comparisons require numbers; boolean operators require booleans.
+
+List literals are homogeneous. `for` exposes the inferred element value inside its render body. A data query is a reactive list whose element type is the selected schema entity. Query iteration exposes live entity fields and stable text `Id`; strict `update` and `delete` require that entity type. A relation field accepts and returns the declared related entity type, not arbitrary text.
+
+## Future type-system design record
+
+Everything below this heading records deeper intended design. It is not a statement of current parser, validator, compiler, or runtime behavior; examples may not parse in the MVP. Material that overlaps the implemented subset above should still be read through the authoritative MVP rules above, especially mandatory invocation parentheses, explicit `interpolate`, total `when`, and canonical `let`.
+
+Any commented-out code is WIP material and should be ignored.
+
+### Basic typing
 
 In these examples, `=>` means "is equivalent to". It is not part of tao syntax.
 
@@ -187,14 +325,14 @@ let Discount = Discount 10
 
 let DiscountPrice = Price - Price * Discount
 
-render Text "{DiscountPrice} USD"
+render Text("{DiscountPrice} USD")
 
 type Title is text
 type OnPress is action
 
-render Button "Buy", OnPress -> {
-  do Purchase
-}
+render Button("Buy", OnPress -> {
+  do Purchase()
+})
 ```
 
 ### Views: Declarations and Rendering
@@ -206,7 +344,7 @@ When you `render` a view somewhere in the code, it displays at the correspondin
 ```tao
 view <ViewName> <Parameters> { <Body> }
   => defines a callable view value named <ViewName>
-render <ViewName> <Arguments> { <Body> }
+render <ViewName>(<Arguments>) [<Layout>] { <Body> }
   => <ViewName> appears in the UI along with its <Body>
 ```
 
@@ -215,29 +353,29 @@ Tao comes with a core library, including UI components. For example, `Text` rend
 ```tao
 view Example {
   // Display `Hello ... ` in the UI:
-  render Text "Hello World!"
+  render Text("Hello World!")
 }
 ```
 
 The `render` keyword is valid inside render-bearing declarations: `view`, `frame`, `layout`, `ui`, `nav`, and `dialogue`. App roots mount a nav rather than rendering ordinary content directly.
 
-Also, inside of any `view` the `render` keyword can be dropped - and you should:
+Inside a render child block, the `render` keyword can be dropped, while invocation parentheses remain required:
 
 ```tao
 view Example {
-  Text "Hello World!" // same as `render Text "Hello World!"`
+  Text("Hello World!") // same as `render Text("Hello World!")`
 }
 ```
 
-Conventional Tao is expected to drop `render` inside any `view` once render elision is implemented.
+Conventional Tao drops `render` for child invocations inside render blocks.
 
 The one exception is for example code. It is useful to demonstrate using views without a wrapping `view Example { ... }` wrapper definition:
 
 ```tao
-render Text "Hello World!"
+render Text("Hello World!")
 // vs:
 view Example {
-  Text "Hello World!"
+  Text("Hello World!")
 }
 ```
 
@@ -249,9 +387,9 @@ To represent data that changes, you declare `state` values. Any time a `state` v
 
 ```tao
 state IsLoggedIn false
-render Text when
+render Text(when
   IsLoggedIn -> "Logged in"
-  otherwise -> "Logged out"
+  otherwise -> "Logged out")
 ```
 
 This boolean `when` expression is separate from type-matching `match` expressions, described later.
@@ -260,42 +398,42 @@ You use an `action` to update any `state`:
 
 ```tao
 view Button Label text, OnPress action {
-  Text Label
-  on press -> { do OnPress }
+  Text(Label)
+  on press -> { do OnPress() }
 }
 
 view Button2 Label text, OnPress action {
-  Text Label
-  on press -> { do OnPress }
+  Text(Label)
+  on press -> { do OnPress() }
 }
 
 action OnPress {
   set IsLoggedIn = true
 }
 
-render Button "Hi", action {
+render Button("Hi", action {
   set IsLoggedIn = true
-}
+})
 
-render Button "Hi", OnPress
+render Button("Hi", OnPress)
 ```
 
-`do <Action>` invokes an action value. It is valid anywhere action execution is valid, such as inside a view interaction body or another action body.
+`do <Action>(<Arguments>)` invokes an action value. Parentheses are mandatory, including `do Save()` for a zero-argument action. It is valid anywhere action execution is valid, such as inside a view interaction body or another action body.
 
 Actions are ordinary typed arguments and are matched the same way as view arguments. `<Type> -> { ... }` is shorthand for creating an action value of `<Type>`. If no type appears before `->`, the type defaults to `action`.
 
 ```tao
-render Button "Hi", -> {
+render Button("Hi", -> {
+  toggle IsLoggedIn
+})
+
+render Button2("Hi", OnPress) {
   toggle IsLoggedIn
 }
 
-render Button2 "Hi", OnPress {
+render Button2("Hi", OnPress -> {
   toggle IsLoggedIn
-}
-
-render Button2 "Hi", OnPress -> {
-  toggle IsLoggedIn
-}
+})
 ```
 
 You can use `let` in a declarative scope to create derived values that depend on `state`. The expression reevaluates whenever one of its reactive dependencies changes.
@@ -322,7 +460,7 @@ use every from @tao/time
 state Countdown 100.seconds
 
 view CountdownTimer {
-  Text "T minus {Countdown} seconds"
+  Text("T minus {Countdown} seconds")
 
   on every 1.second -> {
     set Countdown = Countdown - 1
@@ -339,7 +477,7 @@ use every, Minutes from @tao/time
 
 state Countdown = 100.seconds
 let MinutesCountdown = Countdown.asMinutes
-render Text "T minus {MinutesCountdown} minutes"
+render Text("T minus {MinutesCountdown} minutes")
 ```
 
 A `state` value can only ever be updated by an `action`; and an `action` can only ever happen in response to an `event`.
@@ -350,15 +488,15 @@ For example:
 
 ```tao
 state Counter = 0
-Text "{Counter}"
-Button "Increment", -> { set Counter += 1 }
+Text("{Counter}")
+Button("Increment", -> { set Counter += 1 })
 ```
 
 All `stateful` values are _reactive_. This means that whenever something `stateful` updates value, _every_ other part of the app that refers to that state also update, immediately and automatically.
 
 When a stateful value is rendered in a view, it always updates to its latest value.
 
-Anytime a stateful value is used to decide what to do, e.g `if <state> > 10 { ... }`, it re-evaluates the moment the state updates.
+Anytime a stateful value is used in a conditional `when` branch, it re-evaluates when that state updates.
 
 Only in an action is a state considered as its "current" value, at the time of the action event.
 
@@ -380,9 +518,9 @@ let Greeting = "Hi " + Name
 
 // `render stateful T` collapses to `T` when rendered.
 view Show {
-  Text Count     // render Count => render stateful number => number
-  Text Doubled   // render Doubled =..> number
-  Text Greeting  // render Greeting =..> text
+  Text(Count)     // render Count => render stateful number => number
+  Text(Doubled)   // render Doubled =..> number
+  Text(Greeting)  // render Greeting =..> text
 }
 
 // `set stateful X = stateful T` => `set stateful X = T`
@@ -455,7 +593,7 @@ ui Profile {
   User User
   Theme Theme default SystemTheme
   let DisplayName = User.Name
-  render ProfileBody User DisplayName Theme
+  render ProfileBody(User, DisplayName, Theme)
 }
 
 let RoProfile = Profile { User Ro }
@@ -481,9 +619,9 @@ let NameValue = Name "Ro"
 let AliasValue = Alias "Ro"
 let NicknameValue = Nickname "Ro"
 
-render NameSink Alias: AliasValue      // OK: child to parent
-render AliasSink Name: NameValue       // OK: parent to child
-render NicknameSink AKA: NicknameValue // Type Error: sibling to sibling
+render NameSink(Alias: AliasValue)      // OK: child to parent
+render AliasSink(Name: NameValue)       // OK: parent to child
+render NicknameSink(AKA: NicknameValue) // Type Error: sibling to sibling
 ```
 
 Action values have two extra construction shorthands:
@@ -530,7 +668,7 @@ state CurrentFirstName = FirstName "Ro"
 set CurrentFirstName = Name "Mo"
   => Type Error
 
-render NameSink FirstName: CurrentFirstName
+render NameSink(FirstName: CurrentFirstName)
   => OK
 ```
 
@@ -562,7 +700,7 @@ state LastName "Doe"
   => typeof LastName is stateful LastName
 ```
 
-## Callable Declarations
+## Future design: callable declarations
 
 ```tao
 view <ViewName> <Parameters> { <Body> }
@@ -574,7 +712,7 @@ action <ActionName> <Parameters> { <Body> }
 
 Apps, functions, frames, layouts, UI, navs, and dialogues use the same declaration-property and configured-value model. Their distinct keywords add role-specific validation and behavior; they do not introduce separate argument systems. An app is not invoked as UI, but `App with { ... }` creates another immutable launch configuration that retains the originating app declaration ID.
 
-A declaration name denotes its callable definition. In a context that requires a configured value, a declaration with no required properties is implicitly applied with zero arguments; this is why `Initial HomeUi` and `present HomeUi` are valid. A context that expects a callable-definition type receives the definition without applying it. An unconstrained `let Home = HomeUi` therefore binds the definition; use `let ConfiguredHome = HomeUi {}` when an explicit configured descriptor is required without an expected type. Parameterized declarations always require normal application.
+A declaration name denotes its callable definition. In this future configured-value model, a context that requires a configured value might implicitly apply a declaration with no required properties; presentation would still spell the call `present HomeUi()`. A context that expects a callable-definition type would receive the definition without applying it. An unconstrained `let Home = HomeUi` would therefore bind the definition; an explicit configured descriptor would require a dedicated configured-value form. Parameterized declarations would always require normal application.
 
 ### Declaration Properties And Arguments
 
@@ -582,13 +720,13 @@ A callable declaration defines its public inputs as properties. Header parameter
 
 ```tao
 view Profile User {
-   render Text User.Name
+   render Text(User.Name)
 }
 
 // Equivalent public property surface:
 view ProfileLonghand {
    User User
-   render Text User.Name
+   render Text(User.Name)
 }
 ```
 
@@ -601,7 +739,7 @@ view PersonLine {
    optional Subtitle text
    Density number default 1
 
-   render Text "{Label}: {Person.Name}"
+   render Text("{Label}: {Person.Name}")
 }
 ```
 
@@ -618,9 +756,9 @@ Omitting an optional property binds `none`; spelling `default none` is redundant
 Arguments may appear inline or in a property block:
 
 ```tao
-render Profile User
+render Profile(User)
 
-render PersonLine {
+render PersonLine() {
    Person User
    Label "Owner"
    Subtitle "Active"
@@ -646,12 +784,12 @@ Source order never resolves an ambiguity. Duplicate source types are valid in a 
 view TextPair {
    Primary text
    Secondary text
-   render Text "{Primary} / {Secondary}"
+   render Text("{Primary} / {Secondary}")
 }
 
-render TextPair Primary "A", Secondary "B" // OK
-render TextPair TextPair.Primary "A", TextPair.Secondary "B" // OK
-render TextPair "A", "B" // Type Error: ambiguous text arguments
+render TextPair(Primary "A", Secondary "B") // OK
+render TextPair(TextPair.Primary "A", TextPair.Secondary "B") // OK
+render TextPair("A", "B") // Type Error: ambiguous text arguments
 ```
 
 The invocation-only `<Type>: <Value>` form remains valid when a caller needs to construct an exact argument type explicitly. Exact and nominal slots take priority over closed-union membership so a broad union cannot steal an argument from a more specific property. Two compatible union slots remain ambiguous unless explicitly named. Structural `like` types and other overlapping shapes do not participate in matching unless a later specification defines their behavior.
@@ -683,43 +821,43 @@ Actions, functions, views, UI, navs, dialogues, frames, and layouts all use thes
 
 ```tao
 view Button Label text, OnPress action {
-  Text Label
-  on press -> { do OnPress }
+  Text(Label)
+  on press -> { do OnPress() }
 }
 
 view Button2 Label text, OnPress action {
-  Text Label
-  on press -> { do OnPress }
+  Text(Label)
+  on press -> { do OnPress() }
 }
 
 action OnPress {
-  do Save
+  do Save()
 }
 
 action Save {
   ...
 }
 
-render Button "Hi", action {
-  do Save
+render Button("Hi", action {
+  do Save()
+})
+
+render Button("Hi", OnPress)
+
+render Button("Hi", -> {
+  do Save()
+})
+
+render Button2("Hi", OnPress) {
+  do Save()
 }
 
-render Button "Hi", OnPress
-
-render Button "Hi", -> {
-  do Save
-}
-
-render Button2 "Hi", OnPress {
-  do Save
-}
-
-render Button2 "Hi", OnPress -> {
-  do Save
-}
+render Button2("Hi", OnPress -> {
+  do Save()
+})
 ```
 
-## Match Expressions and Overloaded Views
+## Future design: match expressions and overloaded views
 
 A closed union is declared with `type Name is A | B | ...`. A configured value of any member is assignable to the union, while `view`, `dialogue`, or any other nonmember is not. Nested named unions flatten for membership checks, duplicate members are rejected, and a value compatible with multiple overlapping members requires explicit type construction rather than order-based selection.
 
@@ -731,22 +869,22 @@ Inside each `when` branch, the matched value is narrowed to that branch's type. 
 type Cat is text | number
 let Cat = Cat 1
 
-render Text match Cat
+render Text(match Cat
   when text -> Cat
-  when number -> "{Cat + 9}"
+  when number -> "{Cat + 9}")
 ```
 
 Overloaded views can use the same `match` shape. Each `when` clause declares the parameter types available in that branch; names bind the same way as ordinary view parameters.
 
 ```tao
 view ViewA match
-  when Age -> { Text Age }
-  when Name -> { Text Name }
-  when Age, Name -> { Text "{Age} {Name}" }
+  when Age -> { Text(Age) }
+  when Name -> { Text(Name) }
+  when Age, Name -> { Text("{Age} {Name}") }
   when Name, Age -> { ... } // Type Error: duplicate case matches previous case
 ```
 
-## Items (Objects/Structs)
+## Future design: items (objects/structs)
 
 An item type has properties. Each property is a typed value. Item construction uses `Type { ... }`; bare `{ ... }` is reserved for bodies and content blocks. In a type definition, `ItemType + { ... }` creates a new item type by adding or refining properties from the right-hand shape.
 

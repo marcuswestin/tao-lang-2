@@ -6,12 +6,16 @@ import type { ValidationContext } from './validation'
 /** appValidationMessages declares structural diagnostics for Tao app placement. */
 const appValidationMessages = {
   topLevel:
-    'Only project, app, view, layout, alias, action, type, test declarations, and use statements are allowed at file level.',
+    'Only project, app, view, layout, let, function, action, data, stack, type, test declarations, and use statements are allowed at file level.',
   appCount: (count: number) => `Tao file must declare at most one app, found ${count}.`,
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
-  appBlock: (name: string) => `Only root view declarations are allowed in app ${name}.`,
-  appRootCount: (name: string, count: number) => `App ${name} must declare exactly one root view, found ${count}.`,
+  appBlock: (name: string) => `Only one root view or root stack declaration is allowed in app ${name}.`,
+  duplicateDatasource: (name: string, data: string) => `App ${name} binds datasource ${data} more than once.`,
+  unknownProvider: (provider: string) =>
+    `Unknown datasource provider '${provider}'. Supported providers: Local, Memory.`,
+  appRootCount: (name: string, count: number) =>
+    `App ${name} must declare exactly one root view or root stack, found ${count}.`,
   rootViewParameters: (appName: string, viewName: string) =>
     `App ${appName} root view ${viewName} must not declare parameters.`,
 } as const
@@ -58,19 +62,33 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
 }
 
 function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext): void {
+  const boundData = new Set<string>()
   for (const statement of AST.blockStatements(app)) {
-    if (AST.isAppView(statement)) {
+    if (AST.isAppView(statement) || AST.isAppStack(statement)) {
+      continue
+    }
+    if (AST.isAppDatasource(statement)) {
+      const name = statement.data.$refText
+      if (boundData.has(name)) {
+        ctx.error(appValidationMessages.duplicateDatasource(app.name, name), statement)
+      }
+      boundData.add(name)
+      if (statement.provider !== 'Local' && statement.provider !== 'Memory') {
+        ctx.error(appValidationMessages.unknownProvider(statement.provider), statement)
+      }
       continue
     }
     ctx.error(appValidationMessages.appBlock(app.name), statement)
   }
 
-  const roots = AST.blockStatementOf(app, { filter: AST.isAppView })
+  const roots = AST.blockStatements(app).filter(statement => AST.isAppView(statement) || AST.isAppStack(statement))
   if (roots.length !== 1) {
     ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
   }
   for (const root of roots) {
-    validateRootView(app, root, ctx)
+    if (AST.isAppView(root)) {
+      validateRootView(app, root, ctx)
+    }
   }
 }
 

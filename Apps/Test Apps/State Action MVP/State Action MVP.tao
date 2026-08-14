@@ -4,13 +4,13 @@ app StateActionMVP {
    view MainView
 }
 
-view CounterButton Title is text, Action is action {
-   render Button Title, Action
+view CounterButton Title is text, Action is action() {
+   render Button(Title, Action)
 }
 
 view MainView {
    state Count = 0
-   alias DisplayCount = Count
+   let DisplayCount = Count
    action SetZero {
       set Count = 0
    }
@@ -18,11 +18,11 @@ view MainView {
       set Count += Step
    }
    action AddFive {
-      do AddStep 5
+      do AddStep(5)
    }
    action AddTwice {
       set Count += 1
-      do AddOne
+      do AddOne()
    }
    action AddOne {
       set Count += 1
@@ -36,14 +36,14 @@ view MainView {
    action Halve {
       set Count /= 2
    }
-   render Col {
-      Text "State/action MVP"
-      Number DisplayCount
-      CounterButton "Add twice", AddTwice
-      CounterButton "Add five", AddFive
-      CounterButton "Decrement", Decrement
-      Button "Double", Double
-      Button "Halve", Halve
-      Button "Reset", SetZero
-      Button "Inline add one", -> { set Count += 1 }
+   render Col() {
+      Text("State/action MVP")
+      Number(DisplayCount)
+      CounterButton("Add twice", AddTwice)
+      CounterButton("Add five", AddFive)
+      CounterButton("Decrement", Decrement)
+      Button("Double", Double)
+      Button("Halve", Halve)
+      Button("Reset", SetZero)
+      Button("Inline add one", -> { set Count += 1 })
 }  }

@@ -1,0 +1,174 @@
+use WordFlower, WordFlowerFoundationTest from ./
+
+test "WordFlower functional MVP" {
+   check "starts empty and keeps invalid creates inert" {
+      run WordFlower
+
+      expect { // `expect { ... }` groups several assertions into one step
+         text "WordFlower"
+         text "No workspaces yet"
+         text "Starter prompt: Morning pages"
+         text "Try writing for 10 minutes"
+         text "Tagged: daily, warmup"
+         text "Workspace name is required"
+      }
+      expect #workspaceName {
+         placeholder "Home"
+         input value ""
+      }
+      press #addWorkspace // disabled while the draft is empty, so nothing happens
+      expect missing text "A workspace needs a name"
+      submit #workspaceName
+      expect text "A workspace needs a name" // the empty-name guard presents an overlay notice
+      press #dismissNotice
+      expect missing text "A workspace needs a name"
+      expect text "No workspaces yet"
+   }
+
+   check "uses live workspaces and preserves covered screen state" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      enter "Unsent workspace" into #workspaceName
+      select #workspaces[1] { // `select` scopes steps to the tagged loop's 1-based row
+         expect text "Home"
+         press #openWorkspace
+      }
+      expect text "Workspace: Home"
+      expect #workspaceTitle input value "Home"
+      enter "" into #workspaceTitle
+      submit #workspaceTitle
+      expect text "Workspace: Home"
+      enter "Renamed workspace" into #workspaceTitle
+      press #saveWorkspace
+      expect {
+         text "Workspace: Renamed workspace"
+         text "No drafts"
+      }
+      back
+      expect {
+         text "WordFlower"
+         text "Renamed workspace"
+      }
+      expect #workspaceName input value "Unsent workspace"
+      expect missing text "Workspace: Renamed workspace"
+   }
+
+   check "edits a related document on its own live destination" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      submit #newDocumentTitle
+      expect text "No drafts"
+      enter "Draft the intro" into #newDocumentTitle
+      submit #newDocumentTitle
+      expect text "Drafts: 1"
+      select #drafts[1] {
+         expect text "Draft the intro"
+         press #edit
+      }
+      expect {
+         text "Edit document"
+         text "Workspace: Home"
+         text "Words: 0"
+         text "Saves this session: 0"
+      }
+      expect #editDocumentTitle input value "Draft the intro"
+      enter "" into #editDocumentTitle
+      submit #editDocumentTitle
+      expect text "Saved title: Draft the intro"
+      enter "Polish the intro" into #editDocumentTitle
+      enter "Set the scene with intent" into #editDocumentBody
+      expect text "Words: 5" // the explicit change action keeps the live word count reactive
+      press #saveDocument
+      expect {
+         text "Saved title: Polish the intro"
+         text "Saved body: Set the scene with intent"
+         text "Saves this session: 1"
+      }
+      back
+      select #drafts[1] {
+         expect text "Polish the intro"
+         press #finish
+      }
+      expect {
+         text "Drafts: 0"
+         text "No drafts"
+      }
+      select #finishedDocuments[1] {
+         expect text "Polish the intro"
+         press #deleteFinished
+      }
+      expect text "No finished documents"
+   }
+
+   check "deletes related documents transitively with their workspace" {
+      run WordFlower
+      enter "Temporary" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Related draft" into #newDocumentTitle
+      press #addDocument
+      expect text "Related draft"
+      back
+      select #workspaces[1] {
+         press #deleteWorkspace
+      }
+      expect text "No workspaces yet"
+      enter "Replacement" into #workspaceName
+      press text "Add workspace" // visible-text presses remain alongside #tag selectors
+      select #workspaces[1] {
+         expect text "Replacement"
+         press #openWorkspace
+      }
+      expect {
+         missing text "Related draft"
+         text "No drafts"
+      }
+   }
+
+   check "renders deterministic loading, failure, and recovery states" {
+      run WordFlower
+      data loading // `data` drives the app's datasource provider state
+      expect {
+         text "Loading workspaces…"
+         missing text "Workspace name is required"
+      }
+      data error "Local storage is unavailable"
+      expect {
+         text "Could not load WordFlower"
+         text "Local storage is unavailable"
+      }
+      data ready
+      expect {
+         text "No workspaces yet"
+         text "Workspace name is required"
+      }
+   }
+}
+
+test "WordFlower navigation foundation" {
+   check "native back uses the semantic reducer" {
+      run WordFlowerFoundationTest
+      expect text "Foundation home marker"
+      press text "Open deterministic detail"
+      expect text "Foundation detail marker"
+      back
+      expect text "Foundation home marker"
+      expect missing text "Foundation detail marker"
+   }
+
+   check "slot dismissal restores its initial stack" {
+      run WordFlowerFoundationTest
+      press text "Open deterministic slot"
+      expect text "Foundation slot marker"
+      press text "Restore initial stack"
+      expect text "Foundation home marker"
+      expect missing text "Foundation slot marker"
+   }
+}

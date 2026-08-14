@@ -1,41 +1,51 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { DeclarationOrder } from './DeclarationOrder'
+import { aliasValidationCodes } from './diagnostic-codes'
 import type { ValidationContext } from './validation'
 
 type NamedValueDeclaration =
   | NamedFileValueDeclaration
   | AST.ParameterDeclaration
   | AST.StateDeclaration
+  | AST.QueryDeclaration
+  | AST.ForStatement
 type NamedFileValueDeclaration =
   | AST.ActionDeclaration
   | AST.AliasDeclaration
   | AST.AppDeclaration
+  | AST.FunctionDeclaration
+  | AST.DataDeclaration
   | AST.RenderableDeclaration
+  | AST.StackDeclaration
 type NamedDeclaration = NamedValueDeclaration | AST.TypeDeclaration
 type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
 
-/** aliasValidationMessages declares name and alias-reference diagnostics. */
+/** aliasValidationMessages declares name and immutable-binding reference diagnostics. */
 const aliasValidationMessages = {
   duplicateName: (name: string) => `Duplicate name '${name}'.`,
-  aliasUsedBeforeDeclaration: (alias: string, value: string) =>
-    `Alias '${alias}' cannot reference '${value}' because it is not declared before the alias.`,
+  reservedName: (name: string) => `Name '${name}' is reserved by Tao's generated runtime scope.`,
+  aliasUsedBeforeDeclaration: (binding: string, value: string) =>
+    `Binding '${binding}' cannot reference '${value}' because it is not declared before the binding.`,
   usedBeforeDeclaration: (name: string) => `Name '${name}' is used before it is declared.`,
+  deprecatedAlias: (name: string) => `\`alias\` is deprecated. Write \`let ${name} = ...\`.`,
 } as const
 
-/** AliasesValidator validates alias names and declaration order. */
+/** AliasesValidator validates immutable binding names and declaration order. */
 export const AliasesValidator = {
   messages: aliasValidationMessages,
   validate,
 }
 
-/** validateAliases validates duplicate names and alias reference order. */
+/** validateAliases validates duplicate names and immutable-binding reference order. */
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
+  reportReservedRuntimeNames(file, ctx)
   const fileValueDeclarations = file.statements.filter(isFileValueDeclaration)
   const fileTypeDeclarations = file.statements.filter(AST.isTypeDeclaration)
   reportDuplicateNames(fileValueDeclarations, new Map(), ctx)
   reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
   reportAliasReferenceOrder(allAliases(file), ctx)
+  reportDeprecatedAliasKeyword(allAliases(file), ctx)
   reportLocalValueReferenceOrder(file, ctx)
 
   const fileRenderables = file.statements.filter(AST.isRenderableDeclaration)
@@ -47,6 +57,30 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
       reportDuplicateNames(AST.valueDeclarationsOwnedByBlock(block), blockNames, ctx)
     }
   }
+}
+
+function reportReservedRuntimeNames(file: AST.TaoFile, ctx: ValidationContext): void {
+  for (const declaration of AST.streamAllContents(file).filter(isRuntimeScopeNamedDeclaration)) {
+    const name = Type.declarationName(declaration)
+    if (name === '__proto__') {
+      ctx.error(aliasValidationMessages.reservedName(name), declaration)
+    }
+  }
+}
+
+function isRuntimeScopeNamedDeclaration(node: AST.Node): node is NamedDeclaration {
+  return AST.isActionDeclaration(node)
+    || AST.isAliasDeclaration(node)
+    || AST.isAppDeclaration(node)
+    || AST.isDataDeclaration(node)
+    || AST.isForStatement(node)
+    || AST.isFunctionDeclaration(node)
+    || AST.isParameterDeclaration(node)
+    || AST.isQueryDeclaration(node)
+    || AST.isRenderableDeclaration(node)
+    || AST.isStackDeclaration(node)
+    || AST.isStateDeclaration(node)
+    || AST.isTypeDeclaration(node)
 }
 
 function reportDuplicateNames(
@@ -83,6 +117,16 @@ function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<str
 
 function allAliases(file: AST.TaoFile): AST.AliasDeclaration[] {
   return AST.streamAllContents(file).filter(AST.isAliasDeclaration)
+}
+
+function reportDeprecatedAliasKeyword(aliases: readonly AST.AliasDeclaration[], ctx: ValidationContext): void {
+  for (const alias of aliases) {
+    if (alias.keyword === 'alias') {
+      ctx.warning(aliasValidationMessages.deprecatedAlias(alias.name), alias, {
+        code: aliasValidationCodes.deprecatedAlias,
+      })
+    }
+  }
 }
 
 function reportAliasReferenceOrder(aliases: readonly AST.AliasDeclaration[], ctx: ValidationContext): void {
@@ -169,6 +213,15 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
     if (AST.isRender(statement) && statement.block) {
       collectRenderChildBlocks(statement.block, blocks)
     }
+    if (AST.isWhenRenderStatement(statement)) {
+      for (const branch of statement.branches) {
+        collectRenderChildBlocks(branch.block, blocks)
+      }
+      collectRenderChildBlocks(statement.otherwise.block, blocks)
+    }
+    if (AST.isForStatement(statement)) {
+      collectRenderChildBlocks(statement.block, blocks)
+    }
   }
 }
 
@@ -180,5 +233,8 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
   return AST.isActionDeclaration(node)
     || AST.isAliasDeclaration(node)
     || AST.isAppDeclaration(node)
+    || AST.isFunctionDeclaration(node)
+    || AST.isDataDeclaration(node)
     || AST.isRenderableDeclaration(node)
+    || AST.isStackDeclaration(node)
 }

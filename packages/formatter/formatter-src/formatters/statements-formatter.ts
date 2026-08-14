@@ -23,7 +23,30 @@ export default {
   },
 
   /** ParameterDeclaration formats either a bare named type or an inline `Name is Type` declaration. */
-  ParameterDeclaration() {},
+  ParameterDeclaration(f) {
+    f.oneSpaceBeforeProperty('defaultValue')
+  },
+
+  /** WhenRenderStatement puts each branch and its required fallback on an indented line. */
+  WhenRenderStatement(f) {
+    f.indentedLines([...f.node.branches, f.node.otherwise])
+  },
+
+  /** WhenRenderBranch spaces its condition against the branch arrow. */
+  WhenRenderBranch(f) {
+    f.oneSpaceBefore('->')
+  },
+
+  /** WhenRenderOtherwise spaces the fallback keyword against the branch arrow. */
+  WhenRenderOtherwise(f) {
+    f.oneSpaceBefore('->')
+  },
+
+  /** ForStatement formats iteration headers. */
+  ForStatement(f) {
+    f.oneSpaceAfter('for', 'in')
+    f.oneSpaceBefore('in')
+  },
 } satisfies Partial<FormatHandlers>
 
 /**

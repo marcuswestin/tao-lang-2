@@ -1,6 +1,7 @@
 import { FS } from '@shared'
 
 const TEST_APPS_DIR = 'Test Apps'
+const CURRENT_DIR = 'Current'
 
 /** discoverSwitchableAppPaths lists Tao app entry files under Apps without package subdirs. */
 export async function discoverSwitchableAppPaths(appsRoot: string): Promise<string[]> {
@@ -10,7 +11,9 @@ export async function discoverSwitchableAppPaths(appsRoot: string): Promise<stri
     if (entry === TEST_APPS_DIR) {
       continue
     }
-    await collectAppInDirectory(FS.resolvePath(entry, appsRoot), appPaths)
+    const appFamilyDirectory = FS.resolvePath(entry, appsRoot)
+    await collectAppInDirectory(appFamilyDirectory, appPaths)
+    await collectNamedAppInDirectory(FS.resolvePath(CURRENT_DIR, appFamilyDirectory), entry, appPaths)
   }
 
   const testAppsRoot = FS.resolvePath(TEST_APPS_DIR, appsRoot)
@@ -20,7 +23,7 @@ export async function discoverSwitchableAppPaths(appsRoot: string): Promise<stri
     }
   }
 
-  return appPaths.sort((left, right) => left.localeCompare(right))
+  return appPaths.sort(compareSwitchableAppPaths)
 }
 
 async function collectAppInDirectory(appDirectory: string, appPaths: string[]): Promise<void> {
@@ -29,8 +32,28 @@ async function collectAppInDirectory(appDirectory: string, appPaths: string[]): 
   }
 
   const appName = FS.basename(appDirectory)
+  await collectNamedAppInDirectory(appDirectory, appName, appPaths)
+}
+
+async function collectNamedAppInDirectory(
+  appDirectory: string,
+  appName: string,
+  appPaths: string[],
+): Promise<void> {
+  if (!await FS.isDirectory(appDirectory)) {
+    return
+  }
   const appPath = FS.resolvePath(`${appName}.tao`, appDirectory)
   if (await FS.isFile(appPath)) {
     appPaths.push(appPath)
   }
+}
+
+function compareSwitchableAppPaths(left: string, right: string): number {
+  const leftIsCurrent = FS.basename(FS.dirname(left)) === CURRENT_DIR
+  const rightIsCurrent = FS.basename(FS.dirname(right)) === CURRENT_DIR
+  if (leftIsCurrent !== rightIsCurrent) {
+    return leftIsCurrent ? -1 : 1
+  }
+  return left.localeCompare(right)
 }

@@ -5,173 +5,93 @@ import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import { testParseCode, testParseSyntax } from './test-parse'
 
-const kitchenSinkPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.tao')
-const kitchenSinkTestPath = Repo.resolvePath('Apps/Kitchen Sink/Kitchen Sink.test.tao')
+const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao')
+const wordFlowerTestPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.test.tao')
 const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 
 Describe('minimal Tao parser', () => {
-  Test('parses the current Kitchen Sink app', async () => {
-    const parseResult = await Workspace.parse(kitchenSinkPath)
+  Test('parses the current WordFlower app', async () => {
+    const parseResult = await Workspace.parse(wordFlowerPath)
 
     Expect(parseResult.diagnostics).toEqual([])
 
     const useStatement = parseResult.entry.ast.statements.find(AST.isUseStatement)
     const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
-    const greetingAlias = parseResult.entry.ast.statements.find(
-      statement => AST.isAliasDeclaration(statement) && statement.name === 'Greeting',
+    const taglineLet = parseResult.entry.ast.statements.find(
+      statement => AST.isAliasDeclaration(statement) && statement.name === 'Tagline',
     )
-    const launchCountAlias = parseResult.entry.ast.statements.find(
-      statement => AST.isAliasDeclaration(statement) && statement.name === 'LaunchCount',
+    const data = parseResult.entry.ast.statements.find(AST.isDataDeclaration)
+    const stack = parseResult.entry.ast.statements.find(AST.isStackDeclaration)
+    const workspaceList = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'WorkspaceList',
     )
-    const mainView = parseResult.entry.ast.statements.find(
-      statement => AST.isViewDeclaration(statement) && statement.name === 'MainView',
-    )
-    const countTextView = parseResult.entry.ast.statements.find(
-      statement => AST.isViewDeclaration(statement) && statement.name === 'CountText',
+    const wordCountView = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'WordCount',
     )
     Expect.Is(useStatement, AST.isUseStatement)
     Expect.Is(app, AST.isAppDeclaration)
-    Expect.Is(greetingAlias, AST.isAliasDeclaration)
-    Expect.Is(launchCountAlias, AST.isAliasDeclaration)
-    Expect.Is(mainView, AST.isViewDeclaration)
-    Expect.Is(countTextView, AST.isViewDeclaration)
+    Expect.Is(taglineLet, AST.isAliasDeclaration)
+    Expect.Is(data, AST.isDataDeclaration)
+    Expect.Is(stack, AST.isStackDeclaration)
+    Expect.Is(workspaceList, AST.isViewDeclaration)
+    Expect.Is(wordCountView, AST.isViewDeclaration)
     Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual([
-      'Button',
-      'Number',
-      'Stack',
+      'Col',
+      'FormButton',
       'Text',
+      'TextInput',
     ])
     Expect(useStatement.importPath).toBe('@tao/ui')
 
-    Expect(app.name).toBe('KitchenSink')
-    const appRoot = AST.blockStatementOf(app, 0)
-    Expect.Is(appRoot, AST.isAppView)
-    Expect(appRoot.view.ref?.name).toBe('MainView')
+    Expect(app.name).toBe('WordFlower')
+    const appDatasource = AST.blockStatementOf(app, 0)
+    const appStack = AST.blockStatementOf(app, 1)
+    Expect.Is(appDatasource, AST.isAppDatasource)
+    Expect.Is(appStack, AST.isAppStack)
+    Expect(appStack.stack.ref).toBe(stack)
 
-    Expect(greetingAlias.name).toBe('Greeting')
-    Expect.Is(greetingAlias.value, AST.isStringLiteral)
-    Expect(launchCountAlias.name).toBe('LaunchCount')
-    Expect.Is(launchCountAlias.value, AST.isNumberLiteral)
+    Expect(taglineLet.name).toBe('Tagline')
+    Expect.Is(taglineLet.value, AST.isStringLiteral)
 
-    Expect(mainView.name).toBe('MainView')
-    const [kitchenCountState, localTextAlias, outerGreetingAlias, mainRender] = mainView.block.statements
-    Expect.Is(kitchenCountState, AST.isStateDeclaration)
-    Expect.Is(localTextAlias, AST.isAliasDeclaration)
-    Expect.Is(outerGreetingAlias, AST.isAliasDeclaration)
-    Expect.Is(mainRender, AST.isRenderStatement)
-    Expect(mainRender.view?.ref?.name).toBe('Stack')
-    Expect(kitchenCountState.name).toBe('KitchenCount')
-    Expect.Is(kitchenCountState.value, AST.isNumberLiteral)
-    Expect(localTextAlias.name).toBe('LocalText')
-    Expect(outerGreetingAlias.name).toBe('OuterGreeting')
-    Expect.Is(outerGreetingAlias.value, AST.isValueReference)
-    Expect(valueDeclarationName(outerGreetingAlias.value.target.ref)).toBe('Greeting')
+    Expect(data.name).toBe('WordFlowerData')
+    Expect(data.block.entities.map(entity => entity.name)).toEqual(['Workspace', 'Document'])
+    const documentEntity = data.block.entities[1]
+    Expect(documentEntity?.block.fields.find(field => field.name === 'CreatedAt')?.indexed).toBe(true)
 
-    const [blockGreetingAlias] = AST.statementsOf(mainRender.block)
-    Expect.Is(blockGreetingAlias, AST.isAliasDeclaration)
-    Expect(blockGreetingAlias.name).toBe('Greeting')
-    const childInvocations = AST.statementsOf(mainRender.block).filter(AST.isViewRender)
-    Expect(childInvocations).toHaveLength(11)
-    const [
-      outerText,
-      shadowedText,
-      nestedText,
-      literalText,
-      claimedText,
-      countText,
-      fixedNameText,
-      profileNameText,
-      tagText,
-      kitchenNumber,
-      kitchenButton,
-    ] = childInvocations
-    Expect.Is(outerText, AST.isViewRender)
-    Expect.Is(shadowedText, AST.isViewRender)
-    Expect.Is(nestedText, AST.isViewRender)
-    Expect.Is(literalText, AST.isViewRender)
-    Expect.Is(claimedText, AST.isViewRender)
-    Expect.Is(countText, AST.isViewRender)
-    Expect.Is(fixedNameText, AST.isViewRender)
-    Expect.Is(profileNameText, AST.isViewRender)
-    Expect.Is(tagText, AST.isViewRender)
-    Expect.Is(kitchenNumber, AST.isViewRender)
-    Expect.Is(kitchenButton, AST.isViewRender)
-    Expect(outerText.view.ref?.name).toBe('Text')
-    Expect(shadowedText.view.ref?.name).toBe('Text')
-    Expect(nestedText.view.ref?.name).toBe('Text')
-    Expect(literalText.view.ref?.name).toBe('Text')
-    Expect(claimedText.view.ref?.name).toBe('Text')
-    Expect(countText.view.ref?.name).toBe('CountText')
-    Expect(fixedNameText.view.ref?.name).toBe('Text')
-    Expect(profileNameText.view.ref?.name).toBe('Text')
-    Expect(tagText.view.ref?.name).toBe('TagText')
-    Expect(kitchenNumber.view.ref?.name).toBe('Number')
-    Expect(kitchenButton.view.ref?.name).toBe('Button')
-
-    const [
-      greetingArg,
-      shadowArg,
-      nestedArg,
-      literalArg,
-      claimedArg,
-      countArg,
-      fixedNameArg,
-      profileNameArg,
-      tagArg,
-      kitchenCountArg,
-      kitchenButtonAction,
-    ] = [
-      AST.argumentsOf(outerText)[0]?.value,
-      AST.argumentsOf(shadowedText)[0]?.value,
-      AST.argumentsOf(nestedText)[0]?.value,
-      AST.argumentsOf(literalText)[0]?.value,
-      AST.argumentsOf(claimedText)[0]?.value,
-      AST.argumentsOf(countText)[0]?.value,
-      AST.argumentsOf(fixedNameText)[0]?.value,
-      AST.argumentsOf(profileNameText)[0]?.value,
-      AST.argumentsOf(tagText)[0]?.value,
-      AST.argumentsOf(kitchenNumber)[0]?.value,
-      AST.argumentsOf(kitchenButton)[1]?.value,
-    ]
-    Expect.Is(greetingArg, AST.isValueReference)
-    Expect.Is(shadowArg, AST.isValueReference)
-    Expect.Is(nestedArg, AST.isValueReference)
-    Expect.Is(literalArg, AST.isStringLiteral)
-    Expect.Is(claimedArg, AST.isStringLiteral)
-    Expect.Is(countArg, AST.isValueReference)
-    Expect.Is(fixedNameArg, AST.isValueReference)
-    Expect.Is(profileNameArg, AST.isMemberAccessExpression)
-    Expect.Is(tagArg, AST.isMemberAccessExpression)
-    Expect.Is(kitchenCountArg, AST.isValueReference)
-    Expect.Is(kitchenButtonAction, AST.isActionExpression)
-    Expect(valueDeclarationName(greetingArg.target.ref)).toBe('OuterGreeting')
-    Expect(valueDeclarationName(shadowArg.target.ref)).toBe('LocalText')
-    Expect(valueDeclarationName(nestedArg.target.ref)).toBe('Greeting')
-    Expect(literalArg.value).toBe('Hello World')
-    Expect(claimedArg.value).toBe('Claimed space')
-    Expect(AST.layoutEntriesOf(claimedText.layoutClause).map(layoutEntryTerms)).toEqual([
-      ['claim', 2],
+    Expect(stack.block.initial.destinationName).toBe('WorkspaceList')
+    Expect(stack.block.destinations.map(destination => destination.view.ref?.name)).toEqual([
+      'WorkspaceList',
+      'WorkspaceDetail',
+      'DocumentEditor',
     ])
-    Expect(valueDeclarationName(countArg.target.ref)).toBe('LaunchCount')
-    Expect(valueDeclarationName(fixedNameArg.target.ref)).toBe('FixedSinkName')
-    Expect(valueDeclarationName(profileNameArg.target.ref)).toBe('SinkProfileValue')
-    Expect(profileNameArg.members).toEqual(['SinkName'])
-    Expect(valueDeclarationName(tagArg.target.ref)).toBe('SinkProfileValue')
-    Expect(tagArg.members).toEqual(['SinkTags'])
-    Expect(kitchenCountArg.target.ref).toBe(kitchenCountState)
 
-    Expect(countTextView.name).toBe('CountText')
-    const countParameter = AST.parametersOf(countTextView)[0]
-    Expect.Is(countParameter, AST.isParameterDeclaration)
-    Expect(Type.parameterName(countParameter)).toBe('Count')
-    Expect.Is(countParameter.inlineType?.type, AST.isPrimitiveTypeReference)
-    Expect(countParameter.inlineType.type.primitive).toBe('number')
-    const countRender = AST.blockStatementOf(countTextView, 0)
-    Expect.Is(countRender, AST.isRenderStatement)
-    Expect(countRender.injection?.tsCodeBlock).toContain('Launch count:')
-    Expect.Is(countRender.injection, AST.isInjection)
-    Expect(AST.injectionArgumentsOf(countRender.injection)).toHaveLength(1)
+    const [workspaceDraftState, workspacesQuery] = workspaceList.block.statements
+    Expect.Is(workspaceDraftState, AST.isStateDeclaration)
+    Expect(workspaceDraftState.name).toBe('WorkspaceDraft')
+    Expect.Is(workspacesQuery, AST.isQueryDeclaration)
+    const taglineRender = AST.streamAllContents(workspaceList)
+      .filter(AST.isViewRender)
+      .find(render => {
+        const argument = AST.argumentsOf(render)[0]?.value
+        return AST.isValueReference(argument) && argument.target.$refText === 'Tagline'
+      })
+    Expect.Is(taglineRender, AST.isViewRender)
+    const taglineArg = AST.argumentsOf(taglineRender)[0]?.value
+    Expect.Is(taglineArg, AST.isValueReference)
+    Expect(taglineArg.target.ref).toBe(taglineLet)
+
+    Expect(wordCountView.name).toBe('WordCount')
+    const wordCountParameter = AST.parametersOf(wordCountView)[0]
+    Expect.Is(wordCountParameter, AST.isParameterDeclaration)
+    Expect(Type.parameterName(wordCountParameter)).toBe('Value')
+    Expect.Is(wordCountParameter.inlineType?.type, AST.isPrimitiveTypeReference)
+    Expect(wordCountParameter.inlineType.type.primitive).toBe('text')
+    const wordCountRender = AST.blockStatementOf(wordCountView, 0)
+    Expect.Is(wordCountRender, AST.isRenderStatement)
+    Expect(wordCountRender.injection?.tsCodeBlock).toContain('Words:')
+    Expect.Is(wordCountRender.injection, AST.isInjection)
+    Expect(AST.injectionArgumentsOf(wordCountRender.injection)).toHaveLength(1)
   })
 
   Test('parses inject render declarations', async () => {
@@ -189,10 +109,10 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Stack {
+        render Stack(){
           alias Local = "Inside"
-          Text Local { }
-          Text "Literal"
+          Text(Local) { }
+          Text("Literal")
         }
       }
       layout Stack {
@@ -225,8 +145,8 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Col [claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
-          Text "Label" [width fill, height fill]
+        render Col()[claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
+          Text("Label") [width fill, height fill]
         }
       }
       layout Col {
@@ -270,7 +190,7 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView {
-        render Col []
+        render Col()[]
       }
       layout Col {
         render inject \`\`\`ts
@@ -298,8 +218,8 @@ Describe('minimal Tao parser', () => {
       view StatTile Label is text, Count is number { }
       view MainView Label is text {
         alias LocalLabel = Label
-        render Text LocalLabel { }
-        render StatTile Greeting, LaunchCount { }
+        render Text(LocalLabel) { }
+        render StatTile(Greeting, LaunchCount) { }
       }
     `)
 
@@ -338,6 +258,19 @@ Describe('minimal Tao parser', () => {
     Expect(valueDeclarationName(countArg.target.ref)).toBe('LaunchCount')
   })
 
+  Test('parses current and legacy binding keywords on AliasDeclaration', async () => {
+    const parseResult = await testParseCode(`
+      let Current = "current"
+      alias Legacy = "legacy"
+    `)
+
+    const [current, legacy] = parseResult.entry.ast.statements
+    Expect.Is(current, AST.isAliasDeclaration)
+    Expect.Is(legacy, AST.isAliasDeclaration)
+    Expect(current.keyword).toBe('let')
+    Expect(legacy.keyword).toBe('alias')
+  })
+
   Test('parses state declarations and action values', async () => {
     const parseResult = await testParseCode(`
       app CounterApp { view MainView }
@@ -352,15 +285,15 @@ Describe('minimal Tao parser', () => {
         }
 
         action AddFive {
-          do AddStep 5
+          do AddStep(5)
         }
 
-        render Button "Add five", action {
+        render Button("Add five", action {
           set Count = 0
-        }
-        render Button "Inline", -> {
+        })
+        render Button("Inline", -> {
           set Count *= 2
-        }
+        })
       }
     `)
 
@@ -393,6 +326,24 @@ Describe('minimal Tao parser', () => {
     Expect.Is(AST.argumentsOf(inlineRender)[1]?.value, AST.isActionExpression)
   })
 
+  Test('parses explicit positional action callback signatures', async () => {
+    const parseResult = await testParseCode(`
+      view Field Change is action(text), Submit is action() { }
+    `)
+
+    const field = parseResult.entry.ast.statements[0]
+    Expect.Is(field, AST.isViewDeclaration)
+    const [change, submit] = AST.parametersOf(field)
+    const changeType = change?.inlineType?.type
+    const submitType = submit?.inlineType?.type
+    Expect.Is(changeType, AST.isActionTypeReference)
+    Expect.Is(submitType, AST.isActionTypeReference)
+    Expect(changeType.parameterTypes).toHaveLength(1)
+    Expect.Is(changeType.parameterTypes[0], AST.isPrimitiveTypeReference)
+    Expect(changeType.parameterTypes[0].primitive).toBe('text')
+    Expect(submitType.parameterTypes).toEqual([])
+  })
+
   Test('parses v0 Tao test declarations', async () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
@@ -408,7 +359,11 @@ Describe('minimal Tao parser', () => {
 
           expect text "Hello"
           press text "Add"
+          enter "Draft" into label "Title"
+          submit id "title-input"
           expect missing text "Loading"
+          expect input placeholder "Title" value "Draft"
+          back
         }
       }
     `)
@@ -419,7 +374,7 @@ Describe('minimal Tao parser', () => {
     const [check] = test.block.statements
     Expect.Is(check, AST.isCheckDeclaration)
     Expect(check.name).toBe('renders text')
-    const [run, expectedText, pressText, missingText] = check.block.statements
+    const [run, expectedText, pressText, enterText, submitInput, missingText, inputValue, back] = check.block.statements
     Expect.Is(run, AST.isRunStep)
     Expect(run.app.ref?.name).toBe('MyApp')
     Expect.Is(expectedText, AST.isExpectTextStep)
@@ -429,21 +384,135 @@ Describe('minimal Tao parser', () => {
     Expect.Is(pressText, AST.isPressTextStep)
     Expect(pressText.selector).toBe('text')
     Expect(pressText.text).toBe('Add')
+    Expect.Is(enterText, AST.isEnterTextStep)
+    Expect(enterText.value).toBe('Draft')
+    Expect(enterText.selector).toBe('label')
+    Expect(enterText.target).toBe('Title')
+    Expect.Is(submitInput, AST.isSubmitInputStep)
+    Expect(submitInput.selector).toBe('id')
+    Expect(submitInput.target).toBe('title-input')
     Expect.Is(missingText, AST.isExpectTextStep)
     Expect(missingText.selector).toBe('text')
     Expect(missingText.text).toBe('Loading')
     Expect(missingText.missing).toBe(true)
+    Expect.Is(inputValue, AST.isExpectInputValueStep)
+    Expect(inputValue.selector).toBe('placeholder')
+    Expect(inputValue.target).toBe('Title')
+    Expect(inputValue.value).toBe('Draft')
+    Expect.Is(back, AST.isBackTestStep)
   })
 
-  Test('parses the Kitchen Sink v0 Tao test sidecar', async () => {
-    const parseResult = await Workspace.parse(kitchenSinkTestPath)
+  Test('parses named invocation arguments', async () => {
+    const parseResult = await testParseCode(`
+      view Field Value is text, Change is action, Disabled is boolean { }
+      view MainView Draft is text, ChangeDraft is action {
+        render Field(.Disabled false, .Change ChangeDraft, .Value Draft)
+      }
+    `)
+
+    const mainView = parseResult.entry.ast.statements.find(
+      statement => AST.isViewDeclaration(statement) && statement.name === 'MainView',
+    )
+    Expect.Is(mainView, AST.isViewDeclaration)
+    const render = AST.blockStatementOf(mainView, 0)
+    Expect.Is(render, AST.isRenderStatement)
+    Expect(AST.argumentsOf(render).map(argument => argument.parameterName)).toEqual([
+      'Disabled',
+      'Change',
+      'Value',
+    ])
+  })
+
+  Test('parses data schemas, queries, writes, and provider test status', async () => {
+    const parseResult = await testParseCode(`
+      project data Tasks {
+        Groups Group { Name text }
+        Items Item { Title text Done boolean Ordering number CreatedAt time indexed default now() Group relation Group on delete cascade }
+      }
+      layout Stack { }
+      view Button Title is text, Press is action { }
+      app DataApp { datasource Tasks through Memory view MainView }
+      project view MainView {
+        query Tasks.Items as OpenItems {
+          where Done == false
+          order by Ordering desc
+        }
+        action Add {
+          create Tasks.Item { Title "Draft" Done false Ordering 1 Group "Group-1" }
+        }
+        render Stack(){
+          for Item in OpenItems {
+            Button("Update", action { update Item { Done true } })
+            Button("Delete", action { delete Item })
+          }
+        }
+      }
+      test "Data" {
+        check "loading" {
+          run DataApp
+          data Tasks loading
+          data Tasks error "Offline"
+          data Tasks ready
+        }
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const data = parseResult.entry.ast.statements.find(AST.isDataDeclaration)
+    Expect.Is(data, AST.isDataDeclaration)
+    Expect(data.block.entities.map(entity => entity.name)).toEqual(['Group', 'Item'])
+    Expect(data.block.entities[1]?.block.fields.find(field => field.name === 'CreatedAt')?.indexed).toBe(true)
+    const query = AST.streamAllContents(parseResult.entry.ast).find(AST.isQueryDeclaration)
+    Expect.Is(query, AST.isQueryDeclaration)
+    Expect(query.block?.clauses.map(clause => clause.$type)).toEqual(['WhereClause', 'OrderClause'])
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isCreateStatement)).toHaveLength(1)
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isUpdateStatement)).toHaveLength(1)
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isDeleteStatement)).toHaveLength(1)
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isDataStatusStep)).toHaveLength(3)
+  })
+
+  Test('parses app-owned stacks with typed presentation and back actions', async () => {
+    const parseResult = await testParseCode(`
+      stack MainStack {
+        initial Home
+        destination Home
+        destination Detail
+      }
+      app NavigationApp { stack MainStack }
+      view Home {
+        action Open { present MainStack.Detail(.Name "Workspace") }
+        render Detail("Inline")
+      }
+      view Detail Name is text {
+        action GoBack { back MainStack }
+        render inject \`\`\`ts return null \`\`\`
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const stack = parseResult.entry.ast.statements.find(AST.isStackDeclaration)
+    Expect.Is(stack, AST.isStackDeclaration)
+    Expect(stack.block.initial.destinationName).toBe('Home')
+    Expect(stack.block.destinations.map(destination => destination.view.ref?.name)).toEqual(['Home', 'Detail'])
+    const appStack = AST.streamAllContents(parseResult.entry.ast).find(AST.isAppStack)
+    Expect.Is(appStack, AST.isAppStack)
+    Expect(appStack.stack.ref).toBe(stack)
+    const presentation = AST.streamAllContents(parseResult.entry.ast).find(AST.isPresentStatement)
+    Expect.Is(presentation, AST.isPresentStatement)
+    Expect(presentation.destinationName).toBe('Detail')
+    Expect(AST.argumentsOf(presentation)[0]?.parameterName).toBe('Name')
+    Expect(AST.streamAllContents(parseResult.entry.ast).filter(AST.isBackStatement)).toHaveLength(1)
+  })
+
+  Test('parses the WordFlower Tao test sidecar', async () => {
+    const parseResult = await Workspace.parse(wordFlowerTestPath)
 
     Expect(parseResult.diagnostics).toEqual([])
     const [useStatement, test] = parseResult.entry.ast.statements
     Expect.Is(useStatement, AST.isUseStatement)
-    Expect(useStatement.importedDeclarations[0]?.ref?.name).toBe('KitchenSink')
+    Expect(useStatement.importedDeclarations[0]?.ref?.name).toBe('WordFlower')
     Expect.Is(test, AST.isTestDeclaration)
-    Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(4)
+    Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(5)
   })
 
   Test('does not discover test sidecars from app directory imports', async () => {
@@ -454,7 +523,7 @@ Describe('minimal Tao parser', () => {
         app MyApp { view MainView }
         use SharedView from ./
         view MainView {
-          render SharedView
+          render SharedView()
         }
       `,
         'Shared.tao': `
@@ -500,14 +569,14 @@ Describe('minimal Tao parser', () => {
       view MainView Label is text {
         alias Greeting = "View"
         alias LabelAlias = Label
-        render Stack {
+        render Stack(){
           alias Greeting = "Block"
-          Text Greeting
-          Stack {
+          Text(Greeting)
+          Stack(){
             alias Greeting = "Nested"
-            Text Greeting
+            Text(Greeting)
           }
-          Text LabelAlias
+          Text(LabelAlias)
         }
       }
     `)
@@ -562,7 +631,7 @@ Describe('minimal Tao parser', () => {
       'Job',
       'Person',
     ])
-    Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(11)
+    Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(12)
   })
 
   Test('parses type declarations, constructors, lists, and member access', async () => {
@@ -584,7 +653,7 @@ Describe('minimal Tao parser', () => {
       alias DemoPerson = Person { DisplayName DemoTags DemoJob }
 
       view Profile Person {
-        render Text Person.Job.Title
+        render Text(Person.Job.Title)
       }
       view Text Value is text { }
     `)
@@ -681,8 +750,8 @@ Describe('minimal Tao parser', () => {
       use Text, Stack from ./
       project alias Greeting = "Hello"
       project view MainView {
-        render Stack {
-          Text Greeting
+        render Stack(){
+          Text(Greeting)
         }
       }
       project layout Stack {

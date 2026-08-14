@@ -23,7 +23,7 @@ Rank next-project candidates by Tao value, dependency order, risk, implementatio
 
 ### Research
 
-Resolve decisions that repository evidence cannot settle and record conclusions in the task folder. Ask one focused question at a time. Define intended syntax, behavior, and test-app scope without adding speculative executable Kitchen Sink code.
+Resolve decisions that repository evidence cannot settle and record conclusions in the task folder. Ask one focused question at a time. Define intended syntax, behavior, and test-app scope; intended syntax belongs in `Apps/WordFlower/2 - Next/` sketches (see `Apps/WordFlower/README.md`), never in executable apps.
 
 ### Plan
 
@@ -35,7 +35,7 @@ Review assumptions, decisions, sequencing, scope, acceptance criteria, and missi
 
 ### Implement
 
-Use a `feat/<task>` branch for new project work. Implement one numbered slice at a time with focused tests and intended Tao examples. Keep task docs and app scope current. Add only implemented behavior to Kitchen Sink or test apps. Validate each slice; stage or commit only when Ro explicitly requests it.
+Use a `feat/<task>` branch for new project work. Implement one numbered slice at a time with focused tests and intended Tao examples. Keep task docs and app scope current. Add only implemented behavior to `Apps/WordFlower/1 - Current` or test apps; reconcile `Apps/WordFlower/3 - MVP` when a Next slice fully lands. Validate each slice; stage or commit only when Ro explicitly requests it.
 
 ### Review Implementation
 

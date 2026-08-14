@@ -1,0 +1,98 @@
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app DataMVPApp {
+   datasource DataMVP through Memory
+   view MainView
+}
+
+project data DataMVP {
+   Workspaces Workspace {
+      Name text
+      CreatedAt time indexed default now()
+   }
+   Tasks Task {
+      Title text
+      Done boolean default false
+      Workspace relation Workspace on delete cascade
+}  }
+
+view MainView {
+   state WorkspaceDraft = ""
+   state TaskDraft = ""
+   query DataMVP.Workspaces as Workspaces {
+      order by Name asc
+   }
+   query DataMVP.Tasks as OpenTasks {
+      where Done == false
+      order by Title asc
+   }
+   query DataMVP.Tasks as CompletedTasks {
+      where Done == true
+      order by Title asc
+   }
+   action ChangeWorkspaceDraft Value is text {
+      set WorkspaceDraft = Value
+   }
+   action ChangeTaskDraft Value is text {
+      set TaskDraft = Value
+   }
+   action AddWorkspace {
+      create DataMVP.Workspace {
+         Name WorkspaceDraft
+      }
+      set WorkspaceDraft = ""
+   }
+   render Col() [gap 10, pad 16] {
+      Text("Data MVP")
+      when
+         Workspaces.Loading -> {
+            Text("Loading local data…")
+         }
+         otherwise -> {
+            when
+               Workspaces.Error.Empty -> {
+                  TextInput(.Value WorkspaceDraft, .Change ChangeWorkspaceDraft, .Submit AddWorkspace, .Label "Workspace name", .Id "workspace-name")
+                  FormButton(.Title "Add workspace", .Press AddWorkspace, .Id "add-workspace")
+                  TextInput(.Value TaskDraft, .Change ChangeTaskDraft, .Submit action { }, .Label "Task title", .Id "task-title")
+                  when
+                     Workspaces.Empty -> {
+                        Text("No workspaces yet")
+                     }
+                     otherwise -> {
+                        for Workspace in Workspaces {
+                           Text(Workspace.Name)
+                           FormButton(.Title "Add task", .Press action {
+                              create DataMVP.Task {
+                                 Title TaskDraft
+                                 Workspace Workspace
+                              }
+                              set TaskDraft = ""
+                           }, .Id "add-task")
+                           FormButton(.Title "Delete workspace", .Press action { delete Workspace }, .Id "delete-workspace")
+                     }  }
+                  when
+                     OpenTasks.Empty -> {
+                        Text("No open tasks")
+                     }
+                     otherwise -> {
+                        for Task in OpenTasks {
+                           Text(Task.Title)
+                           FormButton(.Title "Rename task", .Press action { update Task {
+                              Title "Updated task"
+                           } }, .Id "rename-task")
+                           FormButton(.Title "Complete task", .Press action { update Task {
+                              Done true
+                           } }, .Id "complete-task")
+                     }  }
+                  when
+                     CompletedTasks.Empty -> {
+                        Text("No completed tasks")
+                     }
+                     otherwise -> {
+                        for Task in CompletedTasks {
+                           Text(Task.Title)
+                           FormButton(.Title "Delete task", .Press action { delete Task }, .Id "delete-task")
+               }  }  }
+               otherwise -> {
+                  Text(Workspaces.Error)
+}  }  }  }

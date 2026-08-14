@@ -1,6 +1,7 @@
 grammar TaoApp
 
 import "./blocks"
+import "./data"
 import "./terminals"
 
 entry AppGrammarEntrypoint:
@@ -11,3 +12,6 @@ AppDeclaration:
 
 AppView:
     'view' view=[ViewDeclaration:ID];
+
+AppDatasource:
+    'datasource' data=[DataDeclaration:ID] 'through' provider=ID;

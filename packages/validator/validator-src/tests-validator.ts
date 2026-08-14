@@ -2,19 +2,28 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
 
-const supportedSelectors = ['text'] as const
+const supportedSelectors = ['text', 'label', 'id', 'placeholder'] as const
+const supportedInputSelectors = ['label', 'id', 'placeholder'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
   testPlacement: 'Test declarations are only allowed at file level.',
   testBlock: (name: string) => `Only check declarations are allowed in test '${name}'.`,
   checkPlacement: 'Check declarations are only allowed inside test blocks.',
-  checkBlock: (name: string) => `Only run, press, and expect statements are allowed in check '${name}'.`,
+  checkBlock: (name: string) =>
+    `Only run, press, enter, submit, back, data, and expect statements are allowed in check '${name}'.`,
   runPlacement: 'Run steps are only allowed inside check blocks.',
   pressPlacement: 'Press steps are only allowed inside check blocks.',
+  enterPlacement: 'Enter steps are only allowed inside check blocks.',
+  inputExpectationPlacement: 'Input expectations are only allowed inside check blocks.',
+  submitPlacement: 'Submit steps are only allowed inside check blocks.',
+  dataStatusPlacement: 'Data status steps are only allowed inside check blocks.',
   expectationPlacement: 'Expectations are only allowed inside check blocks.',
+  backPlacement: 'Back steps are only allowed inside check blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
+  inputSelector: (selector: string) =>
+    `Unsupported input test selector '${selector}'. Supported selectors: ${supportedInputSelectors.join(', ')}.`,
   missingCheck: (name: string) => `Test '${name}' must declare at least one check.`,
   missingRun: (name: string) => `Check '${name}' must start exactly one app with run.`,
   duplicateRun: (name: string) => `Check '${name}' must not declare more than one run step.`,
@@ -40,6 +49,34 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(testValidationMessages.pressPlacement, press)
     }
     validateSelector(press, ctx)
+  }
+  for (const enter of AST.streamAllContents(file).filter(AST.isEnterTextStep)) {
+    if (statementNeedsStepPlacementDiagnostic(enter)) {
+      ctx.error(testValidationMessages.enterPlacement, enter)
+    }
+    validateSelector(enter, ctx)
+  }
+  for (const expectation of AST.streamAllContents(file).filter(AST.isExpectInputValueStep)) {
+    if (statementNeedsStepPlacementDiagnostic(expectation)) {
+      ctx.error(testValidationMessages.inputExpectationPlacement, expectation)
+    }
+    validateInputSelector(expectation, ctx)
+  }
+  for (const submit of AST.streamAllContents(file).filter(AST.isSubmitInputStep)) {
+    if (statementNeedsStepPlacementDiagnostic(submit)) {
+      ctx.error(testValidationMessages.submitPlacement, submit)
+    }
+    validateSelector(submit, ctx)
+  }
+  for (const back of AST.streamAllContents(file).filter(AST.isBackTestStep)) {
+    if (statementNeedsStepPlacementDiagnostic(back)) {
+      ctx.error(testValidationMessages.backPlacement, back)
+    }
+  }
+  for (const status of AST.streamAllContents(file).filter(AST.isDataStatusStep)) {
+    if (statementNeedsStepPlacementDiagnostic(status)) {
+      ctx.error(testValidationMessages.dataStatusPlacement, status)
+    }
   }
   for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
     if (statementNeedsStepPlacementDiagnostic(expectation)) {
@@ -88,15 +125,29 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
   let hasRun = false
   for (const step of check.block.statements.filter(AST.isCheckStep)) {
     Switch.type(step, {
+      DataStatusStep: checkStepOrder,
+      EnterTextStep: checkStepOrder,
+      ExpectInputValueStep: checkStepOrder,
       ExpectTextStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
       },
+      SubmitInputStep: checkStepOrder,
+      BackTestStep: checkStepOrder,
     })
   }
 
-  function checkStepOrder(step: AST.ExpectTextStep | AST.PressTextStep): void {
+  function checkStepOrder(
+    step:
+      | AST.DataStatusStep
+      | AST.EnterTextStep
+      | AST.ExpectInputValueStep
+      | AST.ExpectTextStep
+      | AST.PressTextStep
+      | AST.SubmitInputStep
+      | AST.BackTestStep,
+  ): void {
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
     }
@@ -112,9 +163,18 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
   }
 }
 
-function validateSelector(step: AST.ExpectTextStep | AST.PressTextStep, ctx: ValidationContext): void {
+function validateSelector(
+  step: AST.EnterTextStep | AST.ExpectTextStep | AST.PressTextStep | AST.SubmitInputStep,
+  ctx: ValidationContext,
+): void {
   if (!supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])) {
     ctx.error(testValidationMessages.selector(step.selector), step)
+  }
+}
+
+function validateInputSelector(step: AST.ExpectInputValueStep, ctx: ValidationContext): void {
+  if (!supportedInputSelectors.includes(step.selector as (typeof supportedInputSelectors)[number])) {
+    ctx.error(testValidationMessages.inputSelector(step.selector), step)
   }
 }
 

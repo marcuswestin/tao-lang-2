@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals'
 import { RuntimeTesting } from '@runtime/testing/runtime-testing'
 import TR from '@runtime/TR'
 import { Repo } from '@shared'
@@ -5,6 +6,7 @@ import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shar
 import { act, cleanup, fireEvent, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, type ReactNode, useState } from 'react'
 import * as RN from 'react-native'
+import * as TaoReactNative from '../TaoRuntime-src/TR-react-native'
 import { compileAndRenderApp, ExpectScreen, testCompileApp, testCompileFiles } from './test-compile-app'
 
 AfterAll(async () => {
@@ -17,6 +19,210 @@ AfterEach(() => {
 })
 
 Describe('Expo runtime', () => {
+  Test('suppresses disabled pressable actions while retaining their accessible name', () => {
+    let presses = 0
+    const screen = render(
+      TR.Views.Pressable(
+        {
+          action: {
+            invoke: () => {
+              presses += 1
+            },
+          },
+          disabled: true,
+          title: 'Save',
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: 'Save',
+            accessibilityRole: 'button',
+            accessibilityState: { busy: true, disabled: true },
+            disabled: true,
+          },
+        },
+      ),
+    )
+
+    const button = screen.getByLabelText('Save')
+    fireEvent.press(button)
+    Expect(presses).toBe(0)
+  })
+
+  Test('suppresses disabled text-input changes and submissions', () => {
+    let changes = 0
+    let submissions = 0
+    const screen = render(TR.Views.TextInput({
+      disabled: true,
+      label: 'Task title',
+      onChange: () => {
+        changes += 1
+      },
+      onSubmit: () => {
+        submissions += 1
+      },
+      value: 'Draft',
+    }))
+
+    const input = screen.getByLabelText('Task title')
+    fireEvent.changeText(input, 'Changed')
+    fireEvent(input, 'submitEditing')
+
+    Expect(input.props.accessibilityState).toEqual({ disabled: true })
+    Expect(input.props.editable).toBe(false)
+    Expect(changes).toBe(0)
+    Expect(submissions).toBe(0)
+  })
+
+  Test('binds an app datasource after render without updating an existing query subscriber during render', async () => {
+    const schema = TR.Data.Schema({
+      name: 'LifecycleSafeBinding',
+      entities: {
+        Entry: { collection: 'Entries', fields: {} },
+      },
+    })
+
+    function QuerySubscriber(): ReactElement {
+      const rows = TR.Data.Query(
+        schema,
+        { entity: 'Entry', filters: [] },
+        TR.Value,
+      ).evaluate().jsValue as unknown[] & { Error: string; Loading: boolean }
+      const status = rows.Loading ? 'Loading' : rows.Error ? 'Provider error' : 'Bound'
+      return createElement(RN.Text, null, status)
+    }
+
+    function ProviderBinding(): null {
+      TR.Data.Use(schema, 'memory')
+      return null
+    }
+
+    const subscriber = render(createElement(QuerySubscriber))
+    ExpectScreen(subscriber).toHaveText('Provider error')
+    const consoleErrors: string[] = []
+    const consoleError = jest.spyOn(console, 'error').mockImplementation((...values: unknown[]) => {
+      consoleErrors.push(values.map(String).join(' '))
+    })
+
+    try {
+      render(createElement(ProviderBinding))
+      await act(async () => {
+        await TR.Data.Settle(schema)
+      })
+
+      ExpectScreen(subscriber).toHaveText('Bound')
+      Expect(consoleErrors.some(message =>
+        message.includes('Cannot update a component')
+        && message.includes('while rendering a different component')
+      )).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  Test('dispatches hardware Back through the stack reducer and cleans up its subscription', () => {
+    let handler: (() => boolean) | undefined
+    let removes = 0
+    const restoreReactNativeRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      BackHandler: {
+        addEventListener(event, nextHandler) {
+          Expect(event).toBe('hardwareBackPress')
+          handler = nextHandler
+          return {
+            remove: () => {
+              removes += 1
+            },
+          }
+        },
+      },
+      KeyboardAvoidingView: RN.View,
+      Pressable: RN.Pressable,
+      ScrollView: RN.View,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+
+    try {
+      const stack = TR.Navigation.Stack({
+        name: 'HardwareBackTest',
+        initial: 'Home',
+        destinations: {
+          Home: { render: () => null },
+          Detail: { render: () => null },
+        },
+      })
+      const screen = render(createElement(TR.Navigation.Host, { stack }))
+
+      Expect(handler?.()).toBe(false)
+      act(() => {
+        TR.Navigation.Present(stack, 'Detail', {})
+      })
+      let consumed = false
+      act(() => {
+        consumed = handler!()
+      })
+      Expect(consumed).toBe(true)
+      Expect(stack.currentDestination).toBe('Home')
+      Expect(stack.depth).toBe(1)
+
+      screen.unmount()
+      Expect(removes).toBe(1)
+    } finally {
+      restoreReactNativeRuntime.mockRestore()
+    }
+  })
+
+  Test('keeps covered navigation entries mounted and returns through the accessible root-safe back reducer', () => {
+    let stack: ReturnType<typeof TR.Navigation.Stack>
+
+    function Home(): ReactElement {
+      const [count, setCount] = useState(0)
+      return createElement(
+        RN.View,
+        null,
+        createElement(RN.Text, null, `Home count ${count}`),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Increment home',
+          onPress: () => setCount(value => value + 1),
+        }),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Open detail',
+          onPress: () => TR.Navigation.Present(stack, 'Detail', {}),
+        }),
+      )
+    }
+
+    function Detail(): ReactElement {
+      return createElement(RN.Text, null, 'Detail')
+    }
+
+    stack = TR.Navigation.Stack({
+      name: 'RuntimeNavigationHostTest',
+      initial: 'Home',
+      destinations: {
+        Home: { render: () => createElement(Home) },
+        Detail: { render: () => createElement(Detail) },
+      },
+    })
+
+    const screen = render(createElement(TR.Navigation.Host, { stack }))
+    fireEvent.press(screen.getByLabelText('Increment home'))
+    ExpectScreen(screen).toHaveText('Home count 1')
+
+    fireEvent.press(screen.getByLabelText('Open detail'))
+    Expect(stack.currentDestination).toBe('Detail')
+    Expect(stack.depth).toBe(2)
+    ExpectScreen(screen).toHaveText('Detail')
+    Expect(screen.queryByLabelText('Increment home')).toBeNull()
+    fireEvent.press(screen.getByLabelText('Back'))
+
+    Expect(stack.currentDestination).toBe('Home')
+    Expect(stack.depth).toBe(1)
+    ExpectScreen(screen).toHaveText('Home count 1')
+    Expect(screen.queryByLabelText('Back')).toBeNull()
+    Expect(stack.back()).toBe(false)
+  })
+
   Test('runs Tao text expectations with duplicate rendered text', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',
@@ -34,9 +240,9 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         app DuplicateTextApp { view MainView }
         view MainView {
-          render Stack {
-            Text "Repeated"
-            Text "Repeated"
+          render Stack(){
+            Text("Repeated")
+            Text("Repeated")
           }
         }
         layout Stack {
@@ -80,9 +286,9 @@ Describe('Expo runtime', () => {
           action AddOne {
             set Count += 1
           }
-          render Stack {
-            NativeButton "Add", AddOne
-            Number Count
+          render Stack(){
+            NativeButton("Add", AddOne)
+            Number(Count)
           }
         }
         layout Stack {
@@ -112,6 +318,178 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('reports selector-neutral Tao press failures', async () => {
+    await withTaoFiles(
+      'tao-runtime-press-failure-test-plan-',
+      {
+        'Main.test.tao': `
+        use MissingPressApp from ./
+
+        test "Press failure" {
+          check "reports the selector" {
+            run MissingPressApp
+            press id "missing-button"
+          }
+        }
+      `,
+        'Main.tao': `
+        app MissingPressApp { view MainView }
+
+        view MainView {
+          render Text("Ready")
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /press id "missing-button" expected one pressable but found 0 matches/,
+        )
+      },
+    )
+  })
+
+  Test('runs Tao enter and submit steps through label and id selectors', async () => {
+    await withTaoFiles(
+      'tao-runtime-input-test-plan-',
+      {
+        'Main.test.tao': `
+        use InputApp from ./
+
+        test "Input" {
+          check "changes and submits" {
+            run InputApp
+            enter "Plan launch" into placeholder "Task title"
+            expect text "Plan launch"
+            expect input placeholder "Task title" value "Plan launch"
+            submit id "task-title"
+            expect text "Saved"
+          }
+        }
+      `,
+        'Main.tao': `
+        app InputApp { view MainView }
+        view MainView {
+          state Draft = ""
+          state Status = "Waiting"
+          action ChangeDraft Value is text {
+            set Draft = Value
+          }
+          action Submit {
+            set Status = "Saved"
+          }
+          render Stack(){
+            NativeInput(.Value Draft, .Change ChangeDraft, .Submit Submit, .Label "Task title", .Id "task-title")
+            Text(Draft)
+            Text(Status)
+          }
+        }
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+        view NativeInput Value is text, Change is action(text), Submit is action(), Label is text, Id is text {
+          render inject Value, Change, Submit, Label, Id \`\`\`ts
+            return (
+              <RN.TextInput
+                accessibilityLabel={Label}
+                placeholder="Task title"
+                testID={Id}
+                value={Value}
+                onChangeText={value => Change.invoke(TR.Value(value))}
+                onSubmitEditing={() => Submit.invoke()}
+              />
+            )
+          \`\`\`
+        }
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('runs standalone Tao back through the active navigation host', async () => {
+    await withTaoFiles(
+      'tao-runtime-navigation-test-plan-',
+      {
+        'Main.test.tao': `
+        use NavigationApp from ./
+
+        test "Navigation" {
+          check "returns to the active stack root" {
+            run NavigationApp
+            expect text "Home"
+            press text "Open"
+            expect text "Detail"
+            back
+            expect text "Home"
+            expect missing text "Detail"
+          }
+        }
+      `,
+        'Main.tao': `
+        project stack AppStack {
+          initial Home
+          destination Home
+          destination Detail
+        }
+
+        app NavigationApp { stack AppStack }
+
+        project view Home {
+          action Open { present AppStack.Detail() }
+          render Stack(){
+            Text("Home")
+            Button("Open", Open)
+          }
+        }
+
+        project view Detail {
+          render Text("Detail")
+        }
+
+        layout Stack {
+          render inject \`\`\`ts
+            return <>{_ViewProps.children}</>
+          \`\`\`
+        }
+
+        view Button Title is text, Press is action {
+          render inject Title, Press \`\`\`ts
+            return (
+              <RN.Pressable accessibilityRole="button" onPress={() => Press.invoke()}>
+                <RN.Text>{Title}</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
   Test('reports Tao suite and check context for failed text expectations', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',
@@ -129,7 +507,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         app BrokenTextApp { view MainView }
         view MainView {
-          render Text "Actual"
+          render Text("Actual")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -163,7 +541,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         app BrokenTextApp { view MainView }
         view MainView {
-          render Text "Actual"
+          render Text("Actual")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -205,7 +583,7 @@ Describe('Expo runtime', () => {
         'First.tao': `
         app FirstApp { view MainView }
         view MainView {
-          render Text "First"
+          render Text("First")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -216,7 +594,7 @@ Describe('Expo runtime', () => {
         'Second.tao': `
         app SecondApp { view MainView }
         view MainView {
-          render Text "Second"
+          render Text("Second")
         }
         view Text Value is text {
           render inject Value \`\`\`ts
@@ -270,9 +648,9 @@ Describe('Expo runtime', () => {
           action AddOne {
             set Count += 1
           }
-          render Stack {
-            NativeButton "Native add", AddOne
-            Number Count
+          render Stack(){
+            NativeButton("Native add", AddOne)
+            Number(Count)
           }
         }
 
@@ -282,7 +660,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton Title is text, Action is action {
+        view NativeButton Title is text, Action is action() {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -307,6 +685,94 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('applies typed defaults for functions, views, layouts, and actions', async () => {
+    await testCompileApp(
+      `
+        app DefaultsApp {
+          view MainView
+        }
+
+        function Greeting Name is text default "world" returns text = interpolate "Hello, ", Name
+
+        view MainView {
+          state Result = ""
+          action Save Message is text default "Saved" {
+            set Result = Message
+          }
+          render Stack(){
+            Text(Greeting())
+            GreetingView()
+            NativeButton("Save", Save)
+            Text(Result)
+          }
+        }
+
+        view GreetingView Title is text default "Welcome" {
+          render Text(Title)
+        }
+
+        layout Stack Gap is number default 8 {
+          render inject Gap \`\`\`ts
+            return <>
+              <RN.Text>{\`Gap \${Gap}\`}</RN.Text>
+              {_ViewProps.children}
+            </>
+          \`\`\`
+        }
+
+        view NativeButton Title is text, Action is action {
+          render inject Title, Action \`\`\`ts
+            return (
+              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
+                <RN.Text>{Title}</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('Hello, world')
+        ExpectScreen(screen).toHaveText('Welcome')
+        ExpectScreen(screen).toHaveText('Gap 8')
+
+        fireEvent.press(screen.getByText('Save'))
+        ExpectScreen(screen).toHaveText('Saved')
+      },
+    )
+  })
+
+  Test('renders an all-defaulted initial destination', async () => {
+    await testCompileApp(
+      `
+        project stack DefaultsNavigation {
+          initial Home
+          destination Home
+        }
+
+        app DefaultsNavigationApp { stack DefaultsNavigation }
+
+        project view Home Title is text default "Welcome home" {
+          render Text(Title)
+        }
+
+        view Text Value is text {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('Welcome home')
+      },
+    )
+  })
+
   Test('invokes action parameters in declaration order after type-based binding', async () => {
     await testCompileApp(
       `
@@ -320,11 +786,11 @@ Describe('Expo runtime', () => {
             set Count += Step
           }
           action RunAddTagged {
-            do AddTagged "tag", 3
+            do AddTagged("tag", 3)
           }
-          render Stack {
-            NativeButton "Run reordered action", RunAddTagged
-            Number Count
+          render Stack(){
+            NativeButton("Run reordered action", RunAddTagged)
+            Number(Count)
           }
         }
 
@@ -371,7 +837,7 @@ Describe('Expo runtime', () => {
           use Save from ./Actions.tao
 
           view MainView {
-            render Button "Imported action", Save
+            render Button("Imported action", Save)
           }
 
           view Button Title is text, Action is action {
@@ -407,7 +873,7 @@ Describe('Expo runtime', () => {
         alias Ada = Person { Age 40 Name "Ada" }
 
         view MainView {
-          render Keys Ada
+          render Keys(Ada)
         }
 
         view Keys Person {
@@ -439,9 +905,9 @@ Describe('Expo runtime', () => {
           action Rename {
             set Current = Person { Name "Grace" }
           }
-          render Stack {
-            Button "Rename", Rename
-            Text Current.Name
+          render Stack(){
+            Button("Rename", Rename)
+            Text(Current.Name)
           }
         }
 
@@ -534,7 +1000,7 @@ Describe('Expo runtime', () => {
         use Text from @tao/ui
 
         view MainView {
-            render Text "Root width fill" [width fill]
+            render Text("Root width fill") [width fill]
         }
       `,
       screen => {
@@ -570,8 +1036,8 @@ Describe('Expo runtime', () => {
         }
 
         view MainView {
-            render Screen [width fill] {
-                Text "Root injected fill"
+            render Screen()[width fill] {
+                Text("Root injected fill")
             }
         }
       `,
@@ -907,13 +1373,13 @@ Describe('Expo runtime', () => {
         use Col, Text from @tao/ui
 
         layout Screen {
-            render Col {
-                Text "Wrapped center"
+            render Col(){
+                Text("Wrapped center")
             }
         }
 
         view MainView {
-            render Screen [content center]
+            render Screen()[content center]
         }
       `,
       screen => {
@@ -938,15 +1404,15 @@ Describe('Expo runtime', () => {
         use Col, Row, Text from @tao/ui
 
         layout Card {
-            render Col {
-                render Row {
-                    Text "Nested render layout"
+            render Col(){
+                render Row(){
+                    Text("Nested render layout")
                 }
             }
         }
 
         view MainView {
-            render Card [gap 9]
+            render Card()[gap 9]
         }
       `,
       screen => {
@@ -974,11 +1440,11 @@ Describe('Expo runtime', () => {
             set Count += _Scope
           }
           action AddOne {
-            do AddStep 1
+            do AddStep(1)
           }
-          render Stack {
-            NativeButton "Add with shadowed parameter", AddOne
-            Number Count
+          render Stack(){
+            NativeButton("Add with shadowed parameter", AddOne)
+            Number(Count)
           }
         }
 
@@ -1023,13 +1489,13 @@ Describe('Expo runtime', () => {
         use Row, Text from @tao/ui
 
         layout Screen {
-            render Row [gap 12, content spread center] {
-                Text "Wrapped gap"
+            render Row()[gap 12, content spread center] {
+                Text("Wrapped gap")
             }
         }
 
         view MainView {
-            render Screen [gap 8]
+            render Screen()[gap 8]
         }
       `,
       screen => {
@@ -1054,8 +1520,8 @@ Describe('Expo runtime', () => {
         use Row, Text from @tao/ui
 
         view MainView {
-            render Row [content right, gap 4, claim 2] {
-                Text "Explicit row"
+            render Row()[content right, gap 4, claim 2] {
+                Text("Explicit row")
             }
         }
       `,
@@ -1087,14 +1553,14 @@ Describe('Expo runtime', () => {
         use Box, Row, Text from @tao/ui
 
         layout Screen {
-            render Box [fill] {
-                Text "Root fill"
+            render Box()[fill] {
+                Text("Root fill")
             }
         }
 
         view MainView {
-            render Row [gap 3] {
-                Screen
+            render Row()[gap 3] {
+                Screen()
             }
         }
       `,
@@ -1137,8 +1603,8 @@ Describe('Expo runtime', () => {
         }
 
         view MainView {
-            render Row [gap 4] {
-                Text "Local row"
+            render Row()[gap 4] {
+                Text("Local row")
             }
         }
       `,
@@ -1166,7 +1632,7 @@ Describe('Expo runtime', () => {
           use AView from ./
 
           view MainView {
-              render AView
+              render AView()
           }
         `,
         'A.tao': `
@@ -1175,7 +1641,7 @@ Describe('Expo runtime', () => {
           project alias SharedTitle = "Circular alias"
 
           project view AView {
-              render BView
+              render BView()
           }
         `,
         'B.tao': `
@@ -1184,7 +1650,7 @@ Describe('Expo runtime', () => {
           alias ImportedTitle = SharedTitle
 
           project view BView {
-              render Text ImportedTitle
+              render Text(ImportedTitle)
           }
 
           view Text Value is text {
@@ -1211,7 +1677,7 @@ Describe('Expo runtime', () => {
         alias Greeting = Message
 
         view MainView {
-            render Text Greeting { }
+            render Text(Greeting) { }
         }
 
         view Text Value is text {
@@ -1237,10 +1703,10 @@ Describe('Expo runtime', () => {
 
         view MainView {
             alias OuterGreeting = Greeting
-            render Stack {
+            render Stack(){
                 alias Greeting = "Inner"
-                Text Greeting
-                Text OuterGreeting
+                Text(Greeting)
+                Text(OuterGreeting)
             }
         }
 

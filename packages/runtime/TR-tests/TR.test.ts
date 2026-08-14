@@ -36,6 +36,17 @@ Describe('TR.Alias', () => {
     Expect(alias.evaluate().jsValue).toBe('lazy 2')
     Expect(evaluations).toBe(2)
   })
+
+  Test('preserves parameterized action types through aliases', () => {
+    const calls: string[] = []
+    const alias: TR.Alias<TR.Action<[TR.Value<string>]>> = TR.Alias(() =>
+      TR.Action((value: TR.Value<string>) => calls.push(value.jsValue))
+    )
+
+    TR.Do(alias.evaluate(), TR.Value('saved'))
+
+    Expect(calls).toEqual(['saved'])
+  })
 })
 
 Describe('TR.Action', () => {
@@ -432,7 +443,95 @@ Describe('TR.TaoProps', () => {
 
 Describe('TR.Views', () => {
   Test('exposes runtime-backed stdlib primitive views', () => {
-    Expect(Object.keys(TR.Views).sort()).toEqual(['Pressable', 'Text', 'View'])
+    Expect(Object.keys(TR.Views).sort()).toEqual(['Pressable', 'Text', 'TextInput', 'View'])
+  })
+})
+
+Describe('TR.Data', () => {
+  Test('persists local rows and applies strict update, relationship cascade, and rehydration', async () => {
+    const values = new Map<string, string>()
+    const storage = {
+      getItem: async (key: string) => values.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        values.set(key, value)
+      },
+    }
+    const definition = {
+      name: 'RuntimeDataTest',
+      provider: 'local' as const,
+      storageKey: 'runtime-data-test',
+      entities: {
+        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' as const } } },
+        Task: {
+          collection: 'Tasks',
+          fields: {
+            Title: { kind: 'text' as const },
+            Workspace: {
+              kind: 'relation' as const,
+              relation: 'Workspace',
+              onDelete: 'cascade' as const,
+            },
+          },
+        },
+      },
+    }
+    const provider = TR.Data.LocalProvider(storage, 'runtime-test')
+    const schema = TR.Data.Schema(definition, provider)
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
+    Expect(() =>
+      TR.Data.Create(schema, 'Task', {
+        Title: TR.Value('Draft'),
+        Workspace: TR.Value('Workspace-1'),
+      })
+    ).toThrow("Relationship 'Task.Workspace' expects a live Workspace entity handle.")
+    const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
+    TR.Data.Create(schema, 'Task', { Title: TR.Value('Draft'), Workspace: TR.Value(workspace) })
+    await TR.Data.Settle(schema)
+    const initiallyRehydrated = TR.Data.Schema(definition, provider)
+    await TR.Data.Settle(initiallyRehydrated)
+    Expect(initiallyRehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(1)
+    Expect(initiallyRehydrated.query({ entity: 'Task', filters: [] })).toHaveLength(1)
+    const tasks = schema.query({ entity: 'Task', filters: [] }) as Array<Record<string, unknown>>
+    Expect(tasks).toHaveLength(1)
+    TR.Data.Update(TR.Value(tasks[0]), { Title: TR.Value('Updated') })
+    Expect((schema.query({ entity: 'Task', filters: [] })[0] as Record<string, unknown>)['Title']).toBe('Updated')
+    const workspaces = schema.query({ entity: 'Workspace', filters: [] })
+    TR.Data.Delete(TR.Value(workspaces[0]))
+    Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
+    await TR.Data.Settle(schema)
+
+    const rehydrated = TR.Data.Schema(definition, provider)
+    await TR.Data.Settle(rehydrated)
+    Expect(rehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
+  })
+})
+
+Describe('TR.Navigation', () => {
+  Test('owns deterministic stack history with root-safe back and test reset', () => {
+    const stack = TR.Navigation.Stack({
+      name: 'RuntimeNavigationTest',
+      initial: 'Home',
+      destinations: {
+        Home: { render: () => null },
+        Detail: { render: () => null },
+      },
+    })
+
+    Expect(stack.currentDestination).toBe('Home')
+    Expect(stack.depth).toBe(1)
+    Expect(stack.back()).toBe(false)
+
+    TR.Navigation.Present(stack, 'Detail', { Name: TR.Value('Workspace') })
+    Expect(stack.currentDestination).toBe('Detail')
+    Expect(stack.depth).toBe(2)
+    Expect(stack.back()).toBe(true)
+    Expect(stack.currentDestination).toBe('Home')
+
+    TR.Navigation.Present(stack, 'Detail', {})
+    TR.Navigation.beginTest()
+    Expect(stack.currentDestination).toBe('Home')
+    Expect(stack.depth).toBe(1)
   })
 })
 
@@ -454,7 +553,7 @@ Describe('TR.Dev', () => {
       Expect(TR.Dev.isEnabled()).toBe(false)
 
       TR.setDevMode({})
-      Expect(TR.Dev.getMode()).toEqual({ enabled: true, layoutBounds: true })
+      Expect(TR.Dev.getMode()).toEqual({ enabled: true, layoutBounds: false })
     } finally {
       restoreDevGlobal()
       TR.setDevMode({ enabled: false })

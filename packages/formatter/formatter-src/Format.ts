@@ -1,9 +1,11 @@
 import { ActionsFormatter } from './formatters/ActionsFormatter'
 import AliasesFormatter from './formatters/aliases-formatter'
 import AppFormatter from './formatters/app-formatter'
+import DataFormatter from './formatters/data-formatter'
 import ExpressionsFormatter from './formatters/expressions-formatter'
 import FilesFormatter from './formatters/files-formatter'
 import InjectionsFormatter from './formatters/injections-formatter'
+import NavigationFormatter from './formatters/navigation-formatter'
 import ProjectFormatter from './formatters/project-formatter'
 import { StateFormatter } from './formatters/StateFormatter'
 import StatementsFormatter from './formatters/statements-formatter'
@@ -20,6 +22,7 @@ export const Format = {
   ...ProjectFormatter,
   ...TestsFormatter,
   ...AppFormatter,
+  ...DataFormatter,
   ...ActionsFormatter,
   ...StateFormatter,
   ...AliasesFormatter,
@@ -28,4 +31,5 @@ export const Format = {
   ...StatementsFormatter,
   ...ExpressionsFormatter,
   ...InjectionsFormatter,
+  ...NavigationFormatter,
 } as const satisfies FormatHandlers

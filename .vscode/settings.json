@@ -15,6 +15,15 @@
     }
   ],
   "langium.config": "packages/parser/langium-config.json",
+  // WordFlower target files use alternate extensions to stay out of Tao discovery.
+  "files.associations": {
+    "*.tao-next": "tao",
+    "*.tao-mvp": "tao",
+    "*.tao-revolution": "tao",
+    "*.test.tao-next": "tao",
+    "*.test.tao-mvp": "tao",
+    "*.test.tao-revolution": "tao"
+  },
   /////////////
   // Formatting
   "editor.defaultFormatter": "dprint.dprint",

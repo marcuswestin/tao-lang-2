@@ -483,7 +483,7 @@ Describe('Repo', () => {
     const root = await untrackedTmpDir()
     try {
       await FS.writeText(FS.resolvePath('MVP-4/valid.tao', root), '')
-      await FS.writeText(FS.resolvePath('Apps/MVP/.tao-future/ignored.tao', root), '')
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/.tao-archive/ignored.tao', root), '')
 
       const files = (await Repo.filesUnder(root, {
         extensions: ['.tao'],

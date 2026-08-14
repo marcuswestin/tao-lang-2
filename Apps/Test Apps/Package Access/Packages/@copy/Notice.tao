@@ -1,1 +1,1 @@
-project alias ProjectNotice = "Project alias works"
+project let ProjectNotice = "Project let works"

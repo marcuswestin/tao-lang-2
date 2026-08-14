@@ -36,21 +36,32 @@ export const ActionsCompiler = {
 
   /** ActionParameterBinding binds one runtime action argument into the action-local scope. */
   ActionParameterBinding(parameter: ActionParameter): Compiled {
-    return gen`${gen.scopeName({ name: Type.parameterName(parameter.parameter) })} = ${
-      actionRuntimeParameterName(parameter.index)
-    }`
+    const name = { name: Type.parameterName(parameter.parameter) }
+    const runtimeParameter = actionRuntimeParameterName(parameter.index)
+    return parameter.parameter.defaultValue === undefined
+      ? gen`${gen.scopeName(name)} = ${runtimeParameter}`
+      : gen`${gen.scopeName(name)} = ${runtimeParameter} ?? ${Compile.Expression(parameter.parameter.defaultValue)}`
   },
 
   /** ActionRuntimeParameter compiles one action callback parameter. */
   ActionRuntimeParameter(parameter: ActionParameter): Compiled {
-    return gen`${actionRuntimeParameterName(parameter.index)}: ${Compile.ParameterType(parameter.parameter)}`
+    return gen`${actionRuntimeParameterName(parameter.index)}${
+      parameter.parameter.defaultValue === undefined ? '' : '?'
+    }: ${Compile.ParameterType(parameter.parameter)}`
   },
 
   /** ActionStatement compiles one statement inside a Tao action body. */
   ActionStatement(statement: AST.ActionStatement): Compiled {
     return Switch.type(statement, {
+      CreateStatement: Compile.CreateStatement,
+      BackStatement: Compile.BackStatement,
+      DeleteStatement: Compile.DeleteStatement,
       DoStatement: Compile.DoStatement,
+      PresentStatement: Compile.PresentStatement,
       SetStatement: Compile.SetStatement,
+      ToggleStatement: Compile.ToggleStatement,
+      UpdateStatement: Compile.UpdateStatement,
+      WhenActionStatement: Compile.WhenActionStatement,
     })
   },
 
@@ -61,9 +72,33 @@ export const ActionsCompiler = {
 
   /** ActionArguments compiles action invocation argument expressions. */
   ActionArguments(invocation: AST.DoStatement): Compiled {
-    return gen.join(actionInvocationArguments(invocation), argument => gen`, ${Compile.Argument(argument)}`, {
+    return gen.join(actionInvocationArguments(invocation), argument => gen`, ${argument}`, {
       separator: '',
     })
+  },
+
+  /** ToggleStatement inverts a validated boolean state through the runtime. */
+  ToggleStatement(statement: AST.ToggleStatement): Compiled {
+    const state = statement.target.ref
+    Assert.defined(state, 'validated toggle targets a state')
+    return gen`TR.Toggle(${gen.scopeName(state)})`
+  },
+
+  /** WhenActionStatement runs only the first matching action branch. */
+  WhenActionStatement(statement: AST.WhenActionStatement): Compiled {
+    return gen`TR.WhenAction([
+      ${
+      gen.list(
+        statement.branches,
+        branch =>
+          gen`[() => ${Compile.Expression(branch.condition)}, () => {
+          ${gen.list(branch.block.statements, Compile.ActionStatement)}
+        }],`,
+      )
+    }
+    ], () => {
+      ${gen.list(statement.otherwise.block.statements, Compile.ActionStatement)}
+    })`
   },
 } as const
 
@@ -75,13 +110,20 @@ function actionRuntimeParameterName(index: number): Compiled {
   return gen.Name({ name: `_TaoActionArg${index}` })
 }
 
-function actionInvocationArguments(invocation: AST.DoStatement): AST.Argument[] {
+function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
   const resolved = ASTUtils.resolveActionInvocation(invocation)
   if (!resolved.action) {
-    Assert(AST.argumentsOf(invocation).length === 0, 'validated dynamic action invocation has no arguments')
-    return []
+    // Dynamic callbacks declare positional action(...) signatures, so preserve the
+    // caller's source order instead of applying named-action type binding.
+    return AST.argumentsOf(invocation).map(Compile.Argument)
   }
   Assert.defined(resolved.action, 'validated action invocation targets a named action')
   Assert(resolved.diagnostics.length === 0, 'validated action invocation has no binding diagnostics')
-  return resolved.pairs.map(pair => pair.argument)
+  const parameters = AST.parametersOf(resolved.action)
+  const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
+  const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
+  return parameters.slice(0, lastProvidedIndex + 1).map(parameter => {
+    const argument = argumentsByParameter.get(parameter)
+    return argument ? Compile.Argument(argument) : gen`undefined`
+  })
 }

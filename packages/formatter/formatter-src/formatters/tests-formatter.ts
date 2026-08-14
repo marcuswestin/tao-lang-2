@@ -22,9 +22,32 @@ export default {
     f.oneSpaceBetweenProperties('selector', 'text')
   },
 
+  /** EnterTextStep formats `enter "value" into <selector> "target"`. */
+  EnterTextStep(f) {
+    f.oneSpaceAfter('enter', 'into')
+    f.oneSpaceBefore('into')
+    f.oneSpaceBetweenProperties('selector', 'target')
+  },
+
+  /** SubmitInputStep formats `submit <selector> "target"`. */
+  SubmitInputStep(f) {
+    f.oneSpaceAfter('submit')
+    f.oneSpaceBetweenProperties('selector', 'target')
+  },
+
   /** ExpectTextStep formats v0 selector-targeted expectations. */
   ExpectTextStep(f) {
     f.oneSpaceAfter('expect', 'missing')
     f.oneSpaceBetweenProperties('selector', 'text')
   },
+
+  /** ExpectInputValueStep formats input value assertions. */
+  ExpectInputValueStep(f) {
+    f.oneSpaceAfter('expect', 'input', 'value')
+    f.oneSpaceBetweenProperties('selector', 'target')
+    f.oneSpaceBefore('value')
+  },
+
+  /** BackTestStep has no operands. */
+  BackTestStep() {},
 } satisfies Partial<FormatHandlers>

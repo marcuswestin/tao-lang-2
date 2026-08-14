@@ -2,7 +2,7 @@ import Runtime from '@runtime'
 import { Assert, FS, Repo } from '@shared'
 import { AfterEach, Describe, Expect, mkTestDir, Test } from '@shared/test'
 
-const kitchenSinkDir = Repo.resolvePath('Apps/Kitchen Sink')
+const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeRoots: string[] = []
@@ -26,7 +26,7 @@ AfterEach(async () => {
 Describe('Tao runtime app generation', () => {
   Test('generates app paths from the supplied app path', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
-    const appPath = FS.resolvePath('Kitchen Sink.tao', kitchenSinkDir)
+    const appPath = FS.resolvePath('WordFlower.tao', wordFlowerDir)
 
     const generated = await Runtime.generateApp(appPath, {
       runtimePackageRoot,
@@ -49,12 +49,12 @@ Describe('Tao runtime app generation', () => {
     const outsideRoot = await createRuntimePackageRoot()
     const runtimePackageRoot = FS.resolvePath('runtime', outsideRoot)
 
-    const generated = await Runtime.generateApp('Kitchen Sink.tao', {
-      cwd: kitchenSinkDir,
+    const generated = await Runtime.generateApp('WordFlower.tao', {
+      cwd: wordFlowerDir,
       runtimePackageRoot,
     })
 
-    Expect(generated.sourcePath).toBe(FS.resolvePath('Kitchen Sink.tao', kitchenSinkDir))
+    Expect(generated.sourcePath).toBe(FS.resolvePath('WordFlower.tao', wordFlowerDir))
     Expect(generated.outputPath).toBe(generatedAppPath(runtimePackageRoot))
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
   })

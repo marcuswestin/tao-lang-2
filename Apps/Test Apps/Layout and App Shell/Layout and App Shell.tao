@@ -4,35 +4,35 @@ app LayoutAndAppShell {
    view MainView
 }
 
-alias PageTitle = "Layout and app shell"
-alias BodyCopy = "This screen should sit inside the default Tao app shell."
+let PageTitle = "Layout and app shell"
+let BodyCopy = "This screen should sit inside the default Tao app shell."
 
 view MainView {
    action Noop { }
-   render Col [fill, content top stretch, gap 12, pad 16] {
-      Text PageTitle [width fill]
-      TextMultiline BodyCopy [width fill]
-      TextFrame "Safe default app frame" [width fill]
-      Stack [content top stretch, gap 8, pad 12, margin bottom 4, width fill, hug] {
-         Text "Stack uses column content defaults, gap, pad, margin, width fill, and hug."
-         Button "Primary action", Noop [centered]
+   render Col() [fill, content top stretch, gap 12, pad 16] {
+      Text(PageTitle) [width fill]
+      TextMultiline(BodyCopy) [width fill]
+      TextFrame("Safe default app frame") [width fill]
+      Stack() [content top stretch, gap 8, pad 12, margin bottom 4, width fill, hug] {
+         Text("Stack uses column content defaults, gap, pad, margin, width fill, and hug.")
+         Button("Primary action", Noop) [centered]
       }
-      Row [content spread center, gap 8, pad horizontal 12 vertical 8, width fill, rigid] {
-         Text "Left"
-         Text "Right" [aligned center]
+      Row() [content spread center, gap 8, pad horizontal 12 vertical 8, width fill, rigid] {
+         Text("Left")
+         Text("Right") [aligned center]
       }
-      Box [content center, gap 6, pad 8, margin horizontal 4, hug, rigid] {
-         Text "Box frame"
+      Box() [content center, gap 6, pad 8, margin horizontal 4, hug, rigid] {
+         Text("Box frame")
       }
-      Col [content top stretch, gap 8, pad top 8 bottom 12 left 10 right 10, width fill, compress] {
-         Text "Compressible body row below."
-         Row [content left center, gap 8, width fill, compress] {
-            Text "Flexible text" [claim 2, compress]
-            Button "Rigid", Noop [rigid]
+      Col() [content top stretch, gap 8, pad top 8 bottom 12 left 10 right 10, width fill, compress] {
+         Text("Compressible body row below.")
+         Row() [content left center, gap 8, width fill, compress] {
+            Text("Flexible text") [claim 2, compress]
+            Button("Rigid", Noop) [rigid]
       }  }
-      WrappingRow [content top left, gap 8, pad 8, width fill, hug, compress] {
-         Text "Safe area"
-         Text "Keyboard"
-         Text "Deterministic"
-         Text "Cross-platform"
+      WrappingRow() [content top left, gap 8, pad 8, width fill, hug, compress] {
+         Text("Safe area")
+         Text("Keyboard")
+         Text("Deterministic")
+         Text("Cross-platform")
 }  }  }

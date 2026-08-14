@@ -8,9 +8,10 @@ Authority, from highest to lowest:
 
 1. `Spec/Tao Presentation and Navigation.md` and the other active specifications.
 2. This research record.
-3. `.tao-future/Writer.tao`, the complete intended usage sketch.
-4. `.tao-future/tao-navs.tao`, the proposed standard-library surface.
-5. `Roadmap/Archive/`, which preserves history but does not define current behavior.
+3. `Apps/WordFlower/2 - Next/WordFlower.tao-next`, the settled upcoming product syntax.
+4. `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp`, the complete intended product envelope.
+5. `.tao-future/tao-navs.tao`, the proposed standard-library surface.
+6. `Roadmap/Archive/`, which preserves history but does not define current behavior.
 
 The syntax remains future Tao until its corresponding implementation slice lands. Current implementation status must be stated separately from intended behavior.
 
@@ -48,7 +49,7 @@ Omitted optional properties have value `none`. Explicit `none` is equivalent at 
 
 Explicit property entries and keyed entries may fill properties. Ordinary render expressions inside a caller block are children and are never consumed as properties solely because their types match. Named render slots remain a separate typed render-surface concept.
 
-`@name` is the common syntax for an owner-scoped name, while the receiving declaration determines whether that name is a render slot or keyed entry. Direct names share one namespace per configured owner. There is no slot-or-key precedence: duplicates and multi-channel or multi-property matches are validation errors, and an explicit property block resolves keyed-property ambiguity. Only targetable keyed entries form paths such as `Writer@home`; render slots never do.
+`@name` is the common syntax for an owner-scoped name, while the receiving declaration determines whether that name is a render slot or keyed entry. Direct names share one namespace per configured owner. There is no slot-or-key precedence: duplicates and multi-channel or multi-property matches are validation errors, and an explicit property block resolves keyed-property ambiguity. Only targetable keyed entries form paths such as `WordFlower@home`; render slots never do.
 
 ### DEC-NAV-005: `ui` and `nav` are distinct presentables
 
@@ -141,7 +142,7 @@ Provider injections receive canonical descriptor data, mounted semantic state, r
 
 ### DEC-NAV-025: Target-only activation is syntactically path-shaped
 
-`present Writer@workspace`, `present @inspector`, and other target-only activation forms require at least one `@` segment. A bare configured nav after `present` is always delivered as content; its parse and type never change with mount count. Configured nav descriptors remain valid targets after `in`.
+`present WordFlower@workspace`, `present @inspector`, and other target-only activation forms require at least one `@` segment. A bare configured nav after `present` is always delivered as content; its parse and type never change with mount count. Configured nav descriptors remain valid targets after `in`.
 
 ### DEC-NAV-026: Presentable is a closed sum
 
@@ -187,7 +188,7 @@ Literal `@key` entries may appear directly in a configured declaration and bind 
 
 ## First Implementation Scope
 
-The full target MVP retains its `Design` and `Datasource` capabilities. They are intentionally absent from the in-between `WriterFoundationTest` app so navigation foundations can become executable without pulling either capability implementation into this slice.
+The full target MVP retains its `Design` and `Datasource` capabilities. They are intentionally absent from the in-between `WordFlowerFoundationTest` app so navigation foundations can become executable without pulling either capability implementation into this slice.
 
 The next implementation project contains only:
 
@@ -199,26 +200,26 @@ The next implementation project contains only:
 - `present`, `replace`, and `dismiss` with contextual delivery, configured-descriptor targets, and the active app root target. Keyed path segments, relative keyed targets, and target-only activation land with Selection and Split.
 - A pure semantic reducer, source/native intent envelopes, separate revisioned provider acknowledgements, the provider payload/rejection contract, and native back reconciliation.
 - The `file`/`package`/`workspace`/`public` vocabulary for declarations needed by this slice, with deprecated `project`/`publish` compatibility and explicit removal criteria. Repository-wide migration remains follow-up work.
-- Focused parser, formatter, resolver, validator, compiler, runtime, source-action, Test App, and Kitchen Sink migration work required by that slice.
+- Focused parser, formatter, resolver, validator, compiler, runtime, source-action, Test App, and WordFlower migration work required by that slice.
 
 Keyed collection syntax/scoping, app `Auxiliaries`, compiler-created keyed wrappers, Selection, Split, keyed/relative path segments, target-only activation, `Occurrence`, Overlay, Window, Toast, persisted restoration/routes, and Dialogue remain documented target behavior but are follow-up implementation projects.
 
 ## Traceability
 
-| Capability                                  | Decision                                                     | Normative spec                                   | Intended example                                 | Planned executable coverage                                                         |
-| ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `let`, properties, `with`, zero-application | DEC-NAV-001..004, DEC-NAV-027                                | Tao Type System                                  | MVP-Writer bindings and configured navs          | Foundation parser/type/formatter fixtures                                           |
-| UI/nav roles, placement, and sum type       | DEC-NAV-005..006, DEC-NAV-026                                | Tao Presentation and Navigation                  | Writer root and composed navs                    | Union and placement validator fixtures                                              |
-| Identity and targeting                      | DEC-NAV-007..010, DEC-NAV-025, DEC-NAV-028..030, DEC-NAV-032 | Tao Presentation and Navigation; Tao Packages    | Writer duplicate editors and inspector paths     | Reducer, lifecycle, and target-resolution tests                                     |
-| App root, auxiliaries, and windows          | DEC-NAV-011..012, DEC-NAV-023                                | Tao Presentation and Navigation                  | Writer app/root and overlay/toast/window hosts   | Root tests plus follow-up auxiliary-provider tests                                  |
-| Transition and provider semantics           | DEC-NAV-013..014, DEC-NAV-022, DEC-NAV-024, DEC-NAV-029..031 | Tao Presentation and Navigation                  | Writer navigation actions and foundation harness | Pure reducer, identity-generation, timer, provider rejection, and native-back tests |
-| Restoration and entities                    | DEC-NAV-015                                                  | Tao Presentation and Navigation                  | Writer restorable document UI                    | Follow-up round-trip and missing-entity tests                                       |
-| Dialogue                                    | DEC-NAV-016                                                  | Tao Presentation and Navigation                  | Writer confirm-close dialogue                    | Follow-up suspension/cancellation tests                                             |
-| Diagnostics                                 | DEC-NAV-017                                                  | Tao Presentation and Navigation; Tao Testing     | Writer invalid examples as comments              | Validator/runtime diagnostic fixtures                                               |
-| Visibility                                  | DEC-NAV-018                                                  | Tao Packages                                     | Target package examples                          | Package discovery and visibility tests                                              |
-| Keyed forwarding wrappers                   | DEC-NAV-019, DEC-NAV-033                                     | Tao Presentation and Navigation; Tao Type System | Writer selection items and split panes           | Follow-up keyed-target and owner-namespace tests                                    |
-| Provider isolation                          | DEC-NAV-020                                                  | Tao Presentation and Navigation                  | Nav stdlib injection contracts                   | Provider boundary tests                                                             |
-| Operation result surface                    | DEC-NAV-021                                                  | Tao Presentation and Navigation                  | Writer fire-and-forget actions                   | Type and reducer tests                                                              |
+| Capability                                  | Decision                                                     | Normative spec                                   | Intended example                                     | Planned executable coverage                                                         |
+| ------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `let`, properties, `with`, zero-application | DEC-NAV-001..004, DEC-NAV-027                                | Tao Type System                                  | MVP-Writer bindings and configured navs              | Foundation parser/type/formatter fixtures                                           |
+| UI/nav roles, placement, and sum type       | DEC-NAV-005..006, DEC-NAV-026                                | Tao Presentation and Navigation                  | WordFlower root and composed navs                    | Union and placement validator fixtures                                              |
+| Identity and targeting                      | DEC-NAV-007..010, DEC-NAV-025, DEC-NAV-028..030, DEC-NAV-032 | Tao Presentation and Navigation; Tao Packages    | WordFlower duplicate editors and inspector paths     | Reducer, lifecycle, and target-resolution tests                                     |
+| App root, auxiliaries, and windows          | DEC-NAV-011..012, DEC-NAV-023                                | Tao Presentation and Navigation                  | WordFlower app/root and overlay/toast/window hosts   | Root tests plus follow-up auxiliary-provider tests                                  |
+| Transition and provider semantics           | DEC-NAV-013..014, DEC-NAV-022, DEC-NAV-024, DEC-NAV-029..031 | Tao Presentation and Navigation                  | WordFlower navigation actions and foundation harness | Pure reducer, identity-generation, timer, provider rejection, and native-back tests |
+| Restoration and entities                    | DEC-NAV-015                                                  | Tao Presentation and Navigation                  | WordFlower restorable document UI                    | Follow-up round-trip and missing-entity tests                                       |
+| Dialogue                                    | DEC-NAV-016                                                  | Tao Presentation and Navigation                  | WordFlower confirm-close dialogue                    | Follow-up suspension/cancellation tests                                             |
+| Diagnostics                                 | DEC-NAV-017                                                  | Tao Presentation and Navigation; Tao Testing     | WordFlower invalid examples as comments              | Validator/runtime diagnostic fixtures                                               |
+| Visibility                                  | DEC-NAV-018                                                  | Tao Packages                                     | Target package examples                              | Package discovery and visibility tests                                              |
+| Keyed forwarding wrappers                   | DEC-NAV-019, DEC-NAV-033                                     | Tao Presentation and Navigation; Tao Type System | WordFlower selection items and split panes           | Follow-up keyed-target and owner-namespace tests                                    |
+| Provider isolation                          | DEC-NAV-020                                                  | Tao Presentation and Navigation                  | Nav stdlib injection contracts                       | Provider boundary tests                                                             |
+| Operation result surface                    | DEC-NAV-021                                                  | Tao Presentation and Navigation                  | WordFlower fire-and-forget actions                   | Type and reducer tests                                                              |
 
 The per-provider behavior suites must cover at least Slot initial/restore/delegation, equal-identity Stack pushes and top replacement, static and dynamic Selection focus, Split reveal/forwarding, Overlay stacking/replacement, keyed Toast refresh plus stale expiry, same-key Window focus/content update, wrapper incompatibility, retired-occurrence callbacks, and exhausted native Back.
 
@@ -228,11 +229,11 @@ Before cleanup, unique material was classified as follows:
 
 | Removed source                             | Preserved destination                                                                                                                        |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MVP-Writer-2.tao`                         | DEC-NAV-001..033, the presentation spec, Writer, and the nav stdlib stub                                                                     |
+| `MVP-Writer-2.tao`                         | DEC-NAV-001..033, the presentation spec, WordFlower, and the nav stdlib stub                                                                 |
 | `Decided/001-core-presentation-intent.tao` | Presentation roles, restorability, entity references, and dialogue sections in the presentation spec                                         |
 | `@ToBeDecided/002..007`                    | `Deferred syntax explorations.md`, `DEF-NAV-002`, `DEF-NAV-007..011`, `DEF-NAV-013`, strict diagnostics, provider isolation, and restoration |
 | `@ToBeDecided/MVP-triage/001..030`         | `Roadmap/Deferred Tao language decisions.md`; navigation-specific routes moved to `DEF-NAV-001`                                              |
-| Former `@ui/ui.tao` presentation lab       | Authoritative Writer coverage, `DEF-NAV-008..011`, and a reduced Still syntax app                                                            |
+| Former `@ui/ui.tao` presentation lab       | Authoritative WordFlower coverage, `DEF-NAV-008..011`, and the canonical app family in `Apps/WordFlower/`                                    |
 | Orphaned `Apps/MVP/`                       | `Roadmap/Deferred Tao language decisions.md`, including conditional chrome as `DEF-NAV-012`                                                  |
 
 Committed historical alternatives remain recoverable from Git history. Material that existed only in staged or uncommitted sketches is preserved by the active records above; the removed Tao files no longer compete with the specifications.

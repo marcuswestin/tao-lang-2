@@ -7,14 +7,65 @@ export default {
     f.commaSpacedList()
   },
 
-  /** Argument formats an optional invocation type label and one value. */
+  /** Argument formats an optional invocation name or type label and one value. */
   Argument(f) {
+    if (f.node.parameterName) {
+      f.noSpaceAfter('.')
+      f.oneSpaceBeforeProperty('value')
+    }
     f.oneSpaceAfter(':')
   },
 
   /** TypedConstructor formats juxtaposed `<Type> <Value>` value creation. */
   TypedConstructor(f) {
     f.oneSpaceBetweenProperties('type', 'value')
+  },
+
+  /** FunctionDeclaration formats a pure expression-bodied function. */
+  FunctionDeclaration(f) {
+    f.oneSpaceAfter('package', 'project', 'publish', 'function', 'returns')
+    f.oneSpaceBefore('returns')
+    f.oneSpaceBeforeProperty('parameterList')
+    f.oneSpaceAround('=')
+  },
+
+  /** FunctionCallExpression keeps call parentheses tight and arguments comma-spaced. */
+  FunctionCallExpression(f) {
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+  },
+
+  /** BinaryExpression formats operators with one space on each side. */
+  BinaryExpression(f) {
+    f.oneSpaceAround('==', '!=', '<', '<=', '>', '>=', '+', '-', '*', '/', 'and', 'or')
+  },
+
+  /** UnaryExpression keeps numeric negation tight and boolean negation readable. */
+  UnaryExpression(f) {
+    f.noSpaceAfter('-')
+    f.oneSpaceAfter('not')
+  },
+
+  /** WhenExpression puts each branch and its required fallback on an indented line. */
+  WhenExpression(f) {
+    f.indentedLines([...f.node.branches, f.node.otherwise])
+  },
+
+  /** WhenBranch spaces a value branch around its arrow. */
+  WhenBranch(f) {
+    f.oneSpaceAround('->')
+  },
+
+  /** WhenOtherwise spaces the required fallback around its arrow. */
+  WhenOtherwise(f) {
+    f.oneSpaceAround('->')
+  },
+
+  /** InterpolationExpression formats comma-separated interpolation parts. */
+  InterpolationExpression(f) {
+    f.oneSpaceAfter('interpolate')
+    f.commaSpacedList()
   },
 
   /** ListLiteral formats list elements. */
@@ -44,6 +95,12 @@ export default {
 
   /** NumberLiteral is a single token with no interior formatting. */
   NumberLiteral() {},
+
+  /** BooleanLiteral is a single token with no interior formatting. */
+  BooleanLiteral() {},
+
+  /** NoneLiteral is a single token with no interior formatting. */
+  NoneLiteral() {},
 
   /** ValueReference is a single identifier with no interior formatting. */
   ValueReference() {},

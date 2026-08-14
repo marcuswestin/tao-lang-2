@@ -17,7 +17,7 @@ async function runJust(args: readonly string[]): Promise<void> {
 }
 
 const JUST_LABELS: Record<string, string> = {
-  '_compile-kitchen-sink-app': 'compile',
+  '_compile-word-flower-app': 'compile',
   '_parser-gen': 'parser',
   'clean': 'clean',
   'deps': 'deps',
@@ -29,7 +29,7 @@ const JUST_LABELS: Record<string, string> = {
 
 /** runTests runs the dev test runner in line-output mode for the dev-loop TUI. */
 async function runTests(repoRoot: string): Promise<void> {
-  await runJust(['_compile-kitchen-sink-app'])
+  await runJust(['_compile-word-flower-app'])
   const result = await CLI.run('bun', {
     args: ['run', Repo.resolvePath('packages/dev/dev-src/dev.ts'), 'test', '--output', 'lines'],
     cwd: repoRoot,

@@ -23,7 +23,10 @@ ParameterTypeDeclaration:
     name=ID 'is' type=TypeExpression;
 
 TypeReference:
-    PrimitiveTypeReference | NamedTypeReference;
+    ActionTypeReference | PrimitiveTypeReference | NamedTypeReference;
+
+ActionTypeReference:
+    'action' '(' (parameterTypes+=TypeReference (',' parameterTypes+=TypeReference)*)? ')';
 
 ConstructorTypeReference:
     ConstructablePrimitiveTypeReference | NamedTypeReference;
@@ -38,9 +41,9 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'item' | 'list' | 'action';
+    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action';
 
 ConstructablePrimitiveType returns string:
-    'text' | 'number' | 'item' | 'list';
+    'text' | 'number' | 'boolean' | 'item' | 'list';
 
 type TypeDefinition = TypeDeclaration | TypeProperty | ParameterTypeDeclaration;
