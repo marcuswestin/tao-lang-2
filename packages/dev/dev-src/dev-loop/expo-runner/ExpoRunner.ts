@@ -7,7 +7,7 @@ import { ExpoMetro } from './metro'
 import { Ports } from './Ports'
 import { ExpoTargets } from './run-targets'
 
-export type ExpoServerProcess = {
+type ExpoServerProcess = {
   onUnexpectedExit: (listener: () => void) => void
   start: () => Promise<void>
   stop: () => Promise<void>

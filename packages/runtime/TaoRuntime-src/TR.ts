@@ -172,7 +172,7 @@ class TR {
         value = DataControls.Read(value, member)
         continue
       }
-      if ((Array.isArray(value) || typeof value === 'string') && member === 'Count') {
+      if (isCountableValue(value) && member === 'Count') {
         value = value.length
         continue
       }
@@ -529,7 +529,7 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
       return { matched: query.status === 'ready' && query.rows.length === 0, payload: undefined }
     }
     return {
-      matched: (Array.isArray(value) || typeof value === 'string') && value.length === 0,
+      matched: isCountableValue(value) && value.length === 0,
       payload: undefined,
     }
   }
@@ -538,6 +538,9 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
   }
   return { matched: false, payload: undefined }
 }
+
+const isCountableValue = (value: unknown): value is string | unknown[] =>
+  Array.isArray(value) || typeof value === 'string'
 
 function queryStatus(
   value: unknown,

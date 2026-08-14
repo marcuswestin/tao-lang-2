@@ -6,6 +6,7 @@ import RuntimeGen from './codegen/app/runtime-gen'
 import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
 
 const codeProjectRoot = '/__tao__'
+const compiledSourceOutputPathMessage = 'compiled source output path exists'
 
 /** CompiledFile declares one generated TypeScript output file. */
 export type CompiledFile = {
@@ -99,13 +100,12 @@ function compileValidatedInput(
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const outputPathBySourcePath = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
   const compiledFiles = sourceFiles.map(file =>
-    compileSourceFile(
-      file,
+    compileSourceFile(file, {
       sourceByPath,
       outputPathBySourcePath,
-      context.packagesContext,
-      file.path === entryPath ? selectedAppName : undefined,
-    )
+      packagesContext: context.packagesContext,
+      selectedAppName: file.path === entryPath ? selectedAppName : undefined,
+    })
   )
 
   return compileResultForEntry(validationResult, compiledFiles)
@@ -132,16 +132,18 @@ function planOutputPaths(
   return outputPathBySourcePath
 }
 
-function compileSourceFile(
-  file: ParsedFile,
-  sourceByPath: Map<string, ParsedFile>,
-  outputPathBySourcePath: ReadonlyMap<string, string>,
-  packagesContext: Packages.Context,
-  selectedAppName: string | undefined,
-): CompiledFile {
+type CompileSourceFileOptions = {
+  sourceByPath: Map<string, ParsedFile>
+  outputPathBySourcePath: ReadonlyMap<string, string>
+  packagesContext: Packages.Context
+  selectedAppName: string | undefined
+}
+
+function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile {
+  const { sourceByPath, outputPathBySourcePath, packagesContext, selectedAppName } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const currentOutputPath = outputPathBySourcePath.get(file.path)
-  Assert.defined(currentOutputPath, 'compiled source output path exists', { sourcePath: file.path })
+  Assert.defined(currentOutputPath, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = importLinesForCompiledFile(imports, currentOutputPath, outputPathBySourcePath)
   const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
   const exportedNames = file.ast.statements
@@ -169,7 +171,7 @@ function importLinesForCompiledFile(
 ): string[] {
   return [...imports.bySource.entries()].map(([sourcePath, names]) => {
     const sourceOutputPath = outputPathBySourcePath.get(sourcePath)
-    Assert.defined(sourceOutputPath, 'compiled source output path exists', { sourcePath })
+    Assert.defined(sourceOutputPath, compiledSourceOutputPathMessage, { sourcePath })
     const importedNames = Array.from(names).toSorted((left, right) => left.localeCompare(right)).join(', ')
     const importPath = relativeImportPath(currentOutputPath, sourceOutputPath)
     return `import { ${importedNames} } from '${importPath}'`

@@ -578,6 +578,122 @@ Describe('TR.Data provider foundation', () => {
   })
 })
 
+Describe('TR.Data', () => {
+  Test('persists local rows and applies strict update, relationship cascade, and rehydration', async () => {
+    const values = new Map<string, string>()
+    const storage = {
+      getItem: async (key: string) => values.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        values.set(key, value)
+      },
+    }
+    const definition = {
+      name: 'RuntimeDataTest',
+      entities: {
+        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' as const } } },
+        Task: {
+          collection: 'Tasks',
+          fields: {
+            Title: { kind: 'text' as const },
+            Workspace: {
+              kind: 'relation' as const,
+              relation: 'Workspace',
+              onDelete: 'cascade' as const,
+            },
+          },
+        },
+      },
+    }
+    const provider = TR.DataProvider.Local(storage, 'runtime-test')
+    const schema = TR.Data.Schema(definition, provider, 'runtime-data-test')
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
+    Expect(() =>
+      TR.Data.Create(schema, 'Task', {
+        Title: TR.Value('Draft'),
+        Workspace: TR.Value('Workspace-1'),
+      })
+    ).toThrow("Relationship 'Task.Workspace' expects a live Workspace entity handle.")
+    const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
+    TR.Data.Create(schema, 'Task', { Title: TR.Value('Draft'), Workspace: TR.Value(workspace) })
+    await TR.Data.Settle(schema)
+    const initiallyRehydrated = TR.Data.Schema(definition, provider, 'runtime-data-test')
+    await TR.Data.Settle(initiallyRehydrated)
+    Expect(initiallyRehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(1)
+    Expect(initiallyRehydrated.query({ entity: 'Task', filters: [] })).toHaveLength(1)
+    const tasks = schema.query({ entity: 'Task', filters: [] }) as Array<Record<string, unknown>>
+    Expect(tasks).toHaveLength(1)
+    TR.Data.Update(TR.Value(tasks[0]), { Title: TR.Value('Updated') })
+    Expect((schema.query({ entity: 'Task', filters: [] })[0] as Record<string, unknown>)['Title']).toBe('Updated')
+    const workspaces = schema.query({ entity: 'Workspace', filters: [] })
+    TR.Data.Delete(TR.Value(workspaces[0]))
+    Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
+    await TR.Data.Settle(schema)
+
+    const rehydrated = TR.Data.Schema(definition, provider, 'runtime-data-test')
+    await TR.Data.Settle(rehydrated)
+    Expect(rehydrated.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
+  })
+
+  Test(
+    'rehydrates the version-1 envelope under an explicit key with inverse fields and next-ID continuity',
+    async () => {
+      const values = new Map<string, string>([[
+        'runtime-test:WordFlowerData',
+        JSON.stringify({
+          formatVersion: 1,
+          schemaVersion: 1,
+          nextId: 7,
+          rows: {
+            Workspace: [{ Id: 'Workspace-1', Name: 'Home', CreatedAt: 10 }],
+            Document: [{ Id: 'Document-4', Title: 'First', Final: false, Workspace: 'Workspace-1' }],
+          },
+        }),
+      ]])
+      const storage = {
+        getItem: async (key: string) => values.get(key) ?? null,
+        setItem: async (key: string, value: string) => {
+          values.set(key, value)
+        },
+      }
+      const definition = {
+        name: 'Data',
+        schemaVersion: 1,
+        entities: {
+          Workspace: {
+            collection: 'Workspaces',
+            defaultOrder: { field: 'CreatedAt', direction: 'asc' as const },
+            fields: { Name: { kind: 'text' as const }, CreatedAt: { kind: 'time' as const } },
+            inverseFields: { Documents: { relation: 'Document', inverseField: 'Workspace' } },
+          },
+          Document: {
+            collection: 'Documents',
+            fields: {
+              Title: { kind: 'text' as const },
+              Final: { kind: 'boolean' as const, defaultValue: false },
+              Workspace: { kind: 'relation' as const, relation: 'Workspace' },
+            },
+          },
+        },
+      }
+      const provider = TR.DataProvider.Local(storage, 'runtime-test')
+      const schema = TR.Data.Schema(definition, provider, 'WordFlowerData')
+      await TR.Data.Settle(schema)
+      const workspace = schema.query({ entity: 'Workspace', filters: [] })[0] as Record<string, unknown>
+      Expect(workspace['Documents'] as unknown[]).toHaveLength(1)
+      TR.Data.Create(schema, 'Document', {
+        Title: TR.Value('Second'),
+        Workspace: TR.Value(workspace),
+      })
+      await TR.Data.Settle(schema)
+      const documents = schema.query({ entity: 'Document', filters: [] }) as Array<Record<string, unknown>>
+      Expect(documents.map(document => document['Id'])).toEqual(['Document-4', 'Document-7'])
+      Expect(documents[1]?.['Final']).toBe(false)
+      Expect(values.has('runtime-test:WordFlowerData')).toBe(true)
+    },
+  )
+})
+
 function relationshipDefinition(name: string): TaoDataSchemaDefinition {
   return {
     name,

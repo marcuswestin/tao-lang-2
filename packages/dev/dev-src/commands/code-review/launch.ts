@@ -12,9 +12,45 @@ type LaunchContext = {
   kind?: ReviewLaunchKind
 }
 
+type ReviewerArtifactPaths = {
+  artifactDir: string
+  debugFile: string
+  eventsPath: string
+  finalFile: string
+  reviewPath: string
+  statusPath: string
+  stderrPath: string
+  stdoutPath: string
+}
+
+type PreparedReviewerLaunch = {
+  artifacts: ReviewerArtifactPaths
+  effort: ReviewMeta['effort']
+  invocation: ReturnType<typeof buildReviewerInvocation>
+  kind: ReviewLaunchKind
+  timeoutSeconds: number
+}
+
 /** launchReviewer runs one reviewer CLI and writes its output artifacts. */
 export async function launchReviewer(entry: ReviewerManifestEntry, ctx: LaunchContext): Promise<ReviewMeta> {
   await FS.mkdir(ctx.runDir)
+  const prepared = await prepareReviewerLaunch(entry, ctx)
+  await resetReviewerArtifacts(prepared.artifacts)
+  const result = await runPreparedReviewer(entry, ctx, prepared)
+  const finalText = await readFinalTextIfSuccessful(result.status, prepared.invocation.finalPath)
+  const reviewText = extractReviewerResultText(entry.reviewer, result.stdout, finalText) ?? ''
+  await FS.writeText(prepared.artifacts.reviewPath, reviewText)
+  const meta = buildReviewMeta(entry, prepared, result, reviewText)
+  await updateFinalStatus(prepared.artifacts.statusPath, meta)
+  await FS.writeJson(FS.resolvePath(`${entry.label}.meta.json`, ctx.runDir), meta)
+  await appendRuntimeMetric(meta, ctx)
+  return meta
+}
+
+async function prepareReviewerLaunch(
+  entry: ReviewerManifestEntry,
+  ctx: LaunchContext,
+): Promise<PreparedReviewerLaunch> {
   const effort = entry.effort ?? DEFAULT_EFFORT
   const kind = ctx.kind ?? 'review'
   const timeoutSeconds = entry.timeoutSeconds ?? defaultTimeoutSeconds(entry)
@@ -31,73 +67,83 @@ export async function launchReviewer(entry: ReviewerManifestEntry, ctx: LaunchCo
     model: entry.model,
     timeoutSeconds,
   })
+  const artifacts = reviewerArtifactPaths(artifactDir, debugFile, finalFile, invocation.outputFormat)
+  return { artifacts, effort, invocation, kind, timeoutSeconds }
+}
 
-  const stdoutPath = FS.resolvePath(invocation.outputFormat === 'jsonl' ? 'stdout.jsonl' : 'stdout.log', artifactDir)
-  const stderrPath = FS.resolvePath('stderr.log', artifactDir)
-  const eventsPath = FS.resolvePath('events.jsonl', artifactDir)
-  const statusPath = FS.resolvePath('status.json', artifactDir)
-  const reviewPath = FS.resolvePath('review.md', artifactDir)
-  await resetReviewerArtifacts({
+function reviewerArtifactPaths(
+  artifactDir: string,
+  debugFile: string,
+  finalFile: string,
+  outputFormat: 'jsonl' | 'text',
+): ReviewerArtifactPaths {
+  return {
     artifactDir,
     debugFile,
-    eventsPath,
+    eventsPath: FS.resolvePath('events.jsonl', artifactDir),
     finalFile,
-    reviewPath,
-    statusPath,
-    stderrPath,
-    stdoutPath,
-  })
-  const result = await runStreamingInvocation({
-    artifactDir,
+    reviewPath: FS.resolvePath('review.md', artifactDir),
+    statusPath: FS.resolvePath('status.json', artifactDir),
+    stderrPath: FS.resolvePath('stderr.log', artifactDir),
+    stdoutPath: FS.resolvePath(outputFormat === 'jsonl' ? 'stdout.jsonl' : 'stdout.log', artifactDir),
+  }
+}
+
+async function runPreparedReviewer(
+  entry: ReviewerManifestEntry,
+  ctx: LaunchContext,
+  { artifacts, effort, invocation, timeoutSeconds }: PreparedReviewerLaunch,
+) {
+  return runStreamingInvocation({
+    artifactDir: artifacts.artifactDir,
     args: invocation.args,
     command: invocation.command,
     cwd: ctx.repoRoot,
     effort,
-    eventsPath,
+    eventsPath: artifacts.eventsPath,
     label: entry.label,
     lens: entry.lens,
     model: entry.model,
     outputFormat: invocation.outputFormat,
     reviewer: entry.reviewer,
-    statusPath,
-    stderrPath,
+    statusPath: artifacts.statusPath,
+    stderrPath: artifacts.stderrPath,
     stdin: invocation.stdin,
-    stdoutPath,
+    stdoutPath: artifacts.stdoutPath,
     timeoutSeconds,
   })
+}
 
-  const finalText = await readFinalTextIfSuccessful(result.status, invocation.finalPath)
-  const reviewText = extractReviewerResultText(entry.reviewer, result.stdout, finalText) ?? ''
-  await FS.writeText(reviewPath, reviewText)
-
+function buildReviewMeta(
+  entry: ReviewerManifestEntry,
+  prepared: PreparedReviewerLaunch,
+  result: Awaited<ReturnType<typeof runStreamingInvocation>>,
+  reviewText: string,
+): ReviewMeta {
   const bytes = Buffer.byteLength(reviewText, 'utf8')
   const status: ReviewStatus = result.status === 'ok' && bytes === 0 ? 'empty' : result.status
-  const meta: ReviewMeta = {
+  return {
     label: entry.label,
     reviewer: entry.reviewer,
-    effort,
+    effort: prepared.effort,
     status,
     exitCode: result.exitCode,
     durationMs: result.durationMs,
     bytes,
-    reviewPath,
-    kind,
-    artifactDir,
-    command: CLI.formatCommand(invocation.command, { args: invocation.args }),
-    eventsPath,
+    reviewPath: prepared.artifacts.reviewPath,
+    kind: prepared.kind,
+    artifactDir: prepared.artifacts.artifactDir,
+    command: CLI.formatCommand(prepared.invocation.command, { args: prepared.invocation.args }),
+    eventsPath: prepared.artifacts.eventsPath,
     firstOutputMs: result.firstOutputMs,
     model: entry.model,
     lens: entry.lens,
-    rawPath: stdoutPath,
-    stderrPath,
-    statusPath,
-    stdoutPath,
+    rawPath: prepared.artifacts.stdoutPath,
+    stderrPath: prepared.artifacts.stderrPath,
+    statusPath: prepared.artifacts.statusPath,
+    stdoutPath: prepared.artifacts.stdoutPath,
     timedOut: result.timedOut,
   }
-  await updateFinalStatus(statusPath, meta)
-  await FS.writeJson(FS.resolvePath(`${entry.label}.meta.json`, ctx.runDir), meta)
-  await appendRuntimeMetric(meta, ctx)
-  return meta
 }
 
 async function resolvePromptText(entry: ReviewerManifestEntry, ctx: LaunchContext): Promise<string> {
@@ -179,16 +225,7 @@ function defaultTimeoutSeconds(entry: ReviewerManifestEntry): number {
   return entry.reviewer === 'agy' ? DEFAULT_AGY_TIMEOUT_SECONDS : DEFAULT_REVIEW_TIMEOUT_SECONDS
 }
 
-async function resetReviewerArtifacts(paths: {
-  artifactDir: string
-  debugFile: string
-  eventsPath: string
-  finalFile: string
-  reviewPath: string
-  statusPath: string
-  stderrPath: string
-  stdoutPath: string
-}): Promise<void> {
+async function resetReviewerArtifacts(paths: ReviewerArtifactPaths): Promise<void> {
   await FS.mkdir(paths.artifactDir)
   await Promise.all([
     FS.remove(paths.debugFile),

@@ -4,6 +4,8 @@ import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
+const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
+
 export const ExpressionsCompiler = {
   /** Expression compiles a Tao expression into a runtime value expression. */
   Expression(expression: AST.Expression): Compiled {
@@ -49,19 +51,16 @@ export const ExpressionsCompiler = {
 
   /** ConfigurationValue compiles a scalar/reference slot or a nested configured value. */
   ConfigurationValue(value: AST.ConfigurationValue): Compiled {
-    if (AST.isConfiguredValue(value)) {
-      return Compile.ConfiguredValue(value)
-    }
-    if (AST.isConfigurationReference(value)) {
-      return compileConfigurationReference(value)
-    }
-    if (AST.isConfigurationKeyValue(value)) {
-      return gen`TR.Value(${gen.jsLiteral(value.key)})`
-    }
-    if (AST.isPropertyConfigurationPatch(value)) {
-      return Assert.never(value as never, 'property-position with is compiled against its owning property')
-    }
-    return Compile.Expression(value)
+    return Switch.type(value, {
+      BooleanLiteral: Compile.Expression,
+      ConfigurationConstructor: Compile.ConfiguredValue,
+      ConfigurationKeyValue: value => gen`TR.Value(${gen.jsLiteral(value.key)})`,
+      ConfigurationReference: compileConfigurationReference,
+      NumberLiteral: Compile.Expression,
+      PropertyConfigurationPatch: value =>
+        Assert.never(value as never, 'property-position with is compiled against its owning property'),
+      StringLiteral: Compile.Expression,
+    })
   },
 
   /** ConfigurationPatchObject lowers property replacements and keyed additions without mutating the base. */
@@ -177,7 +176,7 @@ export const ExpressionsCompiler = {
   ItemLiteral(item: AST.ItemLiteral, type: AST.ConstructablePrimitiveTypeReference | AST.TypeReference): Compiled {
     const itemType = Type.constructorReferenceItemType(type)
     if (!itemType) {
-      Assert(item.properties.length === 0, 'validated shapeless item constructor is empty')
+      Assert(item.properties.length === 0, shapelessItemConstructorMessage)
       return gen`TR.Value({})`
     }
     const pairs = itemPropertyBindingPairs(item, itemType)
@@ -272,7 +271,7 @@ function compileConfiguredItem(
 ): Compiled {
   Assert.defined(value.block, 'validated item constructor has a block')
   if (!itemType) {
-    Assert(value.block.entries.length === 0, 'validated shapeless item constructor is empty')
+    Assert(value.block.entries.length === 0, shapelessItemConstructorMessage)
     return gen`TR.Value({})`
   }
   const remaining = new Set(itemType.properties)

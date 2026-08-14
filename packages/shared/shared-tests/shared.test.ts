@@ -3,6 +3,7 @@ import { AfterEach, Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   Assert,
   CLI,
+  type Diagnostic,
   Diagnostics,
   Errors,
   FS,
@@ -11,7 +12,6 @@ import {
   Repo,
   Switch,
   Text,
-  type Diagnostic,
 } from '../shared-src/shared'
 import { PassThrough, runtimeProcess, Writable } from './TestRuntime'
 

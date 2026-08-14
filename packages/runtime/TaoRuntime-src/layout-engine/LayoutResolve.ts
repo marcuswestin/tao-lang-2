@@ -89,11 +89,14 @@ function applyContent(
 
     const slot = LayoutTerms.contentSlot(term, direction)
     const value = LayoutTerms.contentValue(term)
-    if (slot === 'main') {
-      main = value
-    } else {
-      cross = value
-    }
+    Switch(slot, {
+      main: () => {
+        main = value
+      },
+      cross: () => {
+        cross = value
+      },
+    })
   }
 
   if (centerTerms.length === 1 && main === undefined && cross === undefined) {

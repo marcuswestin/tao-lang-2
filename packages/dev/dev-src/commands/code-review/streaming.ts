@@ -2,7 +2,7 @@ import { CLI, FS, HCI, Platform } from '@shared'
 import type { ReviewEffort, Reviewer, ReviewStatus } from './types'
 import { isRecord, parseJsonObject } from './utils'
 
-export type StreamingRunOptions = {
+type StreamingRunOptions = {
   artifactDir: string
   args: readonly string[]
   command: string
@@ -23,7 +23,7 @@ export type StreamingRunOptions = {
   timeoutSeconds?: number
 }
 
-export type StreamingRunResult = {
+type StreamingRunResult = {
   durationMs: number
   exitCode: number | null
   firstOutputMs?: number

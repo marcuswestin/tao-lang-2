@@ -6,20 +6,20 @@ import type { CompilerContext } from './compiler'
 type TaoTestPlanInput = ParseResult | ValidationResult
 
 /** TaoTestSourceLocation declares where a compiled test-plan item came from. */
-export type TaoTestSourceLocation = {
+type TaoTestSourceLocation = {
   filePath: string
   range?: DiagnosticRange
 }
 
 /** TaoTestRun declares the app launch step for a v0 check. */
-export type TaoTestRun = {
+type TaoTestRun = {
   appName: string
   appSourcePath: string
   source: TaoTestSourceLocation
 }
 
 /** TaoTestExpectation declares one v0 selector-targeted assertion. */
-export type TaoTestExpectation = {
+type TaoTestExpectation = {
   kind: 'expect'
   missing: boolean
   selector: string
@@ -28,7 +28,7 @@ export type TaoTestExpectation = {
 }
 
 /** TaoTestInputValueExpectation declares one selector-targeted native input value assertion. */
-export type TaoTestInputValueExpectation = {
+type TaoTestInputValueExpectation = {
   kind: 'expectInputValue'
   selector: string
   target: string
@@ -36,12 +36,12 @@ export type TaoTestInputValueExpectation = {
   source: TaoTestSourceLocation
 }
 
-export type TaoTestGroupedExpectation =
+type TaoTestGroupedExpectation =
   | { kind: 'match'; missing: boolean; selector: 'label' | 'placeholder' | 'text'; target: string }
   | { kind: 'inputValue'; value: string }
 
 /** TaoTestExpectationGroupStep preserves grouped assertions and an optional tag scope in test IR. */
-export type TaoTestExpectationGroupStep = {
+type TaoTestExpectationGroupStep = {
   kind: 'expectGroup'
   scopeTag?: string
   expectations: TaoTestGroupedExpectation[]
@@ -49,7 +49,7 @@ export type TaoTestExpectationGroupStep = {
 }
 
 /** TaoTestPressStep declares one v0 selector-targeted press action. */
-export type TaoTestPressStep = {
+type TaoTestPressStep = {
   kind: 'press'
   selector: string
   text: string
@@ -57,7 +57,7 @@ export type TaoTestPressStep = {
 }
 
 /** TaoTestEnterStep declares text entry into one selected input. */
-export type TaoTestEnterStep = {
+type TaoTestEnterStep = {
   kind: 'enter'
   selector: string
   target: string
@@ -66,7 +66,7 @@ export type TaoTestEnterStep = {
 }
 
 /** TaoTestSubmitStep declares submission of one selected input. */
-export type TaoTestSubmitStep = {
+type TaoTestSubmitStep = {
   kind: 'submit'
   selector: string
   target: string
@@ -74,7 +74,7 @@ export type TaoTestSubmitStep = {
 }
 
 /** TaoTestDataStatusStep declares a deterministic provider state transition. */
-export type TaoTestDataStatusStep = {
+type TaoTestDataStatusStep = {
   kind: 'dataStatus'
   status: 'error' | 'loading' | 'ready'
   message: string
@@ -82,13 +82,13 @@ export type TaoTestDataStatusStep = {
 }
 
 /** TaoTestBackStep dispatches the active stack's platform-equivalent back operation. */
-export type TaoTestBackStep = {
+type TaoTestBackStep = {
   kind: 'back'
   source: TaoTestSourceLocation
 }
 
 /** TaoTestSelectStep scopes nested operations to one 1-based tagged loop row. */
-export type TaoTestSelectStep = {
+type TaoTestSelectStep = {
   kind: 'select'
   tag: string
   index: number
@@ -97,7 +97,7 @@ export type TaoTestSelectStep = {
 }
 
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
-export type TaoTestStep =
+type TaoTestStep =
   | TaoTestBackStep
   | TaoTestDataStatusStep
   | TaoTestEnterStep
@@ -109,7 +109,7 @@ export type TaoTestStep =
   | TaoTestSubmitStep
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
-export type TaoTestCheck = {
+type TaoTestCheck = {
   name: string
   source: TaoTestSourceLocation
   run: TaoTestRun
@@ -117,7 +117,7 @@ export type TaoTestCheck = {
 }
 
 /** TaoTestSuite declares one Tao test suite. */
-export type TaoTestSuite = {
+type TaoTestSuite = {
   name: string
   source: TaoTestSourceLocation
   checks: TaoTestCheck[]

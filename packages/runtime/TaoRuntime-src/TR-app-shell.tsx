@@ -6,7 +6,7 @@ import type { TaoLayoutProps } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
 
-export type AppShellProps = {
+type AppShellProps = {
   children?: React.ReactNode
 }
 

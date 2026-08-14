@@ -27,6 +27,14 @@ const JUST_LABELS: Record<string, string> = {
   'test': 'test',
 }
 
+type CompileAppOptions = {
+  repoRoot: string
+  appPath: string
+  appName?: string
+  reason: string
+  shouldRunParserGen: boolean
+}
+
 /** runTests runs the dev test runner in line-output mode for the dev-loop TUI. */
 async function runTests(repoRoot: string): Promise<void> {
   await runJust(['_compile-word-flower-app'])
@@ -41,33 +49,23 @@ async function runTests(repoRoot: string): Promise<void> {
 }
 
 /** compileApp runs parser generation when needed and compiles the selected Tao app, returning success. */
-async function compileApp(
-  repoRoot: string,
-  appPath: string,
-  appName: string | undefined,
-  reason: string,
-  shouldRunParserGen: boolean,
-): Promise<boolean> {
+async function compileApp(options: CompileAppOptions): Promise<boolean> {
+  const { reason } = options
   if (!CommandRunner.beginCommand()) {
     TUI.logDevLoop('dev', `Command running; ignored compile (${reason}).`)
     return true
   }
 
   try {
-    return await compileAppWithoutCommandLock(repoRoot, appPath, appName, reason, shouldRunParserGen)
+    return await compileAppWithoutCommandLock(options)
   } finally {
     CommandRunner.endCommand()
   }
 }
 
 /** compileAppWithoutCommandLock compiles the selected Tao app while the caller owns command exclusivity. */
-async function compileAppWithoutCommandLock(
-  repoRoot: string,
-  appPath: string,
-  appName: string | undefined,
-  reason: string,
-  shouldRunParserGen: boolean,
-): Promise<boolean> {
+async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise<boolean> {
+  const { repoRoot, appPath, appName, reason, shouldRunParserGen } = options
   TUI.logDevLoop('dev', `compiling (${reason})`)
   try {
     if (shouldRunParserGen) {
@@ -95,7 +93,13 @@ async function compileAppWithoutCommandLock(
 /** recompileAndReload recompiles the selected app while a command key owns exclusivity, then reloads Expo. */
 async function recompileAndReload(repoRoot: string, appPath: string, appName?: string): Promise<void> {
   CommandRunner.assertCommandRunning('recompile and reload')
-  const compiled = await compileAppWithoutCommandLock(repoRoot, appPath, appName, 'manual reload', true)
+  const compiled = await compileAppWithoutCommandLock({
+    repoRoot,
+    appPath,
+    appName,
+    reason: 'manual reload',
+    shouldRunParserGen: true,
+  })
   if (!compiled) {
     throw new Errors.UserInputError('Reload skipped because compile failed.')
   }

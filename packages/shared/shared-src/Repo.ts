@@ -87,7 +87,7 @@ export async function directoriesUnder(inputPath: string, options: DirectoriesUn
 }
 
 function fileUnder(path: string, options: FilesUnderOptions): string[] {
-  if (options.extensions !== undefined && !options.extensions.includes(FS.extname(path))) {
+  if (!matchesRequestedExtension(path, options.extensions)) {
     return []
   }
   return [path]
@@ -144,11 +144,14 @@ function fileMatchesOptions(path: string, relativePath: string, options: FilesUn
   if (pathIncludesExcludedDirectory(relativePath, options.excludeDirectoryNames)) {
     return false
   }
-  if (options.extensions !== undefined && !options.extensions.includes(FS.extname(path))) {
+  if (!matchesRequestedExtension(path, options.extensions)) {
     return false
   }
   return true
 }
+
+const matchesRequestedExtension = (path: string, extensions: readonly string[] | undefined): boolean =>
+  extensions === undefined || extensions.includes(FS.extname(path))
 
 function directoryMatches(relativePath: string, path: string, options: DirectoriesUnderOptions): boolean {
   if (pathIncludesHiddenSegment(relativePath)) {

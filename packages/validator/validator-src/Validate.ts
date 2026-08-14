@@ -1,69 +1,72 @@
 import { AST } from '@parser'
-import { ActionsValidator } from './ActionsValidator'
-import { AliasesValidator } from './aliases-validator'
-import { AppValidator } from './app-validator'
-import { validateConfigurationDeclarations } from './configuration-validator'
-import { validateData } from './data-validator'
-import { DialogueValidator } from './dialogue-validator'
-import { ExpressionsValidator } from './expressions-validator'
-import { FunctionalCoreValidator } from './FunctionalCoreValidator'
-import { validateInjections } from './injections-validator'
-import { InvocationsValidator } from './invocations-validator'
-import { LayoutValidator } from './layout-validator'
-import { validateNavigation } from './navigation-validator'
-import { validateProject } from './project-validator'
-import { StateValidator } from './StateValidator'
-import { validateTests } from './tests-validator'
-import { validateTypes } from './types-validator'
-import { validateUseStatements, validateVisibleDeclarations } from './use-validator'
+import { NodeValidation, type NodeValidationChecks } from './node-validation'
 import type { ValidationContext } from './validation'
-import { ViewsValidator } from './views-validator'
+import { ActionsValidator } from './validators/ActionsValidator'
+import { AliasesValidator } from './validators/aliases-validator'
+import { AppValidator } from './validators/app-validator'
+import { configurationValidationChecks } from './validators/configuration-validator'
+import {
+  configuredValueValidationChecks,
+  validateConfiguredValuesFile,
+} from './validators/configured-values-validator'
+import { dataValidationChecks, validateDataFile } from './validators/data-validator'
+import { DialogueValidator } from './validators/dialogue-validator'
+import { ExpressionsValidator } from './validators/expressions-validator'
+import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
+import { injectionValidationChecks } from './validators/injections-validator'
+import { InvocationsValidator } from './validators/invocations-validator'
+import { LayoutValidator } from './validators/layout-validator'
+import { navigationValidationChecks } from './validators/navigation-validator'
+import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
+import { StateValidator } from './validators/StateValidator'
+import { testValidationChecks } from './validators/tests-validator'
+import { typeValidationChecks } from './validators/types-validator'
+import { validateUseStatements, validateVisibleDeclarations } from './validators/use-validator'
+import { ViewsValidator } from './validators/views-validator'
 
-function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
+const nodeValidationChecks = NodeValidation.compile(
+  [
+    projectValidationChecks,
+    ViewsValidator.checks,
+    ActionsValidator.checks,
+    StateValidator.checks,
+    AliasesValidator.checks,
+    LayoutValidator.checks,
+    injectionValidationChecks,
+    testValidationChecks,
+    typeValidationChecks,
+    InvocationsValidator.checks,
+    FunctionalCoreValidator.checks,
+    dataValidationChecks,
+    configurationValidationChecks,
+    DialogueValidator.checks,
+    navigationValidationChecks,
+    configuredValueValidationChecks,
+  ] satisfies readonly NodeValidationChecks[],
+)
+
+function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AST.Node[] {
   AppValidator.validate(file, ctx)
-  validateProject(file, ctx)
-  ViewsValidator.validate(file, ctx)
-  ActionsValidator.validate(file, ctx)
-  StateValidator.validate(file, ctx)
-  AliasesValidator.validate(file, ctx)
-  LayoutValidator.validate(file, ctx)
-  validateInjections(file, ctx)
-  validateTests(file, ctx)
-  validateTypes(file, ctx)
-  InvocationsValidator.validate(file, ctx)
-  FunctionalCoreValidator.validate(file, ctx)
-  validateData(file, ctx)
-  validateConfigurationDeclarations(file, ctx)
-  DialogueValidator.validate(file, ctx)
-  validateNavigation(file, ctx)
+  validateProjectFile(file, ctx)
+  AliasesValidator.validateFile(file, ctx)
+  validateDataFile(file, ctx)
+  const nodes = AST.streamAllContents(file)
+  NodeValidation.validate(nodes, file, ctx, nodeValidationChecks)
+  validateConfiguredValuesFile(file, ctx)
 
   const document = AST.getDocument(file)
   if (document.uri.scheme === 'file') {
     validateVisibleDeclarations(ctx, file)
     validateUseStatements(file, ctx)
   }
+  return nodes
 }
 
 /** Validate exposes Tao AST validation passes. */
 export const Validate = {
-  Aliases: AliasesValidator.validate,
   App: AppValidator.validate,
-  Actions: ActionsValidator.validate,
-  Injections: validateInjections,
-  Invocations: InvocationsValidator.validate,
-  FunctionalCore: FunctionalCoreValidator.validate,
-  Data: validateData,
-  ConfigurationDeclarations: validateConfigurationDeclarations,
-  Dialogues: DialogueValidator.validate,
-  Layouts: LayoutValidator.validate,
-  Navigation: validateNavigation,
-  Project: validateProject,
-  States: StateValidator.validate,
   TaoFile: validateTaoFile,
-  Tests: validateTests,
-  Types: validateTypes,
   TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,
   VisibleDeclarations: validateVisibleDeclarations,
-  Views: ViewsValidator.validate,
 } as const

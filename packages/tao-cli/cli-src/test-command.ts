@@ -5,14 +5,14 @@ import Workspace from '@workspace'
 import { findTaoFiles } from './tao-files'
 
 /** TaoTestRunResult declares the files selected for one Tao test command run. */
-export type TaoTestRunResult = {
+type TaoTestRunResult = {
   commandResult?: CLI.CommandResult
   testPaths: readonly string[]
   validationErrors?: readonly TaoTestValidationError[]
 }
 
 /** TaoTestValidationError declares validation errors found before the runtime test harness starts. */
-export type TaoTestValidationError = {
+type TaoTestValidationError = {
   path: string
   messages: readonly string[]
 }
@@ -64,7 +64,7 @@ export async function runTestCommand(path: string): Promise<void> {
 }
 
 /** runTest discovers and runs every `.tao` file with Tao test declarations at or under `path`. */
-export async function runTest(path = '.', options: RunTestOptions = {}): Promise<TaoTestRunResult> {
+async function runTest(path = '.', options: RunTestOptions = {}): Promise<TaoTestRunResult> {
   const root = FS.resolvePath(path)
   const testPaths = options.testPaths ?? await findTaoTestFiles(root)
   if (testPaths.length === 0) {

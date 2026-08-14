@@ -11,10 +11,10 @@ export type TaoLayoutContentTerm =
   | 'spread-inset'
   | 'stretch'
   | 'top'
-export type TaoLayoutDimensionTerm = number | 'fill'
+type TaoLayoutDimensionTerm = number | 'fill'
 export type TaoLayoutSpacingSide = 'bottom' | 'horizontal' | 'left' | 'right' | 'top' | 'vertical'
 export type TaoLayoutPhysicalSpacingSide = 'bottom' | 'left' | 'right' | 'top'
-export type TaoLayoutBareEntry =
+type TaoLayoutBareEntry =
   | readonly ['centered']
   | readonly ['compress']
   | readonly ['fill']

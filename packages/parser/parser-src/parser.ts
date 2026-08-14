@@ -348,23 +348,33 @@ async function loadReachableDocuments(context: ParserContext, entryDocument: AST
       continue
     }
     documents.set(currentPath, document)
-    const ast = document.parseResult.value
-    if (ast === undefined) {
-      continue
-    }
-    for (const useStatement of ast.statements.filter(AST.isUseStatement)) {
-      const candidatePaths = await context.packages.candidateFilePaths(useStatement, {
-        fromFilePath: currentPath,
-      })
-      for (const candidatePath of candidatePaths) {
-        if (!documents.has(candidatePath)) {
-          queue.push(await documentFromFilePath(context, candidatePath))
-        }
-      }
-    }
+    queue.push(...await loadReferencedDocuments(context, document, documents))
   }
 
   return [...documents.values()]
+}
+
+async function loadReferencedDocuments(
+  context: ParserContext,
+  document: AST.Document,
+  loadedDocuments: ReadonlyMap<string, AST.Document>,
+): Promise<AST.Document[]> {
+  const ast = document.parseResult.value
+  if (ast === undefined) {
+    return []
+  }
+  const referencedDocuments: AST.Document[] = []
+  for (const useStatement of ast.statements.filter(AST.isUseStatement)) {
+    const candidatePaths = await context.packages.candidateFilePaths(useStatement, {
+      fromFilePath: document.uri.path,
+    })
+    for (const candidatePath of candidatePaths) {
+      if (!loadedDocuments.has(candidatePath)) {
+        referencedDocuments.push(await documentFromFilePath(context, candidatePath))
+      }
+    }
+  }
+  return referencedDocuments
 }
 
 async function documentFromFilePath(context: ParserContext, filePath: string): Promise<AST.Document> {

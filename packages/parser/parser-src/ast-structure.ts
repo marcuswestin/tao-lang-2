@@ -17,6 +17,7 @@ type BlockStatementPredicate<InputT extends AST.OwnedBlockStatement, OutputT ext
 ) => statement is OutputT
 type BlockStatementFilter<StatementT extends AST.OwnedBlockStatement> = (statement: StatementT) => boolean
 type BlockStatementMap<StatementT extends AST.OwnedBlockStatement, ValueT> = (statement: StatementT) => ValueT
+type NodePredicate<NodeT extends AST.Node> = (node: AST.Node) => node is NodeT
 /** findRoot returns the root AST node that owns `node`. */
 export function findRoot(node: AST.Node): AST.Node {
   let current = node
@@ -304,69 +305,38 @@ export function blockStatements(owner: AST.BlockStatementOwner): readonly AST.Ow
 
 /** findOwningView returns the renderable declaration that owns `node`, if any. */
 export function findOwningView(node: AST.Node): AST.VisualDeclaration | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isVisualDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isVisualDeclaration)
 }
 
 /** findOwningAction returns the action declaration that owns `node`, if any. */
 export function findOwningAction(node: AST.Node): AST.ActionDeclaration | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isActionDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isActionDeclaration)
 }
 
 /** findOwningFunction returns the pure function declaration that owns `node`, if any. */
 export function findOwningFunction(node: AST.Node): AST.FunctionDeclaration | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isFunctionDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isFunctionDeclaration)
 }
 
 /** findOwningActionBlock returns the named or inline action block that owns `node`, if any. */
 export function findOwningActionBlock(node: AST.Node): AST.ActionBlock | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isActionBlock(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isActionBlock)
 }
 
 /** findOwningAlias returns the alias declaration that owns `node`, if any. */
 export function findOwningAlias(node: AST.Node): AST.AliasDeclaration | undefined {
-  let current = node.$container
-  while (current) {
-    if (AST.isAliasDeclaration(current)) {
-      return current
-    }
-    current = current.$container
-  }
-  return undefined
+  return findAncestor(node, AST.isAliasDeclaration)
 }
 
 /** findOwningState returns the state declaration that owns `node`, if any. */
 export function findOwningState(node: AST.Node): AST.StateDeclaration | undefined {
+  return findAncestor(node, AST.isStateDeclaration)
+}
+
+function findAncestor<NodeT extends AST.Node>(node: AST.Node, predicate: NodePredicate<NodeT>): NodeT | undefined {
   let current = node.$container
   while (current) {
-    if (AST.isStateDeclaration(current)) {
+    if (predicate(current)) {
       return current
     }
     current = current.$container

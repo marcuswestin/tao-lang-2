@@ -10,6 +10,3 @@ export const useValidationCodes = {
 export const viewValidationCodes = {
   renderNotLast: 'tao-render-not-last',
 } as const
-
-/** aliasValidationCodes declares diagnostics for immutable bindings. */
-export const aliasValidationCodes = {} as const

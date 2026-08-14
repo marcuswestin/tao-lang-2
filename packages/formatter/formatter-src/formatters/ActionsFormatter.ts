@@ -5,11 +5,10 @@ export const ActionsFormatter = {
   /** ActionBlock formats action bodies with one indented statement per line. */
   ActionBlock(f) {
     f.oneSpaceBefore('{')
-    if (
-      AST.isActionExpression(f.node.$container)
+    const canUseSingleLineActionBody = AST.isActionExpression(f.node.$container)
       && f.node.statements.length === 1
       && !hasInteriorComments(f.node)
-    ) {
+    if (canUseSingleLineActionBody) {
       f.singleLineBraceBlock(f.node.statements[0]!)
       return
     }

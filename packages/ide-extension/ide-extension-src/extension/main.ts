@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Platform } from '@shared'
 import { type AST, Langium } from 'tao-parser'
 import SourceActions, { type SourceActionOptions } from 'tao-source-actions'
 import Workspace from 'tao-workspace'
@@ -108,13 +108,13 @@ function errorMessage(error: unknown): string {
 function serverExecutableOptions(): ExecutableOptions {
   return {
     env: {
-      ...process.env,
-      TAO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+      ...Platform.runtimeProcess.env,
+      TAO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? Platform.runtimeProcess.cwd(),
     },
   }
 }
 
 function workspaceRootForDocument(document: vscode.TextDocument): string {
   return vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath
-    ?? (document.uri.scheme === 'file' ? FS.dirname(document.uri.fsPath) : process.cwd())
+    ?? (document.uri.scheme === 'file' ? FS.dirname(document.uri.fsPath) : Platform.runtimeProcess.cwd())
 }

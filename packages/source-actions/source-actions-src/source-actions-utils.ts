@@ -9,7 +9,7 @@ export type SourceActionOptions = {
 }
 
 /** SourceStatementContext declares a source document plus its top-level statement slices. */
-export type SourceStatementContext = {
+type SourceStatementContext = {
   document: AST.Document
   file: AST.TaoFile
   text: string
@@ -67,6 +67,6 @@ export function assertNoSyntaxErrors(document: AST.Document): void {
 }
 
 /** firstSyntaxError returns the first lexer or parser error message, if any. */
-export function firstSyntaxError(document: AST.Document): string | undefined {
+function firstSyntaxError(document: AST.Document): string | undefined {
   return document.parseResult.lexerErrors[0]?.message ?? document.parseResult.parserErrors[0]?.message
 }

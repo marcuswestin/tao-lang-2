@@ -5,9 +5,9 @@ export type TaoDevModeOptions = {
   readonly layoutBounds?: boolean
 }
 
-export type TaoDebugStyle = Record<string, number | string>
-export type TaoDebugStyleInput = TaoDebugStyle | readonly TaoDebugStyleInput[] | null | undefined
-export type TaoCreateElementDevOptions = {
+type TaoDebugStyle = Record<string, number | string>
+type TaoDebugStyleInput = TaoDebugStyle | readonly TaoDebugStyleInput[] | null | undefined
+type TaoCreateElementDevOptions = {
   readonly platformOS?: string
 }
 

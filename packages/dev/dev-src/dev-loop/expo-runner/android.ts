@@ -18,6 +18,7 @@ const ANDROID_AVD_CONFIG = {
 }
 const EMULATOR_BOOT_TIMEOUT_MS = 180_000
 const EMULATOR_BOOT_POLL_MS = 2_000
+const androidAdbMissingMessage = 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.'
 
 /** Android groups Android emulator and Expo helpers. */
 export const Android = {
@@ -36,7 +37,7 @@ async function ensureEmulator(): Promise<void> {
     'avdmanager',
     'Android avdmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
   )
-  await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
+  await requireCommand('adb', androidAdbMissingMessage)
 
   let avds = await listAvds()
   if (avds.length === 0) {
@@ -85,7 +86,7 @@ async function ensureEmulator(): Promise<void> {
 }
 
 async function ensureExpoGo(): Promise<void> {
-  await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
+  await requireCommand('adb', androidAdbMissingMessage)
   const serial = await requireBootedEmulator()
   if (await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
     TUI.logDevLoop('dev', `Expo Go is already installed on ${serial}.`)
@@ -101,7 +102,7 @@ async function ensureExpoGo(): Promise<void> {
 }
 
 async function prepareAvailableExpoGo(): Promise<boolean> {
-  await requireCommand('adb', 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.')
+  await requireCommand('adb', androidAdbMissingMessage)
   const serial = await findRunningEmulator()
   if (!serial || !await isEmulatorBooted(serial)) {
     TUI.logDevLoop('dev', 'No booted Android emulator found; skipping Android launch.')

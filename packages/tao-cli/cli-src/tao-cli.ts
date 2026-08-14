@@ -141,7 +141,8 @@ async function runInPlaceCommand(
 
     const unchangedCount = results.length - changed.length - errored.length
     const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged`
-    if (errored.length > 0 || labels.failOnChanged && changed.length > 0) {
+    const shouldFail = errored.length > 0 || labels.failOnChanged && changed.length > 0
+    if (shouldFail) {
       HCI.writeErrorLine(`${summary}${errored.length > 0 ? `, ${errored.length} failed` : ''}`)
       Platform.runtimeProcess.exit(1)
     }

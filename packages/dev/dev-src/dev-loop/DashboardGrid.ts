@@ -1,7 +1,7 @@
 import { Box } from 'ink'
 import React from 'react'
 
-export type DashboardGridProps<T> = {
+type DashboardGridProps<T> = {
   height: number
   items: readonly T[]
   layout: ColumnLayout
@@ -19,6 +19,14 @@ export type ColumnLayout = {
 export type TerminalSize = {
   columns: number
   rows: number
+}
+
+type ColumnLayoutOptions = {
+  size: TerminalSize
+  itemCount: number
+  targetColumnWidth: number
+  lineLimit: number
+  rowGap: number
 }
 
 const COLUMN_GAP = 1
@@ -52,13 +60,8 @@ export const DashboardGrid = Object.assign(DashboardGridComponent, {
   layoutHeight,
 })
 
-function columnLayout(
-  size: TerminalSize,
-  itemCount: number,
-  targetColumnWidth: number,
-  lineLimit: number,
-  rowGap: number,
-): ColumnLayout {
+function columnLayout(options: ColumnLayoutOptions): ColumnLayout {
+  const { size, itemCount, targetColumnWidth, lineLimit, rowGap } = options
   const availableColumns = Math.max(1, size.columns - 1)
   const columnsPerRow = Math.max(
     1,

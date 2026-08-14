@@ -4,7 +4,7 @@ import { AST, Langium } from '@parser'
 export const taoTabSize = 3
 
 /** LineSeparation declares an exact newline count, or an inclusive range fitted to the existing newlines. */
-export type LineSeparation = number | { min: number; max: number }
+type LineSeparation = number | { min: number; max: number }
 
 /** NodeFormat exposes succinct formatting verbs scoped to one AST node. */
 export type NodeFormat<NodeT extends AST.Node> = {
@@ -167,7 +167,11 @@ function separateLines<ItemT extends AST.Node>(
   for (let index = 1; index < items.length; index++) {
     const previous = items[index - 1]!
     const next = items[index]!
-    prependLineWithLeadingComments(formatter, next, leaves, linesBetween(previous, next), tabs)
+    prependLineWithLeadingComments(formatter, next, {
+      leaves,
+      separation: linesBetween(previous, next),
+      tabs,
+    })
   }
 }
 
@@ -181,16 +185,20 @@ function prependIndentedLines(
   }
   const leaves = Langium.CstUtils.flattenCst(first.$cstNode!.root).toArray()
   for (const item of items) {
-    prependLineWithLeadingComments(formatter, item, leaves, 1, 1)
+    prependLineWithLeadingComments(formatter, item, { leaves, separation: 1, tabs: 1 })
   }
+}
+
+type PrependLineOptions = {
+  leaves: readonly Langium.CstNode[]
+  separation: LineSeparation
+  tabs: number
 }
 
 function prependLineWithLeadingComments(
   formatter: Langium.NodeFormatter<AST.Node>,
   item: AST.Node,
-  leaves: readonly Langium.CstNode[],
-  separation: LineSeparation,
-  tabs: number,
+  { leaves, separation, tabs }: PrependLineOptions,
 ): void {
   const comments = leadingCommentLeaves(item, leaves)
   if (comments.length === 0) {

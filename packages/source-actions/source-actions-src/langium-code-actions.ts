@@ -24,7 +24,11 @@ export class TaoCodeActionProvider implements Langium.CodeActionProvider {
     if (kindRequested(params, organizeImportsKind)) {
       organized = await SourceActions.organizeSource(taoDocument)
       if (organized !== undefined) {
-        actions.push(action('Tao: Organize Use Statements', organizeImportsKind, taoDocument, organized))
+        actions.push(action(taoDocument, {
+          title: 'Tao: Organize Use Statements',
+          kind: organizeImportsKind,
+          newText: organized,
+        }))
       }
     }
     if (!kindRequested(params, quickFixKind)) {
@@ -35,21 +39,36 @@ export class TaoCodeActionProvider implements Langium.CodeActionProvider {
     if (organizeDiagnostics.length > 0) {
       organized ??= await SourceActions.organizeSource(taoDocument)
       if (organized !== undefined) {
-        actions.push(action('Tao: Organize Use Statements', quickFixKind, taoDocument, organized, organizeDiagnostics))
+        actions.push(action(taoDocument, {
+          title: 'Tao: Organize Use Statements',
+          kind: quickFixKind,
+          newText: organized,
+          diagnostics: organizeDiagnostics,
+        }))
       }
     }
     const unusedDiagnostics = diagnosticsWithCodes(params, [useValidationCodes.unusedImport])
     if (unusedDiagnostics.length > 0) {
       const removed = await SourceActions.removeUnusedImports(taoDocument)
       if (removed !== undefined) {
-        actions.push(action('Tao: Remove unused imports', quickFixKind, taoDocument, removed, unusedDiagnostics))
+        actions.push(action(taoDocument, {
+          title: 'Tao: Remove unused imports',
+          kind: quickFixKind,
+          newText: removed,
+          diagnostics: unusedDiagnostics,
+        }))
       }
     }
     const renderDiagnostics = diagnosticsWithCodes(params, [viewValidationCodes.renderNotLast])
     if (renderDiagnostics.length > 0) {
       const moved = await SourceActions.moveRendersLast(taoDocument)
       if (moved !== undefined) {
-        actions.push(action('Tao: Move render to end', quickFixKind, taoDocument, moved, renderDiagnostics))
+        actions.push(action(taoDocument, {
+          title: 'Tao: Move render to end',
+          kind: quickFixKind,
+          newText: moved,
+          diagnostics: renderDiagnostics,
+        }))
       }
     }
     return actions
@@ -68,13 +87,15 @@ function diagnosticsWithCodes(
   return params.context.diagnostics.filter(diagnostic => codes.includes(String(diagnostic.code)))
 }
 
-function action(
-  title: string,
-  kind: string,
-  document: AST.Document,
-  newText: string,
-  diagnostics?: Langium.CodeActionParams['context']['diagnostics'],
-): Langium.CodeAction {
+type ActionOptions = {
+  title: string
+  kind: string
+  newText: string
+  diagnostics?: Langium.CodeActionParams['context']['diagnostics']
+}
+
+function action(document: AST.Document, options: ActionOptions): Langium.CodeAction {
+  const { title, kind, newText, diagnostics } = options
   const textDocument = document.textDocument
   return {
     title,

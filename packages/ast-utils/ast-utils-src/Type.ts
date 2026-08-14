@@ -23,16 +23,16 @@ export type TaoType =
 
 export type DataEntityDefinition = AST.EntityDataDeclaration
 export type DataFieldDefinition = AST.EntityDataField
-export type QueryDefinition = AST.EntityQueryDeclaration
+type QueryDefinition = AST.EntityQueryDeclaration
 
 /** TaoActionParameter declares one positional input accepted by an action value. */
-export type TaoActionParameter = {
+type TaoActionParameter = {
   type: TaoType
   optional: boolean
 }
 
 /** TypeReferenceRoot declares the root definition and remaining member path for a named type reference. */
-export type TypeReferenceRoot = {
+type TypeReferenceRoot = {
   definition?: AST.TypeDefinition
   remainingMembers: readonly string[]
 }
@@ -146,10 +146,7 @@ export class Type {
   /** ofConfiguredValue resolves one declaration-linked named constructor. */
   static ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
     const declaration = value.type.ref
-    if (AST.isTypeDeclaration(declaration)) {
-      return Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? [])
-    }
-    if (AST.isParameterizedDeclaration(declaration)) {
+    const typeOfParameterizedDeclaration = (declaration: AST.ParameterizedDeclaration): TaoType => {
       const [member, ...remainingMembers] = value.members ?? []
       const parameterType = member
         ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === member)?.inlineType
@@ -158,13 +155,18 @@ export class Type {
         ? Type.atMemberPath(Type.ofDefinition(parameterType), remainingMembers)
         : unresolvedType()
     }
-    if (AST.isNavDeclaration(declaration)) {
-      return primitiveType('nav')
-    }
-    if (AST.isDatasourceDeclaration(declaration)) {
-      return { kind: 'item' }
-    }
-    return unresolvedType()
+    return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
+      TypeDeclaration: declaration => Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? []),
+      ActionDeclaration: typeOfParameterizedDeclaration,
+      DialogueDeclaration: typeOfParameterizedDeclaration,
+      DatasourceDeclaration: () => ({ kind: 'item' }),
+      FunctionDeclaration: typeOfParameterizedDeclaration,
+      LayoutDeclaration: typeOfParameterizedDeclaration,
+      NavDeclaration: () => primitiveType('nav'),
+      UiDeclaration: typeOfParameterizedDeclaration,
+      ViewDeclaration: typeOfParameterizedDeclaration,
+      undefined: unresolvedType,
+    })
   }
 
   /** ofValue resolves an ordinary expression or configured runtime value. */
@@ -288,22 +290,17 @@ export class Type {
     if (nominal) {
       return `${type.kind}:${definitionIdentityName(nominal)}`
     }
-    if (isPrimitiveKind(type)) {
-      if (isActionType(type)) {
-        return `primitive:action(${type.parameters.map(actionParameterIdentityKey).join(',')})`
-      }
-      return `${type.kind}:${type.primitive}`
-    }
-    if (type.kind === 'entity') {
-      return `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`
-    }
-    if (type.kind === 'enum') {
-      return `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`
-    }
-    if (type.kind === 'union') {
-      return `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`
-    }
-    return type.kind
+    return Switch.kind(type, {
+      primitive: type =>
+        isActionType(type)
+          ? `primitive:action(${type.parameters.map(actionParameterIdentityKey).join(',')})`
+          : `${type.kind}:${type.primitive}`,
+      list: type => type.kind,
+      item: type => type.kind,
+      entity: type => `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`,
+      enum: type => `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`,
+      union: type => `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`,
+    })
   }
 
   /** ofMemberAccess resolves the static type reached by a member access expression. */
@@ -404,20 +401,8 @@ export class Type {
 
   /** dataFieldType resolves the value type stored by a schema field. */
   static dataFieldType(field: DataFieldDefinition): TaoType {
-    if (field.primitive === 'text') {
-      return primitiveType('text')
-    }
-    if (field.primitive === 'number') {
-      return primitiveType('number')
-    }
-    if (field.primitive === 'boolean') {
-      return primitiveType('boolean')
-    }
-    if (field.primitive === 'time') {
-      return primitiveType('time')
-    }
-    if (field.boolean) {
-      return primitiveType('boolean')
+    if (field.primitive || field.boolean) {
+      return primitiveType(field.primitive ?? 'boolean')
     }
     const relation = Type.dataFieldRelationEntity(field)
     if (!relation) {

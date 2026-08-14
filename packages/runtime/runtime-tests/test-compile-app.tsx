@@ -1,6 +1,8 @@
 import { RuntimeTesting } from '@runtime/testing/runtime-testing'
+import TR from '@runtime/TR'
 import { FS, Text } from '@shared'
-import { Expect, mkTestDir } from '@shared/test'
+import { AfterAll, AfterEach, Expect, mkTestDir } from '@shared/test'
+import { cleanup } from '@testing-library/react-native'
 
 /** compileAndRenderApp exposes the shared runtime compile/render helper to local Jest tests. */
 export const compileAndRenderApp = RuntimeTesting.compileAndRenderApp
@@ -8,6 +10,18 @@ export type RuntimeScreen = RuntimeTesting.Screen
 
 type RuntimeFiles = Record<string, string>
 type RuntimeScreenAssertions = (screen: RuntimeScreen) => void | Promise<void>
+
+/** registerRuntimeE2ELifecycle registers shared compiler and render cleanup for a runtime E2E suite. */
+export function registerRuntimeE2ELifecycle(): void {
+  AfterAll(async () => {
+    await RuntimeTesting.stopTestCompiler()
+  })
+
+  AfterEach(() => {
+    cleanup()
+    TR.setDevMode()
+  })
+}
 
 /** ExpectScreen wraps runtime render assertions in user-facing language. */
 export function ExpectScreen(screen: RuntimeScreen): { toHaveText(text: string): void } {

@@ -1,5 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { injectionValidationMessages } from '../validator-src/injections-validator'
+import { injectionValidationMessages } from '../validator-src/validators/injections-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
 const tsFence = '```ts'
