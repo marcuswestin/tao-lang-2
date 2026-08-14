@@ -1819,6 +1819,57 @@ Describe('Expo runtime', () => {
     }
   })
 
+  Test('blocks provider load failures until local data is reset and the app remounts', async () => {
+    let firstLoad = true
+    let stored: string | undefined
+    const provider: TR.DataProvider = {
+      load: () => {
+        if (firstLoad) {
+          firstLoad = false
+          throw new Error('storage unavailable')
+        }
+        return stored
+      },
+      persist: (_storageKey, snapshot) => {
+        stored = snapshot
+      },
+    }
+    const schema = TR.Data.Schema({
+      name: 'RecoveryOverlayData',
+      schemaVersion: 1,
+      entities: {
+        Note: {
+          collection: 'Notes',
+          fields: { Title: { kind: 'text' } },
+        },
+      },
+    }, provider)
+    await TR.Data.Settle(schema)
+    let mounts = 0
+
+    function RecoveryRoot(): ReactElement {
+      const [mount] = useState(() => ++mounts)
+      return createElement(RN.Text, null, `Recovery root ${mount}`)
+    }
+
+    const screen = render(createElement(
+      TR.AppShell,
+      null,
+      createElement(RecoveryRoot),
+    ))
+
+    ExpectScreen(screen).toHaveText("Couldn't load app data")
+    ExpectScreen(screen).toHaveText('Could not load local data: storage unavailable')
+    Expect(screen.queryByText('Dismiss')).toBeNull()
+    await fireEventAsync.press(screen.getByLabelText('Reset local data and reload'))
+    await TR.Data.Settle(schema)
+
+    Expect(screen.queryByLabelText('App data load failure')).toBeNull()
+    ExpectScreen(screen).toHaveText('Recovery root 2')
+    Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error).toBe('')
+    Expect((JSON.parse(stored!) as { rows: { Note: unknown[] } }).rows.Note).toEqual([])
+  })
+
   Test('provides a runtime parent direction to app root content', async () => {
     await testCompileApp(
       `

@@ -1,4 +1,5 @@
 import React from 'react'
+import { DataLoadRecovery } from './TR-data-load-recovery'
 
 type DataStatus = 'error' | 'loading' | 'ready'
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
@@ -473,6 +474,22 @@ class RuntimeDataSchema {
 
   readonly snapshot = (): number => this.version
 
+  private async resetAfterLoadFailure(): Promise<void> {
+    const provider = this.provider
+    const providerBinding = this.providerBinding
+    const storageKey = this.storageKey()
+    await provider.persist(storageKey, JSON.stringify(envelope(emptyData(this.definition), this.definition)))
+    if (this.provider !== provider || this.storageKey() !== storageKey) {
+      return
+    }
+
+    this.configure(provider, providerBinding)
+    await this.settle()
+    if (this.provider === provider && this.storageKey() === storageKey && this.status === 'error') {
+      throw new Error(this.error)
+    }
+  }
+
   bindConfigured(declaration: TaoDatasourceDeclaration, storageKey?: string): void {
     if (this.providerBinding === declaration && this.storageKeyBinding === storageKey) {
       return
@@ -739,6 +756,9 @@ class RuntimeDataSchema {
     this.failedSaveSequence = undefined
     this.status = 'error'
     this.error = `Could not load local data: ${errorMessage(error)}`
+    if (this.providerBinding !== 'unbound') {
+      DataLoadRecovery.report(this, this.error, () => this.resetAfterLoadFailure())
+    }
     this.emit()
   }
 
@@ -751,6 +771,7 @@ class RuntimeDataSchema {
       this.failedSaveSequence = undefined
       this.status = 'ready'
       this.error = ''
+      DataLoadRecovery.resolve(this)
       this.emit()
     } catch (error) {
       this.failLoad(generation, error)
