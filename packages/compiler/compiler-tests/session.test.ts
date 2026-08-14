@@ -2,21 +2,6 @@ import { Describe, Expect, Test } from '@shared/test'
 import Compiler from '../compiler-src/compiler'
 
 Describe('compiler: reusable sessions', () => {
-  Test('shares one-shot services until explicitly invalidated', async () => {
-    Compiler.invalidateSharedSession()
-    const firstSession = await Compiler.sharedSession()
-
-    Expect(await Compiler.sharedSession()).toBe(firstSession)
-    Expect((await Compiler.compileCode(appSource('SharedApp'))).appNames).toEqual(['SharedApp'])
-    Expect(await Compiler.sharedSession()).toBe(firstSession)
-
-    Compiler.invalidateSharedSession()
-    const replacementSession = await Compiler.sharedSession()
-
-    Expect(replacementSession).not.toBe(firstSession)
-    Expect((await firstSession.compileCode(appSource('DetachedApp'))).appNames).toEqual(['DetachedApp'])
-  })
-
   Test('isolates concurrent compilations that reuse the standalone source URI', async () => {
     const session = await Compiler.createSession()
     const results = await Promise.all([

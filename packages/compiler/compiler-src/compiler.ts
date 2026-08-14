@@ -37,8 +37,6 @@ export type CompilerSession = {
   compileCode(code: string, options?: CompileOptions): Promise<CompileResult>
 }
 
-let cachedSharedSession: Promise<CompilerSession> | undefined
-
 /** CompilerContext declares shared compiler invocation state. */
 export type CompilerContext = {
   packagesContext: Packages.Context
@@ -75,37 +73,9 @@ async function createSession(): Promise<CompilerSession> {
   }
 }
 
-/**
- * sharedSession returns the process-shared standalone compiler session.
- * Failed initialization is not cached, so a later call can retry.
- */
-function sharedSession(): Promise<CompilerSession> {
-  if (cachedSharedSession !== undefined) {
-    return cachedSharedSession
-  }
-
-  const createdSession = createSession()
-  cachedSharedSession = createdSession
-  void createdSession.catch(() => {
-    if (cachedSharedSession === createdSession) {
-      cachedSharedSession = undefined
-    }
-  })
-  return createdSession
-}
-
-/**
- * invalidateSharedSession detaches the process-shared compiler session.
- * Work already holding that session can finish; the next shared call creates
- * fresh package, parser, Typir, and compiler state.
- */
-function invalidateSharedSession(): void {
-  cachedSharedSession = undefined
-}
-
-/** compileCode compiles Tao source code using process-shared standalone services. */
+/** compileCode compiles Tao source code using fresh standalone services. */
 async function compileCode(code: string, options: CompileOptions = {}): Promise<CompileResult> {
-  return await (await sharedSession()).compileCode(code, options)
+  return await (await createSession()).compileCode(code, options)
 }
 
 /** compileValidated compiles an already validated Tao app into Expo-compatible TSX source. */
@@ -139,8 +109,6 @@ const Compiler = {
   compileCode,
   compileTestPlan,
   compileValidated,
-  invalidateSharedSession,
-  sharedSession,
 } as const
 
 namespace Compiler {
