@@ -15,7 +15,7 @@ import { LayoutValidator } from './validators/layout-validator'
 import { validateNavigation } from './validators/navigation-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { StateValidator } from './validators/StateValidator'
-import { validateTests } from './validators/tests-validator'
+import { testValidationChecks } from './validators/tests-validator'
 import { validateTypes } from './validators/types-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './validators/use-validator'
 import { ViewsValidator } from './validators/views-validator'
@@ -25,6 +25,7 @@ const nodeValidationChecks = NodeValidation.compile(
     projectValidationChecks,
     LayoutValidator.checks,
     injectionValidationChecks,
+    testValidationChecks,
     InvocationsValidator.checks,
     configurationValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
@@ -37,7 +38,6 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   ActionsValidator.validate(file, ctx)
   StateValidator.validate(file, ctx)
   AliasesValidator.validate(file, ctx)
-  validateTests(file, ctx)
   validateTypes(file, ctx)
   FunctionalCoreValidator.validate(file, ctx)
   validateData(file, ctx)
@@ -63,7 +63,6 @@ export const Validate = {
   Navigation: validateNavigation,
   States: StateValidator.validate,
   TaoFile: validateTaoFile,
-  Tests: validateTests,
   Types: validateTypes,
   TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,

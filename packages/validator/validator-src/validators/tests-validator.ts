@@ -1,5 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import { type NodeValidationCheck, type NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 const supportedSelectors = ['text', 'label', 'placeholder'] as const
@@ -33,92 +34,35 @@ export const testValidationMessages = {
   selectBlock: 'A select block may contain test steps but cannot start another app.',
 } as const
 
-/** validateTests validates v0 Tao test declarations. */
-export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const test of AST.streamAllContents(file).filter(AST.isTestDeclaration)) {
-    validateTest(test, ctx)
-  }
-  for (const check of AST.streamAllContents(file).filter(AST.isCheckDeclaration)) {
-    validateCheck(check, ctx)
-  }
-  for (const run of AST.streamAllContents(file).filter(AST.isRunStep)) {
-    if (statementNeedsStepPlacementDiagnostic(run)) {
-      ctx.error(testValidationMessages.runPlacement, run)
-    }
-  }
-  for (const press of AST.streamAllContents(file).filter(AST.isPressTextStep)) {
-    if (statementNeedsStepPlacementDiagnostic(press)) {
-      ctx.error(testValidationMessages.pressPlacement, press)
-    }
-    validateSelector(press, ctx)
-  }
-  for (const press of AST.streamAllContents(file).filter(AST.isTagPressStep)) {
-    if (statementNeedsStepPlacementDiagnostic(press)) {
-      ctx.error(testValidationMessages.pressPlacement, press)
-    }
-  }
-  for (const enter of AST.streamAllContents(file).filter(AST.isEnterTextStep)) {
-    if (statementNeedsStepPlacementDiagnostic(enter)) {
-      ctx.error(testValidationMessages.enterPlacement, enter)
-    }
-    validateSelector(enter, ctx)
-  }
-  for (const enter of AST.streamAllContents(file).filter(AST.isTagEnterStep)) {
-    if (statementNeedsStepPlacementDiagnostic(enter)) {
-      ctx.error(testValidationMessages.enterPlacement, enter)
-    }
-  }
-  for (const expectation of AST.streamAllContents(file).filter(AST.isExpectInputValueStep)) {
-    if (statementNeedsStepPlacementDiagnostic(expectation)) {
-      ctx.error(testValidationMessages.inputExpectationPlacement, expectation)
-    }
-    validateInputSelector(expectation, ctx)
-  }
-  for (const expectation of AST.streamAllContents(file).filter(AST.isTagInputValueExpectation)) {
-    if (statementNeedsStepPlacementDiagnostic(expectation)) {
-      ctx.error(testValidationMessages.inputExpectationPlacement, expectation)
-    }
-  }
-  for (
-    const expectation of AST.streamAllContents(file).filter(node =>
-      AST.isExpectGroupStep(node) || AST.isExpectScopeStep(node)
-    )
-  ) {
-    if (statementNeedsStepPlacementDiagnostic(expectation)) {
-      ctx.error(testValidationMessages.expectationPlacement, expectation)
-    }
-  }
-  for (const submit of AST.streamAllContents(file).filter(AST.isSubmitInputStep)) {
-    if (statementNeedsStepPlacementDiagnostic(submit)) {
-      ctx.error(testValidationMessages.submitPlacement, submit)
-    }
-    validateSelector(submit, ctx)
-  }
-  for (const submit of AST.streamAllContents(file).filter(AST.isTagSubmitStep)) {
-    if (statementNeedsStepPlacementDiagnostic(submit)) {
-      ctx.error(testValidationMessages.submitPlacement, submit)
-    }
-  }
-  for (const select of AST.streamAllContents(file).filter(AST.isSelectStep)) {
-    validateSelect(select, ctx)
-  }
-  for (const back of AST.streamAllContents(file).filter(AST.isBackTestStep)) {
-    if (statementNeedsStepPlacementDiagnostic(back)) {
-      ctx.error(testValidationMessages.backPlacement, back)
-    }
-  }
-  for (const status of AST.streamAllContents(file).filter(AST.isDataStatusStep)) {
-    if (statementNeedsStepPlacementDiagnostic(status)) {
-      ctx.error(testValidationMessages.dataStatusPlacement, status)
-    }
-  }
-  for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
-    if (statementNeedsStepPlacementDiagnostic(expectation)) {
-      ctx.error(testValidationMessages.expectationPlacement, expectation)
-    }
-    validateSelector(expectation, ctx)
-  }
-}
+const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
+const validatePressPlacement = validateStepPlacement(testValidationMessages.pressPlacement)
+const validateEnterPlacement = validateStepPlacement(testValidationMessages.enterPlacement)
+const validateInputExpectationPlacement = validateStepPlacement(testValidationMessages.inputExpectationPlacement)
+const validateSubmitPlacement = validateStepPlacement(testValidationMessages.submitPlacement)
+const validateDataStatusPlacement = validateStepPlacement(testValidationMessages.dataStatusPlacement)
+const validateExpectationPlacement = validateStepPlacement(testValidationMessages.expectationPlacement)
+const validateBackPlacement = validateStepPlacement(testValidationMessages.backPlacement)
+
+/** testValidationChecks validates v0 Tao test declarations and steps. */
+export const testValidationChecks = {
+  [AST.TestDeclaration.$type]: validateTest,
+  [AST.CheckDeclaration.$type]: validateCheck,
+  [AST.RunStep.$type]: validateRunPlacement,
+  [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
+  [AST.TagPressStep.$type]: validatePressPlacement,
+  [AST.EnterTextStep.$type]: [validateEnterPlacement, validateSelector],
+  [AST.TagEnterStep.$type]: validateEnterPlacement,
+  [AST.ExpectInputValueStep.$type]: [validateInputExpectationPlacement, validateInputSelector],
+  [AST.TagInputValueExpectation.$type]: validateInputExpectationPlacement,
+  [AST.ExpectGroupStep.$type]: validateExpectationPlacement,
+  [AST.ExpectScopeStep.$type]: validateExpectationPlacement,
+  [AST.SubmitInputStep.$type]: [validateSubmitPlacement, validateSelector],
+  [AST.TagSubmitStep.$type]: validateSubmitPlacement,
+  [AST.SelectStep.$type]: validateSelect,
+  [AST.BackTestStep.$type]: validateBackPlacement,
+  [AST.DataStatusStep.$type]: validateDataStatusPlacement,
+  [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
+} satisfies NodeValidationChecks
 
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(test.$container)) {
@@ -237,6 +181,14 @@ function validateSelector(
 function validateInputSelector(step: AST.ExpectInputValueStep, ctx: ValidationContext): void {
   if (!supportedInputSelectors.includes(step.selector as (typeof supportedInputSelectors)[number])) {
     ctx.error(testValidationMessages.inputSelector(step.selector), step)
+  }
+}
+
+function validateStepPlacement(message: string): NodeValidationCheck<AST.CheckStep> {
+  return (statement, ctx) => {
+    if (statementNeedsStepPlacementDiagnostic(statement)) {
+      ctx.error(message, statement)
+    }
   }
 }
 
