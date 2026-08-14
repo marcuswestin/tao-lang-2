@@ -23,10 +23,11 @@ Only `1 - Current` is executable. The others use their own file extensions (`.ta
 
 Next's app and test-sidecar headers each declare `// Tranche status: absorbed` at a tranche boundary.
 Cutting work for either pair changes that pair's line in Next alone to `// Tranche status: open`
-before it diverges from Current. The parser and formatter gate the pairs independently: a matching
-pair proves byte identity, while a divergent pair requires its own explicit open marker. Absorption
-changes each open marker back to `absorbed` in both Next and Current only after that pair matches
-again.
+before it diverges from Current. Repository validation gates the pairs independently: a matching
+pair proves byte identity, while a divergent pair requires its own explicit open marker. It compares
+each pair after normalizing only its status line, so an otherwise matching pair cannot remain marked
+`open` indefinitely. Absorption changes each open marker back to `absorbed` in both Next and Current
+only after that pair matches again.
 
 ## Moving Next into Current
 
