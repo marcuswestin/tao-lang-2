@@ -2,6 +2,7 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { referencedConfigurationType } from './configuration-type'
 
 export const configuredValueValidationMessages = {
   patchTarget: (name: string) =>
@@ -271,14 +272,7 @@ function validateConfiguredProperty(
 
 function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
   if (AST.isConfigurationReference(value)) {
-    const target = value.target.ref
-    if (AST.isTypeDeclaration(target)) {
-      return Type.ofDefinition(target)
-    }
-    if (AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)) {
-      return Type.ofValueDeclaration(target)
-    }
-    return { kind: 'unresolved' }
+    return referencedConfigurationType(value.target.ref)
   }
   if (AST.isConfigurationKeyValue(value) || AST.isPropertyConfigurationPatch(value)) {
     return { kind: 'unresolved' }

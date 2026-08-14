@@ -2,6 +2,7 @@ import { type ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import type { ValidationContext } from '../validation'
+import { referencedConfigurationType } from './configuration-type'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {
@@ -82,13 +83,7 @@ function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType
     return Type.ofConfiguredValue(value)
   }
   if (AST.isConfigurationReference(value)) {
-    const target = value.target.ref
-    if (AST.isTypeDeclaration(target)) {
-      return Type.ofDefinition(target)
-    }
-    if (AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)) {
-      return Type.ofValueDeclaration(target)
-    }
+    return referencedConfigurationType(value.target.ref)
   }
   return { kind: 'unresolved' }
 }
@@ -244,13 +239,7 @@ function configuredAppPropertyType(value: AST.ConfiguredAppPropertyValue): ASTUt
   if (AST.isDatasourceDeclaration(target)) {
     return { kind: 'item' }
   }
-  if (AST.isTypeDeclaration(target)) {
-    return Type.ofDefinition(target)
-  }
-  if (AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)) {
-    return Type.ofValueDeclaration(target)
-  }
-  return { kind: 'unresolved' }
+  return referencedConfigurationType(target)
 }
 
 function validateLegacyApp(app: AST.AppDeclaration, ctx: ValidationContext): void {
