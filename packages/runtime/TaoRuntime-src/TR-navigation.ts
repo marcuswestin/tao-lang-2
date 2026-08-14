@@ -1,6 +1,7 @@
 import { Errors } from '@shared/core'
 import React from 'react'
 import { DataControls } from './TR-data'
+import { RuntimeAppDefinition } from './TR-navigation-app'
 import {
   configureNavigation,
   createAppDeclaration,
@@ -22,7 +23,7 @@ import {
   resetNavigationRuntime,
   setActiveBackTarget,
 } from './TR-navigation-registry'
-import type { PresentableEntry, Subscription } from './TR-navigation-state'
+import type { Subscription } from './TR-navigation-state'
 import { NavigationBackAffordance, navigationHostStyle } from './TR-navigation-surfaces'
 import { RuntimeNavigationValue } from './TR-navigation-value'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -152,11 +153,6 @@ export type TaoNavKind<
   render(mount: TaoNavMount<ProfileT, ConfigurationT>, taoProps?: TaoProps): React.ReactNode
   reset(mount: TaoNavMount<ProfileT, ConfigurationT>): void
 }>
-
-type ToastEntry = PresentableEntry & {
-  key: string
-  timeout: ReturnType<typeof setTimeout>
-}
 
 /** NavigationControls is the deterministic generated-code API for Tao navigation. */
 export const NavigationControls = {
@@ -356,133 +352,6 @@ function resolveStrictAppTarget(
     `Cannot ${operation} app '${target.declaration.name}': no enclosing instance matches its declaration.`,
     { details: { appDeclaration: target.declaration.name, operation } },
   )
-}
-
-/** RuntimeAppDefinition lazily resolves app nav factories after generated module initialization. */
-class RuntimeAppDefinition implements Subscription {
-  private auxiliariesValue: Record<string, TaoNavigationValue> | undefined
-  private descriptorMounts = new Map<TaoConfiguredNavigation, TaoNavigationValue>()
-  private listeners = new Set<() => void>()
-  private nextToastEntryId = 1
-  private navigatorValue: TaoNavigationValue | undefined
-  private replacement: TaoNavigationValue | undefined
-  private toastEntries = new Map<string, ToastEntry>()
-  private version = 0
-
-  readonly declaration: TaoAppDeclaration
-
-  constructor(readonly definition: TaoAppDefinition) {
-    this.declaration = definition.declaration ?? createAppDeclaration(definition.name)
-  }
-
-  readonly subscribe = (listener: () => void): () => void => {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
-
-  readonly snapshot = (): number => this.version
-
-  get navigator(): TaoNavigationValue {
-    return this.replacement ?? (this.navigatorValue ??= this.mount(this.definition.navigator()))
-  }
-
-  get auxiliaries(): Record<string, TaoNavigationValue> {
-    return this.auxiliariesValue ??= Object.fromEntries(
-      Object.entries(this.definition.auxiliaries()).map(([key, value]) => [key, this.mount(value)]),
-    )
-  }
-
-  replace(navigator: TaoNavigationInput): void {
-    this.replacement = this.mount(navigator)
-    this.emit()
-  }
-
-  /** resolve returns the mounted occurrence owned by this app for one descriptor identity. */
-  resolve(configured: TaoConfiguredNavigation): TaoNavigationValue | undefined {
-    // Force lazy app configuration before resolving a target nested in its root or auxiliaries.
-    void this.navigator
-    void this.auxiliaries
-    return this.descriptorMounts.get(configured)
-  }
-
-  presentToast(
-    key: string,
-    durationSeconds: number,
-    presentable: TaoPresentable,
-    arguments_: TaoNavigationArguments,
-  ): void {
-    const existing = this.toastEntries.get(key)
-    if (existing) {
-      clearTimeout(existing.timeout)
-    }
-    const entry: ToastEntry = {
-      arguments: { ...arguments_ },
-      instanceId: this.nextToastEntryId++,
-      key,
-      presentable,
-      timeout: setTimeout(() => this.expireToast(key, entry), durationSeconds * 1000),
-    }
-    this.toastEntries.set(key, entry)
-    this.emit()
-  }
-
-  renderToasts(taoProps?: TaoProps): React.ReactNode {
-    return [...this.toastEntries.values()].map(entry =>
-      React.createElement(
-        React.Fragment,
-        { key: entry.instanceId },
-        entry.presentable.render(entry.arguments, { ...taoProps, app: this }),
-      )
-    )
-  }
-
-  back(): boolean {
-    for (const auxiliary of Object.values(this.auxiliaries).toReversed()) {
-      if (auxiliary.back()) {
-        return true
-      }
-    }
-    return this.navigator.back()
-  }
-
-  get canGoBack(): boolean {
-    return Object.values(this.auxiliaries).some(auxiliary => auxiliary.canGoBack)
-      || this.navigator.canGoBack
-  }
-
-  reset(): void {
-    this.replacement = undefined
-    for (const entry of this.toastEntries.values()) {
-      clearTimeout(entry.timeout)
-    }
-    this.toastEntries.clear()
-    this.navigatorValue?.reset()
-    for (const auxiliary of Object.values(this.auxiliariesValue ?? {})) {
-      auxiliary.reset()
-    }
-    this.emit()
-  }
-
-  private emit(): void {
-    this.version += 1
-    for (const listener of this.listeners) {
-      listener()
-    }
-  }
-
-  private mount(input: TaoNavigationInput): TaoNavigationValue {
-    return isConfiguredNavigation(input)
-      ? mountConfiguredNavigation(input, (configured, mount) => this.descriptorMounts.set(configured, mount))
-      : input
-  }
-
-  private expireToast(key: string, entry: ToastEntry): void {
-    if (this.toastEntries.get(key) !== entry) {
-      return
-    }
-    this.toastEntries.delete(key)
-    this.emit()
-  }
 }
 
 function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
