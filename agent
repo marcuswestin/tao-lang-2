@@ -38,7 +38,8 @@ function needs_install() {
 }
 
 function install_dev_deps() {
-  if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
+  # Clonefile installation is not available across Codex's linked-worktree sandbox boundary.
+  if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile --cwd "$SCRIPT_DIR" 2>&1)"; then
     echo "$install_output" >&2
     exit 1
   fi

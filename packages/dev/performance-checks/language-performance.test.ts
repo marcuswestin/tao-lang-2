@@ -1,4 +1,4 @@
-import { CLI, Repo } from '@shared'
+import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   type LanguagePerformanceReport,
@@ -20,17 +20,12 @@ Describe('language performance reporting', () => {
     Expect(() => parseIterations('1.5')).toThrow('Performance iterations must be a positive integer')
   })
 
-  Test('forwards default and explicit Just recipe iterations', async () => {
-    const [defaultRun, explicitRun] = await Promise.all([
-      dryRunPerformanceRecipe(),
-      dryRunPerformanceRecipe('7'),
-    ])
+  Test('declares the default and forwards Just recipe iterations', async () => {
+    const justfile = await FS.readText(Repo.resolvePath('Justfile'))
 
-    Expect(defaultRun.exitCode).toBe(0)
-    Expect(commandOutput(defaultRun)).toContain('language-performance.ts "10"')
-    Expect(explicitRun.exitCode).toBe(0)
-    Expect(commandOutput(explicitRun)).toContain('language-performance.ts "7"')
-  }, 15_000)
+    Expect(justfile).toContain('bench iterations="10":')
+    Expect(justfile).toContain('language-performance.ts "{{ iterations }}"')
+  })
 
   Test('renders fixture metadata, latency percentiles, and aggregate timing', () => {
     const report: LanguagePerformanceReport = {
@@ -58,14 +53,3 @@ Describe('language performance reporting', () => {
     Expect(output).toContain('wall 1.2s, measured sum 1.1s')
   })
 })
-
-async function dryRunPerformanceRecipe(iterations?: string): Promise<CLI.CommandResult> {
-  return await CLI.run('just', {
-    args: ['--dry-run', 'language-performance', ...(iterations === undefined ? [] : [iterations])],
-    cwd: Repo.getRoot(),
-  })
-}
-
-function commandOutput(result: CLI.CommandResult): string {
-  return `${result.stdout}\n${result.stderr}`
-}

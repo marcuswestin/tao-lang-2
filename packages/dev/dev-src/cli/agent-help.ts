@@ -42,8 +42,8 @@ Just passthrough commands:
 ${Text.indentLines(justLines.join('\n'), 2)}
 
 Examples:
-  ./agent language-performance
-  ./agent language-performance 25
+  ./agent bench
+  ./agent bench 25
   ./agent test
   ./agent test "formats imports"
   ./agent verify

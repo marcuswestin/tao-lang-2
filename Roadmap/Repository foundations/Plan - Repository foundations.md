@@ -57,7 +57,6 @@ Implementation branch: `feat/repository-foundations`.
 ## Implementation result
 
 The feature branch implementation is complete and committed. Final verification found 15 suites and
-passed all 757 tests with 2,311 expectations: 6.6s wall time and 31.6s suite-sum. Independent reviews
-covered the runtime/package boundary and the session/performance design; their confirmed findings were
-fixed before the final gate. The remaining roadmap action is to merge the verified branch into `main`
-before tranche 4 begins.
+passed every discovered test. Independent reviews covered the runtime/package boundary and the
+session/performance design; their confirmed findings were fixed before the final gate. The remaining
+roadmap action is to merge the verified branch into `main` before tranche 4 begins.

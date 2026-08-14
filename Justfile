@@ -37,8 +37,9 @@ fix: _parser-gen
 # Check and test all code
 check: _compile-word-flower-app _parallel-check
 
-# Measure cold and steady-state language-service performance
-language-performance iterations="10":
+# Benchmark cold and steady-state language-service performance
+bench iterations="10":
+    bun test packages/dev/performance-checks/language-performance.test.ts
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 
 # Compile a Tao app path relative to the invocation directory into the local runtime host

@@ -39,7 +39,8 @@ function tao_bun_temp_dir() {
   local darwin_temp_dir
   darwin_temp_dir="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)" || darwin_temp_dir=""
   if [[ -n "$darwin_temp_dir" && -d "$darwin_temp_dir" && -w "$darwin_temp_dir" ]]; then
-    print -r -- "$darwin_temp_dir"
+    # Codex grants the physical /private/var path; macOS reports its /var symlink.
+    print -r -- "${darwin_temp_dir:A}"
     return
   fi
 

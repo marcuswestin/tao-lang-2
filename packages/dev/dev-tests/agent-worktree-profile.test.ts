@@ -84,10 +84,17 @@ Describe('agent worktree profile bootstrap', () => {
       const result = await runProfileScript('tao_bun_temp_dir "$2"', fixture, fallback)
 
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout.trim()).toBe(fixture.systemTemp)
+      Expect(result.stdout.trim()).toBe(await FS.realPath(fixture.systemTemp))
     } finally {
       await FS.remove(testRoot)
     }
+  })
+
+  Test('uses the sandbox-compatible Bun installation contract', async () => {
+    const source = await FS.readText(Repo.resolvePath('agent'))
+
+    Expect(source).toContain('TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile')
+    Expect(source).not.toContain('BUN_TMPDIR=')
   })
 })
 
@@ -98,8 +105,10 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   const primaryRoot = FS.resolvePath('primary', testRoot)
   const primaryProfile = FS.resolvePath('.devenv/profile', primaryRoot)
   const systemTemp = FS.resolvePath('system-temp', testRoot)
+  const systemTempAlias = FS.resolvePath('system-temp-alias', testRoot)
   const worktree = FS.resolvePath('linked-worktree', testRoot)
   await Promise.all([FS.mkdir(systemTemp), FS.mkdir(worktree)])
+  await FS.symlink(systemTemp, systemTempAlias)
   await FS.writeText(fakeGit, '#!/bin/zsh\nprint -r -- "$TAO_TEST_COMMON_GIT_DIR"\n')
   await FS.writeText(fakeGetconf, '#!/bin/zsh\nprint -r -- "$TAO_TEST_DARWIN_TEMP_DIR"\n')
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
@@ -112,7 +121,7 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
     env: {
       PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
       TAO_TEST_COMMON_GIT_DIR: FS.resolvePath('.git', primaryRoot),
-      TAO_TEST_DARWIN_TEMP_DIR: systemTemp,
+      TAO_TEST_DARWIN_TEMP_DIR: systemTempAlias,
     },
     primaryProfile,
     systemTemp,

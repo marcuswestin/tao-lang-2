@@ -25,5 +25,6 @@ public entry points: steady-state median validation fell from 50ms to 31ms and c
 to 35ms because those one-shot APIs now reuse process-shared services. Explicit caller-owned session
 results stayed near baseline, as expected.
 
-Run the benchmark with `./agent language-performance`; pass a different positive iteration count
-as the final argument when a larger sample is useful.
+Run the benchmark with `./agent bench`; pass a different positive iteration count as the final
+argument when a larger sample is useful. Benchmarks are intentionally separate from `test` because
+their timings do not add correctness coverage.
