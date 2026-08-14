@@ -38,7 +38,7 @@ function needs_install() {
 }
 
 function install_dev_deps() {
-  if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" BUN_TMPDIR="$BUN_TEMP_DIR" bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
+  if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
     echo "$install_output" >&2
     exit 1
   fi
@@ -89,7 +89,7 @@ function needs_build() {
 }
 
 function build_agent() {
-  if ! build_output="$(TMPDIR="$BUN_TEMP_DIR" BUN_TMPDIR="$BUN_TEMP_DIR" bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
+  if ! build_output="$(TMPDIR="$BUN_TEMP_DIR" bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
     echo "$build_output" >&2
     exit 1
   fi
