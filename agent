@@ -9,9 +9,9 @@ BUILD_DIR="$SCRIPT_DIR/.artifacts/build/agent-dev"
 AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"
 BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
 INSTALL_STAMP="$BUILD_DIR/dev-deps.stamp"
-INSTALL_LOCK="$BUILD_DIR/dev-deps.lockf"
+INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"
 BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
-BUILD_LOCK="$BUILD_DIR/agent-dev.lockf"
+BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
 DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
 
 source "$DEV_PACKAGE_DIR/dev-src/cli/agent-worktree-profile.zsh"
@@ -27,6 +27,12 @@ function enter_devenv_if_needed() {
 enter_devenv_if_needed
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
 BUN_TEMP_DIR="$(tao_bun_temp_dir "$AGENT_TEMP_DIR")"
+typeset -a BUN_INSTALL_ARGS
+if ! tao_bun_install_args "$SCRIPT_DIR"; then
+  echo "Unable to determine Tao's Bun installation mode from its Git worktree." >&2
+  exit 1
+fi
+BUN_INSTALL_ARGS=("${reply[@]}")
 
 function needs_install() {
   [[ ! -d "$SCRIPT_DIR/node_modules" ]] && return 0
@@ -38,16 +44,15 @@ function needs_install() {
 }
 
 function install_dev_deps() {
-  # Clonefile installation is not available across Codex's linked-worktree sandbox boundary.
   local install_output
-  if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile --cwd "$SCRIPT_DIR" 2>&1)"; then
+  if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" 2>&1)"; then
     touch "$INSTALL_STAMP"
     return
   fi
 
   # Bun can leave a resumable partial install after a transient sandbox temp-directory denial.
   if [[ "$install_output" == *"unable to write files to tempdir: PermissionDenied"* ]] &&
-    install_output="$(TMPDIR="$BUN_TEMP_DIR" bun install --backend=copyfile --cwd "$SCRIPT_DIR" 2>&1)"
+    install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" 2>&1)"
   then
     touch "$INSTALL_STAMP"
     return
@@ -57,24 +62,6 @@ function install_dev_deps() {
   exit 1
 }
 
-function run_with_lock() {
-  local lock_file="$1"
-  shift
-
-  if ! command -v lockf >/dev/null 2>&1; then
-    echo "Tao's agent bootstrap requires the system lockf command." >&2
-    return 1
-  fi
-
-  (
-    if ! lockf -s -t 30 9; then
-      echo "Timed out waiting for agent bootstrap lock: $lock_file" >&2
-      exit 1
-    fi
-    "$@"
-  ) 9>"$lock_file"
-}
-
 function install_dev_deps_if_needed() {
   needs_install || return 0
   install_dev_deps
@@ -82,7 +69,7 @@ function install_dev_deps_if_needed() {
 
 function ensure_dev_deps() {
   needs_install || return 0
-  run_with_lock "$INSTALL_LOCK" install_dev_deps_if_needed
+  tao_run_with_lock "$INSTALL_LOCK" 30 install_dev_deps_if_needed
 }
 
 function needs_build() {
@@ -118,7 +105,7 @@ function build_agent_if_needed() {
 
 function ensure_agent_build() {
   needs_build || return 0
-  run_with_lock "$BUILD_LOCK" build_agent_if_needed
+  tao_run_with_lock "$BUILD_LOCK" 30 build_agent_if_needed
 }
 
 ensure_dev_deps

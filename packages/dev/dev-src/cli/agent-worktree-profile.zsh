@@ -1,3 +1,59 @@
+# Report whether a checkout has a worktree-specific Git directory.
+function tao_is_linked_worktree() {
+  local worktree_dir="$1"
+  local git_dir
+  local common_git_dir
+  git_dir="$(git -C "$worktree_dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 2
+  common_git_dir="$(git -C "$worktree_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 2
+
+  [[ "${git_dir:A}" != "${common_git_dir:A}" ]]
+}
+
+# Populate zsh's conventional reply array with Bun's checkout-specific install arguments.
+function tao_bun_install_args() {
+  local worktree_dir="$1"
+  reply=(install)
+  if tao_is_linked_worktree "$worktree_dir"; then
+    # Clonefile installation cannot cross Codex's linked-worktree sandbox boundary.
+    reply+=(--backend=copyfile)
+  else
+    local linked_status=$?
+    (( linked_status == 1 )) || return "$linked_status"
+  fi
+  reply+=(--cwd "$worktree_dir")
+}
+
+# Run a command under a kernel-managed lock that is released with the owning subshell.
+function tao_run_with_lock() {
+  local lock_file="$1"
+  local timeout_seconds="$2"
+  shift 2
+
+  if ! zmodload zsh/system 2>/dev/null; then
+    echo "Tao's agent bootstrap requires zsh/system flock support." >&2
+    return 1
+  fi
+  if ! : >> "$lock_file"; then
+    echo "Unable to create agent bootstrap lock: $lock_file" >&2
+    return 1
+  fi
+
+  (
+    local lock_fd
+    if zsystem flock -t "$timeout_seconds" -f lock_fd "$lock_file"; then
+      "$@"
+    else
+      local lock_status=$?
+      if (( lock_status == 2 )); then
+        echo "Timed out waiting for agent bootstrap lock: $lock_file" >&2
+      else
+        echo "Unable to acquire agent bootstrap lock: $lock_file" >&2
+      fi
+      return 1
+    fi
+  )
+}
+
 # Link a linked worktree to the primary checkout's already-built devenv profile.
 function tao_link_primary_devenv_profile() {
   local worktree_dir="$1"
