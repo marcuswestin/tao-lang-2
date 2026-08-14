@@ -15,5 +15,5 @@ local.properties
 _gen_*
 
 .expo
-packages/runtime/ios
-packages/runtime/android
+packages/runtime-toolchain/ios
+packages/runtime-toolchain/android

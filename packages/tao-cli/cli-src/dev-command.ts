@@ -1,4 +1,4 @@
-import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@dev-loop'
+import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-dev-loop'
 import { Errors, FS, Switch } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'

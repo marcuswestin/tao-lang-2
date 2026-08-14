@@ -72,16 +72,25 @@
         "./workspace/workspace-src/*"
       ],
       "@runtime": [
-        "./runtime/runtime-src/runtime.ts"
+        "./runtime/TaoRuntime-src/TR.ts"
       ],
       "@runtime/TR": [
         "./runtime/TaoRuntime-src/TR.ts"
       ],
       "@runtime/*": [
-        "./runtime/runtime-src/*"
+        "./runtime/TaoRuntime-src/*"
       ],
-      "@dev-loop": [
-        "./dev/dev-src/dev-loop/dev-loop.ts"
+      "@runtime-toolchain": [
+        "./runtime-toolchain/runtime-toolchain-src/runtime.ts"
+      ],
+      "@runtime-toolchain/*": [
+        "./runtime-toolchain/runtime-toolchain-src/*"
+      ],
+      "@stdlib": [
+        "./stdlib/stdlib-src/stdlib.ts"
+      ],
+      "@expo-dev-loop": [
+        "./dev/dev-src/expo-dev-loop/expo-dev-loop.ts"
       ]
     }
   },

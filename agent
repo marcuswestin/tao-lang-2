@@ -12,9 +12,21 @@ INSTALL_STAMP="$BUILD_DIR/dev-deps.stamp"
 INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"
 BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
 BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
+DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
+
+source "$DEV_PACKAGE_DIR/dev-src/cli/agent-worktree-profile.zsh"
+
+function enter_devenv_if_needed() {
+  tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE" && return
+
+  echo "Tao's pinned devenv profile is unavailable." >&2
+  echo "Create the worktree with Worktrunk, or run: direnv allow && direnv exec . ./agent setup" >&2
+  exit 1
+}
 
 # Keep Bun's bootstrap temporary files inside the worktree. Sandboxed agents may
 # receive a host TMPDIR path that exists but is not writable through the sandbox.
+enter_devenv_if_needed
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
 
 function needs_install() {
@@ -27,7 +39,7 @@ function needs_install() {
 }
 
 function install_dev_deps() {
-  if ! install_output="$(TMPDIR="$AGENT_TEMP_DIR" bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
+  if ! install_output="$(TMPDIR="$AGENT_TEMP_DIR" BUN_TMPDIR="$AGENT_TEMP_DIR" bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
     echo "$install_output" >&2
     exit 1
   fi
@@ -48,7 +60,7 @@ function ensure_dev_deps() {
   fi
 
   if mkdir "$INSTALL_LOCK" 2>/dev/null; then
-    trap 'rm -rf "$INSTALL_LOCK" "$BUILD_LOCK"' EXIT INT TERM
+    trap 'rm -rf "$INSTALL_LOCK"' EXIT INT TERM
     needs_install && install_dev_deps
     rm -rf "$INSTALL_LOCK"
     trap - EXIT INT TERM
@@ -78,7 +90,7 @@ function needs_build() {
 }
 
 function build_agent() {
-  if ! build_output="$(TMPDIR="$AGENT_TEMP_DIR" bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
+  if ! build_output="$(TMPDIR="$AGENT_TEMP_DIR" BUN_TMPDIR="$AGENT_TEMP_DIR" bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
     echo "$build_output" >&2
     exit 1
   fi
@@ -91,7 +103,7 @@ function ensure_agent_build() {
   fi
 
   if mkdir "$BUILD_LOCK" 2>/dev/null; then
-    trap 'rm -rf "$INSTALL_LOCK" "$BUILD_LOCK"' EXIT INT TERM
+    trap 'rm -rf "$BUILD_LOCK"' EXIT INT TERM
     needs_build && build_agent
     rm -rf "$BUILD_LOCK"
     trap - EXIT INT TERM

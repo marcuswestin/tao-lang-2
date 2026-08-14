@@ -1,8 +1,8 @@
-import { Switch } from '@shared/core'
 import type { TaoDataEntity, TaoDataField, TaoDataSchema, TaoQueryFilter } from './TR-data'
 import { valueMatchesKind } from './TR-data-definition'
 import { entityHandle } from './TR-data-entity'
 import type { StoredRow } from './TR-data-persistence'
+import RuntimeSwitch from './TR-switch'
 
 export type Evaluable = {
   evaluate(): { jsValue: unknown }
@@ -114,7 +114,7 @@ export function queryFilterValue(
 
 export function matchesFilter(row: StoredRow, filter: TaoQueryFilter, expected: unknown): boolean {
   const actual = row[filter.field]
-  return Switch(filter.operator, {
+  return RuntimeSwitch(filter.operator, {
     '==': () => Object.is(actual, expected),
     '!=': () => !Object.is(actual, expected),
     '<': () => compare(actual, expected) < 0,

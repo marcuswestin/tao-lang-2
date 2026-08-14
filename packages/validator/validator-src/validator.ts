@@ -18,6 +18,8 @@ export type ValidatorSession = {
   validateCode(code: string): Promise<ValidationResult>
 }
 
+let cachedSharedSession: Promise<ValidatorSession> | undefined
+
 /** createContext creates validator invocation state. */
 function createContext(
   packagesContext: Packages.Context,
@@ -56,7 +58,14 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
   return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
 }
 
-/** createSession creates a reusable standalone validator context for batch validation. */
+/**
+ * createSession creates caller-owned standalone services for batch validation.
+ *
+ * The package context and language services live for as long as the returned
+ * session is referenced. Create a new session when its package context changes;
+ * source text alone does not invalidate it because each call replaces the
+ * synthetic Langium document.
+ */
 async function createSession(packagesContext?: Packages.Context): Promise<ValidatorSession> {
   const sharedPackagesContext = packagesContext ?? await Packages.createContext(codeProjectRoot)
   const parserContext = Parser.createContext({
@@ -92,15 +101,45 @@ async function createSession(packagesContext?: Packages.Context): Promise<Valida
   }
 }
 
-/** validateCode validates Tao source code using a standalone validator context. */
+/**
+ * sharedSession returns the process-shared standalone validator session.
+ * Failed initialization is not cached, so a later call can retry.
+ */
+function sharedSession(): Promise<ValidatorSession> {
+  if (cachedSharedSession !== undefined) {
+    return cachedSharedSession
+  }
+
+  const createdSession = createSession()
+  cachedSharedSession = createdSession
+  void createdSession.catch(() => {
+    if (cachedSharedSession === createdSession) {
+      cachedSharedSession = undefined
+    }
+  })
+  return createdSession
+}
+
+/**
+ * invalidateSharedSession detaches the process-shared validator session.
+ * Work already holding that session can finish; the next shared call creates
+ * fresh package, parser, and Typir services.
+ */
+function invalidateSharedSession(): void {
+  cachedSharedSession = undefined
+}
+
+/** validateCode validates Tao source code using process-shared standalone services. */
 async function validateCode(code: string): Promise<ValidationResult> {
-  return await (await createSession()).validateCode(code)
+  return await (await sharedSession()).validateCode(code)
 }
 
 /** Validator exposes Tao source validation functions. */
 const Validator = {
   createContext,
   createSession,
+  invalidateSharedSession,
+  sharedSession,
   validateCode,
   validateParseResult,
 }

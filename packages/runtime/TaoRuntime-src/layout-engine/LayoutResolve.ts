@@ -1,4 +1,4 @@
-import { Switch } from '@shared/core'
+import RuntimeSwitch from '../TR-switch'
 import { LayoutTerms } from './LayoutTerms'
 import type {
   TaoLayoutAlignedEntry,
@@ -41,7 +41,7 @@ function resolve(spec: TaoLayoutSpec): TaoResolvedLayoutStyle {
 }
 
 function applyEntry(style: TaoResolvedLayoutStyle, entry: TaoLayoutEntry, context: LayoutContext): void {
-  return Switch<TaoLayoutEntry[0], void>(entry[0], {
+  return RuntimeSwitch<TaoLayoutEntry[0], void>(entry[0], {
     aligned: () => applyAligned(style, entry as TaoLayoutAlignedEntry),
     centered: () => {
       style['alignSelf'] = 'center'
@@ -89,7 +89,7 @@ function applyContent(
 
     const slot = LayoutTerms.contentSlot(term, direction)
     const value = LayoutTerms.contentValue(term)
-    Switch(slot, {
+    RuntimeSwitch(slot, {
       main: () => {
         main = value
       },

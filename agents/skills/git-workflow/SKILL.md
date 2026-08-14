@@ -19,8 +19,9 @@ concurrently.
 - Read `git worktree list` before any operation that moves a ref. A branch checked out elsewhere is
   not yours to move.
 - Never write to another worktree's files, index, or branch.
-- Fresh worktrees need `direnv allow` then `direnv exec . ./agent setup` before any repository
-  command. Worktrunk-created worktrees run that setup as a blocking pre-start hook.
+- Worktrunk-created worktrees trust and set up the checkout in a blocking pre-start hook. In other
+  linked worktrees, `./agent` reuses the primary checkout's pinned devenv profile; run
+  `direnv allow && direnv exec . ./agent setup` only when the wrapper reports no shared profile.
 - Remove a worktree you created once its branch is merged or abandoned.
 
 ## Moving a branch ref

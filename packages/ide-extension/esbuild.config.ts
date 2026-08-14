@@ -15,6 +15,8 @@ const taoTextMateGrammarOverlay = FS.resolvePath(
 const dprintTypescriptWasm = FS.resolvePath('../formatter/node_modules/@dprint/typescript/plugin.wasm', import.meta.dir)
 const bundledDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/language/plugin.wasm', import.meta.dir)
 const bundledExtensionDprintTypescriptWasm = FS.resolvePath('_gen_ide-extension/extension/plugin.wasm', import.meta.dir)
+const stdlibSourceRoot = FS.resolvePath('../stdlib/tao', import.meta.dir)
+const bundledStdlibRoot = FS.resolvePath('_gen_ide-extension/tao', import.meta.dir)
 
 const ctx = await context({
   entryPoints: [
@@ -25,6 +27,9 @@ const ctx = await context({
   bundle: true,
   target: 'ES2022',
   format: 'cjs',
+  define: {
+    'import.meta.dirname': '__dirname',
+  },
   outExtension: {
     '.js': '.cjs',
   },
@@ -40,6 +45,8 @@ const ctx = await context({
           await writeMergedTaoTextMateGrammar(generatedTaoTextMateGrammar, taoTextMateGrammarOverlay)
           await FS.copyFile(dprintTypescriptWasm, bundledDprintTypescriptWasm)
           await FS.copyFile(dprintTypescriptWasm, bundledExtensionDprintTypescriptWasm)
+          await FS.remove(bundledStdlibRoot)
+          await FS.copyDirectory(stdlibSourceRoot, bundledStdlibRoot)
         }
       })
     },

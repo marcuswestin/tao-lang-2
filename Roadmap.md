@@ -6,10 +6,22 @@ Language features are built in tranches through the WordFlower app family: decis
 `Apps/WordFlower/2 - Next`, implemented into `1 - Current` slice by slice, then `3 - MVP` and
 `4 - Revolution` are reconciled once. `Apps/WordFlower/README.md` owns that process.
 
+## Pre-tranche foundations
+
+- [ ] Land repository foundations before tranche 4
+  - Separate the publishable generated-code runtime, repository toolchain, and Tao stdlib packages.
+  - Remove unused AI review, AI usage, and merge-preflight automation; reorganize the surviving dev
+    package and make fresh linked worktrees self-bootstrap when a pinned primary profile exists.
+  - Reuse validator/compiler language sessions and capture a pre-tranche parse, validate, compile,
+    and format performance baseline.
+  - Keep diagnostic codes scoped to existing quick fixes; decide any broader public identity contract
+    with IDE-polish consumers rather than assigning speculative codes now.
+  - Plan: `Roadmap/Repository foundations/Plan - Repository foundations.md`.
+
 ## Current tranche
 
 - [x] Implement the WordFlower tranche 3 contract into Current
-  - Selection navigation, entity availability guards, dialogues, keyed toasts as a presentation mode, reshaped data fields, the third data level, and self-hosted navs and datasources graduated into `packages/runtime/tao-stdlib`.
+  - Selection navigation, entity availability guards, dialogues, keyed toasts as a presentation mode, reshaped data fields, the third data level, and self-hosted navs and datasources graduated into `packages/stdlib/tao`.
 - [ ] Cut tranche 4 from the gap between Current and MVP
   - `2 - Next` now matches `1 - Current`, so the next tranche is chosen from what `3 - MVP` still expresses and Current does not: splits and windows, design tokens and recipes, a remote provider, snapshots, and `async` with its concurrency policy.
 
@@ -39,7 +51,6 @@ Language features are built in tranches through the WordFlower app family: decis
 Product and codebase backlog, unordered.
 
 - [ ] Add simulation mode: local datasources with simulated network delays, saved library states, and demo renders.
-- [ ] Simplify reviewer context automation. Overview: `Roadmap/Reviewer context automation/`.
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
 - [ ] Allow only one project definition per project root; scope workspace package lookup to that root, have the IDE extension manage one workspace per project folder, and stop requiring a Git repo at the project root.
@@ -47,10 +58,8 @@ Product and codebase backlog, unordered.
 - [ ] Allow `TYPE Value` construction in general positions.
 - [ ] Require the element type of lists.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
-- [ ] Simplify the validator: walk the tree once and validate each node by type instead of filtering repeatedly, review the file structure, and group `*-validator.ts` into a directory.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
 - [ ] Remove magical strings.
-- [ ] Refactor oversized test files.
 - [ ] Improve utility function usage, preferring grouped helpers over many free imports.
 - [ ] Apply the named-const export pattern across the repo, then rename modules to match their main export in one coordinated sweep.
 - [ ] Rename `gen` helper properties to capitalized names, and stop `fmt` from breaking `gen\`…\`` onto the next line.

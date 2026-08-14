@@ -6,8 +6,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Work
 
-- Create agent worktrees with Worktrunk so its blocking setup runs before the harness starts. In other fresh worktrees, run `direnv allow` and `direnv exec . ./agent setup` before other repository commands.
-- Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common workflows and specialized automation; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
+- Create agent worktrees with Worktrunk so its blocking setup runs before the harness starts. In other linked worktrees, `./agent` reuses the primary checkout's pinned devenv profile; if it reports no profile, run `direnv allow` and `direnv exec . ./agent setup`.
+- Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common repository workflows; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely. Resolve routine implementation choices from repository evidence.
 - Language work usually crosses parser, validator, formatter or source actions, compiler, and runtime; `packages/AGENTS.md` owns those boundaries.
 

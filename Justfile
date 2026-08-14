@@ -37,7 +37,11 @@ fix: _parser-gen
 # Check and test all code
 check: _compile-word-flower-app _parallel-check
 
-# Compile a Tao app path relative to the invocation directory into the local runtime package
+# Measure cold and steady-state language-service performance
+language-performance iterations="10":
+    bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
+
+# Compile a Tao app path relative to the invocation directory into the local runtime host
 compile-app app_path: _parser-gen
     ./tao compile "{{ app_path }}"
 
@@ -53,12 +57,12 @@ android: _compile-word-flower-app _android-emulator _android-expo-go
 
 # Clean run dependencies and build artifacts
 clean:
-    rm -rf .artifacts/build .artifacts/dev packages/runtime/.expo packages/runtime/_gen_tao-app
+    rm -rf .artifacts/build .artifacts/dev packages/runtime-toolchain/.expo packages/runtime-toolchain/_gen_tao-app
     find . -name node_modules -type d -prune -exec rm -rf {} +
 
 # Run clean + clean ALL artifacts
 clean-all: clean
-    rm -rf .artifacts packages/runtime/ios packages/runtime/android
+    rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
 # Prepare all code for commit
 verify: fix _compile-word-flower-app _parallel-verify-check
@@ -93,7 +97,7 @@ _dprint-check:
     just --fmt --check
 
 _repo-lint:
-    bun run packages/dev/dev-src/commands/repo-lint.ts
+    bun run packages/dev/dev-src/repository-tests/repo-lint.ts
 
 _typecheck:
     bunx tsc --build packages/*/tsconfig.json

@@ -1,0 +1,12 @@
+{
+  "name": "tao-stdlib",
+  "private": true,
+  "type": "module",
+  "module": "stdlib-src/stdlib.ts",
+  "exports": {
+    ".": "./stdlib-src/stdlib.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  }
+}

@@ -1,4 +1,4 @@
-import { Switch } from '@shared/core'
+import RuntimeSwitch from '../TR-switch'
 import type {
   TaoLayoutAlignmentTerm,
   TaoLayoutContentTerm,
@@ -22,7 +22,7 @@ export const LayoutTerms = {
 } as const
 
 function contentSlot(term: TaoLayoutContentDirectionalTerm, direction: TaoLayoutDirection): 'cross' | 'main' {
-  return Switch(term, {
+  return RuntimeSwitch(term, {
     baseline: () => 'cross',
     bottom: () => direction === 'column' ? 'main' : 'cross',
     left: () => direction === 'row' ? 'main' : 'cross',
@@ -36,7 +36,7 @@ function contentSlot(term: TaoLayoutContentDirectionalTerm, direction: TaoLayout
 }
 
 function contentValue(term: TaoLayoutContentTerm): string {
-  return Switch(term, {
+  return RuntimeSwitch(term, {
     baseline: () => 'baseline',
     bottom: () => 'flex-end',
     center: () => 'center',
@@ -51,7 +51,7 @@ function contentValue(term: TaoLayoutContentTerm): string {
 }
 
 function alignmentValue(term: TaoLayoutAlignmentTerm): string {
-  return Switch(term, {
+  return RuntimeSwitch(term, {
     baseline: () => 'baseline',
     bottom: () => 'flex-end',
     center: () => 'center',
@@ -62,7 +62,7 @@ function alignmentValue(term: TaoLayoutAlignmentTerm): string {
 }
 
 function spacingProperties(propertyPrefix: 'margin' | 'padding', side: TaoLayoutSpacingSide): readonly string[] {
-  return Switch(side, {
+  return RuntimeSwitch<TaoLayoutSpacingSide, readonly string[]>(side, {
     bottom: () => [`${propertyPrefix}Bottom`],
     horizontal: () => [`${propertyPrefix}Left`, `${propertyPrefix}Right`],
     left: () => [`${propertyPrefix}Left`],
@@ -73,7 +73,7 @@ function spacingProperties(propertyPrefix: 'margin' | 'padding', side: TaoLayout
 }
 
 function physicalSpacingSides(side: TaoLayoutSpacingSide): readonly TaoLayoutPhysicalSpacingSide[] {
-  return Switch(side, {
+  return RuntimeSwitch<TaoLayoutSpacingSide, readonly TaoLayoutPhysicalSpacingSide[]>(side, {
     bottom: () => ['bottom'],
     horizontal: () => ['left', 'right'],
     left: () => ['left'],

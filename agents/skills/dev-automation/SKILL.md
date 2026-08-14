@@ -1,13 +1,14 @@
 ---
 name: dev-automation
 description: >-
-  Change Tao developer automation, including packages/dev, ./agent, ./dev, ./tao, Justfile recipes, command help, review orchestration, or repository workflow output.
+  Change Tao developer automation, including packages/dev, ./agent, ./dev, ./tao, Justfile recipes, command help, or repository workflow output.
 ---
 
 # Dev Automation
 
 - Keep common workflow definitions and human developer commands in `Justfile`; keep shell entrypoints and the `./tao` wrapper thin.
-- Keep Worktrunk's blocking `pre-start` hook routed through `direnv exec . just setup` so dependencies and generated agent adapters exist before a launched harness reads them. `./agent setup` remains the agent-facing fallback once the wrapper is available.
+- Keep Worktrunk's blocking `pre-start` hook routed through `direnv allow && direnv exec . just setup` so trust, dependencies, and generated agent adapters exist before a launched harness reads them.
+- Keep `./agent` able to reuse the primary checkout's pinned devenv profile in linked worktrees where sandboxing hides `.envrc`; never fall back to an unpinned host Node. `direnv allow && direnv exec . ./agent setup` remains the fallback when no shared profile exists.
 - Expose formatting, fixing, testing, checking, and final validation as thin `./agent` passthroughs to the matching Just recipes.
 - Derive `./agent help` descriptions for passthrough commands from live `just help` output instead of duplicating recipe help.
 - Keep ordinary shell and Tao CLI commands outside `./agent`; run them directly or through `./tao`.

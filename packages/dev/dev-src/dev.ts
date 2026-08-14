@@ -1,8 +1,8 @@
 import { Errors, HCI, Platform, Switch } from '@shared'
-import { runWithCommands } from './commands/commands-utils'
-import { ExpoRunner } from './dev-loop/expo-runner/ExpoRunner'
-import { TestRunner } from './dev-loop/test-runner/TestRunner'
-import { TUI } from './dev-loop/TUI'
+import { runWithCommands } from './cli/run-with-commands'
+import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
+import { TestRunner } from './repository-tests/TestRunner'
+import { TestTUI } from './repository-tests/TestTUI'
 
 type TestOutputMode = 'lines' | 'tui'
 
@@ -11,6 +11,7 @@ type TestCommandOptions = {
   output?: string
 }
 
+/** Internal Justfile CLI: run repository tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('tao-dev-internal')
 
@@ -62,7 +63,7 @@ async function runTests(
 ): Promise<number> {
   return await Switch<TestOutputMode, Promise<number>>(options.outputMode, {
     lines: () => TestRunner.runSuitesInterleaved(pattern, { jobs: options.jobs }),
-    tui: () => TUI.runTestSuites(pattern, { jobs: options.jobs }),
+    tui: () => TestTUI.runTestSuites(pattern, { jobs: options.jobs }),
   })
 }
 

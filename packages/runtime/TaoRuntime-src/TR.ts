@@ -1,4 +1,3 @@
-import { Switch } from '@shared/core'
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
@@ -27,6 +26,7 @@ import {
   type TaoStackNavConfiguration,
   testNavKind as testNavigationKind,
 } from './TR-navigation'
+import RuntimeSwitch from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
 import * as TRViews from './TR-views'
 
@@ -43,7 +43,7 @@ class TR {
   static Binary(left: TR.Evaluable, operator: TR.BinaryOperator, right: TR.Evaluable): TR.Value<any> {
     const leftValue = left.evaluate().jsValue
     const rightValue = right.evaluate().jsValue
-    return new RuntimeValue(Switch(operator, {
+    return new RuntimeValue(RuntimeSwitch(operator, {
       '!=': () => !Object.is(leftValue, rightValue),
       '*': () => leftValue * rightValue,
       '+': () => leftValue + rightValue,
@@ -62,7 +62,7 @@ class TR {
   /** Unary applies Tao boolean negation or numeric negation. */
   static Unary(operator: TR.UnaryOperator, operand: TR.Evaluable): TR.Value<any> {
     const value = operand.evaluate().jsValue
-    return new RuntimeValue(Switch(operator, {
+    return new RuntimeValue(RuntimeSwitch<TR.UnaryOperator, any>(operator, {
       '-': () => -value,
       not: () => !value,
     }))
@@ -233,7 +233,7 @@ class TR {
   ): TR.Value<number> {
     const current = state.evaluate().jsValue
     const next = value.evaluate().jsValue
-    return Switch(operator, {
+    return RuntimeSwitch(operator, {
       '+=': () => new RuntimeValue(current + next),
       '-=': () => new RuntimeValue(current - next),
       '*=': () => new RuntimeValue(current * next),

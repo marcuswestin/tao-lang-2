@@ -1,12 +1,10 @@
 import { CLI, Platform, Repo } from '@shared'
-import { registerAgentHelpCommand } from './commands/agent-help'
-import { registerAiUsageCommand } from './commands/ai-usage'
-import { registerReviewCommand } from './commands/code-review'
-import { runWithCommands } from './commands/commands-utils'
-import { registerMergeFeaturePreflightCommand } from './commands/merge-feature-preflight'
+import { registerAgentHelpCommand } from './cli/agent-help'
+import { runWithCommands } from './cli/run-with-commands'
 
-const JUST_COMMANDS = ['check', 'fix', 'fmt', 'setup', 'test', 'verify'] as const
+const JUST_COMMANDS = ['check', 'fix', 'fmt', 'language-performance', 'setup', 'test', 'verify'] as const
 
+/** Agent-facing CLI entrypoint: expose only the repository workflows intended for `./agent`. */
 await runWithCommands(commands => {
   commands
     .name('agent')
@@ -30,7 +28,4 @@ await runWithCommands(commands => {
         Platform.runtimeProcess.setExitCode(result.error === undefined ? result.exitCode ?? 1 : 1)
       })
   }
-  registerAiUsageCommand(commands)
-  registerMergeFeaturePreflightCommand(commands)
-  registerReviewCommand(commands)
 })

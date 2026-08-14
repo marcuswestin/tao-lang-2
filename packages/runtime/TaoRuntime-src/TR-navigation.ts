@@ -1,5 +1,5 @@
-import { Errors } from '@shared/core'
 import type React from 'react'
+import { UnexpectedBehaviorError } from './TR-errors'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
 import {
@@ -343,7 +343,7 @@ function resolveStrictAppTarget(
   if (app) {
     return app
   }
-  throw new Errors.UnexpectedBehaviorError(
+  throw new UnexpectedBehaviorError(
     `Cannot ${operation} app '${target.declaration.name}': no enclosing instance matches its declaration.`,
     { details: { appDeclaration: target.declaration.name, operation } },
   )

@@ -6,6 +6,37 @@ import { InvocationsValidator } from '../validator-src/validators/invocations-va
 import { validationErrorMessages } from './test-validate'
 
 Describe('validator: reusable sessions', () => {
+  Test('shares one-shot services until explicitly invalidated', async () => {
+    Validator.invalidateSharedSession()
+    const firstSession = await Validator.sharedSession()
+
+    Expect(await Validator.sharedSession()).toBe(firstSession)
+    Expect(validationErrorMessages(
+      await Validator.validateCode(nominalApp(
+        'SharedApp',
+        'text',
+        '"Ada"',
+        'Text',
+        'text',
+      )),
+    )).toEqual([])
+    Expect(await Validator.sharedSession()).toBe(firstSession)
+
+    Validator.invalidateSharedSession()
+    const replacementSession = await Validator.sharedSession()
+
+    Expect(replacementSession).not.toBe(firstSession)
+    Expect(validationErrorMessages(
+      await firstSession.validateCode(nominalApp(
+        'DetachedApp',
+        'text',
+        '"Grace"',
+        'Text',
+        'text',
+      )),
+    )).toEqual([])
+  })
+
   Test('isolates concurrent results that reuse the standalone source URI', async () => {
     const session = await Validator.createSession()
     const [textResult, numberResult, syntaxResult] = await Promise.all([
