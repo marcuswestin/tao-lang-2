@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 48 commits, 2026-08-14
+Last touched-package re-sweep: after 50 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -100,6 +100,20 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
   R5, R9, and R11 audits added the qualifying follow-up batches below; R8 found no rename above the
   value bar.
 
+## Fifty-commit checkpoint
+
+- Tracked non-generated TypeScript/TSX: 49,319 lines, up 283 from baseline. The completed source
+  navigation split still accounts for 201 added physical lines; the remaining growth is structural
+  overhead from splitting the chartered test monoliths into readable, independently owned suites.
+- Complexity-qualified source functions remain at 69, down three from baseline; no
+  cleanup-written function newly qualifies. Files over 400 lines: 33 (12 source, 21 test), while
+  only three tests remain over 800 lines: parser, compiler, and formatter.
+- The refined mechanical R1 scan still flags 72 conditions. Value review finds no new
+  cleanup-written candidate. Native `switch` remains at zero, and the full sequential-branch R13
+  audit remains exhaustive with no missed closed-union conversion.
+- The TR test owner is now 508 lines after moving its data and navigation seams byte-for-byte. All
+  36 original callback hashes remain identical; no TR test file exceeds 800 lines.
+
 ## Added rules
 
 R13 EXHAUSTIVE UNION DISPATCH. Closed literal or `$type`/`kind` discriminated-union dispatch with
@@ -125,7 +139,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/validator/validator-tests/validator.test.ts`                    | R10 / charter 3 |                8,645 |     8/8,645 | Split the 4,931-line monolith into eight feature owners of 508–677 lines, sharing two existing fixtures; all 167 callback hashes remain identical and no test exceeds 800 lines.             |
 | done               | `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx`                | R10 / charter 3 |                4,613 |     7/4,613 | Split the 2,668-line monolith into seven E2E owners of 132–681 lines with a shared lifecycle; all 62 callback hashes remain identical and no test exceeds 800 lines.                         |
 | queued             | `packages/parser/parser-tests/parser.test.ts`                             | R10 / charter 3 |   mostly moves + ~40 |       1/~40 | Split the 1,369-line parser test by grammar/source seams without touching grammar.                                                                                                           |
-| in progress        | `packages/runtime/TR-tests/TR.test.ts`                                    | R10 / charter 3 |     232 moved, net 0 |       1/232 | Move the complete two-test `TR.Data` suite into the existing data owner byte-for-byte; the 924-line residual still requires its navigation seam.                                             |
+| done               | `packages/runtime/TR-tests/TR.test.ts`                                    | R10 / charter 3 |  1,071 moved, net +5 |     2/1,071 | Split the 1,040-line owner into 508-line core, 762-line data, and 413-line navigation suites plus one eight-line shared fixture; all 36 callback hashes remain identical.                    |
 | queued             | `packages/compiler/compiler-tests/compiler.test.ts`                       | R10 / charter 3 |   mostly moves + ~35 |       1/~35 | Split the 991-line compiler test by codegen feature seams.                                                                                                                                   |
 | queued             | `packages/formatter/formatter-tests/formatter.test.ts`                    | R10 / charter 3 |   mostly moves + ~35 |       1/~35 | Split the 956-line formatter test by formatter feature seams.                                                                                                                                |
 | queued             | 12 non-chartered source files currently over 400 lines                    | R3              |     inspect per seam |       8/TBD | Eight audited files have real second concepts; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                      |
