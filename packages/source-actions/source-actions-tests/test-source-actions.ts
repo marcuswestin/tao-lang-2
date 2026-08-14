@@ -37,6 +37,16 @@ export async function testOrganizeSourceUnchanged(source: string): Promise<void>
   Expect(await SourceActions.organizeSource(await parseDocument(source))).toBeUndefined()
 }
 
+/** organizes returns a test callback that asserts canonical organized source. */
+export function organizes(source: string, expected: string): () => Promise<void> {
+  return async () => await testOrganizeSource(source, expected)
+}
+
+/** organized returns a test callback that asserts source is already canonical. */
+export function organized(source: string): () => Promise<void> {
+  return async () => await testOrganizeSourceUnchanged(source)
+}
+
 /** sourceActionOptionsFor returns package-aware reparse options for a source-action document. */
 export async function sourceActionOptionsFor(document: AST.Document): Promise<SourceActionOptions> {
   const directory = document.uri.scheme === 'file' ? FS.dirname(document.uri.path) : Repo.resolvePath('.')

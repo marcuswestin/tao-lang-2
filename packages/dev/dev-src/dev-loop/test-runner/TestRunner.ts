@@ -46,7 +46,6 @@ const BUN_SUITE_ARGS = new Map<string, readonly string[]>([
   ['compiler', ['--concurrent']],
   ['dev', ['--concurrent']],
   ['ide-extension', ['--concurrent']],
-  ['source-actions', ['--timeout=15000']],
   ['validator', ['--concurrent']],
 ])
 const SUITE_PRIORITIES = new Map<string, number>([
