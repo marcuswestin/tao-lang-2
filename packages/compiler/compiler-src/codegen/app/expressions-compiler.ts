@@ -4,6 +4,8 @@ import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
+const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
+
 export const ExpressionsCompiler = {
   /** Expression compiles a Tao expression into a runtime value expression. */
   Expression(expression: AST.Expression): Compiled {
@@ -177,7 +179,7 @@ export const ExpressionsCompiler = {
   ItemLiteral(item: AST.ItemLiteral, type: AST.ConstructablePrimitiveTypeReference | AST.TypeReference): Compiled {
     const itemType = Type.constructorReferenceItemType(type)
     if (!itemType) {
-      Assert(item.properties.length === 0, 'validated shapeless item constructor is empty')
+      Assert(item.properties.length === 0, shapelessItemConstructorMessage)
       return gen`TR.Value({})`
     }
     const pairs = itemPropertyBindingPairs(item, itemType)
@@ -272,7 +274,7 @@ function compileConfiguredItem(
 ): Compiled {
   Assert.defined(value.block, 'validated item constructor has a block')
   if (!itemType) {
-    Assert(value.block.entries.length === 0, 'validated shapeless item constructor is empty')
+    Assert(value.block.entries.length === 0, shapelessItemConstructorMessage)
     return gen`TR.Value({})`
   }
   const remaining = new Set(itemType.properties)

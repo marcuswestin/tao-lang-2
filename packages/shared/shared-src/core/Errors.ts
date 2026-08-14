@@ -21,6 +21,8 @@ type CommandErrorResult = {
   error?: Error
 }
 
+const unexpectedErrorMessage = 'Something went wrong.'
+
 class BaseTaoError extends Error {
   readonly details?: ErrorDetails
   readonly cause?: unknown
@@ -48,7 +50,7 @@ export class UserInputError extends BaseTaoError {
 export class UnexpectedBehaviorError extends BaseTaoError {
   override readonly name = 'UnexpectedBehaviorError'
 
-  constructor(messageForUser = 'Something went wrong.', opts: { cause?: unknown; details?: ErrorDetails } = {}) {
+  constructor(messageForUser = unexpectedErrorMessage, opts: { cause?: unknown; details?: ErrorDetails } = {}) {
     super('UnexpectedBehaviorError', messageForUser, opts)
   }
 }
@@ -85,7 +87,7 @@ export function fromUnknown(error: unknown, details?: ErrorDetails): TaoError {
   if (isTaoError(error)) {
     return error
   }
-  return new UnexpectedBehaviorError('Something went wrong.', { cause: error, details })
+  return new UnexpectedBehaviorError(unexpectedErrorMessage, { cause: error, details })
 }
 
 /** throwUserInput throws a user-correctable Tao error. */
@@ -100,7 +102,7 @@ export function throwUnexpected(messageForUser: string, opts?: { cause?: unknown
 
 /** formatForUser renders an error message suitable for terminal users. */
 export function formatForUser(error: unknown): string {
-  return isTaoError(error) ? error.messageForUser : 'Something went wrong.'
+  return isTaoError(error) ? error.messageForUser : unexpectedErrorMessage
 }
 
 /** formatForLog renders an error message with diagnostic details. */
