@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 62 commits, 2026-08-14
+Last touched-package re-sweep: after 63 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -165,6 +165,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/validator/validator-src/validators/types-validator.ts`          | R3              |   689 moved, net +27 |       1/689 | Split configured item construction into a 351-line owner, leaving declarations, typed constructors, and member access at 364 lines with facade order intact.                                       |
 | done               | `packages/ast-utils/ast-utils-src/invocations.ts` shared matching         | R3              |    135 moved, net +7 |       1/135 | Extract four byte-identical generic matching primitives into a 65-line internal owner, with no change to the `ASTUtils` facade; the invocation split remains in progress.                          |
 | done               | `packages/ast-utils/ast-utils-src/invocations.ts` item-property binding   | R3              |    272 moved, net +8 |       1/272 | Extract the item-property resolver and its eight private helpers into a 280-line owner, reducing the invocation owner from 1,150 to 878 lines with every moved and residual declaration unchanged. |
+| done               | `packages/ast-utils/ast-utils-src/invocations.ts` data-write binding      | R3              |    254 moved, net +8 |       1/254 | Extract the data-write resolver and its nine private helpers into a 262-line owner, reducing the invocation owner from 878 to 624 lines with all 13 moved declarations unchanged.                  |
 | in progress        | 6 non-chartered source files currently over 400 lines                     | R3              |     inspect per seam |       2/TBD | Invocation binding is partially split and runtime data remains queued; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                    |
 | queued             | 69 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                                    |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                                   |

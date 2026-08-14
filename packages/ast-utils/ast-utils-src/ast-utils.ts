@@ -1,9 +1,9 @@
+import { resolveDataWriteBindings } from './data-write-bindings'
 import { injectionArgumentName } from './injections'
 import {
   resolveActionInvocation,
   resolveActionTarget,
   resolveArgumentBindings,
-  resolveDataWriteBindings,
   resolveFunctionInvocation,
   resolveRenderInvocation,
 } from './invocations'
@@ -33,9 +33,9 @@ export const ASTUtils = {
 export namespace ASTUtils {
   export type ActionInvocationPair = import('./invocations').ActionInvocationPair
   export type ArgumentBindingDiagnostic = import('./invocations').ArgumentBindingDiagnostic
-  export type DataWriteBindingDiagnostic = import('./invocations').DataWriteBindingDiagnostic
-  export type DataWriteBindingPair = import('./invocations').DataWriteBindingPair
-  export type DataWriteBindingResult = import('./invocations').DataWriteBindingResult
+  export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
+  export type DataWriteBindingPair = import('./data-write-bindings').DataWriteBindingPair
+  export type DataWriteBindingResult = import('./data-write-bindings').DataWriteBindingResult
   export type DataEntityDefinition = import('./Type').DataEntityDefinition
   export type DataFieldDefinition = import('./Type').DataFieldDefinition
   export type ItemPropertyBindingDiagnostic = import('./item-property-bindings').ItemPropertyBindingDiagnostic
