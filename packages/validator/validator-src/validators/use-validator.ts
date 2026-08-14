@@ -1,8 +1,8 @@
 import { ASTUtils, Packages } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
-import { useValidationCodes } from './diagnostic-codes'
-import type { ValidationContext } from './validation'
+import { useValidationCodes } from '../diagnostic-codes'
+import type { ValidationContext } from '../validation'
 
 /** useValidationMessages declares import diagnostics for Tao use statements. */
 export const useValidationMessages = {

@@ -1,8 +1,8 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { viewValidationCodes } from './diagnostic-codes'
-import type { ValidationContext } from './validation'
+import { viewValidationCodes } from '../diagnostic-codes'
+import type { ValidationContext } from '../validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
 const viewValidationMessages = {

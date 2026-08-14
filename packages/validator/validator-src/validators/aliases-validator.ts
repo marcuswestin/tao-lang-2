@@ -1,7 +1,7 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
-import { DeclarationOrder } from './DeclarationOrder'
-import type { ValidationContext } from './validation'
+import { DeclarationOrder } from '../DeclarationOrder'
+import type { ValidationContext } from '../validation'
 
 type NamedValueDeclaration =
   | NamedFileValueDeclaration

@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** typeValidationMessages declares diagnostics for custom types, constructors is item, and member access. */
 export const typeValidationMessages = {

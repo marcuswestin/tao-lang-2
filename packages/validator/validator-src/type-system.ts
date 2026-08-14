@@ -3,10 +3,10 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import { InferenceRuleNotApplicable, type Type as TypirType } from 'typir'
 import type { LangiumTypeSystemDefinition } from 'typir-langium'
-import { ActionsValidator } from './ActionsValidator'
-import { InvocationsValidator } from './invocations-validator'
-import { StateValidator } from './StateValidator'
 import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
+import { ActionsValidator } from './validators/ActionsValidator'
+import { InvocationsValidator } from './validators/invocations-validator'
+import { StateValidator } from './validators/StateValidator'
 
 const statefulPrimitiveTypes = ['text', 'number', 'boolean'] as const satisfies readonly AST.PrimitiveType[]
 

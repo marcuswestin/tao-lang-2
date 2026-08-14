@@ -2,9 +2,9 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ValidationProblemAcceptor } from 'typir'
+import { type TaoSpecifics, type TaoTypirServices } from '../TypeSystemHelpers'
+import type { ValidationContext } from '../validation'
 import { AliasesValidator } from './aliases-validator'
-import { type TaoSpecifics, type TaoTypirServices } from './TypeSystemHelpers'
-import type { ValidationContext } from './validation'
 
 /** actionValidationMessages declares action validation diagnostics. */
 const actionValidationMessages = {

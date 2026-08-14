@@ -1,9 +1,9 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
-import { FunctionalCoreValidator } from '../validator-src/FunctionalCoreValidator'
-import { StateValidator } from '../validator-src/StateValidator'
-import { typeValidationMessages } from '../validator-src/types-validator'
+import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
+import { StateValidator } from '../validator-src/validators/StateValidator'
+import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
 const runtimeViews = `

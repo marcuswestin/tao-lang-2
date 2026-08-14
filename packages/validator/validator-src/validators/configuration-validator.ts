@@ -1,6 +1,6 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** configurationValidationMessages declares self-hosted construct diagnostics. */
 export const configurationValidationMessages = {

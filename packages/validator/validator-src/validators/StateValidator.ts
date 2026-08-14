@@ -1,9 +1,9 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationProblemAcceptor } from 'typir'
-import { DeclarationOrder } from './DeclarationOrder'
-import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
-import type { ValidationContext } from './validation'
+import { DeclarationOrder } from '../DeclarationOrder'
+import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from '../TypeSystemHelpers'
+import type { ValidationContext } from '../validation'
 
 const stateValidationMessages = {
   usedBeforeDeclaration: (name: string) => `Name '${name}' is used before it is declared.`,

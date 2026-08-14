@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** dialogueValidationMessages declares ask/response diagnostics. */
 const dialogueValidationMessages = {

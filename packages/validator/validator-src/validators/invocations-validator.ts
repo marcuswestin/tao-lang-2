@@ -1,8 +1,8 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import type { TaoTypirServices } from './TypeSystemHelpers'
-import type { ValidationContext } from './validation'
+import type { TaoTypirServices } from '../TypeSystemHelpers'
+import type { ValidationContext } from '../validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
 const invocationValidationMessages = {

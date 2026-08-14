@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** projectValidationMessages declares diagnostics for local project metadata blocks. */
 export const projectValidationMessages = {

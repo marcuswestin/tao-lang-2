@@ -1,5 +1,5 @@
 import type { AST } from '@parser'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** LayoutConflictMessages declares diagnostic text for layout conflict validation. */
 export type LayoutConflictMessages = {

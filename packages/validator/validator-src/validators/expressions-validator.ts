@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import type { ValidationProblem } from 'typir'
-import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from './TypeSystemHelpers'
-import type { ValidationContext } from './validation'
+import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from '../TypeSystemHelpers'
+import type { ValidationContext } from '../validation'
 
 type TaoSpecificsForProblems = TaoSpecifics
 

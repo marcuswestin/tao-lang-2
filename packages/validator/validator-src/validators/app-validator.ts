@@ -1,7 +1,7 @@
 import { type ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {

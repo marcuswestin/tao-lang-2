@@ -1,6 +1,6 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** injectionValidationMessages declares inject argument diagnostics. */
 export const injectionValidationMessages = {

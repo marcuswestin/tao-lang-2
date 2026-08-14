@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 /** navigationValidationMessages declares configured navigation diagnostics. */
 export const navigationValidationMessages = {

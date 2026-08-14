@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import type { ValidationContext } from './validation'
+import type { ValidationContext } from '../validation'
 
 const supportedSelectors = ['text', 'label', 'placeholder'] as const
 const supportedInputSelectors = ['label', 'placeholder'] as const

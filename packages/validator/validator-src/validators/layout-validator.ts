@@ -1,8 +1,8 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { ValidationContext } from '../validation'
 import { type LayoutConflictItem, LayoutConflictValidator } from './layout-conflict-validator'
-import type { ValidationContext } from './validation'
 
 /** layoutValidationMessages declares layout clause diagnostics. */
 const layoutValidationMessages = {
