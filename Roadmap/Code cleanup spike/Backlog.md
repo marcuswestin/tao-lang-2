@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 55 commits, 2026-08-14
+Last touched-package re-sweep: after 56 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -143,7 +143,8 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/compiler/compiler-tests/compiler.test.ts`                       | R10 / charter 3 |    798 moved, net +8 |       1/798 | Split 13 file/codegen callbacks into a 402-line owner, leaving a 597-line test-plan/IR owner; all 28 callback hashes remain identical and neither file exceeds 800 lines.                    |
 | done               | `packages/formatter/formatter-tests/formatter.test.ts`                    | R10 / charter 3 |    411 moved, net +3 |       1/411 | Move the nine-callback injection suite into a 203-line owner and share its fence fixtures, leaving a 753-line residual; all 53 original callback hashes remain identical.                    |
 | done               | `packages/dev/dev-src/dev-loop/test-runner/TestRunner.ts`                 | R3              |   434 moved, net +16 |       1/434 | Split result parsing, aggregation, and reporting into a 215-line owner, leaving the runner at 349 lines while preserving its facade and a type-only back edge.                               |
-| queued             | 11 non-chartered source files currently over 400 lines                    | R3              |     inspect per seam |       7/TBD | Seven audited files still have real second concepts; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                |
+| done               | `packages/dev/dev-src/commands/code-review/planner.ts`                    | R3              |   332 moved, net +12 |       1/332 | Split budget normalization and provider availability into a 162-line owner, leaving review planning at 353 lines with its existing public facade intact.                                     |
+| queued             | 10 non-chartered source files currently over 400 lines                    | R3              |     inspect per seam |       6/TBD | Six audited files still have real second concepts; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                  |
 | queued             | 69 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                              |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                             |
 | done               | `packages/dev/dev-src/commands/code-review/planner.ts` timeouts           | R6 / charter 4  |                   11 |        6/11 | Reuse the two owning review-timeout constants across six provider outcomes, collapsing the repeated values and net-deleting five lines.                                                      |
