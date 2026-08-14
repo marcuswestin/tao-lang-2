@@ -8,9 +8,10 @@ Language features are built in tranches through the WordFlower app family: decis
 
 ## Current tranche
 
-- [ ] Implement the open WordFlower Next tranche into Current
-  - Selection navigation with keyed items and target-only activation, entity availability guards, dialogues with `ask`/`respond`, keyed toasts as a presentation mode, reshaped data fields, a third data level, and the self-hosted nav/datasource mechanism that graduates `@tao-next/` into `packages/runtime/tao-stdlib`.
-  - Contract: `Apps/WordFlower/2 - Next/WordFlower.tao-next`.
+- [x] Implement the WordFlower tranche 3 contract into Current
+  - Selection navigation, entity availability guards, dialogues, keyed toasts as a presentation mode, reshaped data fields, the third data level, and self-hosted navs and datasources graduated into `packages/runtime/tao-stdlib`.
+- [ ] Cut tranche 4 from the gap between Current and MVP
+  - `2 - Next` now matches `1 - Current`, so the next tranche is chosen from what `3 - MVP` still expresses and Current does not: splits and windows, design tokens and recipes, a remote provider, snapshots, and `async` with its concurrency policy.
 
 ## Toward v1
 
@@ -24,8 +25,8 @@ Language features are built in tranches through the WordFlower app family: decis
   - Polished default text, input, and button styles, seeded accent, neutral palette, app-shell content frame, and empty/error/loading surfaces.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
-- [ ] Finish the dev loop and device experience
-  - `tao dev`/`./dev` parity, app switching, file watching across imports, iOS device LAN support, and Android/web parity where practical.
+- [ ] Finish the device experience
+  - `tao dev` now owns discovery, app selection, and switching. Remaining: file watching across imports, iOS device LAN support, and Android/web parity where practical.
 - [ ] Add production and staging runtime targets
   - Build profiles, environment handling, runtime manifest boundaries, secrets policy, and Expo build expectations.
 - [ ] Polish the IDE MVP

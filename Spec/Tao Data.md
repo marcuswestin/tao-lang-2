@@ -102,6 +102,11 @@ data declaration. Local persists the version-1 envelope containing schema versio
 next generated ID; an explicit key preserves rehydration and next-ID continuity. A load, format,
 version, or persist failure becomes provider error state and never silently falls back to memory.
 
+When a bound datasource cannot load at all, the runtime blocks that app behind a recovery boundary
+reporting the load error, rather than leaving every screen rendering against unusable data. The
+boundary can reset the stored envelope and remount the app root, so recovery needs no manual
+restart. Schemas with no bound datasource keep their ordinary query error state instead.
+
 ## Self-hosted datasource declarations
 
 `Local` and `Memory` are ordinary public Tao declarations in `@tao/data`, not compiler-known names:

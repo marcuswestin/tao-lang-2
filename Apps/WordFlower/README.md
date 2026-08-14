@@ -43,7 +43,7 @@ If reflecting a Next decision reveals a **contradiction** — the decision canno
 
 ## Version contents
 
-- **`1 - Current/WordFlower.tao`** + `WordFlower.test.tao` — the executable app and its journey tests. The repository's canonical compile target (`just _compile-word-flower-app`, the default `./dev` app) and the fixed-point fixture for parser/validator/formatter tests. It exercises the whole implemented language surface.
+- **`1 - Current/WordFlower.tao`** + `WordFlower.test.tao` — the executable app and its journey tests. The repository's canonical compile target (`just _compile-word-flower-app`) and the fixed-point fixture for parser/validator/formatter tests. It exercises the whole implemented language surface.
 - **`2 - Next/WordFlower.tao-next`** + test — the sprint contract; the header comment lists the full tranche. A tranche may carry a flat `@tao-next/` scratch package while it develops a self-hosted stdlib contract. At absorption those declarations graduate into `packages/runtime/tao-stdlib`, imports return to their real stdlib paths, and the scratch package is deleted before the byte-identity gates arm.
 - **`3 - MVP/WordFlower.tao-mvp`** + test + `Justfile` — the full MVP target: three-level related data, every navigation family, dialogues with `ask`/`respond`, snapshots, `with` app variants, design tokens, a remote provider, functions, and the typed injection escape hatch. Its `Justfile` demonstrates every `tao` CLI capability the MVP release intends to ship.
 - **`4 - Revolution/WordFlower.tao-revolution`** + test + `Justfile` — intended functionality that is explicitly _not_ part of the MVP release, plus a TODO list at the top of the app file naming intended capabilities that do not yet have expressible syntax. Its `Justfile` demonstrates the CLI surface intended beyond the MVP.
@@ -56,13 +56,14 @@ From the repository root:
 ./tao check "Apps/WordFlower/1 - Current/WordFlower.tao"
 ./tao test "Apps/WordFlower/1 - Current"
 ./tao compile "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
-./dev "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
+./tao dev "Apps/WordFlower/1 - Current" --app WordFlower
 ```
 
 The first three commands are automated verification paths. The final command launches the Expo development path for interactive use.
 
-Files may declare more than one app. `compile` and `dev` accept `--app <Name>`; without it they
-prompt when attached to an interactive terminal and fail with the available names in noninteractive
-environments. They never select by filename or source order.
+Files may declare more than one app. `tao dev` discovers runnable apps under any path, and both
+`compile` and `dev` accept `--app <Name>`; without it they prompt when attached to an interactive
+terminal and fail with the available names in noninteractive environments. They never select by
+filename or source order.
 
 Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The implemented navigation contract is `Spec/Tao Presentation and Navigation.md`; unimplemented navigation work is tracked in `Roadmap/Add navigation and routing MVP/Follow-ups - Add navigation and routing MVP.md`.
