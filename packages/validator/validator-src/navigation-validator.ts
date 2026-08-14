@@ -32,6 +32,7 @@ export const navigationValidationMessages = {
   toastDurationType: (actual: string) => `Toast Duration expects number, got ${actual}.`,
   toastDurationNegative: 'Toast Duration cannot be negative.',
   activationContext: 'Selection activation is allowed only inside a ui declaration.',
+  unknownSelection: (app: string, key: string) => `App ${app} navigator has no selection item named '@${key}'.`,
   presentationTarget: (actual: string) => `Presentation target expects nav, got ${actual}.`,
   dismissContext: '`dismiss` is allowed only inside a ui declaration.',
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
@@ -65,6 +66,11 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
   for (const activation of AST.streamAllContents(file).filter(AST.isSelectionActivateStatement)) {
     if (!AST.isUiDeclaration(AST.findOwningView(activation))) {
       ctx.error(navigationValidationMessages.activationContext, activation)
+    }
+    const app = activation.app.ref
+    const keys = app && selectionKeysForApp(app)
+    if (app && keys && !keys.has(activation.key)) {
+      ctx.error(navigationValidationMessages.unknownSelection(app.name, activation.key.slice(1)), activation)
     }
   }
   for (const replace of AST.streamAllContents(file).filter(AST.isReplaceStatement)) {
@@ -119,6 +125,124 @@ function appPropertyConfiguredType(
     return AST.isConfigurableDeclaration(target) ? target : undefined
   }
   return AST.isAliasDeclaration(target) ? configuredDeclaration(target.value) : undefined
+}
+
+type EffectiveNavigatorConfiguration = {
+  declaration: AST.ConfigurableDeclaration
+  keys: ReadonlySet<string>
+}
+
+function selectionKeysForApp(app: AST.AppValueDeclaration): ReadonlySet<string> | undefined {
+  const root = AST.appDeclarationOf(app)
+  if (!root) {
+    return undefined
+  }
+  const navigator = AST.blockStatements(root).find(AST.isAppNavigator)
+  if (!navigator) {
+    return undefined
+  }
+  let configuration = configuredAppPropertyConfiguration(navigator.value)
+  for (const variant of appVariantChain(app)) {
+    const patch = variant.value.patchBlock.entries.find(entry => entry.name === 'Navigator')?.value
+    if (AST.isPropertyConfigurationPatch(patch)) {
+      configuration = applyConfigurationPatch(configuration, patch.block)
+    } else if (patch) {
+      configuration = configurationValueConfiguration(patch)
+    }
+  }
+  if (!configuration) {
+    return undefined
+  }
+  return AST.configurationKeyOf(configuration.declaration) ? configuration.keys : new Set()
+}
+
+function appVariantChain(
+  app: AST.AppValueDeclaration,
+  seen: Set<AST.AliasDeclaration> = new Set(),
+): AST.AppVariantDeclaration[] {
+  if (!AST.isAppVariantDeclaration(app) || seen.has(app)) {
+    return []
+  }
+  seen.add(app)
+  const base = app.value.target.ref
+  if (!AST.isAppValueDeclaration(base)) {
+    return []
+  }
+  return [...appVariantChain(base, seen), app]
+}
+
+function configuredAppPropertyConfiguration(
+  value: AST.ConfiguredAppPropertyValue,
+): EffectiveNavigatorConfiguration | undefined {
+  const target = value.target.ref
+  if (AST.isConfigurableDeclaration(target)) {
+    return configuration(target, value.block)
+  }
+  if (!AST.isAliasDeclaration(target)) {
+    return undefined
+  }
+  return applyConfigurationPatch(configuredExpressionConfiguration(target.value), value.block)
+}
+
+function configuredExpressionConfiguration(
+  value: AST.Expression,
+  seen: Set<AST.AliasDeclaration> = new Set(),
+): EffectiveNavigatorConfiguration | undefined {
+  if (AST.isConfigurationConstructor(value) && AST.isConfigurableDeclaration(value.type.ref)) {
+    return configuration(value.type.ref, value.block)
+  }
+  if (!AST.isValueReference(value)) {
+    return undefined
+  }
+  const target = value.target.ref
+  if (!AST.isAliasDeclaration(target) || seen.has(target)) {
+    return undefined
+  }
+  seen.add(target)
+  const base = configuredExpressionConfiguration(target.value, seen)
+  return AST.isPatchedValueReference(value) ? applyConfigurationPatch(base, value.patchBlock) : base
+}
+
+function configurationValueConfiguration(
+  value: AST.ConfigurationValue,
+): EffectiveNavigatorConfiguration | undefined {
+  if (AST.isConfigurationConstructor(value) && AST.isConfigurableDeclaration(value.type.ref)) {
+    return configuration(value.type.ref, value.block)
+  }
+  if (!AST.isConfigurationReference(value)) {
+    return undefined
+  }
+  const target = value.target.ref
+  if (AST.isConfigurableDeclaration(target)) {
+    return configuration(target)
+  }
+  return AST.isAliasDeclaration(target) ? configuredExpressionConfiguration(target.value) : undefined
+}
+
+function configuration(
+  declaration: AST.ConfigurableDeclaration,
+  block?: AST.ConfigurationBlock,
+): EffectiveNavigatorConfiguration {
+  return {
+    declaration,
+    keys: new Set(block?.entries.map(entry => entry.key).filter((key): key is string => key !== undefined)),
+  }
+}
+
+function applyConfigurationPatch(
+  base: EffectiveNavigatorConfiguration | undefined,
+  patch?: AST.ConfigurationBlock,
+): EffectiveNavigatorConfiguration | undefined {
+  if (!base || !patch) {
+    return base
+  }
+  return {
+    declaration: base.declaration,
+    keys: new Set([
+      ...base.keys,
+      ...patch.entries.map(entry => entry.key).filter((key): key is string => key !== undefined),
+    ]),
+  }
 }
 
 function validateContextualPresentation(

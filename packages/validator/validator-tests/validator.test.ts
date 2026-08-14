@@ -310,8 +310,13 @@ Describe('Tao validator structural diagnostics', () => {
 
   Test('limits target-only selection activation to ui actions', async () => {
     await testValidateCode(`
-      use StackNav from @tao/nav
-      app SelectionApp { Name "Selection" Navigator StackNav { Initial Home } }
+      use SelectionNav from @tao/nav
+      let MainNavigation = SelectionNav {
+        Initial @workspace
+        Display "tabs"
+        @workspace { Label "Workspace" Content Home }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNavigation }
       ui Home {
         action Activate { present SelectionApp@workspace }
         render Empty()
@@ -320,8 +325,13 @@ Describe('Tao validator structural diagnostics', () => {
     `)
 
     const invalid = await testValidateCodeWithErrors(`
-      use StackNav from @tao/nav
-      app SelectionApp { Name "Selection" Navigator StackNav { Initial Home } }
+      use SelectionNav from @tao/nav
+      let MainNavigation = SelectionNav {
+        Initial @workspace
+        Display "tabs"
+        @workspace { Label "Workspace" Content Home }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNavigation }
       view Home {
         action Activate { present SelectionApp@workspace }
         render Empty()
@@ -329,6 +339,55 @@ Describe('Tao validator structural diagnostics', () => {
       view Empty { render inject ${tsFence} return null ${fence} }
     `)
     Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.activationContext)
+  })
+
+  Test('validates target-only selection keys against the named app navigator', async () => {
+    await testValidateCode(`
+      use SelectionNav from @tao/nav
+      let MainNavigation = SelectionNav {
+        Initial @workspace
+        Display "tabs"
+        @workspace { Label "Workspace" Content Home }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      let SelectionDrawer = SelectionApp with {
+        Navigator with { Display "drawer" }
+      }
+      ui Home {
+        action ActivateApp { present SelectionApp@workspace }
+        action ActivateVariant { present SelectionDrawer@workspace }
+        render Empty()
+      }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      use SelectionNav from @tao/nav
+      let MainNavigation = SelectionNav {
+        Initial @workspace
+        Display "tabs"
+        @workspace { Label "Workspace" Content Home }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      let SelectionDrawer = SelectionApp with {
+        Navigator with { Display "drawer" }
+      }
+      ui Home {
+        action ActivateApp { present SelectionApp@bogus }
+        action ActivateVariant { present SelectionDrawer@bogus }
+        render Empty()
+      }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const messages = validationErrorMessages(invalid)
+    Expect(
+      messages.filter(message => message === navigationValidationMessages.unknownSelection('SelectionApp', 'bogus')),
+    )
+      .toHaveLength(1)
+    Expect(
+      messages.filter(message => message === navigationValidationMessages.unknownSelection('SelectionDrawer', 'bogus')),
+    ).toHaveLength(1)
   })
 
   Test('validates SelectionNav keyed items, initial key, display, labels, and content', async () => {

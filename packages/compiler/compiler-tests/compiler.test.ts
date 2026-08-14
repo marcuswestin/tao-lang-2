@@ -221,11 +221,15 @@ Describe('Tao compiler', () => {
 
   Test('compiles configured apps, first-class ui, strict targets, dismiss, and replacement', async () => {
     const compiled = await Compiler.compileCode(`
-      use SlotNav, StackNav from @tao/nav
+      use SelectionNav, SlotNav, StackNav from @tao/nav
       let ResetNavigator = StackNav { Initial Home }
       app NavigationApp {
         Name "Navigation"
-        Navigator StackNav { Initial Home }
+        Navigator SelectionNav {
+          Initial @workspace
+          Display "tabs"
+          @workspace { Label "Workspace" Content Home }
+        }
         @window SlotNav { Initial Detail }
       }
       ui Home {
