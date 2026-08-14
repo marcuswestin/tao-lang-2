@@ -21,6 +21,12 @@ Only `1 - Current` is executable. The others use their own file extensions (`.ta
 
 `2 - Next` holds the tranche of decided syntax and semantics that implementation moves into `1 - Current`, slice by slice. Decisions live there as working code plus comments: the file's header lists the tranche, and every construct in the sketch is the agreed target form.
 
+Next's app header declares `// Tranche status: absorbed` at a tranche boundary. Cutting a tranche
+changes that line in Next alone to `// Tranche status: open` before either Next file diverges from
+Current. The parser and formatter gate the app and test sidecar independently: matching pairs prove
+byte identity, while divergent pairs require the explicit open marker. Absorption changes the marker
+back to `absorbed` in both Next and Current only after both pairs match again.
+
 ## Moving Next into Current
 
 Work the tranche one slice at a time; a slice is one decision group from Next's header.

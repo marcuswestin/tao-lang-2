@@ -2,6 +2,7 @@ use Local, Memory from @tao/data
 use SelectionNav, SlotNav, StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
+// Tranche status: absorbed
 // This tranche decides (the process contract is ../README.md):
 // - `SelectionNav` with keyed items (`@key { Label, Content }`), `Initial @key`, `Display`, and
 //   target-only activation: `present App@key` reveals an item without new content

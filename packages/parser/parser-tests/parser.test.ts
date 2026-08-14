@@ -9,6 +9,8 @@ const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.
 const wordFlowerTestPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.test.tao')
 const wordFlowerNextPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next')
 const wordFlowerNextTestPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.test.tao-next')
+const wordFlowerOpenTrancheHeader = '// Tranche status: open'
+const wordFlowerAbsorbedTrancheHeader = '// Tranche status: absorbed'
 const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 
@@ -897,30 +899,56 @@ Describe('minimal Tao parser', () => {
     Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(5)
   })
 
-  // The absorption gate: while a Next tranche is open, Next carries unimplemented syntax and this
-  // test skips. Absorbing the tranche makes the files byte-identical, which re-arms the gate.
-  Test('loads Next through virtual Tao files and preserves normalized Current AST parity', async () => {
+  Test('declares whether the WordFlower Next contract is open or absorbed', async () => {
     const nextSource = await FS.readText(wordFlowerNextPath)
     const nextTestSource = await FS.readText(wordFlowerNextTestPath)
-    const current = await Workspace.parse(wordFlowerPath)
-    const currentTest = await Workspace.parse(wordFlowerTestPath)
-    if (nextSource !== await FS.readText(wordFlowerPath)) {
+    const appMatches = nextSource === await FS.readText(wordFlowerPath)
+    const sidecarMatches = nextTestSource === await FS.readText(wordFlowerTestPath)
+
+    Expect(nextSource).toContain(
+      appMatches && sidecarMatches ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+    )
+  })
+
+  Test('gates the WordFlower Next app independently', async () => {
+    const nextSource = await FS.readText(wordFlowerNextPath)
+    const currentSource = await FS.readText(wordFlowerPath)
+    if (!expectWordFlowerPairState(nextSource, currentSource, nextSource)) {
       return
     }
+    const current = await Workspace.parse(wordFlowerPath)
 
     await withTaoFiles(
-      'wordflower-next-contract-',
+      'wordflower-next-app-contract-',
+      { 'WordFlower.tao': nextSource },
+      async paths => {
+        const next = await Workspace.validate(paths['WordFlower.tao']!)
+
+        Expect(next.diagnostics).toEqual([])
+        Expect(normalizedAst(next.entry.ast)).toEqual(normalizedAst(current.entry.ast))
+      },
+    )
+  })
+
+  Test('gates the WordFlower Next test sidecar independently', async () => {
+    const nextSource = await FS.readText(wordFlowerNextPath)
+    const nextTestSource = await FS.readText(wordFlowerNextTestPath)
+    const currentTestSource = await FS.readText(wordFlowerTestPath)
+    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextSource)) {
+      return
+    }
+    const currentTest = await Workspace.parse(wordFlowerTestPath)
+
+    await withTaoFiles(
+      'wordflower-next-sidecar-contract-',
       {
-        'WordFlower.tao': nextSource,
+        'WordFlower.tao': await FS.readText(wordFlowerPath),
         'WordFlower.test.tao': nextTestSource,
       },
       async paths => {
-        const next = await Workspace.validate(paths['WordFlower.tao']!)
         const nextTest = await Workspace.validate(paths['WordFlower.test.tao']!)
 
-        Expect(next.diagnostics).toEqual([])
         Expect(nextTest.diagnostics).toEqual([])
-        Expect(normalizedAst(next.entry.ast)).toEqual(normalizedAst(current.entry.ast))
         Expect(normalizedAst(nextTest.entry.ast)).toEqual(normalizedAst(currentTest.entry.ast))
       },
     )
@@ -1290,6 +1318,16 @@ Describe('minimal Tao parser', () => {
     ])
   })
 })
+
+function expectWordFlowerPairState(next: string, current: string, nextHeader: string): boolean {
+  if (next === current) {
+    Expect(next).toBe(current)
+    return true
+  }
+  Expect(next).not.toBe(current)
+  Expect(nextHeader).toContain(wordFlowerOpenTrancheHeader)
+  return false
+}
 
 function normalizedAst(value: unknown): unknown {
   if (Array.isArray(value)) {

@@ -7,6 +7,8 @@ const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.
 const wordFlowerTestPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.test.tao')
 const wordFlowerNextPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next')
 const wordFlowerNextTestPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.test.tao-next')
+const wordFlowerOpenTrancheHeader = '// Tranche status: open'
+const wordFlowerAbsorbedTrancheHeader = '// Tranche status: absorbed'
 const tsFence = '```ts'
 const fence = '```'
 
@@ -19,22 +21,51 @@ Describe('Tao formatter WordFlower apps', () => {
     Expect(await Formatter.formatFile(wordFlowerTestPath)).toBe(await FS.readText(wordFlowerTestPath))
   })
 
-  // The absorption gate: skips while a Next tranche is open (Next then carries unimplemented
-  // syntax); absorbing the tranche makes the files byte-identical, which re-arms the gate.
-  Test('formats the Next contract and sidecar to Current fixed points', async () => {
+  Test('declares whether the WordFlower Next contract is open or absorbed', async () => {
     const nextSource = await FS.readText(wordFlowerNextPath)
-    if (nextSource !== await FS.readText(wordFlowerPath)) {
+    const appMatches = nextSource === await FS.readText(wordFlowerPath)
+    const sidecarMatches = await FS.readText(wordFlowerNextTestPath) === await FS.readText(wordFlowerTestPath)
+
+    Expect(nextSource).toContain(
+      appMatches && sidecarMatches ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+    )
+  })
+
+  Test('formats the matching WordFlower Next app to the Current fixed point', async () => {
+    const nextSource = await FS.readText(wordFlowerNextPath)
+    const currentSource = await FS.readText(wordFlowerPath)
+    if (!expectWordFlowerPairState(nextSource, currentSource, nextSource)) {
       return
     }
     const next = await Formatter.formatCode(nextSource)
-    const nextTest = await Formatter.formatCode(await FS.readText(wordFlowerNextTestPath))
 
-    Expect(next).toBe(await FS.readText(wordFlowerPath))
-    Expect(nextTest).toBe(await FS.readText(wordFlowerTestPath))
+    Expect(next).toBe(currentSource)
     Expect(await Formatter.formatCode(next)).toBe(next)
+  })
+
+  Test('formats the matching WordFlower Next sidecar to the Current fixed point', async () => {
+    const nextSource = await FS.readText(wordFlowerNextPath)
+    const nextTestSource = await FS.readText(wordFlowerNextTestPath)
+    const currentTestSource = await FS.readText(wordFlowerTestPath)
+    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextSource)) {
+      return
+    }
+    const nextTest = await Formatter.formatCode(nextTestSource)
+
+    Expect(nextTest).toBe(currentTestSource)
     Expect(await Formatter.formatCode(nextTest)).toBe(nextTest)
   })
 })
+
+function expectWordFlowerPairState(next: string, current: string, nextHeader: string): boolean {
+  if (next === current) {
+    Expect(next).toBe(current)
+    return true
+  }
+  Expect(next).not.toBe(current)
+  Expect(nextHeader).toContain(wordFlowerOpenTrancheHeader)
+  return false
+}
 
 Describe('Tao formatter data declarations', () => {
   Test('formats reshaped fields, relation modifiers, boolean cases, and bare now defaults', async () => {
