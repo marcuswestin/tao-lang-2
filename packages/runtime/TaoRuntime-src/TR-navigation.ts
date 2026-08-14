@@ -2,6 +2,12 @@ import { Errors, Switch } from '@shared/core'
 import React from 'react'
 import { DataControls } from './TR-data'
 import {
+  type Evaluable,
+  RuntimeDialogue,
+  RuntimeNavigationResult,
+  RuntimePresentable,
+} from './TR-navigation-presentables'
+import {
   backNavigation,
   clearActiveBackTarget,
   registerNavigation,
@@ -12,10 +18,6 @@ import {
 import { requireReactNativeRuntime } from './TR-react-native'
 import { type TaoDialogueOccurrence, type TaoProps, TaoPropsControls } from './TR-TaoProps'
 import { Views } from './TR-views'
-
-type Evaluable = {
-  evaluate(): { jsValue: unknown }
-}
 
 export type TaoNavigationArguments = Record<string, Evaluable>
 
@@ -369,40 +371,6 @@ function resolveStrictAppTarget(
     `Cannot ${operation} app '${target.declaration.name}': no enclosing instance matches its declaration.`,
     { details: { appDeclaration: target.declaration.name, operation } },
   )
-}
-
-/** RuntimePresentable is an evaluable UI descriptor used by aliases and configured navs. */
-class RuntimePresentable {
-  readonly kind = 'ui'
-
-  constructor(readonly definition: TaoPresentableDefinition) {}
-
-  get name(): string {
-    return this.definition.name
-  }
-
-  evaluate(): this {
-    return this
-  }
-
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode {
-    return this.definition.render(arguments_, taoProps)
-  }
-}
-
-/** RuntimeDialogue is a declaration descriptor; each ask creates separate mutable occurrence state. */
-class RuntimeDialogue {
-  readonly kind = 'dialogue'
-
-  constructor(readonly definition: TaoDialogueDefinition) {}
-
-  get name(): string {
-    return this.definition.name
-  }
-
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode {
-    return this.definition.render(arguments_, taoProps)
-  }
 }
 
 /** RuntimeNavigationValue is the shared process-local contract for configured navigation values. */
@@ -1483,15 +1451,6 @@ function dialogueProps(
   dialogue: DialogueOccurrenceState,
 ): TaoProps {
   return { ...props, dialogue, navigation }
-}
-
-/** RuntimeNavigationResult supplies the same evaluable shape as TR.Value without a runtime cycle. */
-class RuntimeNavigationResult {
-  constructor(readonly jsValue: unknown) {}
-
-  evaluate(): this {
-    return this
-  }
 }
 
 function isNavigation(value: TaoPresentable | TaoNavigationValue): value is TaoNavigationValue {
