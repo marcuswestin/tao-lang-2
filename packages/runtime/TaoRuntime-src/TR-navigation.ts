@@ -15,8 +15,14 @@ import {
   resetNavigationRuntime,
   setActiveBackTarget,
 } from './TR-navigation-registry'
+import type {
+  DialogueOccurrenceState,
+  OverlayEntry,
+  PresentableEntry,
+  Subscription,
+} from './TR-navigation-state'
 import { requireReactNativeRuntime } from './TR-react-native'
-import { type TaoDialogueOccurrence, type TaoProps, TaoPropsControls } from './TR-TaoProps'
+import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 import { Views } from './TR-views'
 
 export type TaoNavigationArguments = Record<string, Evaluable>
@@ -141,30 +147,9 @@ export type TaoNavKind<
   reset(mount: TaoNavMount<ProfileT, ConfigurationT>): void
 }>
 
-type PresentableEntry = {
-  arguments: TaoNavigationArguments
-  instanceId: number
-  presentable: TaoPresentable
-}
-
-type DialogueOccurrenceState = TaoDialogueOccurrence & {
-  resolve(value: Evaluable): void
-  settled: boolean
-}
-
-type OverlayEntry = Omit<PresentableEntry, 'presentable'> & {
-  dialogue?: DialogueOccurrenceState
-  presentable: TaoPresentable | TaoDialogue
-}
-
 type ToastEntry = PresentableEntry & {
   key: string
   timeout: ReturnType<typeof setTimeout>
-}
-
-type Subscription = {
-  snapshot(): number
-  subscribe(listener: () => void): () => void
 }
 
 /** NavigationControls is the deterministic generated-code API for Tao navigation. */
