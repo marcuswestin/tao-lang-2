@@ -1,8 +1,6 @@
-import Compiler from '@compiler'
 import Formatter from '@formatter'
-import { Parser } from '@parser'
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
-import Validator from '@validator'
+import Workspace from '@workspace'
 import { OutputText } from '../cli/OutputText'
 
 const fixtureRelativePath = 'Apps/WordFlower/1 - Current/WordFlower.tao'
@@ -58,55 +56,56 @@ export async function runLanguagePerformance(iterations = defaultIterations): Pr
   assertIterations(iterations)
 
   const fixturePath = Repo.resolvePath(fixtureRelativePath)
+  const fixtureDirectory = FS.dirname(fixturePath)
   const source = await FS.readText(fixturePath)
   const wallStartedAt = performance.now()
   const results: LanguagePerformanceResult[] = []
 
   results.push(
     await measureCase('parse', 'one-shot', iterations, async () => async () => {
-      await Parser.parseCode(source, { validation: false })
+      await Workspace.parse(fixturePath)
     }),
   )
   results.push(
     await measureCase('parse', 'session', iterations, async () => {
-      const context = Parser.createContext()
-      return async () => await Parser.parseSource(context, source, { validation: false })
+      const workspace = await Workspace.open(fixtureDirectory)
+      return async () => await workspace.parse(fixturePath)
     }),
   )
 
   results.push(
     await measureCase('validate', 'one-shot', iterations, async () => async () => {
-      await Validator.validateCode(source)
+      await Workspace.validate(fixturePath)
     }),
   )
   results.push(
     await measureCase('validate', 'session', iterations, async () => {
-      const session = await Validator.createSession()
-      return async () => await session.validateCode(source)
+      const workspace = await Workspace.open(fixtureDirectory)
+      return async () => await workspace.validate(fixturePath)
     }),
   )
 
   results.push(
     await measureCase('compile', 'one-shot', iterations, async () => async () => {
-      await Compiler.compileCode(source, { appName: 'WordFlower' })
+      await Workspace.compile(fixturePath, { appName: 'WordFlower' })
     }),
   )
   results.push(
     await measureCase('compile', 'session', iterations, async () => {
-      const session = await Compiler.createSession()
-      return async () => await session.compileCode(source, { appName: 'WordFlower' })
+      const workspace = await Workspace.open(fixtureDirectory)
+      return async () => await workspace.compile(fixturePath, { appName: 'WordFlower' })
     }),
   )
 
   results.push(
     await measureCase('format', 'one-shot', iterations, async () => async () => {
-      await Formatter.formatCode(source)
+      await Formatter.formatFile(fixturePath)
     }),
   )
   results.push(
     await measureCase('format', 'session', iterations, async () => {
       const session = Formatter.createSession()
-      return async () => await session.formatCode(source)
+      return async () => await session.formatFile(fixturePath)
     }),
   )
 

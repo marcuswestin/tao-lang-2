@@ -13,6 +13,8 @@
     "tao-shared": "workspace:*"
   },
   "devDependencies": {
-    "@types/react": "^19.2.17"
+    "@types/react": "^19.2.17",
+    "tao-formatter": "workspace:*",
+    "tao-workspace": "workspace:*"
   }
 }

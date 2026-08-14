@@ -38,8 +38,7 @@ fix: _parser-gen
 check: _compile-word-flower-app _parallel-check
 
 # Benchmark cold and steady-state language-service performance
-bench iterations="10":
-    bun test packages/dev/performance-checks/language-performance.test.ts
+bench iterations="10": _bench-check
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 
 # Compile a Tao app path relative to the invocation directory into the local runtime host
@@ -75,10 +74,13 @@ _agent-config:
     bun run scripts/generate-agent-config.ts
 
 [parallel]
-_parallel-check: _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test
+_parallel-check: _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _bench-check
 
 [parallel]
-_parallel-verify-check: _ide-extension-build _repo-lint _typecheck _test
+_parallel-verify-check: _ide-extension-build _repo-lint _typecheck _test _bench-check
+
+_bench-check:
+    bun test packages/dev/performance-checks/language-performance.test.ts
 
 _compile-word-flower-app: _parser-gen
     ./tao compile "{{ WORD_FLOWER_APP }}" --app WordFlower
