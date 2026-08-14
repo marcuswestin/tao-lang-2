@@ -18,6 +18,18 @@ import {
 } from './TR-data-persistence'
 import { MemoryProvider, UnboundProvider } from './TR-data-provider'
 import {
+  beginTest as beginDataTest,
+  bindConfiguredDataSchema,
+  type DataStatus,
+  emitDataChange,
+  endTest as endDataTest,
+  isDataTestMode,
+  registerDataSchema,
+  revision as dataRevision,
+  setTestStatus as setDataTestStatus,
+  subscribeAll as subscribeToAllData,
+} from './TR-data-registry'
+import {
   compare,
   type Evaluable,
   evaluatedFields,
@@ -29,7 +41,6 @@ import {
 
 export { DataProviderControls, testProvider } from './TR-data-provider'
 
-type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'
 
@@ -110,12 +121,6 @@ type RuntimeValueFactory = <T>(value: T) => Evaluable
 
 type DeleteTarget = { entity: string; id: string }
 
-let testMode = false
-const schemas = new Set<RuntimeDataSchema>()
-const activeTestSchemas = new Set<RuntimeDataSchema>()
-const globalListeners = new Set<() => void>()
-let globalRevision = 0
-
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
   const storageKey = configuredStorageKey(source)
   React.useLayoutEffect(() => {
@@ -175,14 +180,14 @@ export const DataControls = {
     providerStorageKey?: string,
   ): RuntimeDataSchema {
     const selectedProvider = provider
-      ?? (testMode ? MemoryProvider() : UnboundProvider(definition.name))
+      ?? (isDataTestMode() ? MemoryProvider() : UnboundProvider(definition.name))
     const schema = new RuntimeDataSchema(
       definition,
       selectedProvider,
-      testMode ? 'test' : provider ? undefined : 'unbound',
+      isDataTestMode() ? 'test' : provider ? undefined : 'unbound',
       providerStorageKey,
     )
-    schemas.add(schema)
+    registerDataSchema(schema)
     return schema
   },
 
@@ -192,11 +197,7 @@ export const DataControls = {
     declaration: TaoDatasourceDeclaration,
     storageKey?: string,
   ): void {
-    if (testMode) {
-      activeTestSchemas.add(schema)
-      return
-    }
-    schema.bindConfigured(declaration, storageKey)
+    bindConfiguredDataSchema(schema, declaration, storageKey)
   },
 
   /** UseConfigured binds a declaration-owned datasource configuration at an app root. */
@@ -251,38 +252,27 @@ export const DataControls = {
 
   /** subscribeAll is the app/navigation seam for rerendering entity-valued screens after data changes. */
   subscribeAll(listener: () => void): () => void {
-    globalListeners.add(listener)
-    return () => globalListeners.delete(listener)
+    return subscribeToAllData(listener)
   },
 
   /** revision returns the global data revision used with subscribeAll. */
   revision(): number {
-    return globalRevision
+    return dataRevision()
   },
 
   /** beginTest isolates every schema behind a fresh in-memory provider for one Tao check. */
   beginTest(): void {
-    testMode = true
-    activeTestSchemas.clear()
-    for (const schema of schemas) {
-      schema.configure(MemoryProvider(), 'test')
-    }
+    beginDataTest()
   },
 
   /** endTest restores normal schema creation after a Tao check. */
   endTest(): void {
-    testMode = false
-    activeTestSchemas.clear()
+    endDataTest()
   },
 
   /** setTestStatus drives deterministic query loading and provider-error behavior in Tao tests. */
   setTestStatus(status: DataStatus, message = ''): void {
-    if (activeTestSchemas.size === 0) {
-      throw new Error('A `data` step requires the running app to declare a Datasource.')
-    }
-    for (const schema of activeTestSchemas) {
-      schema.setStatus(status, message)
-    }
+    setDataTestStatus(status, message)
   },
 } as const
 
@@ -594,13 +584,7 @@ class RuntimeDataSchema {
 
   private emit(): void {
     this.version += 1
-    globalRevision += 1
-    for (const listener of this.listeners) {
-      listener()
-    }
-    for (const listener of globalListeners) {
-      listener()
-    }
+    emitDataChange(this.listeners)
   }
 
   private failLoad(generation: number, error: unknown): void {

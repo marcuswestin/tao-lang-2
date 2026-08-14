@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 69 commits, 2026-08-14
+Last touched-package re-sweep: after 70 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -71,7 +71,7 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 - Tracked non-generated TypeScript/TSX: 49,201 lines, up 165 from baseline. The completed
   navigation split accounts for 201 added physical lines; all other work through the first three
   validator test seams has net-deleted 36 lines.
-- Complexity-qualified source functions: 69, down three from baseline. No cleanup-written function
+- Complexity-qualified source functions: 70, down two from baseline. No cleanup-written function
   newly qualifies; moved navigation functions retain their pre-existing shapes.
 - Files over 400 lines: 25 (12 source, 13 test); six tests remain over 800 lines. Navigation removes
   one oversized source owner, while the first three validator splits deliberately add three
@@ -87,7 +87,7 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 - Tracked non-generated TypeScript/TSX: 49,272 lines, up 236 from baseline. The completed
   navigation split adds 201 physical lines and the validator/runtime test splits add 136; all
   other work net-deletes 101 lines.
-- Complexity-qualified source functions: 69, down three from baseline; no cleanup-written function
+- Complexity-qualified source functions: 70, down two from baseline; no cleanup-written function
   newly qualifies. Files over 400 lines: 30 (12 source, 18 test), reflecting the completed
   validator split into sub-800 owners. Five tests remain over 800 lines, down one from baseline.
 - The refined mechanical R1 scan still flags 72 conditions. Value review finds no new
@@ -105,7 +105,7 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 - Tracked non-generated TypeScript/TSX: 49,319 lines, up 283 from baseline. The completed source
   navigation split still accounts for 201 added physical lines; the remaining growth is structural
   overhead from splitting the chartered test monoliths into readable, independently owned suites.
-- Complexity-qualified source functions remain at 69, down three from baseline; no
+- Complexity-qualified source functions remain at 70, down two from baseline; no
   cleanup-written function newly qualifies. Files over 400 lines: 33 (12 source, 21 test), while
   only three tests remain over 800 lines: parser, compiler, and formatter.
 - The refined mechanical R1 scan still flags 72 conditions. Value review finds no new
@@ -118,7 +118,7 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 
 - Tracked non-generated TypeScript/TSX: 49,446 lines, up 410 from baseline. All chartered oversized
   test splits are complete, and no test file remains over 800 lines.
-- Complexity-qualified source functions remain at 69, down three from baseline; no
+- Complexity-qualified source functions remain at 70, down two from baseline; no
   cleanup-written function newly qualifies. Files over 400 lines: 29 (six source, 23 test). Only
   two of the six source owners still have a qualifying second concept; four are cohesive owners
   deliberately left intact.
@@ -128,6 +128,20 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 - The refined mechanical R1 scan still flags 72 conditions, native `switch` remains at zero, and
   the exhaustive R13 audit has no known missed conversion. A fresh post-R3 sequential-branch sweep
   remains required before the hard stop.
+
+## Seventy-commit checkpoint
+
+- Tracked non-generated TypeScript/TSX: 49,574 lines, up 538 from baseline. Invocation binding is
+  fully split below threshold, and six of the seven runtime-data seams are now extracted.
+- The pinned AST scan finds 70 complexity-qualified source functions, down two from the 72-function
+  baseline and unchanged from commit 61. Re-running that same scan against both revisions exposed a
+  one-count transcription error in the thirty-through-sixty checkpoint prose, corrected above.
+- Files over 400 lines: 28 (five source, 23 test); no test exceeds 800 lines. Runtime data is the
+  only remaining qualifying source split, while `Type`, `value-scope`, `TR`, and `Packages` remain
+  cohesive owners deliberately left intact.
+- The refined R1 scan still flags 72 conditions. Native `switch` remains at zero, and a fresh R13
+  audit of 15 else-if chains, 15 nested-ternary roots, 222 adjacent-if runs, and 128 terminal-if
+  runs found no missed closed-union conversion.
 
 ## Added rules
 
@@ -172,8 +186,9 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` persistence                  | R3              |   105 moved, net +11 |       1/105 | Extract snapshot types, envelope parsing, and stored-row validation into a 116-line owner, reducing the runtime-data facade from 958 to 853 lines with all ten declarations unchanged.             |
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` entity handles               | R3              |     38 moved, net +8 |        1/38 | Extract entity-handle identity, metadata, and lookup into a 46-line owner, reducing the runtime-data facade from 853 to 815 lines through a type-only schema backedge.                             |
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` row and query values         | R3              |   121 moved, net +14 |       1/121 | Extract row normalization, stored-field conversion, filter evaluation, and comparison into a 135-line owner, reducing the runtime-data facade from 815 to 694 lines.                               |
+| done               | `packages/runtime/TaoRuntime-src/TR-data.ts` global registry              | R3              |    16 moved, net +54 |        1/16 | Extract schema/test registries and global subscriptions into a 70-line owner, preserving test-mode timing and local-version/global-revision/local-listener/global-listener observation order.      |
 | in progress        | 5 non-chartered source files currently over 400 lines                     | R3              |     inspect per seam |       1/TBD | Runtime data remains queued; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                                              |
-| queued             | 69 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                                    |
+| queued             | 70 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                                    |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                                   |
 | done               | `packages/dev/dev-src/commands/code-review/planner.ts` timeouts           | R6 / charter 4  |                   11 |        6/11 | Reuse the two owning review-timeout constants across six provider outcomes, collapsing the repeated values and net-deleting five lines.                                                            |
 | done               | repeated Android, compiler assertion, and unexpected-error messages       | R12 / charter 4 |                   26 |        6/26 | Replace ten byte-identical message literals in four owners with four local constants; four abstractions each pay at two or three sites.                                                            |
