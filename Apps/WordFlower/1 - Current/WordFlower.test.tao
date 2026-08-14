@@ -1,3 +1,4 @@
+// Tranche status: absorbed
 use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest from ./
 
 test "WordFlower functional MVP" {

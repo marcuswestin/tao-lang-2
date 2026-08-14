@@ -901,15 +901,19 @@ Describe('minimal Tao parser', () => {
 
   Test('declares whether the WordFlower Next contract is open or absorbed', async () => {
     const currentSource = await FS.readText(wordFlowerPath)
+    const currentTestSource = await FS.readText(wordFlowerTestPath)
     const nextSource = await FS.readText(wordFlowerNextPath)
     const nextTestSource = await FS.readText(wordFlowerNextTestPath)
-    const appMatches = nextSource === currentSource
-    const sidecarMatches = nextTestSource === await FS.readText(wordFlowerTestPath)
 
     expectWordFlowerTrancheStatus(currentSource, wordFlowerAbsorbedTrancheHeader)
+    expectWordFlowerTrancheStatus(currentTestSource, wordFlowerAbsorbedTrancheHeader)
     expectWordFlowerTrancheStatus(
       nextSource,
-      appMatches && sidecarMatches ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+      nextSource === currentSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+    )
+    expectWordFlowerTrancheStatus(
+      nextTestSource,
+      nextTestSource === currentTestSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
     )
   })
 
@@ -934,10 +938,9 @@ Describe('minimal Tao parser', () => {
   })
 
   Test('gates the WordFlower Next test sidecar independently', async () => {
-    const nextSource = await FS.readText(wordFlowerNextPath)
     const nextTestSource = await FS.readText(wordFlowerNextTestPath)
     const currentTestSource = await FS.readText(wordFlowerTestPath)
-    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextSource)) {
+    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextTestSource)) {
       return
     }
     const currentTest = await Workspace.parse(wordFlowerTestPath)

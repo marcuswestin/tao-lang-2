@@ -23,14 +23,19 @@ Describe('Tao formatter WordFlower apps', () => {
 
   Test('declares whether the WordFlower Next contract is open or absorbed', async () => {
     const currentSource = await FS.readText(wordFlowerPath)
+    const currentTestSource = await FS.readText(wordFlowerTestPath)
     const nextSource = await FS.readText(wordFlowerNextPath)
-    const appMatches = nextSource === currentSource
-    const sidecarMatches = await FS.readText(wordFlowerNextTestPath) === await FS.readText(wordFlowerTestPath)
+    const nextTestSource = await FS.readText(wordFlowerNextTestPath)
 
     expectWordFlowerTrancheStatus(currentSource, wordFlowerAbsorbedTrancheHeader)
+    expectWordFlowerTrancheStatus(currentTestSource, wordFlowerAbsorbedTrancheHeader)
     expectWordFlowerTrancheStatus(
       nextSource,
-      appMatches && sidecarMatches ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+      nextSource === currentSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+    )
+    expectWordFlowerTrancheStatus(
+      nextTestSource,
+      nextTestSource === currentTestSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
     )
   })
 
@@ -47,10 +52,9 @@ Describe('Tao formatter WordFlower apps', () => {
   })
 
   Test('formats the matching WordFlower Next sidecar to the Current fixed point', async () => {
-    const nextSource = await FS.readText(wordFlowerNextPath)
     const nextTestSource = await FS.readText(wordFlowerNextTestPath)
     const currentTestSource = await FS.readText(wordFlowerTestPath)
-    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextSource)) {
+    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextTestSource)) {
       return
     }
     const nextTest = await Formatter.formatCode(nextTestSource)
