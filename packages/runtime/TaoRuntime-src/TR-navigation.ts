@@ -1,6 +1,15 @@
 import { Errors, Switch } from '@shared/core'
 import React from 'react'
 import { DataControls } from './TR-data'
+import {
+  configureNavigation,
+  createAppDeclaration,
+  createNavDeclaration,
+  freezeNavConfiguration,
+  isConfiguredNavigation,
+  mountConfiguredNavigation,
+  resolveNavigationTarget,
+} from './TR-navigation-configuration'
 import { RuntimeSelectionNav, RuntimeSlotNav, RuntimeStackNav } from './TR-navigation-mounts'
 import {
   type Evaluable,
@@ -18,7 +27,6 @@ import {
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
 import { NavigationBackAffordance, navigationHostStyle } from './TR-navigation-surfaces'
 import { RuntimeNavigationValue } from './TR-navigation-value'
-import { isPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 
@@ -153,7 +161,7 @@ type ToastEntry = PresentableEntry & {
 export const NavigationControls = {
   /** AppDeclaration creates one process-local source declaration identity for app configurations. */
   AppDeclaration(name: string): TaoAppDeclaration {
-    return Object.freeze({ identity: Symbol(name), name })
+    return createAppDeclaration(name)
   },
 
   /** Declaration binds one Tao declaration identity to its package-scope implementation. */
@@ -167,13 +175,7 @@ export const NavigationControls = {
     declaration: TaoImplementedNavDeclaration,
     config: Record<string, unknown>,
   ): TaoConfiguredNavigation {
-    let configured: TaoConfiguredNavigation
-    configured = Object.freeze({
-      config: freezeNavConfiguration(config),
-      declaration,
-      evaluate: () => configured,
-    })
-    return configured
+    return configureNavigation(declaration, config)
   },
 
   /** Mount creates independent navigation state for one configured descriptor occurrence. */
@@ -527,7 +529,7 @@ class RuntimeAppDefinition implements Subscription {
   readonly declaration: TaoAppDeclaration
 
   constructor(readonly definition: TaoAppDefinition) {
-    this.declaration = definition.declaration ?? NavigationControls.AppDeclaration(definition.name)
+    this.declaration = definition.declaration ?? createAppDeclaration(definition.name)
   }
 
   readonly subscribe = (listener: () => void): () => void => {
@@ -704,137 +706,6 @@ const toastLayerStyle = {
   right: 0,
   zIndex: 2,
 } as const
-
-function resolveNavigationTarget(
-  taoProps: TaoProps | undefined,
-  target: TaoNavigationInput | undefined,
-): TaoNavigationValue | undefined {
-  if (!target) {
-    return TaoPropsControls.navigationInChain(taoProps)
-  }
-  if (!isConfiguredNavigation(target)) {
-    return target
-  }
-  const app = TaoPropsControls.appInChain(taoProps)
-  const mounted = app?.resolve(target)
-  if (!mounted) {
-    throw new Error(
-      `Cannot resolve configured navigation '${target.declaration.name}': it is not mounted in the enclosing app.`,
-    )
-  }
-  return mounted
-}
-
-function mountConfiguredNavigation(
-  configured: TaoConfiguredNavigation,
-  registerMount?: (configured: TaoConfiguredNavigation, mount: TaoNavigationValue) => void,
-): TaoNavigationValue {
-  const kind = configured.declaration.kind
-  const config = normalizeConfiguredNavigation(configured, registerMount)
-  const descriptor = kind.configure(configured.declaration, config)
-  const mount = registerNavigation(kind.mount(descriptor) as RuntimeNavigationValue)
-  registerMount?.(configured, mount)
-  return mount
-}
-
-function normalizeConfiguredNavigation(
-  configured: TaoConfiguredNavigation,
-  registerMount?: (configured: TaoConfiguredNavigation, mount: TaoNavigationValue) => void,
-): Record<string, unknown> {
-  const config = configured.config
-  if (configured.declaration.kind.profile === 'stack' || configured.declaration.kind.profile === 'slot') {
-    return {
-      initial: configuredPresentable(config['Initial'], configured.declaration.name, 'Initial', registerMount),
-      name: configured.declaration.name,
-    }
-  }
-  const items = Object.fromEntries(
-    Object.entries(config)
-      .filter(([key, value]) => key.startsWith('@') && isPlainRecord(value))
-      .map(([sourceKey, value]) => {
-        const key = sourceKey.slice(1)
-        const item = value as Record<string, unknown>
-        return [key, {
-          content: configuredPresentable(
-            item['Content'],
-            configured.declaration.name,
-            `@${key}.Content`,
-            registerMount,
-          ),
-          label: configuredEvaluable(item['Label'], configured.declaration.name, `@${key}.Label`),
-        }]
-      }),
-  )
-  return {
-    display: configuredEvaluable(config['Display'], configured.declaration.name, 'Display'),
-    initial: configuredKey(config['Initial'], configured.declaration.name, 'Initial'),
-    items,
-    name: configured.declaration.name,
-  }
-}
-
-function configuredEvaluable(value: unknown, name: string, property: string): Evaluable {
-  if (isPresentable(value) || !value || typeof (value as Evaluable).evaluate !== 'function') {
-    throw new Error(`${name} configuration '${property}' expects a scalar Tao value.`)
-  }
-  return value as Evaluable
-}
-
-function configuredPresentable(
-  value: unknown,
-  name: string,
-  property: string,
-  registerMount?: (configured: TaoConfiguredNavigation, mount: TaoNavigationValue) => void,
-): TaoPresentable | TaoNavigationValue {
-  const mounted = isConfiguredNavigation(value) ? mountConfiguredNavigation(value, registerMount) : value
-  if (!isPresentable(mounted)) {
-    throw new Error(`${name} configuration '${property}' expects ui or nav.`)
-  }
-  return mounted
-}
-
-function configuredKey(value: unknown, name: string, property: string): string {
-  const key = configuredEvaluable(value, name, property).evaluate().jsValue
-  if (typeof key !== 'string' || !key.startsWith('@')) {
-    throw new Error(`${name} configuration '${property}' expects an @key.`)
-  }
-  return key.slice(1)
-}
-
-function isConfiguredNavigation(value: unknown): value is TaoConfiguredNavigation {
-  return typeof value === 'object' && value !== null
-    && 'declaration' in value && 'config' in value && 'evaluate' in value
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
-}
-
-function createNavDeclaration(name: string): TaoNavDeclaration {
-  return Object.freeze({ identity: Symbol(name), name })
-}
-
-function freezeNavConfiguration<ConfigurationT extends object>(
-  config: ConfigurationT,
-): Readonly<ConfigurationT> {
-  return freezePlainNavValue(config)
-}
-
-function freezePlainNavValue<ValueT>(value: ValueT): ValueT {
-  // Nested descriptors are declaration identities, not plain configuration records to clone.
-  if (isConfiguredNavigation(value)) {
-    return value
-  }
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map(item => freezePlainNavValue(item))) as ValueT
-  }
-  if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    return Object.freeze(Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, freezePlainNavValue(item)]),
-    )) as ValueT
-  }
-  return value
-}
 
 function conformanceConfiguration(
   profile: TaoNavKindProfile,
