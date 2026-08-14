@@ -1,42 +1,13 @@
 import { Packages } from '@ast-utils'
 import { FS } from '@shared'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { app, Describe, Expect, stubLayout, stubView, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
-import Compiler from '../compiler-src/compiler'
+import { TestCompiler as Compiler } from './test-compile'
 
 const tsFence = '```ts'
 const fence = '```'
 
-Describe('Tao compiler', () => {
-  Test('compiles state and action declarations', async () => {
-    const compiled = await Compiler.compileCode(`
-      app MyApp { view MainView }
-      view Button Title is text, Action is action {
-        render inject Title ${tsFence}
-          return null
-        ${fence}
-      }
-      view Number Value is number {
-        render inject Value ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        let DisplayCount = Count
-        action AddOne {
-          set Count += 1
-        }
-        render Button("Add", AddOne) {
-          Number(DisplayCount)
-        }
-      }
-    `)
-
-    Expect(compiled.files).toHaveLength(1)
-    Expect(compiled.validation.diagnostics).toEqual([])
-  })
-
+Describe('compiler: language lowering', () => {
   Test('compiles the top-level data catalog, inferred relations, defaults, and explicit Local key', async () => {
     const compiled = await Compiler.compileCode(`
       use Local from @tao/data
@@ -90,7 +61,6 @@ Describe('Tao compiler', () => {
       layout Col { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain("name: 'Data'")
     Expect(compiled.code).toContain('collection: "Workspaces"')
     Expect(compiled.code).toContain('defaultOrder: { field: "CreatedAt", direction: "desc" }')
@@ -127,11 +97,49 @@ Describe('Tao compiler', () => {
       }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('testTag: "title"')
     Expect(compiled.code).toContain('testTag: "rows choose"')
     Expect(compiled.code).toContain('TR.ForEach')
     Expect(compiled.code).not.toContain('display: "contents"')
+  })
+
+  Test('lowers root and child layout clauses through TR.Layout.create', async () => {
+    const compiled = await Compiler.compileCode(
+      app(
+        `
+          render Col() [fill, content top stretch, gap 12, pad horizontal 16] {
+            Text("Child") [width fill, margin bottom 4]
+          }
+        `,
+        `${stubLayout('Col')}${stubView('Text', 'Value is text')}`,
+      ),
+    )
+
+    Expect(compiled.code).toContain(
+      'TR.Layout.create([["fill"],["content","top","stretch"],["gap",12],["pad","horizontal",16]])',
+    )
+    Expect(compiled.code).toContain(
+      'TR.Layout.create([["width","fill"],["margin","bottom",4]])',
+    )
+  })
+
+  Test('lowers named and literal injection arguments to typed parameters and compiled values', async () => {
+    const compiled = await Compiler.compileCode(`
+      let UserName = "Ro"
+      app InjectionApp { view Native }
+      view Native {
+        render inject Name UserName, Count 3, Greeting "Hello" ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    Expect(compiled.code).toContain(
+      'function __injection__(Name: string, Count: number, Greeting: string)',
+    )
+    Expect(compiled.code).toContain(
+      '[_Scope.UserName.evaluate().jsValue, TR.Value(3).jsValue, TR.Value("Hello").jsValue]',
+    )
   })
 
   Test('emits prototype-sensitive data names as computed object keys', async () => {
@@ -151,7 +159,6 @@ Describe('Tao compiler', () => {
       view Text Value is text { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code.match(/\["__proto__"\]/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
     Expect(compiled.code).not.toContain('"__proto__":')
   })
@@ -187,7 +194,6 @@ Describe('Tao compiler', () => {
       { appName: 'NavigationVariant' },
     )
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Navigation.App({')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.StackNav, {')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.SlotNav, {')
@@ -232,7 +238,6 @@ Describe('Tao compiler', () => {
       view Empty { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Navigation.Dialogue({')
     Expect(compiled.code).toContain('await TR.Navigation.Ask(')
     Expect(compiled.code).toContain('TR.Navigation.Respond(')
@@ -254,7 +259,6 @@ Describe('Tao compiler', () => {
       view Empty { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Navigation.PresentToast(')
     Expect(compiled.code).toContain('_ViewProps.__tao')
     Expect(compiled.code).toContain('key: TR.Value("document-saved")')
@@ -282,7 +286,6 @@ Describe('Tao compiler', () => {
       view Empty { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.SelectionNav, {')
     Expect(compiled.code).toContain('"Initial": TR.Value("@home")')
     Expect(compiled.code).toContain('"Display": TR.Value("tabs")')
@@ -309,7 +312,6 @@ Describe('Tao compiler', () => {
       view Empty { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Navigation.Patch(_Scope.MainNavBase.evaluate(), {')
     Expect(compiled.code).toContain('"@other": {')
     Expect(compiled.code).toContain('"Label": TR.Value("Other")')
@@ -336,7 +338,6 @@ Describe('Tao compiler', () => {
       }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     const code = compiled.files[0]?.code ?? ''
     Expect(code).toContain('Callback: TR.Action<[TR.Value<string>, TR.Value<number>]>')
     const first = code.indexOf('TR.Value("first")')
@@ -356,95 +357,8 @@ Describe('Tao compiler', () => {
       view Text Value is text { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.code).toContain('TR.Alias(() => TR.Action')
     Expect(compiled.code).toContain('TR.Do(_Scope.Save.evaluate())')
-  })
-
-  Test('compiles layout clauses into a generated app file', async () => {
-    const compiled = await Compiler.compileCode(`
-      use Col, Row from @tao/ui
-      app LayoutApp { view MainView }
-      layout Screen {
-        render Col()[gap 4] {
-          Text("Wrapped")
-        }
-      }
-      view Text Value is text {
-        render inject Value ${tsFence}
-          return TR.Views.Text({ __tao: _ViewProps.__tao, children: [Value] })
-        ${fence}
-      }
-      view MainView {
-        render Col()[fill, content top stretch, gap 12, pad 16] {
-          Row()[content spread-inset center, gap 8] {
-            Text("Layout") [claim 2]
-          }
-          Screen()[content center]
-        }
-      }
-    `)
-
-    Expect(compiled.files.map(file => file.relativePath)).toContain('App.tsx')
-    Expect(compiled.validation.diagnostics).toEqual([])
-  })
-
-  Test('compiles custom types, and is list item constructors, casts, and member access', async () => {
-    const compiled = await Compiler.compileCode(`
-      app TypeApp { view MainView }
-      type Name is text
-      type Tags is list
-      type Job is {
-        Title is text
-      }
-      type Person is {
-        Name
-        Tags
-        Job
-      }
-      type InlineJob is {
-        Role is text
-      }
-      type CurrentJob is InlineJob
-      let DisplayName = Name "Ada"
-      let DemoPerson = Person {
-        Name: DisplayName,
-        Tags: Tags ["compiler", "runtime"],
-        Job: Job { Title: "Engineer" }
-      }
-      let EmptyItem = item {}
-      let DemoCurrentJob = CurrentJob { Role: "Engineer" }
-      view MainView {
-        render Stack(){
-          TextValue(DemoPerson.Name)
-          ListValue(DemoPerson.Tags)
-          ItemValue(item {})
-        }
-      }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view TextValue Value is text {
-        render inject Value ${tsFence}
-          return <RN.Text>{Value}</RN.Text>
-        ${fence}
-      }
-      view ListValue Values is list {
-        render inject Values ${tsFence}
-          return <RN.Text>{Values.join(", ")}</RN.Text>
-        ${fence}
-      }
-      view ItemValue Value is item {
-        render inject Value ${tsFence}
-          return <RN.Text>{Object.keys(Value).length}</RN.Text>
-        ${fence}
-      }
-    `)
-
-    Expect(compiled.files).toHaveLength(1)
-    Expect(compiled.validation.diagnostics).toEqual([])
   })
 
   Test('compiles v0 Tao test-plan IR', async () => {

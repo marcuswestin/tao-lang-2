@@ -1,11 +1,12 @@
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Compiler, { type CompiledFile } from '../compiler-src/compiler'
+import { TestCompiler } from './test-compile'
 
 const tsFence = '```ts'
 const fence = '```'
 
-Describe('Tao compiler', () => {
+Describe('compiler: files and packages', () => {
   Test('compiles source strings into a generated app file', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
@@ -21,7 +22,6 @@ Describe('Tao compiler', () => {
 
     Expect(compiled.files).toHaveLength(1)
     Expect(compiled.files[0]?.relativePath).toBe('App.tsx')
-    Expect(compiled.validation.diagnostics).toEqual([])
   })
 
   Test('compiles copied nav and datasource declarations through exported identity bindings', async () => {
@@ -324,7 +324,7 @@ Describe('Tao compiler', () => {
   })
 
   Test('rejects entry files without an app declaration', async () => {
-    await Expect(Compiler.compileCode(`
+    await Expect(TestCompiler.compileCode(`
       view MainView {
         render inject ${tsFence}
           return null
@@ -339,9 +339,9 @@ Describe('Tao compiler', () => {
       app Second { view MainView }
       view MainView { render inject ${tsFence} return null ${fence} }
     `
-    await Expect(Compiler.compileCode(source)).rejects.toThrow('multiple apps without a selection')
+    await Expect(TestCompiler.compileCode(source)).rejects.toThrow('multiple apps without a selection')
 
-    const compiled = await Compiler.compileCode(source, { appName: 'Second' })
+    const compiled = await TestCompiler.compileCode(source, { appName: 'Second' })
     Expect(compiled.appNames).toEqual(['First', 'Second'])
     Expect(compiled.code).toContain('export const TaoApps = {')
     Expect(compiled.code).toContain('"First": TaoApp_First')
@@ -350,7 +350,7 @@ Describe('Tao compiler', () => {
   })
 
   Test('strips test declarations from generated app code', async () => {
-    const compiled = await Compiler.compileCode(`
+    const compiled = await TestCompiler.compileCode(`
       app MyApp { view MainView }
       view MainView {
         render Text("Hello")

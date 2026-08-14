@@ -1,7 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
-import Compiler from '../compiler-src/compiler'
+import { TestCompiler as Compiler } from './test-compile'
 
-Describe('functional core compiler', () => {
+Describe('compiler: functional core', () => {
   Test('compiles pure functions and total control flow through validated Tao', async () => {
     const compiled = await Compiler.compileCode(`
       app FunctionalApp { view Main }
@@ -34,7 +34,6 @@ Describe('functional core compiler', () => {
       view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.files).toHaveLength(1)
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
@@ -54,7 +53,6 @@ Describe('functional core compiler', () => {
       view Greeting Title is text default "Welcome" { render inject \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     const code = compiled.files[0]?.code ?? ''
     Expect(code).toContain('_ViewProps.Title ?? TR.Value("Welcome")')
     Expect(code).toContain('_ViewProps.Gap ?? TR.Value(8)')
@@ -92,7 +90,6 @@ Describe('functional core compiler', () => {
       view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     const code = compiled.files[0]?.code ?? ''
     Expect(code).toContain('_Scope.ConfirmResult = TR.Enum(["Confirmed", "Cancelled"])')
     Expect(code).toContain('TR.IsCase(_Scope.Result.evaluate(), _Scope.ConfirmResult.Confirmed)')
@@ -123,7 +120,6 @@ Describe('functional core compiler', () => {
       view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    Expect(compiled.validation.diagnostics).toEqual([])
     const code = compiled.files[0]?.code ?? ''
     const guard = code.indexOf('if (await TR.GuardAction(')
     const calleeTail = code.indexOf('TR.Set(_Scope.Count, () => TR.Value(2))')

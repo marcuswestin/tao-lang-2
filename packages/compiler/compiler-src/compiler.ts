@@ -32,6 +32,11 @@ export type CompileOptions = {
   appName?: string
 }
 
+/** CompilerSession reuses standalone validation and package state across source strings. */
+export type CompilerSession = {
+  compileCode(code: string, options?: CompileOptions): Promise<CompileResult>
+}
+
 /** CompilerContext declares shared compiler invocation state. */
 export type CompilerContext = {
   packagesContext: Packages.Context
@@ -43,10 +48,21 @@ function createContext(packagesContext: Packages.Context, sourceRoot: string): C
   return { packagesContext, sourceRoot }
 }
 
+/** createSession creates a reusable standalone compiler context for batch compilation. */
+async function createSession(): Promise<CompilerSession> {
+  const packagesContext = await Packages.createContext(codeProjectRoot)
+  const validatorSession = await Validator.createSession(packagesContext)
+  const compilerContext = createContext(packagesContext, codeProjectRoot)
+  return {
+    async compileCode(code: string, options: CompileOptions = {}): Promise<CompileResult> {
+      return compileValidated(await validatorSession.validateCode(code), compilerContext, options)
+    },
+  }
+}
+
 /** compileCode compiles Tao source code using standalone parser and validator contexts. */
 async function compileCode(code: string, options: CompileOptions = {}): Promise<CompileResult> {
-  const packagesContext = await Packages.createContext(codeProjectRoot)
-  return compileValidated(await Validator.validateCode(code), createContext(packagesContext, codeProjectRoot), options)
+  return await (await createSession()).compileCode(code, options)
 }
 
 /** compileValidated compiles an already validated Tao app into Expo-compatible TSX source. */
@@ -76,6 +92,7 @@ function compileValidated(
 /** Compiler exposes Tao source compilation functions. */
 const Compiler = {
   createContext,
+  createSession,
   compileCode,
   compileTestPlan,
   compileValidated,
