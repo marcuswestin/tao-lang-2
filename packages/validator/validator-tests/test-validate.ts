@@ -2,6 +2,9 @@ import { Diagnostics } from '@shared'
 import { Expect } from '@shared/test'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 
+export const tsFence = '```ts'
+export const fence = '```'
+
 /** testValidateCode validates Tao source and asserts it has no error diagnostics. */
 export async function testValidateCode(source: string): Promise<ValidationResult> {
   const result = await validateCode(source)
