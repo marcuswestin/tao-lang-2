@@ -36,7 +36,7 @@ export const dataWriteValidationChecks = {
 
 function validateCreate(create: AST.CreateStatement, ctx: ValidationContext): void {
   if (create.entity.ref) {
-    validateWriteFields(create.entity.ref, create.block.fields, true, ctx)
+    validateWriteFields(create.entity.ref, create.block.fields, ctx, { requireAll: true })
   }
 }
 
@@ -45,7 +45,7 @@ function validateUpdate(update: AST.UpdateStatement, ctx: ValidationContext): vo
   if (type?.kind !== 'entity') {
     return
   }
-  validateWriteFields(type.entity, update.block.fields, false, ctx)
+  validateWriteFields(type.entity, update.block.fields, ctx, { requireAll: false })
 }
 
 function validateRowTarget(
@@ -66,8 +66,8 @@ function validateRowTarget(
 function validateWriteFields(
   entity: ASTUtils.DataEntityDefinition,
   fields: readonly AST.DataWriteField[],
-  requireAll: boolean,
   ctx: ValidationContext,
+  { requireAll }: { requireAll: boolean },
 ): void {
   const result = ASTUtils.resolveDataWriteBindings(entity, fields, requireAll)
   for (const diagnostic of result.diagnostics) {

@@ -44,7 +44,7 @@ export const configuredValueValidationChecks = {
       ctx.error(configuredValueValidationMessages.patchTarget(base.name), patch)
       return
     }
-    validateConfigurationBlock(patch.patchBlock, declaration, false, ctx)
+    validateConfigurationBlock(patch.patchBlock, declaration, ctx, { requireConstructorProperties: false })
   },
 } satisfies NodeValidationChecks
 
@@ -61,7 +61,7 @@ export function validateConfiguredValuesFile(file: AST.TaoFile, ctx: ValidationC
       }
       const declaration = appPropertyConfiguredType(root, entry.name)
       if (declaration) {
-        validateConfigurationBlock(entry.value.block, declaration, false, ctx)
+        validateConfigurationBlock(entry.value.block, declaration, ctx, { requireConstructorProperties: false })
       }
     }
   }
@@ -94,7 +94,7 @@ function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationCont
     ctx.error(configuredValueValidationMessages.constructorBlock(declaration.name), value)
     return
   }
-  validateConfigurationBlock(value.block, declaration, true, ctx)
+  validateConfigurationBlock(value.block, declaration, ctx, { requireConstructorProperties: true })
 }
 
 function configuredDeclaration(
@@ -118,8 +118,8 @@ function configuredDeclaration(
 function validateConfigurationBlock(
   block: AST.ConfigurationBlock,
   declaration: AST.ConfigurableDeclaration,
-  requireConstructorProperties: boolean,
   ctx: ValidationContext,
+  { requireConstructorProperties }: { requireConstructorProperties: boolean },
 ): void {
   const typeName = declaration.name
   const properties = AST.configurationPropertiesOf(declaration)

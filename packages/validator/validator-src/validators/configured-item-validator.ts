@@ -137,16 +137,16 @@ function validateConfiguredItemBlock(
   bindConfiguredEntries(
     remainingCandidates,
     remainingExpected,
-    candidateType,
-    (actual, expected) => Type.identityKey(actual) === Type.identityKey(expected),
-    blockedCandidateTypes,
+    {
+      candidateType,
+      matches: (actual, expected) => Type.identityKey(actual) === Type.identityKey(expected),
+      blockedCandidateTypes,
+    },
   )
   bindConfiguredEntries(
     remainingCandidates,
     remainingExpected,
-    candidateType,
-    Type.isAssignable,
-    blockedCandidateTypes,
+    { candidateType, matches: Type.isAssignable, blockedCandidateTypes },
   )
 
   for (const candidate of remainingCandidates) {
@@ -322,9 +322,11 @@ function duplicateTypes<T>(values: readonly T[], getType: (value: T) => ASTUtils
 function bindConfiguredEntries<T extends { entry: AST.ConfigurationEntry }>(
   candidates: Set<T>,
   expected: Set<AST.TypeProperty>,
-  candidateType: (candidate: T) => ASTUtils.TaoType,
-  matches: (actual: ASTUtils.TaoType, expected: ASTUtils.TaoType) => boolean,
-  blockedCandidateTypes: ReadonlySet<string>,
+  { candidateType, matches, blockedCandidateTypes }: {
+    candidateType: (candidate: T) => ASTUtils.TaoType
+    matches: (actual: ASTUtils.TaoType, expected: ASTUtils.TaoType) => boolean
+    blockedCandidateTypes: ReadonlySet<string>
+  },
 ): void {
   for (const candidate of [...candidates]) {
     const actual = candidateType(candidate)

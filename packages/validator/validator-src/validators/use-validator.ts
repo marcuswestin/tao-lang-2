@@ -53,18 +53,25 @@ export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext)
   for (const useStatement of useStatements) {
     reportDuplicateImports(useStatement, ctx)
     reportUnusedImports(useStatement, ctx, referencedNames)
-    validateUseStatement(useStatement, ctx, fromFilePath, localDeclarationNames, previouslyImportedNames)
+    validateUseStatement(useStatement, {
+      ctx,
+      fromFilePath,
+      localDeclarationNames,
+      previouslyImportedNames,
+    })
   }
   reportUseStatementsOutOfSection(file, ctx)
 }
 
-function validateUseStatement(
-  useStatement: AST.UseStatement,
-  ctx: ValidationContext,
-  fromFilePath: string,
-  localDeclarationNames: ReadonlySet<string>,
-  previouslyImportedNames: Set<string>,
-): void {
+type ValidateUseStatementOptions = {
+  ctx: ValidationContext
+  fromFilePath: string
+  localDeclarationNames: ReadonlySet<string>
+  previouslyImportedNames: Set<string>
+}
+
+function validateUseStatement(useStatement: AST.UseStatement, options: ValidateUseStatementOptions): void {
+  const { ctx, fromFilePath, localDeclarationNames, previouslyImportedNames } = options
   const resolution = Packages.resolve(ctx.packagesContext, {
     importPath: useStatement.importPath,
     fromFilePath,
@@ -91,9 +98,12 @@ function validateUseStatement(
     .flatMap(declarationsInFile)
     .filter(declaration => declaration.name.length > 0)
   for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
-    validateImportedName(importedName, useStatement, declarations, resolution, ctx, {
-      localDeclarationNames,
-      previouslyImportedNames,
+    validateImportedName(importedName, {
+      useStatement,
+      declarations,
+      resolution,
+      ctx,
+      seen: { localDeclarationNames, previouslyImportedNames },
     })
   }
 }
@@ -123,17 +133,19 @@ function unresolvedMessage(useStatement: AST.UseStatement): string {
     : useValidationMessages.unresolvedBareUse()
 }
 
-function validateImportedName(
-  importedName: string,
-  useStatement: AST.UseStatement,
-  declarations: readonly DeclarationRecord[],
-  resolution: Packages.Resolution,
-  ctx: ValidationContext,
+type ValidateImportedNameOptions = {
+  useStatement: AST.UseStatement
+  declarations: readonly DeclarationRecord[]
+  resolution: Packages.Resolution
+  ctx: ValidationContext
   seen: {
     localDeclarationNames: ReadonlySet<string>
     previouslyImportedNames: Set<string>
-  },
-): void {
+  }
+}
+
+function validateImportedName(importedName: string, options: ValidateImportedNameOptions): void {
+  const { useStatement, declarations, resolution, ctx, seen } = options
   const matches = declarations.filter(declaration => declaration.name === importedName)
   if (matches.length === 0) {
     ctx.error(useValidationMessages.missingImport(importedName, importLabel(useStatement)), useStatement)
