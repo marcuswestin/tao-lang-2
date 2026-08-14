@@ -227,11 +227,10 @@ export function resolveItemPropertyBindings(
     }
     const actualType = Type.ofExpression(property.value)
     const propertyKey = Type.identityKey(actualType)
-    if (
-      actualType.kind !== 'unresolved'
+    const propertyIsUnmatched = actualType.kind !== 'unresolved'
       && !(propertyKey && duplicateProvidedPropertyTypes.has(propertyKey))
       && !(matchGraph.targetsByCandidate.get(property)?.length)
-    ) {
+    if (propertyIsUnmatched) {
       diagnostics.push({
         kind: 'unmatched-property',
         property,
@@ -316,11 +315,10 @@ export function resolveDataWriteBindings(
     }
     const actual = Type.ofExpression(write.value)
     const key = Type.identityKey(actual)
-    if (
-      actual.kind !== 'unresolved'
+    const writeIsUnmatched = actual.kind !== 'unresolved'
       && !(key && duplicateWriteTypes.has(key))
       && !(graph.targetsByCandidate.get(write)?.length)
-    ) {
+    if (writeIsUnmatched) {
       diagnostics.push({ kind: 'unmatched-write', write })
     }
   }
@@ -667,11 +665,10 @@ export function resolveArgumentBindings(
     }
     const actualType = Type.ofArgument(argument)
     const argumentType = Type.identityKey(actualType)
-    if (
-      actualType.kind !== 'unresolved'
+    const argumentIsUnmatched = actualType.kind !== 'unresolved'
       && !(argumentType && duplicateArgumentTypes.has(argumentType))
       && !(matchGraph.targetsByCandidate.get(argument)?.length)
-    ) {
+    if (argumentIsUnmatched) {
       diagnostics.push({
         kind: 'unmatched-argument',
         argument,

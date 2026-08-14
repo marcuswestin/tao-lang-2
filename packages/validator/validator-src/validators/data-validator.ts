@@ -208,12 +208,11 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
       }
       continue
     }
-    if (
-      fieldType.kind === 'primitive'
+    const usesUnsupportedBooleanComparison = fieldType.kind === 'primitive'
       && fieldType.primitive === 'boolean'
       && clause.operator !== '=='
       && clause.operator !== '!='
-    ) {
+    if (usesUnsupportedBooleanComparison) {
       ctx.error(dataValidationMessages.booleanComparison(field.name, clause.operator), clause)
     }
     if (fieldType.kind === 'entity' && clause.operator !== '==' && clause.operator !== '!=') {

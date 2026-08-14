@@ -150,12 +150,11 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
   }
 
   for (const statement of statements) {
-    if (
-      !AST.isAppName(statement)
-      && !AST.isAppNavigator(statement)
-      && !AST.isAppAuxiliaryNavigator(statement)
-      && !AST.isAppDatasource(statement)
-    ) {
+    const isModernAppConfigurationStatement = AST.isAppName(statement)
+      || AST.isAppNavigator(statement)
+      || AST.isAppAuxiliaryNavigator(statement)
+      || AST.isAppDatasource(statement)
+    if (!isModernAppConfigurationStatement) {
       ctx.error(appValidationMessages.appBlock(app.name), statement)
     }
   }

@@ -13,11 +13,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
-    if (
-      context.property === 'target'
-      && (AST.isSetStatement(context.container) || AST.isToggleStatement(context.container))
-    ) {
-      return this.createStateScope(context.container)
+    const container = context.container
+    const isStateTargetReference = context.property === 'target'
+      && (AST.isSetStatement(container) || AST.isToggleStatement(container))
+    if (isStateTargetReference) {
+      return this.createStateScope(container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
       if (AST.isPatchedValueReference(context.container)) {
@@ -43,11 +43,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'type' && AST.isConfiguredValue(context.container)) {
       return this.createConstructorDeclarationScope(context.container)
     }
-    if (
-      context.property === 'target'
-      && (AST.isConfigurationReference(context.container) || AST.isConfiguredAppPropertyValue(context.container))
-    ) {
-      return this.createConfigurationDeclarationScope(context.container)
+    const isConfigurationTargetReference = context.property === 'target'
+      && (AST.isConfigurationReference(container) || AST.isConfiguredAppPropertyValue(container))
+    if (isConfigurationTargetReference) {
+      return this.createConfigurationDeclarationScope(container)
     }
     if (context.property === 'ui' && AST.isContextualPresentStatement(context.container)) {
       return this.createUiScope(context.container)

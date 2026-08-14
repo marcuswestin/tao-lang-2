@@ -109,13 +109,12 @@ function validateRenderableBodyBlock(view: AST.VisualDeclaration, ctx: Validatio
 
 function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
   for (const statement of block.statements) {
-    if (
-      AST.isAliasDeclaration(statement)
+    const isViewBodySetupStatement = AST.isAliasDeclaration(statement)
       || AST.isStateDeclaration(statement)
       || AST.isEntityQueryDeclaration(statement)
       || AST.isActionDeclaration(statement)
       || AST.isTagStatement(statement)
-    ) {
+    if (isViewBodySetupStatement) {
       continue
     }
     if (AST.isRenderStatement(statement)) {
