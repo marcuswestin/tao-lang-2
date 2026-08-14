@@ -1,5 +1,5 @@
 import { RuntimeTesting } from '@runtime/testing/runtime-testing'
-import { FS } from '@shared'
+import { FS, Platform } from '@shared'
 import { AfterEach, Describe, Test } from '@shared/test'
 import { cleanup } from '@testing-library/react-native'
 
@@ -15,7 +15,7 @@ Describe('Tao test command', () => {
 })
 
 async function requestedManifest(): Promise<RuntimeTesting.TestCompiler.Manifest> {
-  const manifestPath = process.env[RuntimeTesting.TEST_MANIFEST_ENV]
+  const manifestPath = Platform.runtimeProcess.env[RuntimeTesting.TEST_MANIFEST_ENV]
   if (!manifestPath) {
     throw new Error(`${RuntimeTesting.TEST_MANIFEST_ENV} is required`)
   }

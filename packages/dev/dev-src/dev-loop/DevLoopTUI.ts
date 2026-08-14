@@ -1,4 +1,4 @@
-import { HCI, Switch } from '@shared'
+import { HCI, Platform, Switch } from '@shared'
 import { Box, render, Text, useWindowSize } from 'ink'
 import React from 'react'
 
@@ -84,7 +84,7 @@ export const DevLoopTUI = {
 }
 
 function startDevLoopOutput(): DevLoopOutputHandle | undefined {
-  if (!process.stdout.isTTY) {
+  if (!Platform.runtimeProcess.stdout.isTTY) {
     return undefined
   }
   if (activeDevLoopOutput !== undefined) {
