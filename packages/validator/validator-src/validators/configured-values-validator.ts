@@ -115,68 +115,96 @@ function configuredDeclaration(
   return undefined
 }
 
+type ConfigurationBlockState = {
+  readonly entries: Map<string, AST.ConfigurationEntry>
+  readonly keyedContract: AST.ConfigurationKeyDeclaration | undefined
+  readonly keyedEntries: Map<string, AST.ConfigurationEntry>
+  readonly properties: readonly AST.ConfigurationPropertyDeclaration[]
+  readonly propertiesByName: Map<string, AST.ConfigurationPropertyDeclaration>
+  readonly typeName: string
+}
+
 function validateConfigurationBlock(
   block: AST.ConfigurationBlock,
   declaration: AST.ConfigurableDeclaration,
   ctx: ValidationContext,
   { requireConstructorProperties }: { requireConstructorProperties: boolean },
 ): void {
-  const typeName = declaration.name
   const properties = AST.configurationPropertiesOf(declaration)
-  const propertiesByName = new Map(properties.map(property => [property.name, property]))
-  const keyedContract = AST.configurationKeyOf(declaration)
-  const entries = new Map<string, AST.ConfigurationEntry>()
-  const keyedEntries = new Map<string, AST.ConfigurationEntry>()
+  const state: ConfigurationBlockState = {
+    typeName: declaration.name,
+    properties,
+    propertiesByName: new Map(properties.map(property => [property.name, property])),
+    keyedContract: AST.configurationKeyOf(declaration),
+    entries: new Map(),
+    keyedEntries: new Map(),
+  }
+  validateConfigurationEntries(block, state, ctx)
+  for (const required of requireConstructorProperties ? state.properties : []) {
+    if (!state.entries.has(required.name)) {
+      ctx.error(configuredValueValidationMessages.missingConfiguration(state.typeName, required.name), block)
+    }
+  }
+  if (state.keyedContract) {
+    if (requireConstructorProperties && state.keyedEntries.size === 0) {
+      ctx.error(configuredValueValidationMessages.missingKeyedItem(state.typeName), block)
+    }
+    validateConfigurationKeyReferences(block, state, ctx)
+  }
+}
+
+function validateConfigurationKeyReferences(
+  block: AST.ConfigurationBlock,
+  state: ConfigurationBlockState,
+  ctx: ValidationContext,
+): void {
+  for (const property of state.properties.filter(AST.configurationPropertyIsKey)) {
+    const configuredValues = block.entries
+      .filter(entry => entry.name === property.name)
+      .map(entry => entry.value)
+      .filter(AST.isConfigurationKeyValue)
+    for (const configured of configuredValues) {
+      if (!state.keyedEntries.has(configured.key)) {
+        ctx.error(
+          configuredValueValidationMessages.unknownConfigurationKey(state.typeName, property.name, configured.key),
+          configured,
+        )
+      }
+    }
+  }
+}
+
+function validateConfigurationEntries(
+  block: AST.ConfigurationBlock,
+  state: ConfigurationBlockState,
+  ctx: ValidationContext,
+): void {
   for (const entry of block.entries) {
     if (entry.key) {
-      if (!keyedContract) {
-        ctx.error(configuredValueValidationMessages.keyedConfiguration(typeName), entry)
+      if (!state.keyedContract) {
+        ctx.error(configuredValueValidationMessages.keyedConfiguration(state.typeName), entry)
         continue
       }
-      if (keyedEntries.has(entry.key)) {
-        ctx.error(configuredValueValidationMessages.duplicateConfigurationKey(typeName, entry.key), entry)
+      if (state.keyedEntries.has(entry.key)) {
+        ctx.error(configuredValueValidationMessages.duplicateConfigurationKey(state.typeName, entry.key), entry)
       }
-      keyedEntries.set(entry.key, entry)
-      validateKeyedConfigurationItem(entry, declaration.name, keyedContract, ctx)
+      state.keyedEntries.set(entry.key, entry)
+      validateKeyedConfigurationItem(entry, state.typeName, state.keyedContract, ctx)
       continue
     }
     if (!entry.name || !entry.value) {
       continue
     }
-    const property = propertiesByName.get(entry.name)
+    const property = state.propertiesByName.get(entry.name)
     if (!property) {
-      ctx.error(configuredValueValidationMessages.unknownConfiguration(typeName, entry.name), entry)
+      ctx.error(configuredValueValidationMessages.unknownConfiguration(state.typeName, entry.name), entry)
       continue
     }
-    if (entries.has(entry.name)) {
-      ctx.error(configuredValueValidationMessages.duplicateConfiguration(typeName, entry.name), entry)
+    if (state.entries.has(entry.name)) {
+      ctx.error(configuredValueValidationMessages.duplicateConfiguration(state.typeName, entry.name), entry)
     }
-    entries.set(entry.name, entry)
+    state.entries.set(entry.name, entry)
     validateConfiguredProperty(entry.value, property, entry, ctx)
-  }
-  for (const required of requireConstructorProperties ? properties : []) {
-    if (!entries.has(required.name)) {
-      ctx.error(configuredValueValidationMessages.missingConfiguration(typeName, required.name), block)
-    }
-  }
-  if (keyedContract) {
-    if (requireConstructorProperties && keyedEntries.size === 0) {
-      ctx.error(configuredValueValidationMessages.missingKeyedItem(typeName), block)
-    }
-    for (const property of properties.filter(AST.configurationPropertyIsKey)) {
-      const configuredValues = block.entries
-        .filter(entry => entry.name === property.name)
-        .map(entry => entry.value)
-        .filter(AST.isConfigurationKeyValue)
-      for (const configured of configuredValues) {
-        if (!keyedEntries.has(configured.key)) {
-          ctx.error(
-            configuredValueValidationMessages.unknownConfigurationKey(typeName, property.name, configured.key),
-            configured,
-          )
-        }
-      }
-    }
   }
 }
 
