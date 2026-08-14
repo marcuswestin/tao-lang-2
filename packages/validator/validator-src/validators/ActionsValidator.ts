@@ -52,10 +52,6 @@ export const ActionsValidator = {
   registerTypeValidation,
 } as const
 
-/////////////
-// Private //
-/////////////
-
 function registerTypeValidation(typir: TaoTypirServices): void {
   typir.validation.Collector.addValidationRulesForAstNodes({
     DoStatement: (invocation, accept, services) => {
