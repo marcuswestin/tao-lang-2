@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** typeValidationMessages declares diagnostics for custom types, constructors is item, and member access. */
@@ -31,38 +32,22 @@ export const typeValidationMessages = {
     `Default value for parameter '${name}' expects ${expected}, got ${actual}.`,
 } as const
 
-/** validateTypes validates custom type declarations and item/list/custom expression forms. */
-export function validateTypes(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const declaration of AST.streamAllContents(file).filter(AST.isTypeDeclaration)) {
-    validateTypeDeclaration(declaration, ctx)
-  }
-  for (const type of AST.streamAllContents(file).filter(AST.isItemTypeExpression)) {
-    validateItemType(type, ctx)
-  }
-  for (const property of AST.streamAllContents(file).filter(AST.isTypeProperty)) {
-    validateTypeProperty(property, ctx)
-  }
-  for (const reference of AST.streamAllContents(file).filter(AST.isNamedTypeReference)) {
-    validateNamedTypeReference(reference, ctx)
-  }
-  for (const parameter of AST.streamAllContents(file).filter(AST.isParameterDeclaration)) {
-    validateParameter(parameter, ctx)
-  }
-  for (const declaration of AST.streamAllContents(file).filter(AST.isParameterizedDeclaration)) {
-    validateDefaultParameterOrder(declaration, ctx)
-  }
-  for (const constructor of AST.streamAllContents(file).filter(AST.isTypedConstructor)) {
-    validateTypedConstructor(constructor, ctx)
-  }
-  for (const configured of AST.streamAllContents(file).filter(AST.isConfiguredValue)) {
+/** typeValidationChecks validates custom type declarations and item/list/custom expression forms. */
+export const typeValidationChecks = {
+  [AST.TypeDeclaration.$type]: validateTypeDeclaration,
+  [AST.ItemTypeExpression.$type]: validateItemType,
+  [AST.TypeProperty.$type]: validateTypeProperty,
+  [AST.NamedTypeReference.$type]: validateNamedTypeReference,
+  [AST.ParameterDeclaration.$type]: validateParameter,
+  [AST.ParameterizedDeclaration.$type]: validateDefaultParameterOrder,
+  [AST.TypedConstructor.$type]: validateTypedConstructor,
+  [AST.ConfiguredValue.$type]: (configured, ctx) => {
     if (AST.isTypeDeclaration(configured.type.ref) || AST.isParameterizedDeclaration(configured.type.ref)) {
       validateConfiguredItemConstructor(configured, ctx)
     }
-  }
-  for (const memberAccess of AST.streamAllContents(file).filter(AST.isMemberAccessExpression)) {
-    validateMemberAccess(memberAccess, ctx)
-  }
-}
+  },
+  [AST.MemberAccessExpression.$type]: validateMemberAccess,
+} satisfies NodeValidationChecks
 
 function validateTypeDeclaration(declaration: AST.TypeDeclaration, ctx: ValidationContext): void {
   if (typeDefinitionHasCycle(declaration, declaration, new Set())) {

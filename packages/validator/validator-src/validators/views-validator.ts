@@ -2,6 +2,7 @@ import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { viewValidationCodes } from '../diagnostic-codes'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
@@ -28,18 +29,11 @@ const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao'])
 
 /** ViewsValidator validates renderable declarations and render blocks. */
 export const ViewsValidator = {
+  checks: {
+    [AST.VisualDeclaration.$type]: validateViewDeclaration,
+    [AST.TagStatement.$type]: validateTag,
+  } satisfies NodeValidationChecks,
   messages: viewValidationMessages,
-  validate,
-}
-
-/** validateViews validates view declarations and view-body structure. */
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const view of AST.streamAllContents(file).filter(AST.isVisualDeclaration)) {
-    validateViewDeclaration(view, ctx)
-  }
-  for (const tag of AST.streamAllContents(file).filter(AST.isTagStatement)) {
-    validateTag(tag, ctx)
-  }
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {

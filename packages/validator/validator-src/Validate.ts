@@ -16,16 +16,19 @@ import { validateNavigation } from './validators/navigation-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
-import { validateTypes } from './validators/types-validator'
+import { typeValidationChecks } from './validators/types-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './validators/use-validator'
 import { ViewsValidator } from './validators/views-validator'
 
 const nodeValidationChecks = NodeValidation.compile(
   [
     projectValidationChecks,
+    ViewsValidator.checks,
+    ActionsValidator.checks,
     LayoutValidator.checks,
     injectionValidationChecks,
     testValidationChecks,
+    typeValidationChecks,
     InvocationsValidator.checks,
     FunctionalCoreValidator.checks,
     configurationValidationChecks,
@@ -35,11 +38,8 @@ const nodeValidationChecks = NodeValidation.compile(
 function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   AppValidator.validate(file, ctx)
   validateProjectFile(file, ctx)
-  ViewsValidator.validate(file, ctx)
-  ActionsValidator.validate(file, ctx)
   StateValidator.validate(file, ctx)
   AliasesValidator.validate(file, ctx)
-  validateTypes(file, ctx)
   validateData(file, ctx)
   DialogueValidator.validate(file, ctx)
   validateNavigation(file, ctx)
@@ -56,15 +56,12 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
 export const Validate = {
   Aliases: AliasesValidator.validate,
   App: AppValidator.validate,
-  Actions: ActionsValidator.validate,
   Data: validateData,
   Dialogues: DialogueValidator.validate,
   Navigation: validateNavigation,
   States: StateValidator.validate,
   TaoFile: validateTaoFile,
-  Types: validateTypes,
   TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,
   VisibleDeclarations: validateVisibleDeclarations,
-  Views: ViewsValidator.validate,
 } as const

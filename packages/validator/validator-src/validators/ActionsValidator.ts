@@ -2,6 +2,7 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ValidationProblemAcceptor } from 'typir'
+import type { NodeValidationChecks } from '../node-validation'
 import { type TaoSpecifics, type TaoTypirServices } from '../TypeSystemHelpers'
 import type { ValidationContext } from '../validation'
 import { AliasesValidator } from './aliases-validator'
@@ -40,24 +41,20 @@ const actionValidationMessages = {
 
 /** ActionsValidator groups action validation and diagnostics. */
 export const ActionsValidator = {
+  checks: {
+    [AST.ActionDeclaration.$type]: (action, ctx) => {
+      validateDuplicateParameters(action, ctx)
+      validateParameterNameConflicts(action, ctx)
+    },
+    [AST.DoStatement.$type]: reportArity,
+  } satisfies NodeValidationChecks,
   messages: actionValidationMessages,
   registerTypeValidation,
-  validate,
 } as const
 
 /////////////
 // Private //
 /////////////
-
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const action of AST.streamAllContents(file).filter(AST.isActionDeclaration)) {
-    validateDuplicateParameters(action, ctx)
-    validateParameterNameConflicts(action, ctx)
-  }
-  for (const invocation of AST.streamAllContents(file).filter(AST.isDoStatement)) {
-    reportArity(invocation, ctx)
-  }
-}
 
 function registerTypeValidation(typir: TaoTypirServices): void {
   typir.validation.Collector.addValidationRulesForAstNodes({
