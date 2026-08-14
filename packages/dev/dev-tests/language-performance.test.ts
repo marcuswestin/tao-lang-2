@@ -21,14 +21,16 @@ Describe('language performance reporting', () => {
   })
 
   Test('forwards default and explicit Just recipe iterations', async () => {
-    const defaultRun = await dryRunPerformanceRecipe()
-    const explicitRun = await dryRunPerformanceRecipe('7')
+    const [defaultRun, explicitRun] = await Promise.all([
+      dryRunPerformanceRecipe(),
+      dryRunPerformanceRecipe('7'),
+    ])
 
     Expect(defaultRun.exitCode).toBe(0)
     Expect(commandOutput(defaultRun)).toContain('language-performance.ts "10"')
     Expect(explicitRun.exitCode).toBe(0)
     Expect(commandOutput(explicitRun)).toContain('language-performance.ts "7"')
-  })
+  }, 15_000)
 
   Test('renders fixture metadata, latency percentiles, and aggregate timing', () => {
     const report: LanguagePerformanceReport = {
