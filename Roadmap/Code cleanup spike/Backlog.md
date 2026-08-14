@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 51 commits, 2026-08-14
+Last touched-package re-sweep: after 52 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -141,7 +141,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | queued             | `packages/parser/parser-tests/parser.test.ts`                             | R10 / charter 3 |   mostly moves + ~40 |       1/~40 | Split the 1,369-line parser test by grammar/source seams without touching grammar.                                                                                                           |
 | done               | `packages/runtime/TR-tests/TR.test.ts`                                    | R10 / charter 3 |  1,071 moved, net +5 |     2/1,071 | Split the 1,040-line owner into 508-line core, 762-line data, and 413-line navigation suites plus one eight-line shared fixture; all 36 callback hashes remain identical.                    |
 | done               | `packages/compiler/compiler-tests/compiler.test.ts`                       | R10 / charter 3 |    798 moved, net +8 |       1/798 | Split 13 file/codegen callbacks into a 402-line owner, leaving a 597-line test-plan/IR owner; all 28 callback hashes remain identical and neither file exceeds 800 lines.                    |
-| queued             | `packages/formatter/formatter-tests/formatter.test.ts`                    | R10 / charter 3 |   mostly moves + ~35 |       1/~35 | Split the 956-line formatter test by formatter feature seams.                                                                                                                                |
+| done               | `packages/formatter/formatter-tests/formatter.test.ts`                    | R10 / charter 3 |    411 moved, net +3 |       1/411 | Move the nine-callback injection suite into a 203-line owner and share its fence fixtures, leaving a 753-line residual; all 53 original callback hashes remain identical.                    |
 | queued             | 12 non-chartered source files currently over 400 lines                    | R3              |     inspect per seam |       8/TBD | Eight audited files have real second concepts; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                      |
 | queued             | 69 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                              |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                             |

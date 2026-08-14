@@ -2,6 +2,9 @@ import { Text } from '@shared'
 import { Expect } from '@shared/test'
 import Formatter from '../formatter-src/formatter'
 
+export const tsFence = '```ts'
+export const fence = '```'
+
 const formatterSession = Formatter.createSession()
 
 /** testFormatCode formats Tao source and asserts the expected output and formatting idempotency. */
