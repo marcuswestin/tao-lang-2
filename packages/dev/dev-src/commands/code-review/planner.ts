@@ -8,8 +8,10 @@ import {
 import {
   CODEX_SPARK_MODEL,
   DEFAULT_AGY_MODEL,
+  DEFAULT_AGY_TIMEOUT_SECONDS,
   DEFAULT_CURSOR_MODEL,
   DEFAULT_GEMINI_MODEL,
+  DEFAULT_REVIEW_TIMEOUT_SECONDS,
 } from './constants'
 import type { ReviewEffort, Reviewer, ReviewerManifestEntry } from './types'
 import type { CodexBudgetSummary } from './usage'
@@ -471,14 +473,7 @@ function modelForProvider(provider: ReviewPlanProvider): string | undefined {
 }
 
 function timeoutForProvider(provider: ReviewPlanProvider): number {
-  return Switch<ReviewPlanProvider, number>(provider, {
-    agy: () => 480,
-    claude: () => 900,
-    codex: () => 900,
-    'codex-spark': () => 900,
-    cursor: () => 900,
-    gemini: () => 900,
-  })
+  return provider === 'agy' ? DEFAULT_AGY_TIMEOUT_SECONDS : DEFAULT_REVIEW_TIMEOUT_SECONDS
 }
 
 function skippedProvider(
