@@ -11,6 +11,7 @@ import {
   Test,
   withTaoFiles,
 } from './Test'
+export { app, fence, stubLayout, stubView, tsFence } from './TaoFixtures'
 
 setTestRuntime({
   afterAll,

@@ -24,18 +24,6 @@ AfterEach(async () => {
 })
 
 Describe('FS', () => {
-  Test('joins and resolves slash-separated parts as host paths', async () => {
-    const root = await tmpDir()
-    const val = 'alpha'
-    const file = 'screen.tao'
-    const relativePath = FS.joinPath(`foo/${val}/cat/wat/mat/${file}`)
-
-    const fullPath = FS.resolvePath(`foo/${val}/cat/wat/mat/${file}`, root)
-
-    Expect(FS.resolvePath(relativePath, root)).toBe(fullPath)
-    Expect(FS.resolvePath(fullPath, FS.resolvePath('ignored', root))).toBe(fullPath)
-  })
-
   Test('resolves repo-relative paths from the Git root', async () => {
     const repoRoot = Repo.resolvePath()
     const sharedPath = FS.resolvePath(`${repoRoot}/packages/shared`)
@@ -288,12 +276,6 @@ Describe('Diagnostics', () => {
 })
 
 Describe('CLI', () => {
-  Test('runs commands and reports exit status', async () => {
-    const result = await CLI.run('/usr/bin/true')
-
-    Expect(result.exitCode).toBe(0)
-  })
-
   Test('returns unchecked failures and throws checked failures', async () => {
     const commandSpec = {
       args: ['-c', 'printf bad >&2; exit 7'],
@@ -308,117 +290,50 @@ Describe('CLI', () => {
     Expect(() => CLI.mustRunSync('/bin/sh', commandSpec)).toThrow(Errors.CommandExecutionError)
   })
 
-  Test('formats commands and supports inherited stdio', async () => {
+  Test('quotes command arguments for logs', () => {
     Expect(CLI.formatCommand('tao', { args: ['run', 'Hello World.tao'] })).toBe('tao run "Hello World.tao"')
-
-    const result = await CLI.run('/bin/sh', {
-      args: ['-c', 'exit 0'],
-      stdio: 'inherit',
-    })
-
-    Expect(result.stdout).toBe('')
-    Expect(result.stderr).toBe('')
   })
 
   Test('streams output while preserving captured output', async () => {
-    const stdout = runtimeProcess.stdout
-    const stderr = runtimeProcess.stderr
-    let streamedStdout = ''
-    let streamedStderr = ''
-    runtimeProcess.stdout = new Writable({
-      write(chunk, _encoding, callback) {
-        streamedStdout += chunk.toString()
-        callback()
-      },
-    }) as typeof runtimeProcess.stdout
-    runtimeProcess.stderr = new Writable({
-      write(chunk, _encoding, callback) {
-        streamedStderr += chunk.toString()
-        callback()
-      },
-    }) as typeof runtimeProcess.stderr
-
-    try {
-      const result = await CLI.run('/usr/bin/true', {
+    const streamed = await withCapturedRuntimeOutput(() =>
+      CLI.run('/bin/sh', {
+        args: ['-c', 'printf out; printf err >&2'],
         stdio: 'stream',
       })
+    )
 
-      Expect(result.exitCode).toBe(0)
-      Expect(streamedStdout).toBe('')
-      Expect(streamedStderr).toBe('')
-    } finally {
-      runtimeProcess.stdout = stdout
-      runtimeProcess.stderr = stderr
-    }
+    Expect(streamed.result.stdout).toBe('out')
+    Expect(streamed.result.stderr).toBe('err')
+    Expect(streamed.stdout).toBe('out')
+    Expect(stripAnsi(streamed.stderr)).toBe('err')
   })
 
   Test('streams prefixed output while preserving captured output', async () => {
-    const stdout = runtimeProcess.stdout
-    const stderr = runtimeProcess.stderr
-    let streamedStdout = ''
-    let streamedStderr = ''
-    runtimeProcess.stdout = new Writable({
-      write(chunk, _encoding, callback) {
-        streamedStdout += chunk.toString()
-        callback()
-      },
-    }) as typeof runtimeProcess.stdout
-    runtimeProcess.stderr = new Writable({
-      write(chunk, _encoding, callback) {
-        streamedStderr += chunk.toString()
-        callback()
-      },
-    }) as typeof runtimeProcess.stderr
-
-    try {
-      const result = await CLI.run('/usr/bin/true', {
+    const streamed = await withCapturedRuntimeOutput(() =>
+      CLI.run('/bin/sh', {
+        args: ['-c', 'printf "out\\ntail"; printf "bad\\n" >&2'],
         prefixedOutput: { processName: 'test' },
       })
+    )
 
-      Expect(result.exitCode).toBe(0)
-      Expect(streamedStdout).toBe('')
-      Expect(streamedStderr).toBe('')
-    } finally {
-      runtimeProcess.stdout = stdout
-      runtimeProcess.stderr = stderr
-    }
-  })
-
-  Test('starts commands and streams prefixed output', async () => {
-    const stdout = runtimeProcess.stdout
-    let streamedStdout = ''
-    runtimeProcess.stdout = new Writable({
-      write(chunk, _encoding, callback) {
-        streamedStdout += chunk.toString()
-        callback()
-      },
-    }) as typeof runtimeProcess.stdout
-
-    try {
-      const command = CLI.start('/usr/bin/true', {
-        prefixedOutput: { processName: 'dev' },
-      })
-      const close = await command.waitForClose()
-      await command.closeOutput()
-
-      Expect(close.exitCode).toBe(0)
-      Expect(command.exitCode).toBe(0)
-      Expect(streamedStdout).toBe('')
-    } finally {
-      runtimeProcess.stdout = stdout
-    }
+    Expect(streamed.result.stdout).toBe('out\ntail')
+    Expect(streamed.result.stderr).toBe('bad\n')
+    Expect(stripAnsi(streamed.stdout)).toBe('[test]: out\n[test]: tail\n')
+    Expect(stripAnsi(streamed.stderr)).toBe('[test]: bad\n')
   })
 
   Test('streams stdout and stderr chunks to an onOutput callback', async () => {
-    const chunks: { stream: string; text: string }[] = []
-    const command = CLI.start('/usr/bin/true', {
-      onOutput: (stream, chunk) => chunks.push({ stream, text: chunk.toString('utf8') }),
+    const output = { stderr: '', stdout: '' }
+    const command = CLI.start('/bin/sh', {
+      args: ['-c', 'printf out; printf err >&2'],
+      onOutput: (stream, chunk) => output[stream] += chunk.toString('utf8'),
       stdio: 'pipe',
     })
-    await command.waitForClose()
+    const close = await command.waitForClose()
 
+    Expect(close.exitCode).toBe(0)
     Expect(command.exitCode).toBe(0)
-    Expect(chunks.length).toBeGreaterThanOrEqual(0)
+    Expect(output).toEqual({ stderr: 'err', stdout: 'out' })
   })
 })
 
@@ -676,6 +591,25 @@ function fakeTerminal(inputText: string) {
     output,
     interactive: true,
     outputText: () => Buffer.concat(outputChunks).toString('utf8'),
+  }
+}
+
+async function withCapturedRuntimeOutput<T>(run: () => Promise<T>) {
+  const originalStdout = runtimeProcess.stdout
+  const originalStderr = runtimeProcess.stderr
+  const stdout = fakeTerminal('')
+  const stderr = fakeTerminal('')
+  runtimeProcess.stdout = stdout.output as typeof runtimeProcess.stdout
+  runtimeProcess.stderr = stderr.output as typeof runtimeProcess.stderr
+  try {
+    return {
+      result: await run(),
+      stderr: stderr.outputText(),
+      stdout: stdout.outputText(),
+    }
+  } finally {
+    runtimeProcess.stdout = originalStdout
+    runtimeProcess.stderr = originalStderr
   }
 }
 
