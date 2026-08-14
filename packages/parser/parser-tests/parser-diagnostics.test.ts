@@ -96,6 +96,27 @@ Describe('minimal Tao parser diagnostics', () => {
     Expect(Diagnostics.allMessagesContain(parseResult.diagnostics, 'Could not resolve reference')).toBe(true)
   })
 
+  Test('limits replacement targets to app declarations', async () => {
+    const parseResult = await parseCodeWithErrors(`
+      let SignedOutNav = 1
+      let Tagline = "Not an app"
+      app WordFlower { view Home }
+      view Home { }
+      action Reset {
+        replace SignedOutNav in Tagline
+      }
+    `)
+
+    Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
+    Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
+    Expect(parseResult.diagnostics).toHaveLength(1)
+    Expect(Diagnostics.allFromSource(parseResult.diagnostics, 'linker')).toBe(true)
+    Expect(
+      Diagnostics.allMessagesContain(parseResult.diagnostics, 'Could not resolve reference to AppValueDeclaration'),
+    )
+      .toBe(true)
+  })
+
   Test('reports lexer errors separately from parser errors', async () => {
     const source = 'app MyApp { view MyView } @ view MyView { }'
     lexCodeWithErrors(source)

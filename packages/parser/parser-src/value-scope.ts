@@ -82,6 +82,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'app' && AST.isSelectionActivateStatement(context.container)) {
       return this.createRunAppScope(context.container)
     }
+    if (context.property === 'app' && AST.isReplaceStatement(context.container)) {
+      return this.createRunAppScope(context.container)
+    }
     return super.getScope(context)
   }
 
@@ -319,7 +322,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createRunAppScope(
-    node: AST.RunStep | AST.NavigationTarget | AST.SelectionActivateStatement,
+    node: AST.RunStep | AST.NavigationTarget | AST.SelectionActivateStatement | AST.ReplaceStatement,
   ): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
