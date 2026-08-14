@@ -63,7 +63,7 @@ const GENERAL_FOCUS =
   'Review broadly for bugs, regressions, missed requirements, missing tests, unused or leaked exports, stale code/docs/instructions, and unclear code. Prioritize correctness and language-design integrity over style.'
 
 /** REVIEW_CONTRACT is the binding, reviewer-agnostic review contract. */
-export const REVIEW_CONTRACT = Text.stripIndent(`
+const REVIEW_CONTRACT = Text.stripIndent(`
   Follow this review contract:
   - Do not edit files, stage/unstage, reset, stash, or otherwise touch the Git index.
   - Do not run validation, builds, formatters, or destructive operations.
@@ -79,7 +79,7 @@ export const REVIEW_CONTRACT = Text.stripIndent(`
 `).trim()
 
 /** DEFAULT_REVIEW_SCOPE describes the current working-tree change set. */
-export const DEFAULT_REVIEW_SCOPE = Text.stripIndent(`
+const DEFAULT_REVIEW_SCOPE = Text.stripIndent(`
   Review the current change set in the working tree.
   - Unstaged changes: \`git diff\` and \`git diff --stat\`.
   - Staged changes: \`git diff --cached\` and \`git diff --cached --stat\`.
