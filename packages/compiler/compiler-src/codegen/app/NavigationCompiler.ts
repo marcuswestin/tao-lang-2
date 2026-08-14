@@ -51,7 +51,7 @@ export const NavigationCompiler = {
   ReplaceStatement(statement: AST.ReplaceStatement): Compiled {
     const app = resolveRef(statement.app)
     return gen`TR.Navigation.Replace(
-      ${enclosingTaoProps(statement)},
+      _ViewProps.__tao,
       ${Compile.Expression(statement.navigator)},
       ${appDefinitionReference(app)},
     )`
@@ -74,10 +74,6 @@ function compileNavigationTarget(target: AST.NavigationTarget): Compiled {
     ${appDefinitionReference(app)},
     ${gen.jsLiteral(target.key.slice(1))},
   )`
-}
-
-function enclosingTaoProps(node: AST.Node): Compiled {
-  return AST.findOwningView(node) ? gen`_ViewProps.__tao` : gen`undefined`
 }
 
 /** appDefinitionReference preserves the selected declaration's generated module identity. */

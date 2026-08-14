@@ -365,6 +365,32 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.activationContext)
   })
 
+  Test('limits replacement to actions inside visual declarations', async () => {
+    await testValidateCode(`
+      use StackNav from @tao/nav
+      let SignedOutNav = StackNav { Initial SignedOut }
+      app ReplaceApp { Name "Replace" Navigator StackNav { Initial Home } }
+      ui Home {
+        action Reset { replace SignedOutNav in ReplaceApp }
+        render Empty()
+      }
+      ui SignedOut { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      let SignedOutNav = StackNav { Initial SignedOut }
+      app ReplaceApp { Name "Replace" Navigator StackNav { Initial Home } }
+      action Reset { replace SignedOutNav in ReplaceApp }
+      ui Home { render Empty() }
+      ui SignedOut { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.replaceContext)
+  })
+
   Test('validates target-only selection keys against the named app navigator', async () => {
     await testValidateCode(`
       use SelectionNav from @tao/nav

@@ -37,6 +37,7 @@ export const navigationValidationMessages = {
     `\`with\` can patch only an app, nav, or datasource value; ${name} is not configurable.`,
   presentationTarget: (actual: string) => `Presentation target expects nav, got ${actual}.`,
   dismissContext: '`dismiss` is allowed only inside a ui declaration.',
+  replaceContext: '`replace` is allowed only inside a visual declaration.',
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
   unknownAuxiliary: (app: string, key: string) => `App ${app} has no auxiliary navigator named '@${key}'.`,
   unknownConfiguration: (type: string, name: string) => `${type} has no configuration slot named '${name}'.`,
@@ -76,6 +77,9 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
     }
   }
   for (const replace of AST.streamAllContents(file).filter(AST.isReplaceStatement)) {
+    if (!AST.findOwningView(replace)) {
+      ctx.error(navigationValidationMessages.replaceContext, replace)
+    }
     const actual = Type.ofExpression(replace.navigator)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
       ctx.error(navigationValidationMessages.replaceNavigator(Type.displayName(actual)), replace.navigator)
