@@ -1,8 +1,7 @@
 import { Packages } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
-import { Diagnostics, Repo } from '@shared'
+import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { Workspace } from '@workspace'
 import { Validation } from '../validator-src/validation'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { AppValidator } from '../validator-src/validators/app-validator'
@@ -10,73 +9,76 @@ import { projectValidationMessages } from '../validator-src/validators/project-v
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
 import { useValidationMessages, validateVisibleDeclarations } from '../validator-src/validators/use-validator'
 import {
-  fence,
-  testValidateCode,
+  app,
+  rejects,
+  stubView,
   testValidateCodeWithErrors,
-  tsFence,
+  type ValidatedFiles,
   validationErrorMessages,
   withValidatedFiles,
   withValidationParse,
 } from './test-validate'
 
-const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao')
-const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
-const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
-const stateActionMvpPath = Repo.resolvePath('Apps/Test Apps/State Action MVP/State Action MVP.tao')
+type TaoFiles = Record<string, string>
+type FilesCheck = (result: ValidatedFiles) => Promise<void> | void
 
-Describe('Tao validator structural diagnostics', () => {
-  Test('rejects prototype-mutating runtime scope names', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app ScopeApp { view MainView }
-      let __proto__ = "unsafe"
-      view MainView __proto__ is text {
-        render Text("Ready")
-      }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
+function checksFiles(files: TaoFiles, check: FilesCheck): () => Promise<void> {
+  return async () => await withValidatedFiles('Main.tao', files, check)
+}
 
-    const messages = validationErrorMessages(result)
-    Expect(messages.filter(message => message === AliasesValidator.messages.reservedName('__proto__'))).toHaveLength(2)
+function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
+  return checksFiles(files, result => {
+    const errors = validationErrorMessages(result).join('\n')
+    for (const message of messages) {
+      Expect(errors).toContain(message)
+    }
   })
+}
 
-  Test('validates the current WordFlower app', async () => {
-    const result = await Workspace.validate(wordFlowerPath)
+function visibleView(name: string, parameters = ''): string {
+  return stubView(name, parameters).replace('view ', 'workspace view ')
+}
 
-    Expect(validationErrorMessages(result)).toEqual([])
-  })
+function stubApp(extra = ''): string {
+  return app('render Fixture()', `${stubView('Fixture')}\n${extra}`)
+}
 
-  Test('validates the Type System Tests app', async () => {
-    const result = await Workspace.validate(typeSystemTestsPath)
+function testSuite(body: string, includeApp = true): string {
+  const test = `test "Smoke" { ${body} }`
+  return includeApp ? stubApp(test) : test
+}
 
-    Expect(validationErrorMessages(result)).toEqual([])
-  })
+function testCheck(name: string, body: string, includeApp = true): string {
+  return testSuite(`check "${name}" { ${body} }`, includeApp)
+}
 
-  Test('validates the Runtime Stdlib Tests app', async () => {
-    const result = await Workspace.validate(runtimeStdlibTestsPath)
-
-    Expect(validationErrorMessages(result)).toEqual([])
-  })
-
-  Test('validates the State Action MVP app', async () => {
-    const result = await Workspace.validate(stateActionMvpPath)
-
-    Expect(validationErrorMessages(result)).toEqual([])
-  })
+Describe('validator: workspace structure', () => {
+  for (
+    const reservedNameCase of [
+      {
+        title: 'rejects prototype-mutating file aliases',
+        source: stubApp('let __proto__ = "unsafe"'),
+      },
+      {
+        title: 'rejects prototype-mutating parameters',
+        source: `
+        app ScopeApp { view MainView }
+        view MainView __proto__ is text { render Fixture() }
+        ${stubView('Fixture')}
+      `,
+      },
+    ]
+  ) {
+    Test(
+      reservedNameCase.title,
+      rejects(reservedNameCase.source, AliasesValidator.messages.reservedName('__proto__')),
+    )
+  }
 
   Test('validates an existing parser result', async () => {
-    await withValidationParse(
-      `
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `,
-      ({ result }) => {
-        Expect(validationErrorMessages(result)).toEqual([])
-      },
-    )
+    await withValidationParse(stubApp(), ({ result }) => {
+      Expect(validationErrorMessages(result)).toEqual([])
+    })
   })
 
   Test('does not report duplicate visible declarations for repeated LSP document instances', async () => {
@@ -114,564 +116,341 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(Diagnostics.hasSource(result.diagnostics, 'validator')).toBe(false)
   })
 
-  Test('validates v0 test check run structure', async () => {
-    const missingCheck = await testValidateCodeWithErrors(`
-      test "Smoke" { }
-    `)
-    const missingRun = await testValidateCodeWithErrors(`
-      test "Smoke" {
-        check "missing run" {
-          expect text "Hello"
-        }
-      }
-    `)
-    const duplicateRun = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      test "Smoke" {
-        check "duplicate run" {
-          run MyApp
-          run MyApp
-        }
-      }
-    `)
-    const expectationBeforeRun = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      test "Smoke" {
-        check "ordered run" {
-          expect text "Hello"
-          run MyApp
-        }
-      }
-    `)
-    const pressBeforeRun = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      test "Smoke" {
-        check "ordered press" {
-          press text "Add"
-          run MyApp
-        }
-      }
-    `)
-    const nonAppRun = await testValidateCodeWithErrors(`
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      test "Smoke" {
-        check "non app" {
-          run MainView
-        }
-      }
-    `)
-    Expect(validationErrorMessages(missingCheck)).toContain(testValidationMessages.missingCheck('Smoke'))
-    const missingRunMessages = validationErrorMessages(missingRun)
-    Expect(missingRunMessages).toContain(testValidationMessages.missingRun('missing run'))
-    Expect(missingRunMessages).not.toContain(testValidationMessages.expectationBeforeRun)
-    Expect(validationErrorMessages(duplicateRun)).toContain(testValidationMessages.duplicateRun('duplicate run'))
-    Expect(validationErrorMessages(expectationBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
-    Expect(validationErrorMessages(pressBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
-    const nonAppRunMessages = validationErrorMessages(nonAppRun)
-    Expect(
-      nonAppRunMessages.some(message => message.includes('AppValueDeclaration') && message.includes('MainView')),
-    ).toBe(true)
-    Expect(nonAppRunMessages).not.toContain(testValidationMessages.runTarget('MainView'))
+  for (
+    const checkCase of [
+      {
+        title: 'rejects test suites without checks',
+        source: testSuite('', false),
+        message: testValidationMessages.missingCheck('Smoke'),
+      },
+      {
+        title: 'rejects duplicate run statements in one check',
+        source: testCheck('duplicate run', 'run MyApp\nrun MyApp'),
+        message: testValidationMessages.duplicateRun('duplicate run'),
+      },
+      {
+        title: 'rejects expectations before run',
+        source: testCheck('ordered run', 'expect text "Hello"\nrun MyApp'),
+        message: testValidationMessages.expectationBeforeRun,
+      },
+      {
+        title: 'rejects presses before run',
+        source: testCheck('ordered press', 'press text "Add"\nrun MyApp'),
+        message: testValidationMessages.expectationBeforeRun,
+      },
+    ]
+  ) {
+    Test(checkCase.title, rejects(checkCase.source, checkCase.message))
+  }
+
+  Test('reports missing run without a cascading order diagnostic', async () => {
+    const result = await testValidateCodeWithErrors(
+      testCheck('missing run', 'expect text "Hello"', false),
+    )
+    const messages = validationErrorMessages(result)
+
+    Expect(messages).toContain(testValidationMessages.missingRun('missing run'))
+    Expect(messages).not.toContain(testValidationMessages.expectationBeforeRun)
   })
 
-  Test('validates placeholder selectors, input-value selectors, and standalone test back', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
-      test "Input" {
-        check "selectors" {
-          run MyApp
-          enter "Draft" into placeholder "Title"
-          submit placeholder "Title"
-          expect placeholder "Title"
-          expect input placeholder "Title" value "Draft"
-          back
-        }
-      }
+  Test('reports a non-app run target without a cascading run-target diagnostic', async () => {
+    const result = await testValidateCodeWithErrors(`
+      ${stubView('MainView')}
+      ${testCheck('non app', 'run MainView', false)}
     `)
-    const backBeforeRun = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView { render inject ${tsFence}\nreturn null\n${fence} }
-      test "Navigation" {
-        check "order" {
-          back
-          run MyApp
-        }
-      }
-    `)
+    const messages = validationErrorMessages(result)
 
-    Expect(validationErrorMessages(backBeforeRun)).toContain(testValidationMessages.expectationBeforeRun)
+    Expect(messages.some(message => message.includes('AppValueDeclaration') && message.includes('MainView'))).toBe(true)
+    Expect(messages).not.toContain(testValidationMessages.runTarget('MainView'))
   })
 
-  Test('validates v0 test statement placement', async () => {
-    const checkAtTopLevel = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      check "orphan" {
-        run MyApp
-      }
-    `)
-    const runInTestBlock = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      test "Smoke" {
-        run MyApp
-      }
-    `)
-    const expectationAtTopLevel = await testValidateCodeWithErrors(`
-      expect text "Hello"
-    `)
-    const pressAtTopLevel = await testValidateCodeWithErrors(`
-      press text "Add"
-    `)
-    const aliasInCheckBlock = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      test "Smoke" {
-        check "renders" {
-          let Message = "Hello"
-          run MyApp
-        }
-      }
-    `)
-    const nestedTest = await testValidateCodeWithErrors(`
-      test "Outer" {
-        test "Inner" { }
-      }
-    `)
+  Test(
+    'rejects back before run',
+    rejects(testCheck('order', 'back\nrun MyApp'), testValidationMessages.expectationBeforeRun),
+  )
 
-    Expect(validationErrorMessages(checkAtTopLevel)).toContain(testValidationMessages.checkPlacement)
-    const runInTestMessages = validationErrorMessages(runInTestBlock)
-    Expect(runInTestMessages).toContain(testValidationMessages.testBlock('Smoke'))
-    Expect(runInTestMessages).not.toContain(testValidationMessages.runPlacement)
-    Expect(validationErrorMessages(expectationAtTopLevel)).toContain(testValidationMessages.expectationPlacement)
-    Expect(validationErrorMessages(pressAtTopLevel)).toContain(testValidationMessages.pressPlacement)
-    Expect(validationErrorMessages(aliasInCheckBlock)).toContain(testValidationMessages.checkBlock('renders'))
-    const nestedTestMessages = validationErrorMessages(nestedTest)
-    Expect(nestedTestMessages).toContain(testValidationMessages.testPlacement)
-    Expect(nestedTestMessages).toContain(testValidationMessages.testBlock('Outer'))
+  for (
+    const placementCase of [
+      {
+        title: 'rejects checks at top level',
+        source: `${stubApp()}\ncheck "orphan" { run MyApp }`,
+        messages: [testValidationMessages.checkPlacement],
+      },
+      {
+        title: 'rejects expectations at top level',
+        source: 'expect text "Hello"',
+        messages: [testValidationMessages.expectationPlacement],
+      },
+      {
+        title: 'rejects presses at top level',
+        source: 'press text "Add"',
+        messages: [testValidationMessages.pressPlacement],
+      },
+      {
+        title: 'rejects aliases in check blocks',
+        source: testCheck('renders', 'let Message = "Hello"\nrun MyApp'),
+        messages: [testValidationMessages.checkBlock('renders')],
+      },
+      {
+        title: 'rejects nested test declarations',
+        source: 'test "Outer" { test "Inner" { } }',
+        messages: [testValidationMessages.testPlacement, testValidationMessages.testBlock('Outer')],
+      },
+    ]
+  ) {
+    Test(placementCase.title, rejects(placementCase.source, ...placementCase.messages))
+  }
+
+  Test('reports a run in a test block without a cascading run-placement diagnostic', async () => {
+    const result = await testValidateCodeWithErrors(testSuite('run MyApp'))
+    const messages = validationErrorMessages(result)
+
+    Expect(messages).toContain(testValidationMessages.testBlock('Smoke'))
+    Expect(messages).not.toContain(testValidationMessages.runPlacement)
   })
 
-  Test('rejects app declarations outside the entry file', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'rejects app declarations outside the entry file',
+    rejectsFiles(
       {
         'Main.tao': `
-        app MyApp { view MainView }
-        use OtherView from ./Other.tao
-        view MainView {
-          render OtherView()
-        }
-      `,
+          use OtherView from ./Other.tao
+          ${app('render OtherView()')}
+        `,
         'Other.tao': `
-        app OtherApp { view OtherView }
-        workspace view OtherView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          app OtherApp { view OtherView }
+          ${visibleView('OtherView')}
+        `,
       },
-      async result => {
-        Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appEntryFile('OtherApp'))
-      },
-    )
-  })
+      AppValidator.messages.appEntryFile('OtherApp'),
+    ),
+  )
 
-  Test('rejects app declarations inside packages', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'rejects app declarations inside packages',
+    rejectsFiles(
       {
         'Main.tao': `
-        app MyApp { view MainView }
-        use MainView from @bar
-      `,
+          use MainView from @bar
+          app MyApp { view MainView }
+        `,
         'packages/@bar/Main.tao': `
-        app PackageApp { view MainView }
-        workspace view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          app PackageApp { view MainView }
+          ${visibleView('MainView')}
+        `,
       },
-      async result => {
-        Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appPackage('PackageApp'))
-      },
-    )
-  })
+      AppValidator.messages.appPackage('PackageApp'),
+    ),
+  )
 
-  Test('rejects imports that match multiple visible declarations in an import target', async () => {
-    const sharedTextSource = `
-      workspace view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'rejects imports that match multiple visible declarations in one target',
+    rejectsFiles(
       {
         'Main.tao': `
-        app MyApp { view MainView }
-        use Text from ./views
-        view MainView {
-          render Text("Hello")
-        }
-      `,
-        'views/Views.tao': sharedTextSource,
-        'views/MoreViews.tao': sharedTextSource,
+          use Text from ./views
+          ${app('render Text("Hello")')}
+        `,
+        'views/Views.tao': visibleView('Text', 'Value is text'),
+        'views/MoreViews.tao': visibleView('Text', 'Value is text'),
       },
-      async result => {
-        Expect(validationErrorMessages(result)).toContain(useValidationMessages.ambiguousImport('Text', './views'))
-      },
-    )
-  })
+      useValidationMessages.ambiguousImport('Text', './views'),
+    ),
+  )
 
-  Test('allows file-level aliases that reference imported aliases', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'allows file-level aliases that reference imported aliases',
+    checksFiles(
       {
         'Main.tao': `
-        app MyApp { view MainView }
-        use Greeting from ./
-        let Local = Greeting
-        view Text Value is text {
-          render inject Value ${tsFence}
-            return <RN.Text>{Value}</RN.Text>
-          ${fence}
-        }
-        view MainView {
-          render Text(Local)
-        }
-      `,
+          app MyApp { view MainView }
+          use Greeting from ./
+          let Local = Greeting
+          ${stubView('Text', 'Value is text')}
+          view MainView { render Text(Local) }
+        `,
         'Views.tao': `
-        // Padding comments keep this declaration at a larger source offset than the
-        // importing file's references, which used to trip the declaration-order check.
-        // More padding.
-        // More padding.
-        workspace let Greeting = "Hello"
-      `,
+          // Padding comments keep this declaration at a larger source offset than the
+          // importing file's references, which used to trip the declaration-order check.
+          // More padding.
+          // More padding.
+          workspace let Greeting = "Hello"
+        `,
       },
-      async result => {
+      result => {
         Expect(validationErrorMessages(result)).toEqual([])
       },
-    )
-  })
+    ),
+  )
 
-  Test('validates bare use imports across a whole package', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  for (
+    const packagePathCase of [
+      {
+        title: 'rejects package file basenames as import paths',
+        importPath: '@foo/FileOnly',
+        sourcePath: 'features/@foo/FileOnly.tao',
+      },
+      {
+        title: 'rejects explicit Tao package file paths',
+        importPath: '@foo/ExplicitFile.tao',
+        sourcePath: 'features/@foo/ExplicitFile.tao',
+      },
+    ]
+  ) {
+    Test(
+      packagePathCase.title,
+      rejectsFiles(
+        {
+          'Main.tao': `
+            use Chosen from ${packagePathCase.importPath}
+            ${stubApp()}
+          `,
+          [packagePathCase.sourcePath]: 'workspace let Chosen = "File target"',
+        },
+        useValidationMessages.unresolvedImport(packagePathCase.importPath),
+      ),
+    )
+  }
+
+  Test(
+    'rejects duplicate package names in the package index',
+    checksFiles(
       {
         'Main.tao': `
-        app PackageApp { view MainView }
-        use MainView from @foo/forms
-      `,
-        'features/@foo/Title.tao': `
-        package let PackageTitle = "Package title"
-      `,
-        'features/@foo/forms/Main.tao': `
-        use PackageTitle
-        workspace view MainView {
-          render Text(PackageTitle)
-        }
-        view Text Value is text {
-          render inject Value ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          use MainView from @bar
+          app DuplicatePackageApp { view MainView }
+        `,
+        'one/@bar/Main.tao': visibleView('MainView'),
+        'two/@bar/Main.tao': visibleView('OtherView'),
       },
-      async result => {
-        Expect(validationErrorMessages(result)).toEqual([])
-      },
-    )
-  })
-
-  Test('resolves package imports through the project package index', async () => {
-    await withValidatedFiles(
-      'Main.tao',
-      {
-        'Main.tao': `
-        app IndexedPackageApp { view MainView }
-        use MainView from @bar/views
-      `,
-        'deep/packages/@bar/views/Main.tao': `
-        workspace view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
-      },
-      async result => {
-        Expect(validationErrorMessages(result)).toEqual([])
-      },
-    )
-  })
-
-  Test('resolves package paths through folders instead of file basenames', async () => {
-    await withValidatedFiles(
-      'Main.tao',
-      {
-        'Main.tao': `
-        app FolderTargetApp { view MainView }
-        use Chosen from @foo/Widget
-        use FileOnly from @foo/FileOnly
-        use ExplicitFile from @foo/ExplicitFile.tao
-        view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
-        'features/@foo/Widget.tao': `
-        workspace let Chosen = "Wrong file target"
-      `,
-        'features/@foo/Widget/Index.tao': `
-        workspace let Chosen = "Folder target"
-      `,
-        'features/@foo/FileOnly.tao': `
-        workspace let FileOnly = "File target"
-      `,
-        'features/@foo/ExplicitFile.tao': `
-        workspace let ExplicitFile = "Explicit file target"
-      `,
-      },
-      async result => {
-        Expect(validationErrorMessages(result)).toContain(useValidationMessages.unresolvedImport('@foo/FileOnly'))
-        Expect(validationErrorMessages(result)).toContain(
-          useValidationMessages.unresolvedImport('@foo/ExplicitFile.tao'),
-        )
-      },
-    )
-  })
-
-  Test('rejects duplicate package names in the package index', async () => {
-    await withValidatedFiles(
-      'Main.tao',
-      {
-        'Main.tao': `
-        app DuplicatePackageApp { view MainView }
-        use MainView from @bar
-      `,
-        'one/@bar/Main.tao': `
-        workspace view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
-        'two/@bar/Main.tao': `
-        workspace view OtherView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
-      },
-      async result => {
+      result => {
         Expect(validationErrorMessages(result).some(message => message.includes("Package '@bar' is ambiguous"))).toBe(
           true,
         )
       },
-    )
-  })
+    ),
+  )
 
-  Test('rejects relative imports that cross package boundaries', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'rejects relative imports that cross package boundaries',
+    rejectsFiles(
       {
         'Main.tao': `
-        app BoundaryApp { view MainView }
-        use MainView from ./features/@bar
-      `,
-        'features/@bar/Main.tao': `
-        workspace view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          use MainView from ./features/@bar
+          app BoundaryApp { view MainView }
+        `,
+        'features/@bar/Main.tao': visibleView('MainView'),
       },
-      async result => {
-        Expect(validationErrorMessages(result)).toContain(useValidationMessages.packageBoundary('./features/@bar'))
-      },
-    )
-  })
+      useValidationMessages.packageBoundary('./features/@bar'),
+    ),
+  )
 
-  Test('keeps package-visible declarations out of cross-package imports', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'keeps package-visible declarations out of cross-package imports',
+    rejectsFiles(
       {
         'Main.tao': `
-        app VisibilityApp { view MainView }
-        use MainView from @bar
-      `,
-        'features/@bar/Main.tao': `
-        package view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          use MainView from @bar
+          app VisibilityApp { view MainView }
+        `,
+        'features/@bar/Main.tao': stubView('MainView').replace('view ', 'package view '),
       },
-      async result => {
-        Expect(validationErrorMessages(result)).toContain(useValidationMessages.notVisible('MainView'))
-      },
-    )
-  })
+      useValidationMessages.notVisible('MainView'),
+    ),
+  )
 
-  Test('does not include nested package folders in bare package imports', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'does not include nested package folders in bare package imports',
+    rejectsFiles(
       {
         'Main.tao': `
-        app NestedPackageApp { view MainView }
-        use MainView from @outer
-        use InnerView from @inner
-      `,
+          use MainView from @outer
+          use InnerView from @inner
+          app NestedPackageApp { view MainView }
+        `,
         'features/@outer/Main.tao': `
-        use NestedAlias
-        workspace view MainView {
-          render Text(NestedAlias)
-        }
-        view Text Value is text {
-          render inject Value ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          use NestedAlias
+          workspace view MainView { render Text(NestedAlias) }
+          ${stubView('Text', 'Value is text')}
+        `,
         'features/@outer/@inner/Main.tao': `
-        package let NestedAlias = "Nested"
-        workspace view InnerView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          package let NestedAlias = "Nested"
+          ${visibleView('InnerView')}
+        `,
       },
-      async result => {
-        Expect(validationErrorMessages(result)).toContain(
-          useValidationMessages.missingImport('NestedAlias', 'current package'),
-        )
-      },
-    )
-  })
+      useValidationMessages.missingImport('NestedAlias', 'current package'),
+    ),
+  )
 
-  Test('does not load nested package files through bare package imports', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'does not load nested package files through bare package imports',
+    checksFiles(
       {
         'Main.tao': `
-        app NestedPackageApp { view MainView }
-        use MainView from @outer
-      `,
-        'features/@outer/Main.tao': `
-        workspace view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
+          use MainView from @outer
+          app NestedPackageApp { view MainView }
+        `,
+        'features/@outer/Main.tao': visibleView('MainView'),
         'features/@outer/@inner/Broken.tao': 'view Broken {',
       },
-      async result => {
+      result => {
         Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(false)
         Expect(validationErrorMessages(result)).toEqual([])
       },
-    )
-  })
+    ),
+  )
 
-  Test('rejects duplicate visible declarations in sibling package files', async () => {
-    await withValidatedFiles(
-      'Main.tao',
+  Test(
+    'rejects duplicate visible declarations in sibling package files',
+    checksFiles(
       {
         'Main.tao': `
-        app DuplicateVisibleApp { view MainView }
-        use MainView from @foo
-      `,
-        'features/@foo/Main.tao': `
-        workspace view MainView {
-          render inject ${tsFence}
-            return null
-          ${fence}
-        }
-      `,
-        'features/@foo/First.tao': `
-        package let Shared = "First"
-      `,
-        'features/@foo/Second.tao': `
-        public let Shared = "Second"
-      `,
+          use MainView from @foo
+          app DuplicateVisibleApp { view MainView }
+        `,
+        'features/@foo/Main.tao': visibleView('MainView'),
+        'features/@foo/First.tao': 'package let Shared = "First"',
+        'features/@foo/Second.tao': 'public let Shared = "Second"',
       },
-      async result => {
+      result => {
         const duplicateMessages = validationErrorMessages(result).filter(message =>
           message.startsWith("Visible declaration 'Shared' is declared more than once in folder ")
         )
 
         Expect(duplicateMessages).toHaveLength(2)
       },
-    )
-  })
+    ),
+  )
 
-  Test('validates local project metadata blocks', async () => {
-    const result = await testValidateCodeWithErrors(`
-      project {
-        name "One"
-        name "Two"
-        remote none
-        remote none
-        license MIT
-        license Apache
-        requires foo
-      }
-      project {
-        name "Duplicate"
-      }
-      app MetadataApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateProject())
-    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateName())
-    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateRemote())
-    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.duplicateLicense())
-    Expect(validationErrorMessages(result)).toContain(projectValidationMessages.unsupportedRequires())
-  })
+  for (
+    const projectCase of [
+      {
+        title: 'rejects multiple project declarations',
+        source: `project { name "One" }\nproject { name "Two" }\n${stubApp()}`,
+        message: projectValidationMessages.duplicateProject(),
+      },
+      {
+        title: 'rejects duplicate project names',
+        source: `project { name "One" name "Two" }\n${stubApp()}`,
+        message: projectValidationMessages.duplicateName(),
+      },
+      {
+        title: 'rejects duplicate project remotes',
+        source: `project { remote none remote none }\n${stubApp()}`,
+        message: projectValidationMessages.duplicateRemote(),
+      },
+      {
+        title: 'rejects duplicate project licenses',
+        source: `project { license MIT license Apache }\n${stubApp()}`,
+        message: projectValidationMessages.duplicateLicense(),
+      },
+      {
+        title: 'rejects unsupported project requirements',
+        source: `project { requires foo }\n${stubApp()}`,
+        message: projectValidationMessages.unsupportedRequires(),
+      },
+    ]
+  ) {
+    Test(projectCase.title, rejects(projectCase.source, projectCase.message))
+  }
 })

@@ -1,12 +1,13 @@
 import { Diagnostics, FS, Text } from '@shared'
-import { Expect, mkTestDir, withTaoFiles } from '@shared/test'
+import { app, Expect, fence, mkTestDir, stubLayout, stubView, tsFence, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 
-export const tsFence = '```ts'
-export const fence = '```'
+export { app, fence, stubLayout, stubView, tsFence }
 
 export type ValidatedFiles = Awaited<ReturnType<typeof Workspace.validate>>
+
+const validatorSession = Validator.createSession()
 
 export async function withValidatedFiles<
   const Files extends Record<string, string>,
@@ -56,11 +57,27 @@ export async function testValidateCodeWithErrors(source: string): Promise<Valida
   return result
 }
 
+/** accepts returns a test callback that requires source to validate without errors. */
+export function accepts(source: string): () => Promise<ValidationResult> {
+  return async () => await testValidateCode(source)
+}
+
+/** rejects returns a test callback that requires validation errors containing every message. */
+export function rejects(source: string, ...messages: readonly string[]): () => Promise<void> {
+  return async () => {
+    const result = await testValidateCodeWithErrors(source)
+    const errors = validationErrorMessages(result).join('\n')
+    for (const message of messages) {
+      Expect(errors).toContain(message)
+    }
+  }
+}
+
 /** validationErrorMessages returns all validation error messages. */
 export function validationErrorMessages(result: ValidationResult): string[] {
   return Diagnostics.errorMessages(result.diagnostics)
 }
 
 async function validateCode(source: string): Promise<ValidationResult> {
-  return await Validator.validateCode(source)
+  return await (await validatorSession).validateCode(source)
 }

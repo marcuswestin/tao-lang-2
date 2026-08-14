@@ -6,16 +6,21 @@ import { navigationValidationMessages } from '../validator-src/validators/naviga
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
+  accepts,
+  app,
   fence,
-  testValidateCode,
+  rejects,
+  stubLayout,
+  stubView,
   testValidateCodeWithErrors,
   tsFence,
   validationErrorMessages,
 } from './test-validate'
 
-Describe('Tao validator structural diagnostics', () => {
-  Test('validates arbitrary self-hosted declaration contracts without shipped-name tables', async () => {
-    await testValidateCode(`
+Describe('validator: declaration contracts', () => {
+  Test(
+    'accepts arbitrary self-hosted declaration contracts without shipped-name tables',
+    accepts(`
       public type Presentable is ui | nav
       public nav Carousel {
         Initial key
@@ -24,91 +29,92 @@ Describe('Tao validator structural diagnostics', () => {
           Label text
           Content Presentable
         }
-        implement inject nav ${tsFence}
-          return TR.NavKind.Selection()
-        ${fence}
+        ${implementation('nav', 'return TR.NavKind.Selection()')}
       }
       public datasource SnapshotStore {
         StorageKey text
-        implement inject provider ${tsFence}
-          return TR.DataProvider.Local()
-        ${fence}
+        ${implementation('provider', 'return TR.DataProvider.Local()')}
       }
       ui Home { render Empty() }
       let Main = Carousel {
         Initial @home
         Display "tabs"
-        @home {
-          Label "Home"
-          Content Home
-        }
+        @home { Label "Home" Content Home }
       }
       app Demo {
         Name "Demo"
         Navigator Main
-        Datasource SnapshotStore {
-          StorageKey "demo"
-        }
+        Datasource SnapshotStore { StorageKey "demo" }
       }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-  })
+      ${stubView('Empty')}
+    `),
+  )
 
-  Test('derives ordinary and keyed constructor diagnostics from their declarations', async () => {
-    const invalid = await testValidateCodeWithErrors(`
-      public type Presentable is ui | nav
-      public nav Carousel {
-        Initial key
-        Display text
-        @key {
-          Label text
-          Content Presentable
-        }
-        implement inject nav ${tsFence}
-          return TR.NavKind.Selection()
-        ${fence}
-      }
-      ui Home { render Empty() }
-      let Bad = Carousel {
-        Initial @missing
-        Initial "not a key"
-        Display 3
-        Extra "unknown"
-        @home {
-          Label 4
-          Content "not presentable"
-          Extra "unknown"
-        }
-        @home {
-          Label "Duplicate"
-        }
-      }
-      let Empty = Carousel {
-        Initial @home
-        Display "tabs"
-      }
-      app Demo { Name "Demo" Navigator Bad }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(navigationValidationMessages.duplicateConfiguration('Carousel', 'Initial'))
-    Expect(messages).toContain(navigationValidationMessages.configurationKeyType('Initial'))
-    Expect(messages).toContain(navigationValidationMessages.configurationType('Display', 'text', 'number'))
-    Expect(messages).toContain(navigationValidationMessages.unknownConfiguration('Carousel', 'Extra'))
-    Expect(messages).toContain(navigationValidationMessages.duplicateConfigurationKey('Carousel', '@home'))
-    Expect(messages).toContain(navigationValidationMessages.missingKeyedItem('Carousel'))
-    Expect(messages).toContain(navigationValidationMessages.configurationType('Label', 'text', 'number'))
-    Expect(messages).toContain(navigationValidationMessages.configurationType('Content', 'ui | nav', 'text'))
-    Expect(messages).toContain(navigationValidationMessages.keyedItemConfiguration('Carousel', '@home', 'Extra'))
-    Expect(messages).toContain(navigationValidationMessages.keyedItemMissing('Carousel', '@home', 'Content'))
-    Expect(messages).toContain(
+  const carouselCases: ReadonlyArray<readonly [name: string, configuration: string, message: string]> = [
+    [
+      'duplicate ordinary configuration properties',
+      'Initial @home Initial @home Display "tabs" @home { Label "Home" Content Home }',
+      navigationValidationMessages.duplicateConfiguration('Carousel', 'Initial'),
+    ],
+    [
+      'non-key values for key configuration properties',
+      'Initial "home" Display "tabs" @home { Label "Home" Content Home }',
+      navigationValidationMessages.configurationKeyType('Initial'),
+    ],
+    [
+      'ordinary configuration values of the wrong type',
+      'Initial @home Display 3 @home { Label "Home" Content Home }',
+      navigationValidationMessages.configurationType('Display', 'text', 'number'),
+    ],
+    [
+      'unknown ordinary configuration properties',
+      'Initial @home Display "tabs" Extra "unknown" @home { Label "Home" Content Home }',
+      navigationValidationMessages.unknownConfiguration('Carousel', 'Extra'),
+    ],
+    [
+      'duplicate keyed items',
+      'Initial @home Display "tabs" @home { Label "Home" Content Home } @home { Label "Again" Content Home }',
+      navigationValidationMessages.duplicateConfigurationKey('Carousel', '@home'),
+    ],
+    [
+      'missing keyed items',
+      'Initial @home Display "tabs"',
+      navigationValidationMessages.missingKeyedItem('Carousel'),
+    ],
+    [
+      'keyed item properties of the wrong primitive type',
+      'Initial @home Display "tabs" @home { Label 4 Content Home }',
+      navigationValidationMessages.configurationType('Label', 'text', 'number'),
+    ],
+    [
+      'keyed item properties of the wrong union type',
+      'Initial @home Display "tabs" @home { Label "Home" Content "not presentable" }',
+      navigationValidationMessages.configurationType('Content', 'ui | nav', 'text'),
+    ],
+    [
+      'unknown keyed item properties',
+      'Initial @home Display "tabs" @home { Label "Home" Content Home Extra "unknown" }',
+      navigationValidationMessages.keyedItemConfiguration('Carousel', '@home', 'Extra'),
+    ],
+    [
+      'missing keyed item properties',
+      'Initial @home Display "tabs" @home { Label "Home" }',
+      navigationValidationMessages.keyedItemMissing('Carousel', '@home', 'Content'),
+    ],
+    [
+      'initial keys absent from keyed items',
+      'Initial @missing Display "tabs" @home { Label "Home" Content Home }',
       navigationValidationMessages.unknownConfigurationKey('Carousel', 'Initial', '@missing'),
-    )
-  })
+    ],
+  ]
 
-  Test('rejects with patches on non-configurable aliases and follows configurable alias chains', async () => {
-    await testValidateCode(`
+  for (const [name, configuration, message] of carouselCases) {
+    Test(`derives ${name} from a self-hosted declaration`, rejects(carouselApp(configuration), message))
+  }
+
+  Test(
+    'follows configurable alias chains when applying patches',
+    accepts(`
       use StackNav from @tao/nav
       let BaseNavigation = StackNav { Initial Home }
       let NavigationAlias = BaseNavigation
@@ -116,116 +122,109 @@ Describe('Tao validator structural diagnostics', () => {
       app Demo { Name "Demo" Navigator PatchedNavigation }
       ui Home { render Empty() }
       ui Other { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+      ${stubView('Empty')}
+    `),
+  )
 
-    const invalid = await testValidateCodeWithErrors(`
+  Test(
+    'rejects patches on non-configurable aliases',
+    rejects(
+      `
       use StackNav from @tao/nav
       let Plain = 5
       let Patched = Plain with { X: 1 }
       app Demo { Name "Demo" Navigator StackNav { Initial Home } }
       ui Home { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+      ${stubView('Empty')}
+    `,
+      navigationValidationMessages.patchTarget('Plain'),
+    ),
+  )
 
-    Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.patchTarget('Plain'))
-  })
+  const declarationCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'non-public navigation declarations',
+      `nav HiddenNav { ${implementation('nav')} }`,
+      configurationValidationMessages.visible('Nav'),
+    ],
+    [
+      'duplicate ordinary declaration properties',
+      `public nav Duplicate { Initial key Initial text ${implementation('nav')} }`,
+      configurationValidationMessages.duplicateProperty('Initial'),
+    ],
+    [
+      'duplicate keyed item properties',
+      `public nav Duplicate { @key { Label key Label text } ${implementation('nav')} }`,
+      configurationValidationMessages.duplicateProperty('Label'),
+    ],
+    [
+      'duplicate keyed item blocks',
+      `public nav Duplicate { @key { Label text } @key { Content ui } ${implementation('nav')} }`,
+      configurationValidationMessages.duplicateKey,
+    ],
+    [
+      'duplicate implementation blocks',
+      `public nav Duplicate { ${implementation('provider')} ${implementation('nav')} }`,
+      configurationValidationMessages.duplicateImplementation,
+    ],
+    [
+      'navigation declarations with non-navigation implementations',
+      `public nav WrongProtocol { ${implementation('provider')} }`,
+      configurationValidationMessages.protocol('WrongProtocol', 'nav'),
+    ],
+    [
+      'keyed datasource declarations',
+      `public datasource KeyedStore { @key { Label text } ${implementation('provider')} }`,
+      configurationValidationMessages.datasourceKey,
+    ],
+    [
+      'datasource declarations with non-provider implementations',
+      `public datasource WrongProtocol { ${implementation('nav')} }`,
+      configurationValidationMessages.protocol('WrongProtocol', 'provider'),
+    ],
+    [
+      'nested navigation declarations',
+      `view Owner { public nav NestedNav { ${implementation('nav')} } render Empty() } ${stubView('Empty')}`,
+      configurationValidationMessages.topLevel('Nav'),
+    ],
+    [
+      'declarations without implementation blocks',
+      'public datasource MissingImplementation { StorageKey text }',
+      configurationValidationMessages.missingImplementation('MissingImplementation'),
+    ],
+    [
+      'key-typed keyed item properties',
+      `public nav KeyedProperty { @key { Label key } ${implementation('nav')} }`,
+      configurationValidationMessages.keyProperty('Label'),
+    ],
+  ]
 
-  Test('validates self-hosted declaration placement, visibility, shape, and protocol', async () => {
-    const invalid = await testValidateCodeWithErrors(`
-      nav HiddenNav {
-        Initial key
-        Initial text
-        OrphanKey key
-        @key { Label key Label text }
-        @key { Content ui }
-        implement inject provider ${tsFence} return null ${fence}
-        implement inject nav ${tsFence} return null ${fence}
-      }
-      public datasource BadStore {
-        @key { Label text }
-        implement inject nav ${tsFence} return null ${fence}
-      }
-      view Owner {
-        public nav NestedNav {
-          implement inject nav ${tsFence} return null ${fence}
-        }
-        render Empty()
-      }
-      public datasource MissingImplementation {
-        StorageKey text
-      }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+  for (const [name, source, message] of declarationCases) {
+    Test(`rejects ${name}`, rejects(source, message))
+  }
 
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(configurationValidationMessages.visible('Nav'))
-    Expect(messages).toContain(configurationValidationMessages.duplicateProperty('Initial'))
-    Expect(messages).toContain(configurationValidationMessages.duplicateProperty('Label'))
-    Expect(messages).toContain(configurationValidationMessages.duplicateKey)
-    Expect(messages).toContain(configurationValidationMessages.duplicateImplementation)
-    Expect(messages).toContain(configurationValidationMessages.protocol('HiddenNav', 'nav'))
-    Expect(messages).toContain(configurationValidationMessages.datasourceKey)
-    Expect(messages).toContain(configurationValidationMessages.protocol('BadStore', 'provider'))
-    Expect(messages).toContain(configurationValidationMessages.topLevel('Nav'))
-    Expect(messages).toContain(configurationValidationMessages.missingImplementation('MissingImplementation'))
-    Expect(messages).toContain(configurationValidationMessages.keyProperty('Label'))
-  })
+  const dialogueCases: ReadonlyArray<readonly [name: string, action: string, message: string]> = [
+    [
+      'asks with missing arguments',
+      'let Result = ask ConfirmClose()',
+      DialogueValidator.messages.missingArgument('ConfirmClose', 'Title'),
+    ],
+    [
+      'duplicate ask result bindings',
+      'let Result = ask ConfirmClose("Draft") let Result = ask ConfirmClose("Again")',
+      DialogueValidator.messages.duplicateResult('Result'),
+    ],
+    ['responses outside dialogues', 'respond', DialogueValidator.messages.responseContext],
+  ]
 
-  Test('validates dialogue ask bindings, response ownership, and enum-typed results', async () => {
-    await testValidateCode(`
-      enum ConfirmResult { Confirmed }
-      view Editor {
-        action Close {
-          let Result = ask ConfirmClose("Draft")
-          if Result is Confirmed { dismiss }
-        }
-        render Empty()
-      }
-      dialogue ConfirmClose Title is text responds ConfirmResult {
-        action Confirm { respond Confirmed }
-        action Cancel { respond }
-        render Empty()
-      }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+  for (const [name, action, message] of dialogueCases) {
+    Test(`rejects ${name}`, rejects(dialogueApp(action), message))
+  }
 
-    const invalid = await testValidateCodeWithErrors(`
-      enum ConfirmResult { Confirmed }
-      view Editor {
-        action Broken {
-          let Result = ask ConfirmClose()
-          let Result = ask ConfirmClose("Draft")
-          respond
-        }
-        render Empty()
-      }
-      dialogue ConfirmClose Title is text responds ConfirmResult {
-        render Empty()
-      }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(DialogueValidator.messages.missingArgument('ConfirmClose', 'Title'))
-    Expect(messages).toContain(DialogueValidator.messages.duplicateResult('Result'))
-    Expect(messages).toContain(DialogueValidator.messages.responseContext)
-  })
-
-  Test('validates overlay presentation with nearest and explicit navigation targets', async () => {
-    await testValidateCode(`
-      use StackNav from @tao/nav
-      let TargetNav = StackNav { Initial Detail }
-      app OverlayApp { Name "Overlay" Navigator StackNav { Initial Home } }
-      ui Home {
-        action Nearest { present Detail() as overlay }
-        action Explicit { present Detail() as overlay in TargetNav }
-        render Empty()
-      }
-      ui Detail { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-
-    const invalid = await testValidateCodeWithErrors(`
+  Test(
+    'rejects overlay targets that are not navigation values',
+    rejects(
+      `
       use StackNav from @tao/nav
       app OverlayApp { Name "Overlay" Navigator StackNav { Initial Home } }
       ui Home {
@@ -233,63 +232,43 @@ Describe('Tao validator structural diagnostics', () => {
         render Empty()
       }
       ui Detail { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-    Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.presentationTarget('ui'))
-  })
+      ${stubView('Empty')}
+    `,
+      navigationValidationMessages.presentationTarget('ui'),
+    ),
+  )
 
-  Test('validates app-level keyed toast modifiers from rendered declarations', async () => {
-    await testValidateCode(`
-      use StackNav from @tao/nav
-      app ToastApp { Name "Toast" Navigator StackNav { Initial Home } }
-      ui Home { render Editor() }
-      view Editor {
-        action Save { present Saved() as toast (Key: "document-saved", Duration: 3) }
-        action EmptyKey { present Saved() as toast (Key: "", Duration: 0) }
-        render Empty()
-      }
-      ui Saved { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+  const toastCases: ReadonlyArray<readonly [name: string, statement: string, message: string]> = [
+    [
+      'non-text toast keys',
+      'present Saved() as toast (Key: 3, Duration: 1)',
+      navigationValidationMessages.toastKeyType('number'),
+    ],
+    [
+      'non-number toast durations',
+      'present Saved() as toast (Key: "saved", Duration: "soon")',
+      navigationValidationMessages.toastDurationType('text'),
+    ],
+    [
+      'negative toast durations',
+      'present Saved() as toast (Key: "saved", Duration: -1)',
+      navigationValidationMessages.toastDurationNegative,
+    ],
+    [
+      'explicit toast targets',
+      'present Saved() as toast (Key: "saved", Duration: 1) in Target',
+      navigationValidationMessages.toastTarget,
+    ],
+  ]
 
-    const invalid = await testValidateCodeWithErrors(`
-      use StackNav from @tao/nav
-      let Target = StackNav { Initial Home }
-      app ToastApp { Name "Toast" Navigator Target }
-      ui Home {
-        action BadKey { present Saved() as toast (Key: 3, Duration: 1) }
-        action BadDuration { present Saved() as toast (Key: "saved", Duration: "soon") }
-        action Negative { present Saved() as toast (Key: "saved", Duration: -1) }
-        action Targeted { present Saved() as toast (Key: "saved", Duration: 1) in Target }
-        render Empty()
-      }
-      ui Saved { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(navigationValidationMessages.toastKeyType('number'))
-    Expect(messages).toContain(navigationValidationMessages.toastDurationType('text'))
-    Expect(messages).toContain(navigationValidationMessages.toastDurationNegative)
-    Expect(messages).toContain(navigationValidationMessages.toastTarget)
-  })
+  for (const [name, statement, message] of toastCases) {
+    Test(`rejects ${name}`, rejects(toastApp(statement), message))
+  }
 
-  Test('limits target-only selection activation to ui actions', async () => {
-    await testValidateCode(`
-      use SelectionNav from @tao/nav
-      let MainNavigation = SelectionNav {
-        Initial @workspace
-        Display "tabs"
-        @workspace { Label "Workspace" Content Home }
-      }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
-      ui Home {
-        action Activate { present SelectionApp@workspace }
-        render Empty()
-      }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-
-    const invalid = await testValidateCodeWithErrors(`
+  Test(
+    'rejects target-only selection activation outside ui actions',
+    rejects(
+      `
       use SelectionNav from @tao/nav
       let MainNavigation = SelectionNav {
         Initial @workspace
@@ -301,47 +280,32 @@ Describe('Tao validator structural diagnostics', () => {
         action Activate { present SelectionApp@workspace }
         render Empty()
       }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-    Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.activationContext)
-  })
+      ${stubView('Empty')}
+    `,
+      navigationValidationMessages.activationContext,
+    ),
+  )
 
-  Test('limits replacement to actions inside visual declarations', async () => {
-    await testValidateCode(`
-      use StackNav from @tao/nav
-      let SignedOutNav = StackNav { Initial SignedOut }
-      app ReplaceApp { Name "Replace" Navigator StackNav { Initial Home } }
-      ui Home {
-        action Reset { replace SignedOutNav in ReplaceApp }
-        render Empty()
-      }
-      ui SignedOut { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-
-    const invalid = await testValidateCodeWithErrors(`
+  Test(
+    'rejects replacement outside visual declaration actions',
+    rejects(
+      `
       use StackNav from @tao/nav
       let SignedOutNav = StackNav { Initial SignedOut }
       app ReplaceApp { Name "Replace" Navigator StackNav { Initial Home } }
       action Reset { replace SignedOutNav in ReplaceApp }
       ui Home { render Empty() }
       ui SignedOut { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+      ${stubView('Empty')}
+    `,
+      navigationValidationMessages.replaceContext,
+    ),
+  )
 
-    Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.replaceContext)
-  })
-
-  Test('requires target-only selection keys from the root and every app variant', async () => {
-    await testValidateCode(`
-      use SelectionNav from @tao/nav
-      let MainNavigation = SelectionNav {
-        Initial @workspace
-        Display "tabs"
-        @workspace { Label "Workspace" Content Home }
-        @settings { Label "Settings" Content Settings }
-      }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
+  Test(
+    'accepts target-only keys present in the root and every app variant',
+    accepts(selectionVariantApp(
+      `
       let SelectionDrawer = SelectionApp with {
         Navigator with { Display "drawer" }
       }
@@ -353,65 +317,47 @@ Describe('Tao validator structural diagnostics', () => {
           @other { Label "Other" Content Other }
         }
       }
-      ui Home {
-        action ActivateApp { present SelectionApp@workspace }
-        render Empty()
-      }
-      ui Settings { render Empty() }
-      ui Other { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
+    `,
+      'workspace',
+    )),
+  )
 
-    const missingFromVariant = await testValidateCodeWithErrors(`
-      use SelectionNav from @tao/nav
-      let MainNavigation = SelectionNav {
-        Initial @workspace
-        Display "tabs"
-        @workspace { Label "Workspace" Content Home }
-        @settings { Label "Settings" Content Settings }
-      }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
-      let SelectionLimited = SelectionApp with {
-        Navigator SelectionNav {
-          Initial @workspace
-          Display "tabs"
-          @workspace { Label "Workspace" Content Home }
+  const selectionVariantCases: ReadonlyArray<
+    readonly [name: string, variants: string, selection: string, variantName: string]
+  > = [
+    [
+      'keys missing from a keyed app variant',
+      `
+        let SelectionLimited = SelectionApp with {
+          Navigator SelectionNav {
+            Initial @workspace
+            Display "tabs"
+            @workspace { Label "Workspace" Content Home }
+          }
         }
-      }
-      ui Home {
-        action Activate { present SelectionApp@settings }
-        render Empty()
-      }
-      ui Settings { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-    Expect(validationErrorMessages(missingFromVariant)).toContain(
-      navigationValidationMessages.unknownSelection('SelectionLimited', 'settings'),
-    )
+      `,
+      'settings',
+      'SelectionLimited',
+    ],
+    [
+      'keys on app variants with non-keyed navigation',
+      'let SelectionStack = SelectionApp with { Navigator StackNav { Initial Home } }',
+      'workspace',
+      'SelectionStack',
+    ],
+  ]
 
-    const nonKeyedVariant = await testValidateCodeWithErrors(`
-      use SelectionNav, StackNav from @tao/nav
-      let MainNavigation = SelectionNav {
-        Initial @workspace
-        Display "tabs"
-        @workspace { Label "Workspace" Content Home }
-      }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
-      let SelectionStack = SelectionApp with {
-        Navigator StackNav { Initial Home }
-      }
-      ui Home {
-        action Activate { present SelectionApp@workspace }
-        render Empty()
-      }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-    Expect(validationErrorMessages(nonKeyedVariant)).toContain(
-      navigationValidationMessages.unknownSelection('SelectionStack', 'workspace'),
+  for (const [name, variants, selection, variantName] of selectionVariantCases) {
+    Test(
+      `rejects target-only ${name}`,
+      rejects(
+        selectionVariantApp(variants, selection),
+        navigationValidationMessages.unknownSelection(variantName, selection),
+      ),
     )
-  })
+  }
 
-  Test('requires strict app targets to name the root declaration', async () => {
+  Test('reports every strict target that names an app variant', async () => {
     const invalid = await testValidateCodeWithErrors(`
       use SelectionNav, SlotNav, StackNav from @tao/nav
       let ResetNav = StackNav { Initial Home }
@@ -432,197 +378,268 @@ Describe('Tao validator structural diagnostics', () => {
         render Empty()
       }
       ui Detail { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
+      ${stubView('Empty')}
     `)
 
     const message = navigationValidationMessages.strictTargetDeclaration('StrictVariant')
     Expect(validationErrorMessages(invalid).filter(candidate => candidate === message)).toHaveLength(3)
   })
 
-  Test('validates SelectionNav keyed items, initial key, display, labels, and content', async () => {
-    await testValidateCode(`
-      use SelectionNav from @tao/nav
-      let MainNavigation = SelectionNav {
-        Initial @home
-        Display "tabs"
-        @home { Label "Home" Content Home }
-        @settings { Label "Settings" Content Settings }
-      }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
-      ui Home { render Empty() }
-      ui Settings { render Empty() }
-      view Empty { render inject ${tsFence} return null ${fence} }
-    `)
-
-    const invalid = await testValidateCodeWithErrors(`
-      use SelectionNav from @tao/nav
-      let BadNavigation = SelectionNav {
-        Initial @missing
-        Display 3
-        @home { Label 4 Content "not presentable" Extra "unknown" }
-        @home { Label "Duplicate" }
-      }
-      app SelectionApp { Name "Selection" Navigator BadNavigation }
-    `)
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(
+  const selectionNavCases: ReadonlyArray<readonly [name: string, configuration: string, message: string]> = [
+    [
+      'initial keys absent from keyed items',
+      'Initial @missing Display "tabs" @home { Label "Home" Content Home }',
       navigationValidationMessages.unknownConfigurationKey('SelectionNav', 'Initial', '@missing'),
-    )
-    Expect(messages).toContain(navigationValidationMessages.configurationType('Display', 'text', 'number'))
-    Expect(messages).toContain(navigationValidationMessages.duplicateConfigurationKey('SelectionNav', '@home'))
-    Expect(messages).toContain(navigationValidationMessages.configurationType('Label', 'text', 'number'))
-    Expect(messages).toContain(navigationValidationMessages.configurationType('Content', 'ui | nav', 'text'))
-    Expect(messages).toContain(navigationValidationMessages.keyedItemConfiguration('SelectionNav', '@home', 'Extra'))
-    Expect(messages).toContain(navigationValidationMessages.keyedItemMissing('SelectionNav', '@home', 'Content'))
-  })
+    ],
+    [
+      'display values of the wrong type',
+      'Initial @home Display 3 @home { Label "Home" Content Home }',
+      navigationValidationMessages.configurationType('Display', 'text', 'number'),
+    ],
+    [
+      'duplicate keyed items',
+      'Initial @home Display "tabs" @home { Label "Home" Content Home } @home { Label "Again" Content Home }',
+      navigationValidationMessages.duplicateConfigurationKey('SelectionNav', '@home'),
+    ],
+    [
+      'labels of the wrong type',
+      'Initial @home Display "tabs" @home { Label 4 Content Home }',
+      navigationValidationMessages.configurationType('Label', 'text', 'number'),
+    ],
+    [
+      'content of the wrong type',
+      'Initial @home Display "tabs" @home { Label "Home" Content "not presentable" }',
+      navigationValidationMessages.configurationType('Content', 'ui | nav', 'text'),
+    ],
+    [
+      'unknown keyed item properties',
+      'Initial @home Display "tabs" @home { Label "Home" Content Home Extra "unknown" }',
+      navigationValidationMessages.keyedItemConfiguration('SelectionNav', '@home', 'Extra'),
+    ],
+    [
+      'missing keyed item properties',
+      'Initial @home Display "tabs" @home { Label "Home" }',
+      navigationValidationMessages.keyedItemMissing('SelectionNav', '@home', 'Content'),
+    ],
+  ]
 
-  Test('validates root and relation queries with boolean cases and unconditional placement', async () => {
-    await testValidateCode(`
-      data Workspaces / Workspace { Name text Documents (auto-delete) }
-      data Documents / Document {
-        Title text
-        Final yes / no Draft
-        Workspace
-      }
-      app DataApp { view Main }
-      view Main {
-        query Workspaces { }
-        render Text("Rows: { Workspaces.Count }")
-      }
-      view Detail Workspace {
-        render Col() {
-          Text("Before")
-          query Drafts from Workspace.Documents { where is Draft }
-          Text("Drafts: { Drafts.Count }")
-          loop Drafts / Document { Text(Document.Title) }
-        }
-      }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
+  for (const [name, configuration, message] of selectionNavCases) {
+    Test(`rejects SelectionNav ${name}`, rejects(selectionNavApp(configuration), message))
+  }
 
-    const invalid = await testValidateCodeWithErrors(`
-      data Workspaces / Workspace { Name text }
-      app DataApp { view Main }
-      view Main {
-        render Col() {
-          guard "stop" empty -> { Text("Stopped") }
-          query Missing { }
-        }
-      }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(dataValidationMessages.querySource)
-    Expect(messages).toContain(dataValidationMessages.queryAfterControl)
-  })
+  const queryCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'queries without a data source',
+      queryApp('query Missing { }'),
+      dataValidationMessages.querySource,
+    ],
+    [
+      'queries after unconditional control flow',
+      queryApp(
+        'guard "stop" empty -> { Text("Stopped") } query Workspaces { }',
+        'data Workspaces / Workspace { Name text }',
+      ),
+      dataValidationMessages.queryAfterControl,
+    ],
+  ]
 
-  Test('rejects invalid field modifiers, case collisions, and ambiguous owner-side cascades', async () => {
-    const result = await testValidateCodeWithErrors(`
-      data Parents / Parent {
-        Name text
-        Enabled yes / no Name (default true, relation Parents)
-        Child (auto-delete)
-        Children (auto-delete)
-      }
-      data Children / Child {
-        Parent
-        OtherParent (relation Parent)
-      }
-    `)
+  for (const [name, source, message] of queryCases) {
+    Test(`rejects ${name}`, rejects(source, message))
+  }
 
-    const messages = validationErrorMessages(result)
-    Expect(messages).toContain(dataValidationMessages.duplicateBooleanCase('Parent', 'Name'))
-    Expect(messages).toContain(dataValidationMessages.booleanDefaultCase('Enabled'))
-    Expect(messages).toContain(dataValidationMessages.relationModifier('Enabled'))
-    Expect(messages).toContain(dataValidationMessages.autoDeleteOwner('Child'))
-    Expect(messages).toContain(
+  const dataFieldCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'boolean cases that collide with field names',
+      'data Parents / Parent { Name text Enabled yes / no Name }',
+      dataValidationMessages.duplicateBooleanCase('Parent', 'Name'),
+    ],
+    [
+      'boolean defaults that do not name a case',
+      'data Parents / Parent { Enabled yes / no Disabled (default true) }',
+      dataValidationMessages.booleanDefaultCase('Enabled'),
+    ],
+    [
+      'relation modifiers on non-relation fields',
+      'data Parents / Parent { Enabled yes / no Disabled (relation Parents) }',
+      dataValidationMessages.relationModifier('Enabled'),
+    ],
+    [
+      'auto-delete on owner-side singular relations',
+      'data Parents / Parent { Child (auto-delete) } data Children / Child { Parent }',
+      dataValidationMessages.autoDeleteOwner('Child'),
+    ],
+    [
+      'ambiguous owner-side cascade relations',
+      `
+        data Parents / Parent { Children (auto-delete) }
+        data Children / Child { Parent OtherParent (relation Parent) }
+      `,
       dataValidationMessages.ambiguousInverseRelation('Parent.Children', 'Child'),
+    ],
+  ]
+
+  for (const [name, source, message] of dataFieldCases) {
+    Test(`rejects ${name}`, rejects(source, message))
+  }
+
+  const tagCases: ReadonlyArray<readonly [name: string, body: string, message: string]> = [
+    [
+      'tags attached to non-renderable statements',
+      '#orphan let Label = "Rows" Text(Label)',
+      ViewsValidator.messages.tagAttachment,
+    ],
+    [
+      'tagged loops with multiple direct row roots',
+      '#rows loop ["One"] / Row { Text(Row) Text(Row) }',
+      ViewsValidator.messages.taggedLoopRoot,
+    ],
+    [
+      'tagged loops with a conditional direct row root',
+      '#rows loop ["Two"] / Row { when Row { empty -> { Text("Empty") } otherwise -> { Text(Row) } } }',
+      ViewsValidator.messages.taggedLoopRoot,
+    ],
+  ]
+
+  for (const [name, body, message] of tagCases) {
+    Test(`rejects ${name}`, rejects(taggedLoopApp(body), message))
+  }
+
+  for (const member of ['Loading', 'Error', 'Empty'] as const) {
+    Test(
+      `rejects retired collection member ${member}`,
+      rejects(collectionApp(`Text(Items.${member})`), typeValidationMessages.memberNotItem(member)),
     )
-  })
+  }
 
-  Test('validates tag attachment and the single direct row root required by tagged loops', async () => {
-    await testValidateCode(`
-      app TaggedApp { view Main }
-      view Main {
-        render Col() {
-          #title
-          Text("Title")
-          #rows
-          loop ["One"] / Row {
-            Col() { Text(Row) }
-          }
-        }
-      }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
+  Test(
+    'accepts stable entity IDs in collection loops',
+    accepts(collectionApp('loop Items / Item { Text(Item.Id) }')),
+  )
 
-    const invalid = await testValidateCodeWithErrors(`
-      app TaggedApp { view Main }
-      view Main {
-        render Col() {
-          #orphan
-          let Label = "Rows"
-          #multipleRoots
-          loop ["One"] / Row {
-            Text(Row)
-            Text(Row)
-          }
-          #conditionalRoot
-          loop ["Two"] / Row {
-            when Row {
-              empty -> { Text("Empty") }
-              otherwise -> { Text(Row) }
-            }
-          }
-        }
-      }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(ViewsValidator.messages.tagAttachment)
-    Expect(messages.filter(message => message === ViewsValidator.messages.taggedLoopRoot)).toHaveLength(2)
-  })
+  Test(
+    'accepts parameter defaults that reference preceding parameters',
+    accepts(parameterDefaultsApp('First is text default "first", Second is text default First')),
+  )
 
-  Test('retires legacy query status and collection empty members while exposing stable entity IDs', async () => {
-    const result = await testValidateCodeWithErrors(`
-      data Items / Item { Title text }
-      app DataApp { view MainView }
-      view MainView {
-        query Items { }
-        render Stack(){
-          Text(Items.Loading)
-          Text(Items.Error)
-          Text(Items.Empty)
-          loop Items / Item { Text(Item.Id) }
-        }
-      }
-      layout Stack { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
+  const defaultScopeCases: ReadonlyArray<readonly [name: string, parameters: string, reference: string]> = [
+    [
+      'later parameters',
+      'Third is text default Fourth, Fourth is text default "fourth"',
+      'Fourth',
+    ],
+    ['the parameter itself', 'Self is text default Self', 'Self'],
+  ]
 
-    const messages = validationErrorMessages(result)
-    Expect(messages).toContain(typeValidationMessages.memberNotItem('Loading'))
-    Expect(messages).toContain(typeValidationMessages.memberNotItem('Error'))
-    Expect(messages).toContain(typeValidationMessages.memberNotItem('Empty'))
-    Expect(messages).not.toContain(typeValidationMessages.unknownMember('Item', 'Id'))
-  })
-
-  Test('scopes parameter defaults to preceding parameters only', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app DefaultsApp { view MainView }
-      view MainView { render inject ${tsFence} return null ${fence} }
-      view Child First is text default "first", Second is text default First, Third is text default Fourth, Fourth is text default "fourth", Self is text default Self {
-        render inject ${tsFence} return null ${fence}
-      }
-    `)
-
-    const messages = validationErrorMessages(result)
-    Expect(messages).toContain("Could not resolve reference to ValueDeclaration named 'Fourth'.")
-    Expect(messages).toContain("Could not resolve reference to ValueDeclaration named 'Self'.")
-    Expect(messages).not.toContain("Could not resolve reference to ValueDeclaration named 'First'.")
-  })
+  for (const [name, parameters, reference] of defaultScopeCases) {
+    Test(
+      `rejects parameter defaults that reference ${name}`,
+      rejects(parameterDefaultsApp(parameters), unresolvedValue(reference)),
+    )
+  }
 })
+
+function implementation(protocol: 'nav' | 'provider', body = 'return null'): string {
+  return `implement inject ${protocol} ${tsFence} ${body} ${fence}`
+}
+
+function carouselApp(configuration: string): string {
+  return `
+    public type Presentable is ui | nav
+    public nav Carousel {
+      Initial key
+      Display text
+      @key { Label text Content Presentable }
+      ${implementation('nav')}
+    }
+    ui Home { render Empty() }
+    let Navigation = Carousel { ${configuration} }
+    app Demo { Name "Demo" Navigator Navigation }
+    ${stubView('Empty')}
+  `
+}
+
+function dialogueApp(action: string): string {
+  return `
+    enum ConfirmResult { Confirmed }
+    app Demo { view Editor }
+    view Editor { action Broken { ${action} } render Empty() }
+    dialogue ConfirmClose Title is text responds ConfirmResult { render Empty() }
+    ${stubView('Empty')}
+  `
+}
+
+function toastApp(statement: string): string {
+  return `
+    use StackNav from @tao/nav
+    let Target = StackNav { Initial Home }
+    app ToastApp { Name "Toast" Navigator Target }
+    ui Home { action Present { ${statement} } render Empty() }
+    ui Saved { render Empty() }
+    ${stubView('Empty')}
+  `
+}
+
+function selectionVariantApp(variants: string, selection: string): string {
+  return `
+    use SelectionNav, StackNav from @tao/nav
+    let MainNavigation = SelectionNav {
+      Initial @workspace
+      Display "tabs"
+      @workspace { Label "Workspace" Content Home }
+      @settings { Label "Settings" Content Settings }
+    }
+    app SelectionApp { Name "Selection" Navigator MainNavigation }
+    ${variants}
+    ui Home { action Activate { present SelectionApp@${selection} } render Empty() }
+    ui Settings { render Empty() }
+    ui Other { render Empty() }
+    ${stubView('Empty')}
+  `
+}
+
+function selectionNavApp(configuration: string): string {
+  return `
+    use SelectionNav from @tao/nav
+    let Navigation = SelectionNav { ${configuration} }
+    app SelectionApp { Name "Selection" Navigator Navigation }
+    ui Home { render Empty() }
+    ${stubView('Empty')}
+  `
+}
+
+function queryApp(body: string, declarations = ''): string {
+  return `
+    ${declarations}
+    ${app(`render Col() { ${body} }`, `${stubLayout('Col')}${stubView('Text', 'Value is text')}`)}
+  `
+}
+
+function taggedLoopApp(body: string): string {
+  return app(
+    `render Col() { ${body} }`,
+    `${stubLayout('Col')}${stubView('Text', 'Value is text')}`,
+  )
+}
+
+function collectionApp(body: string): string {
+  return `
+    data Items / Item { Title text }
+    ${
+    app(
+      `query Items { } render Stack() { ${body} }`,
+      `${stubLayout('Stack')}${stubView('Text', 'Value is text')}`,
+    )
+  }
+  `
+}
+
+function parameterDefaultsApp(parameters: string): string {
+  return app(
+    'render Empty()',
+    `${stubView('Empty')}${stubView('Child', parameters)}`,
+  )
+}
+
+function unresolvedValue(name: string): string {
+  return `Could not resolve reference to ValueDeclaration named '${name}'.`
+}

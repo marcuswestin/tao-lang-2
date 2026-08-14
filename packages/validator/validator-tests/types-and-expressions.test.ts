@@ -8,10 +8,12 @@ import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalC
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
-  fence,
-  testValidateCode,
+  accepts,
+  app,
+  rejects,
+  stubLayout,
+  stubView,
   testValidateCodeWithErrors,
-  tsFence,
   validationErrorMessages,
   withValidationParse,
 } from './test-validate'
@@ -19,40 +21,25 @@ import {
 const inferExpressionType = ExpressionsValidator.inferExpressionType
 const invocationValidationMessages = InvocationsValidator.messages
 
-Describe('Tao validator structural diagnostics', () => {
+Describe('validator: types and expressions', () => {
   Test('exposes Typir services for primitive expression inference', async () => {
     await withValidationParse(
-      `
-      app MyApp { view MainView }
-      let Greeting = "Hello"
-      let Count = 3
-      view MainView { }
-    `,
+      app('', 'let Greeting = "Hello" let Count = 3'),
       ({ result, workspace }) => {
         const aliases = result.entry.ast.statements.filter(AST.isAliasDeclaration)
 
-        Expect(ExpressionsValidator.inferExpressionType(aliases[0]!.value, workspace.typir)).toBe('text')
-        Expect(ExpressionsValidator.inferExpressionType(aliases[1]!.value, workspace.typir)).toBe('number')
+        Expect(inferExpressionType(aliases[0]!.value, workspace.typir)).toBe('text')
+        Expect(inferExpressionType(aliases[1]!.value, workspace.typir)).toBe('number')
       },
     )
   })
 
   Test('infers action and stateful expression types', async () => {
     await withValidationParse(
-      `
-      app MyApp { view MainView }
-      let SaveAction = action { }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 3
-        let DisplayCount = Count
-        render Text("hi")
-      }
-    `,
+      app(
+        'state Count = 3 let DisplayCount = Count render Text("hi")',
+        `let SaveAction = action { } ${stubView('Text', 'Value is text')}`,
+      ),
       ({ result, workspace }) => {
         const actionAlias = result.entry.ast.statements.find(statement =>
           AST.isAliasDeclaration(statement) && statement.name === 'SaveAction'
@@ -67,8 +54,8 @@ Describe('Tao validator structural diagnostics', () => {
         })
         Expect.Is(displayAlias, AST.isAliasDeclaration)
 
-        Expect(ExpressionsValidator.inferExpressionType(actionAlias.value, workspace.typir)).toBe('action')
-        Expect(ExpressionsValidator.inferExpressionType(displayAlias.value, workspace.typir)).toBe('stateful number')
+        Expect(inferExpressionType(actionAlias.value, workspace.typir)).toBe('action')
+        Expect(inferExpressionType(displayAlias.value, workspace.typir)).toBe('stateful number')
       },
     )
   })
@@ -80,10 +67,8 @@ Describe('Tao validator structural diagnostics', () => {
         app MyApp { view MainView }
         type Person is text
         let LocalPerson = Person "Ada"
-        view MainView {
-          render Text(LocalPerson)
-        }
-        view Text Value is text { }
+        view MainView { render Text(LocalPerson) }
+        ${stubView('Text', 'Value is text')}
       `,
       'Other.tao': `
         type Person is text
@@ -117,550 +102,383 @@ Describe('Tao validator structural diagnostics', () => {
     })
   })
 
-  Test('rejects ambiguous expected binding types', async () => {
-    const ambiguousScopedParameters = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Pair("Ada")
-      }
-      view Pair First is text, Second is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const ambiguousArgument = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Base is text
-      type Middle is Base
-      type Leaf is Middle
-      view MainView {
-        render Pair(Leaf "Ada")
-      }
-      view Pair Base, Middle {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const duplicateProperties = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Person is {
-        Name
-        Name
-      }
-      let BadPerson = Person { Name "Ada" }
-      view MainView { }
-    `)
-    const ambiguousProperty = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Base is text
-      type Middle is Base
-      type Leaf is Middle
-      type Person is {
-        Base
-        Middle
-      }
-      let BadPerson = Person { Leaf "Ada" }
-      view MainView { }
-    `)
-    const ambiguousParameter = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Base is text
-      type Name is Base
-      type Title is Base
-      view MainView {
-        render Pair(Name "Ada", Title "Grace")
-      }
-      view Pair Base {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const ambiguousField = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Base is text
-      type Name is Base
-      type Title is Base
-      type Pair is {
-        Base
-      }
-      let BadPair = Pair { Name "Ada", Title "Grace" }
-      view MainView { }
-    `)
-
-    Expect(validationErrorMessages(ambiguousScopedParameters)).toContain(
+  const ambiguousBindingCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'arguments matching multiple same-typed parameters',
+      app('render Pair("Ada")', stubView('Pair', 'First is text, Second is text')),
       'Render of Pair has an argument that matches multiple parameters by type: First, Second.',
-    )
-    Expect(validationErrorMessages(ambiguousArgument)).toContain(
+    ],
+    [
+      'arguments matching multiple nominal ancestors',
+      typeApp(
+        'type Base is text type Middle is Base type Leaf is Middle',
+        'render Pair(Leaf "Ada")',
+        stubView('Pair', 'Base, Middle'),
+      ),
       'Render of Pair has an argument that matches multiple parameters by type: Base, Middle.',
-    )
-    Expect(validationErrorMessages(duplicateProperties)).toContain(
+    ],
+    [
+      'duplicate item property types',
+      typeApp('type Name is text type Person is { Name Name } let BadPerson = Person { Name "Ada" }'),
       typeValidationMessages.duplicatePropertyType('Name'),
-    )
-    Expect(validationErrorMessages(ambiguousProperty)).toContain(
+    ],
+    [
+      'item fields matching multiple nominal ancestors',
+      typeApp(`
+        type Base is text
+        type Middle is Base
+        type Leaf is Middle
+        type Person is { Base Middle }
+        let BadPerson = Person { Leaf "Ada" }
+      `),
       typeValidationMessages.ambiguousProperty(['Base', 'Middle']),
-    )
-    Expect(validationErrorMessages(ambiguousParameter)).toContain(
+    ],
+    [
+      'parameters matched by multiple arguments',
+      typeApp(
+        'type Base is text type Name is Base type Title is Base',
+        'render Pair(Name "Ada", Title "Grace")',
+        stubView('Pair', 'Base'),
+      ),
       invocationValidationMessages.ambiguousParameter('Pair', 'Base'),
-    )
-    Expect(validationErrorMessages(ambiguousField)).toContain(typeValidationMessages.ambiguousField('Base'))
-  })
+    ],
+    [
+      'item properties matched by multiple fields',
+      typeApp(`
+        type Base is text
+        type Name is Base
+        type Title is Base
+        type Pair is { Base }
+        let BadPair = Pair { Name "Ada", Title "Grace" }
+      `),
+      typeValidationMessages.ambiguousField('Base'),
+    ],
+  ]
 
-  Test('rejects invalid custom type operations', async () => {
-    const badCast = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Age is number
-      let BadAge = Age "Ada"
-      view MainView { }
-    `)
-    const missingField = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Age is number
-      type Person is {
-        Name
-        Age
-      }
-      let BadPerson = Person { Name "Ada" }
-      view MainView { }
-    `)
-    const unmatchedField = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Age is number
-      type Person is {
-        Name
-        Age
-      }
-      let BadPerson = Person { Name "Ada", Age 40, "extra" }
-      view MainView { }
-    `)
-    const badMember = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      let DisplayName = Name "Ada"
-      view MainView {
-        render Text(DisplayName.First)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const unknownMember = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Person is {
-        Name
-      }
-      let DemoPerson = Person { Name "Ada" }
-      view MainView {
-        render Text(DemoPerson.Missing)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const shapelessItem = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Bag is item
-      let BadBag = Bag { "extra" }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const unresolvedCast = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let Bad = Missing "Ada"
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const unresolvedConstructor = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let Bad = Missing "Ada"
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const unresolvedMember = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Text(Missing.First)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const unresolvedArgument = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Text(Missing)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const unresolvedProperty = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Person is {
-        Name
-      }
-      let BadPerson = Person { Missing }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
+  for (const [name, source, message] of ambiguousBindingCases) {
+    Test(`rejects ambiguous ${name}`, rejects(source, message))
+  }
 
-    Expect(validationErrorMessages(badCast)).toContain(typeValidationMessages.constructorShape('Age', 'number'))
-    Expect(validationErrorMessages(missingField)).toContain(typeValidationMessages.missingProperty('Age'))
-    Expect(validationErrorMessages(unmatchedField)).toContain(typeValidationMessages.unmatchedProperty)
-    Expect(validationErrorMessages(badMember)).toContain(typeValidationMessages.memberNotItem('First'))
-    Expect(validationErrorMessages(unknownMember)).toContain(typeValidationMessages.unknownMember('Person', 'Missing'))
-    Expect(validationErrorMessages(shapelessItem)).toContain(
+  const invalidTypeCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'primitive constructors with the wrong shape',
+      typeApp('type Age is number let BadAge = Age "Ada"'),
+      typeValidationMessages.constructorShape('Age', 'number'),
+    ],
+    [
+      'item constructors with missing properties',
+      typeApp(`
+        type Name is text
+        type Age is number
+        type Person is { Name Age }
+        let BadPerson = Person { Name "Ada" }
+      `),
+      typeValidationMessages.missingProperty('Age'),
+    ],
+    [
+      'item constructors with unmatched fields',
+      typeApp(`
+        type Name is text
+        type Age is number
+        type Person is { Name Age }
+        let BadPerson = Person { Name "Ada", Age 40, "extra" }
+      `),
+      typeValidationMessages.unmatchedProperty,
+    ],
+    [
+      'member access on non-item nominal values',
+      typeApp(
+        'type Name is text let DisplayName = Name "Ada"',
+        'render Text(DisplayName.First)',
+        stubView('Text', 'Value is text'),
+      ),
+      typeValidationMessages.memberNotItem('First'),
+    ],
+    [
+      'unknown item members',
+      typeApp(
+        'type Name is text type Person is { Name } let DemoPerson = Person { Name "Ada" }',
+        'render Text(DemoPerson.Missing)',
+        stubView('Text', 'Value is text'),
+      ),
+      typeValidationMessages.unknownMember('Person', 'Missing'),
+    ],
+    [
+      'constructors for shapeless item aliases',
+      typeApp('type Bag is item let BadBag = Bag { "extra" }'),
       typeValidationMessages.shapelessItemConstructor('Bag'),
-    )
-    Expect(validationErrorMessages(unresolvedCast)).not.toContain(typeValidationMessages.typeFixIncompatible('Missing'))
-    Expect(validationErrorMessages(unresolvedConstructor)).not.toContain(
-      typeValidationMessages.constructorShape('Missing', 'text'),
-    )
-    Expect(validationErrorMessages(unresolvedMember)).not.toContain(typeValidationMessages.memberNotItem('First'))
-    Expect(validationErrorMessages(unresolvedArgument)).not.toContain(
-      invocationValidationMessages.unmatchedArgument('Text'),
-    )
-    Expect(validationErrorMessages(unresolvedArgument)).not.toContain(
-      invocationValidationMessages.missingArgument('Text', 'Value'),
-    )
-    Expect(validationErrorMessages(unresolvedProperty)).not.toContain(typeValidationMessages.unmatchedProperty)
-    Expect(validationErrorMessages(unresolvedProperty)).not.toContain(typeValidationMessages.missingProperty('Name'))
-  })
+    ],
+  ]
 
-  Test('rejects invalid qualified type-reference members', async () => {
-    const unknownTypeMember = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Person is {
-        Name
-      }
-      type Bad is Person.Missing
-      view MainView { }
-    `)
-    const nonItemTypeMember = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Bad is Name.First
-      view MainView { }
-    `)
-    const unknownCastMember = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Person is {
-        Name
-      }
-      let Bad = Person.Missing "Ada"
-      view MainView { }
-    `)
+  for (const [name, source, message] of invalidTypeCases) {
+    Test(`rejects ${name}`, rejects(source, message))
+  }
 
-    Expect(validationErrorMessages(unknownTypeMember)).toContain(
+  const cascadeSuppressionCases: ReadonlyArray<
+    readonly [name: string, source: string, unresolvedMessage: string, suppressedMessages: readonly string[]]
+  > = [
+    [
+      'unresolved constructors',
+      typeApp('let Bad = Missing "Ada"'),
+      "Could not resolve reference to ConstructorDeclaration named 'Missing'.",
+      [
+        typeValidationMessages.typeFixIncompatible('Missing'),
+        typeValidationMessages.constructorShape('Missing', 'text'),
+      ],
+    ],
+    [
+      'member access on unresolved values',
+      app('render Text(Missing.First)', stubView('Text', 'Value is text')),
+      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+      [typeValidationMessages.memberNotItem('First')],
+    ],
+    [
+      'unresolved invocation arguments',
+      app('render Text(Missing)', stubView('Text', 'Value is text')),
+      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+      [
+        invocationValidationMessages.unmatchedArgument('Text'),
+        invocationValidationMessages.missingArgument('Text', 'Value'),
+      ],
+    ],
+    [
+      'unresolved item fields',
+      typeApp('type Name is text type Person is { Name } let BadPerson = Person { Missing }'),
+      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+      [typeValidationMessages.unmatchedProperty, typeValidationMessages.missingProperty('Name')],
+    ],
+  ]
+
+  for (const [name, source, unresolvedMessage, suppressedMessages] of cascadeSuppressionCases) {
+    Test(
+      `does not cascade type diagnostics from ${name}`,
+      rejectsWithout(source, unresolvedMessage, ...suppressedMessages),
+    )
+  }
+
+  const qualifiedMemberCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'unknown type-reference members',
+      typeApp('type Name is text type Person is { Name } type Bad is Person.Missing'),
       typeValidationMessages.unknownMember('Person', 'Missing'),
-    )
-    Expect(validationErrorMessages(nonItemTypeMember)).toContain(typeValidationMessages.memberNotItem('First'))
-    Expect(validationErrorMessages(unknownCastMember)).toContain(
+    ],
+    [
+      'qualified members of non-item types',
+      typeApp('type Name is text type Bad is Name.First'),
+      typeValidationMessages.memberNotItem('First'),
+    ],
+    [
+      'constructors for unknown qualified members',
+      typeApp('type Name is text type Person is { Name } let Bad = Person.Missing "Ada"'),
       typeValidationMessages.unknownMember('Person', 'Missing'),
-    )
-  })
+    ],
+  ]
 
-  Test('resolves item-scoped property types separately from outer same-name types', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      type Name is text
-      type LastName is Name
-      type FullNamePerson is {
-        Name is text
-        LastName
-      }
-      let OuterName = Name "Outer"
-      let FamilyName = LastName "Lovelace"
-      let Ada = FullNamePerson {
-        Name: "Ada",
-        FamilyName
-      }
-      view MainView {
-        render Stack(){
-          Text(OuterName)
-          Text(Ada.Name)
-          Text(Ada.LastName)
-        }
-      }
-      layout Stack {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-  })
+  for (const [name, source, message] of qualifiedMemberCases) {
+    Test(`rejects ${name}`, rejects(source, message))
+  }
 
-  Test('rejects top-level values for same-name scoped parameter item properties', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Age is number
-      let OuterAge = Age 42
-      view MainView {
-        render Card(Card.Details { OuterAge })
-      }
-      view Card Details is {
-        Age is number
-      } {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
+  Test(
+    'resolves item-scoped property types separately from outer same-name types',
+    accepts(typeApp(
+      `
+        type Name is text
+        type LastName is Name
+        type FullNamePerson is { Name is text LastName }
+        let OuterName = Name "Outer"
+        let FamilyName = LastName "Lovelace"
+        let Ada = FullNamePerson { Name: "Ada", FamilyName }
+      `,
+      'render Stack() { Text(OuterName) Text(Ada.Name) Text(Ada.LastName) }',
+      `${stubLayout('Stack')}${stubView('Text', 'Value is text')}`,
+    )),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.unmatchedProperty)
-    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.missingProperty('Age'))
-  })
+  Test(
+    'rejects top-level values for same-name scoped parameter item properties',
+    rejects(
+      typeApp(
+        'type Age is number let OuterAge = Age 42',
+        'render Card(Card.Details { OuterAge })',
+        stubView('Card', 'Details is { Age is number }'),
+      ),
+      typeValidationMessages.unmatchedProperty,
+      typeValidationMessages.missingProperty('Age'),
+    ),
+  )
 
-  Test('rejects cyclic type aliases without recursing forever', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type A is B
-      type B is A
-      let Bad = A "value"
-      view MainView { }
-    `)
-    const qualifiedResult = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type A is B.C
-      type B is {
-        C is A
-      }
-      let Bad = A "value"
-      view MainView { }
-    `)
-    const shorthandResult = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Person is {
-        Friend
-      }
-      type Friend is Person
-      let Bad = Person { Friend { Friend { } } }
-      view MainView { }
-    `)
+  const aliasCycleCases: ReadonlyArray<readonly [name: string, source: string, messages: readonly string[]]> = [
+    [
+      'direct aliases',
+      typeApp('type A is B type B is A let Bad = A "value"'),
+      [typeValidationMessages.cyclicType('A'), typeValidationMessages.cyclicType('B')],
+    ],
+    [
+      'qualified aliases',
+      typeApp('type A is B.C type B is { C is A } let Bad = A "value"'),
+      [typeValidationMessages.cyclicType('A'), typeValidationMessages.cyclicType('B')],
+    ],
+    [
+      'shorthand item properties',
+      typeApp('type Person is { Friend } type Friend is Person let Bad = Person { Friend { Friend { } } }'),
+      [typeValidationMessages.cyclicType('Person'), typeValidationMessages.cyclicType('Friend')],
+    ],
+  ]
 
-    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.cyclicType('A'))
-    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.cyclicType('B'))
-    Expect(validationErrorMessages(qualifiedResult)).toContain(typeValidationMessages.cyclicType('A'))
-    Expect(validationErrorMessages(qualifiedResult)).toContain(typeValidationMessages.cyclicType('B'))
-    Expect(validationErrorMessages(shorthandResult)).toContain(typeValidationMessages.cyclicType('Person'))
-    Expect(validationErrorMessages(shorthandResult)).toContain(typeValidationMessages.cyclicType('Friend'))
-  })
+  for (const [name, source, messages] of aliasCycleCases) {
+    Test(`rejects cyclic ${name} without recursing forever`, rejects(source, ...messages))
+  }
 
-  Test('rejects cyclic scoped parameter type declarations without recursing forever', async () => {
-    const directResult = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view Cycle Self is Cycle.Self {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const itemResult = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view Card Details is {
-        Age is Card.Details.Age
-      } {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
+  const scopedCycleCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'direct parameter types',
+      app('render Empty()', `${stubView('Empty')}${stubView('Cycle', 'Self is Cycle.Self')}`),
+      typeValidationMessages.cyclicType('Cycle.Self'),
+    ],
+    [
+      'parameter item property types',
+      app(
+        'render Empty()',
+        `${stubView('Empty')}${stubView('Card', 'Details is { Age is Card.Details.Age }')}`,
+      ),
+      typeValidationMessages.cyclicType('Card.Details'),
+    ],
+  ]
 
-    Expect(validationErrorMessages(directResult)).toContain(typeValidationMessages.cyclicType('Cycle.Self'))
-    Expect(validationErrorMessages(itemResult)).toContain(typeValidationMessages.cyclicType('Card.Details'))
-  })
+  for (const [name, source, message] of scopedCycleCases) {
+    Test(`rejects cyclic scoped ${name} without recursing forever`, rejects(source, message))
+  }
 
-  Test('allows item type properties to reference sibling properties without false cycles', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      type A is {
-        X is text
-        Y is A.X
-      }
-      view MainView {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-  })
+  Test(
+    'allows item type properties to reference sibling properties without false cycles',
+    accepts(typeApp('type A is { X is text Y is A.X }', 'render Empty()', stubView('Empty'))),
+  )
 
-  Test('reports constructor kind diagnostics using the expected type shape', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Person is {
-        Name
-      }
-      let Bad = Person "hello"
-      view MainView { }
-    `)
+  Test(
+    'reports constructor kind diagnostics using the expected type shape',
+    rejects(
+      typeApp('type Name is text type Person is { Name } let Bad = Person "hello"'),
+      typeValidationMessages.constructorShape('Person', 'item'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.constructorShape('Person', 'item'))
-  })
+  Test(
+    'reports type diagnostics alongside structural invocation errors',
+    rejects(
+      app('render Tile(42, "extra")', stubView('Tile', 'Title is text')),
+      invocationValidationMessages.unmatchedArgument('Tile'),
+    ),
+  )
 
-  Test('reports type diagnostics alongside structural invocation errors', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Tile(42, "extra")
-      }
-      view Tile Title is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.unmatchedArgument('Tile'))
-  })
-
-  Test('keeps cross-view values out of scope through validator diagnostics', async () => {
+  Test('keeps cross-view values out of scope with a located linker diagnostic', async () => {
+    const message = "Could not resolve reference to ValueDeclaration named 'Secret'."
     const result = await testValidateCodeWithErrors(`
       app MyApp { view Target }
-      view Text Value is text { }
-      view Source Secret is text { }
-      view Target {
-        render Text(Secret)
-      }
+      ${stubView('Text', 'Value is text')}
+      ${stubView('Source', 'Secret is text')}
+      view Target { render Text(Secret) }
     `)
 
-    Expect(validationErrorMessages(result).length).toBeGreaterThan(0)
-    Expect(Diagnostics.hasSource(result.diagnostics, 'validator')).toBe(true)
+    const diagnostic = result.diagnostics.find(candidate => candidate.message === message)
+    Expect(validationErrorMessages(result)).toEqual([message])
+    Expect(diagnostic?.range).toBeDefined()
+    Expect(Diagnostics.hasSource(result.diagnostics, 'linker')).toBe(true)
   })
 
-  Test('keeps toggle targets inside their lexical state scope', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'keeps toggle targets inside their lexical state scope',
+    rejects(
+      `
       app MyApp { view Target }
-      view Source {
-        state Ready = false
-        render inject ${tsFence} return null ${fence}
-      }
-      view Target {
-        action Flip { toggle Ready }
-        render inject ${tsFence} return null ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
+      view Source { state Ready = false render Empty() }
+      view Target { action Flip { toggle Ready } render Empty() }
+      ${stubView('Empty')}
+    `,
       "Could not resolve reference to StateDeclaration named 'Ready'.",
-    )
-  })
+    ),
+  )
 
-  Test('case payloads resolve at their lexical depth', async () => {
-    await testValidateCode(`
-      data Workspaces / Workspace { Name text }
-      app ScopeApp { view Main }
-      view Main {
-        query Workspaces { }
-        render Col() {
-          guard Workspaces {
-            loading -> { Text("Loading") }
-            error -> Message {
-              loop Workspaces / Message { Text(Message.Name) }
-            }
-          }
-          Text("Ready")
-        }
+  Test(
+    'resolves case payloads at their lexical depth',
+    accepts(caseScopeApp(`
+      guard Workspaces {
+        loading -> { Text("Loading") }
+        error -> Message { loop Workspaces / Message { Text(Message.Name) } }
       }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
+      Text("Ready")
+    `)),
+  )
 
-    const shadowed = await testValidateCodeWithErrors(`
-      data Workspaces / Workspace { Name text }
-      app ScopeApp { view Main }
-      view Main {
-        query Workspaces { }
-        render Col() {
-          guard Workspaces {
-            error -> Message {
-              Col() {
-                let Message = 5
-                Text(Message)
-              }
-            }
-          }
-          Text("Ready")
+  Test(
+    'resolves a shadowing alias instead of an outer case payload',
+    rejects(
+      caseScopeApp(`
+        guard Workspaces {
+          error -> Message { Col() { let Message = 5 Text(Message) } }
         }
-      }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
-    Expect(validationErrorMessages(shadowed).length).toBeGreaterThan(0)
-  })
+        Text("Ready")
+      `),
+      invocationValidationMessages.unmatchedArgument('Text'),
+    ),
+  )
 
-  Test('reports duplicate, invalid, and payload-bearing case misuse', async () => {
-    const result = await testValidateCodeWithErrors(`
-      data Workspaces / Workspace { Name text }
-      app CaseApp { view Main }
-      view Main {
-        state Draft = ""
-        query Workspaces { }
-        render Col() {
-          guard Workspaces {
-            loading -> { Text("A") }
-            loading -> { Text("B") }
-          }
-          guard Draft {
-            loading -> { Text("C") }
-          }
-          guard Workspaces {
-            empty -> Payload { Text(Payload) }
-          }
-          Text(when 5 { empty -> "X" otherwise -> "Y" })
+  const invalidCaseCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    [
+      'duplicate cases',
+      caseScopeApp(`
+        guard Workspaces {
+          loading -> { Text("A") }
+          loading -> { Text("B") }
         }
-      }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
-    const messages = validationErrorMessages(result)
-    Expect(messages).toContain(FunctionalCoreValidator.messages.duplicateCase('loading'))
-    Expect(messages).toContain(FunctionalCoreValidator.messages.invalidCase('loading', 'a text subject'))
-    Expect(messages).toContain(FunctionalCoreValidator.messages.invalidCasePayload)
-  })
+      `),
+      FunctionalCoreValidator.messages.duplicateCase('loading'),
+    ],
+    [
+      'cases unsupported by the subject type',
+      caseScopeApp('guard Draft { loading -> { Text("C") } }', 'state Draft = ""'),
+      FunctionalCoreValidator.messages.invalidCase('loading', 'a text subject'),
+    ],
+    [
+      'payloads on payload-free cases',
+      caseScopeApp('guard Workspaces { empty -> Payload { Text(Payload) } }'),
+      FunctionalCoreValidator.messages.invalidCasePayload,
+    ],
+  ]
+
+  for (const [name, source, message] of invalidCaseCases) {
+    Test(`rejects ${name}`, rejects(source, message))
+  }
 })
+
+function typeApp(declarations: string, mainBody = '', fixtures = ''): string {
+  return app(mainBody, `${declarations} ${fixtures}`)
+}
+
+function rejectsWithout(
+  source: string,
+  expectedMessage: string,
+  ...unexpectedMessages: readonly string[]
+): () => Promise<void> {
+  return async () => {
+    const result = await testValidateCodeWithErrors(source)
+    const messages = validationErrorMessages(result)
+    Expect(messages).toContain(expectedMessage)
+    for (const message of unexpectedMessages) {
+      Expect(messages).not.toContain(message)
+    }
+  }
+}
+
+function caseScopeApp(body: string, declarations = ''): string {
+  return `
+    data Workspaces / Workspace { Name text }
+    app ScopeApp { view Main }
+    view Main {
+      ${declarations}
+      query Workspaces { }
+      render Col() { ${body} }
+    }
+    ${stubLayout('Col')}
+    ${stubView('Text', 'Value is text')}
+  `
+}

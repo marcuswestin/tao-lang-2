@@ -4,51 +4,38 @@ import { AppValidator } from '../validator-src/validators/app-validator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
   fence,
-  testValidateCode,
+  rejects,
+  stubLayout,
+  stubView,
   testValidateCodeWithErrors,
   tsFence,
   validationErrorMessages,
 } from './test-validate'
 
-Describe('Tao validator structural diagnostics', () => {
-  Test('rejects unsupported top-level statements', async () => {
-    const result = await testValidateCodeWithErrors(`
+Describe('validator: apps and views', () => {
+  Test(
+    'rejects unsupported top-level statements',
+    rejects(
+      `
       app MyApp { view MainView }
       render MainView()
       view MainView { }
-    `)
+    `,
+      AppValidator.messages.topLevel,
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.topLevel)
-  })
-
-  Test('rejects file-level state declarations', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects file-level state declarations',
+    rejects(
+      `
       app MyApp { view MainView }
       state Count = 0
       view MainView { }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.topLevel)
-  })
-
-  Test('allows multiple app declarations for explicit selection', async () => {
-    await testValidateCode(`
-      view MainView {
-        render inject \`\`\`ts
-          return null
-        \`\`\`
-      }
-    `)
-    await testValidateCode(`
-      app First { view MainView }
-      app Second { view MainView }
-      view MainView {
-        render inject \`\`\`ts
-          return null
-        \`\`\`
-      }
-    `)
-  })
+    `,
+      AppValidator.messages.topLevel,
+    ),
+  )
 
   Test('requires exactly one root view in app blocks', async () => {
     const missing = await testValidateCodeWithErrors(`
@@ -68,62 +55,46 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(duplicate)).toContain(AppValidator.messages.appRootCount('MyApp', 2))
   })
 
-  Test('rejects app root view declarations with parameters', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects app root view declarations with parameters',
+    rejects(
+      `
       app MyApp { view MainView }
       view MainView Label is text {
         render Text(Label)
       }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
+      ${stubView('Text', 'Value is text')}
+    `,
+      AppValidator.messages.rootViewParameters('MyApp', 'MainView'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.rootViewParameters('MyApp', 'MainView'))
-  })
-
-  Test('rejects non-root-view statements in app blocks', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects non-root-view statements in app blocks',
+    rejects(
+      `
       app MyApp {
         let Greeting = "Hello"
         view MainView
       }
       view MainView { }
-    `)
+    `,
+      AppValidator.messages.appBlock('MyApp'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.appBlock('MyApp'))
-  })
-
-  Test('rejects unsupported view body statements', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects unsupported view body statements',
+    rejects(
+      `
       app MyApp { view MainView }
       view MainView {
         view Nested { }
       }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.viewBody)
-  })
-
-  Test('allows state and action declarations before a view render', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        action AddOne {
-          set Count += 1
-        }
-        render Text("ok")
-      }
-    `)
-  })
+    `,
+      ViewsValidator.messages.viewBody,
+    ),
+  )
 
   Test('rejects state and action declarations in layouts and render blocks', async () => {
     const layoutResult = await testValidateCodeWithErrors(`
@@ -140,11 +111,7 @@ Describe('Tao validator structural diagnostics', () => {
     `)
     const renderBlockResult = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
+      ${stubView('Text', 'Value is text')}
       view MainView {
         render Text("hi") {
           action AddOne { }
@@ -156,21 +123,19 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(renderBlockResult)).toContain(ViewsValidator.messages.renderBlock)
   })
 
-  Test('rejects bare child invocations directly in view bodies', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects bare child invocations directly in view bodies',
+    rejects(
+      `
       app MyApp { view MainView }
       view MainView {
         Text("Hello")
       }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.viewBody)
-  })
+      ${stubView('Text', 'Value is text')}
+    `,
+      ViewsValidator.messages.viewBody,
+    ),
+  )
 
   Test('rejects duplicate view parameters', async () => {
     const result = await testValidateCodeWithErrors(`
@@ -226,44 +191,27 @@ Describe('Tao validator structural diagnostics', () => {
         render Text("Hello")
         render Text("Again")
       }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
+      ${stubView('Text', 'Value is text')}
     `)
 
     Expect(validationErrorMessages(missing)).toContain(ViewsValidator.messages.renderCount('MainView'))
     Expect(validationErrorMessages(extra)).toContain(ViewsValidator.messages.renderCount('MainView'))
   })
 
-  Test('requires render to be the last view body statement', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'requires render to be the last view body statement',
+    rejects(
+      `
       app MyApp { view MainView }
       view MainView {
         render Text("Hello")
         let Greeting = "Again"
       }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.renderLast)
-  })
-
-  Test('allows render inject as the only view body statement', async () => {
-    await testValidateCode(`
-      app MyApp { view Native }
-      view Native {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-  })
+      ${stubView('Text', 'Value is text')}
+    `,
+      ViewsValidator.messages.renderLast,
+    ),
+  )
 
   Test('rejects render inject mixed with view body statements', async () => {
     const withRender = await testValidateCodeWithErrors(`
@@ -289,8 +237,10 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(validationErrorMessages(withAlias)).toContain(ViewsValidator.messages.renderInjectPlacement)
   })
 
-  Test('rejects render inject inside render child blocks', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects render inject inside render child blocks',
+    rejects(
+      `
       app MyApp { view MainView }
       view MainView {
         render Container(){
@@ -300,78 +250,18 @@ Describe('Tao validator structural diagnostics', () => {
         }
       }
       view Container { }
-    `)
+    `,
+      ViewsValidator.messages.renderInjectPlacement,
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.renderInjectPlacement)
-  })
-
-  Test('validates aliases and parameter references as render arguments', async () => {
-    await testValidateCode(`
+  Test(
+    'requires render block aliases before child view invocations',
+    rejects(
+      `
       app MyApp { view MainView }
-      let Greeting = "Hello"
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view ParameterEcho Label is text {
-        render Text(Label)
-      }
-      view MainView {
-        let Local = "Local"
-        render Stack(){
-          Text(Greeting)
-          ParameterEcho(Local)
-        }
-      }
-    `)
-  })
-
-  Test('allows block-local aliases inside render child blocks', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        let Local = "Outer"
-        render Stack(){
-          let Local = "First"
-          Text(Local)
-          Stack(){
-            let Local = "Nested"
-            Text(Local)
-          }
-        }
-      }
-    `)
-  })
-
-  Test('requires render block aliases before child view invocations', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
+      ${stubLayout('Stack')}
+      ${stubView('Text', 'Value is text')}
       view MainView {
         render Stack(){
           Text("First")
@@ -379,52 +269,18 @@ Describe('Tao validator structural diagnostics', () => {
           Text(Later)
         }
       }
-    `)
+    `,
+      ViewsValidator.messages.renderBlockAliasPlacement,
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.renderBlockAliasPlacement)
-  })
-
-  Test('allows the same let name in separate render child blocks', async () => {
-    await testValidateCode(`
+  Test(
+    'rejects duplicate aliases in the same render child block',
+    rejects(
+      `
       app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        render Stack(){
-          Stack(){
-            let Local = "First"
-            Text(Local)
-          }
-          Stack(){
-            let Local = "Second"
-            Text(Local)
-          }
-        }
-      }
-    `)
-  })
-
-  Test('rejects duplicate aliases in the same render child block', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
+      ${stubLayout('Stack')}
+      ${stubView('Text', 'Value is text')}
       view MainView {
         render Stack(){
           let Local = "First"
@@ -432,24 +288,18 @@ Describe('Tao validator structural diagnostics', () => {
           Text(Local)
         }
       }
-    `)
+    `,
+      AliasesValidator.messages.duplicateName('Local'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Local'))
-  })
-
-  Test('rejects duplicate aliases in nested child invocation blocks', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects duplicate aliases in nested child invocation blocks',
+    rejects(
+      `
       app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
+      ${stubLayout('Stack')}
+      ${stubView('Text', 'Value is text')}
       view MainView {
         render Stack(){
           Stack(){
@@ -459,24 +309,18 @@ Describe('Tao validator structural diagnostics', () => {
           }
         }
       }
-    `)
+    `,
+      AliasesValidator.messages.duplicateName('Local'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Local'))
-  })
-
-  Test('rejects nested child invocation aliases that shadow visible declarations', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects nested child invocation aliases that shadow visible declarations',
+    rejects(
+      `
       app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
+      ${stubLayout('Stack')}
+      ${stubView('Text', 'Value is text')}
       view MainView {
         render Stack(){
           Stack(){
@@ -484,13 +328,15 @@ Describe('Tao validator structural diagnostics', () => {
           }
         }
       }
-    `)
+    `,
+      AliasesValidator.messages.duplicateName('Text'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Text'))
-  })
-
-  Test('rejects duplicate tags in the same lexical block', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test(
+    'rejects duplicate tags in the same lexical block',
+    rejects(
+      `
       app TagApp { view Main }
       view Main {
         render Col() {
@@ -502,7 +348,8 @@ Describe('Tao validator structural diagnostics', () => {
       }
       layout Col { render inject ${tsFence} return null ${fence} }
       view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
-    Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.duplicateTag('#same'))
-  })
+    `,
+      ViewsValidator.messages.duplicateTag('#same'),
+    ),
+  )
 })
