@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 73 commits, 2026-08-14
+Last touched-package re-sweep: after 74 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -205,6 +205,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | file-local exports across seven packages                             | R5   |              -5 |       44/48 | Remove 43 unnecessary export modifiers, one wholly dead type, and its redundant forwarding re-export while retaining package, public runtime, and test-facing surfaces.        |
 | done               | `packages/validator/validator-src/validators/ActionsValidator.ts`    | R9   |              -3 |         1/3 | Delete the decorative `Private` separator that only restated TypeScript visibility, net-deleting three lines.                                                                  |
 | done               | ast-utils internal binding helpers                                   | R11  |             +28 |        4/28 | Replace four five-parameter binding helpers with concept-shaped options objects, reducing three signatures to four parameters and one to three across seven call sites.        |
+| done               | runtime stored-field and test-selection helpers                      | R11  |             +11 |        2/11 | Replace two internal five-parameter helpers with named options across seven call sites, reducing their signatures to one and three parameters without changing public facades. |
 | queued             | remaining internal signatures and literal boolean call sites         | R11  | inspect current |         TBD | Finish the post-R3 audit and apply only internal options objects; published and grammar-visible signatures remain explicitly excluded.                                         |
 | done               | `packages/shared/shared-tests/shared.test.ts`                        | R7   |               2 |         1/2 | Preserve formatter-sorted imports; baseline `./agent verify` exposed and corrected this pre-existing formatting violation.                                                     |
 | done               | direct `process` use in dev, IDE extension, and runtime test owners  | R7   |              19 |        7/19 | Route seven environment, cwd, and stdout accesses through the existing `Platform.runtimeProcess` boundary.                                                                     |

@@ -71,7 +71,7 @@ async function pressStep(
   step: Extract<TestCompiler.Step, { kind: 'press' }>,
   scope?: TestInstance,
 ): Promise<void> {
-  const match = requireSingleMatch(screen, step, step.text, 'pressable', scope)
+  const match = requireSingleMatch(screen, step, { target: step.text, description: 'pressable', scope })
   await dispatchInteraction(() => fireEvent.press(match))
 }
 
@@ -80,7 +80,7 @@ async function enterStep(
   step: Extract<TestCompiler.Step, { kind: 'enter' }>,
   scope?: TestInstance,
 ): Promise<void> {
-  const match = requireSingleMatch(screen, step, step.target, 'text input', scope)
+  const match = requireSingleMatch(screen, step, { target: step.target, description: 'text input', scope })
   await dispatchInteraction(() => fireEvent.changeText(requireInteractiveNode(match, 'onChangeText', step), step.value))
 }
 
@@ -89,7 +89,7 @@ async function submitStep(
   step: Extract<TestCompiler.Step, { kind: 'submit' }>,
   scope?: TestInstance,
 ): Promise<void> {
-  const match = requireSingleMatch(screen, step, step.target, 'submittable input', scope)
+  const match = requireSingleMatch(screen, step, { target: step.target, description: 'submittable input', scope })
   await dispatchInteraction(() => fireEvent(requireInteractiveNode(match, 'onSubmitEditing', step), 'submitEditing'))
 }
 
@@ -124,7 +124,7 @@ function assertInputValue(
   expectation: Extract<TestCompiler.Step, { kind: 'expectInputValue' }>,
   scope?: TestInstance,
 ): void {
-  const match = requireSingleMatch(screen, expectation, expectation.target, 'input', scope)
+  const match = requireSingleMatch(screen, expectation, { target: expectation.target, description: 'input', scope })
   const input = requireValueInput(match, expectation)
   if (input.props.value !== expectation.value) {
     throw new Error(
@@ -218,12 +218,16 @@ function formatStep(step: TestCompiler.Step): string {
   })
 }
 
+type SingleMatchOptions = {
+  target: string
+  description: string
+  scope?: TestInstance
+}
+
 function requireSingleMatch(
   screen: RuntimeApp.Screen,
   step: Extract<TestCompiler.Step, { selector: string }>,
-  target: string,
-  description: string,
-  scope?: TestInstance,
+  { target, description, scope }: SingleMatchOptions,
 ): TestInstance {
   const matches = querySelector(screen, step.selector, target, scope)
   if (matches.length !== 1) {

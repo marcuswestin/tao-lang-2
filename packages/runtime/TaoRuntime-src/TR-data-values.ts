@@ -8,6 +8,14 @@ export type Evaluable = {
   evaluate(): { jsValue: unknown }
 }
 
+type StoredFieldValueOptions = {
+  entityName: string
+  fieldName: string
+  field: TaoDataField
+  value: unknown
+  schema: TaoDataSchema
+}
+
 export function evaluatedFields(fields: Record<string, Evaluable>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(fields).map(([name, value]) => [name, value.evaluate().jsValue]))
 }
@@ -22,14 +30,14 @@ export function rowValues(
   assertKnownFields(entityName, entity, values)
   for (const [name, field] of Object.entries(entity.fields)) {
     if (Object.prototype.hasOwnProperty.call(values, name)) {
-      result[name] = storedFieldValue(entityName, name, field, values[name], schema)
+      result[name] = storedFieldValue({ entityName, fieldName: name, field, value: values[name], schema })
       continue
     }
     if (!Object.prototype.hasOwnProperty.call(field, 'defaultValue') && field.defaultNow !== true) {
       throw new Error(`Create of '${entityName}' is missing required field '${name}'.`)
     }
     const value = field.defaultNow === true ? Date.now() : field.defaultValue
-    result[name] = storedFieldValue(entityName, name, field, value, schema)
+    result[name] = storedFieldValue({ entityName, fieldName: name, field, value, schema })
   }
   return result
 }
@@ -43,7 +51,10 @@ export function partialRowValues(
   assertKnownFields(entityName, entity, values)
   return Object.fromEntries(
     Object.entries(values).map(([name, value]) => {
-      return [name, storedFieldValue(entityName, name, entity.fields[name]!, value, schema)]
+      return [
+        name,
+        storedFieldValue({ entityName, fieldName: name, field: entity.fields[name]!, value, schema }),
+      ]
     }),
   )
 }
@@ -57,11 +68,7 @@ function assertKnownFields(entityName: string, entity: TaoDataEntity, values: Re
 }
 
 function storedFieldValue(
-  entityName: string,
-  fieldName: string,
-  field: TaoDataField,
-  value: unknown,
-  schema: TaoDataSchema,
+  { entityName, fieldName, field, value, schema }: StoredFieldValueOptions,
 ): unknown {
   if (field.kind === 'relation') {
     const handle = entityHandle(value)
