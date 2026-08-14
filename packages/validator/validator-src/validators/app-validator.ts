@@ -141,6 +141,8 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
   }
 }
 
+type AppStatements = readonly AST.OwnedBlockStatement[]
+
 function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext): void {
   const statements = AST.blockStatements(app)
   const modern = statements.some(statement => AST.isAppName(statement) || AST.isAppNavigator(statement))
@@ -149,6 +151,14 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
     return
   }
 
+  validateModernAppStatements(app, statements, ctx)
+  validateAppNames(app, statements, ctx)
+  validateAppNavigators(app, statements, ctx)
+  validateAppAuxiliaryNavigators(app, statements, ctx)
+  validateAppDatasources(app, statements, ctx)
+}
+
+function validateModernAppStatements(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
   for (const statement of statements) {
     const isModernAppConfigurationStatement = AST.isAppName(statement)
       || AST.isAppNavigator(statement)
@@ -158,7 +168,9 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
       ctx.error(appValidationMessages.appBlock(app.name), statement)
     }
   }
+}
 
+function validateAppNames(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
   const names = statements.filter(AST.isAppName)
   for (const name of names) {
     if (name.name !== 'Name') {
@@ -168,7 +180,9 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
   if (names.length !== 1) {
     ctx.error(appValidationMessages.nameCount(app.name, names.length), app)
   }
+}
 
+function validateAppNavigators(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
   const navigators = statements.filter(AST.isAppNavigator)
   for (const navigator of navigators) {
     if (navigator.name !== 'Navigator') {
@@ -184,7 +198,13 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
       ctx.error(appValidationMessages.navigatorType(app.name, Type.displayName(actual)), navigator)
     }
   }
+}
 
+function validateAppAuxiliaryNavigators(
+  app: AST.AppDeclaration,
+  statements: AppStatements,
+  ctx: ValidationContext,
+): void {
   const auxiliaryKeys = new Set<string>()
   for (const auxiliary of statements.filter(AST.isAppAuxiliaryNavigator)) {
     const key = auxiliary.name.slice(1)
@@ -200,7 +220,9 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
       ctx.error(appValidationMessages.auxiliaryType(app.name, key, Type.displayName(actual)), auxiliary)
     }
   }
+}
 
+function validateAppDatasources(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
   const datasources = statements.filter(AST.isAppDatasource)
   if (datasources.length > 1) {
     ctx.error(appValidationMessages.datasourceCount(app.name, datasources.length), datasources[1]!)
