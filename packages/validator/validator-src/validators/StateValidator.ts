@@ -2,6 +2,7 @@ import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationProblemAcceptor } from 'typir'
 import { DeclarationOrder } from '../DeclarationOrder'
+import type { NodeValidationChecks } from '../node-validation'
 import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from '../TypeSystemHelpers'
 import type { ValidationContext } from '../validation'
 
@@ -18,30 +19,26 @@ const stateValidationMessages = {
 
 /** StateValidator groups state validation and diagnostics. */
 export const StateValidator = {
+  checks: {
+    [AST.StateDeclaration.$type]: reportStateReferenceOrder,
+    [AST.SetStatement.$type]: reportStateMutationTargetReferenceOrder,
+    [AST.ToggleStatement.$type]: [reportStateMutationTargetReferenceOrder, reportToggleTarget],
+  } satisfies NodeValidationChecks,
   messages: stateValidationMessages,
   registerTypeValidation,
-  validate,
 }
 
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  reportStateReferenceOrder(allStates(file), ctx)
-  reportStateMutationTargetReferenceOrder(file, ctx)
-  reportToggleTargets(file, ctx)
-}
-
-function reportToggleTargets(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const toggle of AST.streamAllContents(file).filter(AST.isToggleStatement)) {
-    const state = toggle.target.ref
-    if (!state) {
-      continue
-    }
-    const stateType = Type.ofExpression(state.value)
-    if (stateType.kind === 'unresolved') {
-      continue
-    }
-    if (stateType.kind !== 'primitive' || stateType.primitive !== 'boolean') {
-      ctx.error(stateValidationMessages.toggleStateType(state.name, Type.displayName(stateType)), toggle)
-    }
+function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext): void {
+  const state = toggle.target.ref
+  if (!state) {
+    return
+  }
+  const stateType = Type.ofExpression(state.value)
+  if (stateType.kind === 'unresolved') {
+    return
+  }
+  if (stateType.kind !== 'primitive' || stateType.primitive !== 'boolean') {
+    ctx.error(stateValidationMessages.toggleStateType(state.name, Type.displayName(stateType)), toggle)
   }
 }
 
@@ -56,17 +53,11 @@ function registerTypeValidation(typir: TaoTypirServices): void {
   })
 }
 
-function allStates(file: AST.TaoFile): AST.StateDeclaration[] {
-  return AST.streamAllContents(file).filter(AST.isStateDeclaration)
-}
-
-function reportStateReferenceOrder(states: readonly AST.StateDeclaration[], ctx: ValidationContext): void {
-  for (const state of states) {
-    for (const reference of DeclarationOrder.valueReferences(state.value)) {
-      const target = reference.target.ref
-      if (isInvalidStateInitializerReferenceOrder(target, state)) {
-        ctx.error(stateValidationMessages.usedBeforeDeclaration(valueDeclarationName(target)), reference)
-      }
+function reportStateReferenceOrder(state: AST.StateDeclaration, ctx: ValidationContext): void {
+  for (const reference of DeclarationOrder.valueReferences(state.value)) {
+    const target = reference.target.ref
+    if (isInvalidStateInitializerReferenceOrder(target, state)) {
+      ctx.error(stateValidationMessages.usedBeforeDeclaration(valueDeclarationName(target)), reference)
     }
   }
 }
@@ -75,17 +66,14 @@ function valueDeclarationName(declaration: AST.ValueDeclaration | undefined): st
   return declaration ? Type.declarationName(declaration) : '<unresolved>'
 }
 
-function reportStateMutationTargetReferenceOrder(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const mutation of AST.streamAllContents(file).filter(isStateMutationStatement)) {
-    const target = mutation.target.ref
-    if (isInvalidStateMutationTargetReferenceOrder(target, mutation)) {
-      ctx.error(stateValidationMessages.usedBeforeDeclaration(target.name), mutation)
-    }
+function reportStateMutationTargetReferenceOrder(
+  mutation: AST.SetStatement | AST.ToggleStatement,
+  ctx: ValidationContext,
+): void {
+  const target = mutation.target.ref
+  if (isInvalidStateMutationTargetReferenceOrder(target, mutation)) {
+    ctx.error(stateValidationMessages.usedBeforeDeclaration(target.name), mutation)
   }
-}
-
-function isStateMutationStatement(node: AST.Node): node is AST.SetStatement | AST.ToggleStatement {
-  return AST.isSetStatement(node) || AST.isToggleStatement(node)
 }
 
 function isInvalidStateInitializerReferenceOrder(

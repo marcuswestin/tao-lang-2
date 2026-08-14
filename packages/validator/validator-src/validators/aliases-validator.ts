@@ -1,6 +1,7 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { DeclarationOrder } from '../DeclarationOrder'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 type NamedValueDeclaration =
@@ -33,13 +34,29 @@ const aliasValidationMessages = {
 
 /** AliasesValidator validates immutable binding names and declaration order. */
 export const AliasesValidator = {
+  checks: {
+    [AST.ActionDeclaration.$type]: reportReservedRuntimeName,
+    [AST.AliasDeclaration.$type]: [reportReservedRuntimeName, reportAliasReferenceOrder],
+    [AST.AppDeclaration.$type]: reportReservedRuntimeName,
+    [AST.ForStatement.$type]: reportReservedRuntimeName,
+    [AST.AskStatement.$type]: reportReservedRuntimeName,
+    [AST.FunctionDeclaration.$type]: reportReservedRuntimeName,
+    [AST.ParameterDeclaration.$type]: reportReservedRuntimeName,
+    [AST.EntityQueryDeclaration.$type]: reportReservedRuntimeName,
+    [AST.EnumCase.$type]: reportReservedRuntimeName,
+    [AST.EnumDeclaration.$type]: reportReservedRuntimeName,
+    [AST.VisualDeclaration.$type]: [reportReservedRuntimeName, validateVisualDeclaration],
+    [AST.StateDeclaration.$type]: reportReservedRuntimeName,
+    [AST.TypeDeclaration.$type]: reportReservedRuntimeName,
+    [AST.ValueReference.$type]: reportLocalValueReferenceOrder,
+    [AST.MemberAccessExpression.$type]: reportLocalValueReferenceOrder,
+  } satisfies NodeValidationChecks,
   messages: aliasValidationMessages,
-  validate,
+  validateFile,
 }
 
-/** validateAliases validates duplicate names and immutable-binding reference order. */
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  reportReservedRuntimeNames(file, ctx)
+/** validateFile validates file-level duplicate names. */
+function validateFile(file: AST.TaoFile, ctx: ValidationContext): void {
   const fileValueDeclarations: NamedValueDeclaration[] = [
     ...file.statements.filter(isFileValueDeclaration),
     ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
@@ -47,43 +64,23 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   const fileTypeDeclarations = file.statements.filter(AST.isTypeDeclaration)
   reportDuplicateNames(fileValueDeclarations, new Map(), ctx)
   reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
-  reportAliasReferenceOrder(allAliases(file), ctx)
-  reportLocalValueReferenceOrder(file, ctx)
+}
 
+function validateVisualDeclaration(view: AST.VisualDeclaration, ctx: ValidationContext, file: AST.TaoFile): void {
   const fileRenderables = file.statements.filter(AST.isVisualDeclaration)
-  for (const view of AST.streamAllContents(file).filter(AST.isVisualDeclaration)) {
-    const parameters = AST.parametersOf(view)
-    reportNameConflicts(parameters, visibleDeclarations(fileRenderables), ctx)
-    for (const block of blocksOwnedByView(view)) {
-      const blockNames = visibleDeclarations([...fileRenderables, ...parameters])
-      reportDuplicateNames(AST.valueDeclarationsOwnedByBlock(block), blockNames, ctx)
-    }
+  const parameters = AST.parametersOf(view)
+  reportNameConflicts(parameters, visibleDeclarations(fileRenderables), ctx)
+  for (const block of blocksOwnedByView(view)) {
+    const blockNames = visibleDeclarations([...fileRenderables, ...parameters])
+    reportDuplicateNames(AST.valueDeclarationsOwnedByBlock(block), blockNames, ctx)
   }
 }
 
-function reportReservedRuntimeNames(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const declaration of AST.streamAllContents(file).filter(isRuntimeScopeNamedDeclaration)) {
-    const name = Type.declarationName(declaration)
-    if (name === '__proto__') {
-      ctx.error(aliasValidationMessages.reservedName(name), declaration)
-    }
+function reportReservedRuntimeName(declaration: NamedDeclaration, ctx: ValidationContext): void {
+  const name = Type.declarationName(declaration)
+  if (name === '__proto__') {
+    ctx.error(aliasValidationMessages.reservedName(name), declaration)
   }
-}
-
-function isRuntimeScopeNamedDeclaration(node: AST.Node): node is NamedDeclaration {
-  return AST.isActionDeclaration(node)
-    || AST.isAliasDeclaration(node)
-    || AST.isAppDeclaration(node)
-    || AST.isForStatement(node)
-    || AST.isAskStatement(node)
-    || AST.isFunctionDeclaration(node)
-    || AST.isParameterDeclaration(node)
-    || AST.isEntityQueryDeclaration(node)
-    || AST.isEnumCase(node)
-    || AST.isEnumDeclaration(node)
-    || AST.isVisualDeclaration(node)
-    || AST.isStateDeclaration(node)
-    || AST.isTypeDeclaration(node)
 }
 
 function reportDuplicateNames(
@@ -118,33 +115,25 @@ function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<str
   return new Map(declarations.map(declaration => [Type.declarationName(declaration), declaration] as const))
 }
 
-function allAliases(file: AST.TaoFile): AST.AliasDeclaration[] {
-  return AST.streamAllContents(file).filter(AST.isAliasDeclaration)
-}
-
-function reportAliasReferenceOrder(aliases: readonly AST.AliasDeclaration[], ctx: ValidationContext): void {
-  for (const alias of aliases) {
-    for (const reference of aliasValueReferences(alias)) {
-      const target = reference.target.ref
-      if (isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
-        ctx.error(
-          aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, Type.declarationName(target)),
-          reference,
-        )
-      }
+function reportAliasReferenceOrder(alias: AST.AliasDeclaration, ctx: ValidationContext): void {
+  for (const reference of aliasValueReferences(alias)) {
+    const target = reference.target.ref
+    if (isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
+      ctx.error(
+        aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, Type.declarationName(target)),
+        reference,
+      )
     }
   }
 }
 
-function reportLocalValueReferenceOrder(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const reference of AST.streamAllContents(file).filter(isValueReferenceLike)) {
-    if (isReferenceInAliasOrStateInitializer(reference)) {
-      continue
-    }
-    const target = reference.target.ref
-    if (isInvalidLocalValueReferenceOrder(target, reference)) {
-      ctx.error(aliasValidationMessages.usedBeforeDeclaration(Type.declarationName(target)), reference)
-    }
+function reportLocalValueReferenceOrder(reference: ValueReferenceLike, ctx: ValidationContext): void {
+  if (isReferenceInAliasOrStateInitializer(reference)) {
+    return
+  }
+  const target = reference.target.ref
+  if (isInvalidLocalValueReferenceOrder(target, reference)) {
+    ctx.error(aliasValidationMessages.usedBeforeDeclaration(Type.declarationName(target)), reference)
   }
 }
 

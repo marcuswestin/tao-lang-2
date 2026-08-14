@@ -25,6 +25,8 @@ const nodeValidationChecks = NodeValidation.compile(
     projectValidationChecks,
     ViewsValidator.checks,
     ActionsValidator.checks,
+    StateValidator.checks,
+    AliasesValidator.checks,
     LayoutValidator.checks,
     injectionValidationChecks,
     testValidationChecks,
@@ -41,8 +43,7 @@ const nodeValidationChecks = NodeValidation.compile(
 function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
   AppValidator.validate(file, ctx)
   validateProjectFile(file, ctx)
-  StateValidator.validate(file, ctx)
-  AliasesValidator.validate(file, ctx)
+  AliasesValidator.validateFile(file, ctx)
   validateDataFile(file, ctx)
   NodeValidation.validate(AST.streamAllContents(file), file, ctx, nodeValidationChecks)
   validateNavigationFile(file, ctx)
@@ -56,9 +57,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): void {
 
 /** Validate exposes Tao AST validation passes. */
 export const Validate = {
-  Aliases: AliasesValidator.validate,
   App: AppValidator.validate,
-  States: StateValidator.validate,
   TaoFile: validateTaoFile,
   TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,
