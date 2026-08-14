@@ -71,9 +71,15 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
       ctx.error(navigationValidationMessages.activationContext, activation)
     }
     const app = activation.app.ref
-    const keys = app && selectionKeysForApp(app)
-    if (app && keys && !keys.has(activation.key)) {
-      ctx.error(navigationValidationMessages.unknownSelection(app.name, activation.key.slice(1)), activation)
+    if (app) {
+      for (const contract of selectionKeyContractsForAppFamily(app, file)) {
+        if (!contract.keys.has(activation.key)) {
+          ctx.error(
+            navigationValidationMessages.unknownSelection(contract.app.name, activation.key.slice(1)),
+            activation,
+          )
+        }
+      }
     }
   }
   for (const replace of AST.streamAllContents(file).filter(AST.isReplaceStatement)) {
@@ -144,6 +150,28 @@ function appPropertyConfiguredType(
 type EffectiveNavigatorConfiguration = {
   declaration: AST.ConfigurableDeclaration
   keys: ReadonlySet<string>
+}
+
+type SelectionKeyContract = {
+  app: AST.AppValueDeclaration
+  keys: ReadonlySet<string>
+}
+
+function selectionKeyContractsForAppFamily(
+  app: AST.AppValueDeclaration,
+  file: AST.TaoFile,
+): SelectionKeyContract[] {
+  const root = AST.appDeclarationOf(app)
+  if (!root) {
+    return []
+  }
+  const variants = file.statements
+    .filter(AST.isAppVariantDeclaration)
+    .filter(variant => AST.appDeclarationOf(variant) === root)
+  return [root, ...variants].flatMap(candidate => {
+    const keys = selectionKeysForApp(candidate)
+    return keys ? [{ app: candidate, keys }] : []
+  })
 }
 
 function selectionKeysForApp(app: AST.AppValueDeclaration): ReadonlySet<string> | undefined {
