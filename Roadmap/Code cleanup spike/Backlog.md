@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 40 commits, 2026-08-14
+Last touched-package re-sweep: after 41 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -123,7 +123,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/validator/validator-src` traversal entry and feature validators | R4 / charter 1  |                       826 |         69/826 | Replace 70 direct full-file traversals with one shared node array and typed append-only dispatch; Typir consumes the same array, while localized initializer/block walks remain local.       |
 | done               | `packages/runtime/TaoRuntime-src/TR-navigation.ts`                        | R3 / charter 2  |                     2,812 |       13/2,812 | Split the 1,583-line owner into a 350-line public contracts-and-controls facade plus 12 cohesive owners of 24–342 lines; no navigation source file remains over 400 lines.                   |
 | done               | `packages/validator/validator-tests/validator.test.ts`                    | R10 / charter 3 |                     8,645 |        8/8,645 | Split the 4,931-line monolith into eight feature owners of 508–677 lines, sharing two existing fixtures; all 167 callback hashes remain identical and no test exceeds 800 lines.             |
-| in progress        | `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx`                | R10 / charter 3 | 1,383 so far + follow-ups | 1/1,383 so far | Add a 681-line navigation E2E suite and share its lifecycle fixture, reducing the 2,668-line monolith to 2,004 lines while preserving all 62 callback hashes.                                |
+| in progress        | `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx`                | R10 / charter 3 | 2,629 so far + follow-ups | 2/2,629 so far | Add a 625-line Tao test-runner suite after navigation, reducing the 2,668-line monolith to 1,385 lines while preserving all 62 callback hashes.                                              |
 | queued             | `packages/parser/parser-tests/parser.test.ts`                             | R10 / charter 3 |        mostly moves + ~40 |          1/~40 | Split the 1,369-line parser test by grammar/source seams without touching grammar.                                                                                                           |
 | queued             | `packages/runtime/TR-tests/TR.test.ts`                                    | R10 / charter 3 |        mostly moves + ~35 |          1/~35 | Split the 1,040-line TR test along runtime module seams.                                                                                                                                     |
 | queued             | `packages/compiler/compiler-tests/compiler.test.ts`                       | R10 / charter 3 |        mostly moves + ~35 |          1/~35 | Split the 991-line compiler test by codegen feature seams.                                                                                                                                   |
