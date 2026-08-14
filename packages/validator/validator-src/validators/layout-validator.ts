@@ -1,6 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { type LayoutConflictItem, LayoutConflictValidator } from './layout-conflict-validator'
 
@@ -54,19 +55,19 @@ type LayoutConflictKey =
 
 /** LayoutValidator validates render-site layout clauses. */
 export const LayoutValidator = {
+  checks: {
+    [AST.Render.$type]: validateRender,
+  } satisfies NodeValidationChecks,
   messages: layoutValidationMessages,
-  validate,
 }
 
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const render of AST.streamAllContents(file).filter(AST.isRender)) {
-    if (AST.isRenderStatement(render) && render.injection && render.layoutClause) {
-      ctx.error(layoutValidationMessages.injectLayout, render.layoutClause)
-      continue
-    }
-    if (render.layoutClause) {
-      validateLayoutClause(render.layoutClause, ctx)
-    }
+function validateRender(render: AST.Render, ctx: ValidationContext): void {
+  if (AST.isRenderStatement(render) && render.injection && render.layoutClause) {
+    ctx.error(layoutValidationMessages.injectLayout, render.layoutClause)
+    return
+  }
+  if (render.layoutClause) {
+    validateLayoutClause(render.layoutClause, ctx)
   }
 }
 

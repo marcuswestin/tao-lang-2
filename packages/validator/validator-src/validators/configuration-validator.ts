@@ -1,5 +1,6 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** configurationValidationMessages declares self-hosted construct diagnostics. */
@@ -17,12 +18,10 @@ export const configurationValidationMessages = {
   propertyType: (name: string) => `Configuration property '${name}' has an unresolved type.`,
 } as const
 
-/** validateConfigurationDeclarations validates public declaration contracts and implementation binding. */
-export function validateConfigurationDeclarations(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const declaration of AST.streamAllContents(file).filter(AST.isConfigurableDeclaration)) {
-    validateDeclaration(declaration, ctx)
-  }
-}
+/** configurationValidationChecks validates public declaration contracts and implementation binding. */
+export const configurationValidationChecks = {
+  [AST.ConfigurableDeclaration.$type]: validateDeclaration,
+} satisfies NodeValidationChecks
 
 function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const kind = AST.isNavDeclaration(declaration) ? 'Nav' : 'Datasource'

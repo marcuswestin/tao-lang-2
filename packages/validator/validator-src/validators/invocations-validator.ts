@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
@@ -39,15 +40,10 @@ const invocationValidationMessages = {
 
 /** InvocationsValidator validates render invocations through shared type-based binding diagnostics. */
 export const InvocationsValidator = {
+  checks: {
+    [AST.Render.$type]: reportInvocationDiagnostics,
+  } satisfies NodeValidationChecks,
   messages: invocationValidationMessages,
-  validate,
-}
-
-/** validate validates structural render invocation diagnostics. */
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const render of AST.streamAllContents(file).filter(AST.isRender)) {
-    reportInvocationDiagnostics(render, ctx)
-  }
 }
 
 function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext): void {

@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** projectValidationMessages declares diagnostics for local project metadata blocks. */
@@ -12,19 +13,24 @@ export const projectValidationMessages = {
   unsupportedRequires: () => `Project requires entries are not supported yet.`,
 } as const
 
-/** validateProject validates local project metadata blocks. */
-export function validateProject(file: AST.TaoFile, ctx: ValidationContext): void {
+/** projectValidationChecks validates project metadata nodes. */
+export const projectValidationChecks = {
+  [AST.ProjectDeclaration.$type]: validateProject,
+} satisfies NodeValidationChecks
+
+/** validateProjectFile validates file-level project metadata constraints. */
+export function validateProjectFile(file: AST.TaoFile, ctx: ValidationContext): void {
   const topLevelProjects = file.statements.filter(AST.isProjectDeclaration)
   for (const project of topLevelProjects.slice(1)) {
     ctx.error(projectValidationMessages.duplicateProject(), project)
   }
+}
 
-  for (const project of AST.streamAllContents(file).filter(AST.isProjectDeclaration)) {
-    if (!AST.isTaoFile(project.$container)) {
-      ctx.error(projectValidationMessages.topLevelOnly(), project)
-    }
-    validateProjectBlock(project, ctx)
+function validateProject(project: AST.ProjectDeclaration, ctx: ValidationContext): void {
+  if (!AST.isTaoFile(project.$container)) {
+    ctx.error(projectValidationMessages.topLevelOnly(), project)
   }
+  validateProjectBlock(project, ctx)
 }
 
 function validateProjectBlock(project: AST.ProjectDeclaration, ctx: ValidationContext): void {
