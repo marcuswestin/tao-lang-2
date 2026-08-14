@@ -81,7 +81,7 @@ app WordFlower {
 
 // `with` copies public properties into a configured variant. A property-position `with` merge-copies
 // the original property without repeating it; WordFlower and WordFlowerNavigator are unchanged.
-let WordFlowerDrawer = WordFlower with {
+workspace let WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
    Navigator with { Display "drawer" }
 }
