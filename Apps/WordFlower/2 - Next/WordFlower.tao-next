@@ -1,23 +1,30 @@
-use Local from @tao/data
-use Memory from @tao-next/data // the self-hosted stdlib sketch: copyable navs and datasources
-use StackNav from @tao-next/nav
-use OverlayNav, SelectionNav, SlotNav, Toast, ToastHost from @tao/nav
+use Local, Memory from @tao/data
+use SelectionNav, SlotNav, StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
+// Tranche status: absorbed
 // This tranche decides (the process contract is ../README.md):
 // - `SelectionNav` with keyed items (`@key { Label, Content }`), `Initial @key`, `Display`, and
-//   target-only activation: `present App@key` reveals an item without new content
+//   target-only activation: `present App@key` names the root app declaration and reveals an item
+//   without new content. A strict key must be available from the root navigator and every variant
+//   of that app in the file
 // - Configured `with` variants: `Nav with { Display "drawer" }` and app variants that override
 //   Name, Navigator, or Datasource without changing the original
 // - A third data level (Paragraphs) and entity availability guards:
 //   `guard Entity { loading / missing / unauthorized / error -> Message }` with available fall-through;
 //   a handle keeps its Id after its row is gone
 // - `dialogue Name <Params> responds <Enum>`; `ask` suspends the action until the dialogue answers;
-//   `respond Case` answers, bare `respond` answers none; results match with `when`
-// - Keyed toasts: `present Toast { Content: X, Key: "...", Duration: 3.seconds } in App@toasts`;
-//   `N.seconds` is the first unit literal
-// - `snapshot Entity` immutable copies, typed `Entity.Snapshot`
-// - `async { ... }` runs its block without delaying the statements after it
+//   `respond Case` answers, bare `respond` answers none
+// - `is <Case>` generalizes `is empty` into a case test usable wherever a boolean is
+// - `when` stays exhaustive everywhere — `otherwise` is always required. `if <boolean> { ... }` is
+//   the one-sided test and never takes `else`; two or more outcomes are `when`'s job
+// - Presentation modes replace named hosts. Every nav can host overlays, so
+//   `present X() as overlay` layers above the NEAREST nav (the same contextual rule plain
+//   `present` uses) and `in <target>` still overrides scope. `present X() as toast (Key: "...",
+//   Duration: 3)` is always app-level and transient. The same key replaces; different keys coexist.
+//   Toasts expire automatically and neither consume Back nor expose plain dismissal. Keyed app
+//   auxiliaries stay in the language for genuinely app-specific hosts such as windows, but no app
+//   declares overlay or toast hosts. Duration is a number of seconds; unit literals remain deferred
 // - Pure functions in product code (`function Name Params returns type = expression`)
 // - Data fields as `Name type (modifiers)`: parenthesized comma-separated modifiers, booleans as
 //   `Name yes / no [NoAlias] [(default Case)]`, owner-side `auto-delete`, values (like `now`)
@@ -25,17 +32,32 @@ use Col, FormButton, Text, TextInput from @tao/ui
 // - Types instantiate with a bare block (`Datasource Local { ... }`); `with` patches values, and a
 //   property-position `with` (`Navigator with { ... }`) merge-copies the original's property
 // - Self-hosted navs and datasources: a package declares config properties in Tao and binds
-//   semantics with `implement inject` against the published TR protocols (see `@tao-next/`)
+//   semantics with `implement inject` against the published TR protocols in the stdlib sources
 //
 // Splits, windows, design, and the remote provider stay in `../3 - MVP` for later tranches.
 // All tranche-1 forms below are implemented and unchanged. Per ../README.md, `3 - MVP` and
 // `4 - Revolution` are reconciled with this tranche's decisions ONCE, as the final step after
 // Current absorbs Next — mid-tranche amendments to Next accumulate here first.
-
 project {
    name "WordFlower"
    remote none
    license MIT
+}
+
+// An app mounts navs, it does not render content directly. `Navigator` is the primary nav. Overlay
+// and toast hosting are universal capabilities, so no app declares them; keyed auxiliary entries
+// remain available for app-specific hosts such as windows.
+app WordFlower {
+   Name "WordFlower"
+   Navigator WordFlowerNavigator
+   Datasource Local { // Local is a type, which gets instantiated, so no `with`
+      StorageKey "WordFlowerData"
+}  }
+
+app WordFlowerFoundationTest {
+   Name "WordFlower Navigation Foundation Test"
+   Navigator FoundationNavigator
+   // An app without data omits `Datasource` entirely
 }
 
 // A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
@@ -52,7 +74,8 @@ let SignedOutNav = StackNav {
    Initial SignedOut
 }
 
-// Direct keys bind to selection Items and share this configured nav's target-key namespace.
+// Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
+// target-key namespace.
 let WordFlowerNavigator = SelectionNav {
    Initial @home
    Display "automatic"
@@ -69,19 +92,8 @@ let WordFlowerNavigator = SelectionNav {
       Content SettingsStack
 }  }
 
-// An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
-// entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
-app WordFlower {
-   Name "WordFlower"
-   Navigator WordFlowerNavigator
-   @overlays OverlayNav { }
-   @toasts ToastHost { }
-   Datasource Local { // Local is a type, which gets instantiated, so no `with`
-      StorageKey "WordFlowerData"
-}  }
-
 // `with` copies public properties of a *value* into a new value; WordFlower itself is unchanged.
-let WordFlowerDrawer = WordFlower with {
+workspace let WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
    Navigator with { // this short-hands `Navigator WordFlower.Navigator with { ... }`. If you drop `with`, it would be an overwrite instead of a merge-copy
       Display "drawer"
@@ -97,19 +109,13 @@ enum ConfirmResult {
    Confirmed
 }
 
-app WordFlowerFoundationTest {
-   Name "WordFlower Navigation Foundation Test"
-   Navigator FoundationNavigator
-   // An app without data omits `Datasource` entirely
-}
-
 data Workspaces / Workspace { // top-level data: the plural collection, then the singular entity it stores — the same `Plural / Singular` order as `loop`
    Name text
-   // Modifiers take values: `now` is a function value the runtime invokes per create, the same way
-   // `Initial WorkspaceList` passes a ui that mounts later. Invoking still always needs parens.
+   // Modifiers take values: `now` is a deferred runtime default sampled separately for each create,
+   // while `Initial WorkspaceList` likewise passes a ui that mounts later.
    CreatedAt time (default now) // modifications inside parentheses, comma separated
-   Pinned yes / no // yes / no defaults to no
-   Documents (relation Documents, auto-delete) // `auto-delete` translates to `on delete cascade` on the other entity
+   Pinned yes / no // yes / no defaults to no; declared for demonstration, not yet used by the app
+   Documents (relation Documents, auto-delete) // deleting this owner also deletes its related Documents
 
    // Blank line between properties and modifiers
    index CreatedAt // index is declared separately
@@ -120,11 +126,10 @@ data Documents / Document {
    Title text
    Body text (default "")
    Final yes / no Draft // yes/no accepts an optional no-case alias name
-   Public yes / no Private (default Public) // yes/no also accepts default
+   Public yes / no Private (default Public) // yes/no also accepts default; demonstrative, not yet used
    CreatedAt time (default now)
    Workspace (relation Workspace) // `on delete ..` etc are modifications
    Paragraphs (auto-delete) // `relation ...` is optional if the name matches a data declaration.
-
    index CreatedAt
    order by CreatedAt
 }
@@ -133,7 +138,6 @@ data Paragraphs / Paragraph {
    Text text
    Ordering number
    Document // `relation ...` is optional if the name matches a data declaration
-
    index Ordering
    order by Ordering
 }
@@ -172,8 +176,9 @@ ui WorkspaceList {
    }
    action AddWorkspace {
       guard WorkspaceName empty -> { // a match runs its handler and skips the remainder of this action block
-         // `present` is an invocation, so parentheses are always required, including with no arguments
-         present WorkspaceNameNotice() in WordFlower@overlays
+         // `present` is an invocation, so parentheses are always required, including with no arguments.
+         // `as overlay` layers above the nearest enclosing nav rather than pushing into it.
+         present WorkspaceNameNotice() as overlay
       }
       create Workspace {
          Name: WorkspaceName
@@ -238,7 +243,7 @@ ui WorkspaceList {
                   delete Workspace
 }  }  }  }  }  }
 
-// Presented into the app's overlay host; overlays stack above content and are dismissible
+// Presented above the nearest nav; overlays stack above content and are dismissible
 ui WorkspaceNameNotice {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name")
@@ -282,10 +287,10 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
       // Queries can be inlined, but hook-like statements (state, query) must come before any
       // conditional in the definition body
       query Drafts from Workspace.Documents {
-         where Draft // filters by boolean case name, mirroring `update Document { Final }`
+         where is Draft // filters by boolean case name, mirroring `update Document { Final }`. `is <yes/no>` evaluates to true or false.
       }
       query FinishedDocuments from Workspace.Documents {
-         where Final
+         where is Final
       }
       Text("{ SectionLabel }: { Drafts.Count }")
       guard Drafts { // a guard takes exactly one subject; guard each query separately
@@ -393,6 +398,7 @@ workspace view DocumentEditor Document {
    state BodyDraft = Document.Body
    state ParagraphText = ""
    state SaveCount = 0
+   query Paragraphs from Document.Paragraphs { }
    action SetBodyDraft Value is text { // an action reference bound to an event receives the payload through its parameters
       set BodyDraft = Value
    }
@@ -403,32 +409,25 @@ workspace view DocumentEditor Document {
          Body: BodyDraft
       }
       set SaveCount += 1 // compound `set` composes with number state
-      // A keyed toast replaces the previous occurrence with the same key instead of stacking
-      present Toast {
-         Content: SavedToast
-         Key: "document-saved"
-         Duration: 3.seconds // `N.seconds` is the first unit literal
-      } in WordFlower@toasts
+      // A keyed toast replaces the previous occurrence with the same key instead of stacking.
+      // Presentation modifiers go in parentheses, like data field modifiers.
+      present SavedToast() as toast (Key: "document-saved", Duration: 3)
    }
    action AddParagraph {
       guard ParagraphText empty
-      // `async` runs its block without delaying the statements after it
-      async {
-         create Paragraph {
-            Text: ParagraphText
-            Ordering: Paragraphs.Count + 1
-            Document
-      }  }
+      create Paragraph {
+         Text: ParagraphText
+         Ordering: Paragraphs.Count + 1
+         Document
+      }
       set ParagraphText = ""
    }
    action CloseDocument {
-      // `ask` suspends this action until the dialogue responds; a bare `respond` answers none
+      // `ask` suspends this action until the dialogue responds; a bare `respond` answers none.
+      // A one-sided test is `if`; it never takes `else`, so multi-outcome branching stays `when`.
       let Result = ask ConfirmCloseDialogue(Document)
-      when Result {
-         Confirmed -> {
-            dismiss
-         }
-         otherwise -> { } // cancelled
+      if Result is Confirmed {
+         dismiss
    }  }
    render Col() [fill, content top stretch, gap 10, pad 16] {
       Text(DocumentLabel(Document.Title)) [width fill]
@@ -451,8 +450,6 @@ workspace view DocumentEditor Document {
       Text("Saved title: { Document.Title }")
       Text("Saved body: { Document.Body }")
       Text("Saves this session: { SaveCount }")
-
-      query Paragraphs from Document.Paragraphs { }
       Text("Paragraphs: { Paragraphs.Count }")
       #newParagraph
       TextInput(Value: ParagraphText, Label: "New paragraph", Placeholder: "Add a paragraph") {
@@ -463,34 +460,17 @@ workspace view DocumentEditor Document {
          Col() [gap 6, pad 10] {
             Text(Paragraph.Text)
       }  }
-      #snapshotDocument
-      FormButton("Snapshot") {
-         on press -> {
-            // A snapshot is an immutable copy; the live handle keeps updating elsewhere
-            let Snapshot = snapshot Document
-            present DocumentSnapshot(Snapshot) in WordFlower@overlays
-      }  }
       #closeDocument
       FormButton("Close document") {
          on press CloseDocument
-      }
-}  }
+}  }  }
 
 ui SavedToast {
    render Text("Saved")
 }
 
-ui DocumentSnapshot Snapshot is Document.Snapshot {
-   render Col() [gap 6, pad 10] {
-      Text("Captured version")
-      Text(Snapshot.Title)
-      #dismissSnapshot
-      FormButton("Dismiss") {
-         on press -> {
-            dismiss
-}  }  }  }
-
-// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none.
+// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none. Each
+// ask is an independent stacked occurrence. Back or plain dismissal answers none before removal.
 dialogue ConfirmCloseDialogue Document responds ConfirmResult {
    render Col() [gap 6, pad 10] {
       Text("Close { Document.Title }?")
@@ -588,6 +568,7 @@ ui FoundationDetail {
       Text("Foundation detail marker")
       FormButton("Reset foundation app") {
          // `replace <nav> in <App>` swaps the app's root content; it is the only root operation an app accepts
+         // Replacement is contextual and is valid only from inside a visual declaration.
          on press -> {
             replace FoundationNavigator in WordFlowerFoundationTest
 }  }  }  }

@@ -1,9 +1,14 @@
 import React from 'react'
+import { DataLoadRecovery } from './TR-data-load-recovery'
 
-export type DataProviderName = 'local' | 'memory'
-type DataStatus = 'error' | 'loading' | 'ready'
+type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'
+
+/** TaoEntityAvailability is the provider-neutral live state of one entity handle. */
+export type TaoEntityAvailability =
+  | { status: 'available' | 'loading' | 'missing' | 'unauthorized' }
+  | { message: string; status: 'error' }
 
 export type TaoDataField = {
   defaultNow?: true
@@ -47,9 +52,26 @@ export type TaoQueryPlan = {
 
 export type TaoDataProvider = {
   load(storageKey: string): Promise<string | undefined> | string | undefined
-  name: string
-  save(storageKey: string, value: string): Promise<void> | void
+  persist(storageKey: string, snapshot: string): Promise<void> | void
 }
+
+export type TaoDataProviderFactory = () => TaoDataProvider
+
+/** TaoDatasourceDeclaration binds one immutable Tao declaration identity to its injected provider. */
+export type TaoDatasourceDeclaration = Readonly<{
+  identity: symbol
+  name: string
+  provider: TaoDataProvider
+}>
+
+export type TaoDatasourceConfiguration = Readonly<Record<string, unknown>>
+
+/** TaoConfiguredDatasource is an immutable declaration-owned provider configuration. */
+export type TaoConfiguredDatasource = Readonly<{
+  config: TaoDatasourceConfiguration
+  declaration: TaoDatasourceDeclaration
+  evaluate(): TaoConfiguredDatasource
+}>
 
 export type TaoKeyValueStorage = {
   getItem(key: string): Promise<string | null>
@@ -58,12 +80,6 @@ export type TaoKeyValueStorage = {
 
 type Evaluable = {
   evaluate(): { jsValue: unknown }
-}
-
-export type TaoDataSource = {
-  evaluate(): TaoDataSource
-  provider: DataProviderName
-  storageKey?: string
 }
 
 type RuntimeValueFactory = <T>(value: T) => Evaluable
@@ -90,7 +106,7 @@ const globalListeners = new Set<() => void>()
 let globalRevision = 0
 
 /** MemoryProvider creates one isolated, storage-keyed provider whose envelopes live only in this process. */
-export function MemoryProvider(initial?: string): TaoDataProvider {
+function MemoryProvider(initial?: string): TaoDataProvider {
   const stored = new Map<string, string>()
   let initialStorageKey: string | undefined
 
@@ -102,12 +118,11 @@ export function MemoryProvider(initial?: string): TaoDataProvider {
   }
 
   return {
-    name: 'Memory',
     load: storageKey => {
       initialize(storageKey)
       return stored.get(storageKey)
     },
-    save: (storageKey, value) => {
+    persist: (storageKey, value) => {
       initialize(storageKey)
       stored.set(storageKey, value)
     },
@@ -115,46 +130,163 @@ export function MemoryProvider(initial?: string): TaoDataProvider {
 }
 
 /** LocalProvider persists envelopes through AsyncStorage without silently degrading to memory. */
-export function LocalProvider(storage?: TaoKeyValueStorage, keyPrefix = 'tao-data'): TaoDataProvider {
+function LocalProvider(storage?: TaoKeyValueStorage, keyPrefix = 'tao-data'): TaoDataProvider {
   const keyValueStorage = (): TaoKeyValueStorage => storage ?? asyncStorage()
   return {
-    name: 'Local',
     load: async storageKey => (await keyValueStorage().getItem(`${keyPrefix}:${storageKey}`)) ?? undefined,
-    save: async (storageKey, value) => {
+    persist: async (storageKey, value) => {
       await keyValueStorage().setItem(`${keyPrefix}:${storageKey}`, value)
     },
   }
 }
 
-function providerNamed(name: DataProviderName): TaoDataProvider {
-  return name === 'memory' ? MemoryProvider() : LocalProvider()
+/** DataProviderControls is the published injection API for shipped data-provider implementations. */
+export const DataProviderControls = {
+  Local: LocalProvider,
+  Memory: MemoryProvider,
+} as const
+
+/**
+ * testProvider checks the full-snapshot provider protocol without importing a test runner.
+ * A rejecting factory is explicit so the suite proves failures cross the real provider boundary.
+ */
+export async function testProvider(
+  createProvider: TaoDataProviderFactory,
+  createRejectingProvider: TaoDataProviderFactory,
+): Promise<void> {
+  const run = ++providerConformanceRun
+  const key = (name: string): string => `tao-provider-conformance-${run}-${name}`
+  const provider = createProvider()
+
+  assertProviderConformance(
+    await provider.load(key('empty')) === undefined,
+    'load must return undefined for an empty storage key.',
+  )
+
+  const roundTripSnapshot = '{"snapshot":"round-trip"}'
+  await provider.persist(key('round-trip'), roundTripSnapshot)
+  assertProviderConformance(
+    await provider.load(key('round-trip')) === roundTripSnapshot,
+    'persisted snapshots must round-trip exactly.',
+  )
+
+  const firstKey = key('first-schema')
+  const secondKey = key('second-schema')
+  await provider.persist(firstKey, '{"schema":"first"}')
+  await provider.persist(secondKey, '{"schema":"second"}')
+  assertProviderConformance(
+    await provider.load(firstKey) === '{"schema":"first"}'
+      && await provider.load(secondKey) === '{"schema":"second"}',
+    'storage keys must remain isolated.',
+  )
+
+  const orderedKey = key('ordered')
+  await provider.persist(orderedKey, '{"sequence":1}')
+  await provider.persist(orderedKey, '{"sequence":2}')
+  assertProviderConformance(
+    await provider.load(orderedKey) === '{"sequence":2}',
+    'later full snapshots must replace earlier snapshots in call order.',
+  )
+
+  const firstInstance = createProvider()
+  const secondInstance = createProvider()
+  const instanceKey = key('instance')
+  await firstInstance.persist(instanceKey, '{"instance":"first"}')
+  const secondStart = await secondInstance.load(instanceKey)
+  assertProviderConformance(
+    secondStart === undefined || secondStart === '{"instance":"first"}',
+    'provider instances must be isolated or share one stateless storage boundary.',
+  )
+  await secondInstance.persist(instanceKey, '{"instance":"second"}')
+  assertProviderConformance(
+    await firstInstance.load(instanceKey) === (
+      secondStart === undefined ? '{"instance":"first"}' : '{"instance":"second"}'
+    ),
+    'provider instances must not partially share state.',
+  )
+
+  let rejected = false
+  try {
+    await createRejectingProvider().persist(key('rejection'), '{"snapshot":"rejected"}')
+  } catch {
+    rejected = true
+  }
+  assertProviderConformance(rejected, 'persist must propagate storage rejection.')
+}
+
+let providerConformanceRun = 0
+
+function assertProviderConformance(condition: boolean, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(`DataProvider conformance failed: ${message}`)
+  }
 }
 
 function UnboundProvider(schemaName: string): TaoDataProvider {
   const message = `Data schema '${schemaName}' has no bound provider.`
   return {
-    name: 'Unbound',
     load: () => {
       throw new Error(message)
     },
-    save: () => {
+    persist: () => {
       throw new Error(message)
     },
   }
 }
 
-function useProviderBinding(schema: RuntimeDataSchema, provider: DataProviderName, storageKey?: string): void {
+function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
+  const storageKey = configuredStorageKey(source)
   React.useLayoutEffect(() => {
-    DataControls.Bind(schema, provider, storageKey)
-  }, [schema, provider, storageKey])
+    DataControls.BindConfigured(schema, source.declaration, storageKey)
+  }, [schema, source.declaration, storageKey])
 }
 
-function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoDataSource): void {
-  useProviderBinding(schema, source.provider, source.storageKey)
+function configuredStorageKey(source: TaoConfiguredDatasource): string | undefined {
+  const configured = source.config['StorageKey']
+  if (configured === undefined) {
+    return undefined
+  }
+  if (!isEvaluable(configured)) {
+    throw new Error(`Datasource ${source.declaration.name} configuration 'StorageKey' expects text.`)
+  }
+  const value = configured.evaluate().jsValue
+  if (typeof value !== 'string') {
+    throw new Error(`Datasource ${source.declaration.name} configuration 'StorageKey' expects text.`)
+  }
+  return value
+}
+
+function isEvaluable(value: unknown): value is Evaluable {
+  return typeof value === 'object' && value !== null && 'evaluate' in value
+    && typeof value.evaluate === 'function'
 }
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
 export const DataControls = {
+  /** Declaration binds one Tao declaration identity to its package-scope provider implementation. */
+  Declaration(name: string, provider: TaoDataProvider): TaoDatasourceDeclaration {
+    return Object.freeze({ identity: Symbol(name), name, provider })
+  },
+
+  /** Configure creates an immutable declaration-owned datasource value. */
+  Configure(
+    declaration: TaoDatasourceDeclaration,
+    config: Record<string, unknown>,
+  ): TaoConfiguredDatasource {
+    let configured: TaoConfiguredDatasource
+    configured = Object.freeze({
+      config: Object.freeze({ ...config }),
+      declaration,
+      evaluate: () => configured,
+    })
+    return configured
+  },
+
+  /** Patch creates an immutable configured copy without changing its declaration identity. */
+  Patch(base: TaoConfiguredDatasource, patch: Record<string, unknown>): TaoConfiguredDatasource {
+    return DataControls.Configure(base.declaration, { ...base.config, ...patch })
+  },
+
   Schema(
     definition: TaoDataSchemaDefinition,
     provider?: TaoDataProvider,
@@ -172,31 +304,21 @@ export const DataControls = {
     return schema
   },
 
-  /** Bind selects an app datasource provider once; repeated root renders preserve the active store. */
-  Bind(schema: RuntimeDataSchema, provider: DataProviderName, storageKey?: string): void {
+  /** BindConfigured selects a declaration-owned provider while preserving test isolation. */
+  BindConfigured(
+    schema: RuntimeDataSchema,
+    declaration: TaoDatasourceDeclaration,
+    storageKey?: string,
+  ): void {
     if (testMode) {
       activeTestSchemas.add(schema)
       return
     }
-    schema.bind(provider, storageKey)
+    schema.bindConfigured(declaration, storageKey)
   },
 
-  /** Use binds an app datasource after render while preserving React hook ordering across every render. */
-  Use: useProviderBinding,
-
-  /** UseConfigured binds an explicit Local/Memory source configuration at an app root. */
+  /** UseConfigured binds a declaration-owned datasource configuration at an app root. */
   UseConfigured: useConfiguredProviderBinding,
-
-  /** Source creates a typed datasource configuration value. */
-  Source(provider: DataProviderName, storageKey?: Evaluable): TaoDataSource {
-    const key = storageKey?.evaluate().jsValue
-    const source: TaoDataSource = {
-      evaluate: () => source,
-      provider,
-      ...(typeof key === 'string' ? { storageKey: key } : {}),
-    }
-    return source
-  },
 
   Query(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
     React.useSyncExternalStore(schema.subscribe, schema.snapshot, schema.snapshot)
@@ -234,13 +356,16 @@ export const DataControls = {
     return entityHandle(value) !== undefined
   },
 
+  /** EntityAvailability derives the exceptional guard state of a live entity handle. */
+  EntityAvailability(value: unknown): TaoEntityAvailability | undefined {
+    const handle = entityHandle(value)
+    return handle ? metadataOf(handle).schema.availability(handle) : undefined
+  },
+
   /** Settle waits for the active provider load and every save enqueued before this call. */
   async Settle(schema: RuntimeDataSchema): Promise<void> {
     await schema.settle()
   },
-
-  MemoryProvider,
-  LocalProvider,
 
   /** subscribeAll is the app/navigation seam for rerendering entity-valued screens after data changes. */
   subscribeAll(listener: () => void): () => void {
@@ -321,7 +446,7 @@ class RuntimeDataSchema {
   private loadPromise: Promise<void> = Promise.resolve()
   private nextSaveSequence = 0
   private provider: TaoDataProvider
-  private providerBinding: DataProviderName | 'test' | 'unbound' | undefined
+  private providerBinding: TaoDatasourceDeclaration | 'test' | 'unbound' | undefined
   private storageKeyBinding: string | undefined
   private saveQueue: Promise<void> = Promise.resolve()
   private status: DataStatus = 'loading'
@@ -330,7 +455,7 @@ class RuntimeDataSchema {
   constructor(
     readonly definition: TaoDataSchemaDefinition,
     provider: TaoDataProvider,
-    providerBinding?: DataProviderName | 'test' | 'unbound',
+    providerBinding?: TaoDatasourceDeclaration | 'test' | 'unbound',
     storageKeyBinding?: string,
   ) {
     validateDefinition(definition)
@@ -349,17 +474,33 @@ class RuntimeDataSchema {
 
   readonly snapshot = (): number => this.version
 
-  bind(provider: DataProviderName, storageKey?: string): void {
-    if (this.providerBinding === provider && this.storageKeyBinding === storageKey) {
+  private async resetAfterLoadFailure(): Promise<void> {
+    const provider = this.provider
+    const providerBinding = this.providerBinding
+    const storageKey = this.storageKey()
+    await provider.persist(storageKey, JSON.stringify(envelope(emptyData(this.definition), this.definition)))
+    if (this.provider !== provider || this.storageKey() !== storageKey) {
+      return
+    }
+
+    this.configure(provider, providerBinding)
+    await this.settle()
+    if (this.provider === provider && this.storageKey() === storageKey && this.status === 'error') {
+      throw new Error(this.error)
+    }
+  }
+
+  bindConfigured(declaration: TaoDatasourceDeclaration, storageKey?: string): void {
+    if (this.providerBinding === declaration && this.storageKeyBinding === storageKey) {
       return
     }
     this.storageKeyBinding = storageKey
-    this.configure(providerNamed(provider), provider)
+    this.configure(declaration.provider, declaration)
   }
 
   configure(
     provider: TaoDataProvider,
-    providerBinding?: DataProviderName | 'test' | 'unbound',
+    providerBinding?: TaoDatasourceDeclaration | 'test' | 'unbound',
   ): void {
     const generation = ++this.generation
     this.provider = provider
@@ -509,6 +650,28 @@ class RuntimeDataSchema {
     return metadata.id
   }
 
+  availability(handle: RuntimeEntityHandle): TaoEntityAvailability {
+    const metadata = metadataOf(handle)
+    if (metadata.schema !== this) {
+      return { status: 'missing' }
+    }
+    if (this.status === 'loading') {
+      return { status: 'loading' }
+    }
+    if (this.status === 'unauthorized') {
+      return { status: 'unauthorized' }
+    }
+    if (this.status === 'error') {
+      return { message: this.error, status: 'error' }
+    }
+    if (metadata.generation !== this.generation) {
+      return { status: 'missing' }
+    }
+    return this.storedRow(metadata.entity, metadata.id)
+      ? { status: 'available' }
+      : { status: 'missing' }
+  }
+
   async settle(): Promise<void> {
     await this.loadPromise
     await this.saveQueue
@@ -556,7 +719,7 @@ class RuntimeDataSchema {
     this.emit()
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await provider.save(this.storageKey(), serialized)
+        await provider.persist(this.storageKey(), serialized)
         if (
           generation === this.generation
           && this.failedSaveSequence !== undefined
@@ -596,6 +759,9 @@ class RuntimeDataSchema {
     this.failedSaveSequence = undefined
     this.status = 'error'
     this.error = `Could not load local data: ${errorMessage(error)}`
+    if (this.providerBinding !== 'unbound') {
+      DataLoadRecovery.report(this, this.error, () => this.resetAfterLoadFailure())
+    }
     this.emit()
   }
 
@@ -608,6 +774,7 @@ class RuntimeDataSchema {
       this.failedSaveSequence = undefined
       this.status = 'ready'
       this.error = ''
+      DataLoadRecovery.resolve(this)
       this.emit()
     } catch (error) {
       this.failLoad(generation, error)
@@ -654,7 +821,7 @@ class RuntimeDataSchema {
 
   private requireReady(operation: string): void {
     if (this.status !== 'ready') {
-      throw new Error(`Cannot ${operation} data while provider '${this.provider.name}' is ${this.status}.`)
+      throw new Error(`Cannot ${operation} data while the provider is ${this.status}.`)
     }
   }
 

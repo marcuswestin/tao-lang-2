@@ -1,5 +1,7 @@
 # Checklist - Prepare navigation MVP
 
+Status: archived. Every item completed before the navigation MVP shipped.
+
 ## Authority And Decisions
 
 - [x] Active specifications are normative and cross-link the roadmap research.
@@ -51,7 +53,7 @@
 
 ## Required Before Merge
 
-- [x] Fix commented compact-action formatting in its own commit, following `Roadmap/Pre-merge MVP exploration follow-ups.md`.
+- [x] Fix commented compact-action formatting in its own commit.
 - [x] Defer project-ID implementation until stable navigation identity has its first runtime consumer; preserve the settled contract in the same document.
 - [x] Consolidate `Apps/MVP*` into one full target, one rolling executable integration app, and focused tests.
 - [x] Merge current `main` and reconcile its layout/testing documentation changes without reverting them.

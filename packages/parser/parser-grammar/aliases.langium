@@ -8,7 +8,7 @@ entry AliasesGrammarEntrypoint:
     AliasDeclaration;
 
 AliasDeclaration:
-    visibility=DeclarationVisibility? keyword=BindingKeyword name=ID '=' value=(NavigationConfiguredValue | Expression);
+    visibility=DeclarationVisibility? keyword=BindingKeyword name=ID '=' value=Expression;
 
 BindingKeyword returns string:
     'let';

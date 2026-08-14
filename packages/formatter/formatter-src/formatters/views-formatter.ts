@@ -12,6 +12,13 @@ export default {
   /** UiDeclaration formats a first-class presentation declaration. */
   UiDeclaration: ViewDeclaration,
 
+  /** DialogueDeclaration formats its parameters and response enum header. */
+  DialogueDeclaration(f) {
+    ViewDeclaration(f)
+    f.oneSpaceBefore('responds')
+    f.oneSpaceAfter('responds')
+  },
+
   /** RenderStatement formats `render` view and injection targets. */
   RenderStatement(f) {
     f.oneSpaceAfter('render')
@@ -47,6 +54,6 @@ export default {
 } satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.VisualDeclaration>): void {
-  f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'view', 'layout', 'ui')
+  f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'view', 'layout', 'ui', 'dialogue')
   f.oneSpaceBeforeProperty('parameterList')
 }

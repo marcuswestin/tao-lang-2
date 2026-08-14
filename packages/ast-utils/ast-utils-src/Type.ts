@@ -17,6 +17,7 @@ export type TaoType =
   | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
   | { kind: 'entity'; entity: DataEntityDefinition }
+  | { kind: 'enum'; declaration: AST.EnumDeclaration }
   | { kind: 'union'; members: readonly TaoType[] }
   | { kind: 'unresolved' }
 
@@ -36,7 +37,7 @@ export type TypeReferenceRoot = {
   remainingMembers: readonly string[]
 }
 
-type AnyTypeReference = AST.TypeReference | AST.ConstructorTypeReference
+type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeReference
 
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
@@ -69,7 +70,7 @@ export class Type {
   }
 
   /** constructorReferenceName returns the source-facing name of a typed constructor's type prefix. */
-  static constructorReferenceName(type: AST.ConstructorTypeReference): string {
+  static constructorReferenceName(type: AST.ConstructablePrimitiveTypeReference): string {
     return Type.referenceName(type)
   }
 
@@ -100,6 +101,7 @@ export class Type {
       list: () => 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
       entity: type => dataEntityName(type.entity),
+      enum: type => type.declaration.name,
       union: type => type.members.map(Type.displayName).join(' | '),
     })
   }
@@ -115,7 +117,7 @@ export class Type {
   }
 
   /** ofConstructorReference resolves a typed constructor's type prefix. */
-  static ofConstructorReference(type: AST.ConstructorTypeReference): TaoType {
+  static ofConstructorReference(type: AST.ConstructablePrimitiveTypeReference): TaoType {
     return new TypeResolutionContext().ofConstructorReference(type)
   }
 
@@ -141,9 +143,28 @@ export class Type {
     return new TypeResolutionContext().atMemberPath(root, members)
   }
 
-  /** ofConfiguredValue resolves one closed stdlib configuration constructor. */
+  /** ofConfiguredValue resolves one declaration-linked named constructor. */
   static ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
-    return value.type.ref ? Type.ofDefinition(value.type.ref) : unresolvedType()
+    const declaration = value.type.ref
+    if (AST.isTypeDeclaration(declaration)) {
+      return Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? [])
+    }
+    if (AST.isParameterizedDeclaration(declaration)) {
+      const [member, ...remainingMembers] = value.members ?? []
+      const parameterType = member
+        ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === member)?.inlineType
+        : undefined
+      return parameterType
+        ? Type.atMemberPath(Type.ofDefinition(parameterType), remainingMembers)
+        : unresolvedType()
+    }
+    if (AST.isNavDeclaration(declaration)) {
+      return primitiveType('nav')
+    }
+    if (AST.isDatasourceDeclaration(declaration)) {
+      return { kind: 'item' }
+    }
+    return unresolvedType()
   }
 
   /** ofValue resolves an ordinary expression or configured runtime value. */
@@ -172,6 +193,13 @@ export class Type {
   /** ofProperty resolves the expected value type of one item property declaration. */
   static ofProperty(property: AST.TypeProperty): TaoType {
     return new TypeResolutionContext().ofProperty(property)
+  }
+
+  /** ofConfigurationProperty resolves a nav/datasource contract property's accepted Tao type. */
+  static ofConfigurationProperty(property: AST.ConfigurationPropertyDeclaration): TaoType {
+    return AST.configurationPropertyIsKey(property)
+      ? primitiveType('text')
+      : Type.ofReference(property.type)
   }
 
   /** shorthandPropertyDefinition resolves the same-name type used by a shorthand item field. */
@@ -269,6 +297,9 @@ export class Type {
     if (type.kind === 'entity') {
       return `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`
     }
+    if (type.kind === 'enum') {
+      return `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`
+    }
     if (type.kind === 'union') {
       return `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`
     }
@@ -278,6 +309,25 @@ export class Type {
   /** ofMemberAccess resolves the static type reached by a member access expression. */
   static ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
     return new TypeResolutionContext().ofMemberAccess(expression)
+  }
+
+  /** dataFieldOfMemberAccess returns the declaration reached by an entity member path. */
+  static dataFieldOfMemberAccess(expression: AST.MemberAccessExpression): DataFieldDefinition | undefined {
+    let current = Type.ofValueDeclaration(expression.target.ref)
+    for (const [index, member] of expression.members.entries()) {
+      if (current.kind !== 'entity') {
+        return undefined
+      }
+      const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
+      if (!field) {
+        return undefined
+      }
+      if (index === expression.members.length - 1) {
+        return field
+      }
+      current = Type.dataFieldType(field)
+    }
+    return undefined
   }
 
   /** queryEntity resolves the entity selected by one query declaration. */
@@ -303,6 +353,31 @@ export class Type {
   /** dataFields returns the stored and inferred field declarations of one entity. */
   static dataFields(entity: DataEntityDefinition): DataFieldDefinition[] {
     return entity.block.entries.filter(AST.isEntityDataField)
+  }
+
+  /** dataFieldRelationName returns the explicit relation target or the field-name inference key. */
+  static dataFieldRelationName(field: DataFieldDefinition): string {
+    return field.modifiers.find(modifier => modifier.relationName)?.relationName ?? field.name
+  }
+
+  /** dataFieldRelationEntity resolves a stored or inverse relationship target. */
+  static dataFieldRelationEntity(field: DataFieldDefinition): DataEntityDefinition | undefined {
+    if (field.primitive || field.boolean) {
+      return undefined
+    }
+    const relationName = Type.dataFieldRelationName(field)
+    return Type.topLevelDataEntities(field).find(entity =>
+      entity.singularName === relationName || entity.name === relationName
+    )
+  }
+
+  /** dataFieldIsInverseRelation distinguishes plural owner-side relations from stored handles. */
+  static dataFieldIsInverseRelation(field: DataFieldDefinition): boolean {
+    if (field.primitive || field.boolean) {
+      return false
+    }
+    const relationName = Type.dataFieldRelationName(field)
+    return Type.topLevelDataEntities(field).some(entity => entity.name === relationName)
   }
 
   /** topLevelDataEntities returns the current provider-neutral catalog declarations in a file. */
@@ -341,16 +416,16 @@ export class Type {
     if (field.primitive === 'time') {
       return primitiveType('time')
     }
-    if (field.negativeName) {
+    if (field.boolean) {
       return primitiveType('boolean')
     }
-    const entities = Type.topLevelDataEntities(field)
-    const direct = entities.find(entity => entity.singularName === field.name)
-    if (direct) {
-      return { kind: 'entity', entity: direct }
+    const relation = Type.dataFieldRelationEntity(field)
+    if (!relation) {
+      return unresolvedType()
     }
-    const inverse = entities.find(entity => entity.name === field.name)
-    return inverse ? { kind: 'list', element: { kind: 'entity', entity: inverse } } : unresolvedType()
+    return Type.dataFieldIsInverseRelation(field)
+      ? { kind: 'list', element: { kind: 'entity', entity: relation } }
+      : { kind: 'entity', entity: relation }
   }
 
   /** definitionOfReference resolves a named type reference, including qualified item fields. */
@@ -411,7 +486,13 @@ function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
   if (!bothTypesAreResolved || !typesShareKind || primitivesDiffer(actual, expected)) {
     return false
   }
-  return actual.kind !== 'entity' || expected.kind !== 'entity' || actual.entity === expected.entity
+  if (actual.kind === 'entity' && expected.kind === 'entity') {
+    return actual.entity === expected.entity
+  }
+  if (actual.kind === 'enum' && expected.kind === 'enum') {
+    return actual.declaration === expected.declaration
+  }
+  return true
 }
 
 function listTypeIsAssignable(
@@ -485,7 +566,9 @@ function primitivesDiffer(actual: TaoType, expected: TaoType): boolean {
 }
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
-  return isUnresolvedType(type) || type.kind === 'entity' || type.kind === 'union' ? undefined : type.nominal
+  return isUnresolvedType(type) || type.kind === 'entity' || type.kind === 'enum' || type.kind === 'union'
+    ? undefined
+    : type.nominal
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -541,18 +624,8 @@ class TypeResolutionContext {
     })
   }
 
-  ofConstructorReference(type: AST.ConstructorTypeReference): TaoType {
-    return Switch.type(type, {
-      ConstructablePrimitiveTypeReference: reference => primitiveType(reference.primitive),
-      NamedTypeReference: reference => {
-        const entity = Type.entityOfReference(reference)
-        if (entity) {
-          return { kind: 'entity', entity }
-        }
-        const definition = Type.definitionOfReference(reference)
-        return definition ? this.ofDefinition(definition) : unresolvedType()
-      },
-    })
+  ofConstructorReference(type: AST.ConstructablePrimitiveTypeReference): TaoType {
+    return primitiveType(type.primitive)
   }
 
   ofParameter(parameter: AST.ParameterDeclaration): TaoType {
@@ -567,7 +640,8 @@ class TypeResolutionContext {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
       BooleanLiteral: () => primitiveType('boolean'),
-      EmptyExpression: () => primitiveType('boolean'),
+      CaseTestExpression: () => primitiveType('boolean'),
+      ConfigurationConstructor: value => Type.ofConfiguredValue(value),
       WhenExpression: when => this.whenExpressionType(when),
       FunctionCallExpression: call =>
         call.function.ref ? this.ofReference(call.function.ref.returnType) : unresolvedType(),
@@ -619,9 +693,15 @@ class TypeResolutionContext {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: declaration => this.ofAction(declaration),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
+      AppDeclaration: () => unresolvedType(),
+      AskStatement: ask =>
+        ask.dialogue.ref?.response.ref
+          ? { kind: 'enum', declaration: ask.dialogue.ref.response.ref }
+          : unresolvedType(),
       CasePayload: () => primitiveType('text'),
       EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
       EntityQueryDeclaration: query => this.queryDeclarationType(query),
+      EnumCase: enumCase => ({ kind: 'enum', declaration: AST.enumOwningCase(enumCase) }),
       ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
       StateDeclaration: state => this.stateDeclarationType(state),
@@ -694,6 +774,10 @@ class TypeResolutionContext {
         continue
       }
       if (current.kind === 'entity') {
+        if (member === 'Id') {
+          current = primitiveType('text')
+          continue
+        }
         const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
         if (!field) {
           return unresolvedType()
@@ -961,9 +1045,6 @@ function itemConstructorProperty(reference: AST.NamedTypeReference, name: string
 
 function owningItemLiteralType(reference: AST.NamedTypeReference): AST.ItemTypeExpression | undefined {
   let current: AST.Node | undefined = reference.$container
-  if (AST.isTypedConstructor(current) && current.type === reference && AST.isItemLiteral(current.value)) {
-    return undefined
-  }
   while (current) {
     if (AST.isItemLiteral(current)) {
       return itemLiteralType(current)

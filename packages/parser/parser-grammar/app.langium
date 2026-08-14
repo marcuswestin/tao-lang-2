@@ -7,6 +7,8 @@ import "./terminals"
 entry AppGrammarEntrypoint:
     AppDeclaration;
 
+type AppValueDeclaration = AppDeclaration | AliasDeclaration;
+
 AppDeclaration:
     'app' name=ID block=AppBlock;
 
@@ -17,16 +19,19 @@ AppStatement:
     AppName | AppNavigator | AppAuxiliaryNavigator | AppView | AppDatasource;
 
 AppName:
-    name=ID value=StringLiteral;
+    name='Name' value=StringLiteral;
 
 AppNavigator:
-    name=ID value=(NavigationConfiguredValue | ValueReference);
+    name='Navigator' value=ConfiguredAppPropertyValue;
 
 AppAuxiliaryNavigator:
-    name=USE_IMPORT_PATH value=NavigationConfiguredValue;
+    name=USE_IMPORT_PATH value=ConfigurationConstructor;
 
 AppView:
     'view' view=[ViewDeclaration:ID];
 
 AppDatasource:
-    name=ID value=ProviderConfiguredValue;
+    name='Datasource' value=ConfiguredAppPropertyValue;
+
+ConfiguredAppPropertyValue:
+    target=[NamedDeclaration:ID] block=ConfigurationBlock?;

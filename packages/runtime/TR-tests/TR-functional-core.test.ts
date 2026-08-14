@@ -48,6 +48,16 @@ Describe('TR functional core', () => {
     Expect(TR.IsEmpty(TR.Value('')).jsValue).toBe(true)
     Expect(TR.IsEmpty(TR.Value([])).jsValue).toBe(true)
 
+    const confirmResult = TR.Enum(['Confirmed', 'Cancelled'])
+    const otherResult = TR.Enum(['Confirmed'])
+    Expect(TR.IsCase(confirmResult['Confirmed']!, confirmResult['Confirmed']!).jsValue).toBe(true)
+    Expect(TR.IsCase(confirmResult['Confirmed']!, otherResult['Confirmed']!).jsValue).toBe(false)
+    Expect(TR.IsCase(TR.Value(false), TR.Value(false)).jsValue).toBe(true)
+    let ifRuns = 0
+    TR.If(TR.Value(false), () => ifRuns++)
+    TR.If(TR.Value(true), () => ifRuns++)
+    Expect(ifRuns).toBe(1)
+
     const query = [] as unknown as unknown[] & { Loading: boolean; Error: string }
     Object.defineProperties(query, {
       Loading: { value: true, configurable: true },

@@ -1,6 +1,6 @@
 # WordFlower
 
-WordFlower is the canonical Tao application: a workspace/document writing app that forces every language capability we ship. It replaced Still and Kitchen Sink as the single product target.
+WordFlower is the canonical Tao application: a workspace/document writing app that forces every language capability we ship.
 
 This folder also defines **the implementation process** for Tao language work. All feature development flows through the four numbered versions below.
 
@@ -19,7 +19,14 @@ Only `1 - Current` is executable. The others use their own file extensions (`.ta
 
 ## Next is the sprint contract
 
-`2 - Next` holds the tranche of decided syntax and semantics that implementation moves into `1 - Current`, slice by slice. Decisions live there as working code plus comments: the file's header lists the tranche, and every construct in the sketch is the agreed target form. `3 - MVP` and `4 - Revolution` are reconciled with those decisions once per tranche, as its final step.
+`2 - Next` holds the tranche of decided syntax and semantics that implementation moves into `1 - Current`, slice by slice. Decisions live there as working code plus comments: the file's header lists the tranche, and every construct in the sketch is the agreed target form.
+
+Next's app and test-sidecar headers each declare `// Tranche status: absorbed` at a tranche boundary.
+Cutting work for either pair changes that pair's line in Next alone to `// Tranche status: open`
+before it diverges from Current. The parser and formatter gate the pairs independently: a matching
+pair proves byte identity, while a divergent pair requires its own explicit open marker. Absorption
+changes each open marker back to `absorbed` in both Next and Current only after that pair matches
+again.
 
 ## Moving Next into Current
 
@@ -31,13 +38,11 @@ Work the tranche one slice at a time; a slice is one decision group from Next's 
 4. **Repeat** until Current expresses everything Next expresses. The tranche is done when the two files say the same thing — Next just says it with decision comments.
 5. **Reconcile the later versions.** As the final step of the tranche, fold every decision Next settled — including changes discovered during implementation — into `3 - MVP` and `4 - Revolution` in one pass.
 
-A change of mind mid-sprint goes through Next first: amend the sketch, then implement. Current never leads; it follows Next. Mid-tranche amendments accumulate in Next alone and reach MVP and Revolution in the final reconciliation pass.
-
-When the tranche is absorbed, reconcile `3 - MVP` with what implementation taught us, then cut a new Next from the gap between Current and MVP.
+A change of mind mid-sprint goes through Next first: amend the sketch, then implement. Current never leads; it follows Next. The next tranche is then cut from the gap between Current and MVP.
 
 ## Synchronization rule
 
-**`2 - Next`, `3 - MVP`, and `4 - Revolution` agree at every tranche boundary.** While a tranche is open, Next may run ahead — implementation feedback amends it freely. When the tranche completes, every settled decision is reflected into MVP and Revolution in one reconciliation pass — the same syntax, the same semantics, the same spelling — so changes move over exactly once. After that pass the three versions never disagree about a settled decision; they differ only in how much functionality they contain.
+**`2 - Next`, `3 - MVP`, and `4 - Revolution` agree at every tranche boundary.** While a tranche is open, Next runs ahead and implementation feedback amends it freely; mid-tranche amendments accumulate in Next alone. Step 5 then reflects every settled decision into MVP and Revolution at once — same syntax, same semantics, same spelling — so changes move over exactly once. After that pass the three versions never disagree about a settled decision; they differ only in how much functionality they contain.
 
 If reflecting a Next decision reveals a **contradiction** — the decision cannot express something MVP or Revolution depends on, or it conflicts with a decision those versions already assume — that contradiction is a blocker: **it must be resolved before Next becomes Current.** Resolve it by amending the Next decision, by changing what MVP/Revolution require, or by explicitly deferring the conflicting capability. Never implement a Next decision that leaves a known contradiction standing in a later version, and never silently drop the conflicting capability from MVP or Revolution to make the decision fit.
 
@@ -45,8 +50,8 @@ If reflecting a Next decision reveals a **contradiction** — the decision canno
 
 ## Version contents
 
-- **`1 - Current/WordFlower.tao`** + `WordFlower.test.tao` — the executable app and its journey tests. The repository's canonical compile target (`just _compile-word-flower-app`, the default `./dev` app) and the fixed-point fixture for parser/validator/formatter tests. It exercises the whole implemented language surface.
-- **`2 - Next/WordFlower.tao-next`** + test — the sprint contract; the header comment lists the full tranche.
+- **`1 - Current/WordFlower.tao`** + `WordFlower.test.tao` — the executable app and its journey tests. The repository's canonical compile target (`just _compile-word-flower-app`) and the fixed-point fixture for parser/validator/formatter tests. It exercises the whole implemented language surface.
+- **`2 - Next/WordFlower.tao-next`** + test — the sprint contract; the header comment lists the full tranche. A tranche may carry a flat `@tao-next/` scratch package while it develops a self-hosted stdlib contract. At absorption those declarations graduate into `packages/runtime/tao-stdlib`, imports return to their real stdlib paths, and the scratch package is deleted before the byte-identity gates arm.
 - **`3 - MVP/WordFlower.tao-mvp`** + test + `Justfile` — the full MVP target: three-level related data, every navigation family, dialogues with `ask`/`respond`, snapshots, `with` app variants, design tokens, a remote provider, functions, and the typed injection escape hatch. Its `Justfile` demonstrates every `tao` CLI capability the MVP release intends to ship.
 - **`4 - Revolution/WordFlower.tao-revolution`** + test + `Justfile` — intended functionality that is explicitly _not_ part of the MVP release, plus a TODO list at the top of the app file naming intended capabilities that do not yet have expressible syntax. Its `Justfile` demonstrates the CLI surface intended beyond the MVP.
 
@@ -58,13 +63,14 @@ From the repository root:
 ./tao check "Apps/WordFlower/1 - Current/WordFlower.tao"
 ./tao test "Apps/WordFlower/1 - Current"
 ./tao compile "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
-./dev "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
+./tao dev "Apps/WordFlower/1 - Current" --app WordFlower
 ```
 
 The first three commands are automated verification paths. The final command launches the Expo development path for interactive use.
 
-Files may declare more than one app. `compile` and `dev` accept `--app <Name>`; without it they
-prompt when attached to an interactive terminal and fail with the available names in noninteractive
-environments. They never select by filename or source order.
+Files may declare more than one app. `tao dev` discovers runnable apps under any path, and both
+`compile` and `dev` accept `--app <Name>`; without it they prompt when attached to an interactive
+terminal and fail with the available names in noninteractive environments. They never select by
+filename or source order.
 
-Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The full navigation contract and its decision log remain in `Roadmap/Add navigation and routing MVP/`.
+Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The implemented navigation contract is `Spec/Tao Presentation and Navigation.md`; unimplemented navigation work is tracked in `Roadmap/Add navigation and routing MVP/Follow-ups - Add navigation and routing MVP.md`.

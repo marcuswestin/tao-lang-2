@@ -9,6 +9,8 @@ const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.
 const wordFlowerTestPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.test.tao')
 const wordFlowerNextPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next')
 const wordFlowerNextTestPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.test.tao-next')
+const wordFlowerOpenTrancheHeader = '// Tranche status: open'
+const wordFlowerAbsorbedTrancheHeader = '// Tranche status: absorbed'
 const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 
@@ -25,6 +27,9 @@ Describe('minimal Tao parser', () => {
     const taglineLet = parseResult.entry.ast.statements.find(
       statement => AST.isAliasDeclaration(statement) && statement.name === 'Tagline',
     )
+    const wordFlowerNavigator = parseResult.entry.ast.statements.find(
+      statement => AST.isAliasDeclaration(statement) && statement.name === 'WordFlowerNavigator',
+    )
     const data = parseResult.entry.ast.statements.filter(AST.isEntityDataDeclaration)
     const workspaceList = parseResult.entry.ast.statements.find(
       statement => AST.isUiDeclaration(statement) && statement.name === 'WorkspaceList',
@@ -35,7 +40,7 @@ Describe('minimal Tao parser', () => {
     Expect.Is(useStatement, AST.isUseStatement)
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(taglineLet, AST.isAliasDeclaration)
-    Expect(data).toHaveLength(2)
+    Expect(data).toHaveLength(3)
     Expect.Is(workspaceList, AST.isUiDeclaration)
     Expect.Is(wordCountView, AST.isViewDeclaration)
     Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual([
@@ -51,10 +56,18 @@ Describe('minimal Tao parser', () => {
     const appNavigator = AST.blockStatements(app).find(AST.isAppNavigator)
     Expect.Is(appDatasource, AST.isAppDatasource)
     Expect.Is(appNavigator, AST.isAppNavigator)
-    Expect.Is(appNavigator.value, AST.isNavigationConfiguredValue)
-    Expect(appNavigator.value.type.ref?.name).toBe('StackNav')
-    Expect(appNavigator.value.block.entries.find(entry => entry.name === 'Initial')?.value.$type)
-      .toBe('ValueReference')
+    Expect.Is(appNavigator.value, AST.isConfiguredAppPropertyValue)
+    Expect(appNavigator.value.target.ref).toBe(wordFlowerNavigator)
+    Expect.Is(wordFlowerNavigator, AST.isAliasDeclaration)
+    Expect.Is(wordFlowerNavigator.value, AST.isConfigurationConstructor)
+    Expect(wordFlowerNavigator.value.type.ref?.name).toBe('SelectionNav')
+    const wordFlowerNavigatorBlock = wordFlowerNavigator.value.block
+    Expect.Is(wordFlowerNavigatorBlock, AST.isConfigurationBlock)
+    const selectionInitial = wordFlowerNavigatorBlock.entries.find(entry => entry.name === 'Initial')?.value
+    Expect.Is(selectionInitial, AST.isConfigurationKeyValue)
+    Expect(selectionInitial.key).toBe('@home')
+    Expect(wordFlowerNavigatorBlock.entries.filter(entry => entry.key).map(entry => entry.key))
+      .toEqual(['@home', '@workspace', '@settings'])
 
     Expect(taglineLet.name).toBe('Tagline')
     Expect.Is(taglineLet.value, AST.isStringLiteral)
@@ -62,6 +75,7 @@ Describe('minimal Tao parser', () => {
     Expect(data.map(entity => [entity.name, entity.singularName])).toEqual([
       ['Workspaces', 'Workspace'],
       ['Documents', 'Document'],
+      ['Paragraphs', 'Paragraph'],
     ])
     const documentEntity = data[1]!
     Expect(documentEntity.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === 'CreatedAt'))
@@ -532,15 +546,24 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       data Workspaces / Workspace {
         Name text
-        CreatedAt time, default now()
-        Documents
+        CreatedAt time (default now)
+        Pinned yes / no
+        Documents (relation Documents, auto-delete)
         index CreatedAt
         order by CreatedAt desc
       }
       data Documents / Document {
         Title text
-        Final / Draft, default Draft
-        Workspace, on delete cascade
+        Final yes / no Draft
+        Public yes / no Private (default Public)
+        Workspace (relation Workspace)
+        Paragraphs (auto-delete)
+      }
+      data Paragraphs / Paragraph {
+        Text text
+        Ordering number
+        Document
+        order by Ordering
       }
       view Detail Workspace {
         action Add { create Document { Title: "Draft", Workspace } }
@@ -549,7 +572,7 @@ Describe('minimal Tao parser', () => {
       view Queries Workspace {
         query Workspaces as AllWorkspaces { }
         render Col() {
-          query Drafts from Workspace.Documents { where Draft }
+          query Drafts from Workspace.Documents { where is Draft }
           loop Drafts / Draft { Text(Draft.Title) }
         }
       }
@@ -562,9 +585,14 @@ Describe('minimal Tao parser', () => {
     Expect(entities.map(entity => [entity.name, entity.singularName])).toEqual([
       ['Workspaces', 'Workspace'],
       ['Documents', 'Document'],
+      ['Paragraphs', 'Paragraph'],
     ])
     const workspaceFields = entities[0]?.block.entries.filter(AST.isEntityDataField) ?? []
-    Expect(workspaceFields.map(field => field.name)).toEqual(['Name', 'CreatedAt', 'Documents'])
+    Expect(workspaceFields.map(field => field.name)).toEqual(['Name', 'CreatedAt', 'Pinned', 'Documents'])
+    Expect(workspaceFields[2]?.boolean).toBe(true)
+    Expect(workspaceFields[2]?.negativeName).toBeUndefined()
+    Expect(workspaceFields[3]?.modifiers.map(modifier => modifier.relationName ?? modifier.autoDelete))
+      .toEqual(['Documents', true])
     Expect(entities[0]?.block.entries.some(AST.isDataIndex)).toBe(true)
     Expect(entities[0]?.block.entries.some(AST.isDataDefaultOrder)).toBe(true)
     const workspaceParameter = AST.parametersOf(
@@ -587,19 +615,27 @@ Describe('minimal Tao parser', () => {
 
   Test('parses configured apps, ui declarations, and contextual presentation', async () => {
     const parseResult = await testParseCode(`
-      type StackNav is nav
-      type Local is item
+      public nav StackNav {
+        Initial ui
+        implement inject nav \`\`\`ts return TR.NavKind.Stack() \`\`\`
+      }
+      public datasource Local {
+        StorageKey text
+        implement inject provider \`\`\`ts return TR.DataProvider.Local() \`\`\`
+      }
       app Notes {
         Name "Notes"
         Navigator StackNav {
           Initial Home
         }
-        Datasource Local with {
+        Datasource Local {
           StorageKey "NotesData"
         }
       }
       ui Home {
-        action Open { present Detail() }
+        action Open { present Detail() as overlay }
+        action Toast { present Detail() as toast (Key: "saved", Duration: 3) }
+        action Activate { present Notes@home }
         render inject \`\`\`ts return null \`\`\`
       }
       ui Detail {
@@ -614,7 +650,242 @@ Describe('minimal Tao parser', () => {
     Expect.Is(app, AST.isAppDeclaration)
     Expect.Is(home, AST.isUiDeclaration)
     Expect(AST.blockStatements(app).some(AST.isAppNavigator)).toBe(true)
-    Expect(AST.streamAllContents(home).some(AST.isContextualPresentStatement)).toBe(true)
+    const presentations = AST.streamAllContents(home).filter(AST.isContextualPresentStatement)
+    const [overlay, toast] = presentations
+    Expect.Is(overlay, AST.isContextualPresentStatement)
+    Expect(overlay.mode?.kind).toBe('overlay')
+    Expect.Is(toast, AST.isContextualPresentStatement)
+    Expect(toast.mode?.kind).toBe('toast')
+    Expect.Is(toast.mode?.toast?.key, AST.isStringLiteral)
+    Expect(toast.mode.toast.key.value).toBe('saved')
+    Expect.Is(toast.mode.toast.duration, AST.isNumberLiteral)
+    Expect(toast.mode.toast.duration.value).toBe(3)
+    const activation = AST.streamAllContents(home).find(AST.isSelectionActivateStatement)
+    Expect.Is(activation, AST.isSelectionActivateStatement)
+    Expect(activation.app.ref).toBe(app)
+    Expect(activation.key).toBe('@home')
+  })
+
+  Test('parses arbitrary declaration-owned nav and datasource contracts by identity', async () => {
+    const parseResult = await testParseCode(`
+      public nav CustomNav {
+        Initial key
+        Display text
+        @key {
+          Label text
+          Content ui
+        }
+        implement inject nav \`\`\`ts
+          return TR.NavKind.Stack()
+        \`\`\`
+      }
+      public datasource CustomData {
+        StorageKey text
+        implement inject provider \`\`\`ts
+          return TR.DataProvider.Local()
+        \`\`\`
+      }
+      ui Home { }
+      let Main = CustomNav {
+        Initial @home
+        Display "tabs"
+        @home {
+          Label "Home"
+          Content Home
+        }
+      }
+      let Store = CustomData {
+        StorageKey "main"
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const [nav, datasource, home, main, store] = parseResult.entry.ast.statements
+    Expect.Is(nav, AST.isNavDeclaration)
+    Expect.Is(datasource, AST.isDatasourceDeclaration)
+    Expect.Is(home, AST.isUiDeclaration)
+    Expect.Is(main, AST.isAliasDeclaration)
+    Expect.Is(store, AST.isAliasDeclaration)
+    Expect(nav.visibility).toBe('public')
+    Expect(datasource.visibility).toBe('public')
+    Expect(nav.block.entries.map(entry => entry.$type)).toEqual([
+      AST.ConfigurationPropertyDeclaration.$type,
+      AST.ConfigurationPropertyDeclaration.$type,
+      AST.ConfigurationKeyDeclaration.$type,
+      AST.ConfigurationImplementation.$type,
+    ])
+    const [initial, display, keyed, navImplementation] = nav.block.entries
+    Expect.Is(initial, AST.isConfigurationPropertyDeclaration)
+    Expect.Is(display, AST.isConfigurationPropertyDeclaration)
+    Expect.Is(keyed, AST.isConfigurationKeyDeclaration)
+    Expect.Is(navImplementation, AST.isConfigurationImplementation)
+    Expect(initial.name).toBe('Initial')
+    Expect.Is(initial.type, AST.isNamedTypeReference)
+    Expect(initial.type.root).toBe('key')
+    Expect(display.name).toBe('Display')
+    Expect.Is(display.type, AST.isPrimitiveTypeReference)
+    Expect(display.type.primitive).toBe('text')
+    Expect(keyed.name).toBe('@key')
+    Expect(keyed.block.properties.map(property => property.name)).toEqual(['Label', 'Content'])
+    Expect(navImplementation.protocol).toBe('nav')
+    Expect(navImplementation.tsCodeBlock).toContain('TR.NavKind.Stack()')
+    const [storageKey, providerImplementation] = datasource.block.entries
+    Expect.Is(storageKey, AST.isConfigurationPropertyDeclaration)
+    Expect.Is(providerImplementation, AST.isConfigurationImplementation)
+    Expect(storageKey.name).toBe('StorageKey')
+    Expect(providerImplementation.protocol).toBe('provider')
+    Expect(providerImplementation.tsCodeBlock).toContain('TR.DataProvider.Local()')
+
+    Expect.Is(main.value, AST.isConfigurationConstructor)
+    Expect.Is(store.value, AST.isConfigurationConstructor)
+    Expect(main.value.type.ref).toBe(nav)
+    Expect(store.value.type.ref).toBe(datasource)
+    const initialValue = main.value.block?.entries.find(entry => entry.name === 'Initial')?.value
+    Expect.Is(initialValue, AST.isConfigurationKeyValue)
+    Expect(initialValue.key).toBe('@home')
+    const keyedEntry = main.value.block?.entries.find(entry => entry.key === '@home')
+    Expect.Is(keyedEntry, AST.isConfigurationEntry)
+    Expect(keyedEntry.block?.entries.map(entry => entry.name)).toEqual(['Label', 'Content'])
+  })
+
+  Test('links imported custom configurable declarations without shipped-name tables', async () => {
+    await withTaoFiles(
+      'tao-parser-custom-configurable-',
+      {
+        'Main.tao': `
+          use CustomData, CustomNav from @custom
+
+          ui Home { }
+          let MainNav = CustomNav {
+            Initial Home
+          }
+          app Demo {
+            Name "Demo"
+            Navigator MainNav
+            Datasource CustomData {
+              StorageKey "demo"
+            }
+          }
+        `,
+        'Packages/@custom/Constructs.tao': `
+          public nav CustomNav {
+            Initial ui
+            implement inject nav \`\`\`ts
+              return TR.NavKind.Stack()
+            \`\`\`
+          }
+          public datasource CustomData {
+            StorageKey text
+            implement inject provider \`\`\`ts
+              return TR.DataProvider.Local()
+            \`\`\`
+          }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const parseResult = await workspace.parse(paths['Main.tao']!)
+
+        Expect(parseResult.diagnostics).toEqual([])
+        const packageFile = parseResult.files.find(file => file.path === paths['Packages/@custom/Constructs.tao'])
+        const nav = packageFile?.ast.statements.find(AST.isNavDeclaration)
+        const datasource = packageFile?.ast.statements.find(AST.isDatasourceDeclaration)
+        const main = parseResult.entry.ast.statements.find(
+          statement => AST.isAliasDeclaration(statement) && statement.name === 'MainNav',
+        )
+        const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
+        Expect.Is(nav, AST.isNavDeclaration)
+        Expect.Is(datasource, AST.isDatasourceDeclaration)
+        Expect.Is(main, AST.isAliasDeclaration)
+        Expect.Is(app, AST.isAppDeclaration)
+        Expect.Is(main.value, AST.isConfigurationConstructor)
+        Expect(main.value.type.ref).toBe(nav)
+        const appDatasource = AST.blockStatements(app).find(AST.isAppDatasource)
+        Expect.Is(appDatasource, AST.isAppDatasource)
+        Expect(appDatasource.value.target.ref).toBe(datasource)
+      },
+    )
+  })
+
+  Test('parses labeled, unlabeled, nested, and comma-separated declaration constructor entries', async () => {
+    const parseResult = await testParseCode(`
+      type PromptTags is list
+      type PromptCard is {
+        Label is text
+      }
+      type WritingPrompt is {
+        Title is text
+        Minutes is number
+        PromptTags
+        Card is PromptCard
+      }
+      let StarterTags = PromptTags ["daily", "warmup"]
+      let StarterPrompt = WritingPrompt {
+        Title: "Morning pages",
+        Minutes: 10
+        StarterTags,
+        Card {
+          Label "Nested"
+        }
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const starterTags = parseResult.entry.ast.statements.find(
+      statement => AST.isAliasDeclaration(statement) && statement.name === 'StarterTags',
+    )
+    const starterPrompt = parseResult.entry.ast.statements.find(
+      statement => AST.isAliasDeclaration(statement) && statement.name === 'StarterPrompt',
+    )
+    Expect.Is(starterTags, AST.isAliasDeclaration)
+    Expect.Is(starterPrompt, AST.isAliasDeclaration)
+    Expect.Is(starterPrompt.value, AST.isConfigurationConstructor)
+    const [title, minutes, tags, card] = starterPrompt.value.block?.entries ?? []
+    Expect.Is(title, AST.isConfigurationEntry)
+    Expect.Is(minutes, AST.isConfigurationEntry)
+    Expect.Is(tags, AST.isConfigurationEntry)
+    Expect.Is(card, AST.isConfigurationEntry)
+    Expect(title.label).toBe('Title')
+    Expect.Is(title.expression, AST.isStringLiteral)
+    Expect(minutes.label).toBe('Minutes')
+    Expect.Is(minutes.expression, AST.isNumberLiteral)
+    Expect(tags.reference?.ref).toBe(starterTags)
+    Expect(card.name).toBe('Card')
+    Expect(card.block?.entries[0]?.name).toBe('Label')
+    Expect.Is(card.block?.entries[0]?.value, AST.isStringLiteral)
+  })
+
+  Test('parses dialogue asks and explicit or absent responses as occurrence-owned action statements', async () => {
+    const parseResult = await testParseSyntax(`
+      enum ConfirmResult {
+        Confirmed
+      }
+      view Editor {
+        action Close {
+          let Result = ask ConfirmClose("Draft")
+          if Result is Confirmed { dismiss }
+        }
+        render inject \`\`\`ts return null \`\`\`
+      }
+      dialogue ConfirmClose Title is text responds ConfirmResult {
+        action Confirm { respond Confirmed }
+        action Cancel { respond }
+        render inject \`\`\`ts return null \`\`\`
+      }
+    `)
+
+    const dialogue = parseResult.entry.ast.statements.find(AST.isDialogueDeclaration)
+    const ask = AST.streamAllContents(parseResult.entry.ast).find(AST.isAskStatement)
+    const responses = AST.streamAllContents(parseResult.entry.ast).filter(AST.isRespondStatement)
+    Expect.Is(dialogue, AST.isDialogueDeclaration)
+    Expect.Is(ask, AST.isAskStatement)
+    Expect(dialogue.response.ref?.name).toBe('ConfirmResult')
+    Expect(ask.name).toBe('Result')
+    Expect(ask.dialogue.ref).toBe(dialogue)
+    Expect(AST.argumentsOf(ask)).toHaveLength(1)
+    Expect(responses).toHaveLength(2)
+    Expect(responses[0]?.case?.ref?.name).toBe('Confirmed')
+    Expect(responses[1]?.case).toBeUndefined()
   })
 
   Test('parses the WordFlower Tao test sidecar', async () => {
@@ -628,30 +899,62 @@ Describe('minimal Tao parser', () => {
     Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(5)
   })
 
-  // The absorption gate: while a Next tranche is open, Next carries unimplemented syntax and this
-  // test skips. Absorbing the tranche makes the files byte-identical, which re-arms the gate.
-  Test('loads Next through virtual Tao files and preserves normalized Current AST parity', async () => {
+  Test('declares whether the WordFlower Next contract is open or absorbed', async () => {
+    const currentSource = await FS.readText(wordFlowerPath)
+    const currentTestSource = await FS.readText(wordFlowerTestPath)
     const nextSource = await FS.readText(wordFlowerNextPath)
     const nextTestSource = await FS.readText(wordFlowerNextTestPath)
-    const current = await Workspace.parse(wordFlowerPath)
-    const currentTest = await Workspace.parse(wordFlowerTestPath)
-    if (nextSource !== await FS.readText(wordFlowerPath)) {
+
+    expectWordFlowerTrancheStatus(currentSource, wordFlowerAbsorbedTrancheHeader)
+    expectWordFlowerTrancheStatus(currentTestSource, wordFlowerAbsorbedTrancheHeader)
+    expectWordFlowerTrancheStatus(
+      nextSource,
+      nextSource === currentSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+    )
+    expectWordFlowerTrancheStatus(
+      nextTestSource,
+      nextTestSource === currentTestSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
+    )
+  })
+
+  Test('gates the WordFlower Next app independently', async () => {
+    const nextSource = await FS.readText(wordFlowerNextPath)
+    const currentSource = await FS.readText(wordFlowerPath)
+    if (!expectWordFlowerPairState(nextSource, currentSource, nextSource)) {
       return
     }
+    const current = await Workspace.parse(wordFlowerPath)
 
     await withTaoFiles(
-      'wordflower-next-contract-',
+      'wordflower-next-app-contract-',
+      { 'WordFlower.tao': nextSource },
+      async paths => {
+        const next = await Workspace.validate(paths['WordFlower.tao']!)
+
+        Expect(next.diagnostics).toEqual([])
+        Expect(normalizedAst(next.entry.ast)).toEqual(normalizedAst(current.entry.ast))
+      },
+    )
+  })
+
+  Test('gates the WordFlower Next test sidecar independently', async () => {
+    const nextTestSource = await FS.readText(wordFlowerNextTestPath)
+    const currentTestSource = await FS.readText(wordFlowerTestPath)
+    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextTestSource)) {
+      return
+    }
+    const currentTest = await Workspace.parse(wordFlowerTestPath)
+
+    await withTaoFiles(
+      'wordflower-next-sidecar-contract-',
       {
-        'WordFlower.tao': nextSource,
+        'WordFlower.tao': await FS.readText(wordFlowerPath),
         'WordFlower.test.tao': nextTestSource,
       },
       async paths => {
-        const next = await Workspace.validate(paths['WordFlower.tao']!)
         const nextTest = await Workspace.validate(paths['WordFlower.test.tao']!)
 
-        Expect(next.diagnostics).toEqual([])
         Expect(nextTest.diagnostics).toEqual([])
-        Expect(normalizedAst(next.entry.ast)).toEqual(normalizedAst(current.entry.ast))
         Expect(normalizedAst(nextTest.entry.ast)).toEqual(normalizedAst(currentTest.entry.ast))
       },
     )
@@ -816,12 +1119,18 @@ Describe('minimal Tao parser', () => {
     Expect.Is(demoTags, AST.isAliasDeclaration)
     Expect.Is(demoJob, AST.isAliasDeclaration)
     Expect.Is(demoPerson, AST.isAliasDeclaration)
-    Expect.Is(displayName.value, AST.isTypedConstructor)
-    Expect.Is(demoTags.value, AST.isTypedConstructor)
+    Expect.Is(displayName.value, AST.isConfigurationConstructor)
+    Expect(displayName.value.type.ref).toBe(nameType)
+    Expect.Is(displayName.value.value, AST.isStringLiteral)
+    Expect.Is(demoTags.value, AST.isConfigurationConstructor)
+    Expect(demoTags.value.type.ref).toBe(tagsType)
     Expect.Is(demoTags.value.value, AST.isListLiteral)
-    Expect.Is(demoJob.value, AST.isTypedConstructor)
-    Expect.Is(demoJob.value.value, AST.isItemLiteral)
-    Expect.Is(demoPerson.value, AST.isTypedConstructor)
+    Expect.Is(demoJob.value, AST.isConfigurationConstructor)
+    Expect(demoJob.value.type.ref).toBe(jobType)
+    Expect(demoJob.value.block?.entries.map(entry => entry.label)).toEqual(['Title'])
+    Expect.Is(demoPerson.value, AST.isConfigurationConstructor)
+    Expect(demoPerson.value.type.ref).toBe(personType)
+    Expect(demoPerson.value.block?.entries.map(entry => entry.label)).toEqual(['Name', 'Tags', 'Job'])
 
     const profile = parseResult.entry.ast.statements.find(
       statement => AST.isViewDeclaration(statement) && statement.name === 'Profile',
@@ -834,7 +1143,7 @@ Describe('minimal Tao parser', () => {
     Expect(argument.members).toEqual(['Job', 'Title'])
   })
 
-  Test('resolves nested item property constructor types', async () => {
+  Test('parses nested item property blocks from their declaration-owned property shape', async () => {
     const parseResult = await testParseCode(`
       type Job is {
         Title is text
@@ -856,12 +1165,18 @@ Describe('minimal Tao parser', () => {
     Expect.Is(profile, AST.isTypeDeclaration)
     Expect.Is(profile.type, AST.isItemTypeExpression)
     Expect.Is(alias, AST.isAliasDeclaration)
-    Expect.Is(alias.value, AST.isTypedConstructor)
-    Expect.Is(alias.value.value, AST.isItemLiteral)
-    const role = alias.value.value.properties[0]?.value
-    Expect.Is(role, AST.isTypedConstructor)
-    Expect.Is(role.type, AST.isNamedTypeReference)
-    Expect(role.type.root).toBe('Role')
+    Expect.Is(alias.value, AST.isConfigurationConstructor)
+    Expect(alias.value.type.ref).toBe(profile)
+    const profileRole = profile.type.properties[0]
+    Expect.Is(profileRole?.type, AST.isNamedTypeReference)
+    Expect(profileRole.type.root).toBe('Job')
+    const role = alias.value.block?.entries[0]
+    Expect.Is(role, AST.isConfigurationEntry)
+    Expect(role.name).toBe('Role')
+    const title = role.block?.entries[0]
+    Expect.Is(title, AST.isConfigurationEntry)
+    Expect(title.name).toBe('Title')
+    Expect.Is(title.value, AST.isStringLiteral)
   })
 
   Test('parses the Runtime Stdlib Tests app', async () => {
@@ -1009,6 +1324,20 @@ Describe('minimal Tao parser', () => {
     ])
   })
 })
+
+function expectWordFlowerPairState(next: string, current: string, nextHeader: string): boolean {
+  if (next === current) {
+    Expect(next).toBe(current)
+    return true
+  }
+  Expect(next).not.toBe(current)
+  expectWordFlowerTrancheStatus(nextHeader, wordFlowerOpenTrancheHeader)
+  return false
+}
+
+function expectWordFlowerTrancheStatus(source: string, expected: string): void {
+  Expect(source.match(/^\/\/ Tranche status: (?:open|absorbed)$/gm) ?? []).toEqual([expected])
+}
 
 function normalizedAst(value: unknown): unknown {
   if (Array.isArray(value)) {

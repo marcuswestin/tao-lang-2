@@ -12,28 +12,45 @@ export default {
     f.oneSpaceAfter(':')
   },
 
-  /** ConfiguredValue formats optional `with` and its closed configuration block. */
-  ProviderConfiguredValue(f) {
-    f.oneSpaceBefore('with')
-    f.oneSpaceAfter('with')
-    f.oneSpaceBeforeProperty('block')
+  /** ConfigurationConstructor formats a declaration-linked constructor and its value or block. */
+  ConfigurationConstructor(f) {
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+    f.oneSpaceBeforeProperty('block', 'value')
   },
 
-  /** NavigationConfiguredValue juxtaposes its type and closed block. */
-  NavigationConfiguredValue(f) {
-    f.oneSpaceBeforeProperty('block')
+  /** ValueReference formats an optional immutable `with` patch. */
+  ValueReference(f) {
+    f.oneSpaceAround('with')
+    f.oneSpaceBeforeProperty('patchBlock')
   },
 
   /** ConfigurationBlock places each named slot on its own indented line. */
   ConfigurationBlock(f) {
     f.indentedBraceBlock(f.node.entries)
     f.lineSeparatedList(f.node.entries)
+    f.commaLineList()
   },
 
-  /** ConfigurationEntry separates the owner slot from its value. */
+  /** ConfigurationEntry formats keyed, labeled, named, and bare constructor entries. */
   ConfigurationEntry(f) {
+    f.noSpaceBefore(':')
+    f.oneSpaceAfter(':')
     f.oneSpaceBeforeProperty('value')
+    f.oneSpaceBeforeProperty('block')
   },
+
+  /** PropertyConfigurationPatch formats `with { ... }` as one merge-copy property value. */
+  PropertyConfigurationPatch(f) {
+    f.oneSpaceAfter('with')
+    f.oneSpaceBeforeProperty('block')
+  },
+
+  /** ConfigurationReference is one linked configured/app value name. */
+  ConfigurationReference() {},
+
+  /** ConfigurationKeyValue is one `@key` configuration scalar. */
+  ConfigurationKeyValue() {},
 
   /** TypedConstructor formats juxtaposed `<Type> <Value>` value creation. */
   TypedConstructor(f) {
@@ -60,8 +77,8 @@ export default {
     f.oneSpaceAround('==', '!=', '<', '<=', '>', '>=', '+', '-', '*', '/', 'and', 'or')
   },
 
-  /** EmptyExpression formats the postfix emptiness predicate. */
-  EmptyExpression(f) {
+  /** CaseTestExpression formats a postfix built-in or declared case predicate. */
+  CaseTestExpression(f) {
     f.oneSpaceAround('is')
   },
 
@@ -141,9 +158,6 @@ export default {
 
   /** NoneLiteral is a single token with no interior formatting. */
   NoneLiteral() {},
-
-  /** ValueReference is a single identifier with no interior formatting. */
-  ValueReference() {},
 } satisfies Partial<FormatHandlers>
 
 function listLiteralNeedsBlock(list: AST.ListLiteral): boolean {

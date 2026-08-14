@@ -1,6 +1,7 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { DevMenu } from './dev-runtime/TR-dev-menu'
+import { DataLoadRecoveryBoundary } from './TR-data-load-recovery'
 import type { TaoLayoutProps } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -65,17 +66,21 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
       style: rootStyle,
     },
     React.createElement(
-      RN.ScrollView,
-      {
-        contentContainerStyle: [contentStyle, contentPadding],
-        keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
-        keyboardShouldPersistTaps: 'handled',
-        style: rootStyle,
-      },
+      DataLoadRecoveryBoundary,
+      null,
       React.createElement(
-        ParentDirectionContext.Provider,
-        { direction: ParentDirectionContext.defaultProps.parentDirection },
-        appRootChildren(props.children, devMode),
+        RN.ScrollView,
+        {
+          contentContainerStyle: [contentStyle, contentPadding],
+          keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
+          keyboardShouldPersistTaps: 'handled',
+          style: rootStyle,
+        },
+        React.createElement(
+          ParentDirectionContext.Provider,
+          { direction: ParentDirectionContext.defaultProps.parentDirection },
+          appRootChildren(props.children, devMode),
+        ),
       ),
     ),
     devMode.enabled ? React.createElement(DevMenu) : null,

@@ -12,11 +12,6 @@ type DevLoopControl = {
   label: string
 }
 
-type DevLoopAppChoice = {
-  value: string
-  label: string
-}
-
 type DevLoopOutputKind = 'error' | 'info' | 'warn'
 
 type DevLoopOutputLine = {
@@ -82,7 +77,6 @@ let activeDevLoopOutput: {
 export const DevLoopTUI = {
   devLoopOutputHandler,
   logDevLoop,
-  printDevLoopAppChoices,
   printDevLoopControls,
   startDevLoopOutput,
   stopDevLoopOutput,
@@ -157,26 +151,6 @@ function printDevLoopControls(): void {
   }
   HCI.writeLine(`
 ${DEV_LOOP_CONTROLS.map(formatDevLoopControl).join('\n')}`)
-}
-
-function printDevLoopAppChoices(choices: readonly DevLoopAppChoice[], currentAppPath: string): void {
-  if (activeDevLoopOutput !== undefined) {
-    logDevLoop('dev', 'Switch app')
-    for (const [index, choice] of choices.entries()) {
-      const currentLabel = choice.value === currentAppPath ? ' (current)' : ''
-      logDevLoop('dev', `${index + 1}. ${choice.label}${currentLabel}`)
-    }
-    activeDevLoopOutput.state.prompt = `Press 1-${choices.length}, q, or Esc`
-    scheduleDevLoopRender()
-    return
-  }
-  HCI.writeLine()
-  HCI.writeLine(`${HCI.formatProcessPrefix('dev')} Switch app`)
-  choices.forEach((choice, index) => {
-    const currentLabel = choice.value === currentAppPath ? ` ${HCI.dim('(current)')}` : ''
-    HCI.writeLine(`${HCI.dim('›')} ${HCI.bold(HCI.white(String(index + 1)))} ${choice.label}${currentLabel}`)
-  })
-  HCI.write(`${HCI.formatProcessPrefix('dev')} Press 1-${choices.length}, q, or Esc: `)
 }
 
 function formatDevLoopControl(control: DevLoopControl): string {

@@ -13,13 +13,16 @@ export default {
   },
 
   EntityDataField(f) {
-    f.oneSpaceBeforeProperty('primitive')
+    f.oneSpaceBeforeProperty('primitive', 'boolean', 'negativeName')
     f.oneSpaceAround('/')
+    f.oneSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
     f.commaSpacedList()
   },
 
   EntityDataFieldModifier(f) {
-    f.oneSpaceAfter('default', 'on', 'delete')
+    f.oneSpaceAfter('default', 'relation')
   },
 
   DataIndex(f) {
@@ -30,12 +33,8 @@ export default {
     f.oneSpaceAfter('order', 'by')
   },
 
-  /** NowExpression is the fixed `now()` data-default sentinel. */
-  NowExpression(f) {
-    f.noSpaceBefore('(')
-    f.noSpaceAfter('(')
-    f.noSpaceBefore(')')
-  },
+  /** NowExpression is the bare runtime-applied `now` data-default sentinel. */
+  NowExpression() {},
 
   EntityQueryDeclaration(f) {
     f.oneSpaceAfter('query', 'as', 'from')
@@ -54,7 +53,7 @@ export default {
   },
 
   BooleanWhereClause(f) {
-    f.oneSpaceAfter('where')
+    f.oneSpaceAfter('where', 'is')
   },
 
   OrderClause(f) {

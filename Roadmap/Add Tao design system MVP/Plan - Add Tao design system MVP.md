@@ -1,5 +1,9 @@
 # Plan - Add Tao design system MVP
 
+This plan predates the WordFlower tranche process. Re-cut its slices as a tranche — decided first in
+`Apps/WordFlower/2 - Next`, then implemented into `1 - Current` — before running it. The intended
+design surface is expressed in `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp`.
+
 ## Goal
 
 Make Tao apps visually coherent through a deterministic, language-owned design system: design declarations, tokens, semantic tokens, component recipes, recipe application from UI call sites, runtime lowering to React Native styles, and initial design diagnostics.

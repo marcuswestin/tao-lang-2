@@ -55,8 +55,7 @@ export function validateTypes(file: AST.TaoFile, ctx: ValidationContext): void {
     validateTypedConstructor(constructor, ctx)
   }
   for (const configured of AST.streamAllContents(file).filter(AST.isConfiguredValue)) {
-    const typeName = configured.type.ref?.name
-    if (Type.ofConfiguredValue(configured).kind === 'item' && typeName !== 'Local' && typeName !== 'Memory') {
+    if (AST.isTypeDeclaration(configured.type.ref) || AST.isParameterizedDeclaration(configured.type.ref)) {
       validateConfiguredItemConstructor(configured, ctx)
     }
   }
@@ -123,6 +122,12 @@ function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext
 }
 
 function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: ValidationContext): void {
+  if (
+    AST.isConfigurationPropertyDeclaration(reference.$container)
+    && AST.configurationPropertyIsKey(reference.$container)
+  ) {
+    return
+  }
   if (Type.entityOfReference(reference)) {
     return
   }
@@ -190,6 +195,7 @@ function constructorLiteralKind(type: ASTUtils.TaoType): string {
     list: () => 'list',
     item: () => 'item',
     entity: type => Type.dataEntityName(type.entity),
+    enum: type => type.declaration.name,
     unresolved: () => 'unresolved',
     union: type => type.members.map(Type.displayName).join(' | '),
   })
@@ -258,60 +264,117 @@ function validateItemConstructor(
   }
 }
 
-function validateConfiguredItemConstructor(value: AST.ConfiguredValue, ctx: ValidationContext): void {
+function validateConfiguredItemConstructor(
+  value: AST.ConfigurationConstructor,
+  ctx: ValidationContext,
+): void {
   const constructed = Type.ofConfiguredValue(value)
+  if (!AST.isTypeDeclaration(value.type.ref) && !AST.isParameterizedDeclaration(value.type.ref)) {
+    return
+  }
+  if (!validateConfiguredConstructorMembers(value, ctx)) {
+    return
+  }
+  const typeName = [value.type.ref?.name ?? value.type.$refText, ...(value.members ?? [])].join('.')
+  if (value.value) {
+    const expectedKind = constructorLiteralKind(constructed)
+    const actualKind = AST.isStringLiteral(value.value)
+      ? 'text'
+      : AST.isNumberLiteral(value.value)
+      ? 'number'
+      : 'list'
+    if (actualKind !== expectedKind) {
+      ctx.error(typeValidationMessages.constructorShape(typeName, expectedKind), value)
+    }
+    return
+  }
   if (constructed.kind !== 'item') {
+    ctx.error(typeValidationMessages.constructorShape(typeName, constructorLiteralKind(constructed)), value)
     return
   }
-  const typeName = value.type.ref?.name ?? value.type.$refText
+  const block = value.block
+  if (!block) {
+    return
+  }
   if (!constructed.item) {
-    if (value.block.entries.length > 0) {
-      ctx.error(typeValidationMessages.shapelessItemConstructor(typeName), value.block)
+    if (block.entries.length > 0) {
+      ctx.error(typeValidationMessages.shapelessItemConstructor(typeName), block)
     }
     return
   }
 
-  const candidates = value.block.entries.map(entry => ({
-    entry,
-    type: Type.visibleDeclaration(entry, entry.name),
-  }))
-  for (const candidate of candidates) {
-    if (!candidate.type) {
-      ctx.error(typeValidationMessages.unknownType(candidate.entry.name), candidate.entry)
-      continue
-    }
-    const actualValue = Type.ofValue(candidate.entry.value)
-    const expectedValue = Type.ofDefinition(candidate.type)
-    if (actualValue.kind !== 'unresolved' && !Type.isCastCompatible(actualValue, expectedValue)) {
-      ctx.error(
-        typeValidationMessages.constructorShape(candidate.entry.name, constructorLiteralKind(expectedValue)),
-        candidate.entry,
-      )
-    }
-  }
+  validateConfiguredItemBlock(block, constructed.item, ctx)
+}
 
-  const remainingExpected = new Set(constructed.item.properties)
-  const remainingCandidates = new Set(candidates.filter(candidate => candidate.type))
-  const candidateType = (candidate: typeof candidates[number]) => Type.ofDefinition(candidate.type!)
+function validateConfiguredItemBlock(
+  block: AST.ConfigurationBlock,
+  item: AST.ItemTypeExpression,
+  ctx: ValidationContext,
+): void {
+  const namedEntries = new Map<string, AST.ConfigurationEntry>()
+  const candidates = block.entries.flatMap(entry => {
+    if (entry.label && entry.expression) {
+      const expected = item.properties.find(property => property.name === entry.label)
+      if (!expected) {
+        ctx.error(typeValidationMessages.unknownNamedProperty(entry.label), entry)
+        return []
+      }
+      if (namedEntries.has(entry.label)) {
+        ctx.error(typeValidationMessages.duplicateNamedProperty(entry.label), entry)
+      }
+      namedEntries.set(entry.label, entry)
+      const actual = Type.ofExpression(entry.expression)
+      const expectedType = Type.ofProperty(expected)
+      if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expectedType)) {
+        ctx.error(
+          typeValidationMessages.namedPropertyType(
+            entry.label,
+            Type.displayName(expectedType),
+            Type.displayName(actual),
+          ),
+          entry,
+        )
+      }
+      return []
+    }
+    const type = configuredItemEntryType(entry, item, ctx)
+    return type ? [{ entry, type }] : []
+  })
+
+  const remainingExpected = new Set(item.properties.filter(property => !namedEntries.has(property.name)))
+  const remainingCandidates = new Set(candidates)
+  const candidateType = (candidate: typeof candidates[number]) => candidate.type
   const duplicateExpected = duplicateTypes([...remainingExpected], property => Type.ofProperty(property))
   for (const property of duplicateExpected.values()) {
-    ctx.error(typeValidationMessages.duplicatePropertyType(property.name), value.block)
+    ctx.error(typeValidationMessages.duplicatePropertyType(property.name), block)
   }
   const duplicateCandidates = duplicateTypes([...remainingCandidates], candidateType)
   for (const candidate of duplicateCandidates.values()) {
     ctx.error(typeValidationMessages.duplicateProvidedPropertyType, candidate.entry)
   }
+  const blockedCandidateTypes = new Set(duplicateCandidates.keys())
 
   bindConfiguredEntries(
     remainingCandidates,
     remainingExpected,
     candidateType,
     (actual, expected) => Type.identityKey(actual) === Type.identityKey(expected),
+    blockedCandidateTypes,
   )
-  bindConfiguredEntries(remainingCandidates, remainingExpected, candidateType, Type.isAssignable)
+  bindConfiguredEntries(
+    remainingCandidates,
+    remainingExpected,
+    candidateType,
+    Type.isAssignable,
+    blockedCandidateTypes,
+  )
 
   for (const candidate of remainingCandidates) {
     const actual = candidateType(candidate)
+    const identity = Type.identityKey(actual)
+    if (actual.kind === 'unresolved' || (identity && blockedCandidateTypes.has(identity))) {
+      continue
+    }
     const matches = [...remainingExpected].filter(property => Type.isAssignable(actual, Type.ofProperty(property)))
     if (matches.length > 1) {
       ctx.error(typeValidationMessages.ambiguousProperty(matches.map(property => property.name)), candidate.entry)
@@ -319,16 +382,135 @@ function validateConfiguredItemConstructor(value: AST.ConfiguredValue, ctx: Vali
       ctx.error(typeValidationMessages.unmatchedProperty, candidate.entry)
     }
   }
+  let unresolvedCandidates = [...remainingCandidates]
+    .filter(candidate => candidateType(candidate).kind === 'unresolved')
+    .length
   for (const property of remainingExpected) {
     const matches = [...remainingCandidates].filter(candidate =>
-      Type.isAssignable(candidateType(candidate), Type.ofProperty(property))
+      !candidateTypeIsBlocked(candidateType(candidate), blockedCandidateTypes)
+      && Type.isAssignable(candidateType(candidate), Type.ofProperty(property))
     )
     if (matches.length > 1) {
-      ctx.error(typeValidationMessages.ambiguousField(property.name), value.block)
+      ctx.error(typeValidationMessages.ambiguousField(property.name), block)
     } else if (matches.length === 0) {
-      ctx.error(typeValidationMessages.missingProperty(property.name), value.block)
+      if (unresolvedCandidates > 0) {
+        unresolvedCandidates -= 1
+      } else {
+        ctx.error(typeValidationMessages.missingProperty(property.name), block)
+      }
     }
   }
+}
+
+function configuredItemEntryType(
+  entry: AST.ConfigurationEntry,
+  item: AST.ItemTypeExpression,
+  ctx: ValidationContext,
+): ASTUtils.TaoType | undefined {
+  if (entry.expression) {
+    return Type.ofExpression(entry.expression)
+  }
+  if (entry.reference) {
+    return entry.reference.ref ? Type.ofValueDeclaration(entry.reference.ref) : { kind: 'unresolved' }
+  }
+  if (!entry.name || (!entry.block && !entry.value)) {
+    return undefined
+  }
+  const ownerProperty = item.properties.find(property => property.name === entry.name)
+  const expected = ownerProperty
+    ? Type.ofProperty(ownerProperty)
+    : Type.visibleDeclaration(entry, entry.name)
+    ? Type.ofDefinition(Type.visibleDeclaration(entry, entry.name)!)
+    : undefined
+  if (!expected) {
+    return undefined
+  }
+  validateConfiguredEntryLiteral(entry, expected, ctx)
+  return expected
+}
+
+function validateConfiguredEntryLiteral(
+  entry: AST.ConfigurationEntry,
+  expected: ASTUtils.TaoType,
+  ctx: ValidationContext,
+): void {
+  if (entry.block) {
+    if (expected.kind !== 'item') {
+      ctx.error(typeValidationMessages.constructorShape(entry.name ?? '', constructorLiteralKind(expected)), entry)
+      return
+    }
+    if (!expected.item) {
+      if (entry.block.entries.length > 0) {
+        ctx.error(typeValidationMessages.shapelessItemConstructor(entry.name ?? ''), entry.block)
+      }
+      return
+    }
+    validateConfiguredItemBlock(entry.block, expected.item, ctx)
+    return
+  }
+  if (!entry.value) {
+    return
+  }
+  const actual = configurationValueType(entry.value)
+  if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expected)) {
+    ctx.error(typeValidationMessages.constructorShape(entry.name ?? '', constructorLiteralKind(expected)), entry)
+  }
+}
+
+function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
+  if (AST.isConfigurationReference(value)) {
+    const target = value.target.ref
+    return AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)
+      ? Type.ofValueDeclaration(target)
+      : { kind: 'unresolved' }
+  }
+  if (AST.isConfigurationKeyValue(value) || AST.isPropertyConfigurationPatch(value)) {
+    return { kind: 'unresolved' }
+  }
+  return Type.ofValue(value)
+}
+
+function validateConfiguredConstructorMembers(
+  value: AST.ConfigurationConstructor,
+  ctx: ValidationContext,
+): boolean {
+  const declaration = value.type.ref
+  let members = value.members ?? []
+  let ownerName = declaration?.name ?? value.type.$refText
+  let current: ASTUtils.TaoType
+  if (AST.isTypeDeclaration(declaration)) {
+    current = Type.ofDefinition(declaration)
+  } else if (AST.isParameterizedDeclaration(declaration)) {
+    const [parameterName, ...remaining] = members
+    const parameterType = parameterName
+      ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === parameterName)?.inlineType
+      : undefined
+    if (!parameterName || !parameterType) {
+      if (parameterName) {
+        ctx.error(typeValidationMessages.unknownMember(ownerName, parameterName), value)
+      }
+      return false
+    }
+    ownerName = `${ownerName}.${parameterName}`
+    current = Type.ofDefinition(parameterType)
+    members = remaining
+  } else {
+    return true
+  }
+  for (const member of members) {
+    if (current.kind !== 'item' || !current.item) {
+      ctx.error(typeValidationMessages.memberNotItem(member), value)
+      return false
+    }
+    const property = current.item.properties.find(candidate => candidate.name === member)
+    if (!property) {
+      ctx.error(typeValidationMessages.unknownMember(ownerName, member), value)
+      return false
+    }
+    current = Type.ofProperty(property)
+    ownerName = `${ownerName}.${member}`
+  }
+  return true
 }
 
 function duplicateTypes<T>(values: readonly T[], getType: (value: T) => ASTUtils.TaoType): Map<string, T> {
@@ -353,9 +535,13 @@ function bindConfiguredEntries<T extends { entry: AST.ConfigurationEntry }>(
   expected: Set<AST.TypeProperty>,
   candidateType: (candidate: T) => ASTUtils.TaoType,
   matches: (actual: ASTUtils.TaoType, expected: ASTUtils.TaoType) => boolean,
+  blockedCandidateTypes: ReadonlySet<string>,
 ): void {
   for (const candidate of [...candidates]) {
     const actual = candidateType(candidate)
+    if (candidateTypeIsBlocked(actual, blockedCandidateTypes)) {
+      continue
+    }
     const matching = [...expected].filter(property => matches(actual, Type.ofProperty(property)))
     if (matching.length === 1) {
       const property = matching[0]!
@@ -368,6 +554,11 @@ function bindConfiguredEntries<T extends { entry: AST.ConfigurationEntry }>(
       }
     }
   }
+}
+
+function candidateTypeIsBlocked(type: ASTUtils.TaoType, blocked: ReadonlySet<string>): boolean {
+  const identity = Type.identityKey(type)
+  return type.kind === 'unresolved' || (!!identity && blocked.has(identity))
 }
 
 function typeDefinitionHasCycle(
@@ -463,6 +654,11 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       continue
     }
     if (current.kind === 'entity') {
+      if (member === 'Id') {
+        current = { kind: 'primitive', primitive: 'text' }
+        typeName = 'text'
+        continue
+      }
       const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
       if (!field) {
         ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
@@ -493,10 +689,13 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
   return Switch.typeMaybe<AST.ValueDeclaration | undefined, ASTUtils.TaoType>(declaration, {
     ParameterDeclaration: Type.ofParameter,
     AliasDeclaration: declaration => Type.ofExpression(declaration.value),
+    AppDeclaration: () => ({ kind: 'unresolved' }),
+    AskStatement: Type.ofValueDeclaration,
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
     ActionDeclaration: Type.ofAction,
     CasePayload: () => ({ kind: 'primitive', primitive: 'text' }),
     EntityDataField: field => field.negativeName ? { kind: 'primitive', primitive: 'boolean' } : { kind: 'unresolved' },
+    EnumCase: enumCase => ({ kind: 'enum', declaration: AST.enumOwningCase(enumCase) }),
     EntityQueryDeclaration: declaration => {
       const entity = Type.queryEntity(declaration)
       return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }

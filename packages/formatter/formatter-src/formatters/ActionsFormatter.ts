@@ -50,12 +50,34 @@ export const ActionsFormatter = {
     }
   },
 
+  /** IfActionStatement separates its boolean condition from its one-sided body. */
+  IfActionStatement(f) {
+    f.oneSpaceAfter('if')
+  },
+
   /** DoStatement formats action invocation spacing. */
   DoStatement(f) {
     f.oneSpaceAfter('do')
     f.noSpaceBefore('(')
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
+  },
+
+  /** AskStatement formats its local binding and dialogue invocation. */
+  AskStatement(f) {
+    f.oneSpaceAfter('let', 'ask')
+    f.oneSpaceBefore('=')
+    f.oneSpaceAfter('=')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+  },
+
+  /** RespondStatement separates an optional declared response case. */
+  RespondStatement(f) {
+    if (f.node.case) {
+      f.oneSpaceAfter('respond')
+    }
   },
 } satisfies Partial<FormatHandlers>
 

@@ -313,7 +313,7 @@ function declarationRecordKey(declaration: DeclarationRecord): string {
 }
 
 function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
-  return AST.isTypeDeclaration(declaration) ? 'type' : 'value'
+  return AST.isTypeDeclaration(declaration) || AST.isConfigurableDeclaration(declaration) ? 'type' : 'value'
 }
 
 function uniqueWorkspaceFiles(files: readonly AST.TaoFile[]): AST.TaoFile[] {

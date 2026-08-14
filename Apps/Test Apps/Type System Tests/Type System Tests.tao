@@ -46,15 +46,14 @@ let DemoPerson = Person {
 }
 let ScopeLabel = "File scope label"
 let Team = [
-   DemoPerson,
-   Person {
-      Name: "Ro",
-      Age: 41,
-      Tags: EmptyTags,
-      Job: Job {
-         Title: "Language designer",
-         Level: 5
-   }  }
+   DemoPerson, Person {
+   Name: "Ro",
+   Age: 41,
+   Tags: EmptyTags,
+   Job: Job {
+      Title: "Language designer",
+      Level: 5
+}  }
 ]
 
 ui Demo {

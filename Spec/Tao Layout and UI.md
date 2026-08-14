@@ -41,7 +41,10 @@ Presentation adds separate declaration roles without changing these visual roles
 
 - `ui` is presentable content whose visual body follows the same render rules as a `view`.
 - `dialogue` is response-demanding content whose body follows the same render rules.
-- `nav` is a presentation container, not ordinary render content. A nav may be mounted only as an app navigator, app auxiliary, or child of another nav. Rendering a nav inside a `view` or `ui` is a validation error.
+- `nav` declares a package-configured presentation kind and binds its runtime behavior through
+  `implement inject nav`; it is not a render-bearing visual declaration. A configured nav may be
+  mounted only as an app navigator, a genuine app auxiliary, or content of another nav. Rendering a
+  nav inside a `view` or `ui` is a validation error.
 
 See `Tao Presentation and Navigation.md` for presentation behavior.
 
@@ -55,10 +58,12 @@ Flexible `layout` containers:
 - `Row`: lays out its content horizontally on a single line with flexible width
 - `WrappingRow`: lays out its content horizontally and allows it to wrap onto multiple lines, with flexible total width
 
-Rigid `frame` containers:
+Hugging containers:
 
 - `Stack`: hugs its content and lays it out top-to-bottom
 - `Box`: hugs its content and lays it out horizontally
+
+All five ship today as `layout` declarations. The separate `frame` role is intended, not implemented.
 
 UI containers usually do not paint pixels themselves. Instead, they focus on how visible content is arranged and sized.
 
@@ -68,17 +73,17 @@ Tao provides common `view` UI elements and view-like stdlib components. They are
 
 Basic content UI elements:
 
-- `Text`: displays text and allows you to style its typography, color, etc.
-- `Image`: displays an image and allows you to size and transform it, etc.
-- `Icon`: a specialized version of `Image` that is used to display icons, including system icons.
+Shipped today, alongside the containers above: `Text`, `TextFrame`, `TextMultiline`, `Number`,
+`Button`, `TextInput`, and `FormButton`. `TextInput` and `FormButton` carry the label, placeholder,
+disabled, and submitting properties that forms rely on.
 
-Basic interactive UI elements:
+Intended, not implemented:
 
-- `Pressable`: a pressable surface. Its exact `view`/`frame` classification is still part of the broader UI design.
-- `Button`: a button with options like an icon, a label, etc.
-- `TextInput`: a text input with options like a placeholder, a label, etc.
-- `ImageInput`: a button that allows the user to select an image, with options like where to store it, etc.
-- `Checkbox`: a checkbox for a boolean value, with options like a label and disabled state, etc.
+- `Image`: displays an image and allows you to size and transform it.
+- `Icon`: a specialized `Image` for icons, including system icons.
+- `Pressable`: a pressable surface. Its exact role classification is part of the broader UI design.
+- `ImageInput`: a button that lets the user select an image, with options such as where to store it.
+- `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
 
 #### Control events and two-way inputs
 
@@ -106,26 +111,25 @@ TextInput(Value: Draft, Label: "Title")
 
 Computed values, aliases, parameters, entity fields, and unlabeled arguments are not writable bindings; they require an explicit `on change`. An explicit change handler replaces the synthesized update. Disabled controls suppress their configured native press/change/submit delivery in the runtime.
 
-Common complex container UI elements:
+Also intended: `List` (a list of items with header and footer options), `ScrollView` (a scrollable
+container), `Spinner` (a loading indicator), and `Progress` (a progress indicator). Rendering a
+collection today uses `loop` inside an ordinary container.
 
-- `List`: a list of items, with options like a header and footer, etc.
-- `ScrollView`: a scrollable container that allows the user to scroll through its content.
-
-Basic transitional UI elements:
-
-- `Spinner`: a loading indicator.
-- `Progress`: a progress bar indicator.
-
-Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces are UI values presented into an overlay nav, while response-demanding modal conversations are dialogues invoked with `ask`; see `Tao Presentation and Navigation.md`. Visual portal and layer primitives remain a separate deferred design question.
+Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces use
+`present X() as overlay`, which layers above the nearest nav or an explicit `in` target. Every nav
+owns that overlay layer. Response-demanding conversations are dialogues invoked with `ask`; see
+`Tao Presentation and Navigation.md`. Raw visual portals and general in-layout layering remain a
+separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
-When creating a UI element, you can allow for parts of the UI to be rendered by the caller. This is done using `@<name>` render slots.
+Intended, not implemented; the slot-presence test shown below is illustrative rather than settled
+syntax. When creating a UI element, you can allow for parts of the UI to be rendered by the caller. This is done using `@<name>` render slots.
 
 ```tao
 use Icon, Text, Box, Row from @tao/ui
 
-view Label Title text {
+view Label Title is text {
    @icon = empty
 
    render Box() {
@@ -163,7 +167,7 @@ frame Card {
 
 ### Declaration Properties, Children, And Slots
 
-Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header parameters are shorthand for the same public properties:
+Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header parameters are shorthand for the same public properties. Header parameters ship today; the longhand property block, named render slots, and `@@content` are intended, not implemented:
 
 ```tao
 view Profile User {
@@ -185,11 +189,16 @@ Properties, unnamed render children, and named render slots are distinct channel
 - Ordinary render expressions in a caller content block remain children. They are never consumed as properties solely because their types match.
 - `@name` fills a named render slot.
 - `@@content` places unnamed children inside a `frame` or `layout` implementation.
-- Keyed objects such as navigation `Items { @home ... }` are data properties, not visual render slots.
+- Keyed navigation entries bind the configured nav declaration's direct `@key { ... }` contract;
+  they are not visual render slots or an implicit `Items` property.
 
 `@name` consistently introduces or refers to an owner-scoped name. Render slots and keyed entries are different typed roles under that shared naming model: a render slot is declared by the reusable UI surface, while a keyed entry is declared in one configured value and may be targetable when its accepted entry type permits it.
 
-Direct `@name` entries share one namespace within their immediate configured owner. Nested configured values begin new namespaces. A direct name must resolve to exactly one declared render slot or compatible open keyed property; Tao gives neither role precedence. If more than one channel or keyed property could accept it, validation reports an ambiguity and the caller must write the property explicitly, such as `Items { @home { ... } }`. A duplicate direct name in one owner is invalid.
+Direct `@name` entries share one namespace within their immediate configured owner. Nested configured
+values begin new namespaces. In the implemented surface, a configured nav may declare one `@key`
+item contract and each direct key binds it; a `with` patch may add another direct key under that
+contract. A declaration without the contract rejects keyed entries. A render declaration's direct
+`@name` remains a visual slot. A duplicate direct name in one owner is invalid.
 
 Only a targetable keyed entry creates an owner-qualified target such as `WordFlower@home`. A render slot never becomes a navigation target merely because it uses `@`.
 
@@ -288,7 +297,9 @@ Row() [content spread center] {
 
 Col() [content top stretch] {
    Text("fills the column width")
-   Button("Continue", Continue)
+   FormButton("Continue") {
+      on press Continue
+   }
 }
 ```
 
@@ -358,15 +369,19 @@ layout ToolbarArea {
 }
 
 ToolbarArea() [gap 8] {
-   Button("Cancel", Cancel)
-   Button("Save", Save)
+   FormButton("Cancel") {
+      on press Cancel
+   }
+   FormButton("Save") {
+      on press Save
+   }
 }
 ```
 
 If the declaration has fixed siblings and caller content, put `@@content` inside an explicit inner host when caller layout should affect only caller content:
 
 ```tao
-frame LabeledSection text Label {
+frame LabeledSection Label is text {
    render Stack() [gap 12, pad 16] {
       Text(Label)
 
@@ -448,7 +463,7 @@ layout FeedPage {
 }
 ```
 
-Use a future layer concept for things that intentionally escape normal flow:
+Use a future layout-layer concept for render children that intentionally escape normal flow:
 
 ```tao
 // Future-ish shape, not settled syntax.
@@ -461,7 +476,10 @@ This keeps three ideas separate:
 - scrolling: content is larger, and the user moves through it
 - layering: content intentionally appears above or outside normal flow
 
-Raw absolute positioning, raw overflow flags, z-index-like layering, popovers, portals, and toasts all need more design. They should not sneak into ordinary layout syntax just because the runtime has a prop for them.
+This future layout term is distinct from settled presentation modes. `as overlay` already produces a
+nav-owned absolute layer, and `as toast (Key:, Duration:)` already produces app-level transient
+content. Raw absolute positioning, overflow flags, z-index-like layout, popovers, and portals still
+need design and should not sneak into ordinary layout syntax merely because the runtime has a prop.
 
 ## Misc
 
@@ -496,7 +514,8 @@ This document is not a deterministic implementation spec. It is the intended sha
 Some things are known to belong in or near Tao layout, but still need their own design pass:
 
 - `nudge`: small post-layout movement that does not affect siblings
-- `overlay`: positioned content above normal flow
+- `overlay`: a possible in-layout positioning term, distinct from implemented presentation
+  `as overlay`
 - scroll containers
 - safe-area and keyboard-aware helpers
 - design-token spacing and size values

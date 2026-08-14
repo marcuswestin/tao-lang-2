@@ -24,7 +24,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
     TR.Navigation.beginTest()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
     for (const step of check.steps) {
-      runStep(screen, step)
+      await runStep(screen, step)
     }
   } catch (error) {
     throw new Error(
@@ -36,12 +36,12 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   }
 }
 
-function runStep(
+async function runStep(
   screen: RuntimeApp.Screen,
   step: TestCompiler.Step,
   resolveScope: ScopeResolver = () => undefined,
-): void {
-  return Switch.kind<TestCompiler.Step, void>(step, {
+): Promise<void> {
+  await Switch.kind<TestCompiler.Step, void | Promise<void>>(step, {
     back: back => backStep(back),
     dataStatus: status => dataStatusStep(status),
     enter: enter => enterStep(screen, enter, resolveScope()),
@@ -54,8 +54,8 @@ function runStep(
   })
 }
 
-function backStep(_step: Extract<TestCompiler.Step, { kind: 'back' }>): void {
-  act(() => {
+async function backStep(_step: Extract<TestCompiler.Step, { kind: 'back' }>): Promise<void> {
+  await act(async () => {
     TR.Navigation.Back()
   })
 }
@@ -66,31 +66,37 @@ function dataStatusStep(step: Extract<TestCompiler.Step, { kind: 'dataStatus' }>
   })
 }
 
-function pressStep(
+async function pressStep(
   screen: RuntimeApp.Screen,
   step: Extract<TestCompiler.Step, { kind: 'press' }>,
   scope?: TestInstance,
-): void {
+): Promise<void> {
   const match = requireSingleMatch(screen, step, step.text, 'pressable', scope)
-  fireEvent.press(match)
+  await dispatchInteraction(() => fireEvent.press(match))
 }
 
-function enterStep(
+async function enterStep(
   screen: RuntimeApp.Screen,
   step: Extract<TestCompiler.Step, { kind: 'enter' }>,
   scope?: TestInstance,
-): void {
+): Promise<void> {
   const match = requireSingleMatch(screen, step, step.target, 'text input', scope)
-  fireEvent.changeText(requireInteractiveNode(match, 'onChangeText', step), step.value)
+  await dispatchInteraction(() => fireEvent.changeText(requireInteractiveNode(match, 'onChangeText', step), step.value))
 }
 
-function submitStep(
+async function submitStep(
   screen: RuntimeApp.Screen,
   step: Extract<TestCompiler.Step, { kind: 'submit' }>,
   scope?: TestInstance,
-): void {
+): Promise<void> {
   const match = requireSingleMatch(screen, step, step.target, 'submittable input', scope)
-  fireEvent(requireInteractiveNode(match, 'onSubmitEditing', step), 'submitEditing')
+  await dispatchInteraction(() => fireEvent(requireInteractiveNode(match, 'onSubmitEditing', step), 'submitEditing'))
+}
+
+/** Dispatches an interaction through React, then flushes continuations without awaiting a suspended ask. */
+async function dispatchInteraction(dispatch: () => void): Promise<void> {
+  dispatch()
+  await act(async () => {})
 }
 
 function assertExpectation(
@@ -163,14 +169,14 @@ function assertExpectationGroup(
   }
 }
 
-function selectStep(
+async function selectStep(
   screen: RuntimeApp.Screen,
   step: Extract<TestCompiler.Step, { kind: 'select' }>,
   resolveParentScope: ScopeResolver,
-): void {
+): Promise<void> {
   for (const nested of step.steps) {
     // Resolve the row again for each operation because a prior operation may rerender or remove it.
-    runStep(screen, nested, () => selectedRow(screen, step, resolveParentScope()))
+    await runStep(screen, nested, () => selectedRow(screen, step, resolveParentScope()))
   }
 }
 
@@ -238,7 +244,16 @@ function querySelector(
 ): TestInstance[] {
   const queries = scope ? within(scope) : screen
   if (selector === 'tag') {
-    return queries.queryAllByTestId(target)
+    // A loop-row tag and its direct render tag can intentionally share one
+    // concrete native root. Generated testIDs encode those identities as
+    // whitespace-delimited tokens, so either Tao tag remains independently
+    // addressable without introducing a layout-changing wrapper.
+    const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(target)}(?:\\s|$)`)
+    const matches = queries.queryAllByTestId(pattern)
+    if (scope && pattern.test(String(scope.props.testID ?? '')) && !matches.includes(scope)) {
+      return [scope, ...matches]
+    }
+    return matches
   }
   if (selector === 'label') {
     return queries.queryAllByLabelText(target)
@@ -250,6 +265,10 @@ function querySelector(
     return queries.queryAllByPlaceholderText(target)
   }
   throw new Error(`Unsupported test selector '${selector}'.`)
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function requireSingleTag(

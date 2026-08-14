@@ -10,11 +10,8 @@ The current review automation still has enough custom context assembly and orche
 
 Investigate replacing or simplifying the repository's custom reviewer-context plumbing while preserving the useful command surface:
 
-- `./agent review plan`
-- `./agent review implementation`
-- `./agent review language-design`
-- `./agent review clean-code`
-- `./agent review all`
+- `./agent review new [--stringent] [--slug <name>]`
+- `./agent review <lens> --run <run> [--profile <profile>]`, over the repository's review lenses
 
 The target shape is a thin repository adapter around a maintained upstream context-bundling or reviewer orchestration tool, rather than a repository-owned system for collecting diffs, snapshots, filters, and prompt payloads.
 
@@ -24,7 +21,7 @@ The target shape is a thin repository adapter around a maintained upstream conte
 2. Which tools are actively maintained and usable in CI or a non-interactive shell?
 3. Can one tool replace both the current context collector and the direct reviewer launch path, or should those stay separate?
 4. How should branch-base review and dirty-worktree review differ?
-5. Can the repository keep the existing `./agent review <mode>` interface while delegating the heavy lifting?
+5. Can the repository keep the existing `./agent review` interface while delegating the heavy lifting?
 
 ## Acceptance Criteria
 

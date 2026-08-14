@@ -70,8 +70,17 @@ function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | u
         ? ensurePrimitive(typirTypeDefinitionName(type.nominal), typir)
         : taoPrimitiveType(type.kind, typir),
     entity: () => undefined,
+    enum: type => ensurePrimitive(enumTypeName(type.declaration), typir),
     union: () => undefined,
   })
+}
+
+function enumTypeName(declaration: AST.EnumDeclaration): string {
+  try {
+    return `${AST.getDocument(declaration).uri.path}#${declaration.name}`
+  } catch {
+    return declaration.name
+  }
 }
 
 /** ensurePrimitive returns an existing Typir primitive or creates it for nominal Tao types. */

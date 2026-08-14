@@ -11,6 +11,13 @@ type FunctionParameter = {
 
 /** FunctionalCoreCompiler compiles pure functions and render control flow. */
 export const FunctionalCoreCompiler = {
+  /** EnumDeclaration creates declaration-owned runtime case identities. */
+  EnumDeclaration(declaration: AST.EnumDeclaration): Compiled {
+    return gen`${gen.scopeName(declaration)} = TR.Enum([${
+      gen.join(declaration.block.cases, enumCase => gen`${gen.nameLiteral(enumCase)}`)
+    }])`
+  },
+
   /** FunctionDeclaration compiles an expression-bodied Tao pure function. */
   FunctionDeclaration(fn: AST.FunctionDeclaration): Compiled {
     const parameters = AST.parametersOf(fn).map((parameter, index) => ({ index, parameter }))
@@ -42,11 +49,17 @@ export const FunctionalCoreCompiler = {
 
   /** RenderFragmentStatement compiles one child render/control-flow fragment. */
   RenderFragmentStatement(
-    statement: AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement,
+    statement:
+      | AST.Render
+      | AST.WhenRenderStatement
+      | AST.GuardRenderStatement
+      | AST.IfRenderStatement
+      | AST.ForStatement,
   ): Compiled {
     return Switch.type(statement, {
       ForStatement: Compile.ForStatement,
       GuardRenderStatement: statement => Compile.GuardRenderStatement(statement, []),
+      IfRenderStatement: Compile.IfRenderStatement,
       WhenRenderStatement: Compile.WhenRenderStatement,
       RenderStatement: Compile.Render,
       ViewRender: Compile.Render,
@@ -73,10 +86,23 @@ export const FunctionalCoreCompiler = {
     `
   },
 
+  /** IfRenderStatement conditionally renders only its own child block. */
+  IfRenderStatement(statement: AST.IfRenderStatement): Compiled {
+    return gen`
+      {TR.If(${Compile.Expression(statement.condition)}, () =>
+        TR.BlockScope(_Scope, _Scope => {
+          ${Compile.RenderBlockBody(statement.block)}
+        })
+      ) ?? null}
+    `
+  },
+
   /** GuardRenderStatement preserves preceding siblings and owns only the remainder of its block. */
   GuardRenderStatement(
     statement: AST.GuardRenderStatement,
-    remaining: readonly (AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement)[],
+    remaining: readonly (
+      AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.IfRenderStatement | AST.ForStatement
+    )[],
   ): Compiled {
     return gen`
       {TR.GuardRender(${Compile.Expression(statement.subject)}, [

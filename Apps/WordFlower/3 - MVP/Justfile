@@ -70,9 +70,9 @@ test-ci:
 compile:
     {{ TAO }} compile "{{ APP }}" --app WordFlower
 
-# [intended] Start the interactive dev loop: compile, launch, watch, and reload. Roadmap.md: finish dev loop
+# [today] Start the interactive dev loop: discover apps under a path, compile, launch, watch, reload.
 dev:
-    {{ TAO }} dev "{{ APP }}" --app WordFlower
+    {{ TAO }} dev . --app WordFlower
 
 # [intended] Launch the dev loop on a specific target, including a physical device over LAN.
 dev-ios:

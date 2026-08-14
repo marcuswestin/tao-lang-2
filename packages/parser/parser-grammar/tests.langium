@@ -17,7 +17,7 @@ CheckDeclaration:
 type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | DataStatusStep;
 
 RunStep:
-    'run' app=[AppDeclaration:ID];
+    'run' app=[AppValueDeclaration:ID];
 
 PressTextStep:
     'press' selector=TestSelector text=STRING;

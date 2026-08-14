@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { type Compiled, gen } from '../codegen-util'
+import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
 type ActionParameter = {
@@ -14,8 +14,8 @@ export const ActionsCompiler = {
   ActionDeclaration(action: AST.ActionDeclaration): Compiled {
     const parameters = actionParameters(action)
     return gen`
-      ${gen.scopeName(action)} = TR.Action((${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
-        return TR.BlockScope(_Scope, _Scope => {
+      ${gen.scopeName(action)} = TR.Action(async (${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
+        return TR.BlockScope(_Scope, async _Scope => {
           ${gen.list(parameters, Compile.ActionParameterBinding)}
           ${Compile.ActionBlockBody(action.block)}
         })
@@ -26,8 +26,8 @@ export const ActionsCompiler = {
   /** ActionExpression compiles an inline Tao action into a runtime action value. */
   ActionExpression(action: AST.ActionExpression): Compiled {
     return gen`
-      TR.Action(() => {
-        return TR.BlockScope(_Scope, _Scope => {
+      TR.Action(async () => {
+        return TR.BlockScope(_Scope, async _Scope => {
           ${Compile.ActionBlockBody(action.block)}
         })
       })
@@ -54,12 +54,16 @@ export const ActionsCompiler = {
   ActionStatement(statement: AST.ActionStatement): Compiled {
     return Switch.type(statement, {
       CreateStatement: Compile.CreateStatement,
+      AskStatement: Compile.AskStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
+      IfActionStatement: Compile.IfActionStatement,
       ReplaceStatement: Compile.ReplaceStatement,
+      RespondStatement: Compile.RespondStatement,
+      SelectionActivateStatement: Compile.SelectionActivateStatement,
       SetStatement: Compile.SetStatement,
       ToggleStatement: Compile.ToggleStatement,
       UpdateStatement: Compile.UpdateStatement,
@@ -73,7 +77,27 @@ export const ActionsCompiler = {
 
   /** DoStatement compiles Tao action invocation. */
   DoStatement(invocation: AST.DoStatement): Compiled {
-    return gen`TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+    return gen`await TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+  },
+
+  /** AskStatement suspends its action and binds the response owned by this dialogue occurrence. */
+  AskStatement(statement: AST.AskStatement): Compiled {
+    const dialogue = resolveRef(statement.dialogue)
+    const resolved = ASTUtils.resolveArgumentBindings(dialogue, statement)
+    Assert(resolved.diagnostics.length === 0, 'validated dialogue ask has no binding diagnostics')
+    return gen`${gen.scopeName(statement)} = await TR.Navigation.Ask(
+      _ViewProps.__tao,
+      ${Compile.DialogueValue(dialogue)},
+      { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
+    )`
+  },
+
+  /** RespondStatement settles only the dialogue occurrence inherited by this render tree. */
+  RespondStatement(statement: AST.RespondStatement): Compiled {
+    const response = statement.case?.ref
+    return gen`TR.Navigation.Respond(
+      _ViewProps.__tao${response ? gen`, ${Compile.ValueDeclarationReference(response)}` : ''},
+    )`
   },
 
   /** ActionArguments compiles action invocation argument expressions. */
@@ -92,18 +116,27 @@ export const ActionsCompiler = {
 
   /** GuardActionStatement stops only its enclosing action-block callback after a match. */
   GuardActionStatement(statement: AST.GuardActionStatement): Compiled {
-    return gen`if (TR.GuardAction(${Compile.Expression(statement.subject)}, [
+    return gen`if (await TR.GuardAction(${Compile.Expression(statement.subject)}, [
       ${
       gen.list(
         guardActionBranches(statement),
         branch =>
-          gen`[${gen.jsLiteral(branch.case)}, _TaoCasePayload => TR.BlockScope(_Scope, _Scope => {
+          gen`[${gen.jsLiteral(branch.case)}, async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => {
           ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
           ${Compile.ActionBlockBody(branch.block)}
         })],`,
       )
     }
     ])) return`
+  },
+
+  /** IfActionStatement lazily executes one action sub-block without terminating its caller. */
+  IfActionStatement(statement: AST.IfActionStatement): Compiled {
+    return gen`await TR.If(${Compile.Expression(statement.condition)}, async () =>
+      TR.BlockScope(_Scope, async _Scope => {
+        ${Compile.ActionBlockBody(statement.block)}
+      })
+    )`
   },
 } as const
 

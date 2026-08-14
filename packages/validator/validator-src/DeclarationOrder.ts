@@ -21,7 +21,7 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     ActionExpression: expressionValueReferences,
     BinaryExpression: expressionValueReferences,
     BooleanLiteral: expressionValueReferences,
-    EmptyExpression: expressionValueReferences,
+    CaseTestExpression: expressionValueReferences,
     WhenExpression: expressionValueReferences,
     FunctionCallExpression: expressionValueReferences,
     InterpolatedString: expressionValueReferences,
@@ -68,6 +68,7 @@ function isLocalValueDeclaration(declaration: AST.ValueDeclaration): boolean {
   return AST.isAliasDeclaration(declaration)
     || AST.isStateDeclaration(declaration)
     || AST.isActionDeclaration(declaration)
+    || AST.isAskStatement(declaration)
     || AST.isEntityQueryDeclaration(declaration)
     || AST.isForStatement(declaration)
 }

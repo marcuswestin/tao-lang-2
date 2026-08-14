@@ -1,6 +1,5 @@
 import { Errors, HCI, Platform, Switch } from '@shared'
 import { runWithCommands } from './commands/commands-utils'
-import { runDevLoop } from './dev-loop/dev-loop'
 import { ExpoRunner } from './dev-loop/expo-runner/ExpoRunner'
 import { TestRunner } from './dev-loop/test-runner/TestRunner'
 import { TUI } from './dev-loop/TUI'
@@ -13,19 +12,7 @@ type TestCommandOptions = {
 }
 
 await runWithCommands(commands => {
-  commands
-    .name('dev')
-    .argument('[appPath]', 'Tao app path to run in the dev loop.')
-    .option('--app <name>', 'Select a named app when the file declares multiple apps.')
-    .action(async (appPath: string | undefined, options: { app?: string }) => {
-      try {
-        const devLoop = await runDevLoop(appPath, options.app)
-        Platform.runtimeProcess.exit(devLoop)
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
+  commands.name('tao-dev-internal')
 
   commands
     .command('test')

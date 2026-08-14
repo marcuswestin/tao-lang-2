@@ -79,6 +79,9 @@
       ],
       "@runtime/*": [
         "./runtime/runtime-src/*"
+      ],
+      "@dev-loop": [
+        "./dev/dev-src/dev-loop/dev-loop.ts"
       ]
     }
   },

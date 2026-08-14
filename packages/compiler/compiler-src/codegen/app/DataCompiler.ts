@@ -168,32 +168,34 @@ function compileEntityDataField(
 ): Compiled {
   const indexed = owner.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === field.name)
   const defaultModifier = field.modifiers.find(modifier => modifier.defaultValue || modifier.defaultCase)
-  if (field.primitive || field.negativeName) {
-    const kind = field.negativeName ? 'boolean' : field.primitive!
+  if (field.primitive || field.boolean) {
+    const kind = field.boolean ? 'boolean' : field.primitive!
     return gen`[${gen.jsLiteral(field.name)}]: {
       kind: ${gen.jsLiteral(kind)},
       ${indexed ? 'indexed: true,' : ''}
       ${compileEntityFieldDefault(field, defaultModifier)}
     },`
   }
-  const entities = Type.topLevelDataEntities(field)
-  const direct = entities.find(entity => entity.singularName === field.name)
-  if (direct) {
+  const direct = Type.dataFieldRelationEntity(field)
+  if (direct && !Type.dataFieldIsInverseRelation(field)) {
     return gen`[${gen.jsLiteral(field.name)}]: {
       kind: 'relation',
       relation: ${gen.jsLiteral(direct.singularName)},
-      ${field.modifiers.some(modifier => modifier.onDeleteCascade) ? "onDelete: 'cascade'," : ''}
+      ${storedRelationCascades(owner, direct) ? "onDelete: 'cascade'," : ''}
     },`
   }
   return Assert.never(field as never, 'inverse fields compile through inverseFields')
 }
 
 function compileInverseDataField(owner: AST.EntityDataDeclaration, field: AST.EntityDataField): Compiled {
-  const inverse = Type.topLevelDataEntities(field).find(entity => entity.name === field.name)
+  const inverse = Type.dataFieldRelationEntity(field)
   Assert.defined(inverse, 'validated inferred inverse relation resolves its entity')
   const inverseField = inverse.block.entries
     .filter(AST.isEntityDataField)
-    .find(candidate => candidate.name === owner.singularName)
+    .find(candidate => {
+      const candidateType = Type.dataFieldType(candidate)
+      return candidateType.kind === 'entity' && candidateType.entity === owner
+    })
   Assert.defined(inverseField, 'validated inverse relation resolves its stored field')
   return gen`[${gen.jsLiteral(field.name)}]: {
     relation: ${gen.jsLiteral(inverse.singularName)},
@@ -202,8 +204,20 @@ function compileInverseDataField(owner: AST.EntityDataDeclaration, field: AST.En
 }
 
 function isInverseField(field: AST.EntityDataField): boolean {
-  return !field.primitive && !field.negativeName
-    && Type.topLevelDataEntities(field).some(entity => entity.name === field.name)
+  return Type.dataFieldIsInverseRelation(field)
+}
+
+function storedRelationCascades(
+  owner: AST.EntityDataDeclaration,
+  target: AST.EntityDataDeclaration,
+): boolean {
+  return Type.dataFields(target).some(candidate => {
+    if (!Type.dataFieldIsInverseRelation(candidate)) {
+      return false
+    }
+    const related = Type.dataFieldRelationEntity(candidate)
+    return related === owner && candidate.modifiers.some(modifier => modifier.autoDelete)
+  })
 }
 
 function compileEntityFieldDefault(
@@ -211,7 +225,7 @@ function compileEntityFieldDefault(
   modifier: AST.EntityDataFieldModifier | undefined,
 ): Compiled {
   if (!modifier) {
-    return gen.noop()
+    return field.boolean ? gen`defaultValue: false,` : gen.noop()
   }
   if (modifier.defaultCase) {
     return gen`defaultValue: ${modifier.defaultCase === field.name ? 'true' : 'false'},`

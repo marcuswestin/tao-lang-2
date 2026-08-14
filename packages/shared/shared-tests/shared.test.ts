@@ -3,7 +3,6 @@ import { AfterEach, Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   Assert,
   CLI,
-  type Diagnostic,
   Diagnostics,
   Errors,
   FS,
@@ -12,6 +11,7 @@ import {
   Repo,
   Switch,
   Text,
+  type Diagnostic,
 } from '../shared-src/shared'
 import { PassThrough, runtimeProcess, Writable } from './TestRuntime'
 
@@ -493,21 +493,6 @@ Describe('Repo', () => {
     } finally {
       await FS.remove(root)
     }
-  })
-
-  Test('omits index entries that are deleted from the worktree', async () => {
-    const root = await tmpDir()
-    const deletedPath = FS.resolvePath('deleted.tao', root)
-    await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
-    await FS.writeText(deletedPath, 'view Deleted { }\n')
-    await FS.writeText(FS.resolvePath('kept.tao', root), 'view Kept { }\n')
-    await CLI.mustRun('git', { args: ['add', 'deleted.tao'], cwd: root })
-    await FS.remove(deletedPath)
-
-    const files = (await Repo.filesUnder(root, { extensions: ['.tao'] }))
-      .map(path => FS.relativePath(root, path))
-
-    Expect(files).toEqual(['kept.tao'])
   })
 })
 

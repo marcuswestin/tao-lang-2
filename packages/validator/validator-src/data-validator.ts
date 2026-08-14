@@ -13,6 +13,17 @@ export const dataValidationMessages = {
     `Entity '${entity}' cannot declare reserved field '${name}'; every entity receives that field automatically.`,
   unknownRelation: (entity: string, name: string) =>
     `Entity '${entity}' references unknown relationship entity '${name}'.`,
+  relationModifier: (field: string) => `Primitive or boolean data field '${field}' cannot declare a relation.`,
+  relationDefault: (field: string) => `Relationship data field '${field}' cannot declare a default.`,
+  autoDeleteOwner: (field: string) =>
+    `Data field '${field}' can use auto-delete only on an inverse collection relationship.`,
+  ambiguousInverseRelation: (field: string, relation: string) =>
+    `Inverse relationship '${field}' is ambiguous because '${relation}' has more than one stored relationship back to its owner.`,
+  booleanDefaultCase: (field: string) => `Boolean data field '${field}' must name a yes/no case as its default.`,
+  duplicateModifier: (field: string, modifier: string) =>
+    `Data field '${field}' declares '${modifier}' more than once.`,
+  duplicateBooleanCase: (entity: string, name: string) =>
+    `Entity '${entity}' declares boolean case '${name}' more than once.`,
   queryPlacement: 'Queries must be declared directly inside view bodies.',
   currentQueryPlacement: 'Queries must be unconditional statements in a view body or its root render block.',
   queryAfterControl: 'Queries must be declared before the first guard, when, or loop in their block.',
@@ -30,7 +41,7 @@ export const dataValidationMessages = {
     `Data field '${field}' expects ${expected}, got ${actual}.`,
   defaultType: (field: string, expected: string, actual: string) =>
     `Default for data field '${field}' expects ${expected}, got ${actual}.`,
-  nowDefault: (field: string) => `Only time field '${field}' can default to now().`,
+  nowDefault: (field: string) => `Only time field '${field}' can default to now.`,
   duplicateWriteField: (name: string) => `Data write provides field '${name}' more than once.`,
   missingCreateField: (entity: string, name: string) => `Create of '${entity}' is missing field '${name}'.`,
   unmatchedWrite: (entity: string) =>
@@ -79,6 +90,7 @@ function validateEntityCatalog(file: AST.TaoFile, ctx: ValidationContext): void 
       name => dataValidationMessages.duplicateField(entity.singularName, name),
       ctx,
     )
+    validateBooleanCaseNames(entity, fields, ctx)
     const indexes = entity.block.entries.filter(AST.isDataIndex)
     reportDuplicates(indexes, index => index.fieldName, name => `Index '${name}' is declared more than once.`, ctx)
     const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
@@ -89,17 +101,58 @@ function validateEntityCatalog(file: AST.TaoFile, ctx: ValidationContext): void 
       if (field.name === 'Id') {
         ctx.error(dataValidationMessages.reservedField(entity.singularName, field.name), field)
       }
-      if (!field.primitive && !field.negativeName) {
-        const direct = entities.find(candidate => candidate.singularName === field.name)
-        const inverse = entities.find(candidate => candidate.name === field.name)
-        if (!direct && !inverse) {
-          ctx.error(dataValidationMessages.unknownRelation(entity.singularName, field.name), field)
+      const relationModifiers = field.modifiers.filter(modifier => modifier.relationName)
+      const defaults = field.modifiers.filter(modifier => modifier.defaultValue || modifier.defaultCase)
+      const autoDeletes = field.modifiers.filter(modifier => modifier.autoDelete)
+      for (const duplicate of relationModifiers.slice(1)) {
+        ctx.error(dataValidationMessages.duplicateModifier(field.name, 'relation'), duplicate)
+      }
+      for (const duplicate of defaults.slice(1)) {
+        ctx.error(dataValidationMessages.duplicateModifier(field.name, 'default'), duplicate)
+      }
+      for (const duplicate of autoDeletes.slice(1)) {
+        ctx.error(dataValidationMessages.duplicateModifier(field.name, 'auto-delete'), duplicate)
+      }
+      if (field.primitive || field.boolean) {
+        for (const modifier of relationModifiers) {
+          ctx.error(dataValidationMessages.relationModifier(field.name), modifier)
         }
-        if (inverse) {
-          const inverseField = Type.dataFields(inverse).find(candidate => candidate.name === entity.singularName)
-          if (!inverseField) {
+        for (const modifier of autoDeletes) {
+          ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
+        }
+      } else {
+        const relationName = Type.dataFieldRelationName(field)
+        const relation = Type.dataFieldRelationEntity(field)
+        const inverse = Type.dataFieldIsInverseRelation(field)
+        if (!relation) {
+          ctx.error(dataValidationMessages.unknownRelation(entity.singularName, relationName), field)
+        }
+        if (defaults.length > 0) {
+          for (const modifier of defaults) {
+            ctx.error(dataValidationMessages.relationDefault(field.name), modifier)
+          }
+        }
+        if (autoDeletes.length > 0 && !inverse) {
+          for (const modifier of autoDeletes) {
+            ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
+          }
+        }
+        if (relation && inverse) {
+          const inverseFields = Type.dataFields(relation).filter(candidate => {
+            const candidateType = Type.dataFieldType(candidate)
+            return candidateType.kind === 'entity' && candidateType.entity === entity
+          })
+          if (inverseFields.length === 0) {
             ctx.error(
-              `Inverse relationship '${entity.singularName}.${field.name}' requires '${inverse.singularName}.${entity.singularName}'.`,
+              `Inverse relationship '${entity.singularName}.${field.name}' requires a stored relationship from '${relation.singularName}' back to '${entity.singularName}'.`,
+              field,
+            )
+          } else if (inverseFields.length > 1) {
+            ctx.error(
+              dataValidationMessages.ambiguousInverseRelation(
+                `${entity.singularName}.${field.name}`,
+                relation.singularName,
+              ),
               field,
             )
           }
@@ -187,7 +240,10 @@ function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: Va
   }
   const queryIndex = block.statements.indexOf(query)
   const controlIndex = block.statements.findIndex(statement =>
-    AST.isGuardRenderStatement(statement) || AST.isWhenRenderStatement(statement) || AST.isForStatement(statement)
+    AST.isGuardRenderStatement(statement)
+    || AST.isWhenRenderStatement(statement)
+    || AST.isIfRenderStatement(statement)
+    || AST.isForStatement(statement)
   )
   if (controlIndex >= 0 && queryIndex > controlIndex) {
     ctx.error(dataValidationMessages.queryAfterControl, query)
@@ -202,21 +258,22 @@ function validateCreate(create: AST.CreateStatement, ctx: ValidationContext): vo
 
 function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationContext): void {
   const defaults = field.modifiers.filter(modifier => modifier.defaultValue || modifier.defaultCase)
-  for (const duplicate of defaults.slice(1)) {
-    ctx.error(`Data field '${field.name}' declares more than one default.`, duplicate)
-  }
   const modifier = defaults[0]
   if (!modifier) {
     return
   }
   if (modifier.defaultCase) {
-    if (!field.negativeName || (modifier.defaultCase !== field.name && modifier.defaultCase !== field.negativeName)) {
+    if (!field.boolean || (modifier.defaultCase !== field.name && modifier.defaultCase !== field.negativeName)) {
       ctx.error(`Default case '${modifier.defaultCase}' is not a boolean case of field '${field.name}'.`, modifier)
     }
     return
   }
   const defaultValue = modifier.defaultValue
   if (!defaultValue) {
+    return
+  }
+  if (field.boolean) {
+    ctx.error(dataValidationMessages.booleanDefaultCase(field.name), modifier)
     return
   }
   if (AST.isNowExpression(defaultValue)) {
@@ -232,6 +289,24 @@ function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationC
       dataValidationMessages.defaultType(field.name, Type.displayName(expected), Type.displayName(actual)),
       defaultValue,
     )
+  }
+}
+
+function validateBooleanCaseNames(
+  entity: AST.EntityDataDeclaration,
+  fields: readonly AST.EntityDataField[],
+  ctx: ValidationContext,
+): void {
+  const owners = new Map(fields.map(field => [field.name, field]))
+  for (const field of fields) {
+    if (!field.boolean || !field.negativeName) {
+      continue
+    }
+    if (owners.has(field.negativeName)) {
+      ctx.error(dataValidationMessages.duplicateBooleanCase(entity.singularName, field.negativeName), field)
+      continue
+    }
+    owners.set(field.negativeName, field)
   }
 }
 

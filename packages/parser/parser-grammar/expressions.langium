@@ -3,6 +3,7 @@ grammar TaoExpressions
 import "./aliases"
 import "./actions"
 import "./blocks"
+import "./configuration"
 import "./types"
 import "./terminals"
 
@@ -34,10 +35,10 @@ EqualityExpression infers Expression:
     ComparisonExpression ({infer BinaryExpression.left=current} operator=('==' | '!=') right=ComparisonExpression)*;
 
 ComparisonExpression infers Expression:
-    EmptyExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=EmptyExpression)*;
+    CaseTestExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
 
-EmptyExpression infers Expression:
-    AdditionExpression ({infer EmptyExpression.value=current} 'is' empty?='empty')?;
+CaseTestExpression infers Expression:
+    AdditionExpression ({infer CaseTestExpression.value=current} 'is' (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
 
 AdditionExpression infers Expression:
     MultiplicationExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
@@ -49,26 +50,41 @@ UnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PrimaryExpression;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | ValueReference;
+    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | ValueReference;
 
-// Configured values are closed, typed records owned by stdlib and app contracts. `with` is
-// canonical for provider configuration and omitted for navigation construction.
-ProviderConfiguredValue:
-    type=[TypeDeclaration:ID] with?='with' block=ConfigurationBlock;
+// A bare configuration block instantiates a declared type. `with` is reserved for copying and
+// patching an existing configured value.
+ConfigurationConstructor:
+    type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
 
-NavigationConfiguredValue:
-    type=[TypeDeclaration:ID] block=ConfigurationBlock;
-
-type ConfiguredValue = ProviderConfiguredValue | NavigationConfiguredValue;
+type ConfiguredValue = ConfigurationConstructor;
+type ConstructorDeclaration = TypeDeclaration | ConfigurableDeclaration | ParameterizedDeclaration;
 
 ConfigurationBlock:
-    '{' entries+=ConfigurationEntry* '}';
+    '{' (entries+=ConfigurationEntry (','? entries+=ConfigurationEntry)*)? '}';
 
 ConfigurationEntry:
-    name=ID value=ConfigurationValue;
+    key=USE_IMPORT_PATH block=ConfigurationBlock
+    | label=ID ':' expression=Expression
+    | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
+    | reference=[ValueDeclaration:ID]
+    | expression=NonIdentifierConstructorEntryValue;
 
 ConfigurationValue:
-    NavigationConfiguredValue | ProviderConfiguredValue | StringLiteral | NumberLiteral | BooleanLiteral | ValueReference;
+    PropertyConfigurationPatch | ConfigurationConstructor | ConfigurationKeyValue
+    | StringLiteral | NumberLiteral | BooleanLiteral | ConfigurationReference;
+
+NonIdentifierConstructorEntryValue infers Expression:
+    TypedConstructor | ListLiteral | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral;
+
+PropertyConfigurationPatch:
+    'with' block=ConfigurationBlock;
+
+ConfigurationKeyValue:
+    key=USE_IMPORT_PATH;
+
+ConfigurationReference:
+    target=[NamedDeclaration:ID];
 
 // `otherwise` makes every subject conditional total and terminates the branch list unambiguously.
 WhenExpression:
@@ -85,13 +101,19 @@ SubjectExpression infers Expression:
     | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | ValueReference;
 
 SubjectCaseName returns string:
-    'empty' | 'loading' | 'error' | 'true' | 'false' | ID;
+    BuiltInSubjectCaseName | ID;
+
+BuiltInSubjectCaseName returns string:
+    'empty' | 'loading' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false';
 
 CasePayload:
     name=ID;
 
 TypedConstructor:
-    type=ConstructorTypeReference value=TypedConstructorValue;
+    type=ConstructablePrimitiveTypeReference value=TypedConstructorValue;
+
+DeclaredConstructorValue:
+    StringLiteral | NumberLiteral | ListLiteral;
 
 TypedConstructorValue:
     StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;
@@ -139,6 +161,6 @@ NoneLiteral:
     value='none';
 
 ValueReference:
-    target=[ValueDeclaration:ID];
+    target=[ValueDeclaration:ID] ('with' patchBlock=ConfigurationBlock)?;
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | UiDeclaration | EntityDataField;
+type ValueDeclaration = AppDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | UiDeclaration | EntityDataField | EnumCase | AskStatement;

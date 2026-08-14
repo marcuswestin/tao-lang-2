@@ -23,6 +23,7 @@ The old Tao repo has useful precedent in app-level design blocks, semantic varia
 
 - ~~Does the first slice introduce a `design AppTheme { ... }` declaration in `.tao` source, a separate `tao.design` file, or both?~~ **Decided: a `design` declaration in `.tao` source.**
 - ~~Does `app` select a design with `design AppTheme`, `theme AppTheme`, or another capability name?~~ **Decided: `design` is the capability name**, selected by the app as `Design <Name>`. See `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp` and `Apps/WordFlower/4 - Revolution/WordFlower.tao-revolution` for the intended usage.
+- ~~Should recipe variants be a standalone surface, named combined specs, or generated semantic components?~~ **Partly decided:** the MVP app tier applies design as named clause bundles at render sites, exactly like layout clauses, so named specs are the application surface; the internal recipe/variant spelling is still open.
 - Which visuals can be applied to `layout` and future `frame` declarations, versus only to `view` declarations and view-like primitives?
 - How much of "beautiful defaults" should ship before author-controlled tokens and recipes? A deterministic baseline can be useful, but it should not obscure the source-level design system contract.
 - Should recipe variants be declared through a standalone `recipe Button { variant ... }` surface, named combined specs, generated semantic components, or a staged combination?

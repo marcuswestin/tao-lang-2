@@ -2,6 +2,7 @@
 import { Command } from '@commander-js/extra-typings'
 import { Errors, FS, HCI, Platform } from '@shared'
 import { runCompile } from './compile-command'
+import { runTaoDev } from './dev-command'
 import type { InPlace } from './in-place-files'
 import { runCheck, runFix, runFmt } from './source-commands'
 import { runTestCommand } from './test-command'
@@ -39,6 +40,20 @@ function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
+
+  commands
+    .command('dev')
+    .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
+    .option('--app <name>', 'Select a uniquely named app without prompting.')
+    .description('Discover and run Tao apps in the interactive development loop.')
+    .action(async (path: string, options: { app?: string }) => {
+      try {
+        Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app }))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('compile')

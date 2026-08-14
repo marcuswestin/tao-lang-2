@@ -2,14 +2,14 @@ import { AST } from '@parser'
 import { sliceText, statementSlices } from './text-slices'
 
 /**
- * moveViewRendersLast returns the document text with each view body's single render statement
- * moved to the end, or undefined when nothing needs to move. Views with zero or multiple render
- * statements are left for the validator to report.
+ * moveViewRendersLast returns the document text with each visual declaration's single render
+ * statement moved to the end, or undefined when nothing needs to move. Declarations with zero or
+ * multiple render statements are left for the validator to report.
  */
 export function moveViewRendersLast(document: AST.Document): string | undefined {
   const file = document.parseResult.value
   const viewsToReorder = AST.streamAllContents(file)
-    .filter(AST.isRenderableDeclaration)
+    .filter(AST.isVisualDeclaration)
     .filter(needsRenderMove)
     .sort((a, b) => AST.blockStatementOf(b, 0).$cstNode!.offset - AST.blockStatementOf(a, 0).$cstNode!.offset)
   if (viewsToReorder.length === 0) {
@@ -46,7 +46,7 @@ function blockCloseBraceOffset(text: string, block: AST.Block): number {
   return closeOffset === -1 ? blockEnd : closeOffset
 }
 
-function needsRenderMove(view: AST.RenderableDeclaration): boolean {
+function needsRenderMove(view: AST.VisualDeclaration): boolean {
   const statements = AST.blockStatements(view)
   const renderIndex = statements.findIndex(AST.isRenderStatement)
   return statements.filter(AST.isRenderStatement).length === 1

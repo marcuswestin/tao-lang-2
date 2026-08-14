@@ -38,7 +38,7 @@ Describe('functional core compiler', () => {
     Expect(compiled.files).toHaveLength(1)
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
-    Expect(compiled.files[0]?.code).toContain('if (TR.GuardAction(')
+    Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
     Expect(compiled.files[0]?.code).toContain('TR.Toggle(')
   })
 
@@ -62,6 +62,48 @@ Describe('functional core compiler', () => {
     Expect(code).toContain('_TaoFunctionArg0 ?? TR.Value("Save")')
   })
 
+  Test('lowers enum identity case tests and one-sided action and render if', async () => {
+    const compiled = await Compiler.compileCode(`
+      app CaseApp { view Main }
+      enum ConfirmResult { Confirmed Cancelled }
+      data Documents / Document { Final yes / no Draft }
+      view Main {
+        state Result = Confirmed
+        state Ready = true
+        query Documents { }
+        action Close {
+          if Result is Confirmed { toggle Ready }
+        }
+        render Stack() {
+          if Result is Confirmed { Text("Confirmed") }
+          loop Documents / Document {
+            guard Document {
+              loading -> { Text("Loading") }
+              missing -> { Text("Missing") }
+              unauthorized -> { Text("Unauthorized") }
+              error -> Message { Text(Message) }
+            }
+            if Document.Final is Final { Text("Final") }
+            if Document.Final is Draft { Text("Draft") }
+          }
+        }
+      }
+      layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    const code = compiled.files[0]?.code ?? ''
+    Expect(code).toContain('_Scope.ConfirmResult = TR.Enum(["Confirmed", "Cancelled"])')
+    Expect(code).toContain('TR.IsCase(_Scope.Result.evaluate(), _Scope.ConfirmResult.Confirmed)')
+    Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(true))')
+    Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(false))')
+    Expect(code).toContain('TR.GuardRender(_Scope.Document.evaluate(), [')
+    Expect(code).toContain('["missing", _TaoCasePayload =>')
+    Expect(code).toContain('["unauthorized", _TaoCasePayload =>')
+    Expect(code.match(/TR\.If\(/g)).toHaveLength(4)
+  })
+
   Test('keeps a matched guard inside its action block while caller execution continues', async () => {
     const compiled = await Compiler.compileCode(`
       app GuardApp { view Main }
@@ -83,9 +125,9 @@ Describe('functional core compiler', () => {
 
     Expect(compiled.validation.diagnostics).toEqual([])
     const code = compiled.files[0]?.code ?? ''
-    const guard = code.indexOf('if (TR.GuardAction(')
+    const guard = code.indexOf('if (await TR.GuardAction(')
     const calleeTail = code.indexOf('TR.Set(_Scope.Count, () => TR.Value(2))')
-    const caller = code.indexOf('TR.Do(_Scope.Callee.evaluate())')
+    const caller = code.indexOf('await TR.Do(_Scope.Callee.evaluate())')
     const callerTail = code.indexOf('TR.Set(_Scope.Count, () => TR.Value(3))')
     Expect(guard).toBeGreaterThan(-1)
     Expect(calleeTail).toBeGreaterThan(guard)

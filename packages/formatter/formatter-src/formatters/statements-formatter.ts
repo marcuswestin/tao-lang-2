@@ -48,6 +48,11 @@ export default {
     f.oneSpaceBefore('->')
   },
 
+  /** IfRenderStatement separates its boolean condition from its one-sided child block. */
+  IfRenderStatement(f) {
+    f.oneSpaceAfter('if')
+  },
+
   /** GuardRenderStatement separates its subject from either single or grouped cases. */
   GuardRenderStatement(f) {
     f.oneSpaceAfter('guard')

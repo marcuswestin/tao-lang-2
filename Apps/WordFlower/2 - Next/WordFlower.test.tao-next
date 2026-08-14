@@ -1,4 +1,5 @@
-use WordFlower, WordFlowerFoundationTest from ./
+// Tranche status: absorbed
+use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest from ./
 
 test "WordFlower functional MVP" {
    check "starts empty and keeps invalid creates inert" {
@@ -70,7 +71,7 @@ test "WordFlower functional MVP" {
          press #edit
       }
       expect {
-         text "Edit document"
+         text "Document: Draft the intro"
          text "Workspace: Home"
          text "Words: 0"
          text "Saves this session: 0"
@@ -170,15 +171,17 @@ test "WordFlower navigation foundation" {
    }
 }
 
-// Tranche-2 journeys. Selection labels are pressed by visible text; keyed toasts, dialogues,
-// snapshots, and paragraph depth all flow through the same #tag vocabulary.
+// Tranche-2 journeys. Selection labels are pressed by visible text; overlays, keyed toasts,
+// dialogues, and paragraph depth all flow through the same #tag vocabulary.
 test "WordFlower selection and document depth" {
    check "activates the workspace tab and opens a document from the chooser" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
+      expect text "Novel"
       press #activateWorkspaceTab
       expect text "Choose a workspace"
+      expect text "Novel"
       select #chooseWorkspace[1] {
          press #choose
       }
@@ -205,13 +208,14 @@ test "WordFlower selection and document depth" {
       expect text "Document: Chapter one" // cancelling answers none and the editor stays
       enter "The first line." into #editDocumentBody
       press #saveDocument
-      expect text "Saved" // the keyed toast replaces, never stacks
+      // Same-key replacement rather than stacking is asserted in runtime-tests/runtime-e2e.jest-test.tsx.
+      expect text "Saved"
       press #closeDocument
       press #confirmClose
       expect missing text "Document: Chapter one"
    }
 
-   check "adds paragraphs asynchronously and snapshots the live document" {
+   check "adds paragraphs and keeps the live document handle current" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
@@ -228,18 +232,18 @@ test "WordFlower selection and document depth" {
       submit #newParagraph
       expect text "Paragraphs: 1"
       expect text "It began at sea."
-      press #snapshotDocument
-      expect text "Captured version"
-      expect text "Chapter one"
-      press #dismissSnapshot
       enter "Chapter one, revised" into #editDocumentTitle
       press #saveDocument
-      expect text "Saved title: Chapter one, revised" // the snapshot stayed immutable; the handle stayed live
+      expect text "Saved title: Chapter one, revised"
    }
 
    check "a with-variant reconfigures the same app" {
       run WordFlowerDrawer
-      press text "Workspace"
+      press #activateWorkspaceTab
       expect text "Choose a workspace"
+      press text "Settings"
+      expect text "Settings"
+      press #resetSignedOut
+      expect text "Signed out"
    }
 }

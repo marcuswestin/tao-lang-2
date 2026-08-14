@@ -7,20 +7,21 @@ app DataMVPApp {
    Navigator StackNav {
       Initial MainView
    }
-   Datasource Memory with { }
+   Datasource Memory
 }
 
 workspace data Workspaces / Workspace {
    Name text
-   CreatedAt time, default now()
+   CreatedAt time (default now)
+   Tasks (auto-delete)
    index CreatedAt
    order by Name
 }
 
 workspace data Tasks / Task {
    Title text
-   Done / Open, default Open
-   Workspace, on delete cascade
+   Done yes / no Open
+   Workspace
    order by Title
 }
 
@@ -29,10 +30,10 @@ ui MainView {
    state TaskDraft = ""
    query Workspaces { }
    query Tasks as OpenTasks {
-      where Open
+      where is Open
    }
    query Tasks as CompletedTasks {
-      where Done
+      where is Done
    }
    action AddWorkspace {
       create Workspace {

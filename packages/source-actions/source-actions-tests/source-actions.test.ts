@@ -523,6 +523,38 @@ Describe('moveRendersLast', () => {
     }\n`)
   })
 
+  Test('moves render statements to the end of ui and dialogue bodies', async () => {
+    const document = await parseDocument(`
+      enum Answer { Confirmed }
+      ui Home {
+         render Text(Greeting)
+         let Greeting = "Home"
+      }
+      dialogue Confirm responds Answer {
+         render Text(Prompt)
+         let Prompt = "Continue?"
+      }
+    `)
+
+    Expect(await SourceActions.moveRendersLast(document)).toBe(`${
+      Text.stripIndent(`
+      enum Answer {
+         Confirmed
+      }
+
+      ui Home {
+         let Greeting = "Home"
+         render Text(Greeting)
+      }
+
+      dialogue Confirm responds Answer {
+         let Prompt = "Continue?"
+         render Text(Prompt)
+      }
+    `)
+    }\n`)
+  })
+
   Test('splits same-line view statements safely when moving renders', async () => {
     const document = await parseRawDocument('view MainView { render Text(Greeting) let Greeting = "hi" }')
 

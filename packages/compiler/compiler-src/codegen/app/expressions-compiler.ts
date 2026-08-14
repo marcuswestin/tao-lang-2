@@ -11,7 +11,8 @@ export const ExpressionsCompiler = {
       ActionExpression: Compile.ActionExpression,
       BinaryExpression: Compile.BinaryExpression,
       BooleanLiteral: Compile.BooleanLiteral,
-      EmptyExpression: Compile.EmptyExpression,
+      CaseTestExpression: Compile.CaseTestExpression,
+      ConfigurationConstructor: Compile.ConfiguredValue,
       WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
       InterpolatedString: Compile.InterpolatedString,
@@ -26,46 +27,46 @@ export const ExpressionsCompiler = {
     })
   },
 
-  /** ConfiguredValue lowers the closed stdlib configuration constructors used by apps and navigation. */
+  /** ConfiguredValue lowers constructors through their linked Tao declaration identity. */
   ConfiguredValue(value: AST.ConfiguredValue): Compiled {
-    const type = resolveRef(value.type)
+    const declaration = resolveRef(value.type)
     const resolvedType = Type.ofConfiguredValue(value)
-    if (resolvedType.kind === 'item' && type.name !== 'Local' && type.name !== 'Memory') {
+    if (AST.isTypeDeclaration(declaration) || AST.isParameterizedDeclaration(declaration)) {
+      if (value.value) {
+        return Compile.Expression(value.value)
+      }
+      if (resolvedType.kind !== 'item') {
+        return Assert.never(resolvedType as never, 'validated named block constructor resolves an item type')
+      }
       return compileConfiguredItem(value, resolvedType.item)
     }
-    const entries = new Map(value.block.entries.map(entry => [entry.name, entry.value]))
-    const initial = entries.get('Initial')
-    if (type.name === 'StackNav') {
-      Assert.defined(initial, 'validated StackNav configuration has Initial')
-      return gen`TR.Navigation.StackNav({
-        name: ${gen.jsLiteral(configuredValueName(value))},
-        initial: ${Compile.ConfigurationValue(initial)},
-      })`
-    }
-    if (type.name === 'SlotNav') {
-      Assert.defined(initial, 'validated SlotNav configuration has Initial')
-      return gen`TR.Navigation.SlotNav({
-        name: ${gen.jsLiteral(configuredValueName(value))},
-        initial: ${Compile.ConfigurationValue(initial)},
-      })`
-    }
-    if (type.name === 'OverlayNav') {
-      return gen`TR.Navigation.OverlayNav({ name: ${gen.jsLiteral(configuredValueName(value))} })`
-    }
-    if (type.name === 'Local') {
-      const storageKey = entries.get('StorageKey')
-      Assert.defined(storageKey, 'validated Local configuration has StorageKey')
-      return gen`TR.Data.Source('local', ${Compile.ConfigurationValue(storageKey)})`
-    }
-    if (type.name === 'Memory') {
-      return gen`TR.Data.Source('memory')`
-    }
-    return Assert.never(type.name as never, `validated configured type '${type.name}' is supported`)
+    Assert.defined(value.block, 'validated configurable declaration constructor has a block')
+    const config = compileConfigurationObject(value.block)
+    return AST.isNavDeclaration(declaration)
+      ? gen`TR.Navigation.Configure(${gen.scopeName(declaration)}, ${config})`
+      : gen`TR.Data.Configure(${gen.scopeName(declaration)}, ${config})`
   },
 
   /** ConfigurationValue compiles a scalar/reference slot or a nested configured value. */
   ConfigurationValue(value: AST.ConfigurationValue): Compiled {
-    return AST.isConfiguredValue(value) ? Compile.ConfiguredValue(value) : Compile.Expression(value)
+    if (AST.isConfiguredValue(value)) {
+      return Compile.ConfiguredValue(value)
+    }
+    if (AST.isConfigurationReference(value)) {
+      return compileConfigurationReference(value)
+    }
+    if (AST.isConfigurationKeyValue(value)) {
+      return gen`TR.Value(${gen.jsLiteral(value.key)})`
+    }
+    if (AST.isPropertyConfigurationPatch(value)) {
+      return Assert.never(value as never, 'property-position with is compiled against its owning property')
+    }
+    return Compile.Expression(value)
+  },
+
+  /** ConfigurationPatchObject lowers property replacements and keyed additions without mutating the base. */
+  ConfigurationPatchObject(block: AST.ConfigurationBlock): Compiled {
+    return compileConfigurationPatchObject(block)
   },
 
   /** BooleanLiteral compiles a Tao boolean literal into a Tao value. */
@@ -90,9 +91,19 @@ export const ExpressionsCompiler = {
     return gen`TR.Unary(${gen.jsLiteral(expression.operator)}, ${Compile.Expression(expression.operand)})`
   },
 
-  /** EmptyExpression matches empty text/lists and ready queries with no rows. */
-  EmptyExpression(expression: AST.EmptyExpression): Compiled {
-    return gen`TR.IsEmpty(${Compile.Expression(expression.value)})`
+  /** CaseTestExpression compares one subject with a built-in or declaration-linked case. */
+  CaseTestExpression(expression: AST.CaseTestExpression): Compiled {
+    if (expression.builtinCase) {
+      return gen`TR.IsCase(${Compile.Expression(expression.value)}, ${gen.jsLiteral(expression.builtinCase)})`
+    }
+    Assert.defined(expression.declaredCase, 'parsed case test has a declared or built-in case')
+    const declaredCase = resolveRef(expression.declaredCase)
+    if (AST.isEntityDataField(declaredCase)) {
+      return gen`TR.IsCase(${Compile.Expression(expression.value)}, TR.Value(${
+        expression.declaredCase.$refText === declaredCase.name ? 'true' : 'false'
+      }))`
+    }
+    return gen`TR.IsCase(${Compile.Expression(expression.value)}, ${Compile.ValueDeclarationReference(declaredCase)})`
   },
 
   /** WhenExpression evaluates one subject and selects one lazy value case. */
@@ -163,7 +174,7 @@ export const ExpressionsCompiler = {
   },
 
   /** ItemLiteral compiles an item constructor to a plain JavaScript object runtime value. */
-  ItemLiteral(item: AST.ItemLiteral, type: AST.ConstructorTypeReference | AST.TypeReference): Compiled {
+  ItemLiteral(item: AST.ItemLiteral, type: AST.ConstructablePrimitiveTypeReference | AST.TypeReference): Compiled {
     const itemType = Type.constructorReferenceItemType(type)
     if (!itemType) {
       Assert(item.properties.length === 0, 'validated shapeless item constructor is empty')
@@ -189,6 +200,9 @@ export const ExpressionsCompiler = {
 
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
   ValueReference(reference: AST.ValueReference): Compiled {
+    if (AST.isPatchedValueReference(reference)) {
+      return compileConfiguredPatch(reference)
+    }
     const target = resolveRef(reference.target)
     if (AST.isEntityDataField(target)) {
       return gen`TR.Value(${reference.target.$refText === target.name ? 'true' : 'false'})`
@@ -201,9 +215,12 @@ export const ExpressionsCompiler = {
     return Switch.type(target, {
       ActionDeclaration: action => gen`${gen.scopeName(action)}.evaluate()`,
       AliasDeclaration: alias => gen`${gen.scopeName(alias)}.evaluate()`,
+      AppDeclaration: app => gen`${gen.Name({ name: `_TaoAppDefinition_${app.name}` })}`,
+      AskStatement: ask => gen`${gen.scopeName(ask)}.evaluate()`,
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
+      EnumCase: enumCase => gen`${gen.scopeName(AST.enumOwningCase(enumCase))}.${gen.Name(enumCase)}`,
       ForStatement: statement => gen`${gen.scopeName(statement)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
@@ -224,21 +241,21 @@ export const ExpressionsCompiler = {
     } __tao={_NavigationProps} />,
     })`
   },
-} as const
 
-function configuredValueName(value: AST.ConfiguredValue): string {
-  const owner = value.$container
-  if (AST.isAliasDeclaration(owner)) {
-    return owner.name
-  }
-  if (AST.isAppNavigator(owner) || AST.isAppAuxiliaryNavigator(owner)) {
-    const app = owner.$container.$container
-    return AST.isAppDeclaration(app)
-      ? `${app.name}${AST.isAppAuxiliaryNavigator(owner) ? owner.name : ''}`
-      : value.type.$refText
-  }
-  return value.type.$refText
-}
+  /** DialogueValue creates the independently askable descriptor for one dialogue declaration. */
+  DialogueValue(dialogue: AST.DialogueDeclaration): Compiled {
+    return gen`TR.Navigation.Dialogue({
+      name: ${gen.jsLiteral(dialogue.name)},
+      render: (_NavigationArguments, _NavigationProps) =>
+        <${gen.scopeName(dialogue)}${
+      gen.join(AST.parametersOf(dialogue), parameter => {
+        const name = Type.parameterName(parameter)
+        return gen` ${gen.Name({ name })}={_NavigationArguments[${gen.jsLiteral(name)}]}`
+      }, { separator: '' })
+    } __tao={_NavigationProps} />,
+    })`
+  },
+} as const
 
 function itemPropertyBindingPairs(
   item: AST.ItemLiteral,
@@ -250,18 +267,29 @@ function itemPropertyBindingPairs(
 }
 
 function compileConfiguredItem(
-  value: AST.ConfiguredValue,
+  value: AST.ConfigurationConstructor,
   itemType: AST.ItemTypeExpression | undefined,
 ): Compiled {
+  Assert.defined(value.block, 'validated item constructor has a block')
   if (!itemType) {
     Assert(value.block.entries.length === 0, 'validated shapeless item constructor is empty')
     return gen`TR.Value({})`
   }
   const remaining = new Set(itemType.properties)
-  const pairs = value.block.entries.map(entry => {
-    const declaration = Type.visibleDeclaration(entry, entry.name)
-    Assert.defined(declaration, 'validated configured item entry resolves its nominal type')
-    const actual = Type.ofDefinition(declaration)
+  const pairs: Array<{ expected: AST.TypeProperty; compiled: Compiled }> = []
+  for (const entry of value.block.entries) {
+    if (entry.label && entry.expression) {
+      const expected: AST.TypeProperty | undefined = itemType.properties.find(
+        (property: AST.TypeProperty) => property.name === entry.label,
+      )
+      Assert.defined(expected, 'validated configured item label resolves one field')
+      remaining.delete(expected)
+      pairs.push({ expected, compiled: Compile.Expression(entry.expression) })
+      continue
+    }
+    const candidate = compileConfiguredItemEntry(entry)
+    Assert.defined(candidate, 'validated configured item entry has a constructable value')
+    const actual = candidate.type
     const exact = [...remaining].filter(property =>
       Type.identityKey(Type.ofProperty(property)) === Type.identityKey(actual)
     )
@@ -271,13 +299,102 @@ function compileConfiguredItem(
     Assert(assignable.length === 1, 'validated configured item entry binds one field')
     const expected = assignable[0]!
     remaining.delete(expected)
-    return { entry, expected }
-  })
-  Assert(remaining.size === 0, 'validated configured item constructor binds every field')
-  return gen`TR.Value({
-    ${
-    gen.list(pairs, pair =>
-      gen`[${gen.nameLiteral(pair.expected)}]: ${Compile.ConfigurationValue(pair.entry.value)}.jsValue,`)
+    pairs.push({ expected, compiled: candidate.compiled })
   }
+  Assert(remaining.size === 0, 'validated configured item constructor binds every field')
+  pairs.sort((left, right) => itemType.properties.indexOf(left.expected) - itemType.properties.indexOf(right.expected))
+  return gen`TR.Value({
+    ${gen.list(pairs, pair => gen`[${gen.nameLiteral(pair.expected)}]: ${pair.compiled}.jsValue,`)}
   })`
+}
+
+function compileConfiguredItemEntry(
+  entry: AST.ConfigurationEntry,
+): { compiled: Compiled; type: ASTUtils.TaoType } | undefined {
+  if (entry.expression) {
+    return { compiled: Compile.Expression(entry.expression), type: Type.ofExpression(entry.expression) }
+  }
+  if (entry.reference?.ref) {
+    const declaration = resolveRef(entry.reference)
+    return {
+      compiled: Compile.ValueDeclarationReference(declaration),
+      type: Type.ofValueDeclaration(declaration),
+    }
+  }
+  if (entry.name && (entry.block || entry.value)) {
+    const declaration = Type.visibleDeclaration(entry, entry.name)
+    if (!declaration) {
+      return undefined
+    }
+    const constructor = {
+      $type: 'ConfigurationConstructor',
+      type: { $refText: entry.name, ref: declaration },
+      members: entry.nameMembers ?? [],
+      ...(entry.block ? { block: entry.block } : { value: entry.value }),
+      $container: entry,
+    } as unknown as AST.ConfigurationConstructor
+    return { compiled: Compile.ConfiguredValue(constructor), type: Type.ofConfiguredValue(constructor) }
+  }
+  return undefined
+}
+
+function compileConfigurationReference(value: AST.ConfigurationReference): Compiled {
+  const target = resolveRef(value.target)
+  if (AST.isConfigurableDeclaration(target)) {
+    return AST.isNavDeclaration(target)
+      ? gen`TR.Navigation.Configure(${gen.scopeName(target)}, {})`
+      : gen`TR.Data.Configure(${gen.scopeName(target)}, {})`
+  }
+  if (AST.isUiDeclaration(target)) {
+    return Compile.UiValue(target)
+  }
+  if (AST.isAliasDeclaration(target)) {
+    return Compile.ValueDeclarationReference(target)
+  }
+  return Assert.never(target as never, 'validated configuration reference targets a configurable declaration')
+}
+
+function compileConfigurationObject(block: AST.ConfigurationBlock): Compiled {
+  return gen`{
+    ${
+    gen.list(block.entries, entry => {
+      if (entry.key && entry.block) {
+        return gen`${gen.jsLiteral(entry.key)}: ${compileConfigurationObject(entry.block)},`
+      }
+      Assert.defined(entry.name, 'validated configuration entry has a property name')
+      Assert.defined(entry.value, 'validated configuration property has a value')
+      Assert(!AST.isPropertyConfigurationPatch(entry.value), 'configuration property patch is compiled by its owner')
+      return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`
+    })
+  }
+  }`
+}
+
+function compileConfiguredPatch(value: AST.PatchedValueReference): Compiled {
+  const base = resolveRef(value.target)
+  Assert.is(base, AST.isAliasDeclaration, 'generic configured patches currently target configured value aliases')
+  const patch = compileConfigurationPatchObject(value.patchBlock)
+  const type = Type.ofValueDeclaration(base)
+  if (type.kind === 'primitive' && type.primitive === 'nav') {
+    return gen`TR.Navigation.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
+  }
+  if (type.kind === 'item') {
+    return gen`TR.Data.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
+  }
+  return Assert.never(type as never, 'validated configured patch targets nav, datasource, or app')
+}
+
+function compileConfigurationPatchObject(block: AST.ConfigurationBlock): Compiled {
+  return gen`{
+    ${
+    gen.list(block.entries, entry => {
+      if (entry.key && entry.block) {
+        return gen`${gen.jsLiteral(entry.key)}: ${compileConfigurationObject(entry.block)},`
+      }
+      Assert.defined(entry.name, 'validated patch entry has a property name')
+      Assert.defined(entry.value, 'validated patch entry has a property value')
+      return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`
+    })
+  }
+  }`
 }

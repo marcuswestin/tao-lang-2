@@ -1,4 +1,4 @@
-import { Packages, Type } from '@ast-utils'
+import { type ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import type { ValidationContext } from './validation'
@@ -6,13 +6,11 @@ import type { ValidationContext } from './validation'
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {
   topLevel:
-    'Only project, app, ui, view, layout, let, function, action, data, type, test declarations, and use statements are allowed at file level.',
+    'Only project, app, ui, dialogue, view, layout, let, function, action, data, type, enum, test declarations, and use statements are allowed at file level.',
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
   appBlock: (name: string) => `App ${name} contains a statement that is not app configuration.`,
   duplicateDatasource: (name: string, data: string) => `App ${name} binds datasource ${data} more than once.`,
-  unknownProvider: (provider: string) =>
-    `Unknown datasource provider '${provider}'. Supported providers: Local, Memory.`,
   appRootCount: (name: string, count: number) =>
     `App ${name} must declare exactly one Navigator (or transitional root view), found ${count}.`,
   rootViewParameters: (appName: string, viewName: string) =>
@@ -22,9 +20,15 @@ const appValidationMessages = {
   auxiliaryType: (name: string, key: string, actual: string) => `App ${name}@${key} expects nav, got ${actual}.`,
   duplicateAuxiliary: (name: string, key: string) => `App ${name} declares auxiliary navigator @${key} more than once.`,
   auxiliaryKey: (key: string) => `App auxiliary '${key}' must be a single @name key.`,
-  datasourceType: (name: string) => `App ${name} Datasource expects Local or Memory configuration.`,
+  datasourceType: (name: string) => `App ${name} Datasource expects a datasource configuration.`,
   datasourceCount: (name: string, count: number) => `App ${name} may declare at most one Datasource, found ${count}.`,
   propertyName: (expected: string, actual: string) => `App property '${actual}' must be spelled '${expected}'.`,
+  variantProperty: (name: string, property: string) =>
+    `App variant ${name} cannot patch unknown property '${property}'.`,
+  variantDuplicate: (name: string, property: string) => `App variant ${name} patches '${property}' more than once.`,
+  variantName: (name: string) => `App variant ${name} Name expects text.`,
+  variantNavigator: (name: string, actual: string) => `App variant ${name} Navigator expects nav, got ${actual}.`,
+  variantDatasource: (name: string) => `App variant ${name} Datasource expects a datasource configuration.`,
 } as const
 
 /** AppValidator validates Tao app placement and structure. */
@@ -39,6 +43,83 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     validateAppPlacement(app, file, ctx)
     validateAppDeclaration(app, ctx)
   }
+  for (const variant of file.statements.filter(AST.isAppVariantDeclaration)) {
+    validateAppVariant(variant, ctx)
+  }
+}
+
+function validateAppVariant(variant: AST.AppVariantDeclaration, ctx: ValidationContext): void {
+  const entries = new Map<string, AST.ConfigurationEntry>()
+  for (const entry of variant.value.patchBlock.entries) {
+    if (!entry.name || !entry.value || !['Name', 'Navigator', 'Datasource'].includes(entry.name)) {
+      ctx.error(appValidationMessages.variantProperty(variant.name, entry.name ?? entry.key ?? ''), entry)
+      continue
+    }
+    if (entries.has(entry.name)) {
+      ctx.error(appValidationMessages.variantDuplicate(variant.name, entry.name), entry)
+    }
+    entries.set(entry.name, entry)
+  }
+  const name = entries.get('Name')?.value
+  if (name && !AST.isStringLiteral(name)) {
+    ctx.error(appValidationMessages.variantName(variant.name), name)
+  }
+  const navigator = entries.get('Navigator')?.value
+  if (navigator && !AST.isPropertyConfigurationPatch(navigator)) {
+    const actual = configurationValueType(navigator)
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
+      ctx.error(appValidationMessages.variantNavigator(variant.name, Type.displayName(actual)), navigator)
+    }
+  }
+  const datasource = entries.get('Datasource')?.value
+  if (datasource && !AST.isPropertyConfigurationPatch(datasource) && !configurationIsDatasource(datasource)) {
+    ctx.error(appValidationMessages.variantDatasource(variant.name), datasource)
+  }
+}
+
+function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
+  if (AST.isConfigurationConstructor(value)) {
+    return Type.ofConfiguredValue(value)
+  }
+  if (AST.isConfigurationReference(value)) {
+    const target = value.target.ref
+    if (AST.isTypeDeclaration(target)) {
+      return Type.ofDefinition(target)
+    }
+    if (AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)) {
+      return Type.ofValueDeclaration(target)
+    }
+  }
+  return { kind: 'unresolved' }
+}
+
+function configurationIsDatasource(value: AST.ConfigurationValue): boolean {
+  if (AST.isConfigurationConstructor(value)) {
+    return AST.isDatasourceDeclaration(value.type.ref)
+  }
+  if (AST.isConfigurationReference(value)) {
+    const target = value.target.ref
+    if (AST.isDatasourceDeclaration(target)) {
+      return true
+    }
+    return AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value)
+  }
+  return false
+}
+
+function configurationExpressionIsDatasource(value: AST.Expression): boolean {
+  if (AST.isConfigurationConstructor(value)) {
+    return AST.isDatasourceDeclaration(value.type.ref)
+  }
+  if (AST.isPatchedValueReference(value)) {
+    const target = value.target.ref
+    return AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value)
+  }
+  if (AST.isValueReference(value)) {
+    const target = value.target.ref
+    return AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value)
+  }
+  return false
 }
 
 function validateAppPlacement(app: AST.AppDeclaration, file: AST.TaoFile, ctx: ValidationContext): void {
@@ -99,7 +180,7 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
     ctx.error(appValidationMessages.appRootCount(app.name, navigators.length), app)
   }
   for (const navigator of navigators) {
-    const actual = Type.ofExpression(navigator.value)
+    const actual = configuredAppPropertyType(navigator.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
       ctx.error(appValidationMessages.navigatorType(app.name, Type.displayName(actual)), navigator)
     }
@@ -129,15 +210,30 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
     if (datasource.name !== 'Datasource') {
       ctx.error(appValidationMessages.propertyName('Datasource', datasource.name ?? ''), datasource)
     }
-    if (!datasource.value || !AST.isConfiguredValue(datasource.value)) {
-      ctx.error(appValidationMessages.datasourceType(app.name), datasource)
-      continue
-    }
-    const provider = datasource.value.type.ref?.name
-    if (provider !== 'Local' && provider !== 'Memory') {
+    const target = datasource.value.target.ref
+    const valid = AST.isDatasourceDeclaration(target)
+      || (AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value))
+    if (!valid) {
       ctx.error(appValidationMessages.datasourceType(app.name), datasource)
     }
   }
+}
+
+function configuredAppPropertyType(value: AST.ConfiguredAppPropertyValue): ASTUtils.TaoType {
+  const target = value.target.ref
+  if (AST.isNavDeclaration(target)) {
+    return { kind: 'primitive', primitive: 'nav' }
+  }
+  if (AST.isDatasourceDeclaration(target)) {
+    return { kind: 'item' }
+  }
+  if (AST.isTypeDeclaration(target)) {
+    return Type.ofDefinition(target)
+  }
+  if (AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)) {
+    return Type.ofValueDeclaration(target)
+  }
+  return { kind: 'unresolved' }
 }
 
 function validateLegacyApp(app: AST.AppDeclaration, ctx: ValidationContext): void {

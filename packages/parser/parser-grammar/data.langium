@@ -14,11 +14,13 @@ EntityDataDeclarationBlock:
     '{' entries+=(EntityDataField | DataIndex | DataDefaultOrder)* '}';
 
 EntityDataField:
-    name=ID (primitive=DataPrimitiveType | '/' negativeName=ID)? (',' modifiers+=EntityDataFieldModifier)*;
+    name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' 'no' negativeName=BOOLEAN_NO_ALIAS?)?
+    ('(' modifiers+=EntityDataFieldModifier (',' modifiers+=EntityDataFieldModifier)* ')')?;
 
 EntityDataFieldModifier:
     'default' (defaultValue=(StringLiteral | NumberLiteral | BooleanLiteral | NowExpression) | defaultCase=ID)
-    | 'on' 'delete' onDeleteCascade?='cascade';
+    | 'relation' relationName=ID
+    | autoDelete?='auto-delete';
 
 DataIndex:
     'index' fieldName=ID;
@@ -30,7 +32,11 @@ DataPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time';
 
 NowExpression:
-    {infer NowExpression} 'now' '(' ')';
+    {infer NowExpression} 'now';
+
+// Kept distinct from ID so the token builder can require the optional no-case alias to be
+// on the same source line as `yes / no`; otherwise the next field name is indistinguishable.
+terminal BOOLEAN_NO_ALIAS: /\x00/;
 
 EntityQueryDeclaration:
     'query' (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?;
@@ -45,7 +51,7 @@ WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
 
 BooleanWhereClause:
-    'where' case=[EntityDataField:ID];
+    'where' 'is' case=[EntityDataField:ID];
 
 QueryComparisonOperator returns string:
     '==' | '!=' | '<' | '<=' | '>' | '>=';

@@ -1,8 +1,8 @@
 use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest from ./
 
 // Directional journeys for the full target. Steps that reach panes, overlays, toasts, windows,
-// and dialogues reuse the #tag / select vocabulary the Next sketch settles for lists; anything
-// beyond that vocabulary is expected to be decided in a future Next slice before implementation.
+// and dialogues reuse the implemented #tag / select vocabulary; anything beyond that vocabulary
+// is expected to be decided in a future Next slice before implementation.
 test "WordFlower full target" {
    check "activates the workspace tab and fills the split" {
       run WordFlower
@@ -11,8 +11,10 @@ test "WordFlower full target" {
       expect text "Tagged: daily, warmup"
       enter "Novel" into #workspaceName
       submit #workspaceName
+      expect text "Novel"
       press text "Workspace" // selection items are activated by their labels
       expect text "Choose a workspace"
+      expect text "Novel" // target-only activation reveals preserved selection content; it does not present
       select #chooseWorkspace[1] {
          press #choose
       }
@@ -101,8 +103,12 @@ test "WordFlower full target" {
 
    check "a with-variant reconfigures the same app" {
       run WordFlowerDrawer
-      press text "Workspace"
+      press #activateWorkspaceTab
       expect text "Choose a workspace"
+      press text "Settings"
+      expect text "Settings"
+      press #resetSignedOut
+      expect text "Signed out"
    }
 }
 

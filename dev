@@ -1,27 +1,6 @@
 #!/bin/zsh
 
-# Resolve the wrapper location so ./dev works from any invocation directory.
+# Compatibility wrapper: the Tao CLI owns app discovery and the development loop.
 SCRIPT_DIR="${0:A:h}"
 
-# The Bun dev loop exits with this code when it wants the wrapper to restart it.
-RELOAD_EXIT_CODE=42
-NEXT_APP_PATH_FILE="$SCRIPT_DIR/.artifacts/dev/next-app-path"
-
-while true; do
-  # Keep Bun in the foreground so the raw-key dev loop owns terminal stdin.
-  bun run "$SCRIPT_DIR/packages/dev/dev-src/dev.ts" "$@"
-  STATUS=$?
-
-  # Any exit other than the explicit reload code is the final wrapper status.
-  if [[ $STATUS -ne $RELOAD_EXIT_CODE ]]; then
-    exit $STATUS
-  fi
-
-  if [[ -f "$NEXT_APP_PATH_FILE" ]]; then
-    NEXT_APP_PATH="$(< "$NEXT_APP_PATH_FILE")"
-    rm -f "$NEXT_APP_PATH_FILE"
-    if [[ -n "$NEXT_APP_PATH" ]]; then
-      set -- "$NEXT_APP_PATH" "${@:2}"
-    fi
-  fi
-done
+exec "$SCRIPT_DIR/tao" dev "$@"

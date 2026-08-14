@@ -1,7 +1,12 @@
 import { Langium } from './langium-exports'
 import * as AST from './parserASTExport'
 
-type ArgumentListOwner = AST.Render | AST.DoStatement | AST.FunctionCallExpression | AST.ContextualPresentStatement
+type ArgumentListOwner =
+  | AST.Render
+  | AST.DoStatement
+  | AST.FunctionCallExpression
+  | AST.ContextualPresentStatement
+  | AST.AskStatement
 type BlockStatementFor<OwnerT extends AST.BlockStatementOwner> = OwnerT extends
   AST.ActionDeclaration | AST.ActionExpression ? AST.ActionStatement
   : OwnerT extends AST.AppDeclaration ? AST.AppStatement | AST.Statement
@@ -57,8 +62,11 @@ export function ancestorBlocks(node: AST.Node): AST.Block[] {
 /** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
 export function importableValueDeclarationsInFile(
   file: AST.TaoFile,
-): Array<AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration> {
-  return file.statements.filter(isImportableValueDeclaration)
+): Array<AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration | AST.EnumCase> {
+  return [
+    ...file.statements.filter(isImportableValueDeclaration),
+    ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
+  ]
 }
 
 /** valueDeclarationsOwnedByBlock returns value declarations owned directly by `block`. */
@@ -71,6 +79,11 @@ export function valueDeclarationsOwnedByBlock(
     ...block.statements.filter(AST.isEntityQueryDeclaration),
     ...block.statements.filter(AST.isActionDeclaration),
   ]
+}
+
+/** askDeclarationsOwnedByActionBlock returns dialogue results introduced directly by one action block. */
+export function askDeclarationsOwnedByActionBlock(block: AST.ActionBlock): AST.AskStatement[] {
+  return block.statements.filter(AST.isAskStatement)
 }
 
 /** forBindingOwnedByBlock returns the iteration binding visible inside a `for` body. */
@@ -95,21 +108,24 @@ export function taggedLoopRowRoot(loop: AST.ForStatement): AST.Render | undefine
     AST.isRender(statement)
     || AST.isWhenRenderStatement(statement)
     || AST.isGuardRenderStatement(statement)
+    || AST.isIfRenderStatement(statement)
     || AST.isForStatement(statement)
   )
   return renderers.length === 1 && AST.isRender(renderers[0]) ? renderers[0] : undefined
 }
 
-/** testTagForRender resolves a direct render tag or a tagged loop's row tag. */
+/** testTagForRender resolves every tag represented by one concrete render root. */
 export function testTagForRender(render: AST.Render): string | undefined {
   const direct = attachedTag(render)
-  if (direct) {
-    return direct.tag.slice(1)
-  }
   const block = render.$container
   const loop = AST.isBlock(block) && AST.isForStatement(block.$container) ? block.$container : undefined
   const loopTag = loop ? attachedTag(loop) : undefined
-  return loop && loopTag && taggedLoopRowRoot(loop) === render ? loopTag.tag.slice(1) : undefined
+  const rowTag = loop && loopTag && taggedLoopRowRoot(loop) === render ? loopTag : undefined
+  const tags = [rowTag, direct]
+    .filter((tag): tag is AST.TagStatement => tag !== undefined)
+    .map(tag => tag.tag.slice(1))
+  const distinctTags = [...new Set(tags)]
+  return distinctTags.length > 0 ? distinctTags.join(' ') : undefined
 }
 
 /** isImportableValueDeclaration returns true for value declarations that can be imported. */
@@ -117,6 +133,78 @@ export function isImportableValueDeclaration(
   node: AST.Node,
 ): node is AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration {
   return AST.isAliasDeclaration(node) || AST.isActionDeclaration(node) || AST.isUiDeclaration(node)
+}
+
+/** configurationPropertiesOf returns the ordinary public properties declared by one nav/datasource. */
+export function configurationPropertiesOf(
+  declaration: AST.ConfigurableDeclaration,
+): AST.ConfigurationPropertyDeclaration[] {
+  return declaration.block.entries.filter(AST.isConfigurationPropertyDeclaration)
+}
+
+/** configurationKeyOf returns the optional keyed-item contract declared by one nav. */
+export function configurationKeyOf(
+  declaration: AST.ConfigurableDeclaration,
+): AST.ConfigurationKeyDeclaration | undefined {
+  return declaration.block.entries.find(AST.isConfigurationKeyDeclaration)
+}
+
+/** configurationImplementationOf returns the declaration's package-scope runtime binding. */
+export function configurationImplementationOf(
+  declaration: AST.ConfigurableDeclaration,
+): AST.ConfigurationImplementation | undefined {
+  return declaration.block.entries.find(AST.isConfigurationImplementation)
+}
+
+/** configurationPropertyIsKey identifies the keyed-item selector role without reserving `key` globally. */
+export function configurationPropertyIsKey(property: AST.ConfigurationPropertyDeclaration): boolean {
+  return AST.isNamedTypeReference(property.type)
+    && property.type.root === 'key'
+    && property.type.members.length === 0
+}
+
+/** PatchedValueReference is a declaration-linked immutable `value with { ... }` expression. */
+export type PatchedValueReference = AST.ValueReference & { patchBlock: AST.ConfigurationBlock }
+
+/** isPatchedValueReference identifies a `with` patch without name-table lookup. */
+export function isPatchedValueReference(node: AST.Node): node is PatchedValueReference {
+  return AST.isValueReference(node) && node.patchBlock !== undefined
+}
+
+/** AppVariantDeclaration is an alias whose initializer patches an app declaration identity. */
+export type AppVariantDeclaration = AST.AliasDeclaration & { value: PatchedValueReference }
+
+/** isAppVariantDeclaration identifies an immutable `App with { ... }` value declaration. */
+export function isAppVariantDeclaration(node: AST.Node): node is AppVariantDeclaration {
+  return AST.isAliasDeclaration(node) && appDeclarationOf(node) !== undefined
+}
+
+/** appDeclarationOf resolves an app or chained app variant to its original declaration identity. */
+export function appDeclarationOf(
+  node: AST.AppValueDeclaration | undefined,
+  seen: Set<AST.AliasDeclaration> = new Set(),
+): AST.AppDeclaration | undefined {
+  if (AST.isAppDeclaration(node)) {
+    return node
+  }
+  if (!AST.isAliasDeclaration(node) || seen.has(node) || !isPatchedValueReference(node.value)) {
+    return undefined
+  }
+  seen.add(node)
+  const base = node.value.target.ref
+  return AST.isAppValueDeclaration(base) ? appDeclarationOf(base, seen) : undefined
+}
+
+/** appValueDeclarationsInFile returns concrete apps followed by immutable app variants. */
+export function appValueDeclarationsInFile(file: AST.TaoFile): AST.AppValueDeclaration[] {
+  return file.statements.flatMap(statement =>
+    AST.isAppDeclaration(statement) || isAppVariantDeclaration(statement) ? [statement] : []
+  )
+}
+
+/** enumOwningCase returns the declaration whose runtime identity owns one enum case. */
+export function enumOwningCase(enumCase: AST.EnumCase): AST.EnumDeclaration {
+  return enumCase.$container.$container
 }
 
 /** parametersOf returns the parameters declared by a renderable or action declaration. */
