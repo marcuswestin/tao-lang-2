@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 58 commits, 2026-08-14
+Last touched-package re-sweep: after 59 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -146,7 +146,8 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/dev/dev-src/commands/code-review/planner.ts`                    | R3              |   332 moved, net +12 |       1/332 | Split budget normalization and provider availability into a 162-line owner, leaving review planning at 353 lines with its existing public facade intact.                                     |
 | done               | `packages/validator/validator-src/validators/data-validator.ts`           | R3              |   245 moved, net +13 |       1/245 | Split strict create, update, and delete validation into a 126-line owner, leaving query and schema validation at 308 lines while preserving message/check facades.                           |
 | done               | `packages/validator/validator-src/validators/FunctionalCoreValidator.ts`  | R3              |   209 moved, net +17 |       1/209 | Split pure-function declarations and calls into a 109-line owner, leaving expression and control validation at 318 lines while preserving its facade and order.                              |
-| queued             | 8 non-chartered source files currently over 400 lines                     | R3              |     inspect per seam |       4/TBD | Four audited files still have real second concepts; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                 |
+| done               | `packages/validator/validator-src/validators/navigation-validator.ts`     | R3              |   519 moved, net +17 |       1/519 | Split configured values, patches, and app-variant configuration into a 259-line owner, leaving navigation validation at 355 lines with adjacent registration order.                          |
+| queued             | 7 non-chartered source files currently over 400 lines                     | R3              |     inspect per seam |       3/TBD | Three audited files still have real second concepts; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                |
 | queued             | 69 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                              |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                             |
 | done               | `packages/dev/dev-src/commands/code-review/planner.ts` timeouts           | R6 / charter 4  |                   11 |        6/11 | Reuse the two owning review-timeout constants across six provider outcomes, collapsing the repeated values and net-deleting five lines.                                                      |
