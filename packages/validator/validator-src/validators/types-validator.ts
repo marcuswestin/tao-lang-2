@@ -558,10 +558,7 @@ function typeDefinitionReferencesRoot(
     return typeDefinitionOwnedBy(current, root)
   }
   seen.add(current)
-  if (AST.isTypeDeclaration(current)) {
-    return typeExpressionReferencesRoot(root, current.type, seen)
-  }
-  if (AST.isParameterTypeDeclaration(current)) {
+  if (AST.isTypeDeclaration(current) || AST.isParameterTypeDeclaration(current)) {
     return typeExpressionReferencesRoot(root, current.type, seen)
   }
   const propertyType = current.type

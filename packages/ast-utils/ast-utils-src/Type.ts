@@ -401,20 +401,8 @@ export class Type {
 
   /** dataFieldType resolves the value type stored by a schema field. */
   static dataFieldType(field: DataFieldDefinition): TaoType {
-    if (field.primitive === 'text') {
-      return primitiveType('text')
-    }
-    if (field.primitive === 'number') {
-      return primitiveType('number')
-    }
-    if (field.primitive === 'boolean') {
-      return primitiveType('boolean')
-    }
-    if (field.primitive === 'time') {
-      return primitiveType('time')
-    }
-    if (field.boolean) {
-      return primitiveType('boolean')
+    if (field.primitive || field.boolean) {
+      return primitiveType(field.primitive ?? 'boolean')
     }
     const relation = Type.dataFieldRelationEntity(field)
     if (!relation) {
