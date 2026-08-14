@@ -225,7 +225,13 @@ function DevLoopControlsFooter(props: { state: DevLoopOutputState; width: number
 
 function devLoopDashboardLayout(size: TerminalSize, streamCount: number): ColumnLayout {
   const count = Math.max(1, streamCount)
-  const layout = DashboardGrid.columnLayout(size, count, DEV_LOOP_MIN_COLUMN_WIDTH, DEV_LOOP_LINE_LIMIT, ROW_GAP)
+  const layout = DashboardGrid.columnLayout({
+    size,
+    itemCount: count,
+    targetColumnWidth: DEV_LOOP_MIN_COLUMN_WIDTH,
+    lineLimit: DEV_LOOP_LINE_LIMIT,
+    rowGap: ROW_GAP,
+  })
   const rowCount = Math.ceil(count / layout.columnsPerRow)
   const availableHeight = Math.max(1, DashboardGrid.availableRows(size) - 1)
   const columnHeight = Math.floor((availableHeight - Math.max(0, rowCount - 1) * ROW_GAP) / Math.max(1, rowCount))

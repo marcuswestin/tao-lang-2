@@ -137,7 +137,7 @@ async function withRawChoiceInput<Result>(
 ): Promise<Result> {
   const rawMode = input === Platform.runtimeProcess.stdin
     ? Platform.setStdinRawMode(true)
-    : setCustomInputRawMode(input, true)
+    : setCustomInputRawMode(input, { enabled: true })
   input.resume()
   try {
     return await run(() => readChoiceKey(input))
@@ -146,7 +146,7 @@ async function withRawChoiceInput<Result>(
       if (input === Platform.runtimeProcess.stdin) {
         Platform.setStdinRawMode(false)
       } else {
-        setCustomInputRawMode(input, false)
+        setCustomInputRawMode(input, { enabled: false })
       }
     }
   }
@@ -169,7 +169,7 @@ async function readChoiceKey(input: Readable): Promise<string> {
   })
 }
 
-function setCustomInputRawMode(input: Readable, enabled: boolean): boolean {
+function setCustomInputRawMode(input: Readable, { enabled }: { enabled: boolean }): boolean {
   const rawInput = input as Readable & { isTTY?: boolean; setRawMode?: (rawMode: boolean) => void }
   if (rawInput.isTTY !== true || rawInput.setRawMode === undefined) {
     return false

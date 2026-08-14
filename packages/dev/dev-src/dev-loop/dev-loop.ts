@@ -95,7 +95,13 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
 
   try {
     TUI.logDevLoop('dev', `Tao dev app: ${appPath}`)
-    const initialCompileSucceeded = await Run.compileApp(repoRoot, appPath, appName, 'initial compile', true)
+    const initialCompileSucceeded = await Run.compileApp({
+      repoRoot,
+      appPath,
+      appName,
+      reason: 'initial compile',
+      shouldRunParserGen: true,
+    })
     if (shouldStop()) {
       return await done
     }
@@ -103,7 +109,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
       return { kind: 'exit', exitCode: 1 }
     }
     watcher = new DevFileWatcher(appPath, shouldRunParserGen => {
-      void Run.compileApp(repoRoot, appPath, appName, 'file change', shouldRunParserGen)
+      void Run.compileApp({ repoRoot, appPath, appName, reason: 'file change', shouldRunParserGen })
     })
     await ExpoRunner.ensureMetroPortFree()
     if (shouldStop()) {

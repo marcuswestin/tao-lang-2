@@ -133,19 +133,25 @@ function SuiteColumn(
 }
 
 function dashboardLayout(size: TerminalSize, suiteCount: number): ColumnLayout {
-  const fullLayout = DashboardGrid.columnLayout(
+  const fullLayout = DashboardGrid.columnLayout({
     size,
-    suiteCount,
-    COLUMN_MIN_WIDTH,
-    TestRunner.OUTPUT_LINE_LIMIT,
-    ROW_GAP,
-  )
+    itemCount: suiteCount,
+    targetColumnWidth: COLUMN_MIN_WIDTH,
+    lineLimit: TestRunner.OUTPUT_LINE_LIMIT,
+    rowGap: ROW_GAP,
+  })
   if (DashboardGrid.layoutHeight(fullLayout, suiteCount) <= DashboardGrid.availableRows(size)) {
     return fullLayout
   }
 
   for (const targetColumnWidth of ADAPTIVE_COLUMN_WIDTHS) {
-    const layout = DashboardGrid.columnLayout(size, suiteCount, targetColumnWidth, TestRunner.OUTPUT_LINE_LIMIT, 0)
+    const layout = DashboardGrid.columnLayout({
+      size,
+      itemCount: suiteCount,
+      targetColumnWidth,
+      lineLimit: TestRunner.OUTPUT_LINE_LIMIT,
+      rowGap: 0,
+    })
     const rowCount = Math.ceil(suiteCount / layout.columnsPerRow)
     const columnHeight = Math.floor(DashboardGrid.availableRows(size) / Math.max(1, rowCount))
     if (columnHeight >= DashboardGrid.MIN_COLUMN_HEIGHT) {
@@ -156,7 +162,13 @@ function dashboardLayout(size: TerminalSize, suiteCount: number): ColumnLayout {
     }
   }
 
-  return DashboardGrid.columnLayout(size, suiteCount, ADAPTIVE_COLUMN_WIDTHS.at(-1)!, 0, 0)
+  return DashboardGrid.columnLayout({
+    size,
+    itemCount: suiteCount,
+    targetColumnWidth: ADAPTIVE_COLUMN_WIDTHS.at(-1)!,
+    lineLimit: 0,
+    rowGap: 0,
+  })
 }
 
 function statusColor(status: SuiteStatus): 'gray' | 'green' | 'red' | 'yellow' {

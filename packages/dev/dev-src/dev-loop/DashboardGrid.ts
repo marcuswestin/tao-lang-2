@@ -21,6 +21,14 @@ export type TerminalSize = {
   rows: number
 }
 
+type ColumnLayoutOptions = {
+  size: TerminalSize
+  itemCount: number
+  targetColumnWidth: number
+  lineLimit: number
+  rowGap: number
+}
+
 const COLUMN_GAP = 1
 const MIN_COLUMN_HEIGHT = 3
 
@@ -52,13 +60,8 @@ export const DashboardGrid = Object.assign(DashboardGridComponent, {
   layoutHeight,
 })
 
-function columnLayout(
-  size: TerminalSize,
-  itemCount: number,
-  targetColumnWidth: number,
-  lineLimit: number,
-  rowGap: number,
-): ColumnLayout {
+function columnLayout(options: ColumnLayoutOptions): ColumnLayout {
+  const { size, itemCount, targetColumnWidth, lineLimit, rowGap } = options
   const availableColumns = Math.max(1, size.columns - 1)
   const columnsPerRow = Math.max(
     1,
