@@ -57,14 +57,6 @@ function install_dev_deps() {
   exit 1
 }
 
-function wait_for_lock() {
-  local lock_dir="$1"
-
-  while [[ -d "$lock_dir" ]]; do
-    sleep 0.1
-  done
-}
-
 function ensure_dev_deps() {
   if ! needs_install; then
     return
@@ -72,13 +64,14 @@ function ensure_dev_deps() {
 
   if mkdir "$INSTALL_LOCK" 2>/dev/null; then
     trap 'rm -rf "$INSTALL_LOCK"' EXIT INT TERM
+    tao_record_lock_owner "$INSTALL_LOCK"
     needs_install && install_dev_deps
     rm -rf "$INSTALL_LOCK"
     trap - EXIT INT TERM
     return
   fi
 
-  wait_for_lock "$INSTALL_LOCK"
+  tao_wait_for_lock "$INSTALL_LOCK" || exit 1
   needs_install && ensure_dev_deps
 }
 
@@ -115,13 +108,14 @@ function ensure_agent_build() {
 
   if mkdir "$BUILD_LOCK" 2>/dev/null; then
     trap 'rm -rf "$BUILD_LOCK"' EXIT INT TERM
+    tao_record_lock_owner "$BUILD_LOCK"
     needs_build && build_agent
     rm -rf "$BUILD_LOCK"
     trap - EXIT INT TERM
     return
   fi
 
-  wait_for_lock "$BUILD_LOCK"
+  tao_wait_for_lock "$BUILD_LOCK" || exit 1
   needs_build && ensure_agent_build
 }
 

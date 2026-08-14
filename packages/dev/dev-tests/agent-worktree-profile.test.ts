@@ -97,6 +97,45 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(source).toContain('unable to write files to tempdir: PermissionDenied')
     Expect(source).not.toContain('BUN_TMPDIR=')
   })
+
+  Test('recovers a bootstrap lock owned by a dead process', async () => {
+    const testRoot = await mkTestDir('tao-agent-stale-lock-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const lock = FS.resolvePath('stale.lock', testRoot)
+      await FS.writeText(FS.resolvePath('owner-pid', lock), '999999999')
+
+      const result = await runProfileScript('tao_wait_for_lock "$3" 1', fixture, lock)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.exists(lock)).toBe(false)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('bounds the wait for a live bootstrap lock', async () => {
+    const testRoot = await mkTestDir('tao-agent-live-lock-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const lock = FS.resolvePath('live.lock', testRoot)
+      const result = await runProfileScript(
+        [
+          'mkdir -p "$3"',
+          'print -r -- "$$" > "$3/owner-pid"',
+          'if tao_wait_for_lock "$3" 1; then exit 9; fi',
+        ].join('\n'),
+        fixture,
+        lock,
+      )
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stderr).toContain('Timed out waiting for active bootstrap lock:')
+      Expect(await FS.exists(lock)).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
 })
 
 async function createProfileFixture(testRoot: string, withPrimaryProfile: boolean): Promise<ProfileFixture> {
