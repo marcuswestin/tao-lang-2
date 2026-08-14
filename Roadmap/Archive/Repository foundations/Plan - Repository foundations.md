@@ -40,7 +40,8 @@ Implementation branch: `feat/repository-foundations`.
    generated-code runtime with no toolchain imports. Move app generation, Expo/Jest scaffolding, and
    runtime integration tests into a private toolchain package. Move Tao stdlib sources into their own
    package and resolve its root from that package, with an explicit override, rather than from the Git
-   repository root.
+   repository root. Validate the source payload by staging temporary release metadata for Bun's pack
+   dry run; the checked-in manifest remains private and unversioned.
 4. **Reusable language sessions.** Keep explicit caller-owned validator/compiler sessions with safe
    serialization and recovery after failures. Keep standalone one-shot calls fresh, and leave the
    workspace/LSP-owned lifetime unchanged.

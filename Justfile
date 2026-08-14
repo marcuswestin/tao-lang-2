@@ -74,13 +74,16 @@ _agent-config:
     bun run scripts/generate-agent-config.ts
 
 [parallel]
-_parallel-check: _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _bench-check
+_parallel-check: _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _bench-check _runtime-pack-check
 
 [parallel]
-_parallel-verify-check: _ide-extension-build _repo-lint _typecheck _test _bench-check
+_parallel-verify-check: _ide-extension-build _repo-lint _typecheck _test _bench-check _runtime-pack-check
 
 _bench-check:
     bun test packages/dev/performance-checks/language-performance.test.ts
+
+_runtime-pack-check:
+    bun run packages/dev/dev-src/repository-tests/runtime-package-pack.ts
 
 _compile-word-flower-app: _parser-gen
     ./tao compile "{{ WORD_FLOWER_APP }}" --app WordFlower
