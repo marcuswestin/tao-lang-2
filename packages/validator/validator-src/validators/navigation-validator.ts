@@ -226,11 +226,23 @@ function applyConfigurationPatch(
   }
 }
 
+type ToastPresentation = AST.ToastPresentationOptions | undefined
+
 function validateContextualPresentation(
   presentation: AST.ContextualPresentStatement,
   ctx: ValidationContext,
 ): void {
   const toast = presentation.mode?.kind === 'toast' ? presentation.mode.toast : undefined
+  validatePresentationMode(presentation, toast, ctx)
+  validatePresentationArguments(presentation, ctx)
+  validatePresentationTarget(presentation, toast, ctx)
+}
+
+function validatePresentationMode(
+  presentation: AST.ContextualPresentStatement,
+  toast: ToastPresentation,
+  ctx: ValidationContext,
+): void {
   const owningView = AST.findOwningView(presentation)
   if (toast ? !owningView : !AST.isUiDeclaration(owningView)) {
     ctx.error(
@@ -257,6 +269,12 @@ function validateContextualPresentation(
       ctx.error(navigationValidationMessages.toastDurationNegative, toast.duration)
     }
   }
+}
+
+function validatePresentationArguments(
+  presentation: AST.ContextualPresentStatement,
+  ctx: ValidationContext,
+): void {
   const ui = presentation.ui.ref
   if (ui) {
     const resolved = ASTUtils.resolveArgumentBindings(ui, presentation)
@@ -264,30 +282,40 @@ function validateContextualPresentation(
       reportBindingDiagnostic(ui, diagnostic, presentation, ctx)
     }
   }
-  if (presentation.target && !toast) {
-    const targetApp = presentation.target.app?.ref
-    if (presentation.target.value) {
-      const actual = Type.ofExpression(presentation.target.value)
-      if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
-        ctx.error(navigationValidationMessages.presentationTarget(Type.displayName(actual)), presentation.target)
-      }
-    } else if (targetApp && AST.isAppVariantDeclaration(targetApp)) {
-      ctx.error(
-        navigationValidationMessages.strictTargetDeclaration(targetApp.name),
-        presentation.target,
-      )
-    } else if (presentation.target.app?.ref && presentation.target.key) {
-      const app = presentation.target.app.ref
-      const targetKey = presentation.target.key.slice(1)
-      const rootApp = AST.appDeclarationOf(app)
-      const auxiliary = rootApp
-        && AST.blockStatements(rootApp).find(statement =>
-          AST.isAppAuxiliaryNavigator(statement) && statement.name.slice(1) === targetKey
-        )
-      if (!auxiliary) {
-        ctx.error(navigationValidationMessages.unknownAuxiliary(app.name, targetKey), presentation.target)
-      }
+}
+
+function validatePresentationTarget(
+  presentation: AST.ContextualPresentStatement,
+  toast: ToastPresentation,
+  ctx: ValidationContext,
+): void {
+  const target = presentation.target
+  if (!target || toast) {
+    return
+  }
+  if (target.value) {
+    const actual = Type.ofExpression(target.value)
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
+      ctx.error(navigationValidationMessages.presentationTarget(Type.displayName(actual)), target)
     }
+    return
+  }
+  const app = target.app?.ref
+  if (app && AST.isAppVariantDeclaration(app)) {
+    ctx.error(navigationValidationMessages.strictTargetDeclaration(app.name), target)
+    return
+  }
+  if (!app || !target.key) {
+    return
+  }
+  const targetKey = target.key.slice(1)
+  const rootApp = AST.appDeclarationOf(app)
+  const auxiliary = rootApp
+    && AST.blockStatements(rootApp).find(statement =>
+      AST.isAppAuxiliaryNavigator(statement) && statement.name.slice(1) === targetKey
+    )
+  if (!auxiliary) {
+    ctx.error(navigationValidationMessages.unknownAuxiliary(app.name, targetKey), target)
   }
 }
 

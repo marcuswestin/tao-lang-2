@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 82 commits, 2026-08-14
+Last touched-package re-sweep: after 83 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -194,7 +194,8 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | dev merge-feature preflight analysis                                      | R2              |                  +10 |        1/10 | Separate ordered blocker and warning derivation from report assembly, removing the 85-line analyzer from the mechanical list and reducing the source count from 68 to 67.                          |
 | done               | validator configuration declaration contracts                             | R2              |                  +10 |        1/10 | Extract property, keyed-contract, and implementation validation as byte-identical phases, reducing the 66-line owner to 13 lines and the source count from 67 to 66.                               |
 | done               | validator modern-app configuration contracts                              | R2              |                  +22 |        1/22 | Extract statement, Name, Navigator, auxiliary, and Datasource validation as ordered phases, reducing the 76-line owner to 14 lines and the source count from 66 to 65.                             |
-| queued             | 65 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      10/TBD | Ten still pass value review after the app extraction; decompose them into meaningful named steps without changing ordering or public surfaces.                                                     |
+| done               | validator contextual presentation contracts                               | R2              |                  +28 |        1/28 | Split mode/toast, argument binding, and target validation into ordered phases, removing the 64-line/depth-five owner and reducing the source count from 65 to 64.                                  |
+| queued             | 64 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |       9/TBD | Nine still pass value review after the presentation extraction; decompose them into meaningful named steps without changing ordering or public surfaces.                                           |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                                   |
 | done               | `packages/dev/dev-src/commands/code-review/planner.ts` timeouts           | R6 / charter 4  |                   11 |        6/11 | Reuse the two owning review-timeout constants across six provider outcomes, collapsing the repeated values and net-deleting five lines.                                                            |
 | done               | repeated Android, compiler assertion, and unexpected-error messages       | R12 / charter 4 |                   26 |        6/26 | Replace ten byte-identical message literals in four owners with four local constants; four abstractions each pay at two or three sites.                                                            |
