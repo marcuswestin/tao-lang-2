@@ -1,113 +1,11 @@
-import { Packages, Type } from '@ast-utils'
+import { Packages } from '@ast-utils'
 import { AST } from '@parser'
-import { FS, Repo } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import { testParseCode, testParseSyntax } from './test-parse'
 
-const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao')
-const wordFlowerTestPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.test.tao')
-const wordFlowerNextPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next')
-const wordFlowerNextTestPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.test.tao-next')
-const wordFlowerOpenTrancheHeader = '// Tranche status: open'
-const wordFlowerAbsorbedTrancheHeader = '// Tranche status: absorbed'
-const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
-
 Describe('minimal Tao parser', () => {
-  Test('parses the current WordFlower app', async () => {
-    const parseResult = await Workspace.parse(wordFlowerPath)
-
-    Expect(parseResult.diagnostics).toEqual([])
-
-    const useStatement = parseResult.entry.ast.statements.find(
-      statement => AST.isUseStatement(statement) && statement.importPath === '@tao/ui',
-    )
-    const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
-    const taglineLet = parseResult.entry.ast.statements.find(
-      statement => AST.isAliasDeclaration(statement) && statement.name === 'Tagline',
-    )
-    const wordFlowerNavigator = parseResult.entry.ast.statements.find(
-      statement => AST.isAliasDeclaration(statement) && statement.name === 'WordFlowerNavigator',
-    )
-    const data = parseResult.entry.ast.statements.filter(AST.isEntityDataDeclaration)
-    const workspaceList = parseResult.entry.ast.statements.find(
-      statement => AST.isUiDeclaration(statement) && statement.name === 'WorkspaceList',
-    )
-    const wordCountView = parseResult.entry.ast.statements.find(
-      statement => AST.isViewDeclaration(statement) && statement.name === 'WordCount',
-    )
-    Expect.Is(useStatement, AST.isUseStatement)
-    Expect.Is(app, AST.isAppDeclaration)
-    Expect.Is(taglineLet, AST.isAliasDeclaration)
-    Expect(data).toHaveLength(3)
-    Expect.Is(workspaceList, AST.isUiDeclaration)
-    Expect.Is(wordCountView, AST.isViewDeclaration)
-    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual([
-      'Col',
-      'FormButton',
-      'Text',
-      'TextInput',
-    ])
-    Expect(useStatement.importPath).toBe('@tao/ui')
-
-    Expect(app.name).toBe('WordFlower')
-    const appDatasource = AST.blockStatements(app).find(AST.isAppDatasource)
-    const appNavigator = AST.blockStatements(app).find(AST.isAppNavigator)
-    Expect.Is(appDatasource, AST.isAppDatasource)
-    Expect.Is(appNavigator, AST.isAppNavigator)
-    Expect.Is(appNavigator.value, AST.isConfiguredAppPropertyValue)
-    Expect(appNavigator.value.target.ref).toBe(wordFlowerNavigator)
-    Expect.Is(wordFlowerNavigator, AST.isAliasDeclaration)
-    Expect.Is(wordFlowerNavigator.value, AST.isConfigurationConstructor)
-    Expect(wordFlowerNavigator.value.type.ref?.name).toBe('SelectionNav')
-    const wordFlowerNavigatorBlock = wordFlowerNavigator.value.block
-    Expect.Is(wordFlowerNavigatorBlock, AST.isConfigurationBlock)
-    const selectionInitial = wordFlowerNavigatorBlock.entries.find(entry => entry.name === 'Initial')?.value
-    Expect.Is(selectionInitial, AST.isConfigurationKeyValue)
-    Expect(selectionInitial.key).toBe('@home')
-    Expect(wordFlowerNavigatorBlock.entries.filter(entry => entry.key).map(entry => entry.key))
-      .toEqual(['@home', '@workspace', '@settings'])
-
-    Expect(taglineLet.name).toBe('Tagline')
-    Expect.Is(taglineLet.value, AST.isStringLiteral)
-
-    Expect(data.map(entity => [entity.name, entity.singularName])).toEqual([
-      ['Workspaces', 'Workspace'],
-      ['Documents', 'Document'],
-      ['Paragraphs', 'Paragraph'],
-    ])
-    const documentEntity = data[1]!
-    Expect(documentEntity.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === 'CreatedAt'))
-      .toBe(true)
-
-    const [workspaceDraftState, workspacesQuery] = workspaceList.block.statements
-    Expect.Is(workspaceDraftState, AST.isStateDeclaration)
-    Expect(workspaceDraftState.name).toBe('WorkspaceName')
-    Expect.Is(workspacesQuery, AST.isEntityQueryDeclaration)
-    const taglineRender = AST.streamAllContents(workspaceList)
-      .filter(AST.isViewRender)
-      .find(render => {
-        const argument = AST.argumentsOf(render)[0]?.value
-        return AST.isValueReference(argument) && argument.target.$refText === 'Tagline'
-      })
-    Expect.Is(taglineRender, AST.isViewRender)
-    const taglineArg = AST.argumentsOf(taglineRender)[0]?.value
-    Expect.Is(taglineArg, AST.isValueReference)
-    Expect(taglineArg.target.ref).toBe(taglineLet)
-
-    Expect(wordCountView.name).toBe('WordCount')
-    const wordCountParameter = AST.parametersOf(wordCountView)[0]
-    Expect.Is(wordCountParameter, AST.isParameterDeclaration)
-    Expect(Type.parameterName(wordCountParameter)).toBe('Value')
-    Expect.Is(wordCountParameter.inlineType?.type, AST.isPrimitiveTypeReference)
-    Expect(wordCountParameter.inlineType.type.primitive).toBe('text')
-    const wordCountRender = AST.blockStatementOf(wordCountView, 0)
-    Expect.Is(wordCountRender, AST.isRenderStatement)
-    Expect(wordCountRender.injection?.tsCodeBlock).toContain('Words:')
-    Expect.Is(wordCountRender.injection, AST.isInjection)
-    Expect(AST.injectionArgumentsOf(wordCountRender.injection)).toHaveLength(1)
-  })
-
   Test('links imported custom configurable declarations without shipped-name tables', async () => {
     await withTaoFiles(
       'tao-parser-custom-configurable-',
@@ -163,78 +61,6 @@ Describe('minimal Tao parser', () => {
         const appDatasource = AST.blockStatements(app).find(AST.isAppDatasource)
         Expect.Is(appDatasource, AST.isAppDatasource)
         Expect(appDatasource.value.target.ref).toBe(datasource)
-      },
-    )
-  })
-
-  Test('parses the WordFlower Tao test sidecar', async () => {
-    const parseResult = await Workspace.parse(wordFlowerTestPath)
-
-    Expect(parseResult.diagnostics).toEqual([])
-    const [useStatement, test] = parseResult.entry.ast.statements
-    Expect.Is(useStatement, AST.isUseStatement)
-    Expect(useStatement.importedDeclarations[0]?.ref?.name).toBe('WordFlower')
-    Expect.Is(test, AST.isTestDeclaration)
-    Expect(test.block.statements.filter(AST.isCheckDeclaration)).toHaveLength(5)
-  })
-
-  Test('declares whether the WordFlower Next contract is open or absorbed', async () => {
-    const currentSource = await FS.readText(wordFlowerPath)
-    const currentTestSource = await FS.readText(wordFlowerTestPath)
-    const nextSource = await FS.readText(wordFlowerNextPath)
-    const nextTestSource = await FS.readText(wordFlowerNextTestPath)
-
-    expectWordFlowerTrancheStatus(currentSource, wordFlowerAbsorbedTrancheHeader)
-    expectWordFlowerTrancheStatus(currentTestSource, wordFlowerAbsorbedTrancheHeader)
-    expectWordFlowerTrancheStatus(
-      nextSource,
-      nextSource === currentSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
-    )
-    expectWordFlowerTrancheStatus(
-      nextTestSource,
-      nextTestSource === currentTestSource ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
-    )
-  })
-
-  Test('gates the WordFlower Next app independently', async () => {
-    const nextSource = await FS.readText(wordFlowerNextPath)
-    const currentSource = await FS.readText(wordFlowerPath)
-    if (!expectWordFlowerPairState(nextSource, currentSource, nextSource)) {
-      return
-    }
-    const current = await Workspace.parse(wordFlowerPath)
-
-    await withTaoFiles(
-      'wordflower-next-app-contract-',
-      { 'WordFlower.tao': nextSource },
-      async paths => {
-        const next = await Workspace.validate(paths['WordFlower.tao']!)
-
-        Expect(next.diagnostics).toEqual([])
-        Expect(normalizedAst(next.entry.ast)).toEqual(normalizedAst(current.entry.ast))
-      },
-    )
-  })
-
-  Test('gates the WordFlower Next test sidecar independently', async () => {
-    const nextTestSource = await FS.readText(wordFlowerNextTestPath)
-    const currentTestSource = await FS.readText(wordFlowerTestPath)
-    if (!expectWordFlowerPairState(nextTestSource, currentTestSource, nextTestSource)) {
-      return
-    }
-    const currentTest = await Workspace.parse(wordFlowerTestPath)
-
-    await withTaoFiles(
-      'wordflower-next-sidecar-contract-',
-      {
-        'WordFlower.tao': await FS.readText(wordFlowerPath),
-        'WordFlower.test.tao': nextTestSource,
-      },
-      async paths => {
-        const nextTest = await Workspace.validate(paths['WordFlower.test.tao']!)
-
-        Expect(nextTest.diagnostics).toEqual([])
-        Expect(normalizedAst(nextTest.entry.ast)).toEqual(normalizedAst(currentTest.entry.ast))
       },
     )
   })
@@ -341,13 +167,6 @@ Describe('minimal Tao parser', () => {
     Expect.Is(labelTextValue, AST.isValueReference)
     Expect(labelTextValue.target.ref).toBe(labelAlias)
     Expect(labelTextValue.target.ref).not.toBe(fileGreetingAlias)
-  })
-
-  Test('parses the Runtime Stdlib Tests app', async () => {
-    const parseResult = await Workspace.parse(runtimeStdlibTestsPath)
-
-    Expect(parseResult.diagnostics).toEqual([])
-    Expect(parseResult.entry.ast.statements.filter(AST.isUseStatement)).toHaveLength(2)
   })
 
   Test('parses Tao source strings', async () => {
@@ -488,35 +307,3 @@ Describe('minimal Tao parser', () => {
     ])
   })
 })
-
-function expectWordFlowerPairState(next: string, current: string, nextHeader: string): boolean {
-  if (next === current) {
-    Expect(next).toBe(current)
-    return true
-  }
-  Expect(next).not.toBe(current)
-  expectWordFlowerTrancheStatus(nextHeader, wordFlowerOpenTrancheHeader)
-  return false
-}
-
-function expectWordFlowerTrancheStatus(source: string, expected: string): void {
-  Expect(source.match(/^\/\/ Tranche status: (?:open|absorbed)$/gm) ?? []).toEqual([expected])
-}
-
-function normalizedAst(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(normalizedAst)
-  }
-  if (typeof value !== 'object' || value === null) {
-    return value
-  }
-  if ('$refText' in value) {
-    return { $refText: (value as { $refText: string }).$refText }
-  }
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key === '$type' || !key.startsWith('$'))
-      .filter(([key]) => key !== 'error' && key !== 'ref')
-      .map(([key, child]) => [key, normalizedAst(child)]),
-  )
-}

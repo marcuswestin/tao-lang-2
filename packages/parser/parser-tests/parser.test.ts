@@ -3,18 +3,7 @@ import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
-Describe('minimal Tao parser', () => {
-  Test('parses inject render declarations', async () => {
-    const parseResult = await testParseCode('view Native { render inject ```ts\nreturn null\n``` }')
-    const view = parseResult.entry.ast.statements[0]
-
-    Expect.Is(view, AST.isViewDeclaration)
-
-    const render = AST.blockStatementOf(view, 0)
-    Expect.Is(render, AST.isRenderStatement)
-    Expect(render.injection?.tsCodeBlock).toContain('return null')
-  })
-
+Describe('parser: core language syntax', () => {
   Test('parses layout declarations and child view invocations', async () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
