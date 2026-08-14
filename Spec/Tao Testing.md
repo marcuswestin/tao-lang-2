@@ -31,8 +31,9 @@ app registry is local to that generated module, and target references retain the
 declaration object. Loading another generated module with an app of the same name cannot overwrite
 the first definition, so module evaluation and test order do not affect target resolution. The
 selected app remains the compiled module's default export for launch; filename and source order
-never choose it. Focused `render` subjects, authored row seeding, remote-provider adapters, and
-direct action/value tests remain deferred.
+never choose it. A check drives whatever the running app presents, including overlays. Focused
+`render` subjects, authored row seeding, remote-provider adapters, and direct action/value tests
+remain deferred.
 
 `tao test [path]` discovers inline and sidecar tests, compiles them to structured test-plan IR, and
 runs the plans through the repository's runtime Jest harness. Richer filtering, watch, JSON,

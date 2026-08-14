@@ -19,9 +19,10 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Guidance
 
+- `Apps/WordFlower/README.md` owns the language implementation process. Language work proceeds in tranches: decisions are settled in `2 - Next`, implemented into `1 - Current` slice by slice, and `3 - MVP` and `4 - Revolution` are reconciled once when the tranche is absorbed. Current never leads; it follows Next.
 - Read `packages/AGENTS.md` before editing `packages/`.
 - Read `Apps/Test Apps/AGENTS.md` before editing test apps.
-- Read active roadmap task documents for planned work. `Roadmap/Archive/` is frozen after merge; do not update archived task documents unless Ro explicitly asks. Other `Roadmap/` documents remain live.
+- Read active roadmap documents for planned work. `Roadmap/Archive/` is frozen; do not update archived documents unless Ro explicitly asks. Other `Roadmap/` documents remain live.
 
 ## Validation
 

@@ -16,7 +16,6 @@ CLI package commands, and package publishing remain future work.
 
 ### Creating a Tao app
 
-- Only the workspace root can declare an `app`.
 - The app selects a primary navigator; see `Tao Presentation and Navigation.md` for its behavior.
 
 ```tao

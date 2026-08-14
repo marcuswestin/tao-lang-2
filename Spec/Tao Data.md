@@ -153,14 +153,15 @@ query Drafts from Workspace.Documents {
    where is Draft
 }
 
-query Workspace.Documents as FinishedDocuments {
+query FinishedDocuments from Workspace.Documents {
    where is Final
    order by CreatedAt desc
 }
 ```
 
-The source is either a root plural or a plural relationship. A query may keep the source name, use
-`Name from Source`, or use `Source as Name`. Repeated `where` clauses combine with AND. Primitive
+The source is either a root plural or a plural relationship. A query may keep the source name or
+use `Name from Source`; the `Source as Name` form renames a root plural only, since a relationship
+path cannot be a bare source name. Repeated `where` clauses combine with AND. Primitive
 comparisons support `==`, `!=`, `<`, `<=`, `>`, and `>=`; boolean cases are filtered by case name.
 Boolean filters use `where is <Case>`. One explicit order may override the source entity's default
 order. Generated hooks are hoisted while preserving lexical visibility and the authored
