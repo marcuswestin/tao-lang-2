@@ -86,27 +86,53 @@ function validateConfiguredItemConstructor(
   validateConfiguredItemBlock(block, constructed.item, ctx)
 }
 
+type ConfiguredItemCandidate = { entry: AST.ConfigurationEntry; type: ASTUtils.TaoType }
+
+type ConfiguredItemBindingState = {
+  readonly block: AST.ConfigurationBlock
+  readonly ctx: ValidationContext
+  readonly namedEntries: Map<string, AST.ConfigurationEntry>
+  readonly remainingCandidates: Set<ConfiguredItemCandidate>
+  readonly remainingExpected: Set<AST.TypeProperty>
+}
+
 function validateConfiguredItemBlock(
   block: AST.ConfigurationBlock,
   item: AST.ItemTypeExpression,
   ctx: ValidationContext,
 ): void {
-  const namedEntries = new Map<string, AST.ConfigurationEntry>()
-  const candidates = block.entries.flatMap(entry => {
+  const state: ConfiguredItemBindingState = {
+    block,
+    ctx,
+    namedEntries: new Map(),
+    remainingCandidates: new Set(),
+    remainingExpected: new Set(),
+  }
+  collectConfiguredItemCandidates(state, item)
+  const blockedCandidateTypes = bindUnambiguousConfiguredItemCandidates(state)
+  reportRemainingConfiguredItemCandidates(state, blockedCandidateTypes)
+  reportRemainingConfiguredItemFields(state, blockedCandidateTypes)
+}
+
+function collectConfiguredItemCandidates(
+  state: ConfiguredItemBindingState,
+  item: AST.ItemTypeExpression,
+): void {
+  for (const entry of state.block.entries) {
     if (entry.label && entry.expression) {
       const expected = item.properties.find(property => property.name === entry.label)
       if (!expected) {
-        ctx.error(configuredItemValidationMessages.unknownNamedProperty(entry.label), entry)
-        return []
+        state.ctx.error(configuredItemValidationMessages.unknownNamedProperty(entry.label), entry)
+        continue
       }
-      if (namedEntries.has(entry.label)) {
-        ctx.error(configuredItemValidationMessages.duplicateNamedProperty(entry.label), entry)
+      if (state.namedEntries.has(entry.label)) {
+        state.ctx.error(configuredItemValidationMessages.duplicateNamedProperty(entry.label), entry)
       }
-      namedEntries.set(entry.label, entry)
+      state.namedEntries.set(entry.label, entry)
       const actual = Type.ofExpression(entry.expression)
       const expectedType = Type.ofProperty(expected)
       if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expectedType)) {
-        ctx.error(
+        state.ctx.error(
           configuredItemValidationMessages.namedPropertyType(
             entry.label,
             Type.displayName(expectedType),
@@ -115,73 +141,93 @@ function validateConfiguredItemBlock(
           entry,
         )
       }
-      return []
+      continue
     }
-    const type = configuredItemEntryType(entry, item, ctx)
-    return type ? [{ entry, type }] : []
-  })
-
-  const remainingExpected = new Set(item.properties.filter(property => !namedEntries.has(property.name)))
-  const remainingCandidates = new Set(candidates)
-  const candidateType = (candidate: typeof candidates[number]) => candidate.type
-  const duplicateExpected = duplicateTypes([...remainingExpected], property => Type.ofProperty(property))
-  for (const property of duplicateExpected.values()) {
-    ctx.error(configuredItemValidationMessages.duplicatePropertyType(property.name), block)
+    const type = configuredItemEntryType(entry, item, state.ctx)
+    if (type) {
+      state.remainingCandidates.add({ entry, type })
+    }
   }
-  const duplicateCandidates = duplicateTypes([...remainingCandidates], candidateType)
+  for (const property of item.properties) {
+    if (!state.namedEntries.has(property.name)) {
+      state.remainingExpected.add(property)
+    }
+  }
+}
+
+const configuredItemCandidateType = (candidate: ConfiguredItemCandidate): ASTUtils.TaoType => candidate.type
+
+function bindUnambiguousConfiguredItemCandidates(state: ConfiguredItemBindingState): Set<string> {
+  const duplicateExpected = duplicateTypes([...state.remainingExpected], Type.ofProperty)
+  for (const property of duplicateExpected.values()) {
+    state.ctx.error(configuredItemValidationMessages.duplicatePropertyType(property.name), state.block)
+  }
+  const duplicateCandidates = duplicateTypes([...state.remainingCandidates], configuredItemCandidateType)
   for (const candidate of duplicateCandidates.values()) {
-    ctx.error(configuredItemValidationMessages.duplicateProvidedPropertyType, candidate.entry)
+    state.ctx.error(configuredItemValidationMessages.duplicateProvidedPropertyType, candidate.entry)
   }
   const blockedCandidateTypes = new Set(duplicateCandidates.keys())
+  bindConfiguredEntries(state.remainingCandidates, state.remainingExpected, {
+    candidateType: configuredItemCandidateType,
+    matches: (actual, expected) => Type.identityKey(actual) === Type.identityKey(expected),
+    blockedCandidateTypes,
+  })
+  bindConfiguredEntries(state.remainingCandidates, state.remainingExpected, {
+    candidateType: configuredItemCandidateType,
+    matches: Type.isAssignable,
+    blockedCandidateTypes,
+  })
+  return blockedCandidateTypes
+}
 
-  bindConfiguredEntries(
-    remainingCandidates,
-    remainingExpected,
-    {
-      candidateType,
-      matches: (actual, expected) => Type.identityKey(actual) === Type.identityKey(expected),
-      blockedCandidateTypes,
-    },
-  )
-  bindConfiguredEntries(
-    remainingCandidates,
-    remainingExpected,
-    { candidateType, matches: Type.isAssignable, blockedCandidateTypes },
-  )
-
-  for (const candidate of remainingCandidates) {
-    const actual = candidateType(candidate)
+function reportRemainingConfiguredItemCandidates(
+  state: ConfiguredItemBindingState,
+  blockedCandidateTypes: ReadonlySet<string>,
+): void {
+  for (const candidate of state.remainingCandidates) {
+    const actual = configuredItemCandidateType(candidate)
     const identity = Type.identityKey(actual)
     if (actual.kind === 'unresolved' || (identity && blockedCandidateTypes.has(identity))) {
       continue
     }
-    const matches = [...remainingExpected].filter(property => Type.isAssignable(actual, Type.ofProperty(property)))
+    const matches = [...state.remainingExpected].filter(property =>
+      Type.isAssignable(actual, Type.ofProperty(property))
+    )
     if (matches.length > 1) {
-      ctx.error(
+      state.ctx.error(
         configuredItemValidationMessages.ambiguousProperty(matches.map(property => property.name)),
         candidate.entry,
       )
     } else if (matches.length === 0) {
-      ctx.error(configuredItemValidationMessages.unmatchedProperty, candidate.entry)
+      state.ctx.error(configuredItemValidationMessages.unmatchedProperty, candidate.entry)
     }
   }
-  let unresolvedCandidates = [...remainingCandidates]
-    .filter(candidate => candidateType(candidate).kind === 'unresolved')
+}
+
+function reportRemainingConfiguredItemFields(
+  state: ConfiguredItemBindingState,
+  blockedCandidateTypes: ReadonlySet<string>,
+): void {
+  let unresolvedCandidates = [...state.remainingCandidates]
+    .filter(candidate => configuredItemCandidateType(candidate).kind === 'unresolved')
     .length
-  for (const property of remainingExpected) {
-    const matches = [...remainingCandidates].filter(candidate =>
-      !candidateTypeIsBlocked(candidateType(candidate), blockedCandidateTypes)
-      && Type.isAssignable(candidateType(candidate), Type.ofProperty(property))
+  for (const property of state.remainingExpected) {
+    const matches = [...state.remainingCandidates].filter(candidate =>
+      !candidateTypeIsBlocked(configuredItemCandidateType(candidate), blockedCandidateTypes)
+      && Type.isAssignable(configuredItemCandidateType(candidate), Type.ofProperty(property))
     )
     if (matches.length > 1) {
-      ctx.error(configuredItemValidationMessages.ambiguousField(property.name), block)
-    } else if (matches.length === 0) {
-      if (unresolvedCandidates > 0) {
-        unresolvedCandidates -= 1
-      } else {
-        ctx.error(configuredItemValidationMessages.missingProperty(property.name), block)
-      }
+      state.ctx.error(configuredItemValidationMessages.ambiguousField(property.name), state.block)
+      continue
     }
+    if (matches.length > 0) {
+      continue
+    }
+    if (unresolvedCandidates > 0) {
+      unresolvedCandidates -= 1
+      continue
+    }
+    state.ctx.error(configuredItemValidationMessages.missingProperty(property.name), state.block)
   }
 }
 
