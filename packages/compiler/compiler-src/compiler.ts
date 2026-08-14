@@ -48,19 +48,32 @@ function createContext(packagesContext: Packages.Context, sourceRoot: string): C
   return { packagesContext, sourceRoot }
 }
 
-/** createSession creates a reusable standalone compiler context for batch compilation. */
+/**
+ * createSession creates caller-owned standalone services for batch compilation.
+ * The package, parser, and Typir state lives for as long as the returned session
+ * is referenced; source text alone does not invalidate it.
+ */
 async function createSession(): Promise<CompilerSession> {
   const packagesContext = await Packages.createContext(codeProjectRoot)
   const validatorSession = await Validator.createSession(packagesContext)
   const compilerContext = createContext(packagesContext, codeProjectRoot)
+
+  // Validation mutates the shared Langium document store, while compilation
+  // still reads the resulting AST. Keep the whole pipeline serialized so a
+  // later parse cannot invalidate documents that an earlier compile is using.
+  let pending = Promise.resolve()
   return {
-    async compileCode(code: string, options: CompileOptions = {}): Promise<CompileResult> {
-      return compileValidated(await validatorSession.validateCode(code), compilerContext, options)
+    compileCode(code: string, options: CompileOptions = {}): Promise<CompileResult> {
+      const result = pending.then(async () =>
+        compileValidated(await validatorSession.validateCode(code), compilerContext, options)
+      )
+      pending = result.then(() => undefined, () => undefined)
+      return result
     },
   }
 }
 
-/** compileCode compiles Tao source code using standalone parser and validator contexts. */
+/** compileCode compiles Tao source code using fresh standalone services. */
 async function compileCode(code: string, options: CompileOptions = {}): Promise<CompileResult> {
   return await (await createSession()).compileCode(code, options)
 }

@@ -1,4 +1,4 @@
-import Runtime from '@runtime'
+import Runtime from '@runtime-toolchain'
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 

@@ -7,7 +7,8 @@
     ".": "./ast-utils-src/ast-utils.ts"
   },
   "dependencies": {
+    "tao-parser": "workspace:*",
     "tao-shared": "workspace:*",
-    "tao-parser": "workspace:*"
+    "tao-stdlib": "workspace:*"
   }
 }

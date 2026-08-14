@@ -3,7 +3,7 @@ import {
   duplicateDescribeTitleIssues,
   missingTestAppReadmeEntries,
   wordFlowerPairIssues,
-} from '../dev-src/commands/repo-lint'
+} from '../dev-src/repository-tests/repo-lint'
 
 const absorbed = '// Tranche status: absorbed'
 const open = '// Tranche status: open'

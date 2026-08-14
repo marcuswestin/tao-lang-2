@@ -13,9 +13,10 @@
     "@commander-js/extra-typings": "^14.0.0",
     "commander": "^14.0.0",
     "tao-ast-utils": "workspace:*",
+    "tao-dev": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-parser": "workspace:*",
-    "tao-runtime": "workspace:*",
+    "tao-runtime-toolchain": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-source-actions": "workspace:*",
     "tao-workspace": "workspace:*"

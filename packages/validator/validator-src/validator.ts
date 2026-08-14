@@ -56,7 +56,14 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
   return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
 }
 
-/** createSession creates a reusable standalone validator context for batch validation. */
+/**
+ * createSession creates caller-owned standalone services for batch validation.
+ *
+ * The package context and language services live for as long as the returned
+ * session is referenced. Create a new session when its package context changes;
+ * source text alone does not invalidate it because each call replaces the
+ * synthetic Langium document.
+ */
 async function createSession(packagesContext?: Packages.Context): Promise<ValidatorSession> {
   const sharedPackagesContext = packagesContext ?? await Packages.createContext(codeProjectRoot)
   const parserContext = Parser.createContext({
@@ -92,7 +99,7 @@ async function createSession(packagesContext?: Packages.Context): Promise<Valida
   }
 }
 
-/** validateCode validates Tao source code using a standalone validator context. */
+/** validateCode validates Tao source code using fresh standalone services. */
 async function validateCode(code: string): Promise<ValidationResult> {
   return await (await createSession()).validateCode(code)
 }

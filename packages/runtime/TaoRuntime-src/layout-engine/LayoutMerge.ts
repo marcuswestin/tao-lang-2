@@ -1,4 +1,4 @@
-import { Switch } from '@shared/core'
+import RuntimeSwitch from '../TR-switch'
 import { LayoutTerms } from './LayoutTerms'
 import type {
   TaoLayout,
@@ -41,7 +41,7 @@ function mergeEntry(
   overlayEntry: TaoLayoutEntry,
   direction: TaoLayoutDirection | undefined,
 ): void {
-  return Switch<TaoLayoutEntryHead, void>(overlayEntry[0], {
+  return RuntimeSwitch<TaoLayoutEntryHead, void>(overlayEntry[0], {
     aligned: () => entries.push(overlayEntry),
     centered: () => entries.push(overlayEntry),
     claim: () => entries.push(overlayEntry),
@@ -115,7 +115,7 @@ function contentSlots(
       continue
     }
     const slot = LayoutTerms.contentSlot(term, direction)
-    Switch(slot, {
+    RuntimeSwitch(slot, {
       main: () => {
         slots.main = term
       },

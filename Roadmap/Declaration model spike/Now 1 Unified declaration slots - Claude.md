@@ -20,10 +20,12 @@ together, same feature name across all five.
 ### 1. Space-separate `TypeProperty`
 
 `packages/parser/parser-grammar/types.langium:31-32`:
+
 ```
 TypeProperty:
     name=ID ('is' type=TypeReference)?;
 ```
+
 The type is already optional — repurpose that slot in item 2 below rather than dropping it. What
 changes is the connector: move `Name is text` to `Name text`, matching
 `ConfigurationPropertyDeclaration` (`configuration.langium:19`, already space-separated) and data

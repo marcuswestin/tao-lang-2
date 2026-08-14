@@ -16,7 +16,7 @@ This is the largest one, and it gates everything else in the `ui` direction.
 Today `render Card(Title: "Inbox") [fill, gap 8] { Text("Open") }` treats the layout clause and the
 child block as syntax — `Spec/Tao Type System.md` states they are "never part of the argument list."
 That works while the compiler knows every component. It stops working the moment a user writes a
-TypeScript-backed `ui`, because the component must *declare* whether it accepts children and layout.
+TypeScript-backed `ui`, because the component must _declare_ whether it accepts children and layout.
 
 ```tao
 primitive ui with {
@@ -95,7 +95,7 @@ both legal? Ro's stated preference in turn one was that losing `app Foo { … }`
 exactly the kind of surface redundancy this dialogue set out to remove, and it puts every primitive
 name back into statement-head position.
 
-A middle reading: primitive heads are legal only for *top-level product declarations* — `app`, `data`,
+A middle reading: primitive heads are legal only for _top-level product declarations_ — `app`, `data`,
 `ui` — where the head carries real information about what the file contains, and `let` is the only
 form for everything else. `Apps/WordFlower/2 - Next` currently has 16 kind-headed declarations to 2
 `let`s, so this decision has the largest migration cost of anything here.

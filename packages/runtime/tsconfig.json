@@ -1,12 +1,8 @@
 {
   "extends": "../tsconfig.base.json",
   "include": [
-    "index.ts",
     "TaoRuntime-src/**/*",
-    "TR-tests/**/*",
-    "runtime-src/**/*",
-    "runtime-tests/**/*",
-    "_gen_tao-app/**/*"
+    "TR-tests/**/*"
   ],
   "compilerOptions": {
     "allowImportingTsExtensions": true,
@@ -17,9 +13,7 @@
     "jsx": "react",
     "noEmit": true,
     "types": [
-      "bun",
-      "jest",
-      "node"
+      "bun"
     ]
   }
 }

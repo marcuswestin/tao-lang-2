@@ -1,4 +1,3 @@
-import { Switch } from '@shared/core'
 import type {
   TaoNavKind,
   TaoNavKindProfile,
@@ -11,6 +10,7 @@ import type {
 import { createNavDeclaration } from './TR-navigation-configuration'
 import { assertNavKind } from './TR-navigation-kinds'
 import { RuntimePresentable } from './TR-navigation-presentables'
+import RuntimeSwitch from './TR-switch'
 
 /** testNavKind runs the published navigation protocol suite without depending on a test runner. */
 export function testNavKind(
@@ -84,7 +84,7 @@ function testNavKindProfile(
   mount: TaoNavMount<any, any>,
   detail: TaoPresentable,
 ): void {
-  Switch(profile, {
+  RuntimeSwitch(profile, {
     stack: () => {
       kind.present(mount, detail, {})
       kind.present(mount, detail, {})

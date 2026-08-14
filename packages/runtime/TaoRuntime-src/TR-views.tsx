@@ -1,8 +1,8 @@
-import { Switch } from '@shared/core'
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
+import RuntimeSwitch from './TR-switch'
 import { TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
 
 type TaoButtonProps = TaoViewProps & {
@@ -139,7 +139,7 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
 }
 
 function nativeComponent(runtime: ReactNativeRuntime, kind: TaoPrimitiveKind): React.ElementType {
-  return Switch<TaoPrimitiveKind, React.ElementType>(kind, {
+  return RuntimeSwitch<TaoPrimitiveKind, React.ElementType>(kind, {
     Pressable: () => runtime.Pressable,
     Text: () => runtime.Text,
     View: () => runtime.View,

@@ -52,7 +52,7 @@ let HomeStack = StackNav { Initial WorkspaceList }
 ### Primitives
 
 Primitives are opaque: named, ordinary-looking, resolvable, but not definable in Tao because nothing
-above them exists to define them with. Users create new *types* over primitives, never new primitives.
+above them exists to define them with. Users create new _types_ over primitives, never new primitives.
 They are written down in a pinned prelude:
 
 ```tao
@@ -79,7 +79,7 @@ arithmetic as the one honest gap.
 - **`ui` gets an open `implement` slot.** `Text`, `Col`, `Slider`, `ScrollView` and the rest become
   ordinary `@tao/ui` declarations rather than compiler-known names, and a user can write an equivalent
   with the same mechanism and no privilege. This resolves `LANG-016` toward its third option. The
-  *direction* is settled; the mechanics are not, which is why it is absent from the build list below.
+  _direction_ is settled; the mechanics are not, which is why it is absent from the build list below.
 - **`function` and `action` keep their own heads.** The unified form is strictly worse to read —
   `function DocumentLabel Title is text returns text = "…"` beats spelling the result as a derived
   slot. This is the one place ergonomics is allowed to beat uniformity.
@@ -111,7 +111,7 @@ export default function StackKind(): NavKind<StackNavConfig> { ... }
 The `.tao` declaration emits a `.d.ts` for its own config shape; the sidecar imports it and implements
 against it. Tao owns the data contract, TypeScript owns the behavior, `tsc` checks the join
 statically, and `TR.testNavKind` still checks it dynamically. That is strictly more guarantee than the
-current inline `implement inject nav ```ts …``` ` form can offer, and it is what makes third-party
+current inline `` implement inject nav ```ts …``` `` form can offer, and it is what makes third-party
 declarations practical rather than merely permitted.
 
 ## What already exists
@@ -131,7 +131,7 @@ Verified in `packages/parser/parser-grammar/`. More of this is built than the di
 - `configuration.langium:19` — `ConfigurationPropertyDeclaration: name=ID type=…`, **space-separated**,
   matching both the settled syntax and existing `data` fields.
 
-And, importantly, what does *not* exist: `configuration.langium` has **no `= <base>` derivation and no
+And, importantly, what does _not_ exist: `configuration.langium` has **no `= <base>` derivation and no
 `with`** for `nav` or `datasource`. Neither does `app.langium`. The derivation forms written across
 `Apps/WordFlower/2 - Next` are unbuilt proposals, so the collision below is a plan change rather than
 a code undo.
@@ -149,7 +149,7 @@ one.
 
 **2. Slot-name elision.** A one-token entry in a type block elides a slot name equal to its type:
 `{ Name text, Age }` means `{ Name text, Age Age }`. The grammar's optional type in `TypeProperty`
-becomes an optional *name* instead. Note this changes the meaning of an existing optional — confirm
+becomes an optional _name_ instead. Note this changes the meaning of an existing optional — confirm
 nothing depends on the current type-less reading before repurposing it.
 
 **3. `is` as default-and-fill marker inside a type block.** `Header ui is none` declares with a

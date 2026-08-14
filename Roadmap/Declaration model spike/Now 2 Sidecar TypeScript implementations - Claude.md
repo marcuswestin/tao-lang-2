@@ -9,6 +9,7 @@ starting.
 ## What exists today
 
 `packages/parser/parser-grammar/configuration.langium:31-35`:
+
 ```
 ConfigurationImplementation:
     'implement' 'inject' protocol=ConfigurationImplementationProtocol tsCodeBlock=TS_CODE_BLOCK;
@@ -16,9 +17,10 @@ ConfigurationImplementation:
 ConfigurationImplementationProtocol returns string:
     'nav' | 'provider';
 ```
-An inline fenced TS block, e.g. `implement inject nav \`\`\`ts return TR.NavKind.Stack() \`\`\``, used
-today by the shipped `StackNav` and `Memory` declarations. **Keep this form working — do not remove it
-in this slice.**
+
+An inline fenced TS block can inject a nav implementation that returns `TR.NavKind.Stack()`; the
+shipped `StackNav` and `Memory` declarations use this form today. **Keep this form working — do not
+remove it in this slice.**
 
 ## What to build
 
@@ -33,6 +35,7 @@ Keep today's `implement inject nav|provider` vocabulary rather than inventing ne
 not here) — this slice's whole job is a second RHS form for the clause that already exists.
 
 **Compiler:**
+
 - Emit a `.d.ts` alongside the generated module for the `.tao` declaration's configuration shape — the
   type of `config` in `TR.NavKind<Profile, ConfigurationT>` or `TR.DataProvider` — so a sidecar can
   `import type { XConfig } from './X.tao'`, compiler-emitted rather than hand-written.
@@ -43,6 +46,7 @@ not here) — this slice's whole job is a second RHS form for the clause that al
   counterpart are the starting points from this session's earlier reading).
 
 **Validator:**
+
 - File-exists check on the sidecar path.
 - A cheap "has a default export" check if that's inexpensive at validation time; deeper conformance
   (does it actually implement `NavKind`/`DataProvider`) is `TR.testNavKind`/`TR.testProvider`'s job at
@@ -52,7 +56,7 @@ not here) — this slice's whole job is a second RHS form for the clause that al
 
 - Moving `StackNav`/`Memory` out of `TR` into `@tao/nav`/`@tao/data`. That relocation depends on
   package resolution (`requires`, lockfiles, external workspace installation) landing first, per
-  `Spec/Tao Packages.md`. This slice only adds the *capability* to point at a sidecar file; it does not
+  `Spec/Tao Packages.md`. This slice only adds the _capability_ to point at a sidecar file; it does not
   move anything that ships today.
 - Any protocol-version negotiation between a sidecar and `TR`. Stays single-version and implicit, as it
   is today.

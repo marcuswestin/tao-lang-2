@@ -1,5 +1,5 @@
-import { Switch } from '@shared/core'
 import type { TaoDataField, TaoDataSchemaDefinition } from './TR-data'
+import RuntimeSwitch from './TR-switch'
 
 export function validateDefinition(definition: TaoDataSchemaDefinition): void {
   if (!Number.isSafeInteger(definition.schemaVersion ?? 1) || (definition.schemaVersion ?? 1) < 1) {
@@ -63,7 +63,7 @@ function validatePrimitiveFieldDefinition(
 }
 
 export function valueMatchesKind(value: unknown, kind: Exclude<TaoDataField['kind'], 'relation'>): boolean {
-  return Switch(kind, {
+  return RuntimeSwitch(kind, {
     boolean: () => typeof value === 'boolean',
     number: () => typeof value === 'number' && Number.isFinite(value),
     text: () => typeof value === 'string',

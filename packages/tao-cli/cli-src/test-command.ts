@@ -1,5 +1,6 @@
 import { AST, Langium, Parser } from '@parser'
-import { RuntimeTesting } from '@runtime/testing/runtime-testing'
+import { RuntimeToolchainPaths } from '@runtime-toolchain'
+import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import { CLI, Diagnostics, Errors, FS, HCI, Platform, Repo } from '@shared'
 import Workspace from '@workspace'
 import { findTaoFiles } from './tao-files'
@@ -78,7 +79,7 @@ async function runTest(path = '.', options: RunTestOptions = {}): Promise<TaoTes
     }
   }
 
-  const runtimeRoot = Repo.resolvePath('packages/runtime')
+  const runtimeRoot = RuntimeToolchainPaths.packageRoot
   const manifestPath = await writeTestManifest(testPaths, {
     runtimeRoot,
     skipValidation: options.skipValidation,

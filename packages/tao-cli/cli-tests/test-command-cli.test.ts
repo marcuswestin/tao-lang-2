@@ -21,7 +21,7 @@ Describe('tao test CLI', () => {
       Expect(output).toContain('Empty.test.tao')
       Expect(output).toContain('Validating Tao test files')
       Expect(output).not.toContain('Compiling apps and running Tao tests')
-      Expect(output).not.toContain('runtime-tests/tao-test-command.jest.tsx')
+      Expect(output).not.toContain('runtime-toolchain-tests/tao-test-command.jest.tsx')
       Expect(output).not.toContain('Test Suites:')
     })
   })

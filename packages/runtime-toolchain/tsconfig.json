@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "index.ts",
+    "runtime-toolchain-src/**/*",
+    "runtime-toolchain-tests/**/*",
+    "_gen_tao-app/**/*"
+  ],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "jsx": "react",
+    "noEmit": true,
+    "types": [
+      "bun",
+      "jest",
+      "node"
+    ]
+  }
+}

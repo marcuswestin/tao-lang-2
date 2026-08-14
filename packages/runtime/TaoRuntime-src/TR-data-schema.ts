@@ -1,4 +1,3 @@
-import { Switch } from '@shared/core'
 import type {
   TaoDataEntity,
   TaoDataProvider,
@@ -30,6 +29,7 @@ import {
   queryFilterValue,
   rowValues,
 } from './TR-data-values'
+import RuntimeSwitch from './TR-switch'
 
 type DeleteTarget = { entity: string; id: string }
 
@@ -253,7 +253,7 @@ export class RuntimeDataSchema {
     if (metadata.schema !== this) {
       return { status: 'missing' }
     }
-    return Switch<DataStatus, TaoEntityAvailability>(this.status, {
+    return RuntimeSwitch<DataStatus, TaoEntityAvailability>(this.status, {
       error: () => ({ message: this.error, status: 'error' }),
       loading: () => ({ status: 'loading' }),
       ready: () => {

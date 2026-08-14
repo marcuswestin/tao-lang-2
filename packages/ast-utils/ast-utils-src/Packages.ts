@@ -1,5 +1,6 @@
 import { AST, type PackageResolver } from '@parser'
 import { FS, Repo, TaoFiles } from '@shared'
+import { Stdlib } from '@stdlib'
 
 /** Packages exposes Tao package discovery, import resolution, and visibility helpers. */
 export namespace Packages {
@@ -18,6 +19,12 @@ export namespace Packages {
   /** Context declares shared lookup state for Tao imports. */
   export type Context = {
     index: Index
+    stdlibRoot: string
+  }
+
+  /** ContextOptions configures package roots shared by one parser or workspace lifetime. */
+  export type ContextOptions = {
+    stdlibRoot?: string
   }
 
   export type Relation =
@@ -83,10 +90,11 @@ export namespace Packages {
   }
 
   /** createContext creates shared package lookup state for one project root. */
-  export async function createContext(projectRoot: string): Promise<Context> {
+  export async function createContext(projectRoot: string, options: ContextOptions = {}): Promise<Context> {
     const resolvedProjectRoot = FS.resolvePath(projectRoot)
     return {
       index: await createIndex(resolvedProjectRoot),
+      stdlibRoot: FS.resolvePath(options.stdlibRoot ?? Stdlib.rootPath),
     }
   }
 
@@ -121,7 +129,7 @@ export namespace Packages {
       return {
         importPath,
         relation: 'stdlib',
-        targetPath: FS.resolvePath(importPath.slice(1), defaultStdLibRoot()),
+        targetPath: FS.resolvePath(importPath.slice(1), context.stdlibRoot),
         candidateMode: 'direct',
       }
     }
@@ -256,10 +264,6 @@ export namespace Packages {
   /** isStdLibImport returns true when `importPath` references the Tao standard library namespace. */
   export function isStdLibImport(importPath: string): boolean {
     return importPath.startsWith('@tao/')
-  }
-
-  function defaultStdLibRoot(): string {
-    return Repo.resolvePath('packages/runtime/tao-stdlib')
   }
 
   async function directCandidateFilePaths(resolution: Resolution): Promise<string[]> {

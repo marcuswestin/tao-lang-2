@@ -1,6 +1,6 @@
 import TR from '@runtime/TR'
-import { Errors } from '@shared/core'
 import { Describe, Expect, Test } from '@shared/test'
+import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 import { configuredStack } from './TR-navigation-test-fixtures'
 
 function configuredSlot(
@@ -401,8 +401,8 @@ Describe('TR.Navigation', () => {
       } catch (error) {
         unmatched = error
       }
-      Expect(unmatched).toBeInstanceOf(Errors.UnexpectedBehaviorError)
-      Expect((unmatched as Errors.UnexpectedBehaviorError).details).toEqual({
+      Expect(unmatched).toBeInstanceOf(UnexpectedBehaviorError)
+      Expect((unmatched as UnexpectedBehaviorError).details).toEqual({
         appDeclaration: 'Origin declaration',
         operation,
       })

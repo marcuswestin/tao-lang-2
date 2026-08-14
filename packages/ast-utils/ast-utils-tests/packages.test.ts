@@ -47,4 +47,26 @@ Describe('Tao package discovery', () => {
       await FS.remove(root)
     }
   })
+
+  Test('resolves stdlib imports from the context-owned root', async () => {
+    const root = await mkTestDir('tao-packages-stdlib-')
+    try {
+      const projectRoot = FS.resolvePath('project', root)
+      const stdlibRoot = FS.resolvePath('stdlib', root)
+      const viewsPath = FS.resolvePath('tao/ui/Views.tao', stdlibRoot)
+      await FS.writeText(FS.resolvePath('Main.tao', projectRoot), '')
+      await FS.writeText(viewsPath, '')
+
+      const context = await Packages.createContext(projectRoot, { stdlibRoot })
+      const resolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', projectRoot),
+        importPath: '@tao/ui',
+      })
+
+      Expect(resolution.targetPath).toBe(FS.resolvePath('tao/ui', stdlibRoot))
+      Expect(await Packages.candidateFilePaths(resolution)).toEqual([viewsPath])
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })

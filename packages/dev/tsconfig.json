@@ -2,7 +2,8 @@
   "extends": "../tsconfig.base.json",
   "include": [
     "dev-src/**/*",
-    "dev-tests/**/*"
+    "dev-tests/**/*",
+    "performance-checks/**/*"
   ],
   "compilerOptions": {
     "composite": false,
