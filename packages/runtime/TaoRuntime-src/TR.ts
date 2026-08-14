@@ -17,7 +17,6 @@ import {
   NavKindControls,
   type TaoNavDeclaration,
   type TaoNavDescriptor,
-  type TaoNavigationStack,
   type TaoNavigationValue,
   type TaoNavKind,
   type TaoNavKindProfile,
@@ -496,8 +495,6 @@ namespace TR {
   export type SlotNavConfiguration = TaoSlotNavConfiguration
   /** SelectionNavConfiguration is the normalized Selection profile descriptor configuration. */
   export type SelectionNavConfiguration = TaoSelectionNavConfiguration
-  /** NavigationStack declares one runtime-backed Tao application stack. */
-  export type NavigationStack = TaoNavigationStack
   /** NavigationValue declares one mounted declaration-owned navigation occurrence. */
   export type NavigationValue = TaoNavigationValue
   /** Presentable declares a first-class Tao ui descriptor. */

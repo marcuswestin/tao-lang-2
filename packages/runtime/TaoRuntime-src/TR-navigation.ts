@@ -10,16 +10,6 @@ type Evaluable = {
 
 export type TaoNavigationArguments = Record<string, Evaluable>
 
-export type TaoNavigationDestination = {
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode
-}
-
-export type TaoNavigationStackDefinition = {
-  destinations: Record<string, TaoNavigationDestination>
-  initial: string
-  name: string
-}
-
 export type TaoPresentableDefinition = {
   name: string
   render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode
@@ -134,12 +124,6 @@ export type TaoNavKind<
   reset(mount: TaoNavMount<ProfileT, ConfigurationT>): void
 }>
 
-type NavigationEntry = {
-  arguments: TaoNavigationArguments
-  destination: string
-  instanceId: number
-}
-
 type PresentableEntry = {
   arguments: TaoNavigationArguments
   instanceId: number
@@ -166,7 +150,6 @@ type Subscription = {
   subscribe(listener: () => void): () => void
 }
 
-const legacyStacks = new Set<RuntimeNavigationStack>()
 const navigationValues = new Set<RuntimeNavigationValue>()
 const appDefinitions = new Set<RuntimeAppDefinition>()
 let activeBackTarget: { back(): boolean } | undefined
@@ -198,13 +181,6 @@ export const NavigationControls = {
     return mountConfiguredNavigation(configured)
   },
 
-  /** Stack preserves the transitional closed-destination stack API. */
-  Stack(definition: TaoNavigationStackDefinition): RuntimeNavigationStack {
-    const stack = new RuntimeNavigationStack(definition)
-    legacyStacks.add(stack)
-    return stack
-  },
-
   /** UI creates a first-class presentation descriptor for one Tao ui declaration. */
   UI(definition: TaoPresentableDefinition): TaoPresentable {
     return new RuntimePresentable(definition)
@@ -222,13 +198,7 @@ export const NavigationControls = {
     return app
   },
 
-  Host: NavigationHost,
   AppHost: NavigationAppHost,
-
-  /** Present preserves the transitional explicit stack API. */
-  Present(stack: RuntimeNavigationStack, destination: string, arguments_: TaoNavigationArguments): void {
-    stack.present(destination, arguments_)
-  },
 
   /** PresentIn presents through an explicit nav or the nearest enclosing nav in Tao props. */
   PresentIn(
@@ -358,9 +328,6 @@ export const NavigationControls = {
   /** beginTest resets cached generated navigation and apps before each Tao behavior check. */
   beginTest(): void {
     activeBackTarget = undefined
-    for (const stack of legacyStacks) {
-      stack.reset()
-    }
     for (const navigation of navigationValues) {
       navigation.reset()
     }
@@ -370,7 +337,6 @@ export const NavigationControls = {
   },
 } as const
 
-export type TaoNavigationStack = RuntimeNavigationStack
 export type TaoPresentable = RuntimePresentable
 export type TaoDialogue = RuntimeDialogue
 export type TaoNavigationValue = RuntimeNavigationValue
@@ -1136,95 +1102,6 @@ class RuntimeAppDefinition implements Subscription {
     this.toastEntries.delete(key)
     this.emit()
   }
-}
-
-/** RuntimeNavigationStack owns one transitional ordered navigation history. */
-class RuntimeNavigationStack implements Subscription {
-  private entries: NavigationEntry[]
-  private listeners = new Set<() => void>()
-  private nextEntryId = 1
-  private version = 0
-
-  constructor(readonly definition: TaoNavigationStackDefinition) {
-    if (!definition.destinations[definition.initial]) {
-      throw new Error(`Navigation stack ${definition.name} has no initial destination '${definition.initial}'.`)
-    }
-    this.entries = [this.initialEntry()]
-  }
-
-  readonly subscribe = (listener: () => void): () => void => {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
-
-  readonly snapshot = (): number => this.version
-
-  get currentDestination(): string {
-    return this.currentEntry().destination
-  }
-
-  get depth(): number {
-    return this.entries.length
-  }
-
-  present(destination: string, arguments_: TaoNavigationArguments): void {
-    if (!this.definition.destinations[destination]) {
-      throw new Error(`Navigation stack ${this.definition.name} has no destination '${destination}'.`)
-    }
-    this.entries.push({ arguments: { ...arguments_ }, destination, instanceId: this.nextEntryId++ })
-    this.emit()
-  }
-
-  back(): boolean {
-    if (this.entries.length === 1) {
-      return false
-    }
-    this.entries.pop()
-    this.emit()
-    return true
-  }
-
-  reset(): void {
-    this.entries = [this.initialEntry()]
-    this.emit()
-  }
-
-  render(taoProps?: TaoProps): React.ReactNode {
-    return this.entries.map((entry, index) =>
-      React.createElement(NavigationLevel, {
-        children: this.definition.destinations[entry.destination]!.render(entry.arguments, taoProps),
-        hidden: index !== this.entries.length - 1,
-        key: entry.instanceId,
-      })
-    )
-  }
-
-  private currentEntry(): NavigationEntry {
-    return this.entries[this.entries.length - 1]!
-  }
-
-  private initialEntry(): NavigationEntry {
-    return { arguments: {}, destination: this.definition.initial, instanceId: this.nextEntryId++ }
-  }
-
-  private emit(): void {
-    this.version += 1
-    for (const listener of this.listeners) {
-      listener()
-    }
-  }
-}
-
-function NavigationHost(props: { stack: RuntimeNavigationStack; __tao?: TaoProps }): React.JSX.Element {
-  useSubscription(props.stack)
-  React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
-  usePlatformBack(props.stack)
-  return React.createElement(
-    React.Fragment,
-    null,
-    props.stack.depth > 1 ? React.createElement(NavigationBackAffordance, { target: props.stack }) : null,
-    props.stack.render(props.__tao),
-  )
 }
 
 function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
