@@ -1,9 +1,9 @@
+import { resolveArgumentBindings } from './argument-bindings'
 import { resolveDataWriteBindings } from './data-write-bindings'
 import { injectionArgumentName } from './injections'
 import {
   resolveActionInvocation,
   resolveActionTarget,
-  resolveArgumentBindings,
   resolveFunctionInvocation,
   resolveRenderInvocation,
 } from './invocations'
@@ -32,7 +32,7 @@ export const ASTUtils = {
 
 export namespace ASTUtils {
   export type ActionInvocationPair = import('./invocations').ActionInvocationPair
-  export type ArgumentBindingDiagnostic = import('./invocations').ArgumentBindingDiagnostic
+  export type ArgumentBindingDiagnostic = import('./argument-bindings').ArgumentBindingDiagnostic
   export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
   export type DataWriteBindingPair = import('./data-write-bindings').DataWriteBindingPair
   export type DataWriteBindingResult = import('./data-write-bindings').DataWriteBindingResult
@@ -45,7 +45,7 @@ export namespace ASTUtils {
   export type LayoutTermValue = import('./layouts').LayoutTermValue
   export type RenderEventBindingDiagnostic = import('./invocations').RenderEventBindingDiagnostic
   export type RenderEventBindingPair = import('./invocations').RenderEventBindingPair
-  export type RenderInvocationPair = import('./invocations').RenderInvocationPair
+  export type RenderInvocationPair = import('./argument-bindings').RenderInvocationPair
   export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation
