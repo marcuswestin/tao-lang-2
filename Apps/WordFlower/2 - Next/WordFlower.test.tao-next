@@ -207,7 +207,8 @@ test "WordFlower selection and document depth" {
       expect text "Document: Chapter one" // cancelling answers none and the editor stays
       enter "The first line." into #editDocumentBody
       press #saveDocument
-      expect text "Saved" // the keyed toast replaces, never stacks
+      // Same-key replacement rather than stacking is asserted in runtime-tests/runtime-e2e.jest-test.tsx.
+      expect text "Saved"
       press #closeDocument
       press #confirmClose
       expect missing text "Document: Chapter one"
