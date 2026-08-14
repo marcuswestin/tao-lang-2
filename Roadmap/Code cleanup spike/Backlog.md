@@ -52,8 +52,17 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 
 ## Added rules
 
-None. Add a rule here only when the same worthwhile, uncovered cleanup appears in multiple places
-and an immediate repo-wide application clears the abstraction and value bars.
+R13 EXHAUSTIVE UNION DISPATCH. Closed literal or `$type`/`kind` discriminated-union dispatch with
+three or more mutually exclusive outcomes uses shared `Switch`, `Switch.type`, or `Switch.kind`;
+repeated two-way dispatch within the same concept also qualifies. Keep ordinary `if`/early-return
+logic for validation and failure guards, progressive or stateful short-circuiting, open/unknown
+input, structural unions without a supported discriminator, and intentional special-case/default
+grouping where exhaustive handlers would add duplication. Never cast, stringify, or invent a
+discriminator merely to make `Switch` fit.
+
+The repo-wide audit found ten qualifying pre-existing sites across ast-utils, compiler, validator,
+and runtime. Applying the rule immediately is net-negative and leaves open-input/stateful false
+positives alone.
 
 ## Chartered and threshold backlog
 
@@ -77,13 +86,14 @@ and an immediate repo-wide application clears the abstraction and value bars.
 
 ## Repo-rule conformance backlog
 
-| Status             | Location                                                            | Rule | Estimated size | Value score | Measurable effect                                                                                                                                                              |
-| ------------------ | ------------------------------------------------------------------- | ---- | -------------: | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| done               | validator Typir initialization and invocation validator             | R5   |             -7 |         1/7 | Remove the only call, exported object member, type-only import, and implementation of a deliberately empty validation hook.                                                    |
-| done               | compiler, formatter, and source-actions internal module exports     | R5   |             36 |       18/36 | Make 17 file-local types private and delete one unused `Compile` re-export, net two lines; retain the package-facing test-plan and formatter/action types.                     |
-| done               | `packages/shared/shared-tests/shared.test.ts`                       | R7   |              2 |         1/2 | Preserve formatter-sorted imports; baseline `./agent verify` exposed and corrected this pre-existing formatting violation.                                                     |
-| done               | direct `process` use in dev, IDE extension, and runtime test owners | R7   |             19 |        7/19 | Route seven environment, cwd, and stdout accesses through the existing `Platform.runtimeProcess` boundary.                                                                     |
-| baseline-satisfied | all non-generated package source                                    | R7   |              0 |         n/a | The baseline contains no native `switch`, no direct Langium import outside the parser owner, and direct Node filesystem/process imports are confined to shared wrapper owners. |
+| Status             | Location                                                             | Rule | Estimated size | Value score | Measurable effect                                                                                                                                                              |
+| ------------------ | -------------------------------------------------------------------- | ---- | -------------: | ----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| done               | validator Typir initialization and invocation validator              | R5   |             -7 |         1/7 | Remove the only call, exported object member, type-only import, and implementation of a deliberately empty validation hook.                                                    |
+| done               | compiler, formatter, and source-actions internal module exports      | R5   |             36 |       18/36 | Make 17 file-local types private and delete one unused `Compile` re-export, net two lines; retain the package-facing test-plan and formatter/action types.                     |
+| done               | `packages/shared/shared-tests/shared.test.ts`                        | R7   |              2 |         1/2 | Preserve formatter-sorted imports; baseline `./agent verify` exposed and corrected this pre-existing formatting violation.                                                     |
+| done               | direct `process` use in dev, IDE extension, and runtime test owners  | R7   |             19 |        7/19 | Route seven environment, cwd, and stdout accesses through the existing `Platform.runtimeProcess` boundary.                                                                     |
+| in progress        | closed-union dispatch across ast-utils, compiler, validator, runtime | R13  |           ~210 |      5/~210 | Convert five non-runtime sites first, including the cleanup-created `expressions-compiler.ts` threshold crossing; five runtime/layout sites remain.                            |
+| baseline-satisfied | all non-generated package source                                     | R7   |              0 |         n/a | The baseline contains no native `switch`, no direct Langium import outside the parser owner, and direct Node filesystem/process imports are confined to shared wrapper owners. |
 
 ## Findings outside the spike
 

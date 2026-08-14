@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Assert } from '@shared'
+import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -232,11 +232,10 @@ function compileEntityFieldDefault(
   }
   const value = modifier.defaultValue
   Assert.defined(value, 'validated field default has a value')
-  return AST.isNowExpression(value)
-    ? gen`defaultNow: true,`
-    : AST.isBooleanLiteral(value)
-    ? gen`defaultValue: ${value.value},`
-    : AST.isNumberLiteral(value)
-    ? gen`defaultValue: ${value.value},`
-    : gen`defaultValue: ${gen.jsLiteral(value.value)},`
+  return Switch.type(value, {
+    NowExpression: () => gen`defaultNow: true,`,
+    BooleanLiteral: value => gen`defaultValue: ${value.value},`,
+    NumberLiteral: value => gen`defaultValue: ${value.value},`,
+    StringLiteral: value => gen`defaultValue: ${gen.jsLiteral(value.value)},`,
+  })
 }

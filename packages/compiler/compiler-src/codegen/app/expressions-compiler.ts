@@ -51,19 +51,16 @@ export const ExpressionsCompiler = {
 
   /** ConfigurationValue compiles a scalar/reference slot or a nested configured value. */
   ConfigurationValue(value: AST.ConfigurationValue): Compiled {
-    if (AST.isConfiguredValue(value)) {
-      return Compile.ConfiguredValue(value)
-    }
-    if (AST.isConfigurationReference(value)) {
-      return compileConfigurationReference(value)
-    }
-    if (AST.isConfigurationKeyValue(value)) {
-      return gen`TR.Value(${gen.jsLiteral(value.key)})`
-    }
-    if (AST.isPropertyConfigurationPatch(value)) {
-      return Assert.never(value as never, 'property-position with is compiled against its owning property')
-    }
-    return Compile.Expression(value)
+    return Switch.type(value, {
+      BooleanLiteral: Compile.Expression,
+      ConfigurationConstructor: Compile.ConfiguredValue,
+      ConfigurationKeyValue: value => gen`TR.Value(${gen.jsLiteral(value.key)})`,
+      ConfigurationReference: compileConfigurationReference,
+      NumberLiteral: Compile.Expression,
+      PropertyConfigurationPatch: value =>
+        Assert.never(value as never, 'property-position with is compiled against its owning property'),
+      StringLiteral: Compile.Expression,
+    })
   },
 
   /** ConfigurationPatchObject lowers property replacements and keyed additions without mutating the base. */

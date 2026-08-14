@@ -263,11 +263,11 @@ function validateConfiguredItemConstructor(
   const typeName = [value.type.ref?.name ?? value.type.$refText, ...(value.members ?? [])].join('.')
   if (value.value) {
     const expectedKind = constructorLiteralKind(constructed)
-    const actualKind = AST.isStringLiteral(value.value)
-      ? 'text'
-      : AST.isNumberLiteral(value.value)
-      ? 'number'
-      : 'list'
+    const actualKind = Switch.type(value.value, {
+      StringLiteral: () => 'text' as const,
+      NumberLiteral: () => 'number' as const,
+      ListLiteral: () => 'list' as const,
+    })
     if (actualKind !== expectedKind) {
       ctx.error(typeValidationMessages.constructorShape(typeName, expectedKind), value)
     }

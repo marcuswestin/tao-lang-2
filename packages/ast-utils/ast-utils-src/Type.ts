@@ -288,22 +288,17 @@ export class Type {
     if (nominal) {
       return `${type.kind}:${definitionIdentityName(nominal)}`
     }
-    if (isPrimitiveKind(type)) {
-      if (isActionType(type)) {
-        return `primitive:action(${type.parameters.map(actionParameterIdentityKey).join(',')})`
-      }
-      return `${type.kind}:${type.primitive}`
-    }
-    if (type.kind === 'entity') {
-      return `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`
-    }
-    if (type.kind === 'enum') {
-      return `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`
-    }
-    if (type.kind === 'union') {
-      return `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`
-    }
-    return type.kind
+    return Switch.kind(type, {
+      primitive: type =>
+        isActionType(type)
+          ? `primitive:action(${type.parameters.map(actionParameterIdentityKey).join(',')})`
+          : `${type.kind}:${type.primitive}`,
+      list: type => type.kind,
+      item: type => type.kind,
+      entity: type => `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`,
+      enum: type => `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`,
+      union: type => `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`,
+    })
   }
 
   /** ofMemberAccess resolves the static type reached by a member access expression. */

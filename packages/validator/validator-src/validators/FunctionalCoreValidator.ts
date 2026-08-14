@@ -314,22 +314,15 @@ function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
     return 'query'
   }
   const type = Type.ofExpression(subject)
-  if (type.kind === 'unresolved') {
-    return 'unresolved'
-  }
-  if (type.kind === 'list') {
-    return 'list'
-  }
-  if (type.kind === 'entity') {
-    return 'entity'
-  }
-  if (type.kind === 'primitive' && type.primitive === 'text') {
-    return 'text'
-  }
-  if (type.kind === 'primitive' && type.primitive === 'boolean') {
-    return 'boolean'
-  }
-  return 'unsupported'
+  return Switch.kind(type, {
+    unresolved: () => 'unresolved',
+    primitive: type => type.primitive === 'text' || type.primitive === 'boolean' ? type.primitive : 'unsupported',
+    list: () => 'list',
+    item: () => 'unsupported',
+    entity: () => 'entity',
+    enum: () => 'unsupported',
+    union: () => 'unsupported',
+  })
 }
 
 function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
