@@ -1,0 +1,58 @@
+// Shared values, types, and the typed-injection escape hatch.
+
+workspace enum ConfirmResult {
+   Confirmed
+}
+
+workspace let Tagline = "A quiet place for words that matter."
+
+// A writing session's goal, used by the editor's progress indicator.
+workspace let ParagraphGoal = 10
+
+type PromptTitle is text
+
+type PromptMinutes is number
+
+type PromptTags is list
+
+workspace type WritingPrompt is {
+   PromptTitle
+   PromptMinutes
+   PromptTags
+   optional PromptSubtitle text // an item field may be absent; reading it yields `none`
+}
+
+// Typed constructors keep their value-literal form; item fields follow the same argument decisions
+// as invocations: `Field: value` labels a field, and an unlabeled typed value binds by type.
+let StarterTags = PromptTags ["daily", "warmup"]
+
+workspace let StarterPrompt = WritingPrompt {
+   PromptTitle: "Morning pages"
+   PromptMinutes: 10
+   StarterTags // unlabeled: binds the PromptTags field by type
+   // PromptSubtitle is optional and omitted here
+}
+
+workspace function DocumentLabel Title is text returns text = "Document: { Title }"
+
+// A fraction between 0 and 1 for `Progress`.
+workspace function GoalFraction Count is number returns number = Count / ParagraphGoal
+
+// `inject <type>` produces a typed value outside render position. The declared Tao type is checked
+// against what the injected TypeScript returns.
+workspace let BuildStamp = inject text ```ts
+   return process.env.TAO_BUILD ?? 'development'
+```
+
+// Typed TS injection also stays the permanent escape hatch for rendering Tao does not own.
+workspace view WordCount Value is text {
+   render inject Value ```ts
+      return <RN.Text>Words: {Value.trim() === '' ? 0 : Value.trim().split(/\s+/).length}</RN.Text>
+   ```
+}
+
+workspace view TagLine Tags is list {
+   render inject Tags ```ts
+      return <RN.Text>Tagged: {Tags.join(', ')}</RN.Text>
+   ```
+}

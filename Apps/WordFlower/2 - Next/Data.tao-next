@@ -1,0 +1,35 @@
+// The data catalog. Declarations are provider-neutral: an app chooses Local or InstantDB, and the
+// same catalog serves both.
+
+workspace data Workspaces / Workspace { // the plural collection, then the singular entity it stores
+   Name text
+   // Modifiers take values: `now` is a deferred runtime default sampled separately for each create.
+   CreatedAt time (default now)
+   Pinned yes / no // declared for demonstration, not yet used by the app
+   Documents (relation Documents, auto-delete) // deleting this owner also deletes its Documents
+
+   index CreatedAt
+   order by CreatedAt
+}
+
+workspace data Documents / Document {
+   Title text
+   Body text (default "")
+   Final yes / no Draft // an optional no-case alias name
+   Public yes / no Private (default Public) // demonstrative, not yet used
+   CreatedAt time (default now)
+   Workspace (relation Workspace)
+   Paragraphs (auto-delete)
+
+   index CreatedAt
+   order by CreatedAt
+}
+
+workspace data Paragraphs / Paragraph {
+   Text text
+   Ordering number
+   Document
+
+   index Ordering
+   order by Ordering
+}

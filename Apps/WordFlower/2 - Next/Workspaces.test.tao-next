@@ -1,0 +1,127 @@
+use WordFlower from ./
+
+test "WordFlower workspaces" {
+   check "starts empty and keeps invalid creates inert" {
+      run WordFlower
+      expect { // `expect { ... }` groups several assertions into one step
+         text "WordFlower"
+         text "No workspaces yet"
+         text "Starter prompt: Morning pages"
+         text "Try writing for 10 minutes"
+         text "Tagged: daily, warmup"
+         text "Workspace name is required"
+      }
+      expect #workspaceName {
+         placeholder "Home"
+         input value ""
+      }
+      press #addWorkspace // disabled while the draft is empty, so nothing happens
+      expect missing text "A workspace needs a name"
+      submit #workspaceName
+      expect text "A workspace needs a name" // the empty-name guard presents an overlay notice
+      press #dismissNotice
+      expect missing text "A workspace needs a name"
+      expect text "No workspaces yet"
+   }
+
+   check "uses live workspaces and preserves covered screen state" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      enter "Unsent workspace" into #workspaceName
+      select #workspaces[1] { // `select` scopes steps to the tagged loop's 1-based row
+         expect text "Home"
+         press #openWorkspace
+      }
+      expect text "Workspace: Home"
+      expect #workspaceTitle input value "Home"
+      enter "" into #workspaceTitle
+      submit #workspaceTitle
+      expect text "Workspace: Home"
+      enter "Renamed workspace" into #workspaceTitle
+      press #saveWorkspace
+      expect {
+         text "Workspace: Renamed workspace"
+         text "No drafts"
+      }
+      back
+      expect {
+         text "WordFlower"
+         text "Renamed workspace"
+      }
+      expect #workspaceName input value "Unsent workspace"
+      expect missing text "Workspace: Renamed workspace"
+   }
+
+   check "shows drafts and finished documents in both panes" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      submit #newDocumentTitle
+      expect text "No drafts"
+      enter "Draft the intro" into #newDocumentTitle
+      submit #newDocumentTitle
+      // `Panes` stacks or sits side by side depending on width; both panes render either way.
+      expect {
+         text "Drafts: 1"
+         text "Draft the intro"
+         text "Finished"
+         text "No finished documents"
+      }
+      select #drafts[1] {
+         press #finish
+      }
+      expect {
+         text "Drafts: 0"
+         text "No drafts"
+      }
+      select #finishedDocuments[1] {
+         expect text "Draft the intro"
+         press #deleteFinished
+      }
+      expect text "No finished documents"
+   }
+
+   check "deletes related documents transitively with their workspace" {
+      run WordFlower
+      enter "Temporary" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Related draft" into #newDocumentTitle
+      press #addDocument
+      expect text "Related draft"
+      back
+      select #workspaces[1] {
+         press #deleteWorkspace
+      }
+      expect text "No workspaces yet"
+      enter "Replacement" into #workspaceName
+      press text "Add workspace" // visible-text presses remain alongside #tag selectors
+      select #workspaces[1] {
+         expect text "Replacement"
+         press #openWorkspace
+      }
+      expect {
+         missing text "Related draft"
+         text "No drafts"
+   }  }
+
+   check "renders deterministic loading, failure, and recovery states" {
+      run WordFlower
+      data loading // `data` drives the app's datasource provider state
+      expect missing text "Workspace name is required"
+      data error "Local storage is unavailable"
+      expect {
+         text "Could not load WordFlower"
+         text "Local storage is unavailable"
+      }
+      data ready
+      expect {
+         text "No workspaces yet"
+         text "Workspace name is required"
+}  }  }

@@ -1,0 +1,37 @@
+// ============================================================================================
+// IMPLEMENT THIS FILE LAST.
+//
+// Do NOT begin any design or styling work until every other part of this tranche is implemented,
+// absorbed into `1 - Current`, and green: the stdlib surfaces, adaptive layout, safe-area and
+// keyboard insets, the InstantDB provider and its protocol extension, `unauthorized`, the new test
+// steps, `async`, typed `inject` values, and optional item fields.
+//
+// The reason is ordering, not preference: design styles primitives, so the primitives must exist
+// first or the app gets restyled twice. The bundles below are applied at render sites throughout
+// the other files ([screen], [title], [body]) — those clauses are written already and are inert
+// until this file lands, which is the intended sequence.
+//
+// This is deliberately the SMALLEST useful design system: flat tokens and named clause bundles.
+// It exists so styling can be iterated on with real usage, not so it can be finished. Recipes,
+// variants, states, patterns, rules, and platform blocks all stay in `3 - MVP` for a later tranche;
+// do not pull them forward, and do not generalize this file beyond what the app below uses.
+// ============================================================================================
+
+// A design declaration is ordinary Tao source, subject to the same visibility, imports, and
+// validation as everything else. An app selects one with its `Design` property.
+workspace design WordFlowerDesign {
+   // Flat tokens. A token is a name bound to a value; there is no token category syntax yet.
+   paper #f6f7f3
+   ink #121826
+   inkMuted #5b6472
+   accent #2f6b4f
+   line #d9dcd4
+
+   // Named clause bundles. A bundle is a reusable list of the same clauses a render site can write
+   // inline, so `[screen]` means exactly what its entries mean. Bundles compose with inline
+   // clauses at the call site, and a later entry wins over an earlier one.
+   screen [fill, content top stretch, pad 16, bg paper]
+   title [size 28, weight 700, fg ink]
+   body [size 16, line 22, fg inkMuted]
+   panel [pad 12, radius 8, bg paper, border line]
+}

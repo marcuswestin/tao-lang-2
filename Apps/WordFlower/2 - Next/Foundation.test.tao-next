@@ -1,0 +1,23 @@
+use WordFlowerFoundationTest from ./
+
+test "WordFlower navigation foundation" {
+   check "native back uses the semantic reducer" {
+      run WordFlowerFoundationTest
+
+      expect text "Foundation home marker"
+      press text "Open deterministic detail"
+      expect text "Foundation detail marker"
+      back
+      expect text "Foundation home marker"
+      expect missing text "Foundation detail marker"
+   }
+
+   check "slot dismissal restores its initial stack" {
+      run WordFlowerFoundationTest
+      press text "Open deterministic slot"
+      expect text "Foundation slot marker"
+      press text "Restore initial stack"
+      expect text "Foundation home marker"
+      expect missing text "Foundation slot marker"
+   }
+}

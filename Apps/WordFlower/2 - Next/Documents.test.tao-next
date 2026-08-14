@@ -1,0 +1,130 @@
+use WordFlower from ./
+
+test "WordFlower documents" {
+   check "edits a document on its own live destination" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Draft the intro" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      expect {
+         text "Document: Draft the intro"
+         text "Workspace: Home"
+         text "Words: 0"
+         text "Saves this session: 0"
+         text "Paragraphs: 0"
+         text "Goal: 10 paragraphs"
+      }
+      expect #editDocumentTitle input value "Draft the intro"
+      expect checkbox #markFinal unchecked
+      enter "" into #editDocumentTitle
+      submit #editDocumentTitle
+      expect text "Saved title: Draft the intro"
+      enter "Polish the intro" into #editDocumentTitle
+      enter "Set the scene with intent" into #editDocumentBody
+      expect text "Words: 5" // the explicit change action keeps the live word count reactive
+      press #saveDocument
+      expect {
+         text "Saved title: Polish the intro"
+         text "Saved body: Set the scene with intent"
+         text "Saves this session: 1"
+         text "Saved" // the keyed toast
+      }
+   }
+
+   check "marks a document final through the checkbox" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      expect checkbox #markFinal unchecked
+      press #markFinal
+      expect checkbox #markFinal checked
+      back
+      expect {
+         text "Drafts: 0"
+         text "No drafts"
+      }
+      select #finishedDocuments[1] {
+         expect text "Chapter one"
+      }
+   }
+
+   check "adds paragraphs without waiting for the write" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      data delayed 250 // milliseconds; the provider now settles slowly
+      enter "It began at sea." into #newParagraph
+      submit #newParagraph
+      // `async` lets the action finish before the write settles, so the input clears at once.
+      expect #newParagraph input value ""
+      expect {
+         text "Paragraphs: 1"
+         text "It began at sea."
+      }
+      data ready
+   }
+
+   check "asks before closing" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      expect text "Document: Chapter one"
+      press #closeDocument
+      expect text "Close Chapter one?"
+      press #cancelClose
+      expect text "Document: Chapter one" // cancelling answers none and the editor stays
+      press #closeDocument
+      press #confirmClose
+      expect missing text "Document: Chapter one"
+   }
+
+   check "reports a missing document behind the availability guard" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      expect text "Document: Chapter one"
+      back
+      select #drafts[1] {
+         press #delete
+      }
+      expect text "No drafts"
+}  }

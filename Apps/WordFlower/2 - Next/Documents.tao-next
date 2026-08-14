@@ -1,0 +1,145 @@
+use Checkbox, Col, FormButton, Panes, Progress, ScrollView, Spinner, Text, TextInput from @tao/ui
+use ConfirmResult, DocumentLabel, GoalFraction, ParagraphGoal, Paragraphs, WordCount from ./
+
+// The document area: an availability-guarded entry, the editor itself, and the close conversation.
+
+// The presented entry guards entity availability; the editor below assumes an available document.
+workspace ui DocumentScreen Document {
+   render Col() [fill] {
+      guard Document {
+         loading -> {
+            Spinner()
+         }
+         missing -> {
+            Text("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
+         }
+         unauthorized -> {
+            // A remote provider produces this state; `data unauthorized` drives it in checks.
+            Text("You no longer have access to this document.") [body]
+         }
+         error -> Message {
+            Text("The document could not be loaded: { Message }") [body]
+      }  }
+      DocumentEditor(Document)
+}  }
+
+workspace view DocumentEditor Document {
+   state TitleDraft = Document.Title
+   state BodyDraft = Document.Body
+   state ParagraphText = ""
+   state SaveCount = 0
+   query Paragraphs from Document.Paragraphs { }
+   action SetBodyDraft Value is text {
+      set BodyDraft = Value
+   }
+   action SetFinished Finished is boolean {
+      // A checkbox reports a boolean; the entity stores a named case, so translate at the boundary.
+      when Finished {
+         true -> {
+            update Document {
+               Final
+         }  }
+         otherwise -> {
+            update Document {
+               Draft
+   }  }  }  }
+   action SaveDocument {
+      guard TitleDraft empty
+      update Document {
+         Title: TitleDraft
+         Body: BodyDraft
+      }
+      set SaveCount += 1
+      // A keyed toast replaces the previous occurrence with the same key instead of stacking.
+      present SavedToast() as toast (Key: "document-saved", Duration: 3)
+   }
+   action AddParagraph {
+      guard ParagraphText empty
+      // `async` runs its block without delaying the statements after it, so the input clears
+      // immediately even when the provider is slow. Failures surface as provider error state.
+      async {
+         create Paragraph {
+            Text: ParagraphText
+            Ordering: Paragraphs.Count + 1
+            Document
+      }  }
+      set ParagraphText = ""
+   }
+   action CloseDocument {
+      // `ask` suspends this action until the dialogue responds; a bare `respond` answers none.
+      let Result = ask ConfirmCloseDialogue(Document)
+      if Result is Confirmed {
+         dismiss
+   }  }
+   // Editing and the paragraph outline sit side by side on a wide screen and stack on a narrow one.
+   render Panes() [screen, gap 16] {
+      ScrollView() [claim 2] {
+         Col() [width max 720, gap 10] {
+            Text(DocumentLabel(Document.Title)) [title]
+            Text("Workspace: { Document.Workspace.Name }") [body]
+            #editDocumentTitle
+            TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
+               on submit SaveDocument
+            }
+            #editDocumentBody
+            TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
+               on change SetBodyDraft
+               on submit SaveDocument
+            }
+            WordCount(BodyDraft)
+            #markFinal
+            Checkbox(Value: Document is Final, Label: "Final") {
+               on change SetFinished
+            }
+            #saveDocument
+            FormButton("Save document", Icon: "check", Disabled: TitleDraft is empty) {
+               on press SaveDocument
+            }
+            Text("Saved title: { Document.Title }") [body]
+            Text("Saved body: { Document.Body }") [body]
+            Text("Saves this session: { SaveCount }") [body]
+            #closeDocument
+            FormButton("Close document") {
+               on press CloseDocument
+      }  }  }
+      Col() [gap 10] {
+         Text("Paragraphs: { Paragraphs.Count }") [title]
+         // `Progress` takes a fraction between 0 and 1.
+         Progress(Value: GoalFraction(Paragraphs.Count))
+         Text("Goal: { ParagraphGoal } paragraphs") [body]
+         guard Paragraphs {
+            loading -> {
+               Spinner()
+            }
+            error -> Message {
+               Text("Could not load paragraphs: { Message }") [body]
+         }  }
+         #newParagraph
+         TextInput(Value: ParagraphText, Label: "New paragraph", Placeholder: "Add a paragraph") {
+            on submit AddParagraph
+         }
+         #paragraphs
+         loop Paragraphs / Paragraph {
+            Col() [gap 6, pad 10] {
+               Text(Paragraph.Text) [body]
+}  }  }  }  }
+
+ui SavedToast {
+   render Text("Saved") [body]
+}
+
+// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none. Each
+// ask is an independent stacked occurrence. Back or plain dismissal answers none before removal.
+workspace dialogue ConfirmCloseDialogue Document responds ConfirmResult {
+   render Col() [gap 6, pad 10] {
+      Text("Close { Document.Title }?") [title]
+      #confirmClose
+      FormButton("Close") {
+         on press -> {
+            respond Confirmed
+      }  }
+      #cancelClose
+      FormButton("Cancel") {
+         on press -> {
+            respond // bare respond answers none
+}  }  }  }
