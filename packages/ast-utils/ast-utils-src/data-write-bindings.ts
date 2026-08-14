@@ -5,6 +5,8 @@ import {
   bindUnambiguousPairs,
   type MatchGraph,
   matchGraph,
+  reportDuplicateCandidateTypes,
+  reportDuplicateTargetTypes,
   typesExactlyMatch,
 } from './type-binding-matches'
 
@@ -275,40 +277,21 @@ function reportDuplicateDataFieldTypes(
   fields: readonly DataFieldDefinition[],
   diagnostics: DataWriteBindingDiagnostic[],
 ): void {
-  const seen = new Map<string, DataFieldDefinition>()
-  for (const field of fields) {
-    const key = Type.identityKey(Type.dataFieldType(field))
-    if (!key) {
-      continue
-    }
-    if (seen.has(key)) {
-      diagnostics.push({ kind: 'duplicate-field-type', field, type: key })
-      continue
-    }
-    seen.set(key, field)
-  }
+  reportDuplicateTargetTypes(
+    fields,
+    field => Type.identityKey(Type.dataFieldType(field)),
+    (field, type) => diagnostics.push({ kind: 'duplicate-field-type', field, type }),
+  )
 }
 
 function reportDuplicateWriteTypes(
   writes: readonly AST.DataWriteField[],
   diagnostics: DataWriteBindingDiagnostic[],
 ): Set<string> {
-  const seen = new Set<string>()
-  const duplicates = new Set<string>()
-  for (const write of writes) {
-    if (write.label) {
-      continue
-    }
-    const key = Type.identityKey(Type.ofExpression(write.value))
-    if (!key) {
-      continue
-    }
-    if (seen.has(key)) {
-      duplicates.add(key)
-      diagnostics.push({ kind: 'duplicate-write-type', write, type: key })
-      continue
-    }
-    seen.add(key)
-  }
-  return duplicates
+  return reportDuplicateCandidateTypes(
+    writes,
+    write => !!write.label,
+    write => Type.identityKey(Type.ofExpression(write.value)),
+    (write, type) => diagnostics.push({ kind: 'duplicate-write-type', write, type }),
+  )
 }

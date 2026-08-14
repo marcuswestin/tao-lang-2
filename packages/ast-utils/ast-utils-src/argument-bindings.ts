@@ -4,6 +4,8 @@ import {
   bindUnambiguousPairs,
   type MatchGraph,
   matchGraph,
+  reportDuplicateCandidateTypes,
+  reportDuplicateTargetTypes,
   typesExactlyMatch,
 } from './type-binding-matches'
 
@@ -226,22 +228,16 @@ function reportDuplicateParameterTypes(
   parameters: readonly AST.ParameterDeclaration[],
   diagnostics: ArgumentBindingDiagnostic[],
 ): void {
-  const seen = new Map<string, AST.ParameterDeclaration>()
-  for (const parameter of parameters) {
-    const key = Type.identityKey(Type.ofParameter(parameter))
-    if (!key) {
-      continue
-    }
-    if (seen.has(key)) {
+  reportDuplicateTargetTypes(
+    parameters,
+    parameter => Type.identityKey(Type.ofParameter(parameter)),
+    (parameter, type) =>
       diagnostics.push({
         kind: 'duplicate-parameter-type',
         parameter,
-        type: key,
-      })
-      continue
-    }
-    seen.set(key, parameter)
-  }
+        type,
+      }),
+  )
 }
 
 function bindArguments(
@@ -296,26 +292,15 @@ function reportDuplicateArgumentTypes(
   args: readonly AST.Argument[],
   diagnostics: ArgumentBindingDiagnostic[],
 ): Set<string> {
-  const seen = new Set<string>()
-  const duplicates = new Set<string>()
-  for (const argument of args) {
-    if (argument.label) {
-      continue
-    }
-    const key = Type.identityKey(Type.ofArgument(argument))
-    if (!key) {
-      continue
-    }
-    if (seen.has(key)) {
-      duplicates.add(key)
+  return reportDuplicateCandidateTypes(
+    args,
+    argument => !!argument.label,
+    argument => Type.identityKey(Type.ofArgument(argument)),
+    (argument, type) =>
       diagnostics.push({
         kind: 'duplicate-argument-type',
         argument,
-        type: key,
-      })
-      continue
-    }
-    seen.add(key)
-  }
-  return duplicates
+        type,
+      }),
+  )
 }

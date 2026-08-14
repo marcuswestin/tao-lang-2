@@ -4,6 +4,8 @@ import {
   bindUnambiguousPairs,
   type MatchGraph,
   matchGraph,
+  reportDuplicateCandidateTypes,
+  reportDuplicateTargetTypes,
   typesExactlyMatch,
 } from './type-binding-matches'
 
@@ -189,22 +191,16 @@ function reportDuplicatePropertyTypes(
   properties: readonly AST.TypeProperty[],
   diagnostics: ItemPropertyBindingDiagnostic[],
 ): void {
-  const seen = new Map<string, AST.TypeProperty>()
-  for (const property of properties) {
-    const key = Type.identityKey(Type.ofProperty(property))
-    if (!key) {
-      continue
-    }
-    if (seen.has(key)) {
+  reportDuplicateTargetTypes(
+    properties,
+    property => Type.identityKey(Type.ofProperty(property)),
+    (expected, type) =>
       diagnostics.push({
         kind: 'duplicate-property-type',
-        expected: property,
-        type: key,
-      })
-      continue
-    }
-    seen.set(key, property)
-  }
+        expected,
+        type,
+      }),
+  )
 }
 
 function bindNamedItemProperties(state: ItemPropertyBindingState): void {
@@ -302,26 +298,15 @@ function reportDuplicateProvidedPropertyTypes(
   properties: readonly AST.ItemProperty[],
   diagnostics: ItemPropertyBindingDiagnostic[],
 ): Set<string> {
-  const seen = new Set<string>()
-  const duplicates = new Set<string>()
-  for (const property of properties) {
-    if (property.label) {
-      continue
-    }
-    const key = Type.identityKey(Type.ofExpression(property.value))
-    if (!key) {
-      continue
-    }
-    if (seen.has(key)) {
-      duplicates.add(key)
+  return reportDuplicateCandidateTypes(
+    properties,
+    property => !!property.label,
+    property => Type.identityKey(Type.ofExpression(property.value)),
+    (property, type) =>
       diagnostics.push({
         kind: 'duplicate-provided-property-type',
         property,
-        type: key,
-      })
-      continue
-    }
-    seen.add(key)
-  }
-  return duplicates
+        type,
+      }),
+  )
 }

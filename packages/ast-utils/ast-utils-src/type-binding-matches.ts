@@ -5,6 +5,51 @@ export type MatchGraph<Candidate, Target> = {
   candidatesByTarget: Map<Target, Candidate[]>
 }
 
+export function reportDuplicateTargetTypes<Target>(
+  targets: readonly Target[],
+  typeKey: (target: Target) => string | undefined,
+  reportDuplicate: (target: Target, type: string) => void,
+): void {
+  const seen = new Set<string>()
+  for (const target of targets) {
+    const key = typeKey(target)
+    if (!key) {
+      continue
+    }
+    if (seen.has(key)) {
+      reportDuplicate(target, key)
+      continue
+    }
+    seen.add(key)
+  }
+}
+
+export function reportDuplicateCandidateTypes<Candidate>(
+  candidates: readonly Candidate[],
+  isNamed: (candidate: Candidate) => boolean,
+  typeKey: (candidate: Candidate) => string | undefined,
+  reportDuplicate: (candidate: Candidate, type: string) => void,
+): Set<string> {
+  const seen = new Set<string>()
+  const duplicates = new Set<string>()
+  for (const candidate of candidates) {
+    if (isNamed(candidate)) {
+      continue
+    }
+    const key = typeKey(candidate)
+    if (!key) {
+      continue
+    }
+    if (seen.has(key)) {
+      duplicates.add(key)
+      reportDuplicate(candidate, key)
+      continue
+    }
+    seen.add(key)
+  }
+  return duplicates
+}
+
 export function bindUnambiguousPairs<Candidate, Target>(params: {
   candidates: Set<Candidate>
   targets: Set<Target>
