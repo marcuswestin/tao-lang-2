@@ -3,6 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
+Last touched-package re-sweep: after 10 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -38,6 +39,17 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 - Verification: 14 suites, 668 tests passed, 2,398 expectations plus two suites without expectation
   counts; 11.63s process wall time and 9.5s reported suite wall time.
 
+## Ten-commit checkpoint
+
+- Tracked non-generated TypeScript/TSX: 49,002 lines, down 34 from baseline.
+- Complexity-qualified source functions: 70, down two; no cleanup-written function newly qualifies.
+- Files over 400 lines: 24 (14 source, 10 test); six tests remain over 800 lines.
+- `expressions-compiler.ts` crossed from 400 to 402 lines through R12. Do not manufacture an R3
+  split for that cleanup-created crossing; its independently qualifying closed-union dispatch can
+  bring it back under threshold.
+- Native `switch`, compound-condition, direct platform/Langium, TODO-marker, and unused-export
+  scans found no new cleanup-written violations.
+
 ## Added rules
 
 None. Add a rule here only when the same worthwhile, uncovered cleanup appears in multiple places
@@ -48,7 +60,7 @@ and an immediate repo-wide application clears the abstraction and value bars.
 | Status             | Location                                                                  | Rule            |          Estimated size |   Value score | Measurable effect                                                                                                                                                                            |
 | ------------------ | ------------------------------------------------------------------------- | --------------- | ----------------------: | ------------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | done               | `packages/validator/validator-src/validators/`                            | R3 / charter 1  |      mostly moves + 142 |        19/142 | Put all 19 feature validators under `validators/`; validator infrastructure remains at the package root.                                                                                     |
-| in progress        | `packages/validator/validator-src` traversal entry and feature validators | R4 / charter 1  | 504 so far + follow-ups | 48/504 so far | Typed append-only node dispatch now owns 50 handler kinds; direct full-tree scans are 70 -> 22 after migrating Types, Actions, and Views.                                                    |
+| in progress        | `packages/validator/validator-src` traversal entry and feature validators | R4 / charter 1  | 628 so far + follow-ups | 61/628 so far | Typed append-only node dispatch now owns 63 handler kinds; direct full-tree scans are 70 -> 9 after migrating Data, Dialogue, and Navigation.                                                |
 | queued             | `packages/runtime/TaoRuntime-src/TR-navigation.ts`                        | R3 / charter 2  |     mostly moves + ~120 |        3/~120 | Replace one 1,583-line, four-concept module with descriptor, state/reducer, host/rendering, and target/resolution owners under 400 lines where coherent.                                     |
 | queued             | `packages/validator/validator-tests/validator.test.ts`                    | R10 / charter 3 |      mostly moves + ~80 |         1/~80 | Split the 4,931-line test by validator source seams without changing assertions.                                                                                                             |
 | queued             | `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx`                | R10 / charter 3 |      mostly moves + ~60 |         1/~60 | Split the 2,668-line runtime integration test by runtime feature seams.                                                                                                                      |
@@ -56,8 +68,8 @@ and an immediate repo-wide application clears the abstraction and value bars.
 | queued             | `packages/runtime/TR-tests/TR.test.ts`                                    | R10 / charter 3 |      mostly moves + ~35 |         1/~35 | Split the 1,040-line TR test along runtime module seams.                                                                                                                                     |
 | queued             | `packages/compiler/compiler-tests/compiler.test.ts`                       | R10 / charter 3 |      mostly moves + ~35 |         1/~35 | Split the 991-line compiler test by codegen feature seams.                                                                                                                                   |
 | queued             | `packages/formatter/formatter-tests/formatter.test.ts`                    | R10 / charter 3 |      mostly moves + ~35 |         1/~35 | Split the 956-line formatter test by formatter feature seams.                                                                                                                                |
-| queued             | 13 source files currently over 400 lines                                  | R3              |        inspect per seam |        13/TBD | Split only where a real second concept exists; record cohesive files as deliberately left alone.                                                                                             |
-| queued             | 72 source functions over 40 lines or nesting depth three                  | R2              |    inspect per function |        72/TBD | Decompose only into meaningful named steps with lower nesting or sub-threshold owners.                                                                                                       |
+| queued             | 14 source files currently over 400 lines                                  | R3              |        inspect per seam |        14/TBD | Split only where a real second concept exists; `expressions-compiler.ts` is cleanup-created threshold churn, not a new split candidate.                                                      |
+| queued             | 70 source functions over 40 lines or nesting depth three                  | R2              |    inspect per function |        70/TBD | Decompose only into meaningful named steps with lower nesting or sub-threshold owners; two former validator dispatch functions are already gone.                                             |
 | queued             | 76 mechanically flagged conditions                                        | R1              |   inspect per predicate |        76/TBD | Name non-obvious decisions; reject short guard clauses whose extraction would be churn.                                                                                                      |
 | queued             | repeated meaningful non-message literals found by the package sweep       | R6 / charter 4  |       inspect per owner |           TBD | Name repeated values at the module that owns their meaning.                                                                                                                                  |
 | done               | repeated Android, compiler assertion, and unexpected-error messages       | R12 / charter 4 |                      26 |          6/26 | Replace ten byte-identical message literals in four owners with four local constants; four abstractions each pay at two or three sites.                                                      |

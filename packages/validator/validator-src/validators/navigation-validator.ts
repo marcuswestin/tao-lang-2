@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** navigationValidationMessages declares configured navigation diagnostics. */
@@ -58,17 +59,15 @@ export const navigationValidationMessages = {
   constructorBlock: (name: string) => `${name} configuration requires a block.`,
 } as const
 
-/** validateNavigation validates configured navigation and presentation calls. */
-export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const presentation of AST.streamAllContents(file).filter(AST.isContextualPresentStatement)) {
-    validateContextualPresentation(presentation, ctx)
-  }
-  for (const dismiss of AST.streamAllContents(file).filter(AST.isDismissStatement)) {
+/** navigationValidationChecks validates configured navigation and presentation calls. */
+export const navigationValidationChecks = {
+  [AST.ContextualPresentStatement.$type]: validateContextualPresentation,
+  [AST.DismissStatement.$type]: (dismiss, ctx) => {
     if (!AST.findOwningView(dismiss)) {
       ctx.error(navigationValidationMessages.dismissContext, dismiss)
     }
-  }
-  for (const activation of AST.streamAllContents(file).filter(AST.isSelectionActivateStatement)) {
+  },
+  [AST.SelectionActivateStatement.$type]: (activation, ctx, file) => {
     if (!AST.isUiDeclaration(AST.findOwningView(activation))) {
       ctx.error(navigationValidationMessages.activationContext, activation)
     }
@@ -85,8 +84,8 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
         }
       }
     }
-  }
-  for (const replace of AST.streamAllContents(file).filter(AST.isReplaceStatement)) {
+  },
+  [AST.ReplaceStatement.$type]: (replace, ctx) => {
     if (!AST.findOwningView(replace)) {
       ctx.error(navigationValidationMessages.replaceContext, replace)
     }
@@ -98,28 +97,34 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
     if (app && AST.isAppVariantDeclaration(app)) {
       ctx.error(navigationValidationMessages.strictTargetDeclaration(app.name), replace)
     }
-  }
-  for (const configured of AST.streamAllContents(file).filter(AST.isConfiguredValue)) {
-    validateConfiguredValue(configured, ctx)
-  }
-  for (const patch of AST.streamAllContents(file).filter(AST.isPatchedValueReference)) {
+  },
+  [AST.ConfiguredValue.$type]: validateConfiguredValue,
+  [AST.ValueReference.$type]: (value, ctx) => {
+    if (!AST.isPatchedValueReference(value)) {
+      return
+    }
+    const patch = value
     const base = patch.target.ref
     if (AST.isAppVariantDeclaration(patch.$container)) {
-      continue
+      return
     }
     if (!AST.isAliasDeclaration(base)) {
       if (base) {
         ctx.error(navigationValidationMessages.patchTarget(patch.target.$refText), patch)
       }
-      continue
+      return
     }
     const declaration = configuredDeclaration(base.value)
     if (!declaration) {
       ctx.error(navigationValidationMessages.patchTarget(base.name), patch)
-      continue
+      return
     }
     validateConfigurationBlock(patch.patchBlock, declaration, false, ctx)
-  }
+  },
+} satisfies NodeValidationChecks
+
+/** validateNavigationFile validates top-level app-variant property patches. */
+export function validateNavigationFile(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const variant of file.statements.filter(AST.isAppVariantDeclaration)) {
     const root = AST.appDeclarationOf(variant)
     if (!root) {

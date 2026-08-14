@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** dataValidationMessages declares structural and type diagnostics for Tao data. */
@@ -61,21 +62,19 @@ export const dataValidationMessages = {
   rowTarget: (operation: string) => `${operation} expects a row handle produced by a Tao query.`,
 } as const
 
-/** validateData validates schemas, reactive queries, and strict row writes. */
-export function validateData(file: AST.TaoFile, ctx: ValidationContext): void {
-  validateEntityCatalog(file, ctx)
-  for (const query of AST.streamAllContents(file).filter(AST.isEntityQueryDeclaration)) {
-    validateEntityQuery(query, ctx)
-  }
-  for (const create of AST.streamAllContents(file).filter(AST.isCreateStatement)) {
-    validateCreate(create, ctx)
-  }
-  for (const update of AST.streamAllContents(file).filter(AST.isUpdateStatement)) {
-    validateUpdate(update, ctx)
-  }
-  for (const deleteStatement of AST.streamAllContents(file).filter(AST.isDeleteStatement)) {
+/** dataValidationChecks validates reactive queries and strict row writes. */
+export const dataValidationChecks = {
+  [AST.EntityQueryDeclaration.$type]: validateEntityQuery,
+  [AST.CreateStatement.$type]: validateCreate,
+  [AST.UpdateStatement.$type]: validateUpdate,
+  [AST.DeleteStatement.$type]: (deleteStatement, ctx) => {
     validateRowTarget(deleteStatement.target, 'delete', ctx)
-  }
+  },
+} satisfies NodeValidationChecks
+
+/** validateDataFile validates the top-level data entity catalog. */
+export function validateDataFile(file: AST.TaoFile, ctx: ValidationContext): void {
+  validateEntityCatalog(file, ctx)
 }
 
 function validateEntityCatalog(file: AST.TaoFile, ctx: ValidationContext): void {

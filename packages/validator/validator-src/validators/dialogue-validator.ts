@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** dialogueValidationMessages declares ask/response diagnostics. */
@@ -30,29 +31,25 @@ const dialogueValidationMessages = {
 
 /** DialogueValidator validates dialogue occurrence invocation and response ownership. */
 export const DialogueValidator = {
-  messages: dialogueValidationMessages,
-  validate,
-} as const
-
-function validate(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const ask of AST.streamAllContents(file).filter(AST.isAskStatement)) {
-    validateAsk(ask, ctx)
-  }
-  for (const respond of AST.streamAllContents(file).filter(AST.isRespondStatement)) {
-    if (!AST.isDialogueDeclaration(AST.findOwningView(respond))) {
-      ctx.error(dialogueValidationMessages.responseContext, respond)
-    }
-  }
-  for (const block of AST.streamAllContents(file).filter(AST.isActionBlock)) {
-    const seen = new Set<string>()
-    for (const ask of AST.askDeclarationsOwnedByActionBlock(block)) {
-      if (seen.has(ask.name)) {
-        ctx.error(dialogueValidationMessages.duplicateResult(ask.name), ask)
+  checks: {
+    [AST.AskStatement.$type]: validateAsk,
+    [AST.RespondStatement.$type]: (respond, ctx) => {
+      if (!AST.isDialogueDeclaration(AST.findOwningView(respond))) {
+        ctx.error(dialogueValidationMessages.responseContext, respond)
       }
-      seen.add(ask.name)
-    }
-  }
-}
+    },
+    [AST.ActionBlock.$type]: (block, ctx) => {
+      const seen = new Set<string>()
+      for (const ask of AST.askDeclarationsOwnedByActionBlock(block)) {
+        if (seen.has(ask.name)) {
+          ctx.error(dialogueValidationMessages.duplicateResult(ask.name), ask)
+        }
+        seen.add(ask.name)
+      }
+    },
+  } satisfies NodeValidationChecks,
+  messages: dialogueValidationMessages,
+} as const
 
 function validateAsk(ask: AST.AskStatement, ctx: ValidationContext): void {
   const dialogue = ask.dialogue.ref
