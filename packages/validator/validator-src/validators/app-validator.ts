@@ -111,10 +111,6 @@ function configurationExpressionIsDatasource(value: AST.Expression): boolean {
   if (AST.isConfigurationConstructor(value)) {
     return AST.isDatasourceDeclaration(value.type.ref)
   }
-  if (AST.isPatchedValueReference(value)) {
-    const target = value.target.ref
-    return AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value)
-  }
   if (AST.isValueReference(value)) {
     const target = value.target.ref
     return AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value)
