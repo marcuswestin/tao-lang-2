@@ -1,6 +1,14 @@
 import { Errors, Switch } from '@shared/core'
 import React from 'react'
 import { DataControls } from './TR-data'
+import {
+  backNavigation,
+  clearActiveBackTarget,
+  registerNavigation,
+  registerNavigationApp,
+  resetNavigationRuntime,
+  setActiveBackTarget,
+} from './TR-navigation-registry'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { type TaoDialogueOccurrence, type TaoProps, TaoPropsControls } from './TR-TaoProps'
 import { Views } from './TR-views'
@@ -157,10 +165,6 @@ type Subscription = {
   subscribe(listener: () => void): () => void
 }
 
-const navigationValues = new Set<RuntimeNavigationValue>()
-const appDefinitions = new Set<RuntimeAppDefinition>()
-let activeBackTarget: { back(): boolean } | undefined
-
 /** NavigationControls is the deterministic generated-code API for Tao navigation. */
 export const NavigationControls = {
   /** AppDeclaration creates one process-local source declaration identity for app configurations. */
@@ -206,8 +210,7 @@ export const NavigationControls = {
   /** App creates a lazy, resettable process-local app navigation definition. */
   App(definition: TaoAppDefinition): RuntimeAppDefinition {
     const app = new RuntimeAppDefinition(definition)
-    appDefinitions.add(app)
-    return app
+    return registerNavigationApp(app)
   },
 
   AppHost: NavigationAppHost,
@@ -336,18 +339,12 @@ export const NavigationControls = {
   },
 
   Back(target?: { back(): boolean }): boolean {
-    return (target ?? activeBackTarget)?.back() ?? false
+    return backNavigation(target)
   },
 
   /** beginTest resets cached generated navigation and apps before each Tao behavior check. */
   beginTest(): void {
-    activeBackTarget = undefined
-    for (const navigation of navigationValues) {
-      navigation.reset()
-    }
-    for (const app of appDefinitions) {
-      app.reset()
-    }
+    resetNavigationRuntime()
   },
 } as const
 
@@ -1185,16 +1182,14 @@ function useSubscription(subscription: Subscription): void {
 
 function usePlatformBack(target: { back(): boolean }): void {
   React.useEffect(() => {
-    activeBackTarget = target
+    setActiveBackTarget(target)
     const subscription = requireReactNativeRuntime().BackHandler?.addEventListener(
       'hardwareBackPress',
-      () => NavigationControls.Back(target),
+      () => backNavigation(target),
     )
     return () => {
       subscription?.remove()
-      if (activeBackTarget === target) {
-        activeBackTarget = undefined
-      }
+      clearActiveBackTarget(target)
     }
   }, [target])
 }
@@ -1222,7 +1217,7 @@ function NavigationBackAffordance(props: {
     {
       action: {
         invoke: () => {
-          NavigationControls.Back(props.target)
+          backNavigation(props.target)
         },
       },
       title: 'Back',
@@ -1286,11 +1281,6 @@ function NavigationSurface(props: {
     props.content,
     overlays,
   )
-}
-
-function registerNavigation<ValueT extends RuntimeNavigationValue>(navigation: ValueT): ValueT {
-  navigationValues.add(navigation)
-  return navigation
 }
 
 function resolveNavigationTarget(
