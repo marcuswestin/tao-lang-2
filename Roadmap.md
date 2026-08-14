@@ -1,22 +1,10 @@
 # Tao Roadmap
 
-Open work only. Completed work is recorded in `Roadmap/Archive/Delivered language roadmap.md`.
+Open work only. Completed work is recorded under `Roadmap/Archive/`.
 
 Language features are built in tranches through the WordFlower app family: decisions are settled in
 `Apps/WordFlower/2 - Next`, implemented into `1 - Current` slice by slice, then `3 - MVP` and
 `4 - Revolution` are reconciled once. `Apps/WordFlower/README.md` owns that process.
-
-## Pre-tranche foundations
-
-- [ ] Land repository foundations before tranche 4
-  - Separate the publishable generated-code runtime, repository toolchain, and Tao stdlib packages.
-  - Remove unused AI review, AI usage, and merge-preflight automation; reorganize the surviving dev
-    package and make fresh linked worktrees self-bootstrap when a pinned primary profile exists.
-  - Reuse validator/compiler language sessions and capture a pre-tranche parse, validate, compile,
-    and format performance baseline.
-  - Keep diagnostic codes scoped to existing quick fixes; decide any broader public identity contract
-    with IDE-polish consumers rather than assigning speculative codes now.
-  - Plan: `Roadmap/Repository foundations/Plan - Repository foundations.md`.
 
 ## Current tranche
 
@@ -78,4 +66,6 @@ Product and codebase backlog, unordered.
 - `Apps/WordFlower/README.md` — the implementation process and the four app tiers.
 - `Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
 - `Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
+- `Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
+- `Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
 - `Roadmap/Archive/` — frozen records of completed work.
