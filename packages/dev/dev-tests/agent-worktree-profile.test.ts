@@ -6,6 +6,7 @@ const PROFILE_SCRIPT = Repo.resolvePath('packages/dev/dev-src/cli/agent-worktree
 type ProfileFixture = {
   env: Platform.ProcessEnv
   primaryProfile: string
+  systemTemp: string
   worktree: string
 }
 
@@ -73,17 +74,35 @@ Describe('agent worktree profile bootstrap', () => {
       await FS.remove(testRoot)
     }
   })
+
+  Test('uses the macOS per-user temporary directory for Bun bootstrap', async () => {
+    const testRoot = await mkTestDir('tao-agent-temp-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const fallback = FS.resolvePath('fallback-temp', testRoot)
+      await FS.mkdir(fallback)
+      const result = await runProfileScript('tao_bun_temp_dir "$2"', fixture, fallback)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout.trim()).toBe(fixture.systemTemp)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
 })
 
 async function createProfileFixture(testRoot: string, withPrimaryProfile: boolean): Promise<ProfileFixture> {
   const fakeBin = FS.resolvePath('bin', testRoot)
   const fakeGit = FS.resolvePath('git', fakeBin)
+  const fakeGetconf = FS.resolvePath('getconf', fakeBin)
   const primaryRoot = FS.resolvePath('primary', testRoot)
   const primaryProfile = FS.resolvePath('.devenv/profile', primaryRoot)
+  const systemTemp = FS.resolvePath('system-temp', testRoot)
   const worktree = FS.resolvePath('linked-worktree', testRoot)
-  await FS.mkdir(worktree)
+  await Promise.all([FS.mkdir(systemTemp), FS.mkdir(worktree)])
   await FS.writeText(fakeGit, '#!/bin/zsh\nprint -r -- "$TAO_TEST_COMMON_GIT_DIR"\n')
-  await makeExecutable(fakeGit)
+  await FS.writeText(fakeGetconf, '#!/bin/zsh\nprint -r -- "$TAO_TEST_DARWIN_TEMP_DIR"\n')
+  await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
     await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
@@ -93,8 +112,10 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
     env: {
       PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
       TAO_TEST_COMMON_GIT_DIR: FS.resolvePath('.git', primaryRoot),
+      TAO_TEST_DARWIN_TEMP_DIR: systemTemp,
     },
     primaryProfile,
+    systemTemp,
     worktree,
   }
 }

@@ -24,10 +24,9 @@ function enter_devenv_if_needed() {
   exit 1
 }
 
-# Keep Bun's bootstrap temporary files inside the worktree. Sandboxed agents may
-# receive a host TMPDIR path that exists but is not writable through the sandbox.
 enter_devenv_if_needed
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
+BUN_TEMP_DIR="$(tao_bun_temp_dir "$AGENT_TEMP_DIR")"
 
 function needs_install() {
   [[ ! -d "$SCRIPT_DIR/node_modules" ]] && return 0
@@ -39,7 +38,7 @@ function needs_install() {
 }
 
 function install_dev_deps() {
-  if ! install_output="$(TMPDIR="$AGENT_TEMP_DIR" BUN_TMPDIR="$AGENT_TEMP_DIR" bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
+  if ! install_output="$(TMPDIR="$BUN_TEMP_DIR" BUN_TMPDIR="$BUN_TEMP_DIR" bun install --cwd "$SCRIPT_DIR" 2>&1)"; then
     echo "$install_output" >&2
     exit 1
   fi
@@ -90,7 +89,7 @@ function needs_build() {
 }
 
 function build_agent() {
-  if ! build_output="$(TMPDIR="$AGENT_TEMP_DIR" BUN_TMPDIR="$AGENT_TEMP_DIR" bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
+  if ! build_output="$(TMPDIR="$BUN_TEMP_DIR" BUN_TMPDIR="$BUN_TEMP_DIR" bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
     echo "$build_output" >&2
     exit 1
   fi

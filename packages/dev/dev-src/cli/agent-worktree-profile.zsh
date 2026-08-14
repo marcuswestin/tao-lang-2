@@ -30,3 +30,23 @@ function tao_activate_devenv_profile() {
   tao_link_primary_devenv_profile "$worktree_dir" "$devenv_profile" || return 1
   export PATH="$devenv_profile/bin:$PATH"
 }
+
+# Bun's installer requires the host's per-user temporary directory on macOS.
+# A workspace-local TMPDIR is writable to the shell but Bun rejects it during
+# package extraction. Fall back to a caller-owned directory on other hosts.
+function tao_bun_temp_dir() {
+  local fallback_dir="$1"
+  local darwin_temp_dir
+  darwin_temp_dir="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)" || darwin_temp_dir=""
+  if [[ -n "$darwin_temp_dir" && -d "$darwin_temp_dir" && -w "$darwin_temp_dir" ]]; then
+    print -r -- "$darwin_temp_dir"
+    return
+  fi
+
+  if [[ -n "${TMPDIR:-}" && -d "$TMPDIR" && -w "$TMPDIR" ]]; then
+    print -r -- "$TMPDIR"
+    return
+  fi
+
+  print -r -- "$fallback_dir"
+}
