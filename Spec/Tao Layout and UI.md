@@ -196,9 +196,9 @@ Properties, unnamed render children, and named render slots are distinct channel
 
 Direct `@name` entries share one namespace within their immediate configured owner. Nested configured
 values begin new namespaces. In the implemented surface, a configured nav may declare one `@key`
-item contract and each direct key binds it; a declaration without that contract rejects keyed entries.
-A render declaration's direct `@name` remains a visual slot. A duplicate direct name in one owner is
-invalid.
+item contract and each direct key binds it; a `with` patch may add another direct key under that
+contract. A declaration without the contract rejects keyed entries. A render declaration's direct
+`@name` remains a visual slot. A duplicate direct name in one owner is invalid.
 
 Only a targetable keyed entry creates an owner-qualified target such as `WordFlower@home`. A render slot never becomes a navigation target merely because it uses `@`.
 

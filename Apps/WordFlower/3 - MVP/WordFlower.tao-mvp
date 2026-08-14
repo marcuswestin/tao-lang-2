@@ -12,6 +12,9 @@ use Col, FormButton, Row, Spinner, Text, TextInput from @tao/ui
 // `implement inject` binds shipped implementations to the published TR.NavKind and TR.DataProvider
 // protocols and their conformance suites rather than to compiler-maintained name tables. StackNav
 // and Memory are the stdlib proof that a package declaration can own either kind of implementation.
+// Configured `with` patches may add direct keyed entries when the declaration owns a keyed contract.
+// A strict `App@key` target names the root app declaration, and the key must exist on that root and
+// every in-file variant so each launch configuration can honor the same static target.
 
 project {
    name "WordFlower"
@@ -183,7 +186,7 @@ ui WorkspaceList {
       }
       #activateWorkspaceTab
       FormButton("Activate workspace") {
-         // Target-only activation: presenting a bare key reveals that item without new content.
+         // Target-only activation names the root app declaration and reveals without new content.
          on press -> { present WordFlower@workspace }
       }
       guard Workspaces empty -> {
@@ -578,7 +581,7 @@ ui Settings {
       Text("Settings")
       #resetSignedOut
       FormButton("Reset to signed out") {
-         // `replace` is the only root operation an app host accepts.
+         // From a visual declaration, `replace` is the only root operation an app host accepts.
          on press -> { replace SignedOutNav in WordFlower }
       }
    }

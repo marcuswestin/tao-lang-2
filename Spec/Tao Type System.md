@@ -203,8 +203,9 @@ surface; raw provider rows and ID-based test selectors remain private.
 Apps, `nav`, and `datasource` declarations already use a declaration-owned configured-value model.
 The linked declaration is the source of truth for property names and types; validation, formatting,
 and compilation do not dispatch on shipped names. A bare block constructs a descriptor, `with`
-patches an existing descriptor, and the descriptor retains its declaration identity across imports,
-aliases, and generated modules.
+patches its named entries and may add direct keyed entries when the declaration owns a keyed item
+contract. The descriptor retains its declaration identity across imports, aliases, and generated
+modules.
 
 ````tao
 public nav CopiedStack {

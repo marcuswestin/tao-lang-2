@@ -72,7 +72,8 @@ Strict app targets name a declaration statically and select its running occurren
 for the nearest occurrence with the named declaration identity. The app position must name the root
 app declaration, never a variant. A variant still receives that declaration's targets because it
 retains its originating identity. No match is a structured runtime error; target resolution never
-mounts or falls back to the named app definition.
+mounts or falls back to the named app definition. A strict selection key must exist on the root
+app's SelectionNav and every variant of that root declared in the same file.
 
 One source module may declare several apps. Generated modules expose a registry local to that module
 and retain the selected app as their default export. `run AppName` selects directly from that module.
@@ -208,8 +209,8 @@ state changes nothing.
 replace FoundationNavigator in WordFlowerFoundationTest
 ```
 
-`replace <nav> in <App>` replaces that app's mounted root with the given configured nav. It does not
-append a stack occurrence.
+`replace <nav> in <App>` is allowed only from an action inside a visual declaration. It replaces
+that app's mounted root with the given configured nav and does not append a stack occurrence.
 
 ## Back, mounting, and layout
 

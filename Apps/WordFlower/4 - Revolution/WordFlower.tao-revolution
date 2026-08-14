@@ -8,6 +8,9 @@ use every from @tao/time
 // relying on name tables. Generic property validation reads their config shape, and package-scope
 // `implement inject` binds them to the published TR.NavKind and TR.DataProvider protocols. StackNav
 // and Memory are the proof implementations, and each protocol ships a conformance suite.
+// Configured `with` patches may add direct keyed entries when the declaration owns a keyed contract.
+// A strict `App@key` target names the root app declaration, and the key must exist on that root and
+// every in-file variant so each launch configuration can honor the same static target.
 
 // WordFlower/Revolution is the tier beyond the v1 release: functionality Tao eventually intends to
 // cover that the MVP deliberately does not ship. It contains everything in `../3 - MVP` plus the
@@ -360,7 +363,7 @@ ui WorkspaceList {
       }
       #activateWorkspaceTab
       FormButton("Activate workspace") {
-         // Target-only activation: presenting a bare key reveals that item without new content.
+         // Target-only activation names the root app declaration and reveals without new content.
          on press -> { present WordFlower@workspace }
       }
       guard Workspaces empty -> {
@@ -755,7 +758,7 @@ ui Settings {
       Text("Settings")
       #resetSignedOut
       FormButton("Reset to signed out") {
-         // `replace` is the only root operation an app host accepts.
+         // From a visual declaration, `replace` is the only root operation an app host accepts.
          on press -> { replace SignedOutNav in WordFlower }
       }
    }
