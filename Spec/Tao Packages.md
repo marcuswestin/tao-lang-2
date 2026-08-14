@@ -1,6 +1,6 @@
 # Tao Project and Packages
 
-Status: partially implemented design draft. The current implementation supports local `project { name "..." remote none license ... }` metadata, the transitional `package`/`project`/`publish` visibility words, `use ... from ...` imports for relative Tao source paths and `@tao/...` stdlib paths, bare same-package `use Foo`, and local `@package[/subfolder]` imports through an in-memory workspace package index. The intended visibility vocabulary in this specification is `file`, `package`, `workspace`, and `public`; its migration is not implemented yet. Project IDs, `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other CLI package commands, and package publishing remain future work.
+Status: partially implemented design draft. The current implementation supports local `project { name "..." remote none license ... }` metadata, `file`/`package`/`workspace`/`public` declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...` stdlib paths, bare same-package `use Foo`, and local `@package[/subfolder]` imports through an in-memory workspace package index. Project IDs, `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other CLI package commands, and package publishing remain future work.
 
 ## Creating a Tao Project
 
@@ -14,51 +14,53 @@ Status: partially implemented design draft. The current implementation supports 
 - The app selects a primary navigator; see `Tao Presentation and Navigation.md` for its behavior.
 
 ```tao
-use Button, Col, List, Text from @tao/ui
-use @tao/nav as Nav
+use StackNav from @tao/nav
+use Col, FormButton, Text from @tao/ui
 
 project {
-   id "example.chat"
    name "Chat"
    remote none
    license MIT
 }
 
-data Chat {
-   Messages/Message {
-      Text text
-      optional Parent Message
-      Thread Messages
-   }
+data Messages / Message {
+   Text text
+   CreatedAt time, default now()
+   order by CreatedAt
 }
 
 app ChatApp {
    Name "Chat"
-   Navigator Nav.StackNav { Initial ThreadListUi }
+   Navigator StackNav { Initial ThreadListUi }
 }
 
 ui ThreadListUi {
-   query Chat.Messages { Text }
+   query Messages { }
 
    render Col() {
-      List(Messages) {
+      loop Messages / Message {
          Text(Message.Text)
-         on select -> Message { present ThreadUi(Message) }
+         FormButton("Open thread") {
+            on press -> { present ThreadUi(Message) }
+         }
       }
    }
 }
 
-ui ThreadUi Message Chat.Message {
+ui ThreadUi Message {
    render Col() {
       Text(Message.Text)
-      Button("Open thread", on press -> { present ThreadUi(Message) })
+      FormButton("Open another occurrence") {
+         on press -> { present ThreadUi(Message) }
+      }
    }
 }
 ```
 
 The project `id` is an opaque, immutable value chosen by the developer and checked into the project declaration. `tao create <id>` uses its new directory name as the ID. For an existing project, `tao project id <id> [path]` creates and persists a missing ID; repeating it with the same value preserves the existing declaration. The ID travels with clones and published artifacts and does not change when the project later moves, gains a remote, or advances to another commit. A fork that becomes an independent Tao project runs `tao project id <new-id> [path] --replace`. Required dependencies retain their own project IDs; lockfile revisions select code but do not alter declaration identity. Ordinary checking, compiling, formatting, and launching never invent or modify identity as a side effect.
 
-The data declaration supplies singular and plural values. The UI presents configured semantic destinations; `StackNav` owns the corresponding native transition.
+The top-level data declaration supplies singular and plural values. The UI presents first-class
+`ui` values; `StackNav` owns the corresponding native transition.
 
 ## Using packages and publishing projects
 

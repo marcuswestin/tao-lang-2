@@ -6,25 +6,16 @@ import "./visibility"
 import "./terminals"
 
 entry NavigationGrammarEntrypoint:
-    StackDeclaration | AppStack | PresentStatement | BackStatement;
+    ContextualPresentStatement | DismissStatement | ReplaceStatement;
 
-StackDeclaration:
-    visibility=DeclarationVisibility? 'stack' name=ID block=NavigationBlock;
+ContextualPresentStatement:
+    'present' ui=[UiDeclaration:ID] '(' argumentList=ArgumentList? ')' ('in' target=NavigationTarget)?;
 
-NavigationBlock:
-    '{' initial=NavigationInitial destinations+=NavigationDestination+ '}';
+NavigationTarget:
+    value=ValueReference | app=[AppDeclaration:ID] key=USE_IMPORT_PATH;
 
-NavigationInitial:
-    'initial' destinationName=ID;
+DismissStatement:
+    {infer DismissStatement} 'dismiss';
 
-NavigationDestination:
-    'destination' view=[ViewDeclaration:ID];
-
-AppStack:
-    'stack' stack=[StackDeclaration:ID];
-
-PresentStatement:
-    'present' stack=[StackDeclaration:ID] '.' destinationName=ID '(' argumentList=ArgumentList? ')';
-
-BackStatement:
-    'back' stack=[StackDeclaration:ID];
+ReplaceStatement:
+    'replace' navigator=ValueReference 'in' app=[AppDeclaration:ID];

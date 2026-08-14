@@ -1,131 +1,153 @@
 # Tao Data
 
-Status: authoritative functional-MVP implementation.
+Status: authoritative implemented contract for the current WordFlower tranche.
 
-Tao's MVP data layer is a typed, reactive application capability. Tao source declares provider-neutral schemas, queries, and writes. An `app` chooses a provider, generated TypeScript passes schema metadata and query/write plans to `TR.Data`, and the runtime owns loading, persistence, subscriptions, stable entity identity, and provider errors.
+Tao's data layer is provider-neutral in source and generated schema metadata. Top-level `data`
+declarations define entity shape, queries and writes operate on live typed values, and each `app`
+chooses the provider that mounts the catalog.
 
-## Schemas and app datasources
+## Catalog declarations
 
-Schemas describe data shape independently of storage:
+A declaration names its plural collection first and its stored singular entity second:
 
 ```tao
-project data WordFlowerData {
-   Workspaces Workspace {
-      Name text
-      CreatedAt time indexed default now()
-   }
-   Documents Document {
-      Title text
-      Body text default ""
-      Final boolean default false
-      CreatedAt time indexed default now()
-      Workspace relation Workspace on delete cascade
-   }
+data Workspaces / Workspace {
+   Name text
+   CreatedAt time, default now()
+   Documents
+   index CreatedAt
+   order by CreatedAt
 }
+
+data Documents / Document {
+   Title text
+   Body text, default ""
+   Final / Draft, default Draft
+   CreatedAt time, default now()
+   Workspace, on delete cascade
+   index CreatedAt
+   order by CreatedAt
+}
+```
+
+Primitive fields support `text`, `number`, `boolean`, and `time`. `now()` is the implemented time
+default. Boolean fields are declared as their two case names; writes and filters use those names.
+Field modifiers are comma-separated. Indexes are separate statements, and one default `order by`
+may be declared for the entity.
+
+A bare singular name such as `Workspace` is a stored to-one relationship when it names another
+entity. A bare plural name such as `Documents` is the inferred inverse to-many relationship. A
+stored relationship may add `on delete cascade`; otherwise deletion is restricted while another
+row refers to the target. Relationship values are live entity handles, never public text IDs.
+
+## App datasource configuration
+
+The catalog does not own provider identity. An app mounts either the keyless `Memory` provider or
+the configured `Local` provider:
+
+```tao
+use Local from @tao/data
 
 app WordFlower {
-   datasource WordFlowerData through Local
-   stack WordFlowerNavigation
+   Name "WordFlower"
+   Navigator WordFlowerNavigator
+   Datasource Local with {
+      StorageKey "WordFlowerData"
+   }
 }
 ```
 
-A schema contains explicitly named collection/entity pairs. Primitive fields support `text`, `number`, `boolean`, and `time`. Fields are required unless they declare a default. Text, number, and boolean fields accept matching literal defaults; `now()` is the implemented `time` default. `indexed` records indexing intent in compiled schema metadata. Schema evolution and index-backed query execution remain future work.
+`StorageKey` is required and nonempty for `Local`. It is unique within the app's datasource
+configuration and belongs to that configured provider—not to a display `Name`, source filename, or
+data declaration. `Memory` has no key. Local persists the version-1 envelope containing schema
+version, rows, and next generated ID; the explicit key preserves rehydration and next-ID continuity.
+A load, format, version, or save failure becomes provider error state and never silently falls back
+to memory.
 
-Relationships are explicit and target another entity in the same schema. Tao code supplies a value of that entity type, not a text ID:
+Remote sync, authentication, permissions, migrations, transactions, pagination, aggregation, and
+provider-specific query features remain deferred.
+
+## Queries
+
+Queries are reactive lists and are declared in unconditional definition or root-render placement
+before first use and before control flow:
 
 ```tao
-Workspace relation Workspace on delete cascade
+query Workspaces { }
+
+query Drafts from Workspace.Documents {
+   where Draft
+}
+
+query Workspace.Documents as FinishedDocuments {
+   where Final
+   order by CreatedAt desc
+}
 ```
 
-Without `on delete cascade`, deletion is restricted while another row still refers to the target. Explicit cascade deletes dependent rows transitively. Relationship reads return the related live entity handle, so chained reads such as `Document.Workspace.Name` observe the current row.
+The source is either a root plural or a plural relationship. A query may keep the source name, use
+`Name from Source`, or use `Source as Name`. Repeated `where` clauses combine with AND. Primitive
+comparisons support `==`, `!=`, `<`, `<=`, `>`, and `>=`; boolean cases are filtered by case name.
+One explicit order may override the source entity's default order. Generated hooks are hoisted while
+preserving lexical visibility and the authored declaration-order rules.
 
-An app binds each schema with `datasource Schema through Provider`. The implemented providers are:
+Queries and lists expose `.Count`. Emptiness is tested with `Value is empty`. Query status cases are
+mutually exclusive:
 
-- `Local`, which loads and saves asynchronously through AsyncStorage. It persists a versioned envelope containing schema version, rows, and the next generated ID. A load, format, version, or save failure becomes provider error state; Local never silently falls back to memory.
-- `Memory`, which implements the same contract without durable storage. Tao behavior checks replace every schema with a fresh memory provider so checks cannot read or mutate application data.
+- `loading` while the provider is loading;
+- `error -> Message` while it has failed;
+- `empty` only when ready with zero rows;
+- the ordinary ready, nonempty path when none of those cases match.
 
-Remote sync, authentication, permissions, migrations, transactions, pagination, aggregation, and provider-specific query features are deferred.
+`Message` is scoped to the matched error handler. The retired `.Empty`, `.Loading`, and `.Error`
+members are not part of the public contract.
 
-## Reactive queries and live entities
+## Writes and iteration
 
-Queries are declared directly in a view before its actions and render root:
+Writes share the ordinary owner binder used by invocations and constructors:
 
 ```tao
-query WordFlowerData.Documents as Drafts {
-   where Workspace == Workspace
-   where Final == false
-   order by CreatedAt asc
+create Document {
+   Title: DocumentTitle
+   Workspace
 }
+
+update Document {
+   Title: TitleDraft
+   Final
+}
+
+delete Document
 ```
 
-A query is a reactive list. Each filter value is reevaluated from current Tao values, and repeated `where` clauses combine with AND. The MVP supports `==`, `!=`, `<`, `<=`, `>`, and `>=`; boolean and relationship fields accept only equality or inequality. A relationship filter requires a live handle for the declared target entity from the same schema instance. A query may order by one primitive field, ascending by default or explicitly `asc`/`desc`. Relationship fields cannot be ordered.
+`Name: Value` binds a declared field by owner label. An unlabeled value binds only when its nominal
+type identifies exactly one field. Unknown, duplicate, ambiguous, missing, and incorrectly typed
+fields are diagnostics; source order never disambiguates. Omitted defaulted fields receive their
+declared value. Updates and deletes require a live entity handle from the mounted catalog.
 
-Rows expose their declared fields plus a stable text `Id`. At runtime, the same schema/entity/ID resolves to the same live entity handle while that provider store is active. Updating a row changes what existing handles read; relationship fields resolve to handles rather than exposing their stored IDs. This lets a destination safely accept `WordFlowerData.Document` and continue observing that document after writes elsewhere.
-
-Lists expose `Empty` and `Count`. Query values additionally expose:
-
-- `Loading`: whether the provider is still loading;
-- `Error`: empty text while healthy, otherwise a user-presentable provider error.
-
-Views author loading, error, empty, and populated UI with ordinary total render `when` branches:
+Iteration uses the same plural/singular order as data declarations:
 
 ```tao
-when
-   Documents.Loading -> {
-      Text("Loading documents…")
-   }
-   not Documents.Error.Empty -> {
-      Text(Documents.Error)
-   }
-   Documents.Empty -> {
-      Text("No documents")
-   }
-   otherwise -> {
-      for Document in Documents {
-         Text(Document.Title)
-      }
-   }
-```
-
-`otherwise` is required. Conditions are checked lazily in source order, and only the first matching branch renders.
-
-## Writes
-
-Writes are action statements:
-
-```tao
-action AddDocument Workspace is WordFlowerData.Workspace, Draft is text {
-   create WordFlowerData.Document {
-      Title Draft
-      Workspace Workspace
-   }
-}
-
-action FinishDocument Document is WordFlowerData.Document {
-   update Document {
-      Final true
-   }
-}
-
-action DeleteDocument Document is WordFlowerData.Document {
-   delete Document
+loop Drafts / Document {
+   Text(Document.Title)
 }
 ```
 
-`create` requires each non-defaulted field exactly once. Omitted defaulted fields receive their declared literal or `now()` value. `update` and `delete` require a typed live entity handle, not arbitrary text; an update accepts declared fields only. Runtime checks also reject unknown fields, wrong primitive values, missing relationship targets, handles from another schema, and operations on deleted rows.
-
-A successful write updates the in-memory store and publishes a reactive revision immediately. Local persistence is then serialized through an asynchronous save queue, preserving write order. A failed save surfaces through `Error`; writes attempted while a provider is loading or failed are rejected rather than silently discarded. When a newer snapshot was already queued and saves successfully, it proves the current data durable and clears that save-origin error.
+The binder's type is inferred from the collection element. Runtime rendering uses entity identity
+for React keys and an index fallback for non-entity lists. Stable entity IDs remain runtime-private;
+there is no public `.Id` member or ID-based test selector.
 
 ## Deterministic provider-state tests
 
-Tao checks can exercise non-ready providers without clocks, sleeps, or external services:
+Every Tao check receives a fresh Memory replacement for the launched app's datasource. Bare status
+steps drive that active provider without touching durable storage:
 
 ```tao
-data WordFlowerData loading
+data loading
 expect text "Loading documents…"
-data WordFlowerData error "Storage unavailable"
+data error "Storage unavailable"
 expect text "Storage unavailable"
-data WordFlowerData ready
+data ready
 ```
 
-These steps affect only the check's isolated memory provider and flush the reactive render. They test application-owned loading and failure UI; production provider selection belongs only in the app's `datasource` statement.
+See `Tao Testing.md` for selector, row-scope, and isolation rules.

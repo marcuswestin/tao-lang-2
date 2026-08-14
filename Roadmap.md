@@ -19,27 +19,27 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - `state`, named/inline `action`, `set`, `do`, action parameters, stateful type behavior, and reactive rerendering.
 
 - [x] Expand core expression/value language
-  - Boolean and `none` values, `interpolate`, arithmetic/comparison/boolean expressions, pure function calls, collection/text members, and focused diagnostics.
+  - Boolean and `none` values, expression interpolation inside strings, arithmetic/comparison/boolean expressions, pure function calls, collection/text members, and focused diagnostics.
   - Rendering, action `do`, and function calls use mandatory `Name(args)` delimiters; render layout remains outside the call as `Name(args) [layout]`.
 
 - [x] Add control flow and collection rendering MVP
-  - Expression-bodied pure functions, one ordered and total `when ... otherwise` form for values/renders/actions, boolean-state `toggle`, `.Empty`/`.Count`, and `for` over typed lists with formatter/compiler/runtime support.
+  - Expression-bodied pure functions, subject-based total `when ... otherwise` for values/renders, block-scoped action/render guards, boolean-state `toggle`, `is empty`/`.Count`, and `loop Plural / Singular` over typed lists.
 
 - [x] Add datasource schema and query MVP
-  - Provider-neutral `data` schemas, app-owned `datasource Schema through Local|Memory`, required/defaulted fields, `time`, index metadata, explicit relationships, reactive `query`, AND-composed `where`, ordering, typed live entity rows, and isolated Memory test providers.
+  - Provider-neutral top-level `data Plural / Singular` catalogs, app-owned configured Local/Memory providers with explicit Local storage keys, required/defaulted fields, `time`, index metadata, inferred relationships, reactive `query`, AND-composed `where`, ordering, typed live entity rows, and isolated Memory test providers.
   - `create`, strict live-handle `update`/`delete`, versioned AsyncStorage persistence, explicit transitive cascade, surfaced provider failures, and post-write UI consistency.
 
 - [ ] Add typed TS value injection expressions
   - `let X = inject text/number ...`, with Tao-side declared type and generated TS return checking.
 
 - [x] Add navigation and routing MVP
-  - The autonomous MVP branch implements one app-owned declared stack with typed destination views and `present Stack.Destination(args)`, deterministic state-preserving history, an automatic accessible Back affordance, Tao `back Stack`, test `back`, and native hardware-back reconciliation. Selection, split, overlays, restoration, and public routing remain deferred.
+  - Apps mount configured StackNav, SlotNav, and OverlayNav values; `ui` presentation supports contextual or strict targets, dismiss, root replace, state-preserving history, accessible/native/test Back, and explicit multi-app selection. Selection, split, window, toast, restoration, and public routing remain deferred.
 
 - [x] Define canonical buildable app target and acceptance bar
   - `Apps/WordFlower/1 - Current/WordFlower.tao` is the executable forcing app: local related data, empty/error/loading/populated states, create/update/delete flows, navigation, forms, and Tao behavior tests.
 
 - [x] Implement Tao-native testing v0
-  - Inline/sidecar `test`, direct text/label/id/placeholder selectors, input-value assertions, deterministic data states, root-safe navigation back, test-plan IR, runtime Jest execution through the existing Expo harness, and minimal `tao test [path]`.
+  - Inline/sidecar `test`, text/label/placeholder and `#tag` selectors, scoped row selection, grouped/input-value assertions, bare deterministic data states, root-safe navigation back, structured test-plan IR, runtime Jest execution through the existing Expo harness, and `tao test [path]`.
 
 - [ ] Migrate Test Apps to Tao-authored behavior tests and harden `tao test`
   - Make Test Apps assert behavior in Tao instead of only package/runtime Jest fixtures; add filters, watch/CI output, richer failure reporting, and broader runtime coverage.
@@ -47,8 +47,8 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [x] Add interaction event MVP
   - Press/change/submit behavior for built-in controls, action-valued component parameters, disabled/submitting suppression, authored accessibility labels, and deterministic event tests.
 
-- [x] Add render IDs and minimal accessibility semantics
-  - Stable test/accessibility identifiers, labels, roles for built-ins, useful TextInput/Button semantics, and validator guidance.
+- [x] Add render tags and minimal accessibility semantics
+  - Private test tags that merge into existing native roots without layout wrappers, labels and roles for built-ins, useful TextInput/Button semantics, scoped loop-row selection, and validator guidance. Public IDs remain retired.
 
 - [ ] Add Tao design system MVP
   - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level design application, runtime lowering, and first design diagnostics.
@@ -58,7 +58,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
   - TextInput, field labels, local form state, validation/error display, submit/change/focus flow, keyboard handling, and accessible feedback.
 
 - [x] Add loading, empty, and error-state MVP
-  - Reactive query `Loading`/text-bearing `Error` members, total Tao `when` branches, app-visible provider failures and recovery tests, and canonical loading/error/empty/populated patterns for first apps.
+  - Mutually exclusive reactive query `loading`/`error -> Message`/ready-empty/ready-nonempty cases, app-visible provider failures and recovery tests, and canonical first-app state patterns.
 
 - [ ] Add beautiful app defaults mini slice
   - Polished default text/input/button styles, seeded accent, neutral palette, app-shell content frame, empty/error/loading surfaces.
@@ -75,8 +75,11 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Polish IDE MVP
   - Syntax, diagnostics, formatting, source actions, go-to-definition/reference basics, and live preview once runtime/test flow is stable.
 
-- [ ] Advance WordFlower through the Current/Next/Future process
-  - Implement `Apps/WordFlower/2 - Next` into `Apps/WordFlower/1 - Current` slice by slice, reconciling `Apps/WordFlower/3 - MVP` after every landed slice; cut a new Next tranche after Current absorbs the existing one. The process contract is `Apps/WordFlower/README.md`.
+- [x] Absorb the 2026-08 WordFlower Next tranche into Current
+  - Current and its test sidecar now match Next, the active specs and later WordFlower sketches are reconciled, and the tranche passes the repository acceptance gates in `Apps/WordFlower/README.md`.
+
+- [ ] Select and cut the following WordFlower Next tranche
+  - Choose the next coherent gap from MVP separately; do not fold tranche selection into the completed absorption work.
 
 - [ ] Complete canonical app and v1 hardening
   - Build WordFlower end to end, close gaps, tighten diagnostics/docs, remove stale roadmap/spec drift, and validate `verify`.
@@ -86,7 +89,7 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 This remains Ro's product/backlog stack. Items completed or deliberately superseded by the autonomous MVP are reconciled here rather than left as contradictory current-work claims.
 
 - [ ] Add simulation mode with datasources kept locally (with simulated network delays), library states/state saving, demo renders
-- [ ] String interpolation syntax highlighting (did we accomplish this in old repo?)
+- [x] String interpolation syntax highlighting
 - [ ] Add typed TS value injection expressions: `let X = inject <type>`ts ...`
   - Plan: `Roadmap/Archive/Inject typed TS values/Plan - Inject typed TS values.md`
 - [x] Reorganize agent context
@@ -99,7 +102,7 @@ This remains Ro's product/backlog stack. Items completed or deliberately superse
   - [ ] Then ensure that a workspace only looks inside its root folder for packages; and have the ide extension manage multiple workspaces (one for each project folder); and stop requiring a tao project to have a git repo at its root, as long as it is inside a git repo (to allow for multiple tao projects in a single repo)
 - [ ] Implement styling
 - [ ] Actions
-  - [ ] Add `on press` etc
+  - [x] Add `on press|change|submit`, scoped inline handlers, and direct-state two-way input binding
   - [ ] Switch other test apps to use tao testing rather than ts
 - [ ] Change argument order of `ValidationContext.error`/etc
 - [ ] Require type of lists: `view TagText Tags is list {`

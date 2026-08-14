@@ -1,9 +1,12 @@
 import TR from '@runtime/TR'
 import { Switch } from '@shared/core'
-import { act, fireEvent } from '@testing-library/react-native'
+import { act, fireEvent, within } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
 import type * as TestCompiler from './test-compiler/TestCompiler'
+
+type TestInstance = ReturnType<RuntimeApp.Screen['getByTestId']>
+type ScopeResolver = () => TestInstance | undefined
 
 /** runTestFile runs one precompiled Tao test file through the Expo render harness. */
 export async function runTestFile(file: TestCompiler.File): Promise<void> {
@@ -33,15 +36,21 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   }
 }
 
-function runStep(screen: RuntimeApp.Screen, step: TestCompiler.Step): void {
+function runStep(
+  screen: RuntimeApp.Screen,
+  step: TestCompiler.Step,
+  resolveScope: ScopeResolver = () => undefined,
+): void {
   return Switch.kind<TestCompiler.Step, void>(step, {
     back: back => backStep(back),
     dataStatus: status => dataStatusStep(status),
-    enter: enter => enterStep(screen, enter),
-    expect: expectation => assertExpectation(screen, expectation),
-    expectInputValue: expectation => assertInputValue(screen, expectation),
-    press: press => pressStep(screen, press),
-    submit: submit => submitStep(screen, submit),
+    enter: enter => enterStep(screen, enter, resolveScope()),
+    expect: expectation => assertExpectation(screen, expectation, resolveScope()),
+    expectGroup: expectation => assertExpectationGroup(screen, expectation, resolveScope()),
+    expectInputValue: expectation => assertInputValue(screen, expectation, resolveScope()),
+    press: press => pressStep(screen, press, resolveScope()),
+    select: select => selectStep(screen, select, resolveScope),
+    submit: submit => submitStep(screen, submit, resolveScope()),
   })
 }
 
@@ -53,30 +62,43 @@ function backStep(_step: Extract<TestCompiler.Step, { kind: 'back' }>): void {
 
 function dataStatusStep(step: Extract<TestCompiler.Step, { kind: 'dataStatus' }>): void {
   act(() => {
-    TR.Data.setTestStatus(step.dataName, step.status, step.message)
+    TR.Data.setTestStatus(step.status, step.message)
   })
 }
 
-function pressStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'press' }>): void {
-  const match = requireSingleMatch(screen, step, step.text, 'pressable')
+function pressStep(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'press' }>,
+  scope?: TestInstance,
+): void {
+  const match = requireSingleMatch(screen, step, step.text, 'pressable', scope)
   fireEvent.press(match)
 }
 
-function enterStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'enter' }>): void {
-  const match = requireSingleMatch(screen, step, step.target, 'text input')
-  fireEvent.changeText(match, step.value)
+function enterStep(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'enter' }>,
+  scope?: TestInstance,
+): void {
+  const match = requireSingleMatch(screen, step, step.target, 'text input', scope)
+  fireEvent.changeText(requireInteractiveNode(match, 'onChangeText', step), step.value)
 }
 
-function submitStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'submit' }>): void {
-  const match = requireSingleMatch(screen, step, step.target, 'submittable input')
-  fireEvent(match, 'submitEditing')
+function submitStep(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'submit' }>,
+  scope?: TestInstance,
+): void {
+  const match = requireSingleMatch(screen, step, step.target, 'submittable input', scope)
+  fireEvent(requireInteractiveNode(match, 'onSubmitEditing', step), 'submitEditing')
 }
 
 function assertExpectation(
   screen: RuntimeApp.Screen,
   expectation: Extract<TestCompiler.Step, { kind: 'expect' }>,
+  scope?: TestInstance,
 ): void {
-  const matches = querySelector(screen, expectation.selector, expectation.text)
+  const matches = querySelector(screen, expectation.selector, expectation.text, scope)
   if (!expectation.missing && matches.length === 0) {
     throw new Error(
       `${formatStep(expectation)} expected rendered text but found none.\n${formatSource(expectation.source)}`,
@@ -94,17 +116,79 @@ function assertExpectation(
 function assertInputValue(
   screen: RuntimeApp.Screen,
   expectation: Extract<TestCompiler.Step, { kind: 'expectInputValue' }>,
+  scope?: TestInstance,
 ): void {
-  const match = requireSingleMatch(screen, expectation, expectation.target, 'input')
-  if (match.props.value !== expectation.value) {
+  const match = requireSingleMatch(screen, expectation, expectation.target, 'input', scope)
+  const input = requireValueInput(match, expectation)
+  if (input.props.value !== expectation.value) {
     throw new Error(
       `${formatStep(expectation)} expected input value ${JSON.stringify(expectation.value)}, got ${
-        JSON.stringify(
-          match.props.value,
-        )
+        JSON.stringify(input.props.value)
       }.\n${formatSource(expectation.source)}`,
     )
   }
+}
+
+function assertExpectationGroup(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'expectGroup' }>,
+  parentScope?: TestInstance,
+): void {
+  const scope = step.scopeTag ? requireSingleTag(screen, step.scopeTag, step, parentScope) : parentScope
+  // Every member is evaluated against the same render state; all failures report as one step.
+  const failures: string[] = []
+  for (const expectation of step.expectations) {
+    if (expectation.kind === 'inputValue') {
+      if (!scope) {
+        throw new Error(`${formatStep(step)} input value expectations require a #tag scope.`)
+      }
+      const input = requireValueInput(scope, step)
+      if (input.props.value !== expectation.value) {
+        failures.push(
+          `expected input value ${JSON.stringify(expectation.value)}, got ${JSON.stringify(input.props.value)}`,
+        )
+      }
+      continue
+    }
+    const matches = querySelector(screen, expectation.selector, expectation.target, scope)
+    if (!expectation.missing && matches.length === 0) {
+      failures.push(`expected ${expectation.selector} ${JSON.stringify(expectation.target)}`)
+    }
+    if (expectation.missing && matches.length > 0) {
+      failures.push(`expected missing ${expectation.selector} ${JSON.stringify(expectation.target)}`)
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`${formatStep(step)} failed:\n- ${failures.join('\n- ')}\n${formatSource(step.source)}`)
+  }
+}
+
+function selectStep(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'select' }>,
+  resolveParentScope: ScopeResolver,
+): void {
+  for (const nested of step.steps) {
+    // Resolve the row again for each operation because a prior operation may rerender or remove it.
+    runStep(screen, nested, () => selectedRow(screen, step, resolveParentScope()))
+  }
+}
+
+function selectedRow(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'select' }>,
+  parentScope?: TestInstance,
+): TestInstance {
+  const matches = querySelector(screen, 'tag', step.tag, parentScope)
+  const row = matches[step.index - 1]
+  if (!row) {
+    throw new Error(
+      `${formatStep(step)} expected row ${step.index} but found ${matches.length} tagged rows.\n${
+        formatSource(step.source)
+      }`,
+    )
+  }
+  return row
 }
 
 function formatStep(step: TestCompiler.Step): string {
@@ -113,15 +197,17 @@ function formatStep(step: TestCompiler.Step): string {
     enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
     dataStatus: status =>
       status.status === 'error'
-        ? `data ${status.dataName} error "${status.message}"`
-        : `data ${status.dataName} ${status.status}`,
+        ? `data error "${status.message}"`
+        : `data ${status.status}`,
     expect: expectation =>
       expectation.missing
         ? `expect missing ${expectation.selector} "${expectation.text}"`
         : `expect ${expectation.selector} "${expectation.text}"`,
+    expectGroup: expectation => expectation.scopeTag ? `expect #${expectation.scopeTag} { … }` : 'expect { … }',
     expectInputValue: expectation =>
       `expect input ${expectation.selector} "${expectation.target}" value "${expectation.value}"`,
     press: press => `press ${press.selector} "${press.text}"`,
+    select: select => `select #${select.tag}[${select.index}] { … }`,
     submit: submit => `submit ${submit.selector} "${submit.target}"`,
   })
 }
@@ -131,8 +217,9 @@ function requireSingleMatch(
   step: Extract<TestCompiler.Step, { selector: string }>,
   target: string,
   description: string,
-) {
-  const matches = querySelector(screen, step.selector, target)
+  scope?: TestInstance,
+): TestInstance {
+  const matches = querySelector(screen, step.selector, target, scope)
   if (matches.length !== 1) {
     throw new Error(
       `${formatStep(step)} expected one ${description} but found ${matches.length} matches.\n${
@@ -143,20 +230,76 @@ function requireSingleMatch(
   return matches[0]!
 }
 
-function querySelector(screen: RuntimeApp.Screen, selector: string, target: string) {
-  if (selector === 'id') {
-    return screen.queryAllByTestId(target)
+function querySelector(
+  screen: RuntimeApp.Screen,
+  selector: string,
+  target: string,
+  scope?: TestInstance,
+): TestInstance[] {
+  const queries = scope ? within(scope) : screen
+  if (selector === 'tag') {
+    return queries.queryAllByTestId(target)
   }
   if (selector === 'label') {
-    return screen.queryAllByLabelText(target)
+    return queries.queryAllByLabelText(target)
   }
   if (selector === 'text') {
-    return screen.queryAllByText(target)
+    return queries.queryAllByText(target)
   }
   if (selector === 'placeholder') {
-    return screen.queryAllByPlaceholderText(target)
+    return queries.queryAllByPlaceholderText(target)
   }
   throw new Error(`Unsupported test selector '${selector}'.`)
+}
+
+function requireSingleTag(
+  screen: RuntimeApp.Screen,
+  tag: string,
+  step: TestCompiler.Step,
+  scope?: TestInstance,
+): TestInstance {
+  const matches = querySelector(screen, 'tag', tag, scope)
+  if (matches.length !== 1) {
+    throw new Error(`${formatStep(step)} expected one #${tag} scope but found ${matches.length}.`)
+  }
+  return matches[0]!
+}
+
+function requireInteractiveNode(
+  root: TestInstance,
+  prop: 'onChangeText' | 'onPress' | 'onSubmitEditing',
+  step: TestCompiler.Step,
+): TestInstance {
+  const candidates = [
+    root,
+    ...root.findAll((node: TestInstance) => node !== root && typeof node.props[prop] === 'function'),
+  ].filter(node => typeof node.props[prop] === 'function')
+  const matches = candidates.filter(candidate =>
+    candidate.findAll((node: TestInstance) => node !== candidate && typeof node.props[prop] === 'function').length === 0
+  )
+  if (matches.length !== 1) {
+    throw new Error(`${formatStep(step)} expected one interactive native target but found ${matches.length}.`)
+  }
+  return matches[0]!
+}
+
+function requireValueInput(root: TestInstance, step: TestCompiler.Step): TestInstance {
+  const candidates = [
+    root,
+    ...root.findAll((node: TestInstance) => node !== root && typeof node.props['onChangeText'] === 'function'),
+  ]
+    .filter(node => typeof node.props['onChangeText'] === 'function' && 'value' in node.props)
+  const matches = candidates.filter(candidate =>
+    candidate.findAll((node: TestInstance) =>
+      node !== candidate
+      && typeof node.props['onChangeText'] === 'function'
+      && 'value' in node.props
+    ).length === 0
+  )
+  if (matches.length !== 1) {
+    throw new Error(`${formatStep(step)} expected one input value target but found ${matches.length}.`)
+  }
+  return matches[0]!
 }
 
 function formatSource(source: TestCompiler.Source): string {

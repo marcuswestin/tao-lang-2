@@ -18,6 +18,11 @@ export const typeValidationMessages = {
   ambiguousField: (name: string) => `Item constructor has multiple values that match field '${name}' by type.`,
   duplicatePropertyType: (name: string) => `Item type has more than one field with the same type near '${name}'.`,
   duplicateProvidedPropertyType: 'Item constructor has more than one value with the same exact type.',
+  unknownNamedProperty: (name: string) =>
+    `Item constructor has no field named '${name}'; labels resolve only the constructed owner's fields, not visible types.`,
+  duplicateNamedProperty: (name: string) => `Item constructor provides field '${name}' more than once.`,
+  namedPropertyType: (name: string, expected: string, actual: string) =>
+    `Labeled item field '${name}:' expects ${expected}, got ${actual}.`,
   cyclicType: (name: string) => `Type '${name}' cannot reference itself through its type definition.`,
   memberNotItem: (name: string) => `Cannot access member '${name}' on a non-item value.`,
   unknownMember: (type: string, name: string) => `Item type '${type}' has no field '${name}'.`,
@@ -46,11 +51,14 @@ export function validateTypes(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const declaration of AST.streamAllContents(file).filter(AST.isParameterizedDeclaration)) {
     validateDefaultParameterOrder(declaration, ctx)
   }
-  for (const argument of AST.streamAllContents(file).filter(AST.isArgument)) {
-    validateTypedArgument(argument, ctx)
-  }
   for (const constructor of AST.streamAllContents(file).filter(AST.isTypedConstructor)) {
     validateTypedConstructor(constructor, ctx)
+  }
+  for (const configured of AST.streamAllContents(file).filter(AST.isConfiguredValue)) {
+    const typeName = configured.type.ref?.name
+    if (Type.ofConfiguredValue(configured).kind === 'item' && typeName !== 'Local' && typeName !== 'Memory') {
+      validateConfiguredItemConstructor(configured, ctx)
+    }
   }
   for (const memberAccess of AST.streamAllContents(file).filter(AST.isMemberAccessExpression)) {
     validateMemberAccess(memberAccess, ctx)
@@ -140,33 +148,6 @@ function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: Vali
   }
 }
 
-function validateTypedArgument(argument: AST.Argument, ctx: ValidationContext): void {
-  if (!argument.type) {
-    return
-  }
-  if (AST.isItemLiteral(argument.value)) {
-    validateTypedItemLiteral(argument.value, argument.type, ctx)
-    return
-  }
-  validateValueCanBeFixedAs(argument.value, argument.type, argument, ctx)
-}
-
-function validateValueCanBeFixedAs(
-  value: AST.Expression,
-  type: AST.TypeReference,
-  node: AST.Node,
-  ctx: ValidationContext,
-): void {
-  const actual = Type.ofExpression(value)
-  const target = Type.ofReference(type)
-  if (actual.kind === 'unresolved' || target.kind === 'unresolved') {
-    return
-  }
-  if (!Type.isCastCompatible(actual, target)) {
-    ctx.error(typeValidationMessages.typeFixIncompatible(Type.referenceName(type)), node)
-  }
-}
-
 function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: ValidationContext): void {
   const expected = Type.ofConstructorReference(constructor.type)
   if (expected.kind === 'unresolved') {
@@ -203,31 +184,14 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
   validateItemConstructor(constructor.value, expected.item, ctx)
 }
 
-function validateTypedItemLiteral(item: AST.ItemLiteral, type: AST.TypeReference, ctx: ValidationContext): void {
-  const expected = Type.ofReference(type)
-  if (expected.kind === 'unresolved') {
-    return
-  }
-  if (expected.kind !== 'item') {
-    ctx.error(typeValidationMessages.constructorShape(Type.referenceName(type), constructorLiteralKind(expected)), item)
-    return
-  }
-  if (!expected.item) {
-    if (item.properties.length > 0) {
-      ctx.error(typeValidationMessages.shapelessItemConstructor(Type.referenceName(type)), item)
-    }
-    return
-  }
-  validateItemConstructor(item, expected.item, ctx)
-}
-
 function constructorLiteralKind(type: ASTUtils.TaoType): string {
   return Switch.kind(type, {
     primitive: type => type.primitive,
     list: () => 'list',
     item: () => 'item',
-    entity: type => type.entity.name,
+    entity: type => Type.dataEntityName(type.entity),
     unresolved: () => 'unresolved',
+    union: type => type.members.map(Type.displayName).join(' | '),
   })
 }
 
@@ -274,7 +238,135 @@ function validateItemConstructor(
       'duplicate-property-type': diagnostic => {
         ctx.error(typeValidationMessages.duplicatePropertyType(diagnostic.expected.name), item)
       },
+      'unknown-named-property': diagnostic => {
+        ctx.error(typeValidationMessages.unknownNamedProperty(diagnostic.name), diagnostic.property)
+      },
+      'duplicate-named-property': diagnostic => {
+        ctx.error(typeValidationMessages.duplicateNamedProperty(diagnostic.expected.name), diagnostic.property)
+      },
+      'named-property-type': diagnostic => {
+        ctx.error(
+          typeValidationMessages.namedPropertyType(
+            diagnostic.expected.name,
+            Type.displayName(Type.ofProperty(diagnostic.expected)),
+            Type.displayName(Type.ofExpression(diagnostic.property.value)),
+          ),
+          diagnostic.property,
+        )
+      },
     })
+  }
+}
+
+function validateConfiguredItemConstructor(value: AST.ConfiguredValue, ctx: ValidationContext): void {
+  const constructed = Type.ofConfiguredValue(value)
+  if (constructed.kind !== 'item') {
+    return
+  }
+  const typeName = value.type.ref?.name ?? value.type.$refText
+  if (!constructed.item) {
+    if (value.block.entries.length > 0) {
+      ctx.error(typeValidationMessages.shapelessItemConstructor(typeName), value.block)
+    }
+    return
+  }
+
+  const candidates = value.block.entries.map(entry => ({
+    entry,
+    type: Type.visibleDeclaration(entry, entry.name),
+  }))
+  for (const candidate of candidates) {
+    if (!candidate.type) {
+      ctx.error(typeValidationMessages.unknownType(candidate.entry.name), candidate.entry)
+      continue
+    }
+    const actualValue = Type.ofValue(candidate.entry.value)
+    const expectedValue = Type.ofDefinition(candidate.type)
+    if (actualValue.kind !== 'unresolved' && !Type.isCastCompatible(actualValue, expectedValue)) {
+      ctx.error(
+        typeValidationMessages.constructorShape(candidate.entry.name, constructorLiteralKind(expectedValue)),
+        candidate.entry,
+      )
+    }
+  }
+
+  const remainingExpected = new Set(constructed.item.properties)
+  const remainingCandidates = new Set(candidates.filter(candidate => candidate.type))
+  const candidateType = (candidate: typeof candidates[number]) => Type.ofDefinition(candidate.type!)
+  const duplicateExpected = duplicateTypes([...remainingExpected], property => Type.ofProperty(property))
+  for (const property of duplicateExpected.values()) {
+    ctx.error(typeValidationMessages.duplicatePropertyType(property.name), value.block)
+  }
+  const duplicateCandidates = duplicateTypes([...remainingCandidates], candidateType)
+  for (const candidate of duplicateCandidates.values()) {
+    ctx.error(typeValidationMessages.duplicateProvidedPropertyType, candidate.entry)
+  }
+
+  bindConfiguredEntries(
+    remainingCandidates,
+    remainingExpected,
+    candidateType,
+    (actual, expected) => Type.identityKey(actual) === Type.identityKey(expected),
+  )
+  bindConfiguredEntries(remainingCandidates, remainingExpected, candidateType, Type.isAssignable)
+
+  for (const candidate of remainingCandidates) {
+    const actual = candidateType(candidate)
+    const matches = [...remainingExpected].filter(property => Type.isAssignable(actual, Type.ofProperty(property)))
+    if (matches.length > 1) {
+      ctx.error(typeValidationMessages.ambiguousProperty(matches.map(property => property.name)), candidate.entry)
+    } else if (matches.length === 0) {
+      ctx.error(typeValidationMessages.unmatchedProperty, candidate.entry)
+    }
+  }
+  for (const property of remainingExpected) {
+    const matches = [...remainingCandidates].filter(candidate =>
+      Type.isAssignable(candidateType(candidate), Type.ofProperty(property))
+    )
+    if (matches.length > 1) {
+      ctx.error(typeValidationMessages.ambiguousField(property.name), value.block)
+    } else if (matches.length === 0) {
+      ctx.error(typeValidationMessages.missingProperty(property.name), value.block)
+    }
+  }
+}
+
+function duplicateTypes<T>(values: readonly T[], getType: (value: T) => ASTUtils.TaoType): Map<string, T> {
+  const first = new Map<string, T>()
+  const duplicates = new Map<string, T>()
+  for (const value of values) {
+    const key = Type.identityKey(getType(value))
+    if (!key) {
+      continue
+    }
+    if (first.has(key)) {
+      duplicates.set(key, value)
+    } else {
+      first.set(key, value)
+    }
+  }
+  return duplicates
+}
+
+function bindConfiguredEntries<T extends { entry: AST.ConfigurationEntry }>(
+  candidates: Set<T>,
+  expected: Set<AST.TypeProperty>,
+  candidateType: (candidate: T) => ASTUtils.TaoType,
+  matches: (actual: ASTUtils.TaoType, expected: ASTUtils.TaoType) => boolean,
+): void {
+  for (const candidate of [...candidates]) {
+    const actual = candidateType(candidate)
+    const matching = [...expected].filter(property => matches(actual, Type.ofProperty(property)))
+    if (matching.length === 1) {
+      const property = matching[0]!
+      const competing = [...candidates].filter(other =>
+        other !== candidate && matches(candidateType(other), Type.ofProperty(property))
+      )
+      if (competing.length === 0) {
+        candidates.delete(candidate)
+        expected.delete(property)
+      }
+    }
   }
 }
 
@@ -316,6 +408,9 @@ function typeExpressionReferencesRoot(
 ): boolean {
   if (AST.isItemTypeExpression(type)) {
     return type.properties.some(property => typeDefinitionReferencesRoot(root, property, new Set(seen)))
+  }
+  if (AST.isUnionTypeExpression(type)) {
+    return type.members.some(member => typeReferenceReferencesRoot(root, member, new Set(seen)))
   }
   return typeReferenceReferencesRoot(root, type, seen)
 }
@@ -359,25 +454,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
     return
   }
   let typeName = Type.displayName(current)
-  for (const [index, member] of memberAccess.members.entries()) {
-    if (
-      index === 0
-      && AST.isQueryDeclaration(memberAccess.target.ref)
-      && (member === 'Loading' || member === 'Error')
-    ) {
-      current = member === 'Loading'
-        ? { kind: 'primitive', primitive: 'boolean' }
-        : { kind: 'primitive', primitive: 'text' }
-      typeName = Type.displayName(current)
-      continue
-    }
-    if (
-      (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text')) && member === 'Empty'
-    ) {
-      current = { kind: 'primitive', primitive: 'boolean' }
-      typeName = 'boolean'
-      continue
-    }
+  for (const member of memberAccess.members) {
     if (
       (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text')) && member === 'Count'
     ) {
@@ -386,12 +463,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       continue
     }
     if (current.kind === 'entity') {
-      if (member === 'Id') {
-        current = { kind: 'primitive', primitive: 'text' }
-        typeName = 'text'
-        continue
-      }
-      const field = current.entity.block.fields.find(candidate => candidate.name === member)
+      const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
       if (!field) {
         ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
         return
@@ -423,7 +495,9 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     AliasDeclaration: declaration => Type.ofExpression(declaration.value),
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
     ActionDeclaration: Type.ofAction,
-    QueryDeclaration: declaration => {
+    CasePayload: () => ({ kind: 'primitive', primitive: 'text' }),
+    EntityDataField: field => field.negativeName ? { kind: 'primitive', primitive: 'boolean' } : { kind: 'unresolved' },
+    EntityQueryDeclaration: declaration => {
       const entity = Type.queryEntity(declaration)
       return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }
     },
@@ -431,6 +505,7 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
       const collection = Type.ofExpression(statement.collection)
       return collection.kind === 'list' ? collection.element ?? { kind: 'unresolved' } : { kind: 'unresolved' }
     },
+    UiDeclaration: () => ({ kind: 'primitive', primitive: 'ui' }),
     undefined: () => ({ kind: 'unresolved' }),
   })
 }

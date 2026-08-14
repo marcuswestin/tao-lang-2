@@ -13,7 +13,7 @@ export const ExpressionsValidator = {
 
 /** inferExpressionType returns the Typir-inferred type name for a Tao expression. */
 function inferExpressionType(
-  expression: AST.Expression,
+  expression: AST.Expression | AST.ConfiguredValue,
   typir: TaoTypirServices,
 ): string | undefined {
   return TypeSystemHelpers.safeInferType(typir, expression)?.getName()

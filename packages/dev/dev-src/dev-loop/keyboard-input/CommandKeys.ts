@@ -22,6 +22,7 @@ type CommandHandler = (context: CommandKeyContext) => Promise<boolean | void> | 
 
 /** CommandKeyContext provides dependencies for a dev-loop key action. */
 export type CommandKeyContext = {
+  appName?: string
   appPath: string
   finish: (exitCode: number) => Promise<void>
   keyInput: RawKeyInput
@@ -53,7 +54,7 @@ const COMMAND_HANDLERS = {
   r: context =>
     CommandRunner.runNonInteractiveCommand(
       'recompile and reload Expo app',
-      () => Run.recompileAndReload(context.repoRoot, context.appPath),
+      () => Run.recompileAndReload(context.repoRoot, context.appPath, context.appName),
     ),
   d: context => context.finish(DEV_RELOAD_EXIT_CODE),
   w: () => CommandRunner.runNonInteractiveCommand('open Expo web', ExpoRunner.openWeb),

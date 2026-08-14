@@ -68,23 +68,23 @@ test-ci:
 
 # [today] Compile this app into the local runtime package.
 compile:
-    {{ TAO }} compile "{{ APP }}"
+    {{ TAO }} compile "{{ APP }}" --app WordFlower
 
 # [intended] Start the interactive dev loop: compile, launch, watch, and reload. Roadmap.md: finish dev loop
 dev:
-    {{ TAO }} dev "{{ APP }}"
+    {{ TAO }} dev "{{ APP }}" --app WordFlower
 
 # [intended] Launch the dev loop on a specific target, including a physical device over LAN.
 dev-ios:
-    {{ TAO }} dev "{{ APP }}" --target ios
+    {{ TAO }} dev "{{ APP }}" --app WordFlower --target ios
 
 # [intended] Launch the dev loop on a connected Android device or emulator.
 dev-android:
-    {{ TAO }} dev "{{ APP }}" --target android
+    {{ TAO }} dev "{{ APP }}" --app WordFlower --target android
 
 # [intended] Launch the dev loop in the browser.
 dev-web:
-    {{ TAO }} dev "{{ APP }}" --target web
+    {{ TAO }} dev "{{ APP }}" --app WordFlower --target web
 
 ## Shipping
 ##########

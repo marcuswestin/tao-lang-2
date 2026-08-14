@@ -1,146 +1,151 @@
 # Tao Type System
 
-Status: the opening sections are authoritative for the implemented functional MVP. The later design record is explicitly future-facing.
+Status: the opening sections are authoritative for the implemented WordFlower tranche. The later
+design record is explicitly future-facing.
 
-## Implemented functional MVP
+## Implemented value and control-flow contract
 
-The current scalar/value core supports `text`, `number`, `boolean`, `none`, homogeneous lists, item values, and schema-specific live entity types. `time` is a distinct data-field type; time values currently enter Tao through entity fields, with data-only `default now()` as the clock-producing form. Text and lists expose `.Empty` as boolean and `.Count` as number. Entity values expose stable `Id`, declared fields, and live related entities through member access.
+The current value core supports `text`, `number`, `boolean`, `none`, homogeneous lists, nominal
+custom values and items, configured `ui`/`nav` values, and schema-specific live entity types. `time`
+is a distinct data-field type whose current producing form is data-only `default now()`. Text, lists,
+and queries support `Value is empty`; lists and queries retain `.Count`. Public `.Empty`, `.Loading`,
+`.Error`, and entity `.Id` members are retired.
 
-The current executable language also supports:
+The executable language includes precedence-aware arithmetic, comparison, equality, and boolean
+expressions; pure functions; immutable `let`; reactive `state`; named and inline actions; `set`,
+compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
+`loop`; first-class `view`, `layout`, `ui`, and configured `nav` values; closed role unions such as
+`Presentable is ui | nav`; top-level data/query/write forms; and typed injection.
 
-- precedence-aware arithmetic, comparison, equality, and boolean expressions;
-- explicit `interpolate` and the absence value `none`;
-- expression-bodied pure functions with an explicit `returns` type;
-- one required-total, ordered, lazy `when … otherwise` form across values, render blocks, and actions;
-- homogeneous list literals and `for … in` rendering;
-- canonical immutable `let` bindings; legacy `alias` is accepted only for compatibility and produces a deprecation warning;
-- view-local `state`, named and inline `action`, `set`, boolean-only `toggle`, `do`, and reactive rerendering;
-- structural `action(...)` callback contracts with checked positional inputs and default-aware named-action compatibility;
-- `view` and `layout` declarations, simple custom `type` declarations, typed primitive/list/item construction, item member access, and typed declaration parameters;
-- typed parameter defaults on views, layouts, actions, and functions;
-- exact-first type-based render/action/presentation/item-field binding, explicit `.Parameter Value` invocation bindings, and invocation-only `Type: Value` labels;
-- typed data queries/writes and typed stack destinations, described in `Tao Data.md` and `Tao Presentation and Navigation.md`.
+Optional item fields, `match`, heterogeneous lists, richer collection transforms, and async remain
+future work.
 
-Template-literal sugar, optional types and item fields, `match`, type extension with `is item`, heterogeneous lists, configured-declaration property blocks, closed unions, and richer collection transforms remain future work.
+### Owner-bound arguments
 
-### Canonical calls and layout placement
-
-Rendering, action execution, pure-function calls, and destination presentation always delimit arguments with parentheses:
+Rendering, actions, functions, presentation, constructors, configured values, and data writes share
+one non-positional binder. Calls and presentation always delimit arguments with parentheses and use
+commas between multiple arguments:
 
 ```tao
-render Card(.Title "Inbox") [fill, gap 8] {
+render Card(Title: "Inbox", Tone: "quiet") [fill, gap 8] {
    Text("Open")
 }
 
-do Save(.Draft Draft)
+do Save(Draft: Draft)
 let Label = CountLabel(Count)
-present MainNavigation.Detail(.Task Task)
+present Detail(Task)
 ```
 
-Empty calls use `()`. A render layout clause and child block follow the closing parenthesis; layout is never part of the argument list. The `render` keyword may be omitted only for a child view invocation inside a render block, but the parentheses remain mandatory.
+`Name: Value` refers strictly to a parameter or field owned by the value being invoked or
+constructed. It never resolves `Name` as an unrelated visible type. An unlabeled value binds when
+its exact or nominal type identifies exactly one remaining slot; declaration or source order never
+breaks a tie. The validator reports unknown and duplicate labels, label/type-name collisions,
+same-type ambiguity, unmatched values, and missing required slots.
 
-Any expression of the required type can appear in an argument list, including a function call, `interpolate`, a binary expression, or a list literal. `.Parameter Value` binds by declared parameter name before type-based matching and disambiguates repeated underlying types.
+Defaults may be omitted. A defaulted slot does not compete for an unlabeled value, so override it
+with its owner label. A required parameter cannot follow a defaulted one; a default must match its
+parameter type and may refer only to earlier parameters in the same declaration.
 
-### Action callback contracts
+Empty calls use `()`. A render layout clause and child block follow the closing parenthesis and are
+never part of the argument list. The `render` keyword may be omitted only for child invocations
+inside a render block; parentheses remain mandatory.
 
-Reusable views declare the arguments they will supply when invoking an action value. `action()` accepts no arguments; `action(text)` accepts one text argument; additional inputs are comma-separated. Bare `action` remains compatible as the zero-argument form, but canonical APIs spell the contract explicitly.
+### Interpolated strings and expressions
+
+A quoted string may contain scalar expressions:
 
 ```tao
-view Field Change is action(text), Submit is action() {
-   action Relay Value is text {
-      do Change(Value)
-   }
-   action Send {
-      do Submit()
-   }
-   render Text("Ready")
-}
+let Greeting = "Hello { Person.Name }; next is { Count + 1 }."
+```
 
+Interpolation accepts the full expression grammar, including member paths, calls, binary
+expressions, and subject `when`. Results must be text, number, boolean, or `none`; `none` contributes
+empty text. `\{`, `\"`, and `\\` escape a literal brace, quote, and slash. Multiple interpolations
+and nested expression braces are supported. Explicit `interpolate` is retired.
+
+Operator precedence is unary, multiplication/division, addition/subtraction, comparison, equality,
+`and`, then `or`. Arithmetic operands are numbers except for `text + text`; ordered comparisons
+require numbers; boolean operators require booleans.
+
+### Action callback contracts and control events
+
+`action()` accepts no values; `action(text)` accepts one text value; further inputs are
+comma-separated. Contracts are structural. Named actions infer their callback signature, and an
+action with incompatible value types or required arity is rejected.
+
+```tao
 view Editor {
    state Draft = ""
-   action ChangeDraft Value is text {
-      set Draft = Value
-   }
+   action ChangeDraft Value is text { set Draft = Value }
    action Save { }
-   render Field(.Change ChangeDraft, .Submit Save)
-}
-```
-
-Named actions infer their callback signature from their declared parameters. Inline `action { ... }` values are zero-argument. Contracts are structural, so a matching callback can be forwarded through multiple reusable views; an action with a wrong type or required arity is rejected. A named action may have additional trailing defaulted parameters when every call allowed by the callback contract remains safe.
-
-Named action declarations keep Tao's ordinary type-based and `.Parameter` argument binding. Invoking an action-typed value uses the positional order declared by `action(...)`, because a callback type intentionally carries types rather than source parameter names. The compiler preserves the signature in generated `TR.Action` types, and runtime-backed controls adapt native events to the declared Tao values. For example, the standard `TextInput.Change` contract is `action(text)`, while `TextInput.Submit`, `Button.Action`, and `FormButton.Press` are `action()`.
-
-### Functions and typed defaults
-
-Pure functions have lexical parameters, one expression body, an explicit return type, and positional calls:
-
-```tao
-function CountLabel Count is number returns text = interpolate "Count: ", Count
-function Step Count is number, Amount is number default 1 returns number = Count + Amount
-
-let Label = CountLabel(2)
-let Next = Step(2)
-```
-
-Function defaults may be omitted only from the trailing positional arguments; named `.Parameter` arguments are not valid for function calls. View, layout, action, and destination calls use normal type-based binding for required parameters. A defaulted parameter does not compete for an unnamed argument, so overriding it is explicit:
-
-```tao
-view Status Title is text, Tone is text default "quiet" {
-   render Text(interpolate Title, ": ", Tone)
-}
-
-render Status("Ready")
-render Status("Ready", .Tone "loud")
-```
-
-A required parameter cannot follow a defaulted parameter. A default must match its parameter type and may refer only to earlier parameters in the same declaration.
-
-### Total `when`
-
-Every conditional has one or more boolean branches and a required `otherwise`. Conditions run lazily in source order; only the first matching branch is evaluated or executed.
-
-```tao
-function Status Visible is boolean returns text = when
-   Visible -> "Open"
-   otherwise -> "Hidden"
-
-view Example {
-   state Count = 2
-   state Visible = true
-   action Hide {
-      when
-         Count > 0 -> {
-            toggle Visible
-            set Count = 0
-         }
-         otherwise -> { }
-   }
-   render Col() {
-      when
-         Visible -> {
-            Text(Status(Visible))
-         }
-         otherwise -> {
-            Text("Empty")
-         }
-      for Name in ["Inbox" "Today"] {
-         Text(Name)
-      }
+   render TextInput(Value: Draft, Label: "Draft") {
+      on change ChangeDraft
+      on submit Save
    }
 }
 ```
 
-Value branches must produce compatible types. Render and action branches use blocks. `when` and `for` render statements are valid only inside a render child block and introduce lexical child scopes. There is no separate implemented `if` form.
+`on press|change|submit` configures the matching action-valued control slot. It accepts a named action
+or an inline handler; `on change -> Entered { ... }` introduces the supplied text payload in the
+handler scope. A direct writable-state `Value:` reference receives synthesized two-way change
+behavior only when no explicit change handler exists. Computed values, aliases, parameters, and
+entity fields require an explicit handler.
 
-### Expressions, collections, and entities
+### Subject `when`
 
-`interpolate` concatenates text, number, boolean, and `none` parts; `none` contributes empty text. Operator precedence is unary, multiplication/division, addition/subtraction, comparison, equality, `and`, then `or`. Equality uses `==` and `!=`. Arithmetic operands are numbers except for `text + text`; ordered expression comparisons require numbers; boolean operators require booleans.
+`when` evaluates one subject once and selects one case lazily:
 
-List literals are homogeneous. `for` exposes the inferred element value inside its render body. A data query is a reactive list whose element type is the selected schema entity. Query iteration exposes live entity fields and stable text `Id`; strict `update` and `delete` require that entity type. A relation field accepts and returns the declared related entity type, not arbitrary text.
+```tao
+let Label = when Draft {
+   empty -> "Required"
+   otherwise -> Draft
+}
+
+when Ready {
+   true -> { Text("Ready") }
+   otherwise -> { Text("Waiting") }
+}
+```
+
+`otherwise` is required. Value branches must have compatible results. Exact boolean cases preserve
+ordinary boolean conditionals. Query subjects additionally support mutually exclusive `loading`,
+`error -> Message`, and ready `empty` cases. Render branches use blocks. Action control flow uses
+guards rather than an action `when` statement.
+
+### Block-scoped guards
+
+A guard has exactly one subject and either one case or a case block:
+
+```tao
+guard Draft empty
+
+guard Documents {
+   loading -> { Text("Loading…") }
+   error -> Message { Text(Message) }
+}
+```
+
+On a match, the optional handler runs and the remainder of that guard's enclosing block is skipped.
+Statements or render siblings before it remain. A guard inside a called action stops only that
+called action's current block; execution after `do Callee()` in the caller continues. A guard inside
+a nested event handler stops only that handler block. A render guard renders its matched handler and
+skips only later siblings in the same render block.
+
+### Collections and entities
+
+List literals are homogeneous and comma-separated. Rendering iteration uses
+`loop Collection / Binder`; the binder type is inferred from the collection element and is scoped to
+the loop body. Queries are reactive lists of live entities. Relationship fields accept and return
+the declared related entity type, never arbitrary text. Strict `update` and `delete` require such a
+live handle. Runtime entity identity supplies row keys but is not public Tao surface.
 
 ## Future type-system design record
 
-Everything below this heading records deeper intended design. It is not a statement of current parser, validator, compiler, or runtime behavior; examples may not parse in the MVP. Material that overlaps the implemented subset above should still be read through the authoritative MVP rules above, especially mandatory invocation parentheses, explicit `interpolate`, total `when`, and canonical `let`.
+Everything below this heading records deeper intended design. It is not a statement of current
+parser, validator, compiler, or runtime behavior; examples may not parse in the current tranche.
+Material that overlaps the implemented subset above must be read through the authoritative rules
+above, especially owner-bound arguments, interpolation, subject `when`, block-scoped guards, `loop`,
+and canonical `let`.
 
 Any commented-out code is WIP material and should be ignored.
 
@@ -298,7 +303,9 @@ In a declarative scope, a `let` expression is reevaluated when a reactive depend
 
 Declarative expressions are pure, so an implementation may cache a `let` between dependency revisions without changing observable behavior. Module/import cycles are permitted when they do not require an impossible eager value cycle. A value-initialization cycle with no already-available value is a diagnostic; it is never resolved from arbitrary source or import order.
 
-During migration, the implemented `alias` keyword may remain as deprecated compatibility syntax. A source action may rewrite it only when the binding has equivalent `let` evaluation and cycle behavior. Declaration synonyms, textual substitution, and cycle-sensitive cases require an explicit migration rather than a blind keyword replacement.
+The retired `alias` keyword is not accepted. Existing sources migrate to `let` only when the
+binding has equivalent evaluation and cycle behavior; declaration synonyms, textual substitution,
+and cycle-sensitive cases require an explicit redesign rather than a blind keyword replacement.
 
 ```tao
 let <Name> = <Expression>

@@ -43,11 +43,11 @@
     },
     "string-escape": {
       "name": "constant.character.escape.tao-lang",
-      "match": "\\\\(n|r|t|\\\\|\"|\\$)"
+      "match": "\\\\(n|r|t|\\\\|\"|\\{)"
     },
     "string-interpolation": {
       "name": "meta.template.expression.tao-lang",
-      "begin": "\\$\\{",
+      "begin": "\\{",
       "end": "\\}",
       "beginCaptures": {
         "0": { "name": "punctuation.definition.template-expression.begin.tao-lang" }

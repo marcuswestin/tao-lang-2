@@ -1,3 +1,4 @@
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
@@ -5,73 +6,66 @@ import { Compile } from '../Compile'
 
 /** DataCompiler lowers Tao schemas, reactive queries, and strict row writes to TR.Data. */
 export const DataCompiler = {
-  DataDeclaration(data: AST.DataDeclaration): Compiled {
+  /** DataCatalog compiles all top-level Plural / Singular declarations into one provider-neutral schema. */
+  DataCatalog(entities: readonly AST.EntityDataDeclaration[]): Compiled {
     return gen`
-      ${gen.scopeName(data)} = TR.Data.Schema({
-        name: ${gen.jsLiteral(data.name)},
+      ${dataCatalogScope()} = TR.Data.Schema({
+        name: 'Data',
         schemaVersion: 1,
-        storageKey: ${gen.jsLiteral(data.name)},
         entities: {
-          ${gen.list(data.block.entities, Compile.DataEntity)}
+          ${gen.list(entities, Compile.EntityDataDefinition)}
         },
       })
     `
   },
 
-  DataEntity(entity: AST.DataEntity): Compiled {
+  /** EntityDataDeclaration contributes to its file catalog and emits no standalone schema. */
+  EntityDataDeclaration(): Compiled {
+    return gen.noop()
+  },
+
+  EntityDataDefinition(entity: AST.EntityDataDeclaration): Compiled {
+    const order = entity.block.entries.find(AST.isDataDefaultOrder)
+    const fields = entity.block.entries.filter(AST.isEntityDataField)
     return gen`
-      [${gen.jsLiteral(entity.name)}]: {
-        collection: ${gen.jsLiteral(entity.collectionName)},
+      [${gen.jsLiteral(entity.singularName)}]: {
+        collection: ${gen.jsLiteral(entity.name)},
+        ${
+      order
+        ? gen`defaultOrder: { field: ${gen.jsLiteral(order.fieldName)}, direction: ${
+          gen.jsLiteral(order.direction ?? 'asc')
+        } },`
+        : ''
+    }
         fields: {
-          ${gen.list(entity.block.fields, Compile.DataField)}
+          ${gen.list(fields.filter(field => !isInverseField(field)), field => compileEntityDataField(entity, field))}
+        },
+        inverseFields: {
+          ${gen.list(fields.filter(isInverseField), field => compileInverseDataField(entity, field))}
         },
       },
     `
   },
-
-  DataField(field: AST.DataField): Compiled {
-    return field.primitive
-      ? gen`[${gen.jsLiteral(field.name)}]: {
-          kind: ${gen.jsLiteral(field.primitive)},
-          ${field.indexed ? 'indexed: true,' : ''}
-          ${field.defaultValue ? Compile.DataFieldDefault(field.defaultValue) : ''}
-        },`
-      : gen`[${gen.jsLiteral(field.name)}]: {
-          kind: 'relation',
-          relation: ${gen.jsLiteral(resolveRef(field.relation!).name)},
-          ${field.onDeleteCascade ? "onDelete: 'cascade'," : ''}
-        },`
-  },
-
-  /** DataFieldDefault keeps literal defaults distinct from the time-only now() sentinel. */
-  DataFieldDefault(value: Exclude<AST.DataField['defaultValue'], undefined>): Compiled {
-    return AST.isNowExpression(value)
-      ? gen`defaultNow: true,`
-      : AST.isBooleanLiteral(value)
-      ? gen`defaultValue: ${value.value},`
-      : AST.isNumberLiteral(value)
-      ? gen`defaultValue: ${value.value},`
-      : gen`defaultValue: ${gen.jsLiteral(value.value)},`
-  },
-
-  QueryDeclaration(query: AST.QueryDeclaration): Compiled {
-    const data = resolveRef(query.data)
-    const entity = data.block.entities.find(candidate => candidate.collectionName === query.collectionName)
-    Assert.defined(entity, 'validated query collection resolves an entity', {
-      collectionName: query.collectionName,
-      dataName: data.name,
-    })
+  EntityQueryDeclaration(query: AST.EntityQueryDeclaration): Compiled {
+    const entity = Type.queryEntity(query)
+    Assert.defined(entity, 'validated current query resolves an entity')
+    const clauses = query.block?.clauses ?? []
+    const sourceFilter = query.source ? compileRelationSourceFilter(query.source, entity) : undefined
     return gen`
       ${gen.scopeName(query)} = TR.Data.Query(
-        ${gen.scopeName(data)},
+        ${dataCatalogScope()},
         {
-          entity: ${gen.jsLiteral(entity.name)},
-          filters: [${gen.list(query.block?.clauses.filter(AST.isWhereClause) ?? [], Compile.WhereClause)}],
-          ${
-      query.block?.clauses.find(AST.isOrderClause)
-        ? Compile.OrderClause(query.block.clauses.find(AST.isOrderClause)!)
-        : ''
+          entity: ${gen.jsLiteral(Type.dataEntityName(entity))},
+          filters: [
+            ${sourceFilter ?? ''}
+            ${
+      gen.list(
+        clauses.filter(clause => AST.isWhereClause(clause) || AST.isBooleanWhereClause(clause)),
+        clause => AST.isWhereClause(clause) ? Compile.WhereClause(clause) : Compile.BooleanWhereClause(clause),
+      )
     }
+          ],
+          ${clauses.find(AST.isOrderClause) ? Compile.OrderClause(clauses.find(AST.isOrderClause)!) : ''}
         },
         TR.Value,
       )
@@ -86,6 +80,15 @@ export const DataCompiler = {
     },`
   },
 
+  BooleanWhereClause(where: AST.BooleanWhereClause): Compiled {
+    const field = resolveRef(where.case)
+    return gen`{
+      field: ${gen.jsLiteral(field.name)},
+      operator: '==',
+      value: () => TR.Value(${where.case.$refText === field.name ? 'true' : 'false'}),
+    },`
+  },
+
   OrderClause(order: AST.OrderClause): Compiled {
     return gen`order: {
       field: ${gen.jsLiteral(order.fieldName)},
@@ -94,18 +97,26 @@ export const DataCompiler = {
   },
 
   CreateStatement(create: AST.CreateStatement): Compiled {
-    const data = resolveRef(create.data)
+    const entity = resolveRef(create.entity)
+    const bindings = ASTUtils.resolveDataWriteBindings(entity, create.block.fields, true)
+    Assert(bindings.diagnostics.length === 0, 'validated create has no field-binding diagnostics')
     return gen`TR.Data.Create(
-      ${gen.scopeName(data)},
-      ${gen.jsLiteral(create.entityName)},
-      { ${gen.list(create.block.fields, Compile.DataWriteField)} },
+      ${dataCatalogScope()},
+      ${gen.jsLiteral(Type.dataEntityName(entity))},
+      { ${gen.list(bindings.pairs, Compile.DataWriteField)} },
     )`
   },
 
   UpdateStatement(update: AST.UpdateStatement): Compiled {
+    const targetType = Type.ofExpression(update.target)
+    if (targetType.kind !== 'entity') {
+      return Assert.never(targetType as never, 'validated update targets an entity row')
+    }
+    const bindings = ASTUtils.resolveDataWriteBindings(targetType.entity, update.block.fields, false)
+    Assert(bindings.diagnostics.length === 0, 'validated update has no field-binding diagnostics')
     return gen`TR.Data.Update(
       ${Compile.Expression(update.target)},
-      { ${gen.list(update.block.fields, Compile.DataWriteField)} },
+      { ${gen.list(bindings.pairs, Compile.DataWriteField)} },
     )`
   },
 
@@ -113,7 +124,105 @@ export const DataCompiler = {
     return gen`TR.Data.Delete(${Compile.Expression(deleteStatement.target)})`
   },
 
-  DataWriteField(field: AST.DataWriteField): Compiled {
-    return gen`[${gen.jsLiteral(field.name)}]: ${Compile.Expression(field.value)},`
+  DataWriteField(pair: ASTUtils.DataWriteBindingPair): Compiled {
+    return gen`[${gen.jsLiteral(pair.field.name)}]: ${Compile.Expression(pair.write.value)},`
   },
 } as const
+
+function dataCatalogScope(): Compiled {
+  return gen.scopeName({ name: '_TaoDataCatalog' })
+}
+
+function compileRelationSourceFilter(
+  source: AST.MemberAccessExpression,
+  entity: ASTUtils.DataEntityDefinition,
+): Compiled {
+  const ownerType = Type.atMemberPath(Type.ofValueDeclaration(source.target.ref), source.members.slice(0, -1))
+  if (ownerType.kind !== 'entity') {
+    return Assert.never(ownerType as never, 'validated relation query source has an entity owner')
+  }
+  const ownerEntity = ownerType.entity
+  const inverseField = Type.dataFields(entity).find(field => {
+    const fieldType = Type.dataFieldType(field)
+    return fieldType.kind === 'entity' && fieldType.entity === ownerEntity
+  })
+  Assert.defined(inverseField, 'validated relation query source resolves its inverse stored field')
+  const owner = source.members.length === 1
+    ? Compile.ValueDeclarationReference(resolveRef(source.target))
+    : gen`TR.Member(${Compile.ValueDeclarationReference(resolveRef(source.target))}, [${
+      gen.join(
+        source.members.slice(0, -1),
+        member => gen`${gen.jsLiteral(member)}`,
+      )
+    }])`
+  return gen`{
+    field: ${gen.jsLiteral(inverseField.name)},
+    operator: '==',
+    value: () => ${owner},
+  },`
+}
+
+function compileEntityDataField(
+  owner: AST.EntityDataDeclaration,
+  field: AST.EntityDataField,
+): Compiled {
+  const indexed = owner.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === field.name)
+  const defaultModifier = field.modifiers.find(modifier => modifier.defaultValue || modifier.defaultCase)
+  if (field.primitive || field.negativeName) {
+    const kind = field.negativeName ? 'boolean' : field.primitive!
+    return gen`[${gen.jsLiteral(field.name)}]: {
+      kind: ${gen.jsLiteral(kind)},
+      ${indexed ? 'indexed: true,' : ''}
+      ${compileEntityFieldDefault(field, defaultModifier)}
+    },`
+  }
+  const entities = Type.topLevelDataEntities(field)
+  const direct = entities.find(entity => entity.singularName === field.name)
+  if (direct) {
+    return gen`[${gen.jsLiteral(field.name)}]: {
+      kind: 'relation',
+      relation: ${gen.jsLiteral(direct.singularName)},
+      ${field.modifiers.some(modifier => modifier.onDeleteCascade) ? "onDelete: 'cascade'," : ''}
+    },`
+  }
+  return Assert.never(field as never, 'inverse fields compile through inverseFields')
+}
+
+function compileInverseDataField(owner: AST.EntityDataDeclaration, field: AST.EntityDataField): Compiled {
+  const inverse = Type.topLevelDataEntities(field).find(entity => entity.name === field.name)
+  Assert.defined(inverse, 'validated inferred inverse relation resolves its entity')
+  const inverseField = inverse.block.entries
+    .filter(AST.isEntityDataField)
+    .find(candidate => candidate.name === owner.singularName)
+  Assert.defined(inverseField, 'validated inverse relation resolves its stored field')
+  return gen`[${gen.jsLiteral(field.name)}]: {
+    relation: ${gen.jsLiteral(inverse.singularName)},
+    inverseField: ${gen.jsLiteral(inverseField.name)},
+  },`
+}
+
+function isInverseField(field: AST.EntityDataField): boolean {
+  return !field.primitive && !field.negativeName
+    && Type.topLevelDataEntities(field).some(entity => entity.name === field.name)
+}
+
+function compileEntityFieldDefault(
+  field: AST.EntityDataField,
+  modifier: AST.EntityDataFieldModifier | undefined,
+): Compiled {
+  if (!modifier) {
+    return gen.noop()
+  }
+  if (modifier.defaultCase) {
+    return gen`defaultValue: ${modifier.defaultCase === field.name ? 'true' : 'false'},`
+  }
+  const value = modifier.defaultValue
+  Assert.defined(value, 'validated field default has a value')
+  return AST.isNowExpression(value)
+    ? gen`defaultNow: true,`
+    : AST.isBooleanLiteral(value)
+    ? gen`defaultValue: ${value.value},`
+    : AST.isNumberLiteral(value)
+    ? gen`defaultValue: ${value.value},`
+    : gen`defaultValue: ${gen.jsLiteral(value.value)},`
+}

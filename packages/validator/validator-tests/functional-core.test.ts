@@ -16,25 +16,26 @@ Describe('functional core validator', () => {
     await testValidateCode(`
       app FunctionalApp { view Main }
       function HasCount Count is number returns boolean = Count > 0 and not false
-      function Label Count is number returns text = when
-        Count > 0 -> interpolate "Count: ", Count
+      function Label Count is number returns text = when (Count > 0) {
+        true -> "Count: { Count }"
         otherwise -> "Empty"
+      }
       view Main {
         state Ready = false
         action Flip {
-          when
-            Ready -> { toggle Ready }
-            otherwise -> { toggle Ready }
+          guard Ready true -> { toggle Ready }
+          toggle Ready
         }
         render Stack(){
-          when
-            HasCount(2) -> {
+          when HasCount(2) {
+            true -> {
             Text(Label(2))
             }
             otherwise -> {
             Text("Empty")
             }
-          for Name in ["Inbox" "Today"] { Text(Name) }
+          }
+          loop ["Inbox", "Today"] / Name { Text(Name) }
         }
       }
       ${runtimeViews}
@@ -45,15 +46,16 @@ Describe('functional core validator', () => {
     const result = await testValidateCodeWithErrors(`
       app BrokenApp { view Main }
       function Wrong Value is number returns boolean = Value + 1
-      function Timestamp At is time returns text = interpolate At
+      function Timestamp At is time returns text = "{ At }"
       view Main {
         state Count = 1
         action InvalidToggle { toggle Count }
         render Stack(){
-          when
-            1 -> { Text("Wrong condition") }
+          when 1 {
+            true -> { Text("Wrong condition") }
             otherwise -> { Text("Fallback") }
-          for Value in "not a list" { Text(Value) }
+          }
+          loop "not a list" / Value { Text(Value) }
         }
       }
       ${runtimeViews}
@@ -61,7 +63,7 @@ Describe('functional core validator', () => {
     const errors = validationErrorMessages(result)
 
     Expect(errors).toContain(FunctionalCoreValidator.messages.functionReturn('Wrong', 'boolean', 'number'))
-    Expect(errors).toContain(FunctionalCoreValidator.messages.conditionBoolean)
+    Expect(errors).toContain(FunctionalCoreValidator.messages.subjectCases)
     Expect(errors).toContain(FunctionalCoreValidator.messages.forCollection)
     Expect(errors).toContain(FunctionalCoreValidator.messages.interpolationPart)
     Expect(errors).toContain(StateValidator.messages.toggleStateType('Count', 'number'))
@@ -69,8 +71,8 @@ Describe('functional core validator', () => {
 
   Test('unifies nested list values without treating unlike element types as compatible', async () => {
     const accepted = await testValidateCode(`
-      let EmptyFirst = [[] [1]]
-      let EmptyLast = [[1] []]
+      let EmptyFirst = [[], [1]]
+      let EmptyLast = [[1], []]
     `)
     const emptyLists = accepted.entry.ast.statements.filter(AST.isAliasDeclaration)
     const inferredTypes = emptyLists.map(declaration => Type.ofExpression(declaration.value))
@@ -82,9 +84,9 @@ Describe('functional core validator', () => {
     Expect(inferredTypes).toEqual([nestedNumberList, nestedNumberList])
 
     const result = await testValidateCodeWithErrors(`
-      let MixedElements = [1 2 "one"]
-      let MixedNested = [[1] [2] ["one"]]
-      let MixedBranches = when true -> 1 false -> 2 otherwise -> "one"
+      let MixedElements = [1, 2, "one"]
+      let MixedNested = [[1], [2], ["one"]]
+      let MixedBranches = when true { true -> 1 false -> 2 otherwise -> "one" }
     `)
     const errors = validationErrorMessages(result)
     const listDiagnostics = result.diagnostics.filter(diagnostic =>
@@ -103,12 +105,12 @@ Describe('functional core validator', () => {
   Test('accepts trailing typed defaults and requires named overrides for optional view parameters', async () => {
     await testValidateCode(`
       app DefaultsApp { view Main }
-      function Label Prefix is text, Value is text default "Save" returns text = interpolate Prefix, Value
+      function Label Prefix is text, Value is text default "Save" returns text = "{ Prefix }{ Value }"
       view Main {
         action Submit Message is text default "Saved" { }
         render Card(){
           LabelView("Plain")
-          LabelView("Title", .Hint "Hint")
+          LabelView("Title", Hint: "Hint")
         }
       }
       layout Card Gap is number default 8 { render inject \`\`\`ts\nreturn null\n\`\`\` }
@@ -127,22 +129,19 @@ Describe('functional core validator', () => {
     Expect(errors).toContain(typeValidationMessages.defaultParameterType('Title', 'Main.Title', 'number'))
   })
 
-  Test('allows functions to omit trailing defaults but rejects named function arguments', async () => {
-    const result = await testValidateCodeWithErrors(`
+  Test('allows functions to omit trailing defaults and bind owner labels', async () => {
+    await testValidateCode(`
       app DefaultsApp { view Main }
       function Label Value is text default "Save" returns text = Value
-      view Main { render Text(Label(.Value "Override")) }
+      view Main { render Text(Label(Value: "Override")) }
       ${runtimeViews}
     `)
-    const errors = validationErrorMessages(result)
-
-    Expect(errors).toContain(FunctionalCoreValidator.messages.functionNamedArgument('Label'))
   })
 
-  Test('reports the accepted argument range for functions with defaults', async () => {
+  Test('reports missing and duplicate-type function bindings without positional fallback', async () => {
     const result = await testValidateCodeWithErrors(`
       app DefaultsApp { view Main }
-      function Label Prefix is text, Value is text default "Save" returns text = interpolate Prefix, Value
+      function Label Prefix is text, Value is text default "Save" returns text = "{ Prefix }{ Value }"
       view Main {
         render Col(){
           Text(Label())
@@ -153,7 +152,7 @@ Describe('functional core validator', () => {
     `)
     const errors = validationErrorMessages(result)
 
-    Expect(errors).toContain(FunctionalCoreValidator.messages.functionArgumentCount('Label', 1, 2, 0))
-    Expect(errors).toContain(FunctionalCoreValidator.messages.functionArgumentCount('Label', 1, 2, 3))
+    Expect(errors).toContain(FunctionalCoreValidator.messages.functionMissingArgument('Label', 'Prefix'))
+    Expect(errors).toContain(FunctionalCoreValidator.messages.functionDuplicateArgumentType('Label'))
   })
 })

@@ -6,6 +6,7 @@ type TaoFileCompileOptions = {
   importLines?: string[]
   scopeBindings?: string[]
   exportedNames?: string[]
+  selectedAppName?: string
 }
 
 export default {
@@ -14,6 +15,20 @@ export default {
     const importLines = opts.importLines?.join('\n') ?? ''
     const scopeBindings = opts.scopeBindings?.join('\n') ?? ''
     const exportLines = opts.exportedNames?.map(name => `export const ${name} = _Scope.${name}`).join('\n') ?? ''
+    const apps = taoFile.statements.filter(AST.isAppDeclaration)
+    const dataEntities = taoFile.statements.filter(AST.isEntityDataDeclaration)
+    const hasRuntimeStatements = taoFile.statements.some(statement =>
+      AST.isAppDeclaration(statement) || AST.isEmittingRuntimeBinding(statement)
+    )
+    if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines) {
+      return gen`export {}`
+    }
+    const registry = apps.length === 0 ? gen.noop() : gen`
+      export const TaoApps = {
+        ${gen.list(apps, app => gen`${gen.jsLiteral(app.name)}: ${gen.Name({ name: `TaoApp_${app.name}` })},`)}
+      } as const
+      ${opts.selectedAppName ? gen`export default TaoApps[${gen.jsLiteral(opts.selectedAppName)}]` : gen.noop()}
+    `
     return gen`
       import React from 'react'
       import TR from '@runtime/TR'
@@ -26,7 +41,10 @@ export default {
       const _Scope: any = {}
       ${gen.textLines(scopeBindings)}
 
+      ${dataEntities.length > 0 ? Compile.DataCatalog(dataEntities) : gen.noop()}
+
       ${gen.list(taoFile.statements, Compile.Statement, { newLines: 2 })}
+      ${registry}
       ${gen.textLines(exportLines)}
     `
   },

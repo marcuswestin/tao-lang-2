@@ -43,10 +43,11 @@ function createCommands(): Command {
   commands
     .command('compile')
     .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
+    .option('--app <name>', 'Select a named app when the file declares multiple apps.')
     .description('Compile a Tao app into the local runtime package.')
-    .action(async (appPath: string) => {
+    .action(async (appPath: string, options: { app?: string }) => {
       try {
-        const compiled = await runCompile(appPath)
+        const compiled = await runCompile(appPath, { appName: options.app })
         HCI.writeSuccess(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}\n`)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))

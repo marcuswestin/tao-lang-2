@@ -1,9 +1,15 @@
 # Repo-local filesystem protections for Tao development.
+# Git metadata writes outside the worktree are routed through Auto-review.
 
 default_permissions = "tao-workspace"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
 
 [permissions.tao-workspace]
 extends = ":workspace"
+
+[permissions.tao-workspace.filesystem]
+"~/code/tao-lang-2/.git" = "write"
 
 [permissions.tao-workspace.filesystem.":workspace_roots"]
 "**/.env*" = "deny"

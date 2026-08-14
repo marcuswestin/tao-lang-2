@@ -145,9 +145,10 @@ test "WordFlower revolution" {
          theme WordFlowerDesign
       }
 
-      expect text string .workspaces.EmptyTitle // localized string keys, not literal copy
-      expect id "EmptyState"
-      expect missing id "LoadingSpinner"
+      expect #emptyState {
+         text string .workspaces.EmptyTitle // localized string keys, not literal copy
+      }
+      expect missing #loadingSpinner
    }
 
    check "exports a document and reports failure through a presentation result" {

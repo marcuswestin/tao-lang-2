@@ -41,24 +41,28 @@ export const FunctionalCoreCompiler = {
   },
 
   /** RenderFragmentStatement compiles one child render/control-flow fragment. */
-  RenderFragmentStatement(statement: AST.Render | AST.WhenRenderStatement | AST.ForStatement): Compiled {
+  RenderFragmentStatement(
+    statement: AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement,
+  ): Compiled {
     return Switch.type(statement, {
       ForStatement: Compile.ForStatement,
+      GuardRenderStatement: statement => Compile.GuardRenderStatement(statement, []),
       WhenRenderStatement: Compile.WhenRenderStatement,
       RenderStatement: Compile.Render,
       ViewRender: Compile.Render,
     })
   },
 
-  /** WhenRenderStatement compiles total render branches lazily in source order. */
+  /** WhenRenderStatement evaluates one subject and renders one lazy case. */
   WhenRenderStatement(statement: AST.WhenRenderStatement): Compiled {
     return gen`
-      {TR.WhenRender([
+      {TR.WhenCaseRender(${Compile.Expression(statement.subject)}, [
         ${
       gen.list(
         statement.branches,
         branch =>
-          gen`[() => ${Compile.Expression(branch.condition)}, () => TR.BlockScope(_Scope, _Scope => {
+          gen`[${gen.jsLiteral(branch.case)}, _TaoCasePayload => TR.BlockScope(_Scope, _Scope => {
+            ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
             ${Compile.RenderBlockBody(branch.block)}
           })],`,
       )
@@ -66,6 +70,29 @@ export const FunctionalCoreCompiler = {
       ], () => TR.BlockScope(_Scope, _Scope => {
         ${Compile.RenderBlockBody(statement.otherwise.block)}
       }))}
+    `
+  },
+
+  /** GuardRenderStatement preserves preceding siblings and owns only the remainder of its block. */
+  GuardRenderStatement(
+    statement: AST.GuardRenderStatement,
+    remaining: readonly (AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement)[],
+  ): Compiled {
+    return gen`
+      {TR.GuardRender(${Compile.Expression(statement.subject)}, [
+        ${
+      gen.list(
+        guardRenderBranches(statement),
+        branch =>
+          gen`[${gen.jsLiteral(branch.case)}, _TaoCasePayload => TR.BlockScope(_Scope, _Scope => {
+          ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
+          ${branch.block ? Compile.RenderBlockBody(branch.block) : gen`return null`}
+        })],`,
+      )
+    }
+      ], () => <>
+        ${Compile.RenderBlockFragments(remaining)}
+      </>)}
     `
   },
 
@@ -81,6 +108,10 @@ export const FunctionalCoreCompiler = {
     `
   },
 } as const
+
+function guardRenderBranches(statement: AST.GuardRenderStatement): AST.GuardRenderBranch[] {
+  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
+}
 
 function functionRuntimeParameterName(index: number): Compiled {
   return gen.Name({ name: `_TaoFunctionArg${index}` })

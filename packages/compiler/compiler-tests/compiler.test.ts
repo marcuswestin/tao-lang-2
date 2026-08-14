@@ -55,65 +55,101 @@ Describe('Tao compiler', () => {
     Expect(compiled.validation.diagnostics).toEqual([])
   })
 
-  Test('compiles provider-neutral data schemas, reactive queries, and row writes', async () => {
+  Test('compiles the top-level data catalog, inferred relations, defaults, and explicit Local key', async () => {
     const compiled = await Compiler.compileCode(`
-      data Tasks {
-        Workspaces Workspace { Name text }
-        Items Item { Title text Marker text default "now" Done boolean default false Ordering number CreatedAt time indexed default now() Workspace relation Workspace on delete cascade }
+      use Local from @tao/data
+      use StackNav from @tao/nav
+      data Workspaces / Workspace {
+        Name text
+        CreatedAt time, default now()
+        Documents
+        index CreatedAt
+        order by CreatedAt desc
       }
-      app MyApp { datasource Tasks through Memory view MainView }
-      project view MainView {
-        query Tasks.Items as Items {
-          where Done == false
-          order by Ordering desc
+      data Documents / Document {
+        Title text
+        Final / Draft, default Draft
+        Workspace, on delete cascade
+      }
+      app Notes {
+        Name "Notes"
+        Navigator StackNav { Initial Main }
+        Datasource Local with { StorageKey "WordFlowerData" }
+      }
+      ui Main {
+        query Workspaces { }
+        action Add { create Workspace { Name: "Home" } }
+        render Text("Main")
+      }
+      ui Detail Workspace {
+        action AddDocument { create Document { Title: "Draft", Workspace } }
+        render Col() {
+          Text("Detail")
+          query Drafts from Workspace.Documents { where Draft }
+          Text("Drafts: { Drafts.Count }")
+          loop Drafts / Draft { Text(Draft.Title) }
         }
-        render Stack(){
-          for Item in Items {
-            Button("Update", action { update Item { Done true } })
-            Button("Delete", action { delete Item })
+      }
+      ui Editor Document {
+        action Finish { update Document { Final } }
+        action Reopen { update Document { Draft } }
+        render Text("Editor")
+      }
+      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      layout Col { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain("name: 'Data'")
+    Expect(compiled.code).toContain('collection: "Workspaces"')
+    Expect(compiled.code).toContain('defaultOrder: { field: "CreatedAt", direction: "desc" }')
+    Expect(compiled.code).toContain('inverseField: "Workspace"')
+    Expect(compiled.code).toContain('defaultValue: false')
+    Expect(compiled.code).toContain('TR.Data.Source(\'local\', TR.Value("WordFlowerData"))')
+    Expect(compiled.code).toContain('_Scope._TaoDataCatalog')
+    Expect(compiled.code).toContain('["Final"]: TR.Value(true)')
+    Expect(compiled.code).toContain('["Final"]: TR.Value(false)')
+    Expect(compiled.code).toContain('TR.Data.Query')
+    Expect(compiled.code).toContain('field: "Workspace"')
+    Expect(compiled.code).toContain("operator: '=='")
+    Expect(compiled.code).toContain('TR.ForEach(_Scope.Drafts.evaluate()')
+  })
+
+  Test('lowers render and loop tags through Tao props without adding a row wrapper', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Col, Text from @tao/ui
+      app TaggedApp { view Main }
+      view Main {
+        render Col() {
+          #title
+          Text("Tagged")
+          #rows
+          loop ["One"] / Row {
+            Col() { Text(Row) }
           }
         }
-      }
-      layout Stack {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view Button Title is text, Press is action {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view Detail Workspace is Tasks.Workspace, CreatedAt is time {
-        action AddRelated { create Tasks.Item { Title "Related" Ordering 2 Workspace Workspace } }
-        render Stack() { }
       }
     `)
 
     Expect(compiled.validation.diagnostics).toEqual([])
-    Expect(compiled.code).toContain('TR.Data.Schema')
-    Expect(compiled.code).toContain('TR.Data.Query')
-    Expect(compiled.code).toContain('TR.Data.Create')
-    Expect(compiled.code).toContain('TR.Data.Update')
-    Expect(compiled.code).toContain('TR.Data.Delete')
-    Expect(compiled.code).toContain('TR.Data.Use')
-    Expect(compiled.code).not.toContain('TR.Data.Bind')
-    Expect(compiled.code).toContain('schemaVersion: 1')
-    Expect(compiled.code).toContain('defaultValue: "now"')
-    Expect(compiled.code).toContain('defaultNow: true')
-    Expect(compiled.code).toContain('relation: "Workspace"')
-    Expect(compiled.code).toContain("onDelete: 'cascade'")
-    Expect(compiled.code).toContain('CreatedAt: TR.Value<number>')
+    Expect(compiled.code).toContain('testTag: "title"')
+    Expect(compiled.code).toContain('testTag: "rows"')
+    Expect(compiled.code).toContain('TR.ForEach')
+    Expect(compiled.code).not.toContain('display: "contents"')
   })
 
   Test('emits prototype-sensitive data names as computed object keys', async () => {
     const compiled = await Compiler.compileCode(`
-      data SafeData {
-        Rows __proto__ { __proto__ text }
+      type Memory is item
+      type StackNav is nav
+      data Rows / __proto__ { __proto__ text }
+      app SafeApp {
+        Name "Safe"
+        Navigator StackNav { Initial MainView }
+        Datasource Memory with { }
       }
-      app SafeApp { datasource SafeData through Memory view MainView }
-      view MainView {
-        action Add { create SafeData.__proto__ { __proto__ "safe" } }
+      ui MainView {
+        action Add { create __proto__ { __proto__: "safe" } }
         render Text("Ready")
       }
       view Text Value is text { render inject ${tsFence} return null ${fence} }
@@ -124,32 +160,36 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).not.toContain('"__proto__":')
   })
 
-  Test('compiles app-owned stack destinations, presentation, and back behavior', async () => {
+  Test('compiles configured apps, first-class ui, strict targets, dismiss, and replacement', async () => {
     const compiled = await Compiler.compileCode(`
-      stack MainStack {
-        initial Home
-        destination Home
-        destination Detail
+      type StackNav is nav
+      type OverlayNav is nav
+      let ResetNavigator = StackNav { Initial Home }
+      app NavigationApp {
+        Name "Navigation"
+        Navigator StackNav { Initial Home }
+        @overlays OverlayNav { }
       }
-      app NavigationApp { stack MainStack }
-      view Home Title is text default "Home" {
-        action Open { present MainStack.Detail(.Name "Workspace") }
-        render Detail("Inline")
+      ui Home {
+        action Open { present Detail() in NavigationApp@overlays }
+        render Empty()
       }
-      view Detail Name is text {
-        action GoBack { back MainStack }
-        render Text(Name)
+      ui Detail {
+        action Close { dismiss }
+        action Reset { replace ResetNavigator in NavigationApp }
+        render Empty()
       }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      view Empty { render inject ${tsFence} return null ${fence} }
     `)
 
     Expect(compiled.validation.diagnostics).toEqual([])
-    Expect(compiled.code).toContain('TR.Navigation.Stack')
-    Expect(compiled.code).toContain('TR.Navigation.Host')
-    Expect(compiled.code).toContain('TR.Navigation.Present')
-    Expect(compiled.code).toContain('TR.Navigation.Back')
-    Expect(compiled.code).toContain('Title={_NavigationArguments["Title"]}')
-    Expect(compiled.code).toContain('Name={_NavigationArguments["Name"]}')
+    Expect(compiled.code).toContain('TR.Navigation.App({')
+    Expect(compiled.code).toContain('TR.Navigation.StackNav({')
+    Expect(compiled.code).toContain('TR.Navigation.OverlayNav({')
+    Expect(compiled.code).toContain('TR.Navigation.Target(')
+    Expect(compiled.code).toContain('TR.Navigation.Dismiss(_ViewProps.__tao)')
+    Expect(compiled.code).toContain('TR.Navigation.Replace(')
+    Expect(compiled.code).toContain('<TR.Navigation.AppHost')
   })
 
   Test('compiles typed dynamic action arguments in source order', async () => {
@@ -237,7 +277,7 @@ Describe('Tao compiler', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value is text {
+        workspace view Text Value is text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -263,7 +303,7 @@ Describe('Tao compiler', () => {
         }
       `,
         'Views.tao': `
-        project view Text Value is text {
+        workspace view Text Value is text {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -297,7 +337,7 @@ Describe('Tao compiler', () => {
         use MainView from @bar/views
       `,
         'lib/nested/@bar/views/Main.tao': `
-        project view MainView {
+        workspace view MainView {
           render Text("Package import")
         }
         view Text Value is text {
@@ -325,11 +365,11 @@ Describe('Tao compiler', () => {
         use MainView from @foo/forms
       `,
         'feature/@foo/Title.tao': `
-        package alias PackageTitle = "Package alias"
+        package let PackageTitle = "Package alias"
       `,
         'feature/@foo/forms/Main.tao': `
         use PackageTitle
-        project view MainView {
+        workspace view MainView {
           render Text(PackageTitle)
         }
         view Text Value is text {
@@ -368,17 +408,17 @@ Describe('Tao compiler', () => {
       type CurrentJob is InlineJob
       let DisplayName = Name "Ada"
       let DemoPerson = Person {
-        DisplayName
-        Tags ["compiler" "runtime"]
-        Job { Title "Engineer" }
+        Name: DisplayName,
+        Tags: Tags ["compiler", "runtime"],
+        Job: Job { Title: "Engineer" }
       }
       let EmptyItem = item {}
-      let DemoCurrentJob = CurrentJob { Role "Engineer" }
+      let DemoCurrentJob = CurrentJob { Role: "Engineer" }
       view MainView {
         render Stack(){
           TextValue(DemoPerson.Name)
           ListValue(DemoPerson.Tags)
-          ItemValue(item: {})
+          ItemValue(item {})
         }
       }
       layout Stack {
@@ -414,7 +454,7 @@ Describe('Tao compiler', () => {
         'Main.tao': `
         app TypeImportApp { view MainView }
         use Name from ./Types.tao
-        alias Name = Name "Ada"
+        let Name = Name "Ada"
         view MainView {
           render TextValue(Name)
         }
@@ -425,7 +465,7 @@ Describe('Tao compiler', () => {
         }
       `,
         'Types.tao': `
-        project type Name is text
+        workspace type Name is text
       `,
       },
       compiled => {
@@ -448,14 +488,14 @@ Describe('Tao compiler', () => {
       `,
         'A.tao': `
         use BView from ./
-        project alias SharedTitle = "Cycle"
-        project view AView {
+        workspace let SharedTitle = "Cycle"
+        workspace view AView {
           render BView()
         }
       `,
         'B.tao': `
         use SharedTitle from ./
-        project view BView {
+        workspace view BView {
           render Leaf(SharedTitle)
         }
         view Leaf Value is text {
@@ -475,7 +515,7 @@ Describe('Tao compiler', () => {
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      project view ${name} Value is text {
+      workspace view ${name} Value is text {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -514,7 +554,23 @@ Describe('Tao compiler', () => {
           return null
         ${fence}
       }
-    `)).rejects.toThrow('entry file must declare exactly one app')
+    `)).rejects.toThrow('entry file must declare at least one app')
+  })
+
+  Test('requires explicit multi-app selection and emits a named registry', async () => {
+    const source = `
+      app First { view MainView }
+      app Second { view MainView }
+      view MainView { render inject ${tsFence} return null ${fence} }
+    `
+    await Expect(Compiler.compileCode(source)).rejects.toThrow('multiple apps without a selection')
+
+    const compiled = await Compiler.compileCode(source, { appName: 'Second' })
+    Expect(compiled.appNames).toEqual(['First', 'Second'])
+    Expect(compiled.code).toContain('export const TaoApps = {')
+    Expect(compiled.code).toContain('"First": TaoApp_First')
+    Expect(compiled.code).toContain('"Second": TaoApp_Second')
+    Expect(compiled.code).toContain('export default TaoApps["Second"]')
   })
 
   Test('strips test declarations from generated app code', async () => {
@@ -546,7 +602,7 @@ Describe('Tao compiler', () => {
       'tao-test-plan-',
       {
         'Main.test.tao': `
-        use MyApp, MyData from ./
+        use MyApp from ./
 
         test "Smoke" {
           check "renders" {
@@ -554,17 +610,16 @@ Describe('Tao compiler', () => {
             expect text "Hello"
             press text "Add"
             enter "Draft" into label "Title"
-            submit id "title-input"
+            submit placeholder "Title"
             expect input placeholder "Title" value "Draft"
             back
-            data MyData loading
+            data loading
             expect missing text "Loading"
           }
         }
       `,
         'Main.tao': `
-        project data MyData { }
-        app MyApp { datasource MyData through Memory view MainView }
+        app MyApp { view MainView }
         view MainView {
           render inject ${tsFence}
             return null
@@ -593,18 +648,18 @@ Describe('Tao compiler', () => {
             ...('text' in step ? { text: step.text } : {}),
             ...('target' in step ? { target: step.target } : {}),
             ...('value' in step ? { value: step.value } : {}),
-            ...('dataName' in step
-              ? { dataName: step.dataName, status: step.status, message: step.message }
+            ...(step.kind === 'dataStatus'
+              ? { status: step.status, message: step.message }
               : {}),
           })),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },
           { kind: 'press', selector: 'text', text: 'Add' },
           { kind: 'enter', selector: 'label', target: 'Title', value: 'Draft' },
-          { kind: 'submit', selector: 'id', target: 'title-input' },
+          { kind: 'submit', selector: 'placeholder', target: 'Title' },
           { kind: 'expectInputValue', selector: 'placeholder', target: 'Title', value: 'Draft' },
           { kind: 'back' },
-          { kind: 'dataStatus', dataName: 'MyData', status: 'loading', message: '' },
+          { kind: 'dataStatus', status: 'loading', message: '' },
           { kind: 'expect', selector: 'text', text: 'Loading' },
         ])
         Expect(plan.suites[0]?.source.range).toBeDefined()
@@ -612,6 +667,83 @@ Describe('Tao compiler', () => {
       },
     )
   })
+
+  Test(
+    'compiles tag selectors, grouped expectations, selected rows, and bare data status to structured IR',
+    async () => {
+      await withTaoFiles(
+        'tao-structured-test-plan-',
+        {
+          'Main.test.tao': `
+        use MyApp from ./
+
+        test "Structured" {
+          check "scopes interactions" {
+            run MyApp
+            expect {
+              text "Ready"
+              missing label "Unavailable"
+            }
+            expect #field {
+              placeholder "Title"
+              input value "Draft"
+            }
+            enter "Changed" into #field
+            submit #field
+            select #rows[2] {
+              expect text "Second"
+              press #open
+            }
+            data loading
+          }
+        }
+      `,
+          'Main.tao': `
+        app MyApp { view MainView }
+        view MainView { render inject ${tsFence} return null ${fence} }
+      `,
+        },
+        async paths => {
+          const testPath = paths['Main.test.tao']!
+          const validation = await Workspace.validate(testPath)
+          const plan = Compiler.compileTestPlan(
+            validation,
+            Compiler.createContext(await Packages.createContext(FS.dirname(testPath)), FS.dirname(testPath)),
+          )
+          const steps = plan.suites[0]?.checks[0]?.steps ?? []
+
+          Expect(steps[0]).toMatchObject({
+            kind: 'expectGroup',
+            expectations: [
+              { kind: 'match', missing: false, selector: 'text', target: 'Ready' },
+              { kind: 'match', missing: true, selector: 'label', target: 'Unavailable' },
+            ],
+          })
+          Expect(steps[1]).toMatchObject({
+            kind: 'expectGroup',
+            scopeTag: 'field',
+            expectations: [
+              { kind: 'match', missing: false, selector: 'placeholder', target: 'Title' },
+              { kind: 'inputValue', value: 'Draft' },
+            ],
+          })
+          Expect(steps[2]).toMatchObject({ kind: 'enter', selector: 'tag', target: 'field', value: 'Changed' })
+          Expect(steps[3]).toMatchObject({ kind: 'submit', selector: 'tag', target: 'field' })
+          Expect(steps[4]).toMatchObject({
+            kind: 'select',
+            tag: 'rows',
+            index: 2,
+            steps: [
+              { kind: 'expect', selector: 'text', text: 'Second' },
+              { kind: 'press', selector: 'tag', text: 'open' },
+            ],
+          })
+          Expect(steps[5]).toEqual(Expect['objectContaining']({ kind: 'dataStatus', status: 'loading', message: '' }))
+          Expect('dataName' in steps[5]!).toBe(false)
+        },
+      )
+    },
+  )
 })
 
 type CompiledFiles<Files extends Record<string, string>> = { [Path in keyof Files]: CompiledFile }

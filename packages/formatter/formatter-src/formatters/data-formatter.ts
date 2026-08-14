@@ -1,29 +1,33 @@
 import type { FormatHandlers } from '../formatting'
 
 export default {
-  DataDeclaration(f) {
-    f.oneSpaceAfter('package', 'project', 'publish', 'data')
+  EntityDataDeclaration(f) {
+    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'data')
+    f.oneSpaceAround('/')
   },
 
-  DataBlock(f) {
+  EntityDataDeclarationBlock(f) {
     f.oneSpaceBefore('{')
-    f.indentedBraceBlock(f.node.entities)
-    f.lineSeparatedList(f.node.entities)
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
   },
 
-  DataEntity(f) {
-    f.oneSpaceBetweenProperties('collectionName', 'name')
+  EntityDataField(f) {
+    f.oneSpaceBeforeProperty('primitive')
+    f.oneSpaceAround('/')
+    f.commaSpacedList()
   },
 
-  DataEntityBlock(f) {
-    f.oneSpaceBefore('{')
-    f.indentedBraceBlock(f.node.fields)
-    f.lineSeparatedList(f.node.fields)
+  EntityDataFieldModifier(f) {
+    f.oneSpaceAfter('default', 'on', 'delete')
   },
 
-  DataField(f) {
-    f.oneSpaceBeforeProperty('primitive', 'relation', 'defaultValue')
-    f.oneSpaceBefore('relation', 'indexed', 'default', 'on', 'delete', 'cascade')
+  DataIndex(f) {
+    f.oneSpaceAfter('index')
+  },
+
+  DataDefaultOrder(f) {
+    f.oneSpaceAfter('order', 'by')
   },
 
   /** NowExpression is the fixed `now()` data-default sentinel. */
@@ -33,11 +37,9 @@ export default {
     f.noSpaceBefore(')')
   },
 
-  QueryDeclaration(f) {
-    f.oneSpaceAfter('query', 'as')
-    f.oneSpaceBefore('as')
-    f.noSpaceBefore('.')
-    f.noSpaceAfter('.')
+  EntityQueryDeclaration(f) {
+    f.oneSpaceAfter('query', 'as', 'from')
+    f.oneSpaceBefore('as', 'from')
   },
 
   QueryBlock(f) {
@@ -51,14 +53,16 @@ export default {
     f.oneSpaceAround('==', '!=', '<', '<=', '>', '>=')
   },
 
+  BooleanWhereClause(f) {
+    f.oneSpaceAfter('where')
+  },
+
   OrderClause(f) {
     f.oneSpaceAfter('order', 'by')
   },
 
   CreateStatement(f) {
     f.oneSpaceAfter('create')
-    f.noSpaceBefore('.')
-    f.noSpaceAfter('.')
   },
 
   UpdateStatement(f) {
@@ -73,10 +77,11 @@ export default {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.fields)
     f.lineSeparatedList(f.node.fields)
+    f.commaLineList()
   },
 
   DataWriteField(f) {
-    f.oneSpaceBeforeProperty('value')
+    f.oneSpaceAfter(':')
   },
 
   DataStatusStep(f) {

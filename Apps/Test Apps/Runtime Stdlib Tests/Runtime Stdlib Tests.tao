@@ -1,17 +1,22 @@
+use StackNav from @tao/nav
 use Box, Button, Col, Number, Row, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
 
 app RuntimeStdlibTests {
-   view MainView
-}
+   Name "Runtime Stdlib Tests"
+   Navigator StackNav {
+      Initial MainView
+}  }
 
 let LaunchCount = 3
 
-view MainView {
+ui MainView {
    action Ignore { }
    render Stack() {
       Text("Runtime stdlib smoke")
       Number(LaunchCount)
-      Button("Tap me", Ignore)
+      Button("Tap me") {
+         on press Ignore
+      }
       Box() {
          Col() {
             TextFrame("Label")

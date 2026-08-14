@@ -7,13 +7,32 @@ export default {
     f.commaSpacedList()
   },
 
-  /** Argument formats an optional invocation name or type label and one value. */
+  /** Argument formats an optional owner-slot label and one value. */
   Argument(f) {
-    if (f.node.parameterName) {
-      f.noSpaceAfter('.')
-      f.oneSpaceBeforeProperty('value')
-    }
     f.oneSpaceAfter(':')
+  },
+
+  /** ConfiguredValue formats optional `with` and its closed configuration block. */
+  ProviderConfiguredValue(f) {
+    f.oneSpaceBefore('with')
+    f.oneSpaceAfter('with')
+    f.oneSpaceBeforeProperty('block')
+  },
+
+  /** NavigationConfiguredValue juxtaposes its type and closed block. */
+  NavigationConfiguredValue(f) {
+    f.oneSpaceBeforeProperty('block')
+  },
+
+  /** ConfigurationBlock places each named slot on its own indented line. */
+  ConfigurationBlock(f) {
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
+  },
+
+  /** ConfigurationEntry separates the owner slot from its value. */
+  ConfigurationEntry(f) {
+    f.oneSpaceBeforeProperty('value')
   },
 
   /** TypedConstructor formats juxtaposed `<Type> <Value>` value creation. */
@@ -23,7 +42,7 @@ export default {
 
   /** FunctionDeclaration formats a pure expression-bodied function. */
   FunctionDeclaration(f) {
-    f.oneSpaceAfter('package', 'project', 'publish', 'function', 'returns')
+    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'function', 'returns')
     f.oneSpaceBefore('returns')
     f.oneSpaceBeforeProperty('parameterList')
     f.oneSpaceAround('=')
@@ -41,6 +60,11 @@ export default {
     f.oneSpaceAround('==', '!=', '<', '<=', '>', '>=', '+', '-', '*', '/', 'and', 'or')
   },
 
+  /** EmptyExpression formats the postfix emptiness predicate. */
+  EmptyExpression(f) {
+    f.oneSpaceAround('is')
+  },
+
   /** UnaryExpression keeps numeric negation tight and boolean negation readable. */
   UnaryExpression(f) {
     f.noSpaceAfter('-')
@@ -49,7 +73,10 @@ export default {
 
   /** WhenExpression puts each branch and its required fallback on an indented line. */
   WhenExpression(f) {
-    f.indentedLines([...f.node.branches, f.node.otherwise])
+    f.oneSpaceAfter('when')
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock([...f.node.branches, f.node.otherwise])
+    f.lineSeparatedList([...f.node.branches, f.node.otherwise])
   },
 
   /** WhenBranch spaces a value branch around its arrow. */
@@ -62,10 +89,19 @@ export default {
     f.oneSpaceAround('->')
   },
 
-  /** InterpolationExpression formats comma-separated interpolation parts. */
-  InterpolationExpression(f) {
-    f.oneSpaceAfter('interpolate')
-    f.commaSpacedList()
+  /** CasePayload is a single scoped identifier. */
+  CasePayload() {},
+
+  /** InterpolatedString preserves text while canonicalizing expression brace spacing. */
+  InterpolatedString() {},
+
+  /** InterpolatedStringText preserves source escapes and literal whitespace. */
+  InterpolatedStringText() {},
+
+  /** StringInterpolation places one space inside both expression braces. */
+  StringInterpolation(f) {
+    f.oneSpaceBeforeProperty('expression')
+    f.oneSpaceBefore('}')
   },
 
   /** ListLiteral formats list elements. */
@@ -73,19 +109,23 @@ export default {
     if (listLiteralNeedsBlock(f.node)) {
       f.indentedBracketBlock(f.node.elements)
       f.lineSeparatedList(f.node.elements)
+      f.commaLineList()
       return
     }
-    f.spaceSeparatedList(f.node.elements)
+    f.commaSpacedList()
   },
 
   /** ItemLiteral formats item constructor values. */
   ItemLiteral(f) {
     f.indentedBraceBlock(f.node.properties)
     f.lineSeparatedList(f.node.properties)
+    f.commaLineList()
   },
 
-  /** ItemProperty is a single expression; spacing is owned by ItemLiteral. */
-  ItemProperty() {},
+  /** ItemProperty formats an optional owner-field label. */
+  ItemProperty(f) {
+    f.oneSpaceAfter(':')
+  },
 
   /** MemberAccessExpression has no whitespace around member dots. */
   MemberAccessExpression() {},

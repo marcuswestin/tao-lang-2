@@ -23,7 +23,19 @@ const invocationValidationMessages = {
   duplicateNamedArgument: (view: string, name: string) =>
     `Render of ${view} provides parameter '${name}' more than once.`,
   namedArgumentType: (view: string, name: string, expected: string, actual: string) =>
-    `Named argument '.${name}' of ${view} expects ${expected}, got ${actual}.`,
+    `Labeled argument '${name}:' of ${view} expects ${expected}, got ${actual}.`,
+  duplicateEvent: (view: string, event: AST.EventName) => `Render of ${view} configures 'on ${event}' more than once.`,
+  unsupportedEvent: (view: string, event: AST.EventName, parameter: string) =>
+    `Renderable ${view} cannot handle 'on ${event}'; parameter '${parameter}' must have the standard event action type.`,
+  eventArgumentConflict: (view: string, event: AST.EventName, parameter: string) =>
+    `Render of ${view} cannot provide both '${parameter}:' and 'on ${event}'.`,
+  eventActionType: (view: string, event: AST.EventName, expected: string, actual: string) =>
+    `'on ${event}' of ${view} expects ${expected}, got ${actual}.`,
+  unexpectedEventPayload: (event: AST.EventName) =>
+    `'on ${event}' does not provide a payload; only 'on change' may bind one.`,
+  implicitChangeTarget: (view: string) =>
+    `Render of ${view} must provide 'on change' because automatic change binding requires `
+    + `Value: to directly reference writable text state.`,
 } as const
 
 /** InvocationsValidator validates render invocations through shared type-based binding diagnostics. */
@@ -109,4 +121,60 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
       },
     })
   }
+  for (const diagnostic of invocation.eventDiagnostics) {
+    Switch.kind(diagnostic, {
+      'duplicate-event': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.duplicateEvent(view.name, diagnostic.handler.event),
+          diagnostic.handler,
+        )
+      },
+      'unsupported-event': diagnostic => {
+        const parameter = diagnostic.parameter
+          ? Type.parameterName(diagnostic.parameter)
+          : eventParameterName(diagnostic.handler.event)
+        ctx.error(
+          invocationValidationMessages.unsupportedEvent(view.name, diagnostic.handler.event, parameter),
+          diagnostic.handler,
+        )
+      },
+      'event-argument-conflict': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.eventArgumentConflict(
+            view.name,
+            diagnostic.handler.event,
+            Type.parameterName(diagnostic.parameter),
+          ),
+          diagnostic.handler,
+        )
+      },
+      'event-action-type': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.eventActionType(
+            view.name,
+            diagnostic.handler.event,
+            Type.displayName(Type.ofParameter(diagnostic.parameter)),
+            Type.displayName(diagnostic.actual),
+          ),
+          diagnostic.handler,
+        )
+      },
+      'unexpected-event-payload': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.unexpectedEventPayload(diagnostic.handler.event),
+          diagnostic.handler.payload ?? diagnostic.handler,
+        )
+      },
+      'implicit-change-target': diagnostic => {
+        ctx.error(
+          invocationValidationMessages.implicitChangeTarget(view.name),
+          diagnostic.valueArgument,
+        )
+      },
+    })
+  }
+}
+
+function eventParameterName(event: AST.EventName): string {
+  return `${event[0]!.toUpperCase()}${event.slice(1)}`
 }

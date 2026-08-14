@@ -5,25 +5,26 @@ import "./visibility"
 import "./terminals"
 
 entry DataGrammarEntrypoint:
-    DataDeclaration | QueryDeclaration | CreateStatement | UpdateStatement | DeleteStatement;
+    EntityDataDeclaration | EntityQueryDeclaration | CreateStatement | UpdateStatement | DeleteStatement;
 
-DataDeclaration:
-    visibility=DeclarationVisibility? 'data' name=ID block=DataBlock;
+EntityDataDeclaration:
+    visibility=DeclarationVisibility? 'data' name=ID '/' singularName=ID block=EntityDataDeclarationBlock;
 
-DataBlock:
-    '{' entities+=DataEntity* '}';
+EntityDataDeclarationBlock:
+    '{' entries+=(EntityDataField | DataIndex | DataDefaultOrder)* '}';
 
-DataEntity:
-    collectionName=ID name=ID block=DataEntityBlock;
+EntityDataField:
+    name=ID (primitive=DataPrimitiveType | '/' negativeName=ID)? (',' modifiers+=EntityDataFieldModifier)*;
 
-DataEntityBlock:
-    '{' fields+=DataField* '}';
+EntityDataFieldModifier:
+    'default' (defaultValue=(StringLiteral | NumberLiteral | BooleanLiteral | NowExpression) | defaultCase=ID)
+    | 'on' 'delete' onDeleteCascade?='cascade';
 
-DataField:
-    name=ID (
-        primitive=DataPrimitiveType indexed?='indexed'? ('default' defaultValue=(StringLiteral | NumberLiteral | BooleanLiteral | NowExpression))?
-        | 'relation' relation=[DataEntity:ID] ('on' 'delete' onDeleteCascade?='cascade')?
-    );
+DataIndex:
+    'index' fieldName=ID;
+
+DataDefaultOrder:
+    'order' 'by' fieldName=ID direction=OrderDirection?;
 
 DataPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time';
@@ -31,17 +32,20 @@ DataPrimitiveType returns string:
 NowExpression:
     {infer NowExpression} 'now' '(' ')';
 
-QueryDeclaration:
-    'query' data=[DataDeclaration:ID] '.' collectionName=ID 'as' name=ID block=QueryBlock?;
+EntityQueryDeclaration:
+    'query' (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?;
 
 QueryBlock:
     '{' clauses+=QueryClause* '}';
 
 QueryClause:
-    WhereClause | OrderClause;
+    WhereClause | BooleanWhereClause | OrderClause;
 
 WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
+
+BooleanWhereClause:
+    'where' case=[EntityDataField:ID];
 
 QueryComparisonOperator returns string:
     '==' | '!=' | '<' | '<=' | '>' | '>=';
@@ -53,7 +57,7 @@ OrderDirection returns string:
     'asc' | 'desc';
 
 CreateStatement:
-    'create' data=[DataDeclaration:ID] '.' entityName=ID block=DataWriteBlock;
+    'create' entity=[EntityDataDeclaration:ID] block=DataWriteBlock;
 
 UpdateStatement:
     'update' target=DataRowExpression block=DataWriteBlock;
@@ -65,7 +69,7 @@ DataRowExpression infers Expression:
     MemberAccessExpression | ValueReference;
 
 DataWriteBlock:
-    '{' fields+=DataWriteField* '}';
+    '{' (fields+=DataWriteField (','? fields+=DataWriteField)*)? '}';
 
 DataWriteField:
-    name=ID value=Expression;
+    (label=ID ':')? value=Expression;

@@ -11,7 +11,7 @@ Describe('tao fix', () => {
         use Text,Button from @tao/ui
         view MainView {
            render Text(Greeting)
-           alias Greeting = "hi"
+           let Greeting = "hi"
         }
       `),
     }, async (rootDir) => {
@@ -28,7 +28,7 @@ Describe('tao fix', () => {
         }
 
         view MainView {
-           alias Greeting = "hi"
+           let Greeting = "hi"
            render Text(Greeting)
         }
       `)
@@ -58,7 +58,7 @@ Describe('tao fix', () => {
 
         view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
     }, async (rootDir) => {
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
       const results = await runFix(path)
@@ -81,7 +81,7 @@ Describe('tao fix', () => {
 
         view MainView { }
       `),
-      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
     }, async (rootDir) => {
       const directory = FS.resolvePath('Packages/@cards/screens', rootDir)
       const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
@@ -113,7 +113,7 @@ Describe('tao fix', () => {
     }\n`
     await withTaoFixture({
       'Packages/@cards/screens/Main.tao': originalSource,
-      'Packages/@cards/widgets/Widget.tao': 'publish view LocalText Value is text { }\n',
+      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
     }, async (rootDir) => {
       const cwd = FS.resolvePath('Packages/@cards/screens', rootDir)
       const path = FS.resolvePath('Main.tao', cwd)

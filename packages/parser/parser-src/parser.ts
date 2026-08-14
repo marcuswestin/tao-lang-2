@@ -2,6 +2,8 @@ import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics } from '@sha
 import { Langium } from './langium-exports'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { TaoTokenBuilder } from './tao-token-builder'
+import { TaoValueConverter } from './tao-value-converter'
 import { ValueScopeProvider } from './value-scope'
 
 const URI = Langium.URI
@@ -156,6 +158,13 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
     Langium.createDefaultCoreModule({ shared }),
     AST.GeneratedModule,
     {
+      parser: {
+        // Tao deliberately resolves the token-identical `StackNav { Initial Home }` and
+        // one-field unlabeled item form from the linked owner type.
+        ParserConfig: () => ({ skipValidations: true }),
+        TokenBuilder: () => new TaoTokenBuilder(),
+        ValueConverter: () => new TaoValueConverter(),
+      },
       references: {
         ScopeProvider: (services) => new ValueScopeProvider(services, options.packages),
       },
@@ -190,6 +199,11 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
     Langium.createDefaultModule({ shared }),
     AST.GeneratedModule,
     {
+      parser: {
+        ParserConfig: () => ({ skipValidations: true }),
+        TokenBuilder: () => new TaoTokenBuilder(),
+        ValueConverter: () => new TaoValueConverter(),
+      },
       references: {
         ScopeProvider: (services) => new ValueScopeProvider(services, options.packages),
       },

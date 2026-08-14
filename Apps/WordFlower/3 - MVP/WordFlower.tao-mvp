@@ -52,6 +52,8 @@ let WordFlowerNavigator = SelectionNav {
 
 // An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
 // entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
+// A Local datasource is configured as `Datasource Local with { StorageKey "WordFlowerData" }`;
+// Memory is keyless, while remote providers own their provider-specific configuration below.
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
@@ -62,10 +64,8 @@ app WordFlower {
    @toasts ToastHost { }
    @windows WindowHost { }
 
-   Datasource {
-      Provider InstantDB { // remote syncing provider; Local stays for tests and offline development
-         AppId "wordflower-mvp"
-      }
+   Datasource InstantDB with { // remote syncing provider; Local stays for tests and offline development
+      AppId "wordflower-mvp"
    }
 }
 
@@ -77,10 +77,8 @@ let WordFlowerDrawer = WordFlower with {
 
 let WordFlowerStage = WordFlower with {
    Name "WordFlower - Stage"
-   Datasource {
-      Provider {
-         AppId "wordflower-stage"
-      }
+   Datasource InstantDB with {
+      AppId "wordflower-stage"
    }
 }
 
@@ -423,7 +421,7 @@ workspace ui DocumentScreen Document {
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
-         missing -> { Text("Document { Document.Id } no longer exists.") } // a handle keeps its Id after the row is gone
+         missing -> { Text("This document no longer exists.") } // availability does not expose the handle's runtime ID
          unauthorized -> { Text("You no longer have access to this document.") }
          error -> Message { Text("The document could not be loaded: { Message }") }
       }

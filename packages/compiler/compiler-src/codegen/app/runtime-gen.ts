@@ -7,6 +7,7 @@ type TaoFileCompileOptions = {
   importLines?: string[]
   scopeBindings?: string[]
   exportedNames?: string[]
+  selectedAppName?: string
 }
 
 export default {

@@ -1,0 +1,3 @@
+public type Local is item
+
+public type Memory is item

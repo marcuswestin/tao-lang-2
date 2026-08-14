@@ -21,9 +21,14 @@ type ResolvedImports = {
 
 /** CompileResult declares generated output for a Tao app entry. */
 export type CompileResult = {
+  appNames: string[]
   validation: ValidationResult
   code: string
   files: CompiledFile[]
+}
+
+export type CompileOptions = {
+  appName?: string
 }
 
 /** CompilerContext declares shared compiler invocation state. */
@@ -38,22 +43,33 @@ function createContext(packagesContext: Packages.Context, sourceRoot: string): C
 }
 
 /** compileCode compiles Tao source code using standalone parser and validator contexts. */
-async function compileCode(code: string): Promise<CompileResult> {
+async function compileCode(code: string, options: CompileOptions = {}): Promise<CompileResult> {
   const packagesContext = await Packages.createContext(codeProjectRoot)
-  return compileValidated(await Validator.validateCode(code), createContext(packagesContext, codeProjectRoot))
+  return compileValidated(await Validator.validateCode(code), createContext(packagesContext, codeProjectRoot), options)
 }
 
 /** compileValidated compiles an already validated Tao app into Expo-compatible TSX source. */
-function compileValidated(validationResult: ValidationResult, context: CompilerContext): CompileResult {
+function compileValidated(
+  validationResult: ValidationResult,
+  context: CompilerContext,
+  options: CompileOptions = {},
+): CompileResult {
   const errors = Diagnostics.errorMessages(validationResult.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, { errors })
   const entryApps = validationResult.entry.ast.statements.filter(AST.isAppDeclaration)
-  Assert(
-    entryApps.length === 1,
-    `Cannot compile app entry: entry file must declare exactly one app, found ${entryApps.length}.`,
-    { entryApps: entryApps.length },
+  Assert(entryApps.length > 0, 'Cannot compile app entry: entry file must declare at least one app.')
+  const appNames = entryApps.map(app => app.name)
+  const selectedAppName = options.appName ?? (appNames.length === 1 ? appNames[0] : undefined)
+  Assert.defined(
+    selectedAppName,
+    `Cannot compile app entry with multiple apps without a selection. Available apps: ${appNames.join(', ')}.`,
   )
-  return compileValidatedInput(validationResult, context)
+  Assert(
+    appNames.includes(selectedAppName),
+    `Cannot compile unknown app '${selectedAppName}'. Available apps: ${appNames.join(', ')}.`,
+    { appNames, selectedAppName },
+  )
+  return compileValidatedInput(validationResult, context, selectedAppName)
 }
 
 /** Compiler exposes Tao source compilation functions. */
@@ -76,13 +92,20 @@ export default Compiler
 function compileValidatedInput(
   validationResult: ValidationResult,
   context: CompilerContext,
+  selectedAppName: string,
 ): CompileResult {
   const entryPath = validationResult.entry.path
   const sourceFiles = validationResult.files
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const outputPathBySourcePath = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
   const compiledFiles = sourceFiles.map(file =>
-    compileSourceFile(file, sourceByPath, outputPathBySourcePath, context.packagesContext)
+    compileSourceFile(
+      file,
+      sourceByPath,
+      outputPathBySourcePath,
+      context.packagesContext,
+      file.path === entryPath ? selectedAppName : undefined,
+    )
   )
 
   return compileResultForEntry(validationResult, compiledFiles)
@@ -114,6 +137,7 @@ function compileSourceFile(
   sourceByPath: Map<string, ParsedFile>,
   outputPathBySourcePath: ReadonlyMap<string, string>,
   packagesContext: Packages.Context,
+  selectedAppName: string | undefined,
 ): CompiledFile {
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const currentOutputPath = outputPathBySourcePath.get(file.path)
@@ -133,6 +157,7 @@ function compileSourceFile(
       importLines,
       scopeBindings,
       exportedNames,
+      selectedAppName,
     }),
   }
 }
@@ -159,6 +184,7 @@ function compileResultForEntry(
   const entryCode = compiledFiles.find((compiledFile: CompiledFile) => compiledFile.sourcePath === entryPath)?.code
   Assert.defined(entryCode, 'entry compiled code exists', { entryPath })
   return {
+    appNames: validationResult.entry.ast.statements.filter(AST.isAppDeclaration).map(app => app.name),
     validation: validationResult,
     code: entryCode,
     files: compiledFiles,

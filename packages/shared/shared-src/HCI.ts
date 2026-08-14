@@ -55,7 +55,7 @@ const PROCESS_COLORS: Record<string, ProcessColor> = {
   test: green,
 }
 
-function isInteractive(options: TerminalStreams = {}): boolean {
+export function isInteractive(options: TerminalStreams = {}): boolean {
   if (options.interactive !== undefined) {
     return options.interactive
   }

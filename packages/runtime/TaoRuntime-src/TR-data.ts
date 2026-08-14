@@ -16,15 +16,18 @@ export type TaoDataField = {
 
 export type TaoDataEntity = {
   collection: string
+  defaultOrder?: {
+    direction: 'asc' | 'desc'
+    field: string
+  }
   fields: Record<string, TaoDataField>
+  inverseFields?: Record<string, { inverseField: string; relation: string }>
 }
 
 export type TaoDataSchemaDefinition = {
   entities: Record<string, TaoDataEntity>
   name: string
-  provider?: DataProviderName
   schemaVersion?: number
-  storageKey?: string
 }
 
 export type TaoQueryFilter = {
@@ -57,6 +60,12 @@ type Evaluable = {
   evaluate(): { jsValue: unknown }
 }
 
+export type TaoDataSource = {
+  evaluate(): TaoDataSource
+  provider: DataProviderName
+  storageKey?: string
+}
+
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 type StoredRow = Record<string, unknown> & { Id: string }
 type StoredData = {
@@ -76,6 +85,7 @@ type DeleteTarget = { entity: string; id: string }
 const persistedFormatVersion = 1
 let testMode = false
 const schemas = new Set<RuntimeDataSchema>()
+const activeTestSchemas = new Set<RuntimeDataSchema>()
 const globalListeners = new Set<() => void>()
 let globalRevision = 0
 
@@ -133,37 +143,60 @@ function UnboundProvider(schemaName: string): TaoDataProvider {
   }
 }
 
-function useProviderBinding(schema: RuntimeDataSchema, provider: DataProviderName): void {
+function useProviderBinding(schema: RuntimeDataSchema, provider: DataProviderName, storageKey?: string): void {
   React.useLayoutEffect(() => {
-    DataControls.Bind(schema, provider)
-  }, [schema, provider])
+    DataControls.Bind(schema, provider, storageKey)
+  }, [schema, provider, storageKey])
+}
+
+function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoDataSource): void {
+  useProviderBinding(schema, source.provider, source.storageKey)
 }
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
 export const DataControls = {
-  Schema(definition: TaoDataSchemaDefinition, provider?: TaoDataProvider): RuntimeDataSchema {
-    const legacyBinding = definition.provider
+  Schema(
+    definition: TaoDataSchemaDefinition,
+    provider?: TaoDataProvider,
+    providerStorageKey?: string,
+  ): RuntimeDataSchema {
     const selectedProvider = provider
-      ?? (testMode ? MemoryProvider() : legacyBinding ? providerNamed(legacyBinding) : UnboundProvider(definition.name))
+      ?? (testMode ? MemoryProvider() : UnboundProvider(definition.name))
     const schema = new RuntimeDataSchema(
       definition,
       selectedProvider,
-      testMode ? 'test' : provider ? undefined : legacyBinding ?? 'unbound',
+      testMode ? 'test' : provider ? undefined : 'unbound',
+      providerStorageKey,
     )
     schemas.add(schema)
     return schema
   },
 
   /** Bind selects an app datasource provider once; repeated root renders preserve the active store. */
-  Bind(schema: RuntimeDataSchema, provider: DataProviderName): void {
+  Bind(schema: RuntimeDataSchema, provider: DataProviderName, storageKey?: string): void {
     if (testMode) {
+      activeTestSchemas.add(schema)
       return
     }
-    schema.bind(provider)
+    schema.bind(provider, storageKey)
   },
 
   /** Use binds an app datasource after render while preserving React hook ordering across every render. */
   Use: useProviderBinding,
+
+  /** UseConfigured binds an explicit Local/Memory source configuration at an app root. */
+  UseConfigured: useConfiguredProviderBinding,
+
+  /** Source creates a typed datasource configuration value. */
+  Source(provider: DataProviderName, storageKey?: Evaluable): TaoDataSource {
+    const key = storageKey?.evaluate().jsValue
+    const source: TaoDataSource = {
+      evaluate: () => source,
+      provider,
+      ...(typeof key === 'string' ? { storageKey: key } : {}),
+    }
+    return source
+  },
 
   Query(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
     React.useSyncExternalStore(schema.subscribe, schema.snapshot, schema.snapshot)
@@ -223,6 +256,7 @@ export const DataControls = {
   /** beginTest isolates every schema behind a fresh in-memory provider for one Tao check. */
   beginTest(): void {
     testMode = true
+    activeTestSchemas.clear()
     for (const schema of schemas) {
       schema.configure(MemoryProvider(), 'test')
     }
@@ -231,14 +265,16 @@ export const DataControls = {
   /** endTest restores normal schema creation after a Tao check. */
   endTest(): void {
     testMode = false
+    activeTestSchemas.clear()
   },
 
   /** setTestStatus drives deterministic query loading and provider-error behavior in Tao tests. */
-  setTestStatus(schemaName: string, status: DataStatus, message = ''): void {
-    for (const schema of schemas) {
-      if (schema.name === schemaName) {
-        schema.setStatus(status, message)
-      }
+  setTestStatus(status: DataStatus, message = ''): void {
+    if (activeTestSchemas.size === 0) {
+      throw new Error('A `data` step requires the running app to declare a Datasource.')
+    }
+    for (const schema of activeTestSchemas) {
+      schema.setStatus(status, message)
     }
   },
 } as const
@@ -263,7 +299,8 @@ class RuntimeEntityHandle {
   ) {
     runtimeEntityMetadata.set(this, { entity, generation, id, schema })
     Object.defineProperty(this, 'Id', { enumerable: true, get: () => id })
-    const fields = schema.definition.entities[entity]?.fields ?? {}
+    const definition = schema.definition.entities[entity]
+    const fields = { ...(definition?.fields ?? {}), ...(definition?.inverseFields ?? {}) }
     for (const name of Object.keys(fields)) {
       Object.defineProperty(this, name, {
         enumerable: true,
@@ -285,6 +322,7 @@ class RuntimeDataSchema {
   private nextSaveSequence = 0
   private provider: TaoDataProvider
   private providerBinding: DataProviderName | 'test' | 'unbound' | undefined
+  private storageKeyBinding: string | undefined
   private saveQueue: Promise<void> = Promise.resolve()
   private status: DataStatus = 'loading'
   private version = 0
@@ -293,11 +331,13 @@ class RuntimeDataSchema {
     readonly definition: TaoDataSchemaDefinition,
     provider: TaoDataProvider,
     providerBinding?: DataProviderName | 'test' | 'unbound',
+    storageKeyBinding?: string,
   ) {
     validateDefinition(definition)
     this.name = definition.name
     this.provider = provider
     this.providerBinding = providerBinding
+    this.storageKeyBinding = storageKeyBinding
     this.data = emptyData(definition)
     this.configure(provider, providerBinding)
   }
@@ -309,10 +349,11 @@ class RuntimeDataSchema {
 
   readonly snapshot = (): number => this.version
 
-  bind(provider: DataProviderName): void {
-    if (this.providerBinding === provider) {
+  bind(provider: DataProviderName, storageKey?: string): void {
+    if (this.providerBinding === provider && this.storageKeyBinding === storageKey) {
       return
     }
+    this.storageKeyBinding = storageKey
     this.configure(providerNamed(provider), provider)
   }
 
@@ -359,11 +400,10 @@ class RuntimeDataSchema {
     const rows = source
       .filter(row => filters.every(({ filter, expected }) => matchesFilter(row, filter, expected)))
       .map(row => this.handle(plan.entity, row.Id))
-    if (plan.order) {
-      const multiplier = plan.order.direction === 'desc' ? -1 : 1
-      rows.sort((left, right) =>
-        compare(this.read(left, plan.order!.field), this.read(right, plan.order!.field)) * multiplier
-      )
+    const order = plan.order ?? entity.defaultOrder
+    if (order) {
+      const multiplier = order.direction === 'desc' ? -1 : 1
+      rows.sort((left, right) => compare(this.read(left, order.field), this.read(right, order.field)) * multiplier)
     }
     Object.defineProperties(rows, {
       Loading: { configurable: true, value: this.status === 'loading' },
@@ -436,7 +476,14 @@ class RuntimeDataSchema {
       return metadata.id
     }
     const row = this.storedRow(metadata.entity, metadata.id)
-    const field = this.definition.entities[metadata.entity]?.fields[member]
+    const entity = this.definition.entities[metadata.entity]
+    const inverse = entity?.inverseFields?.[member]
+    if (inverse) {
+      return (this.data.rows[inverse.relation] ?? [])
+        .filter(candidate => candidate[inverse.inverseField] === metadata.id)
+        .map(candidate => this.handle(inverse.relation, candidate.Id))
+    }
+    const field = entity?.fields[member]
     const value = row?.[member]
     if (field?.kind !== 'relation' || typeof value !== 'string' || !field.relation) {
       return value
@@ -612,7 +659,7 @@ class RuntimeDataSchema {
   }
 
   private storageKey(): string {
-    return this.definition.storageKey ?? this.definition.name
+    return this.storageKeyBinding ?? this.definition.name
   }
 
   private storedRow(entity: string, id: string): StoredRow | undefined {

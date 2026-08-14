@@ -74,7 +74,7 @@ design-check:
 
 # Compile with source maps so runtime failures point back at Tao source. LANG-029
 compile-traced:
-    {{ TAO }} compile "{{ APP }}" --source-maps
+    {{ TAO }} compile "{{ APP }}" --app WordFlower --source-maps
 
 # Trace semantic navigation reducer decisions for a running app. LANG-029
 trace-navigation:

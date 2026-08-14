@@ -1,98 +1,121 @@
+use Memory from @tao/data
+use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
 app DataMVPApp {
-   datasource DataMVP through Memory
-   view MainView
+   Name "Data MVP"
+   Navigator StackNav {
+      Initial MainView
+   }
+   Datasource Memory with { }
 }
 
-project data DataMVP {
-   Workspaces Workspace {
-      Name text
-      CreatedAt time indexed default now()
-   }
-   Tasks Task {
-      Title text
-      Done boolean default false
-      Workspace relation Workspace on delete cascade
-}  }
+workspace data Workspaces / Workspace {
+   Name text
+   CreatedAt time, default now()
+   index CreatedAt
+   order by Name
+}
 
-view MainView {
+workspace data Tasks / Task {
+   Title text
+   Done / Open, default Open
+   Workspace, on delete cascade
+   order by Title
+}
+
+ui MainView {
    state WorkspaceDraft = ""
    state TaskDraft = ""
-   query DataMVP.Workspaces as Workspaces {
-      order by Name asc
+   query Workspaces { }
+   query Tasks as OpenTasks {
+      where Open
    }
-   query DataMVP.Tasks as OpenTasks {
-      where Done == false
-      order by Title asc
-   }
-   query DataMVP.Tasks as CompletedTasks {
-      where Done == true
-      order by Title asc
-   }
-   action ChangeWorkspaceDraft Value is text {
-      set WorkspaceDraft = Value
-   }
-   action ChangeTaskDraft Value is text {
-      set TaskDraft = Value
+   query Tasks as CompletedTasks {
+      where Done
    }
    action AddWorkspace {
-      create DataMVP.Workspace {
-         Name WorkspaceDraft
+      create Workspace {
+         Name: WorkspaceDraft
       }
       set WorkspaceDraft = ""
    }
    render Col() [gap 10, pad 16] {
       Text("Data MVP")
-      when
-         Workspaces.Loading -> {
+      guard Workspaces {
+         loading -> {
             Text("Loading local data…")
          }
+         error -> Message {
+            Text(Message)
+      }  }
+      #workspaceName
+      TextInput(Value: WorkspaceDraft, Label: "Workspace name") {
+         on submit AddWorkspace
+      }
+      #addWorkspace
+      FormButton("Add workspace") {
+         on press AddWorkspace
+      }
+      #taskTitle
+      TextInput(Value: TaskDraft, Label: "Task title") {
+         on submit -> { }
+      }
+      when Workspaces {
+         empty -> {
+            Text("No workspaces yet")
+         }
          otherwise -> {
-            when
-               Workspaces.Error.Empty -> {
-                  TextInput(.Value WorkspaceDraft, .Change ChangeWorkspaceDraft, .Submit AddWorkspace, .Label "Workspace name", .Id "workspace-name")
-                  FormButton(.Title "Add workspace", .Press AddWorkspace, .Id "add-workspace")
-                  TextInput(.Value TaskDraft, .Change ChangeTaskDraft, .Submit action { }, .Label "Task title", .Id "task-title")
-                  when
-                     Workspaces.Empty -> {
-                        Text("No workspaces yet")
-                     }
-                     otherwise -> {
-                        for Workspace in Workspaces {
-                           Text(Workspace.Name)
-                           FormButton(.Title "Add task", .Press action {
-                              create DataMVP.Task {
-                                 Title TaskDraft
-                                 Workspace Workspace
-                              }
-                              set TaskDraft = ""
-                           }, .Id "add-task")
-                           FormButton(.Title "Delete workspace", .Press action { delete Workspace }, .Id "delete-workspace")
-                     }  }
-                  when
-                     OpenTasks.Empty -> {
-                        Text("No open tasks")
-                     }
-                     otherwise -> {
-                        for Task in OpenTasks {
-                           Text(Task.Title)
-                           FormButton(.Title "Rename task", .Press action { update Task {
-                              Title "Updated task"
-                           } }, .Id "rename-task")
-                           FormButton(.Title "Complete task", .Press action { update Task {
-                              Done true
-                           } }, .Id "complete-task")
-                     }  }
-                  when
-                     CompletedTasks.Empty -> {
-                        Text("No completed tasks")
-                     }
-                     otherwise -> {
-                        for Task in CompletedTasks {
-                           Text(Task.Title)
-                           FormButton(.Title "Delete task", .Press action { delete Task }, .Id "delete-task")
-               }  }  }
-               otherwise -> {
-                  Text(Workspaces.Error)
-}  }  }  }
+            #workspaces
+            loop Workspaces / Workspace {
+               Col() {
+                  Text(Workspace.Name)
+                  #addTask
+                  FormButton("Add task") {
+                     on press -> {
+                        create Task {
+                           Title: TaskDraft
+                           Workspace
+                        }
+                        set TaskDraft = ""
+                  }  }
+                  #deleteWorkspace
+                  FormButton("Delete workspace") {
+                     on press -> {
+                        delete Workspace
+      }  }  }  }  }  }
+      when OpenTasks {
+         empty -> {
+            Text("No open tasks")
+         }
+         otherwise -> {
+            #openTasks
+            loop OpenTasks / Task {
+               Col() {
+                  Text(Task.Title)
+                  #renameTask
+                  FormButton("Rename task") {
+                     on press -> {
+                        update Task {
+                           Title: "Updated task"
+                  }  }  }
+                  #completeTask
+                  FormButton("Complete task") {
+                     on press -> {
+                        update Task {
+                           Done
+      }  }  }  }  }  }  }
+      when CompletedTasks {
+         empty -> {
+            Text("No completed tasks")
+         }
+         otherwise -> {
+            #completedTasks
+            loop CompletedTasks / Task {
+               Col() {
+                  Text(Task.Title)
+                  #deleteTask
+                  FormButton("Delete task") {
+                     on press -> {
+                        delete Task
+}  }  }  }  }  }  }  }

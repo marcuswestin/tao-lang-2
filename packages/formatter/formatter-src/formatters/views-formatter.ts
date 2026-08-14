@@ -2,11 +2,15 @@ import { AST } from '@parser'
 import type { FormatHandlers, NodeFormat } from '../formatting'
 
 export default {
+  TagStatement() {},
   /** ViewDeclaration formats a `view Name parameters` view header. */
   ViewDeclaration: ViewDeclaration,
 
   /** LayoutDeclaration formats a `layout Name parameters` view header. */
   LayoutDeclaration: ViewDeclaration,
+
+  /** UiDeclaration formats a first-class presentation declaration. */
+  UiDeclaration: ViewDeclaration,
 
   /** RenderStatement formats `render` view and injection targets. */
   RenderStatement(f) {
@@ -42,7 +46,7 @@ export default {
   LayoutNumberLiteral() {},
 } satisfies Partial<FormatHandlers>
 
-function ViewDeclaration(f: NodeFormat<AST.RenderableDeclaration>): void {
-  f.oneSpaceAfter('package', 'project', 'publish', 'view', 'layout')
+function ViewDeclaration(f: NodeFormat<AST.VisualDeclaration>): void {
+  f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'view', 'layout', 'ui')
   f.oneSpaceBeforeProperty('parameterList')
 }

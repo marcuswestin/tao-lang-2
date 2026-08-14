@@ -8,9 +8,13 @@ Minimal non-normative examples for syntax ideas preserved from the deleted explo
 
 Implement typed keyed objects including direct owner-scoped entries, owner-wide target-key uniqueness, explicit keyed-property fallback, `key of Items`, compiler-created selection/split items, static and dynamic SelectionNav, SplitNav, keyed and relative path segments, directional delegation, pane reveal, programmatic target activation, adaptive display including drawer, and occurrence-key behavior.
 
-### FOLLOW-NAV-002: Overlay, Window, And Toast Auxiliaries
+### FOLLOW-NAV-002: Window And Toast Auxiliaries
 
-Implement app auxiliary registration, OverlayNav, WindowHost/Window, ToastHost/Toast, reducer-owned toast expiration, native dismissal/close events, key-based focus, safe stacking, and platform support diagnostics. Settle refreshed Toast child-occurrence behavior under `DEF-NAV-017` before interactive toasts are admitted.
+App auxiliary registration and `OverlayNav` shipped with the WordFlower Next tranche. Extend that
+model with WindowHost/Window, ToastHost/Toast, reducer-owned toast expiration, native
+dismissal/close events, key-based focus, safe stacking, and platform support diagnostics. Settle
+refreshed Toast child-occurrence behavior under `DEF-NAV-017` before interactive toasts are
+admitted.
 
 ### FOLLOW-NAV-003: Restoration, Routes, And Entity Recovery
 
@@ -20,9 +24,12 @@ Implement the versioned presentation-state schema, round-trip restoration, inval
 
 Implement process-local `ask`/`respond`, exactly-once completion, platform cancellation, concurrent ask policy, native-dismiss races, and optional result typing. Durable continuations remain out of scope.
 
-### FOLLOW-NAV-005: Repository Conformance
+### FOLLOW-NAV-005: Repository Conformance (absorbed)
 
-Complete repository-wide migration from deprecated `alias` to `let`, remove compatibility after cycle and initialization audits pass, finish the visibility-vocabulary migration and remove transitional `project`/`publish` compatibility, remove obsolete push/pop/tab APIs, add source actions only where migration is semantically mechanical, add implemented coverage to WordFlower/1 - Current and Test Apps, and move target/example files out of `.tao-future` only as each becomes executable.
+The WordFlower Next tranche migrated executable sources to `let`, retired the former binding and
+visibility spellings, removed obsolete source navigation APIs, and added Current/Test App coverage.
+Future work moves target examples out of `.tao-future` only as each becomes executable and adds
+source actions only where a later migration is semantically mechanical.
 
 ## Deferred Design
 
@@ -101,6 +108,6 @@ After each project:
 1. Search active specifications, roadmap tasks, apps, tests, stdlib, and prompts for superseded syntax.
 2. Migrate executable code only when the replacement feature is implemented.
 3. Add behavior coverage to focused Test Apps and WordFlower/1 - Current.
-4. Update source actions for mechanical migrations such as `alias` to `let`.
+4. Update source actions only for future migrations that are semantically mechanical.
 5. Re-enable discovery for individual future-syntax folders only when every discovered file parses, validates, formats, compiles, and tests.
 6. Run a targeted stale-reference audit and `./agent verify` before handoff.

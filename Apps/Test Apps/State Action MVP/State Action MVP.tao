@@ -1,14 +1,18 @@
+use StackNav from @tao/nav
 use Button, Col, Number, Text from @tao/ui
 
 app StateActionMVP {
-   view MainView
-}
+   Name "State Action MVP"
+   Navigator StackNav {
+      Initial MainView
+}  }
 
-view CounterButton Title is text, Action is action() {
-   render Button(Title, Action)
-}
+view CounterButton Title is text, Press is action() {
+   render Button(Title) {
+      on press Press
+}  }
 
-view MainView {
+ui MainView {
    state Count = 0
    let DisplayCount = Count
    action SetZero {
@@ -39,11 +43,25 @@ view MainView {
    render Col() {
       Text("State/action MVP")
       Number(DisplayCount)
-      CounterButton("Add twice", AddTwice)
-      CounterButton("Add five", AddFive)
-      CounterButton("Decrement", Decrement)
-      Button("Double", Double)
-      Button("Halve", Halve)
-      Button("Reset", SetZero)
-      Button("Inline add one", -> { set Count += 1 })
-}  }
+      CounterButton("Add twice") {
+         on press AddTwice
+      }
+      CounterButton("Add five") {
+         on press AddFive
+      }
+      CounterButton("Decrement") {
+         on press Decrement
+      }
+      Button("Double") {
+         on press Double
+      }
+      Button("Halve") {
+         on press Halve
+      }
+      Button("Reset") {
+         on press SetZero
+      }
+      Button("Inline add one") {
+         on press -> {
+            set Count += 1
+}  }  }  }

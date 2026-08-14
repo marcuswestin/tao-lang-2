@@ -4,52 +4,47 @@ import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
-/** NavigationCompiler lowers declared destination stacks and navigation actions to TR.Navigation. */
+/** NavigationCompiler lowers configured navigation actions to TR.Navigation. */
 export const NavigationCompiler = {
-  StackDeclaration(stack: AST.StackDeclaration): Compiled {
-    return gen`
-      ${gen.scopeName(stack)} = TR.Navigation.Stack({
-        name: ${gen.jsLiteral(stack.name)},
-        initial: ${gen.jsLiteral(stack.block.initial.destinationName)},
-        destinations: {
-          ${gen.list(stack.block.destinations, Compile.NavigationDestination)}
-        },
-      })
-    `
-  },
-
-  NavigationDestination(destination: AST.NavigationDestination): Compiled {
-    const view = resolveRef(destination.view)
-    return gen`
-      [${gen.jsLiteral(view.name)}]: {
-        render: (_NavigationArguments, _NavigationProps) =>
-          <${gen.scopeName(view)}${
-      gen.join(AST.parametersOf(view), parameter => {
-        const name = Type.parameterName(parameter)
-        return gen` ${gen.Name({ name })}={_NavigationArguments[${gen.jsLiteral(name)}]}`
-      }, { separator: '' })
-    } __tao={_NavigationProps} />,
-      },
-    `
-  },
-
-  PresentStatement(presentation: AST.PresentStatement): Compiled {
-    const resolved = ASTUtils.resolveNavigationInvocation(presentation)
-    Assert.defined(resolved.stack, 'validated navigation presentation resolves its stack')
-    Assert.defined(resolved.view, 'validated navigation presentation resolves its destination view')
-    Assert(resolved.diagnostics.length === 0, 'validated navigation presentation has no binding diagnostics')
-    return gen`TR.Navigation.Present(
-      ${gen.scopeName(resolved.stack)},
-      ${gen.jsLiteral(resolved.view.name)},
+  /** ContextualPresentStatement presents a ui through the nearest or explicitly named nav. */
+  ContextualPresentStatement(presentation: AST.ContextualPresentStatement): Compiled {
+    const ui = resolveRef(presentation.ui)
+    const resolved = ASTUtils.resolveArgumentBindings(ui, presentation)
+    Assert(resolved.diagnostics.length === 0, 'validated ui presentation has no binding diagnostics')
+    return gen`TR.Navigation.PresentIn(
+      _ViewProps.__tao,
+      ${presentation.target ? compileNavigationTarget(presentation.target) : 'undefined'},
+      ${Compile.UiValue(ui)},
       { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
+    )`
+  },
+
+  /** DismissStatement dismisses the nearest enclosing navigation container. */
+  DismissStatement(): Compiled {
+    return gen`TR.Navigation.Dismiss(_ViewProps.__tao)`
+  },
+
+  /** ReplaceStatement replaces an app root through the selected app definition. */
+  ReplaceStatement(statement: AST.ReplaceStatement): Compiled {
+    return gen`TR.Navigation.Replace(
+      ${Compile.Expression(statement.navigator)},
+      ${gen.jsLiteral(resolveRef(statement.app).name)},
     )`
   },
 
   NavigationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
     return gen`[${gen.jsLiteral(Type.parameterName(pair.parameter))}]: ${Compile.Argument(pair.argument)},`
   },
-
-  BackStatement(back: AST.BackStatement): Compiled {
-    return gen`TR.Navigation.Back(${gen.scopeName(resolveRef(back.stack))})`
-  },
 } as const
+
+function compileNavigationTarget(target: AST.NavigationTarget): Compiled {
+  if (target.value) {
+    return Compile.Expression(target.value)
+  }
+  Assert.defined(target.app, 'validated app auxiliary target resolves its app')
+  Assert.defined(target.key, 'validated app auxiliary target has a key')
+  return gen`TR.Navigation.Target(
+    ${gen.jsLiteral(resolveRef(target.app).name)},
+    ${gen.jsLiteral(target.key.slice(1))},
+  )`
+}

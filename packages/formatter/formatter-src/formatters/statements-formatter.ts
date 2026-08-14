@@ -29,12 +29,18 @@ export default {
 
   /** WhenRenderStatement puts each branch and its required fallback on an indented line. */
   WhenRenderStatement(f) {
-    f.indentedLines([...f.node.branches, f.node.otherwise])
+    f.oneSpaceAfter('when')
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock([...f.node.branches, f.node.otherwise])
+    f.lineSeparatedList([...f.node.branches, f.node.otherwise])
   },
 
   /** WhenRenderBranch spaces its condition against the branch arrow. */
   WhenRenderBranch(f) {
     f.oneSpaceBefore('->')
+    if (f.node.payload !== undefined) {
+      f.oneSpaceAfter('->')
+    }
   },
 
   /** WhenRenderOtherwise spaces the fallback keyword against the branch arrow. */
@@ -42,10 +48,40 @@ export default {
     f.oneSpaceBefore('->')
   },
 
+  /** GuardRenderStatement separates its subject from either single or grouped cases. */
+  GuardRenderStatement(f) {
+    f.oneSpaceAfter('guard')
+    f.oneSpaceBeforeProperty('caseBlock', 'single')
+  },
+
+  /** GuardRenderCaseBlock puts each case on one indented line. */
+  GuardRenderCaseBlock(f) {
+    f.indentedBraceBlock(f.node.branches)
+    f.lineSeparatedList(f.node.branches)
+  },
+
+  /** GuardRenderBranch formats its optional handler and error payload. */
+  GuardRenderBranch(f) {
+    f.oneSpaceBefore('->')
+    if (f.node.payload !== undefined) {
+      f.oneSpaceAfter('->')
+    }
+  },
+
+  /** EventHandler formats control configuration as `on event Action` or an inline handler. */
+  EventHandler(f) {
+    f.oneSpaceAfter('on')
+    f.oneSpaceBefore('->')
+    f.oneSpaceBeforeProperty('action')
+    if (f.node.payload !== undefined) {
+      f.oneSpaceAfter('->')
+    }
+  },
+
   /** ForStatement formats iteration headers. */
   ForStatement(f) {
-    f.oneSpaceAfter('for', 'in')
-    f.oneSpaceBefore('in')
+    f.oneSpaceAfter('loop')
+    f.oneSpaceAround('/')
   },
 } satisfies Partial<FormatHandlers>
 

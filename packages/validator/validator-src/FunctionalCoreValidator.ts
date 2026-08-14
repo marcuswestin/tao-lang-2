@@ -1,5 +1,6 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import type { ValidationContext } from './validation'
 
 const messages = {
@@ -8,22 +9,39 @@ const messages = {
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   conditionalBranch: '`when` branches must produce compatible value types.',
-  conditionBoolean: 'A `when` condition must be boolean.',
+  duplicateCase: (name: string) => `Case '${name}' is declared more than once for this subject.`,
+  emptySubject: '`is empty` accepts text, list, or query values.',
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this function.`,
-  functionNamedArgument: (name: string) => `Function '${name}' only accepts positional arguments.`,
-  forCollection: '`for` requires a list value after `in`.',
-  functionArgumentCount: (name: string, minimum: number, maximum: number, actual: number) =>
-    minimum === maximum
-      ? `Function '${name}' expects ${minimum} argument${minimum === 1 ? '' : 's'}, got ${actual}.`
-      : `Function '${name}' expects ${minimum} to ${maximum} arguments, got ${actual}.`,
-  functionArgumentType: (name: string, index: number, expected: string, actual: string) =>
-    `Argument ${index + 1} of function '${name}' expects ${expected}, got ${actual}.`,
+  forCollection: '`loop` requires a list value before `/`.',
+  functionMissingArgument: (name: string, parameter: string) =>
+    `Function '${name}' is missing argument for parameter '${parameter}'.`,
+  functionUnmatchedArgument: (name: string) =>
+    `Function '${name}' has an argument that does not match any unbound parameter by type.`,
+  functionAmbiguousArgument: (name: string, parameters: readonly AST.ParameterDeclaration[]) =>
+    `Function '${name}' has an argument that matches multiple parameters by type: ${
+      parameters.map(Type.parameterName).join(', ')
+    }.`,
+  functionAmbiguousParameter: (name: string, parameter: string) =>
+    `Function '${name}' has multiple arguments that match parameter '${parameter}' by type.`,
+  functionDuplicateParameterType: (name: string, parameter: string) =>
+    `Function '${name}' has more than one parameter with the same type near '${parameter}'.`,
+  functionDuplicateArgumentType: (name: string) =>
+    `Function '${name}' has more than one argument with the same exact type.`,
+  functionUnknownLabel: (name: string, label: string) =>
+    `Function '${name}' has no parameter named '${label}'; labels resolve only the invoked owner's parameters, not visible types.`,
+  functionDuplicateLabel: (name: string, label: string) =>
+    `Function '${name}' receives parameter '${label}' more than once.`,
+  functionLabelType: (name: string, label: string, expected: string, actual: string) =>
+    `Labeled argument '${label}:' of function '${name}' expects ${expected}, got ${actual}.`,
   functionPlacement: 'Pure functions must be declared at file level.',
   functionReturn: (name: string, expected: string, actual: string) =>
     `Function '${name}' returns ${expected}, but its expression produces ${actual}.`,
-  interpolationPart: '`interpolate` accepts text, number, boolean, or none values.',
+  interpolationPart: 'String interpolation accepts text, number, boolean, or none values.',
+  invalidCase: (name: string, subject: string) => `Case '${name}' is not valid for ${subject}.`,
+  invalidCasePayload: "Only an 'error -> Name' case may introduce an error-message value.",
   listElement: 'List elements must have compatible types.',
-  renderControlPlacement: '`when` and `for` rendering must be nested inside a render child block.',
+  renderControlPlacement: '`when`, `guard`, and `for` rendering must be nested inside a render child block.',
+  subjectCases: '`when` and `guard` subjects must be text, list, query, or boolean values.',
   unaryBoolean: "Unary 'not' requires a boolean value.",
   unaryNumber: "Unary '-' requires a number value.",
 } as const
@@ -51,32 +69,37 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(expression.operator === 'not' ? messages.unaryBoolean : messages.unaryNumber, expression)
     }
   }
+  for (const expression of AST.streamAllContents(file).filter(AST.isEmptyExpression)) {
+    validateEmptyExpression(expression, ctx)
+  }
   for (const expression of AST.streamAllContents(file).filter(AST.isWhenExpression)) {
-    validateWhenConditions(expression.branches, ctx)
+    validateSubjectCases(expression.subject, expression.branches, ctx)
     validateCompatibleBranches(
       [...expression.branches.map(branch => branch.value), expression.otherwise.value],
       ctx,
     )
   }
-  for (const expression of AST.streamAllContents(file).filter(AST.isInterpolationExpression)) {
-    for (const part of expression.parts) {
-      const type = Type.ofExpression(part)
-      const supported = type.kind === 'primitive'
-        && ['text', 'number', 'boolean', 'none'].includes(type.primitive)
-      if (type.kind !== 'unresolved' && !supported) {
-        ctx.error(messages.interpolationPart, part)
-      }
+  for (const interpolation of AST.streamAllContents(file).filter(AST.isStringInterpolation)) {
+    const type = Type.ofExpression(interpolation.expression)
+    const supported = type.kind === 'primitive'
+      && ['text', 'number', 'boolean', 'none'].includes(type.primitive)
+    if (type.kind !== 'unresolved' && !supported) {
+      ctx.error(messages.interpolationPart, interpolation.expression)
     }
   }
   for (const list of AST.streamAllContents(file).filter(AST.isListLiteral)) {
     validateList(list, ctx)
   }
   for (const statement of AST.streamAllContents(file).filter(AST.isWhenRenderStatement)) {
-    validateWhenConditions(statement.branches, ctx)
+    validateSubjectCases(statement.subject, statement.branches, ctx)
     validateRenderControlPlacement(statement, ctx)
   }
-  for (const statement of AST.streamAllContents(file).filter(AST.isWhenActionStatement)) {
-    validateWhenConditions(statement.branches, ctx)
+  for (const statement of AST.streamAllContents(file).filter(AST.isGuardRenderStatement)) {
+    validateSubjectCases(statement.subject, guardRenderBranches(statement), ctx)
+    validateRenderControlPlacement(statement, ctx)
+  }
+  for (const statement of AST.streamAllContents(file).filter(AST.isGuardActionStatement)) {
+    validateSubjectCases(statement.subject, guardActionBranches(statement), ctx)
   }
   for (const statement of AST.streamAllContents(file).filter(AST.isForStatement)) {
     const collection = Type.ofExpression(statement.collection)
@@ -107,32 +130,52 @@ function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): 
 }
 
 function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationContext): void {
-  const fn = call.function.ref
+  const resolved = ASTUtils.resolveFunctionInvocation(call)
+  const fn = resolved.function
   if (!fn) {
     return
   }
-  const parameters = AST.parametersOf(fn)
-  const arguments_ = AST.argumentsOf(call)
-  const requiredCount = parameters.filter(parameter => parameter.defaultValue === undefined).length
-  if (arguments_.length < requiredCount || arguments_.length > parameters.length) {
-    ctx.error(messages.functionArgumentCount(fn.name, requiredCount, parameters.length, arguments_.length), call)
-  }
-  for (const argument of arguments_) {
-    if (argument.parameterName !== undefined) {
-      ctx.error(messages.functionNamedArgument(fn.name), argument)
-    }
-  }
-  for (let index = 0; index < Math.min(parameters.length, arguments_.length); index++) {
-    const parameter = parameters[index]!
-    const argument = arguments_[index]!
-    const expected = Type.ofParameter(parameter)
-    const actual = Type.ofArgument(argument)
-    if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
-      ctx.error(
-        messages.functionArgumentType(fn.name, index, Type.displayName(expected), Type.displayName(actual)),
-        argument,
-      )
-    }
+  for (const diagnostic of resolved.diagnostics) {
+    Switch.kind(diagnostic, {
+      'missing-argument': diagnostic => {
+        ctx.error(messages.functionMissingArgument(fn.name, Type.parameterName(diagnostic.parameter)), call)
+      },
+      'unmatched-argument': diagnostic => {
+        ctx.error(messages.functionUnmatchedArgument(fn.name), diagnostic.argument)
+      },
+      'ambiguous-argument': diagnostic => {
+        ctx.error(messages.functionAmbiguousArgument(fn.name, diagnostic.parameters), diagnostic.argument)
+      },
+      'ambiguous-parameter': diagnostic => {
+        ctx.error(messages.functionAmbiguousParameter(fn.name, Type.parameterName(diagnostic.parameter)), call)
+      },
+      'duplicate-argument-type': diagnostic => {
+        ctx.error(messages.functionDuplicateArgumentType(fn.name), diagnostic.argument)
+      },
+      'duplicate-parameter-type': diagnostic => {
+        ctx.error(messages.functionDuplicateParameterType(fn.name, Type.parameterName(diagnostic.parameter)), call)
+      },
+      'unknown-named-argument': diagnostic => {
+        ctx.error(messages.functionUnknownLabel(fn.name, diagnostic.name), diagnostic.argument)
+      },
+      'duplicate-named-argument': diagnostic => {
+        ctx.error(
+          messages.functionDuplicateLabel(fn.name, Type.parameterName(diagnostic.parameter)),
+          diagnostic.argument,
+        )
+      },
+      'named-argument-type': diagnostic => {
+        ctx.error(
+          messages.functionLabelType(
+            fn.name,
+            Type.parameterName(diagnostic.parameter),
+            Type.displayName(Type.ofParameter(diagnostic.parameter)),
+            Type.displayName(Type.ofArgument(diagnostic.argument)),
+          ),
+          diagnostic.argument,
+        )
+      },
+    })
   }
 }
 
@@ -168,20 +211,93 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   }
 }
 
-function validateCondition(condition: AST.Expression, ctx: ValidationContext): void {
-  const type = Type.ofExpression(condition)
-  if (type.kind !== 'unresolved' && !isPrimitive(type, 'boolean')) {
-    ctx.error(messages.conditionBoolean, condition)
+type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardActionBranch | AST.GuardRenderBranch
+
+function validateEmptyExpression(expression: AST.EmptyExpression, ctx: ValidationContext): void {
+  const type = Type.ofExpression(expression.value)
+  const supported = type.kind === 'list' || isPrimitive(type, 'text')
+  if (type.kind !== 'unresolved' && !supported) {
+    ctx.error(messages.emptySubject, expression.value)
   }
 }
 
-function validateWhenConditions(
-  branches: readonly (AST.WhenBranch | AST.WhenRenderBranch | AST.WhenActionBranch)[],
+function validateSubjectCases(
+  subject: AST.Expression,
+  branches: readonly SubjectCaseBranch[],
   ctx: ValidationContext,
 ): void {
-  for (const branch of branches) {
-    validateCondition(branch.condition, ctx)
+  const category = subjectCaseCategory(subject)
+  if (category === 'unresolved') {
+    return
   }
+  if (category === 'unsupported') {
+    ctx.error(messages.subjectCases, subject)
+  }
+  const allowed = allowedCases(category)
+  const seen = new Set<string>()
+  for (const branch of branches) {
+    if (seen.has(branch.case)) {
+      ctx.error(messages.duplicateCase(branch.case), branch)
+    }
+    seen.add(branch.case)
+    if (!allowed.has(branch.case)) {
+      ctx.error(messages.invalidCase(branch.case, subjectCaseLabel(category)), branch)
+    }
+    if ('payload' in branch && branch.payload && branch.case !== 'error') {
+      ctx.error(messages.invalidCasePayload, branch.payload)
+    }
+  }
+}
+
+type SubjectCaseCategory = 'boolean' | 'list' | 'query' | 'text' | 'unresolved' | 'unsupported'
+
+function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
+  if (
+    AST.isValueReference(subject)
+    && AST.isEntityQueryDeclaration(subject.target.ref)
+  ) {
+    return 'query'
+  }
+  const type = Type.ofExpression(subject)
+  if (type.kind === 'unresolved') {
+    return 'unresolved'
+  }
+  if (type.kind === 'list') {
+    return 'list'
+  }
+  if (type.kind === 'primitive' && type.primitive === 'text') {
+    return 'text'
+  }
+  if (type.kind === 'primitive' && type.primitive === 'boolean') {
+    return 'boolean'
+  }
+  return 'unsupported'
+}
+
+function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
+  switch (category) {
+    case 'query':
+      return new Set(['empty', 'loading', 'error'])
+    case 'list':
+    case 'text':
+      return new Set(['empty'])
+    case 'boolean':
+      return new Set(['true', 'false'])
+    default:
+      return new Set()
+  }
+}
+
+function subjectCaseLabel(category: SubjectCaseCategory): string {
+  return category === 'unsupported' ? 'this subject type' : `a ${category} subject`
+}
+
+function guardActionBranches(statement: AST.GuardActionStatement): AST.GuardActionBranch[] {
+  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
+}
+
+function guardRenderBranches(statement: AST.GuardRenderStatement): AST.GuardRenderBranch[] {
+  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
 }
 
 function validateCompatibleBranches(
@@ -221,7 +337,7 @@ function firstValueWithoutCommonType<ValueT extends { type: ReturnType<typeof Ty
 }
 
 function validateRenderControlPlacement(
-  node: AST.WhenRenderStatement | AST.ForStatement,
+  node: AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement,
   ctx: ValidationContext,
 ): void {
   let current: AST.Node | undefined = node.$container

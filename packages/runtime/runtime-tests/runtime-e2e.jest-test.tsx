@@ -119,7 +119,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('dispatches hardware Back through the stack reducer and cleans up its subscription', () => {
+  Test('dispatches hardware Back through the configured app reducer and cleans up its subscription', () => {
     let handler: (() => boolean) | undefined
     let removes = 0
     const restoreReactNativeRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
@@ -143,27 +143,29 @@ Describe('Expo runtime', () => {
     })
 
     try {
-      const stack = TR.Navigation.Stack({
-        name: 'HardwareBackTest',
-        initial: 'Home',
-        destinations: {
-          Home: { render: () => null },
-          Detail: { render: () => null },
-        },
+      const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+      const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+      const stack = TR.Navigation.StackNav({ name: 'HardwareBackTest', initial: home })
+      const app = TR.Navigation.App({
+        key: 'HardwareBackApp',
+        name: 'Hardware Back App',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
       })
-      const screen = render(createElement(TR.Navigation.Host, { stack }))
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
       Expect(handler?.()).toBe(false)
       act(() => {
-        TR.Navigation.Present(stack, 'Detail', {})
+        TR.Navigation.PresentIn(undefined, stack, detail, {})
       })
+      ExpectScreen(screen).toHaveText('Detail')
       let consumed = false
       act(() => {
         consumed = handler!()
       })
       Expect(consumed).toBe(true)
-      Expect(stack.currentDestination).toBe('Home')
-      Expect(stack.depth).toBe(1)
+      ExpectScreen(screen).toHaveText('Home')
+      Expect(screen.queryByText('Detail')).toBeNull()
 
       screen.unmount()
       Expect(removes).toBe(1)
@@ -173,7 +175,7 @@ Describe('Expo runtime', () => {
   })
 
   Test('keeps covered navigation entries mounted and returns through the accessible root-safe back reducer', () => {
-    let stack: ReturnType<typeof TR.Navigation.Stack>
+    let stack: TR.NavigationValue
 
     function Home(): ReactElement {
       const [count, setCount] = useState(0)
@@ -187,37 +189,30 @@ Describe('Expo runtime', () => {
         }),
         createElement(RN.Pressable, {
           accessibilityLabel: 'Open detail',
-          onPress: () => TR.Navigation.Present(stack, 'Detail', {}),
+          onPress: () => TR.Navigation.PresentIn(undefined, stack, detail, {}),
         }),
       )
     }
 
-    function Detail(): ReactElement {
-      return createElement(RN.Text, null, 'Detail')
-    }
-
-    stack = TR.Navigation.Stack({
-      name: 'RuntimeNavigationHostTest',
-      initial: 'Home',
-      destinations: {
-        Home: { render: () => createElement(Home) },
-        Detail: { render: () => createElement(Detail) },
-      },
+    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(Home) })
+    const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+    stack = TR.Navigation.StackNav({ name: 'RuntimeNavigationHostTest', initial: home })
+    const app = TR.Navigation.App({
+      key: 'RuntimeNavigationHostApp',
+      name: 'Runtime Navigation Host App',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
     })
 
-    const screen = render(createElement(TR.Navigation.Host, { stack }))
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
     fireEvent.press(screen.getByLabelText('Increment home'))
     ExpectScreen(screen).toHaveText('Home count 1')
 
     fireEvent.press(screen.getByLabelText('Open detail'))
-    Expect(stack.currentDestination).toBe('Detail')
-    Expect(stack.depth).toBe(2)
     ExpectScreen(screen).toHaveText('Detail')
     Expect(screen.queryByLabelText('Increment home')).toBeNull()
     fireEvent.press(screen.getByLabelText('Back'))
 
-    Expect(stack.currentDestination).toBe('Home')
-    Expect(stack.depth).toBe(1)
     ExpectScreen(screen).toHaveText('Home count 1')
     Expect(screen.queryByLabelText('Back')).toBeNull()
     Expect(stack.back()).toBe(false)
@@ -328,7 +323,7 @@ Describe('Expo runtime', () => {
         test "Press failure" {
           check "reports the selector" {
             run MissingPressApp
-            press id "missing-button"
+            press text "Missing button"
           }
         }
       `,
@@ -348,13 +343,13 @@ Describe('Expo runtime', () => {
       },
       async paths => {
         await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
-          /press id "missing-button" expected one pressable but found 0 matches/,
+          /press text "Missing button" expected one pressable but found 0 matches/,
         )
       },
     )
   })
 
-  Test('runs Tao enter and submit steps through label and id selectors', async () => {
+  Test('runs Tao enter and submit steps through label and placeholder selectors', async () => {
     await withTaoFiles(
       'tao-runtime-input-test-plan-',
       {
@@ -367,7 +362,7 @@ Describe('Expo runtime', () => {
             enter "Plan launch" into placeholder "Task title"
             expect text "Plan launch"
             expect input placeholder "Task title" value "Plan launch"
-            submit id "task-title"
+            submit label "Task title"
             expect text "Saved"
           }
         }
@@ -384,7 +379,7 @@ Describe('Expo runtime', () => {
             set Status = "Saved"
           }
           render Stack(){
-            NativeInput(.Value Draft, .Change ChangeDraft, .Submit Submit, .Label "Task title", .Id "task-title")
+            NativeInput(Value: Draft, Change: ChangeDraft, Submit: Submit, Label: "Task title")
             Text(Draft)
             Text(Status)
           }
@@ -394,13 +389,12 @@ Describe('Expo runtime', () => {
             return <>{_ViewProps.children}</>
           \`\`\`
         }
-        view NativeInput Value is text, Change is action(text), Submit is action(), Label is text, Id is text {
-          render inject Value, Change, Submit, Label, Id \`\`\`ts
+        view NativeInput Value is text, Change is action(text), Submit is action(), Label is text {
+          render inject Value, Change, Submit, Label \`\`\`ts
             return (
               <RN.TextInput
                 accessibilityLabel={Label}
                 placeholder="Task title"
-                testID={Id}
                 value={Value}
                 onChangeText={value => Change.invoke(TR.Value(value))}
                 onSubmitEditing={() => Submit.invoke()}
@@ -417,6 +411,126 @@ Describe('Expo runtime', () => {
       },
       async paths => {
         await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('runs grouped and tag-scoped expectations, interactions, selected rows, and bare data status', async () => {
+    await withTaoFiles(
+      'tao-runtime-structured-test-plan-',
+      {
+        'Main.test.tao': `
+        use TaggedApp from ./
+
+        test "Structured selectors" {
+          check "scopes every operation" {
+            run TaggedApp
+            expect {
+              text "First"
+              text "Second"
+              missing text "Selected Second"
+            }
+            expect #field {
+              placeholder "Name"
+              input value ""
+            }
+            enter "Draft" into #field
+            expect #field input value "Draft"
+            submit #field
+            expect text "Submitted"
+            select #rows[2] {
+              expect text "Second"
+              press #choose
+            }
+            expect text "Selected Second"
+            data loading
+            expect {
+              text "Loading"
+              missing text "First"
+            }
+            data ready
+            expect text "First"
+          }
+        }
+      `,
+        'Main.tao': `
+        use Col, FormButton, Text, TextInput from @tao/ui
+        use Memory from @tao/data
+        use StackNav from @tao/nav
+
+        data Items / Item { Name text }
+
+        app TaggedApp {
+          Name "Tagged"
+          Navigator StackNav { Initial Main }
+          Datasource Memory with { }
+        }
+
+        ui Main {
+          state Draft = ""
+          state Status = "Waiting"
+          state Selection = "Nothing selected"
+          query Items { }
+          render Col() {
+            guard Items {
+              loading -> { Text("Loading") }
+              error -> Message { Text(Message) }
+            }
+            #field
+            TextInput(Value: Draft, Label: "Name", Placeholder: "Name") {
+              on submit -> { set Status = "Submitted" }
+            }
+            Text(Status)
+            Text(Selection)
+            #rows
+            loop ["First", "Second"] / Row {
+              Col() {
+                Text(Row)
+                #choose
+                FormButton("Choose") {
+                  on press -> { set Selection = "Selected { Row }" }
+                }
+              }
+            }
+          }
+        }
+      `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('tagged loops preserve the same native row hierarchy as untagged loops', async () => {
+    await testCompileApp(
+      `
+        use Col, Text from @tao/ui
+        app LoopHierarchyApp { view Main }
+        view Main {
+          render Col() {
+            #taggedRows
+            loop ["Tagged"] / Row {
+              Col() { Text(Row) }
+            }
+            loop ["Untagged"] / Row {
+              Col() { Text(Row) }
+            }
+          }
+        }
+      `,
+      screen => {
+        const taggedRow = screen.getByTestId('taggedRows')
+        let untaggedRow = screen.getByText('Untagged').parent
+        while (untaggedRow && untaggedRow.type !== taggedRow.type) {
+          untaggedRow = untaggedRow.parent
+        }
+        Expect(untaggedRow).not.toBeNull()
+        Expect(taggedRow.type).toBe(untaggedRow?.type)
+        Expect(taggedRow.children.map((child: any) => typeof child === 'string' ? 'string' : child.type))
+          .toEqual(untaggedRow?.children.map((child: any) => typeof child === 'string' ? 'string' : child.type))
+        Expect(taggedRow.props.testID).toBe('taggedRows')
+        Expect(untaggedRow?.props.testID).toBeUndefined()
       },
     )
   })
@@ -441,23 +555,21 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        project stack AppStack {
-          initial Home
-          destination Home
-          destination Detail
+        type StackNav is nav
+        app NavigationApp {
+          Name "Navigation"
+          Navigator StackNav { Initial Home }
         }
 
-        app NavigationApp { stack AppStack }
-
-        project view Home {
-          action Open { present AppStack.Detail() }
+        workspace ui Home {
+          action Open { present Detail() }
           render Stack(){
             Text("Home")
-            Button("Open", Open)
+            Button("Open") { on press Open }
           }
         }
 
-        project view Detail {
+        workspace ui Detail {
           render Text("Detail")
         }
 
@@ -467,7 +579,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Button Title is text, Press is action {
+        view Button Title is text, Press is action() {
           render inject Title, Press \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Press.invoke()}>
@@ -692,7 +804,7 @@ Describe('Expo runtime', () => {
           view MainView
         }
 
-        function Greeting Name is text default "world" returns text = interpolate "Hello, ", Name
+        function Greeting Name is text default "world" returns text = "Hello, { Name }"
 
         view MainView {
           state Result = ""
@@ -750,14 +862,14 @@ Describe('Expo runtime', () => {
   Test('renders an all-defaulted initial destination', async () => {
     await testCompileApp(
       `
-        project stack DefaultsNavigation {
-          initial Home
-          destination Home
+        type StackNav is nav
+
+        app DefaultsNavigationApp {
+          Name "Defaults"
+          Navigator StackNav { Initial Home }
         }
 
-        app DefaultsNavigationApp { stack DefaultsNavigation }
-
-        project view Home Title is text default "Welcome home" {
+        workspace ui Home Title is text default "Welcome home" {
           render Text(Title)
         }
 
@@ -847,7 +959,7 @@ Describe('Expo runtime', () => {
           }
         `,
         'Actions.tao': `
-          project action Save { }
+          workspace action Save { }
         `,
       },
       screen => {
@@ -870,7 +982,7 @@ Describe('Expo runtime', () => {
           Age
         }
 
-        alias Ada = Person { Age 40 Name "Ada" }
+        let Ada = Person { Age: 40, Name: "Ada" }
 
         view MainView {
           render Keys(Ada)
@@ -901,9 +1013,9 @@ Describe('Expo runtime', () => {
         }
 
         view MainView {
-          state Current = Person { Name "Ada" }
+          state Current = Person { Name: "Ada" }
           action Rename {
-            set Current = Person { Name "Grace" }
+            set Current = Person { Name: "Grace" }
           }
           render Stack(){
             Button("Rename", Rename)
@@ -1638,18 +1750,18 @@ Describe('Expo runtime', () => {
         'A.tao': `
           use BView from ./
 
-          project alias SharedTitle = "Circular alias"
+          workspace let SharedTitle = "Circular alias"
 
-          project view AView {
+          workspace view AView {
               render BView()
           }
         `,
         'B.tao': `
           use SharedTitle from ./
 
-          alias ImportedTitle = SharedTitle
+          let ImportedTitle = SharedTitle
 
-          project view BView {
+          workspace view BView {
               render Text(ImportedTitle)
           }
 
@@ -1673,8 +1785,8 @@ Describe('Expo runtime', () => {
             view MainView
         }
 
-        alias Message = "Ordered output"
-        alias Greeting = Message
+        let Message = "Ordered output"
+        let Greeting = Message
 
         view MainView {
             render Text(Greeting) { }
@@ -1699,12 +1811,12 @@ Describe('Expo runtime', () => {
             view MainView
         }
 
-        alias Greeting = "Outer"
+        let Greeting = "Outer"
 
         view MainView {
-            alias OuterGreeting = Greeting
+            let OuterGreeting = Greeting
             render Stack(){
-                alias Greeting = "Inner"
+                let Greeting = "Inner"
                 Text(Greeting)
                 Text(OuterGreeting)
             }

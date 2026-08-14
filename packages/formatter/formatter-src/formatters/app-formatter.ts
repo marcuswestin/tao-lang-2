@@ -6,6 +6,24 @@ export default {
     f.oneSpaceAfter('app')
   },
 
+  AppBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.statements)
+    f.lineSeparatedList(f.node.statements)
+  },
+
+  AppName(f) {
+    f.oneSpaceBeforeProperty('value')
+  },
+
+  AppNavigator(f) {
+    f.oneSpaceBeforeProperty('value')
+  },
+
+  AppAuxiliaryNavigator(f) {
+    f.oneSpaceBeforeProperty('value')
+  },
+
   /** AppView formats the `view MainView` entry-view statement. */
   AppView(f) {
     f.oneSpaceAfter('view')
@@ -13,7 +31,6 @@ export default {
 
   /** AppDatasource formats app-owned schema storage bindings. */
   AppDatasource(f) {
-    f.oneSpaceAfter('datasource', 'through')
-    f.oneSpaceBefore('through')
+    f.oneSpaceBeforeProperty('value')
   },
 } satisfies Partial<FormatHandlers>

@@ -4,7 +4,12 @@ import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
 import { DataControls, type TaoDataSchema } from './TR-data'
 import { LayoutControls } from './TR-layout'
-import { NavigationControls, type TaoNavigationStack } from './TR-navigation'
+import {
+  NavigationControls,
+  type TaoNavigationStack,
+  type TaoNavigationValue,
+  type TaoPresentable,
+} from './TR-navigation'
 import * as TRTaoProps from './TR-TaoProps'
 import * as TRViews from './TR-views'
 
@@ -51,29 +56,78 @@ class TR {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
   }
 
-  /** When evaluates value branches in source order, invoking only the selected body. */
-  static When<T>(
-    branches: readonly [() => TR.Evaluable, () => TR.Evaluable][],
+  /** IsEmpty matches empty text/lists and ready queries with no rows. */
+  static IsEmpty(subject: TR.Evaluable): TR.Value<boolean> {
+    return new RuntimeValue(matchSubjectCase(subject.evaluate().jsValue, 'empty').matched)
+  }
+
+  /** WhenCase evaluates one subject once and selects one mutually exclusive value case. */
+  static WhenCase<T>(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<TR.Evaluable>[],
     otherwise: () => TR.Evaluable,
   ): TR.Value<T> {
-    for (const [condition, body] of branches) {
-      if (condition().evaluate().jsValue) {
-        return body().evaluate() as TR.Value<T>
+    const value = subject.evaluate().jsValue
+    for (const [caseName, body] of branches) {
+      const match = matchSubjectCase(value, caseName)
+      if (match.matched) {
+        return body(new RuntimeValue(match.payload)).evaluate() as TR.Value<T>
       }
     }
     return otherwise().evaluate() as TR.Value<T>
   }
 
-  /** Member reads item fields and the built-in Empty/Count collection and text members. */
+  /** WhenCaseRender evaluates one subject once and renders one matching case. */
+  static WhenCaseRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    otherwise: () => React.ReactNode,
+  ): React.ReactNode {
+    const value = subject.evaluate().jsValue
+    for (const [caseName, body] of branches) {
+      const match = matchSubjectCase(value, caseName)
+      if (match.matched) {
+        return body(new RuntimeValue(match.payload))
+      }
+    }
+    return otherwise()
+  }
+
+  /** GuardAction runs a matching handler and reports whether the enclosing block must stop. */
+  static GuardAction(subject: TR.Evaluable, branches: readonly TR.CaseBranch<void>[]): boolean {
+    const value = subject.evaluate().jsValue
+    for (const [caseName, body] of branches) {
+      const match = matchSubjectCase(value, caseName)
+      if (match.matched) {
+        body(new RuntimeValue(match.payload))
+        return true
+      }
+    }
+    return false
+  }
+
+  /** GuardRender renders a matching handler or the untouched remainder of the enclosing block. */
+  static GuardRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    remaining: () => React.ReactNode,
+  ): React.ReactNode {
+    const value = subject.evaluate().jsValue
+    for (const [caseName, body] of branches) {
+      const match = matchSubjectCase(value, caseName)
+      if (match.matched) {
+        return body(new RuntimeValue(match.payload))
+      }
+    }
+    return remaining()
+  }
+
+  /** Member reads item fields and the built-in Count collection and text member. */
   static Member(root: TR.Evaluable, path: readonly string[]): TR.Value<any> {
     let value = root.evaluate().jsValue
     for (const member of path) {
       if (DataControls.IsEntityHandle(value)) {
         value = DataControls.Read(value, member)
-        continue
-      }
-      if ((Array.isArray(value) || typeof value === 'string') && member === 'Empty') {
-        value = value.length === 0
         continue
       }
       if ((Array.isArray(value) || typeof value === 'string') && member === 'Count') {
@@ -93,33 +147,6 @@ class TR {
   /** Call invokes a Tao pure function with runtime-wrapped values. */
   static Call<T>(fn: TR.Function, ...args: TR.Evaluable[]): TR.Value<T> {
     return fn.invoke(...args) as TR.Value<T>
-  }
-
-  /** WhenRender renders only the first matching branch body. */
-  static WhenRender(
-    branches: readonly [() => TR.Evaluable, () => React.ReactNode][],
-    otherwise: () => React.ReactNode,
-  ): React.ReactNode {
-    for (const [condition, body] of branches) {
-      if (condition().evaluate().jsValue) {
-        return body()
-      }
-    }
-    return otherwise()
-  }
-
-  /** WhenAction runs only the first matching action body. */
-  static WhenAction(
-    branches: readonly [() => TR.Evaluable, () => void][],
-    otherwise: () => void,
-  ): void {
-    for (const [condition, body] of branches) {
-      if (condition().evaluate().jsValue) {
-        body()
-        return
-      }
-    }
-    otherwise()
   }
 
   /** ForEach renders a stable fragment for each list value. */
@@ -341,6 +368,8 @@ namespace TR {
   export type CompoundSetOperator = '+=' | '-=' | '*=' | '/='
   /** Evaluable declares runtime values that can collapse to their current value. */
   export type Evaluable = { evaluate(): any }
+  /** CaseBranch maps one source case name to a payload-aware lazy body. */
+  export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
   export type Function = RuntimeFunction
   /** State declares a runtime Tao state wrapper. */
@@ -359,6 +388,51 @@ namespace TR {
   export type DataSchema = TaoDataSchema
   /** NavigationStack declares one runtime-backed Tao application stack. */
   export type NavigationStack = TaoNavigationStack
+  /** NavigationValue declares a configured StackNav, SlotNav, or OverlayNav. */
+  export type NavigationValue = TaoNavigationValue
+  /** Presentable declares a first-class Tao ui descriptor. */
+  export type Presentable = TaoPresentable
+}
+
+type SubjectCaseMatch = { matched: boolean; payload: unknown }
+
+function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
+  const query = queryStatus(value)
+  if (caseName === 'loading') {
+    return { matched: query?.status === 'loading', payload: undefined }
+  }
+  if (caseName === 'error') {
+    return { matched: query?.status === 'error', payload: query?.message }
+  }
+  if (caseName === 'empty') {
+    if (query) {
+      return { matched: query.status === 'ready' && query.rows.length === 0, payload: undefined }
+    }
+    return {
+      matched: (Array.isArray(value) || typeof value === 'string') && value.length === 0,
+      payload: undefined,
+    }
+  }
+  if (caseName === 'true' || caseName === 'false') {
+    return { matched: value === (caseName === 'true'), payload: undefined }
+  }
+  return { matched: false, payload: undefined }
+}
+
+function queryStatus(
+  value: unknown,
+): { status: 'loading' | 'error' | 'ready'; message?: string; rows: unknown[] } | undefined {
+  if (!Array.isArray(value) || !Object.prototype.hasOwnProperty.call(value, 'Loading')) {
+    return undefined
+  }
+  const query = value as unknown[] & { Loading?: boolean; Error?: string }
+  if (query.Loading === true) {
+    return { status: 'loading', rows: query }
+  }
+  if (typeof query.Error === 'string' && query.Error.length > 0) {
+    return { status: 'error', message: query.Error, rows: query }
+  }
+  return { status: 'ready', rows: query }
 }
 
 export default TR

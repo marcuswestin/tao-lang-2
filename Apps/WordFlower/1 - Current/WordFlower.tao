@@ -1,14 +1,69 @@
+use Local from @tao/data
+use OverlayNav, SlotNav, StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
+// This tranche decides (the process contract is ../README.md):
+// - Arguments: `Name:` labels, unlabeled type-based binding, comma-separated, never positional
+// - Interpolated strings "{ Expression }"
+// - `is empty` expressions and the empty/loading/error case vocabulary (`.Empty` retired)
+// - Block-scoped `guard` in actions and renders (a match skips the rest of its enclosing block);
+//   one subject per guard
+// - `when` subject form for values and renders
+// - `data Plural / Singular` top-level declarations with comma modifiers, `index`, default
+//   `order by`, relation elision, and boolean case fields written and filtered by name
+// - `loop Plural / Singular` list rendering
+// - `query [Name from] Source { ... }` including relation sources and inline placement
+//   (declared before use, and before any conditional)
+// - Two-way input binding; `on press|change|submit` with action references or inline handlers
+// - `ui` role; app Navigator/@overlays/Datasource block; `present Name(Args)` with required
+//   parentheses; `dismiss`; StackNav/SlotNav/OverlayNav; `replace <nav> in <App>`
+// - `#tag` render metadata and test vocabulary: `press`/`enter`/`submit` with `#tag`, `select #tag[1-based]`,
+//   grouped `expect { ... }`, bare `data loading|error|ready` steps
+// - Visibility words: `file` (default, written by omission), `package`, `workspace`, `public`
+// - Custom types with value-literal constructors; view-local and block-shadowed `let`;
+//   number state with compound `set`; typed injection
+// - Multi-app compile/dev selection: `--app Name`, or an interactive prompt when a TTY is available;
+//   noninteractive commands with no selection fail rather than guessing
 project {
    name "WordFlower"
    remote none
    license MIT
 }
 
+// An app mounts navs, it does not render content directly. `Navigator` is the primary nav; keyed
+// entries like `@overlays` are auxiliary navs, and their keys are stable navigation targets.
 app WordFlower {
-   datasource WordFlowerData through Local
-   stack WordFlowerNavigation
+   Name "WordFlower"
+   Navigator StackNav {
+      Initial WorkspaceList // Initial expects a ui, not a rendered element. So WorkspaceList is passed as a value, not as invoked result.
+   }
+   @overlays OverlayNav { }
+   Datasource Local with {
+      StorageKey "WordFlowerData"
+}  }
+
+app WordFlowerFoundationTest {
+   Name "WordFlower Navigation Foundation Test"
+   Navigator FoundationNavigator
+   // An app without data omits `Datasource` entirely
+}
+
+data Workspaces / Workspace { // top-level data: the plural collection, then the singular entity it stores — the same `Plural / Singular` order as `loop`
+   Name text
+   CreatedAt time, default now() // modifications are comma separated; index is declared separately
+   Documents // `relation Documents` can be omitted if the name matches a data declaration
+   index CreatedAt // index is declared separately
+   order by CreatedAt // default order, defaults to asc
+}
+
+data Documents / Document {
+   Title text
+   Body text, default ""
+   Final / Draft, default Draft // booleans are <yesName> / <noName>
+   CreatedAt time, default now()
+   Workspace, on delete cascade // `relation Workspace` can be omitted if the name matches a data declaration
+   index CreatedAt
+   order by CreatedAt // default order, defaults to asc
 }
 
 let Tagline = "A quiet place for words that matter."
@@ -25,212 +80,254 @@ type WritingPrompt is {
    PromptTags
 }
 
+// Typed constructors keep their value-literal form; item fields follow the same argument decisions
+// as invocations: `Field: value` labels a field, and an unlabeled typed value binds by type.
+let StarterTags = PromptTags ["daily", "warmup"] // list items are comma separated
 let StarterPrompt = WritingPrompt {
-   PromptTitle "Morning pages"
-   PromptMinutes 10
-   PromptTags ["daily" "warmup"]
+   PromptTitle: "Morning pages"
+   PromptMinutes: 10
+   StarterTags // unlabeled: binds the PromptTags field by type
 }
 
-project data WordFlowerData {
-   Workspaces Workspace {
-      Name text
-      CreatedAt time indexed default now()
-   }
-   Documents Document {
-      Title text
-      Body text default ""
-      Final boolean default false
-      CreatedAt time indexed default now()
-      Workspace relation Workspace on delete cascade
-}  }
-
-project stack WordFlowerNavigation {
-   initial WorkspaceList
-   destination WorkspaceList
-   destination WorkspaceDetail
-   destination DocumentEditor
-}
-
-project view WorkspaceList {
-   state WorkspaceDraft = ""
-   query WordFlowerData.Workspaces as Workspaces {
-      order by CreatedAt asc
-   }
-   action ChangeWorkspaceDraft Value is text {
-      set WorkspaceDraft = Value
+// `ui` is content that can enter the app's presentation tree; `view` stays embeddable content.
+// There is no separate destination list: presenting a `ui` is the whole navigation contract.
+ui WorkspaceList {
+   state WorkspaceName = ""
+   query Workspaces { // `<Name from>` is omitted: a query binds its source's name. `query Workspaces as ArchivedWorkspaces { ... }` would also work
+   // order by CreatedAt asc // can be omitted bc it's the entity's declared default order
    }
    action AddWorkspace {
-      when
-         WorkspaceDraft.Empty -> { }
-         otherwise -> {
-            create WordFlowerData.Workspace {
-               Name WorkspaceDraft
-            }
-            set WorkspaceDraft = ""
-   }  }
+      guard WorkspaceName empty -> { // a match runs its handler and skips the remainder of this action block
+         // `present` is an invocation, so parentheses are always required, including with no arguments
+         present WorkspaceNameNotice() in WordFlower@overlays
+      }
+      create Workspace {
+         Name: WorkspaceName
+      }
+      set WorkspaceName = ""
+   }
    render Col() [fill, content top stretch, gap 10, pad 16] {
       Text("WordFlower")
       Text(Tagline)
-      when
-         Workspaces.Loading -> {
+      // In a render, a matched guard shows its handler and skips the remainder of its ENCLOSING BLOCK
+      guard Workspaces {
+         loading -> {
             Text("Loading workspaces…")
          }
-         not Workspaces.Error.Empty -> {
+         error -> Message {
             Text("Could not load WordFlower")
-            Text(Workspaces.Error)
+            Text(Message)
+      }  }
+      #workspaceName // Tags apply to the next view render
+      // Arguments are comma-separated; `Name:` labels a parameter, and unlabeled values bind by type
+      TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Home") {
+         // An explicit `on change` replaces the input's default update of its bound state
+         on change -> NewWorkspaceName {
+            set WorkspaceName = NewWorkspaceName
          }
-         otherwise -> {
-            TextInput(.Value WorkspaceDraft, .Change ChangeWorkspaceDraft, .Submit AddWorkspace, .Label "Workspace name", .Placeholder "Home", .Id "workspace-name")
-            when
-               WorkspaceDraft.Empty -> {
-                  Text("Workspace name is required")
-               }
-               otherwise -> {
-                  Text(WorkspaceDraft)
-               }
-            FormButton(.Title "Add workspace", .Press AddWorkspace, .Id "add-workspace", .Disabled WorkspaceDraft.Empty)
-            when
-               Workspaces.Empty -> {
-                  Text("No workspaces yet")
-                  Text("Create one to start capturing documents.")
-                  Text(interpolate "Starter prompt: ", StarterPrompt.PromptTitle)
-                  Text(interpolate "Try writing for ", StarterPrompt.PromptMinutes, " minutes")
-                  TagLine(StarterPrompt.PromptTags)
-               }
-               otherwise -> {
-                  for Workspace in Workspaces {
-                     Col() [gap 6, pad 10] {
-                        Text(Workspace.Name)
-                        FormButton(.Title "Open workspace", .Press action { present WordFlowerNavigation.WorkspaceDetail(.Workspace Workspace) }, .Id (interpolate "open-workspace-", Workspace.Id))
-                        FormButton(.Title "Delete workspace", .Press action { delete Workspace }, .Id (interpolate "delete-workspace-", Workspace.Id))
+         on submit AddWorkspace
+      }
+      Text(when WorkspaceName {
+         empty -> "Workspace name is required"
+         otherwise -> WorkspaceName
+      })
+      #addWorkspace
+      FormButton("Add workspace", Disabled: WorkspaceName is empty) {
+         on press AddWorkspace
+      }
+      guard Workspaces empty -> { // Guarding a single condition can be done without brackets `{ empty -> ... }`
+         Text("No workspaces yet")
+         Text("Create one to start capturing documents.")
+         Text("Starter prompt: { StarterPrompt.PromptTitle }") // interpolation reaches custom item members
+         Text("Try writing for { StarterPrompt.PromptMinutes } minutes")
+         TagLine(StarterPrompt.PromptTags)
+      }
+      #workspaces
+      loop Workspaces / Workspace { // `loop` binds each row by the provided singular name. In this case it's just `Workspace`, but it could be e.g `NewWorkspace`, etc
+         Col() [gap 6, pad 10] {
+            Text(Workspace.Name)
+            #openWorkspace
+            FormButton("Open workspace") {
+               on press -> {
+                  present WorkspaceDetail(Workspace)
+               } // delivered to the nearest enclosing nav
+            }
+            #deleteWorkspace
+            FormButton("Delete workspace") {
+               on press -> {
+                  delete Workspace
 }  }  }  }  }  }
 
-project view WorkspaceDetail Workspace is WordFlowerData.Workspace {
+// Presented into the app's overlay host; overlays stack above content and are dismissible
+ui WorkspaceNameNotice {
+   render Col() [gap 6, pad 10] {
+      Text("A workspace needs a name")
+      #dismissNotice
+      FormButton("Dismiss") {
+         on press -> {
+            dismiss
+         } // the nearest enclosing nav is the overlay host that presented this
+}  }  }
+
+// Visibility is `file` (the default, written by omission), `package`, `workspace`, or `public`.
+// These replace the transitional `project` and `publish` words.
+workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same-named entity type
    state WorkspaceNameDraft = Workspace.Name
-   state DocumentDraft = ""
-   query WordFlowerData.Documents as Drafts {
-      where Workspace == Workspace
-      where Final == false
-      order by CreatedAt asc
-   }
-   query WordFlowerData.Documents as FinishedDocuments {
-      where Workspace == Workspace
-      where Final == true
-      order by CreatedAt asc
-   }
-   let SectionLabel = "Drafts"
-   action ChangeDocumentDraft Value is text {
-      set DocumentDraft = Value
-   }
-   action ChangeWorkspaceNameDraft Value is text {
-      set WorkspaceNameDraft = Value
-   }
+   state DocumentTitle = ""
+   let SectionLabel = "Drafts" // definition-level `let` bindings stay visible through the render tree
    action SaveWorkspace {
-      when
-         WorkspaceNameDraft.Empty -> { }
-         otherwise -> {
-            update Workspace {
-               Name WorkspaceNameDraft
-   }  }  }
-   action AddDocument {
-      when
-         DocumentDraft.Empty -> { }
-         otherwise -> {
-            create WordFlowerData.Document {
-               Title DocumentDraft
-               Workspace Workspace
-            }
-            set DocumentDraft = ""
+      guard WorkspaceNameDraft empty
+      update Workspace {
+         Name: WorkspaceNameDraft
    }  }
+   action AddDocument {
+      guard DocumentTitle empty
+      create Document {
+         Title: DocumentTitle
+         Workspace // unlabeled arguments bind by type; the entity value matches the relation field
+      }
+      set DocumentTitle = ""
+   }
    render Col() [fill, content top stretch, gap 10, pad 16] {
-      Text(interpolate "Workspace: ", Workspace.Name)
-      TextInput(.Value WorkspaceNameDraft, .Change ChangeWorkspaceNameDraft, .Submit SaveWorkspace, .Label "Workspace title", .Placeholder "Workspace title", .Id "workspace-title")
-      FormButton(.Title "Save workspace", .Press SaveWorkspace, .Id "save-workspace", .Disabled WorkspaceNameDraft.Empty)
-      Text(interpolate SectionLabel, ": ", Drafts.Count)
-      when
-         Drafts.Loading or FinishedDocuments.Loading -> {
+      Text("Workspace: { Workspace.Name }")
+      #workspaceTitle
+      TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
+         on submit SaveWorkspace
+      }
+      #saveWorkspace
+      FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
+         on press SaveWorkspace
+      }
+
+      // Queries can be inlined, but hook-like statements (state, query) must come before any
+      // conditional in the definition body
+      query Drafts from Workspace.Documents {
+         where Draft // filters by boolean case name, mirroring `update Document { Final }`
+      }
+      query FinishedDocuments from Workspace.Documents {
+         where Final
+      }
+      Text("{ SectionLabel }: { Drafts.Count }")
+      guard Drafts { // a guard takes exactly one subject; guard each query separately
+         loading -> {
             Text("Loading documents…")
          }
-         not Drafts.Error.Empty -> {
-            Text("Could not load documents")
-            Text(Drafts.Error)
+         error -> Message {
+            Text("Could not load documents: { Message }")
+      }  }
+      guard FinishedDocuments {
+         loading -> {
+            Text("Loading documents…")
          }
-         not FinishedDocuments.Error.Empty -> {
-            Text("Could not load documents")
-            Text(FinishedDocuments.Error)
+         error -> Message {
+            Text("Could not load documents: { Message }")
+      }  }
+      #newDocumentTitle
+      TextInput(Value: DocumentTitle, Label: "New document title", Placeholder: "Draft the next chapter") {
+         // No `on change`: TextInput updates its bound state automatically; the default binding requires `Value:` to reference a writable state
+         on submit AddDocument
+      }
+      when DocumentTitle {
+         empty -> {
+            Text("Document title is required")
          }
          otherwise -> {
-            TextInput(.Value DocumentDraft, .Change ChangeDocumentDraft, .Submit AddDocument, .Label "New document title", .Placeholder "Draft the next chapter", .Id "new-document-title")
-            when
-               DocumentDraft.Empty -> {
-                  Text("Document title is required")
-               }
-               otherwise -> {
-                  Text(DocumentDraft)
-               }
-            FormButton(.Title "Add document", .Press AddDocument, .Id "add-document", .Disabled DocumentDraft.Empty)
-            when
-               Drafts.Empty -> {
-                  Text("No drafts")
-               }
-               otherwise -> {
-                  for Document in Drafts {
-                     Col() [gap 6, pad 10] {
-                        Text(Document.Title)
-                        FormButton(.Title "Open document", .Press action { present WordFlowerNavigation.DocumentEditor(.Document Document) }, .Id (interpolate "open-document-", Document.Id))
-                        FormButton(.Title "Finish document", .Press action { update Document {
-                           Final true
-                        } }, .Id (interpolate "finish-document-", Document.Id))
-                        FormButton(.Title "Delete document", .Press action { delete Document }, .Id (interpolate "delete-draft-", Document.Id))
+            Text(DocumentTitle)
+      }  }
+      #addDocument
+      FormButton("Add document", Disabled: DocumentTitle is empty) {
+         on press AddDocument
+      }
+      when Drafts {
+         empty -> {
+            Text("No drafts")
+         }
+         otherwise -> {
+            // A tagged loop can be selected by 1-based row index and then queried within:
+            // #drafts[INDEX] { press #edit }
+            #drafts
+            loop Drafts / Document {
+               Col() [gap 6, pad 10] {
+                  Text(Document.Title)
+                  #edit
+                  FormButton("Open document") {
+                     on press -> {
+                        present DocumentEditor(Document)
+                  }  }
+                  #finish
+                  FormButton("Finish document") {
+                     on press -> {
+                        update Document {
+                           Final
+                        }
+                     } // boolean cases are written by name
+                  }
+                  #delete
+                  FormButton("Delete document") {
+                     on press -> {
+                        delete Document
+      }  }  }  }  }  }
+      guard FinishedDocuments empty -> {
+         Text("No finished documents")
+      }
+      Col() [gap 6] {
+         let SectionLabel = "Finished" // a render-block `let` shadows the definition-level binding inside its block
+         Text(SectionLabel)
+         #finishedDocuments
+         loop FinishedDocuments / Document {
+            Col() [gap 6, pad 10] {
+               Text(Document.Title)
+               #reopen
+               FormButton("Reopen document") {
+                  on press -> {
+                     update Document {
+                        Draft
                }  }  }
-            when
-               FinishedDocuments.Empty -> {
-                  Text("No finished documents")
-               }
-               otherwise -> {
-                  let SectionLabel = "Finished"
-                  Text(SectionLabel)
-                  for Document in FinishedDocuments {
-                     Col() [gap 6, pad 10] {
-                        Text(Document.Title)
-                        FormButton(.Title "Reopen document", .Press action { update Document {
-                           Final false
-                        } }, .Id (interpolate "reopen-document-", Document.Id))
-                        FormButton(.Title "Delete finished document", .Press action { delete Document }, .Id (interpolate "delete-finished-document-", Document.Id))
-}  }  }  }  }  }
+               #deleteFinished
+               FormButton("Delete finished document") {
+                  on press -> {
+                     delete Document
+}  }  }  }  }  }  }
 
-project view DocumentEditor Document is WordFlowerData.Document {
+workspace ui DocumentEditor Document {
    state TitleDraft = Document.Title
    state BodyDraft = Document.Body
    state SaveCount = 0
-   action ChangeTitleDraft Value is text {
-      set TitleDraft = Value
-   }
-   action ChangeBodyDraft Value is text {
+   action SetBodyDraft Value is text { // an action reference bound to an event receives the payload through its parameters
       set BodyDraft = Value
    }
    action SaveDocument {
-      when
-         TitleDraft.Empty -> { }
-         otherwise -> {
-            update Document {
-               Title TitleDraft
-               Body BodyDraft
-            }
-            set SaveCount += 1
-   }  }
+      guard TitleDraft empty
+      update Document {
+         Title: TitleDraft
+         Body: BodyDraft
+      }
+      set SaveCount += 1 // compound `set` composes with number state
+   }
    render Col() [fill, content top stretch, gap 10, pad 16] {
       Text("Edit document") [width fill]
-      Text(interpolate "Workspace: ", Document.Workspace.Name)
-      TextInput(.Value TitleDraft, .Change ChangeTitleDraft, .Submit SaveDocument, .Label "Document title", .Placeholder "Document title", .Id "edit-document-title")
-      TextInput(.Value BodyDraft, .Change ChangeBodyDraft, .Submit SaveDocument, .Label "Document body", .Placeholder "Write the document body", .Id "edit-document-body") [claim 2]
+      Text("Workspace: { Document.Workspace.Name }")
+      #editDocumentTitle
+      TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
+         on submit SaveDocument
+      }
+      #editDocumentBody
+      // The body editor claims the column's leftover space
+      TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
+         on change SetBodyDraft // an explicit action reference also replaces the input's default binding
+         on submit SaveDocument
+      }
       WordCount(BodyDraft)
-      FormButton(.Title "Save document", .Press SaveDocument, .Id "save-document", .Disabled TitleDraft.Empty)
-      Text(interpolate "Saved title: ", Document.Title)
-      Text(interpolate "Saved body: ", Document.Body)
-      Text(interpolate "Saves this session: ", SaveCount)
+      #saveDocument
+      FormButton("Save document", Disabled: TitleDraft is empty) {
+         on press SaveDocument
+      }
+      Text("Saved title: { Document.Title }")
+      Text("Saved body: { Document.Body }")
+      Text("Saves this session: { SaveCount }")
 }  }
 
+// Typed TS injection stays the permanent escape hatch for behavior Tao does not own.
 view WordCount Value is text {
    render inject Value ```ts
       return <RN.Text>Words: {Value.trim() === '' ? 0 : Value.trim().split(/\s+/).length}</RN.Text>
@@ -242,3 +339,42 @@ view TagLine Tags is list {
       return <RN.Text>Tagged: {Tags.join(', ')}</RN.Text>
    ```
 }
+
+// Deterministic in-between harness for the first navigation foundation slice. Product syntax is
+// still decided in this file; the harness keeps foundation acceptance independent of full WordFlower.
+let FoundationStack = StackNav {
+   Initial FoundationHome
+}
+let FoundationNavigator = SlotNav {
+   Initial FoundationStack
+}
+
+ui FoundationHome {
+   render Col() {
+      Text("Foundation home marker")
+      FormButton("Open deterministic detail") {
+         on press -> {
+            present FoundationDetail()
+      }  }
+      FormButton("Open deterministic slot") {
+         on press -> {
+            present FoundationSlot() in FoundationNavigator
+}  }  }  }
+
+ui FoundationDetail {
+   render Col() {
+      Text("Foundation detail marker")
+      FormButton("Reset foundation app") {
+         // `replace <nav> in <App>` swaps the app's root content; it is the only root operation an app accepts
+         on press -> {
+            replace FoundationNavigator in WordFlowerFoundationTest
+}  }  }  }
+
+ui FoundationSlot {
+   render Col() {
+      Text("Foundation slot marker")
+      FormButton("Restore initial stack") {
+         on press -> {
+            dismiss
+         } // dismissing a SlotNav's presented content restores its Initial
+}  }  }

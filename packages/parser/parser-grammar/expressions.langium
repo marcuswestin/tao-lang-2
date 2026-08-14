@@ -13,12 +13,7 @@ ArgumentList:
     arguments+=Argument (',' arguments+=Argument)*;
 
 Argument:
-    ('.' parameterName=ID value=ArgumentValue)
-    | (type=TypeReference ':' value=TypedArgumentValue)
-    | value=ArgumentValue;
-
-TypedArgumentValue:
-    ItemLiteral | Expression;
+    (label=ID ':')? value=ArgumentValue;
 
 ArgumentValue infers Expression:
     Expression;
@@ -39,7 +34,10 @@ EqualityExpression infers Expression:
     ComparisonExpression ({infer BinaryExpression.left=current} operator=('==' | '!=') right=ComparisonExpression)*;
 
 ComparisonExpression infers Expression:
-    AdditionExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=AdditionExpression)*;
+    EmptyExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=EmptyExpression)*;
+
+EmptyExpression infers Expression:
+    AdditionExpression ({infer EmptyExpression.value=current} 'is' empty?='empty')?;
 
 AdditionExpression infers Expression:
     MultiplicationExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
@@ -51,17 +49,46 @@ UnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PrimaryExpression;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ListLiteral | MemberAccessExpression | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | InterpolationExpression | FunctionCallExpression | ValueReference;
+    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | ValueReference;
 
-// `otherwise` makes every value conditional total and terminates the branch list unambiguously.
+// Configured values are closed, typed records owned by stdlib and app contracts. `with` is
+// canonical for provider configuration and omitted for navigation construction.
+ProviderConfiguredValue:
+    type=[TypeDeclaration:ID] with?='with' block=ConfigurationBlock;
+
+NavigationConfiguredValue:
+    type=[TypeDeclaration:ID] block=ConfigurationBlock;
+
+type ConfiguredValue = ProviderConfiguredValue | NavigationConfiguredValue;
+
+ConfigurationBlock:
+    '{' entries+=ConfigurationEntry* '}';
+
+ConfigurationEntry:
+    name=ID value=ConfigurationValue;
+
+ConfigurationValue:
+    NavigationConfiguredValue | ProviderConfiguredValue | StringLiteral | NumberLiteral | BooleanLiteral | ValueReference;
+
+// `otherwise` makes every subject conditional total and terminates the branch list unambiguously.
 WhenExpression:
-    'when' branches+=WhenBranch+ otherwise=WhenOtherwise;
+    'when' subject=SubjectExpression '{' branches+=WhenBranch+ otherwise=WhenOtherwise '}';
 
 WhenBranch:
-    condition=OrExpression '->' value=OrExpression;
+    case=SubjectCaseName '->' value=OrExpression;
 
 WhenOtherwise:
     'otherwise' '->' value=OrExpression;
+
+SubjectExpression infers Expression:
+    '(' Expression ')' | ListLiteral | MemberAccessExpression | FunctionCallExpression | InterpolatedString
+    | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | ValueReference;
+
+SubjectCaseName returns string:
+    'empty' | 'loading' | 'error' | 'true' | 'false' | ID;
+
+CasePayload:
+    name=ID;
 
 TypedConstructor:
     type=ConstructorTypeReference value=TypedConstructorValue;
@@ -70,13 +97,13 @@ TypedConstructorValue:
     StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;
 
 ListLiteral:
-    '[' elements+=Expression* ']';
+    '[' (elements+=Expression (',' elements+=Expression)*)? ']';
 
 ItemLiteral:
-    '{' properties+=ItemProperty* '}';
+    '{' (properties+=ItemProperty (','? properties+=ItemProperty)*)? '}';
 
 ItemProperty:
-    value=Expression;
+    (label=ID ':')? value=Expression;
 
 MemberAccessExpression:
     target=[ValueDeclaration:ID] '.' members+=ID ('.' members+=ID)*;
@@ -84,8 +111,17 @@ MemberAccessExpression:
 FunctionCallExpression:
     function=[FunctionDeclaration:ID] '(' argumentList=ArgumentList? ')';
 
-InterpolationExpression:
-    'interpolate' parts+=Expression (',' parts+=Expression)*;
+InterpolatedString:
+    INTERPOLATED_STRING_START parts+=InterpolatedStringPart* STRING_END;
+
+InterpolatedStringPart:
+    InterpolatedStringText | StringInterpolation;
+
+InterpolatedStringText:
+    value=STRING_TEXT;
+
+StringInterpolation:
+    INTERPOLATION_START expression=Expression '}';
 
 StringLiteral:
     value=STRING;
@@ -105,4 +141,4 @@ NoneLiteral:
 ValueReference:
     target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | QueryDeclaration | ForStatement;
+type ValueDeclaration = AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | UiDeclaration | EntityDataField;

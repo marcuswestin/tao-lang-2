@@ -22,20 +22,19 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | ToggleStatement | DoStatement | WhenActionStatement | CreateStatement | UpdateStatement | DeleteStatement | PresentStatement | BackStatement;
+    SetStatement | ToggleStatement | DoStatement | GuardActionStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | DismissStatement | ReplaceStatement;
 
 ToggleStatement:
     'toggle' target=[StateDeclaration:ID];
 
-// `otherwise` makes every action conditional total and terminates the branch list unambiguously.
-WhenActionStatement:
-    'when' branches+=WhenActionBranch+ otherwise=WhenActionOtherwise;
+GuardActionStatement:
+    'guard' subject=SubjectExpression (caseBlock=GuardActionCaseBlock | single=GuardActionBranch);
 
-WhenActionBranch:
-    condition=OrExpression '->' block=ActionBlock;
+GuardActionCaseBlock:
+    '{' branches+=GuardActionBranch+ '}';
 
-WhenActionOtherwise:
-    'otherwise' '->' block=ActionBlock;
+GuardActionBranch:
+    case=SubjectCaseName ('->' payload=CasePayload?)? block=ActionBlock?;
 
 SetStatement:
     'set' target=[StateDeclaration:ID] operator=SetOperator value=Expression;

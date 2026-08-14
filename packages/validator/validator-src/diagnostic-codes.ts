@@ -11,7 +11,5 @@ export const viewValidationCodes = {
   renderNotLast: 'tao-render-not-last',
 } as const
 
-/** aliasValidationCodes declares compatibility diagnostics for legacy bindings. */
-export const aliasValidationCodes = {
-  deprecatedAlias: 'tao-deprecated-alias',
-} as const
+/** aliasValidationCodes declares diagnostics for immutable bindings. */
+export const aliasValidationCodes = {} as const

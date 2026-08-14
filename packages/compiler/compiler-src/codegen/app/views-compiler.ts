@@ -11,8 +11,11 @@ export const ViewsCompiler = {
   /** LayoutDeclaration compiles a Tao layout declaration into a runtime component. */
   LayoutDeclaration: ViewDeclaration,
 
+  /** UiDeclaration compiles presentation content through the same component body lowering as views. */
+  UiDeclaration: ViewDeclaration,
+
   /** ViewParameterList compiles Tao view parameters into generated React props. */
-  ViewParameterList(renderable: AST.RenderableDeclaration): Compiled {
+  ViewParameterList(renderable: AST.VisualDeclaration): Compiled {
     const parameters = AST.parametersOf(renderable)
     return gen`{
       ${gen.list(parameters, Compile.ParameterDeclaration)}
@@ -52,25 +55,51 @@ export const ViewsCompiler = {
           number: () => gen`TR.Value<number>`,
           text: () => gen`TR.Value<string>`,
           time: () => gen`TR.Value<number>`,
+          nav: () => gen`TR.NavigationValue`,
+          ui: () => gen`TR.Presentable`,
         }),
       list: () => gen`TR.Value<any[]>`,
       item: () => gen`TR.Value<Record<string, any>>`,
       entity: () => gen`TR.Value<Record<string, any>>`,
       unresolved: () => gen`TR.Value<Record<string, any>>`,
+      union: () => gen`TR.Evaluable`,
     })
   },
 
   /** RenderBlockBody compiles render child setup statements followed by JSX children. */
   RenderBlockBody(block: AST.Block): Compiled {
-    const setupStatements = block.statements.filter(AST.isAliasDeclaration)
+    const setupStatements = block.statements.filter(statement =>
+      AST.isAliasDeclaration(statement) || AST.isEntityQueryDeclaration(statement)
+    )
     const renders = block.statements.filter(statement =>
-      AST.isRender(statement) || AST.isWhenRenderStatement(statement) || AST.isForStatement(statement)
+      AST.isRender(statement)
+      || AST.isWhenRenderStatement(statement)
+      || AST.isGuardRenderStatement(statement)
+      || AST.isForStatement(statement)
     )
     return gen`
       ${gen.list(setupStatements, Compile.Statement)}
       return <>
-        ${gen.list(renders, Compile.RenderFragmentStatement)}
+        ${Compile.RenderBlockFragments(renders)}
       </>
+    `
+  },
+
+  /** RenderBlockFragments compiles sequential render fragments around the first block-scoped guard. */
+  RenderBlockFragments(
+    statements: readonly (AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.ForStatement)[],
+  ): Compiled {
+    const guardIndex = statements.findIndex(AST.isGuardRenderStatement)
+    if (guardIndex < 0) {
+      return gen.list(statements, Compile.RenderFragmentStatement)
+    }
+    const guard = statements[guardIndex]
+    if (!AST.isGuardRenderStatement(guard)) {
+      return gen.noop()
+    }
+    return gen`
+      ${gen.list(statements.slice(0, guardIndex), Compile.RenderFragmentStatement)}
+      ${Compile.GuardRenderStatement(guard, statements.slice(guardIndex + 1))}
     `
   },
 
@@ -83,7 +112,7 @@ export const ViewsCompiler = {
   },
 } as const
 
-function ViewDeclaration(renderable: AST.RenderableDeclaration): Compiled {
+function ViewDeclaration(renderable: AST.VisualDeclaration): Compiled {
   const parameterList = Compile.ViewParameterList(renderable)
   return gen`
     ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {

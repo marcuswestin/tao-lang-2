@@ -5,6 +5,8 @@ import { testFormatCode } from './test-format'
 
 const wordFlowerPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao')
 const wordFlowerTestPath = Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.test.tao')
+const wordFlowerNextPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next')
+const wordFlowerNextTestPath = Repo.resolvePath('Apps/WordFlower/2 - Next/WordFlower.test.tao-next')
 const tsFence = '```ts'
 const fence = '```'
 
@@ -16,15 +18,31 @@ Describe('Tao formatter WordFlower apps', () => {
   Test('the current WordFlower test sidecar is a formatting fixed point', async () => {
     Expect(await Formatter.formatFile(wordFlowerTestPath)).toBe(await FS.readText(wordFlowerTestPath))
   })
+
+  // The absorption gate: skips while a Next tranche is open (Next then carries unimplemented
+  // syntax); absorbing the tranche makes the files byte-identical, which re-arms the gate.
+  Test('formats the Next contract and sidecar to Current fixed points', async () => {
+    const nextSource = await FS.readText(wordFlowerNextPath)
+    if (nextSource !== await FS.readText(wordFlowerPath)) {
+      return
+    }
+    const next = await Formatter.formatCode(nextSource)
+    const nextTest = await Formatter.formatCode(await FS.readText(wordFlowerNextTestPath))
+
+    Expect(next).toBe(await FS.readText(wordFlowerPath))
+    Expect(nextTest).toBe(await FS.readText(wordFlowerTestPath))
+    Expect(await Formatter.formatCode(next)).toBe(next)
+    Expect(await Formatter.formatCode(nextTest)).toBe(nextTest)
+  })
 })
 
 Describe('Tao formatter top-level statements', () => {
-  Test('separates declarations with one blank line and keeps alias groups adjacent', async () => {
+  Test('separates declarations with one blank line and keeps let groups adjacent', async () => {
     await testFormatCode(
       `
         app MyApp { view MainView }
-        alias Greeting = "Hello"
-        alias Count = 3
+        let Greeting = "Hello"
+        let Count = 3
         view MainView { }
       `,
       `
@@ -32,8 +50,8 @@ Describe('Tao formatter top-level statements', () => {
            view MainView
         }
 
-        alias Greeting = "Hello"
-        alias Count = 3
+        let Greeting = "Hello"
+        let Count = 3
 
         view MainView { }
       `,
@@ -43,14 +61,14 @@ Describe('Tao formatter top-level statements', () => {
   Test('collapses extra blank lines between declarations', async () => {
     await testFormatCode(
       `
-        alias Greeting = "Hello"
+        let Greeting = "Hello"
 
 
 
         view MainView { }
       `,
       `
-        alias Greeting = "Hello"
+        let Greeting = "Hello"
 
         view MainView { }
       `,
@@ -81,9 +99,9 @@ Describe('Tao formatter top-level statements', () => {
         use Text from @tao/ui
 
         use Stack from @tao/ui
-        alias Greeting = "a"
+        let Greeting = "a"
 
-        alias Count = 3
+        let Count = 3
         view MainView { }
       `,
       `
@@ -91,9 +109,9 @@ Describe('Tao formatter top-level statements', () => {
 
         use Stack from @tao/ui
 
-        alias Greeting = "a"
+        let Greeting = "a"
 
-        alias Count = 3
+        let Count = 3
 
         view MainView { }
       `,
@@ -103,17 +121,17 @@ Describe('Tao formatter top-level statements', () => {
   Test('collapses multiple blank lines between consecutive aliases to one', async () => {
     await testFormatCode(
       `
-        alias Greeting = "a"
+        let Greeting = "a"
 
 
 
-        alias Count = 3
+        let Count = 3
         view MainView { }
       `,
       `
-        alias Greeting = "a"
+        let Greeting = "a"
 
-        alias Count = 3
+        let Count = 3
 
         view MainView { }
       `,
@@ -145,7 +163,7 @@ Describe('Tao formatter use statements', () => {
 Describe('Tao formatter tests', () => {
   Test('formats v0 Tao test declarations', async () => {
     await testFormatCode(
-      `use WordFlower from ./\ntest   "WordFlower"{check "renders"{run   WordFlower\nexpect   text "Hello"\npress   role "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
+      `use WordFlower from ./\ntest   "WordFlower"{check "renders"{run   WordFlower\nexpect   text "Hello"\npress   text "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
       `
         use WordFlower from ./
 
@@ -154,7 +172,7 @@ Describe('Tao formatter tests', () => {
               run WordFlower
 
               expect text "Hello"
-              press role "Add"
+              press text "Add"
               expect input placeholder "Title" value "Draft"
               back
               expect missing label "Loading"
@@ -203,6 +221,37 @@ Describe('Tao formatter views and blocks', () => {
               Text("a")
               Text("b")
         }  }
+      `,
+    )
+  })
+
+  Test('formats named and inline control event handlers', async () => {
+    await testFormatCode(
+      `view MainView{render Input(Value:Draft){on change->Entered{set Draft=Entered}\non submit Submit}}`,
+      `
+        view MainView {
+           render Input(Value: Draft) {
+              on change -> Entered {
+                 set Draft = Entered
+              }
+              on submit Submit
+        }  }
+      `,
+    )
+  })
+
+  Test('formats current query and loop headers', async () => {
+    await testFormatCode(
+      `view Main Workspace{render Col(){query Drafts from Workspace.Documents{where Draft}\nloop Drafts/Document{Text(Document.Title)}}}`,
+      `
+        view Main Workspace {
+           render Col() {
+              query Drafts from Workspace.Documents {
+                 where Draft
+              }
+              loop Drafts / Document {
+                 Text(Document.Title)
+        }  }  }
       `,
     )
   })
@@ -289,9 +338,9 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes view parameter spacing', async () => {
     await testFormatCode(
-      `publish view CountText Count is number, Label is text { render Text(Label) }`,
+      `public view CountText Count is number, Label is text { render Text(Label) }`,
       `
-        publish view CountText Count is number, Label is text {
+        public view CountText Count is number, Label is text {
            render Text(Label)
         }
       `,
@@ -316,95 +365,18 @@ Describe('Tao formatter views and blocks', () => {
 
   Test('normalizes named invocation and input-test step spacing', async () => {
     await testFormatCode(
-      `view MainView{render Field(.Value   "Draft",.Disabled false)}\ntest "Form"{check "entry"{run MyApp enter "Hello"  into label  "Title" submit id  "field"}}`,
+      `view MainView{render Field(Value: "Draft",Disabled: false)}\ntest "Form"{check "entry"{run MyApp enter "Hello"  into label  "Title" submit placeholder  "Title"}}`,
       `
         view MainView {
-           render Field(.Value "Draft", .Disabled false)
+           render Field(Value: "Draft", Disabled: false)
         }
 
         test "Form" {
            check "entry" {
               run MyApp
               enter "Hello" into label "Title"
-              submit id "field"
+              submit placeholder "Title"
         }  }
-      `,
-    )
-  })
-
-  Test('formats data schemas, queries, writes, and provider status steps', async () => {
-    await testFormatCode(
-      `project data Tasks{Groups Group{Name text}Items Item{Title text Done boolean Count number indexed   default   2 CreatedAt time indexed default now ( ) Group relation Group on delete cascade}}\napp DataApp{datasource Tasks through Memory view MainView}\nproject view MainView{query Tasks . Items as OpenItems{where Done==false order by Title desc}action Add{create Tasks . Item{Title "Draft" Done false}}render Stack() {for Item in OpenItems{Button("Delete",action{delete Item})}}}\ntest "Data"{check "status"{run DataApp data Tasks error "Offline" data Tasks ready}}`,
-      `
-        project data Tasks {
-           Groups Group {
-              Name text
-           }
-           Items Item {
-              Title text
-              Done boolean
-              Count number indexed default 2
-              CreatedAt time indexed default now()
-              Group relation Group on delete cascade
-        }  }
-
-        app DataApp {
-           datasource Tasks through Memory
-           view MainView
-        }
-
-        project view MainView {
-           query Tasks.Items as OpenItems {
-              where Done == false
-              order by Title desc
-           }
-           action Add {
-              create Tasks.Item {
-                 Title "Draft"
-                 Done false
-           }  }
-           render Stack() {
-              for Item in OpenItems {
-                 Button("Delete", action { delete Item })
-        }  }  }
-
-        test "Data" {
-           check "status" {
-              run DataApp
-              data Tasks error "Offline"
-              data Tasks ready
-        }  }
-      `,
-    )
-  })
-
-  Test('formats stack declarations and navigation actions', async () => {
-    await testFormatCode(
-      `project stack Main{initial Home destination Home destination Detail}\napp Demo{stack Main}\nview Home{action Open{present Main . Detail(.Name "Item")}render Text("Home")}\nview Detail Name is text{action Close{back Main}render Text(Name)}`,
-      `
-        project stack Main {
-           initial Home
-           destination Home
-           destination Detail
-        }
-
-        app Demo {
-           stack Main
-        }
-
-        view Home {
-           action Open {
-              present Main.Detail(.Name "Item")
-           }
-           render Text("Home")
-        }
-
-        view Detail Name is text {
-           action Close {
-              back Main
-           }
-           render Text(Name)
-        }
       `,
     )
   })
@@ -463,13 +435,13 @@ Describe('Tao formatter views and blocks', () => {
   })
 })
 
-Describe('Tao formatter aliases', () => {
-  Test('preserves current and legacy binding keywords while normalizing spacing', async () => {
+Describe('Tao formatter immutable bindings', () => {
+  Test('normalizes canonical let binding spacing', async () => {
     await testFormatCode(
-      `publish let   Greeting="Hello"\nalias   Legacy="Hello"\nview MainView { }`,
+      `public let   Greeting="Hello"\nlet   Legacy="Hello"\nview MainView { }`,
       `
-        publish let Greeting = "Hello"
-        alias Legacy = "Hello"
+        public let Greeting = "Hello"
+        let Legacy = "Hello"
 
         view MainView { }
       `,
@@ -480,7 +452,7 @@ Describe('Tao formatter aliases', () => {
 Describe('Tao formatter types and constructors', () => {
   Test('normalizes type declarations, constructors, casts, lists, and member access', async () => {
     await testFormatCode(
-      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nalias Demo = Person {Tags ["a" "b"] Job {Level 2 Title "Engineer"} Age 40 Name "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
+      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nlet Demo = Person {Tags: Tags ["a","b"],Job: Job {Level: 2,Title: "Engineer"},Age: 40,Name: "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
       `
         type Job is {
            Title is text
@@ -494,14 +466,14 @@ Describe('Tao formatter types and constructors', () => {
            Job
         }
 
-        alias Demo = Person {
-           Tags ["a" "b"]
-           Job {
-              Level 2
-              Title "Engineer"
-           }
-           Age 40
-           Name "Ada"
+        let Demo = Person {
+           Tags: Tags ["a", "b"],
+           Job: Job {
+              Level: 2,
+              Title: "Engineer"
+           },
+           Age: 40,
+           Name: "Ada"
         }
 
         view Profile Person {
@@ -708,7 +680,7 @@ Describe('Tao formatter injections', () => {
   Test('normalizes injection argument spacing', async () => {
     await testFormatCode(
       `
-        alias UserName = "Ro"
+        let UserName = "Ro"
         view MainView {
         render inject Name    UserName,UserName ${tsFence}
         return <RN.Text>{Name}</RN.Text>
@@ -716,7 +688,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        alias UserName = "Ro"
+        let UserName = "Ro"
 
         view MainView {
            render inject Name UserName, UserName ${tsFence}
@@ -732,13 +704,13 @@ Describe('Tao formatter comments', () => {
   Test('keeps top-level comments attached below the blank-line separation', async () => {
     await testFormatCode(
       `
-        alias Greeting = "hi"
+        let Greeting = "hi"
 
         // the main view
         view MainView { render Text(Greeting) }
       `,
       `
-        alias Greeting = "hi"
+        let Greeting = "hi"
 
         // the main view
         view MainView {
@@ -753,14 +725,14 @@ Describe('Tao formatter comments', () => {
       `
         view MainView {
         // local greeting
-        alias G = "hi"
+        let G = "hi"
         render Text(G)
         }
       `,
       `
         view MainView {
            // local greeting
-           alias G = "hi"
+           let G = "hi"
            render Text(G)
         }
       `,

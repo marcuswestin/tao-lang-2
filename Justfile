@@ -30,7 +30,7 @@ fmt: _parser-gen
     just --fmt
 
 # Fix and format all code
-fix: _agent-config _parser-gen
+fix: _parser-gen
     dprint fmt --incremental=false
     ./tao fix
 
@@ -76,7 +76,7 @@ _parallel-check: _ide-extension-build _tao-check _dprint-check _typecheck _test
 _parallel-verify-check: _ide-extension-build _typecheck _test
 
 _compile-word-flower-app: _parser-gen
-    ./tao compile "{{ WORD_FLOWER_APP }}"
+    ./tao compile "{{ WORD_FLOWER_APP }}" --app WordFlower
 
 _ide-extension-build: _parser-gen
     cd packages/ide-extension && bun esbuild.config.ts

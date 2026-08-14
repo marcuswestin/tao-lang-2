@@ -4,7 +4,6 @@ import type { TaoDataProvider, TaoDataSchemaDefinition } from '../TaoRuntime-src
 
 const noteDefinition: TaoDataSchemaDefinition = {
   name: 'RuntimeNotes',
-  provider: 'memory',
   schemaVersion: 1,
   entities: {
     Note: {
@@ -34,7 +33,6 @@ Describe('TR.Data provider foundation', () => {
     Expect(() =>
       TR.Data.Schema({
         name: 'ReservedFields',
-        provider: 'memory',
         entities: {
           Entry: { collection: 'Entries', fields: { Id: { kind: 'text' } } },
         },
@@ -43,8 +41,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('surfaces an unbound-provider error when schema construction has no provider source', async () => {
-    const { provider: _legacyProvider, ...unboundDefinition } = noteDefinition
-    const schema = TR.Data.Schema(unboundDefinition)
+    const schema = TR.Data.Schema(noteDefinition)
     await TR.Data.Settle(schema)
 
     const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
@@ -52,8 +49,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('binds Memory synchronously and preserves the store across repeated app renders', () => {
-    const { provider: _legacyProvider, ...unboundDefinition } = noteDefinition
-    const schema = TR.Data.Schema(unboundDefinition)
+    const schema = TR.Data.Schema(noteDefinition)
     TR.Data.Bind(schema, 'memory')
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Bound') })
     const revisionBeforeRepeat = schema.snapshot()
@@ -103,7 +99,6 @@ Describe('TR.Data provider foundation', () => {
   Test('keeps the text literal "now" distinct from the time clock default', () => {
     const schema = TR.Data.Schema({
       name: 'DefaultKinds',
-      provider: 'memory',
       entities: {
         Entry: {
           collection: 'Entries',
@@ -147,12 +142,12 @@ Describe('TR.Data provider foundation', () => {
     const values = new Map<string, string>()
     const storage = mapStorage(values)
     const provider = TR.Data.LocalProvider(storage, 'persisted-id-test')
-    const first = TR.Data.Schema({ ...noteDefinition, provider: 'local' }, provider)
+    const first = TR.Data.Schema(noteDefinition, provider)
     await TR.Data.Settle(first)
     TR.Data.Create(first, 'Note', { Title: TR.Value('First') })
     await TR.Data.Settle(first)
 
-    const second = TR.Data.Schema({ ...noteDefinition, provider: 'local' }, provider)
+    const second = TR.Data.Schema(noteDefinition, provider)
     await TR.Data.Settle(second)
     TR.Data.Create(second, 'Note', { Title: TR.Value('Second') })
     await TR.Data.Settle(second)
@@ -235,7 +230,7 @@ Describe('TR.Data provider foundation', () => {
     Expect(rows.Error).toContain('entity collections do not match')
   })
 
-  Test('rejects persisted duplicate identifiers before handles can alias rows', async () => {
+  Test('rejects persisted duplicate identifiers before handles can let rows', async () => {
     const duplicateRows = JSON.stringify({
       formatVersion: 1,
       schemaVersion: 1,
@@ -299,7 +294,6 @@ Describe('TR.Data provider foundation', () => {
     }
     const definition: TaoDataSchemaDefinition = {
       name: 'Cascade',
-      provider: 'memory',
       entities: {
         Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' } } },
         Task: {
@@ -399,7 +393,6 @@ Describe('TR.Data provider foundation', () => {
   Test('restricts deletion when a relationship does not explicitly opt into cascade', () => {
     const definition: TaoDataSchemaDefinition = {
       name: 'RestrictedRelationship',
-      provider: 'memory',
       entities: {
         Parent: { collection: 'Parents', fields: { Name: { kind: 'text' } } },
         Child: {
@@ -427,7 +420,6 @@ Describe('TR.Data provider foundation', () => {
 function relationshipDefinition(name: string): TaoDataSchemaDefinition {
   return {
     name,
-    provider: 'memory',
     entities: {
       Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' } } },
       Task: {

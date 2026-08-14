@@ -1,5 +1,10 @@
 # Autonomous language MVP
 
+Status: historical implementation record. The absorbed WordFlower Next tranche supersedes this
+project's earlier source spellings for interpolation, invocation binding, control flow, data,
+queries, loops, testing selectors, visibility, apps, and navigation. The active contracts live in
+`Apps/WordFlower/1 - Current`, `Apps/WordFlower/2 - Next`, and `Spec/`.
+
 This branch-local project integrates Tao's functional application core around one executable forcing app (Still during the experiment, since restructured into WordFlower). The experiment intentionally owns its language decisions and does not wait for the independent roadmap slices that were active when the branch began. The first end-to-end implementation is complete; a consolidation pass is now incorporating the strongest independently proven ideas and hardening the result for merge consideration.
 
 ## Capability inventory

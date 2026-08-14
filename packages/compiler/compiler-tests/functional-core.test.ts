@@ -6,25 +6,26 @@ Describe('functional core compiler', () => {
     const compiled = await Compiler.compileCode(`
       app FunctionalApp { view Main }
       function HasCount Count is number returns boolean = Count > 0
-      function Label Count is number returns text = when
-        Count > 0 -> interpolate "Count: ", Count
+      function Label Count is number returns text = when (Count > 0) {
+        true -> "Count: { Count }"
         otherwise -> "Empty"
+      }
       view Main {
         state Ready = false
         action Flip {
-          when
-            Ready -> { toggle Ready }
-            otherwise -> { toggle Ready }
+          guard Ready true -> { toggle Ready }
+          toggle Ready
         }
         render Stack(){
-          when
-            HasCount(2) -> {
+          when HasCount(2) {
+            true -> {
             Text(Label(2))
             }
             otherwise -> {
             Text("Empty")
             }
-          for Name in ["Inbox" "Today"] {
+          }
+          loop ["Inbox", "Today"] / Name {
             Text(Name)
           }
         }
@@ -35,9 +36,9 @@ Describe('functional core compiler', () => {
 
     Expect(compiled.validation.diagnostics).toEqual([])
     Expect(compiled.files).toHaveLength(1)
-    Expect(compiled.files[0]?.code).toContain('TR.When([')
-    Expect(compiled.files[0]?.code).toContain('TR.WhenRender([')
-    Expect(compiled.files[0]?.code).toContain('TR.WhenAction([')
+    Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
+    Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
+    Expect(compiled.files[0]?.code).toContain('if (TR.GuardAction(')
     Expect(compiled.files[0]?.code).toContain('TR.Toggle(')
   })
 
@@ -59,5 +60,37 @@ Describe('functional core compiler', () => {
     Expect(code).toContain('_ViewProps.Gap ?? TR.Value(8)')
     Expect(code).toContain('_TaoActionArg0 ?? TR.Value("Saved")')
     Expect(code).toContain('_TaoFunctionArg0 ?? TR.Value("Save")')
+  })
+
+  Test('keeps a matched guard inside its action block while caller execution continues', async () => {
+    const compiled = await Compiler.compileCode(`
+      app GuardApp { view Main }
+      view Main {
+        state Stop = true
+        state Count = 0
+        action Callee {
+          guard Stop true -> { set Count = 1 }
+          set Count = 2
+        }
+        action Caller {
+          do Callee()
+          set Count = 3
+        }
+        render Text("Ready")
+      }
+      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    const code = compiled.files[0]?.code ?? ''
+    const guard = code.indexOf('if (TR.GuardAction(')
+    const calleeTail = code.indexOf('TR.Set(_Scope.Count, () => TR.Value(2))')
+    const caller = code.indexOf('TR.Do(_Scope.Callee.evaluate())')
+    const callerTail = code.indexOf('TR.Set(_Scope.Count, () => TR.Value(3))')
+    Expect(guard).toBeGreaterThan(-1)
+    Expect(calleeTail).toBeGreaterThan(guard)
+    Expect(caller).toBeGreaterThan(calleeTail)
+    Expect(callerTail).toBeGreaterThan(caller)
+    Expect(code.slice(caller, callerTail)).not.toContain('return')
   })
 })
