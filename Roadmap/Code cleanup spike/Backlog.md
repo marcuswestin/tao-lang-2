@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 20 commits, 2026-08-14
+Last touched-package re-sweep: after 34 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -66,6 +66,22 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 - The R6 literal sweep found one qualifying owner: six planner timeout outcomes repeat constants
   already owned by the review subsystem. All other high-frequency literals failed the value bar.
 
+## Thirty-commit checkpoint
+
+- Tracked non-generated TypeScript/TSX: 49,201 lines, up 165 from baseline. The completed
+  navigation split accounts for 201 added physical lines; all other work through the first three
+  validator test seams has net-deleted 36 lines.
+- Complexity-qualified source functions: 69, down three from baseline. No cleanup-written function
+  newly qualifies; moved navigation functions retain their pre-existing shapes.
+- Files over 400 lines: 25 (12 source, 13 test); six tests remain over 800 lines. Navigation removes
+  one oversized source owner, while the first three validator splits deliberately add three
+  sub-800 feature suites before the 3,090-line residual is fully divided.
+- The mechanical R1 scan now flags 72 conditions. Value review finds no new cleanup-written
+  candidate; remaining short guards, progressive checks, and already-question-named functions stay
+  rejected as churn.
+- Native `switch` remains at zero. The completed R13 follow-up audit still finds no qualifying
+  sequential closed-union miss in touched packages.
+
 ## Added rules
 
 R13 EXHAUSTIVE UNION DISPATCH. Closed literal or `$type`/`kind` discriminated-union dispatch with
@@ -88,7 +104,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/validator/validator-src/validators/`                            | R3 / charter 1  |        mostly moves + 142 |         19/142 | Put all 19 feature validators under `validators/`; validator infrastructure remains at the package root.                                                                                     |
 | done               | `packages/validator/validator-src` traversal entry and feature validators | R4 / charter 1  |                       826 |         69/826 | Replace 70 direct full-file traversals with one shared node array and typed append-only dispatch; Typir consumes the same array, while localized initializer/block walks remain local.       |
 | done               | `packages/runtime/TaoRuntime-src/TR-navigation.ts`                        | R3 / charter 2  |                     2,812 |       13/2,812 | Split the 1,583-line owner into a 350-line public contracts-and-controls facade plus 12 cohesive owners of 24–342 lines; no navigation source file remains over 400 lines.                   |
-| in progress        | `packages/validator/validator-tests/validator.test.ts`                    | R10 / charter 3 | 3,746 so far + follow-ups | 3/3,746 so far | Add a 673-line alias/invocation suite after two earlier seams, reducing the monolith from 4,931 to 3,090 lines; all 167 test titles and tokenized callbacks remain identical.                |
+| in progress        | `packages/validator/validator-tests/validator.test.ts`                    | R10 / charter 3 | 5,113 so far + follow-ups | 4/5,113 so far | Add a 666-line type/expression suite and share its parse fixture after three earlier seams, reducing the monolith from 4,931 to 2,421 lines; all 167 callback hashes remain identical.       |
 | queued             | `packages/runtime/runtime-tests/runtime-e2e.jest-test.tsx`                | R10 / charter 3 |        mostly moves + ~60 |          1/~60 | Split the 2,668-line runtime integration test by runtime feature seams.                                                                                                                      |
 | queued             | `packages/parser/parser-tests/parser.test.ts`                             | R10 / charter 3 |        mostly moves + ~40 |          1/~40 | Split the 1,369-line parser test by grammar/source seams without touching grammar.                                                                                                           |
 | queued             | `packages/runtime/TR-tests/TR.test.ts`                                    | R10 / charter 3 |        mostly moves + ~35 |          1/~35 | Split the 1,040-line TR test along runtime module seams.                                                                                                                                     |
