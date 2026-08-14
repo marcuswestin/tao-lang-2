@@ -4,7 +4,7 @@ import { AST, Langium } from '@parser'
 export const taoTabSize = 3
 
 /** LineSeparation declares an exact newline count, or an inclusive range fitted to the existing newlines. */
-export type LineSeparation = number | { min: number; max: number }
+type LineSeparation = number | { min: number; max: number }
 
 /** NodeFormat exposes succinct formatting verbs scoped to one AST node. */
 export type NodeFormat<NodeT extends AST.Node> = {

@@ -1,8 +1,6 @@
 import { AST, Langium } from '@parser'
 import { Compile } from '../Compile'
 
-export { Compile } from '../Compile'
-
 type TaoFileCompileOptions = {
   importLines?: string[]
   scopeBindings?: string[]

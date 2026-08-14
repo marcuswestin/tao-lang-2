@@ -9,7 +9,7 @@ export type SourceActionOptions = {
 }
 
 /** SourceStatementContext declares a source document plus its top-level statement slices. */
-export type SourceStatementContext = {
+type SourceStatementContext = {
   document: AST.Document
   file: AST.TaoFile
   text: string
