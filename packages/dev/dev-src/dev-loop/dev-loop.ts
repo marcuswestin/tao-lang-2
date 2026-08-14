@@ -1,6 +1,4 @@
-import Runtime from '@runtime'
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
-import type { Readable, Writable } from 'node:stream'
+import { Platform, Repo } from '@shared'
 import { DevFileWatcher } from './DevFileWatcher'
 import { ExpoRunner } from './expo-runner/ExpoRunner'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
@@ -9,14 +7,24 @@ import { RawKeyInput } from './keyboard-input/RawKeyInput'
 import Run from './Run'
 import { TUI } from './TUI'
 
-const DEFAULT_APP_PATH = 'Apps/WordFlower/1 - Current/WordFlower.tao'
 const RUNTIME_PACKAGE_PATH = 'packages/runtime'
 
-/** runDevLoop runs the interactive Tao dev loop and returns its process exit code. */
-export async function runDevLoop(appPathInput?: string, appNameInput?: string): Promise<number> {
+/** DevAppSelection identifies the exact app declaration selected by the Tao CLI. */
+export type DevAppSelection = {
+  appName: string
+  appPath: string
+}
+
+/** DevLoopOutcome tells the Tao CLI whether to exit, restart, or run app selection again. */
+export type DevLoopOutcome =
+  | { kind: 'exit'; exitCode: number }
+  | { kind: 'restart' }
+  | { kind: 'select-app' }
+
+/** runDevLoop runs one selected app until the Tao CLI should exit, restart, or select again. */
+export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOutcome> {
   const repoRoot = Repo.getRoot()
-  const appPath = await resolveDevAppPath(appPathInput)
-  const appName = await resolveDevAppName(appPath, appNameInput)
+  const { appName, appPath } = selection
   const runtimeRoot = Repo.resolvePath(RUNTIME_PACKAGE_PATH)
   const expoServer = ExpoRunner.createServer(runtimeRoot)
   const output = TUI.startDevLoopOutput()
@@ -24,20 +32,20 @@ export async function runDevLoop(appPathInput?: string, appNameInput?: string): 
   let watcher: DevFileWatcher | undefined
   let finished = false
   let cleanupStarted = false
-  let exitLoop!: (exitCode: number) => void
+  let exitLoop!: (outcome: DevLoopOutcome) => void
 
-  const done = new Promise<number>(resolve => {
+  const done = new Promise<DevLoopOutcome>(resolve => {
     exitLoop = resolve
   })
   const shouldStop = () => finished
 
-  const finish = async (exitCode: number) => {
+  const finish = async (outcome: DevLoopOutcome) => {
     if (finished) {
       return
     }
     finished = true
     await cleanup()
-    exitLoop(exitCode)
+    exitLoop(outcome)
   }
 
   const cleanup = async () => {
@@ -59,9 +67,10 @@ export async function runDevLoop(appPathInput?: string, appNameInput?: string): 
     void handleCommandKey(key, {
       appPath,
       appName,
-      finish,
-      keyInput: keyInput!,
+      finish: exitCode => finish({ kind: 'exit', exitCode }),
       repoRoot,
+      restart: () => finish({ kind: 'restart' }),
+      selectApp: () => finish({ kind: 'select-app' }),
       stopServices,
     })
   })
@@ -70,11 +79,11 @@ export async function runDevLoop(appPathInput?: string, appNameInput?: string): 
     if (finished) {
       Platform.runtimeProcess.exit(exitCode)
     }
-    void finish(exitCode)
+    void finish({ kind: 'exit', exitCode })
   }
 
   expoServer.onUnexpectedExit(() => {
-    void finish(1)
+    void finish({ kind: 'exit', exitCode: 1 })
   })
 
   const removeSigint = Platform.onProcessSignal('SIGINT', () => {
@@ -91,7 +100,7 @@ export async function runDevLoop(appPathInput?: string, appNameInput?: string): 
       return await done
     }
     if (!initialCompileSucceeded) {
-      return 1
+      return { kind: 'exit', exitCode: 1 }
     }
     watcher = new DevFileWatcher(appPath, shouldRunParserGen => {
       void Run.compileApp(repoRoot, appPath, appName, 'file change', shouldRunParserGen)
@@ -122,45 +131,4 @@ export async function runDevLoop(appPathInput?: string, appNameInput?: string): 
     await cleanup()
     await output?.stop()
   }
-}
-
-/** DevAppSelectionOptions supplies terminal state for app selection and its focused tests. */
-export type DevAppSelectionOptions = {
-  input?: Readable
-  interactive?: boolean
-  output?: Writable
-}
-
-/** resolveDevAppName selects one app explicitly or asks without ever guessing among several apps. */
-export async function resolveDevAppName(
-  appPath: string,
-  requested: string | undefined,
-  options: DevAppSelectionOptions = {},
-): Promise<string | undefined> {
-  const appNames = await Runtime.appNames(appPath)
-  if (requested || appNames.length <= 1) {
-    return requested ?? appNames[0]
-  }
-  if (!HCI.isInteractive(options)) {
-    throw new Errors.UserInputError(
-      `Multiple apps are declared in ${appPath}: ${appNames.join(', ')}. Select one with --app ${appNames[0]}.`,
-    )
-  }
-  return await HCI.askChoice({
-    ...options,
-    message: 'Choose the Tao app to run',
-    choices: appNames.map(value => ({ value })),
-  })
-}
-
-async function resolveDevAppPath(appPath: string | undefined): Promise<string> {
-  const resolvedPath = appPath === undefined || appPath.trim() === ''
-    ? Repo.resolvePath(DEFAULT_APP_PATH)
-    : FS.resolvePath(appPath)
-
-  if (!await FS.isFile(resolvedPath)) {
-    throw new Errors.UserInputError(`Dev app does not exist: ${resolvedPath}`)
-  }
-
-  return resolvedPath
 }

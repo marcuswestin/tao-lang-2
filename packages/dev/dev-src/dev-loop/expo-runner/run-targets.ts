@@ -1,3 +1,5 @@
+/// <reference path="./better-opn.d.ts" />
+
 import { CLI, Errors, Platform, Time } from '@shared'
 import betterOpen from 'better-opn'
 import { TUI } from '../TUI'

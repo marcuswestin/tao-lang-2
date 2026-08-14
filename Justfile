@@ -11,9 +11,9 @@ help:
 # Setup dependencies and generated agent adapters
 setup: deps _agent-config
 
-# Run the dev loop
-dev app_path="":
-    ./dev "{{ app_path }}"
+# Discover and run Tao apps through the Tao CLI dev loop
+dev app_path="Apps":
+    ./tao dev "{{ app_path }}"
 
 # Install development dependencies
 deps:
@@ -49,7 +49,7 @@ install-ide-extension: _ide-extension-package
 
 # Compile WordFlower, launch an Android emulator, and start the Expo runtime on Android.
 android: _compile-word-flower-app _android-emulator _android-expo-go
-    ./dev expo-android
+    bun run packages/dev/dev-src/dev.ts expo-android
 
 # Clean run dependencies and build artifacts
 clean:
@@ -99,10 +99,10 @@ _test PATTERN="":
     bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
 
 _android-emulator:
-    ./dev android-emulator
+    bun run packages/dev/dev-src/dev.ts android-emulator
 
 _android-expo-go:
-    ./dev android-expo-go
+    bun run packages/dev/dev-src/dev.ts android-expo-go
 
 _parser-gen:
     cd packages/parser && "{{ DEVENV_NODE }}" node_modules/langium-cli/bin/langium.js generate

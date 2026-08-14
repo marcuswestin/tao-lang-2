@@ -7,13 +7,34 @@ import {
   formatMergeFeaturePreflightReport,
 } from '../dev-src/commands/merge-feature-preflight'
 import { ExpoRunner } from '../dev-src/dev-loop/expo-runner/ExpoRunner'
-import { AppSwitchChoices } from '../dev-src/dev-loop/keyboard-input/AppSwitchChoices'
+import { handleCommandKey } from '../dev-src/dev-loop/keyboard-input/CommandKeys'
 import Commands from '../dev-src/dev-loop/keyboard-input/Commands'
 
 Describe('dev loop command helpers', () => {
   Test('recognizes the verify dev-loop shortcut key', () => {
     Expect(Commands.isCommandKey('v')).toBe(true)
     Expect(Commands.isCommandKey('p')).toBe(false)
+  })
+
+  Test('quits on q and opens app selection only on s', async () => {
+    const actions: string[] = []
+    const context = {
+      appPath: '/repo/App.tao',
+      finish: async (exitCode: number) => {
+        actions.push(`finish:${exitCode}`)
+      },
+      repoRoot: '/repo',
+      restart: async () => {},
+      selectApp: async () => {
+        actions.push('select-app')
+      },
+      stopServices: async () => {},
+    }
+
+    await handleCommandKey('q', context)
+    await handleCommandKey('s', context)
+
+    Expect(actions).toEqual(['finish:0', 'select-app'])
   })
 })
 
@@ -122,32 +143,6 @@ Describe('dev loop port helpers', () => {
     })
 
     Expect(listeners).toEqual([])
-  })
-})
-
-Describe('dev loop app switch helpers', () => {
-  Test('maps single digit app switch keys to displayed app choices', () => {
-    const choices = [
-      { label: 'First', value: '/repo/Apps/First/First.tao' },
-      { label: 'Second', value: '/repo/Apps/Second/Second.tao' },
-    ]
-
-    Expect(AppSwitchChoices.actionForKey(choices, '1')).toEqual({
-      kind: 'choose',
-      appPath: '/repo/Apps/First/First.tao',
-    })
-    Expect(AppSwitchChoices.actionForKey(choices, '2')).toEqual({
-      kind: 'choose',
-      appPath: '/repo/Apps/Second/Second.tao',
-    })
-    Expect(AppSwitchChoices.actionForKey(choices, '0')).toEqual({ kind: 'invalid' })
-    Expect(AppSwitchChoices.actionForKey(choices, '9')).toEqual({ kind: 'invalid' })
-    Expect(AppSwitchChoices.actionForKey(choices, '')).toEqual({ kind: 'invalid' })
-    Expect(AppSwitchChoices.actionForKey(choices, 'x')).toEqual({ kind: 'invalid' })
-    Expect(AppSwitchChoices.actionForKey(choices, '\u001b[A')).toEqual({ kind: 'invalid' })
-    Expect(AppSwitchChoices.actionForKey(choices, 'q')).toEqual({ kind: 'cancel' })
-    Expect(AppSwitchChoices.actionForKey(choices, '\u001b')).toEqual({ kind: 'cancel' })
-    Expect(AppSwitchChoices.actionForKey(choices, '\u0003')).toEqual({ kind: 'exit', exitCode: 130 })
   })
 })
 
