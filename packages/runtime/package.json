@@ -1,6 +1,6 @@
 {
   "name": "tao-runtime",
-  "version": "0.0.0",
+  "private": true,
   "type": "module",
   "main": "TaoRuntime-src/TR.ts",
   "module": "TaoRuntime-src/TR.ts",

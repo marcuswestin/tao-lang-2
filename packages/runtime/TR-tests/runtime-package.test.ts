@@ -10,6 +10,7 @@ type RuntimeManifest = {
   optionalDependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
   private?: boolean
+  version?: string
 }
 
 const runtimePackageRoot = FS.resolvePath('..', import.meta.dir)
@@ -27,26 +28,27 @@ function providerPackageFixture(): TR.DataProvider {
 }
 
 Describe('tao-runtime package boundary', () => {
-  Test('publishes only the generated-code runtime surface', async () => {
+  Test('packages only the generated-code runtime surface', async () => {
     const manifest = await FS.readJson<RuntimeManifest>(FS.resolvePath('package.json', runtimePackageRoot))
 
-    Expect(manifest.private).not.toBe(true)
+    Expect(manifest.private).toBe(true)
+    Expect(manifest.version).toBeUndefined()
     Expect(manifest.files).toEqual(['TaoRuntime-src'])
     Expect(manifest.exports).toEqual({
       '.': './TaoRuntime-src/TR.ts',
       './TR': './TaoRuntime-src/TR.ts',
     })
-    const shippedDependencies = {
+    const packagedDependencies = {
       ...manifest.dependencies,
       ...manifest.optionalDependencies,
       ...manifest.peerDependencies,
     }
     const allDependencies = {
-      ...shippedDependencies,
+      ...packagedDependencies,
       ...manifest.devDependencies,
     }
     Expect(Object.values(allDependencies).some(version => version.startsWith('workspace:'))).toBe(false)
-    Expect(Object.keys(shippedDependencies).some(name => name.startsWith('tao-'))).toBe(false)
+    Expect(Object.keys(packagedDependencies).some(name => name.startsWith('tao-'))).toBe(false)
   })
 
   Test('does not import Tao toolchain packages', async () => {
@@ -73,7 +75,7 @@ Describe('tao-runtime package boundary', () => {
     }
   })
 
-  Test('exports the provider protocol through the published TR subpath', async () => {
+  Test('exports the provider protocol through the runtime TR subpath', async () => {
     const provider = providerPackageFixture()
 
     await provider.persist('demo', '{"provider":"third-party"}')
