@@ -1,6 +1,6 @@
 import { Switch } from '@shared/core'
 import React from 'react'
-import { validateDefinition, valueMatchesKind } from './TR-data-definition'
+import { validateDefinition } from './TR-data-definition'
 import {
   entityHandle,
   handleKey,
@@ -17,6 +17,15 @@ import {
   type StoredRow,
 } from './TR-data-persistence'
 import { MemoryProvider, UnboundProvider } from './TR-data-provider'
+import {
+  compare,
+  type Evaluable,
+  evaluatedFields,
+  matchesFilter,
+  partialRowValues,
+  queryFilterValue,
+  rowValues,
+} from './TR-data-values'
 
 export { DataProviderControls, testProvider } from './TR-data-provider'
 
@@ -95,10 +104,6 @@ export type TaoConfiguredDatasource = Readonly<{
 export type TaoKeyValueStorage = {
   getItem(key: string): Promise<string | null>
   setItem(key: string, value: string): Promise<void>
-}
-
-type Evaluable = {
-  evaluate(): { jsValue: unknown }
 }
 
 type RuntimeValueFactory = <T>(value: T) => Evaluable
@@ -678,132 +683,6 @@ class RuntimeDataSchema {
   private storedRow(entity: string, id: string): StoredRow | undefined {
     return this.data.rows[entity]?.find(row => row.Id === id)
   }
-}
-
-function evaluatedFields(fields: Record<string, Evaluable>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(fields).map(([name, value]) => [name, value.evaluate().jsValue]))
-}
-
-function rowValues(
-  entityName: string,
-  entity: TaoDataEntity,
-  values: Record<string, unknown>,
-  schema: RuntimeDataSchema,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  assertKnownFields(entityName, entity, values)
-  for (const [name, field] of Object.entries(entity.fields)) {
-    if (Object.prototype.hasOwnProperty.call(values, name)) {
-      result[name] = storedFieldValue(entityName, name, field, values[name], schema)
-      continue
-    }
-    if (!Object.prototype.hasOwnProperty.call(field, 'defaultValue') && field.defaultNow !== true) {
-      throw new Error(`Create of '${entityName}' is missing required field '${name}'.`)
-    }
-    const value = field.defaultNow === true ? Date.now() : field.defaultValue
-    result[name] = storedFieldValue(entityName, name, field, value, schema)
-  }
-  return result
-}
-
-function partialRowValues(
-  entityName: string,
-  entity: TaoDataEntity,
-  values: Record<string, unknown>,
-  schema: RuntimeDataSchema,
-): Record<string, unknown> {
-  assertKnownFields(entityName, entity, values)
-  return Object.fromEntries(
-    Object.entries(values).map(([name, value]) => {
-      return [name, storedFieldValue(entityName, name, entity.fields[name]!, value, schema)]
-    }),
-  )
-}
-
-function assertKnownFields(entityName: string, entity: TaoDataEntity, values: Record<string, unknown>): void {
-  for (const name of Object.keys(values)) {
-    if (name === 'Id' || !entity.fields[name]) {
-      throw new Error(`Entity '${entityName}' has no writable field '${name}'.`)
-    }
-  }
-}
-
-function storedFieldValue(
-  entityName: string,
-  fieldName: string,
-  field: TaoDataField,
-  value: unknown,
-  schema: RuntimeDataSchema,
-): unknown {
-  if (field.kind === 'relation') {
-    const handle = entityHandle(value)
-    if (!handle) {
-      throw new Error(`Relationship '${entityName}.${fieldName}' expects a live ${field.relation} entity handle.`)
-    }
-    return schema.relationId(
-      handle,
-      field.relation!,
-      `Relationship '${entityName}.${fieldName}'`,
-    )
-  }
-  if (!valueMatchesKind(value, field.kind)) {
-    throw new Error(`Field '${entityName}.${fieldName}' expects ${field.kind}, got ${valueType(value)}.`)
-  }
-  return value
-}
-
-function queryFilterValue(
-  entityName: string,
-  entity: TaoDataEntity,
-  filter: TaoQueryFilter,
-  schema: RuntimeDataSchema,
-): unknown {
-  const field = entity.fields[filter.field]
-  if (!field) {
-    throw new Error(`Entity '${entityName}' has no queryable field '${filter.field}'.`)
-  }
-  const value = filter.value().evaluate().jsValue
-  if (field.kind !== 'relation') {
-    return value
-  }
-  const handle = entityHandle(value)
-  if (!handle) {
-    throw new Error(`Query filter '${entityName}.${filter.field}' expects a live ${field.relation} entity handle.`)
-  }
-  return schema.relationId(
-    handle,
-    field.relation!,
-    `Query filter '${entityName}.${filter.field}'`,
-  )
-}
-
-function matchesFilter(row: StoredRow, filter: TaoQueryFilter, expected: unknown): boolean {
-  const actual = row[filter.field]
-  return Switch(filter.operator, {
-    '==': () => Object.is(actual, expected),
-    '!=': () => !Object.is(actual, expected),
-    '<': () => compare(actual, expected) < 0,
-    '<=': () => compare(actual, expected) <= 0,
-    '>': () => compare(actual, expected) > 0,
-    '>=': () => compare(actual, expected) >= 0,
-  })
-}
-
-function compare(left: unknown, right: unknown): number {
-  if (Object.is(left, right)) {
-    return 0
-  }
-  if (left === undefined || left === null) {
-    return -1
-  }
-  if (right === undefined || right === null) {
-    return 1
-  }
-  return left < right ? -1 : 1
-}
-
-function valueType(value: unknown): string {
-  return value === null ? 'null' : Array.isArray(value) ? 'list' : typeof value
 }
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
