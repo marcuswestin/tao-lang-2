@@ -470,6 +470,34 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
+  Test('requires strict app targets to name the root declaration', async () => {
+    const invalid = await testValidateCodeWithErrors(`
+      use SelectionNav, SlotNav, StackNav from @tao/nav
+      let ResetNav = StackNav { Initial Home }
+      app StrictApp {
+        Name "Strict"
+        Navigator SelectionNav {
+          Initial @workspace
+          Display "tabs"
+          @workspace { Label "Workspace" Content Home }
+        }
+        @window SlotNav { Initial Detail }
+      }
+      let StrictVariant = StrictApp with { Name "Strict variant" }
+      ui Home {
+        action Activate { present StrictVariant@workspace }
+        action Open { present Detail() in StrictVariant@window }
+        action Reset { replace ResetNav in StrictVariant }
+        render Empty()
+      }
+      ui Detail { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const message = navigationValidationMessages.strictTargetDeclaration('StrictVariant')
+    Expect(validationErrorMessages(invalid).filter(candidate => candidate === message)).toHaveLength(3)
+  })
+
   Test('validates SelectionNav keyed items, initial key, display, labels, and content', async () => {
     await testValidateCode(`
       use SelectionNav from @tao/nav

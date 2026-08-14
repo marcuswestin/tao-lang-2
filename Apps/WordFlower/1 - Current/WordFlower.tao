@@ -5,8 +5,9 @@ use Col, FormButton, Text, TextInput from @tao/ui
 // Tranche status: absorbed
 // This tranche decides (the process contract is ../README.md):
 // - `SelectionNav` with keyed items (`@key { Label, Content }`), `Initial @key`, `Display`, and
-//   target-only activation: `present App@key` reveals an item without new content. A strict key
-//   must be available from the root navigator and every variant of that app in the file
+//   target-only activation: `present App@key` names the root app declaration and reveals an item
+//   without new content. A strict key must be available from the root navigator and every variant
+//   of that app in the file
 // - Configured `with` variants: `Nav with { Display "drawer" }` and app variants that override
 //   Name, Navigator, or Datasource without changing the original
 // - A third data level (Paragraphs) and entity availability guards:

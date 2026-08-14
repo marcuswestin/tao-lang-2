@@ -32,6 +32,8 @@ export const navigationValidationMessages = {
   toastDurationType: (actual: string) => `Toast Duration expects number, got ${actual}.`,
   toastDurationNegative: 'Toast Duration cannot be negative.',
   activationContext: 'Selection activation is allowed only inside a ui declaration.',
+  strictTargetDeclaration: (name: string) =>
+    `Strict app target '${name}' must name an app declaration, not an app variant.`,
   unknownSelection: (app: string, key: string) => `App ${app} navigator has no selection item named '@${key}'.`,
   patchTarget: (name: string) =>
     `\`with\` can patch only an app, nav, or datasource value; ${name} is not configurable.`,
@@ -71,7 +73,9 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
       ctx.error(navigationValidationMessages.activationContext, activation)
     }
     const app = activation.app.ref
-    if (app) {
+    if (app && AST.isAppVariantDeclaration(app)) {
+      ctx.error(navigationValidationMessages.strictTargetDeclaration(app.name), activation)
+    } else if (app) {
       for (const contract of selectionKeyContractsForAppFamily(app, file)) {
         if (!contract.keys.has(activation.key)) {
           ctx.error(
@@ -89,6 +93,10 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
     const actual = Type.ofExpression(replace.navigator)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
       ctx.error(navigationValidationMessages.replaceNavigator(Type.displayName(actual)), replace.navigator)
+    }
+    const app = replace.app.ref
+    if (app && AST.isAppVariantDeclaration(app)) {
+      ctx.error(navigationValidationMessages.strictTargetDeclaration(app.name), replace)
     }
   }
   for (const configured of AST.streamAllContents(file).filter(AST.isConfiguredValue)) {
@@ -326,11 +334,17 @@ function validateContextualPresentation(
     }
   }
   if (presentation.target && !toast) {
+    const targetApp = presentation.target.app?.ref
     if (presentation.target.value) {
       const actual = Type.ofExpression(presentation.target.value)
       if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
         ctx.error(navigationValidationMessages.presentationTarget(Type.displayName(actual)), presentation.target)
       }
+    } else if (targetApp && AST.isAppVariantDeclaration(targetApp)) {
+      ctx.error(
+        navigationValidationMessages.strictTargetDeclaration(targetApp.name),
+        presentation.target,
+      )
     } else if (presentation.target.app?.ref && presentation.target.key) {
       const app = presentation.target.app.ref
       const targetKey = presentation.target.key.slice(1)

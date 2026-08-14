@@ -69,9 +69,10 @@ workspace let WordFlowerDrawer = WordFlower with {
 
 Strict app targets name a declaration statically and select its running occurrence dynamically.
 `present App@key`, `present Ui() in App@key`, and `replace Nav in App` walk the enclosing app chain
-for the nearest occurrence with the named declaration identity. A variant therefore receives its
-own targets because it retains its originating declaration identity. No match is a structured
-runtime error; target resolution never mounts or falls back to the named app definition.
+for the nearest occurrence with the named declaration identity. The app position must name the root
+app declaration, never a variant. A variant still receives that declaration's targets because it
+retains its originating identity. No match is a structured runtime error; target resolution never
+mounts or falls back to the named app definition.
 
 One source module may declare several apps. Generated modules expose a registry local to that module
 and retain the selected app as their default export. `run AppName` selects directly from that module.
