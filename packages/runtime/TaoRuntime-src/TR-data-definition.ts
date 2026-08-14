@@ -10,38 +10,55 @@ export function validateDefinition(definition: TaoDataSchemaDefinition): void {
       if (fieldName === 'Id') {
         throw new Error(`Entity '${entityName}' cannot declare reserved field 'Id'.`)
       }
+      const fieldPath = `${entityName}.${fieldName}`
       if (field.kind === 'relation') {
-        if (!field.relation || !definition.entities[field.relation]) {
-          throw new Error(`Relationship '${entityName}.${fieldName}' has an unknown target '${field.relation ?? ''}'.`)
-        }
-        if (Object.prototype.hasOwnProperty.call(field, 'defaultValue') || field.defaultNow !== undefined) {
-          throw new Error(`Relationship '${entityName}.${fieldName}' cannot declare a default value.`)
-        }
+        validateRelationshipFieldDefinition(definition, fieldPath, field)
         continue
       }
-      if (field.onDelete || field.relation) {
-        throw new Error(`Primitive field '${entityName}.${fieldName}' cannot declare relationship metadata.`)
-      }
-      const hasLiteralDefault = Object.prototype.hasOwnProperty.call(field, 'defaultValue')
-      if (field.defaultNow !== undefined) {
-        if (field.defaultNow !== true) {
-          throw new Error(`Field '${entityName}.${fieldName}' has invalid now-default metadata.`)
-        }
-        if (hasLiteralDefault) {
-          throw new Error(`Field '${entityName}.${fieldName}' cannot declare two defaults.`)
-        }
-        if (field.kind !== 'time') {
-          throw new Error(`Only time field '${entityName}.${fieldName}' can default to now.`)
-        }
-        continue
-      }
-      if (!hasLiteralDefault) {
-        continue
-      }
-      if (!valueMatchesKind(field.defaultValue, field.kind)) {
-        throw new Error(`Default for '${entityName}.${fieldName}' does not match ${field.kind}.`)
-      }
+      validatePrimitiveFieldDefinition(fieldPath, field, field.kind)
     }
+  }
+}
+
+function validateRelationshipFieldDefinition(
+  definition: TaoDataSchemaDefinition,
+  fieldPath: string,
+  field: TaoDataField,
+): void {
+  if (!field.relation || !definition.entities[field.relation]) {
+    throw new Error(`Relationship '${fieldPath}' has an unknown target '${field.relation ?? ''}'.`)
+  }
+  if (Object.prototype.hasOwnProperty.call(field, 'defaultValue') || field.defaultNow !== undefined) {
+    throw new Error(`Relationship '${fieldPath}' cannot declare a default value.`)
+  }
+}
+
+function validatePrimitiveFieldDefinition(
+  fieldPath: string,
+  field: TaoDataField,
+  kind: Exclude<TaoDataField['kind'], 'relation'>,
+): void {
+  if (field.onDelete || field.relation) {
+    throw new Error(`Primitive field '${fieldPath}' cannot declare relationship metadata.`)
+  }
+  const hasLiteralDefault = Object.prototype.hasOwnProperty.call(field, 'defaultValue')
+  if (field.defaultNow !== undefined) {
+    if (field.defaultNow !== true) {
+      throw new Error(`Field '${fieldPath}' has invalid now-default metadata.`)
+    }
+    if (hasLiteralDefault) {
+      throw new Error(`Field '${fieldPath}' cannot declare two defaults.`)
+    }
+    if (kind !== 'time') {
+      throw new Error(`Only time field '${fieldPath}' can default to now.`)
+    }
+    return
+  }
+  if (!hasLiteralDefault) {
+    return
+  }
+  if (!valueMatchesKind(field.defaultValue, kind)) {
+    throw new Error(`Default for '${fieldPath}' does not match ${kind}.`)
   }
 }
 
