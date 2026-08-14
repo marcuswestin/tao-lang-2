@@ -120,9 +120,26 @@ export function analyzeMergeFeaturePreflight(facts: {
   upstream?: string
   worktrees: string
 }): MergeFeaturePreflightReport {
-  const blockers: MergeFeaturePreflightIssue[] = []
-  const warnings: MergeFeaturePreflightIssue[] = []
+  const blockers = mergeFeatureBlockers(facts)
+  const warnings = mergeFeatureWarnings(facts)
 
+  return {
+    branch: facts.branch,
+    blockers,
+    commitsAheadOfMain: facts.commitsAheadOfMain,
+    dirtyEntries: [...facts.dirtyEntries],
+    gitFailures: [...(facts.gitFailures ?? [])],
+    roadmapArchiveCandidates: [...facts.roadmapArchiveCandidates],
+    statusBranch: facts.statusBranch,
+    upstream: facts.upstream,
+    warnings,
+  }
+}
+
+type MergeFeaturePreflightFacts = Parameters<typeof analyzeMergeFeaturePreflight>[0]
+
+function mergeFeatureBlockers(facts: MergeFeaturePreflightFacts): MergeFeaturePreflightIssue[] {
+  const blockers: MergeFeaturePreflightIssue[] = []
   for (const failure of facts.gitFailures ?? []) {
     blockers.push({ level: 'blocker', message: failure })
   }
@@ -153,7 +170,11 @@ export function analyzeMergeFeaturePreflight(facts: {
       message: `Local main is behind origin/main by ${facts.mainOriginDivergence[1]} commit(s).`,
     })
   }
+  return blockers
+}
 
+function mergeFeatureWarnings(facts: MergeFeaturePreflightFacts): MergeFeaturePreflightIssue[] {
+  const warnings: MergeFeaturePreflightIssue[] = []
   if (!facts.hasOriginMain) {
     warnings.push({
       level: 'warning',
@@ -178,18 +199,7 @@ export function analyzeMergeFeaturePreflight(facts: {
   if (countBranchWorktrees(facts.worktrees, facts.branch) > 1) {
     warnings.push({ level: 'warning', message: 'Current branch appears in more than one worktree.' })
   }
-
-  return {
-    branch: facts.branch,
-    blockers,
-    commitsAheadOfMain: facts.commitsAheadOfMain,
-    dirtyEntries: [...facts.dirtyEntries],
-    gitFailures: [...(facts.gitFailures ?? [])],
-    roadmapArchiveCandidates: [...facts.roadmapArchiveCandidates],
-    statusBranch: facts.statusBranch,
-    upstream: facts.upstream,
-    warnings,
-  }
+  return warnings
 }
 
 /** formatMergeFeaturePreflightReport formats preflight output for humans. */
