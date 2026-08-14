@@ -22,11 +22,14 @@ Describe('Tao formatter WordFlower apps', () => {
   })
 
   Test('declares whether the WordFlower Next contract is open or absorbed', async () => {
+    const currentSource = await FS.readText(wordFlowerPath)
     const nextSource = await FS.readText(wordFlowerNextPath)
-    const appMatches = nextSource === await FS.readText(wordFlowerPath)
+    const appMatches = nextSource === currentSource
     const sidecarMatches = await FS.readText(wordFlowerNextTestPath) === await FS.readText(wordFlowerTestPath)
 
-    Expect(nextSource).toContain(
+    expectWordFlowerTrancheStatus(currentSource, wordFlowerAbsorbedTrancheHeader)
+    expectWordFlowerTrancheStatus(
+      nextSource,
       appMatches && sidecarMatches ? wordFlowerAbsorbedTrancheHeader : wordFlowerOpenTrancheHeader,
     )
   })
@@ -63,8 +66,12 @@ function expectWordFlowerPairState(next: string, current: string, nextHeader: st
     return true
   }
   Expect(next).not.toBe(current)
-  Expect(nextHeader).toContain(wordFlowerOpenTrancheHeader)
+  expectWordFlowerTrancheStatus(nextHeader, wordFlowerOpenTrancheHeader)
   return false
+}
+
+function expectWordFlowerTrancheStatus(source: string, expected: string): void {
+  Expect(source.match(/^\/\/ Tranche status: (?:open|absorbed)$/gm) ?? []).toEqual([expected])
 }
 
 Describe('Tao formatter data declarations', () => {
