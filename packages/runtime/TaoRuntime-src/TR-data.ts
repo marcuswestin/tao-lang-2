@@ -1,6 +1,13 @@
 import { Switch } from '@shared/core'
 import React from 'react'
 import { validateDefinition, valueMatchesKind } from './TR-data-definition'
+import {
+  entityHandle,
+  handleKey,
+  metadataOf,
+  RuntimeEntityHandle,
+  type RuntimeEntityMetadata,
+} from './TR-data-entity'
 import { DataLoadRecovery } from './TR-data-load-recovery'
 import {
   emptyData,
@@ -275,35 +282,6 @@ export const DataControls = {
 } as const
 
 export type TaoDataSchema = RuntimeDataSchema
-
-type RuntimeEntityMetadata = {
-  entity: string
-  generation: number
-  id: string
-  schema: RuntimeDataSchema
-}
-
-const runtimeEntityMetadata = new WeakMap<RuntimeEntityHandle, RuntimeEntityMetadata>()
-
-class RuntimeEntityHandle {
-  constructor(
-    schema: RuntimeDataSchema,
-    entity: string,
-    id: string,
-    generation: number,
-  ) {
-    runtimeEntityMetadata.set(this, { entity, generation, id, schema })
-    Object.defineProperty(this, 'Id', { enumerable: true, get: () => id })
-    const definition = schema.definition.entities[entity]
-    const fields = { ...(definition?.fields ?? {}), ...(definition?.inverseFields ?? {}) }
-    for (const name of Object.keys(fields)) {
-      Object.defineProperty(this, name, {
-        enumerable: true,
-        get: () => schema.read(this, name),
-      })
-    }
-  }
-}
 
 class RuntimeDataSchema {
   readonly name: string
@@ -826,22 +804,6 @@ function compare(left: unknown, right: unknown): number {
 
 function valueType(value: unknown): string {
   return value === null ? 'null' : Array.isArray(value) ? 'list' : typeof value
-}
-
-function entityHandle(value: unknown): RuntimeEntityHandle | undefined {
-  return value instanceof RuntimeEntityHandle ? value : undefined
-}
-
-function metadataOf(handle: RuntimeEntityHandle): RuntimeEntityMetadata {
-  const metadata = runtimeEntityMetadata.get(handle)
-  if (!metadata) {
-    throw new Error('Invalid Tao data entity handle.')
-  }
-  return metadata
-}
-
-function handleKey(entity: string, id: string): string {
-  return `${entity}\u0000${id}`
 }
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {

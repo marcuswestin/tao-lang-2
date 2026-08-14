@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 67 commits, 2026-08-14
+Last touched-package re-sweep: after 68 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -170,6 +170,7 @@ stateful, guard, structural-union, and intentional special/default false positiv
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` provider implementations     | R3              |    133 moved, net +8 |       1/133 | Extract provider implementations and conformance into a 141-line owner, reducing the runtime-data facade from 1,143 to 1,010 lines while preserving its existing exports and consumers.            |
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` definition validation        | R3              |     52 moved, net +3 |        1/52 | Extract schema-definition and primitive-value validation into a 55-line owner, reducing the runtime-data facade from 1,010 to 958 lines with validation bodies unchanged.                          |
 | done               | `packages/runtime/TaoRuntime-src/TR-data.ts` persistence                  | R3              |   105 moved, net +11 |       1/105 | Extract snapshot types, envelope parsing, and stored-row validation into a 116-line owner, reducing the runtime-data facade from 958 to 853 lines with all ten declarations unchanged.             |
+| done               | `packages/runtime/TaoRuntime-src/TR-data.ts` entity handles               | R3              |     38 moved, net +8 |        1/38 | Extract entity-handle identity, metadata, and lookup into a 46-line owner, reducing the runtime-data facade from 853 to 815 lines through a type-only schema backedge.                             |
 | in progress        | 5 non-chartered source files currently over 400 lines                     | R3              |     inspect per seam |       1/TBD | Runtime data remains queued; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                                              |
 | queued             | 69 source functions over 40 lines or nesting depth three                  | R2              | inspect per function |      15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                                    |
 | done               | compound decisions across seven packages                                  | R1              |                   77 |       14/77 | Name 12 audited questions across 14 qualifying condition sites, including two reused extension/countability policies; net-delete one code line and reject churn.                                   |
