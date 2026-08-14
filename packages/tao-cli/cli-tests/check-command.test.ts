@@ -1,7 +1,13 @@
-import { CLI, FS, Text } from '@shared'
+import { CLI, FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runCheck } from '../cli-src/source-commands'
-import { statusByBasename, statusByFile, withTaoFixture } from './test-cli-files'
+import {
+  packageAwareCliFixture,
+  packageAwareCliMainPath,
+  packageAwareCliPathCases,
+  statusByFile,
+  withTaoFixture,
+} from './test-cli-files'
 
 Describe('tao check', () => {
   Test('reports canonical files as unchanged without writing', async () => {
@@ -86,56 +92,16 @@ Describe('tao check', () => {
     })
   })
 
-  Test('uses package-aware workspace roots for explicit nested package files', async () => {
-    await withTaoFixture({
-      'Packages/@cards/screens/Main.tao': Text.stripIndent(`
-        use LocalText, Missing from @cards/widgets
+  for (const pathCase of packageAwareCliPathCases) {
+    Test(`uses package-aware workspace roots for ${pathCase.name}`, async () => {
+      await withTaoFixture(packageAwareCliFixture, async rootDir => {
+        const target = pathCase.resolve(rootDir)
+        const results = await runCheck(target.path, { cwd: target.cwd })
+        const sourcePath = FS.resolvePath(packageAwareCliMainPath, rootDir)
 
-        view MainView { }
-      `),
-      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
-    }, async (rootDir) => {
-      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
-      const results = await runCheck(path)
-
-      Expect(statusByFile(results, rootDir)).toEqual({ 'Packages/@cards/screens/Main.tao': 'changed' })
-      Expect(await FS.readText(path)).toContain('LocalText, Missing')
+        Expect(statusByFile(results, rootDir)).toEqual({ [packageAwareCliMainPath]: 'changed' })
+        Expect(await FS.readText(sourcePath)).toContain('LocalText, Missing')
+      })
     })
-  })
-
-  Test('uses package-aware workspace roots for explicit nested package directories', async () => {
-    await withTaoFixture({
-      'Packages/@cards/screens/Main.tao': Text.stripIndent(`
-        use LocalText, Missing from @cards/widgets
-
-        view MainView { }
-      `),
-      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
-    }, async (rootDir) => {
-      const directory = FS.resolvePath('Packages/@cards/screens', rootDir)
-      const path = FS.resolvePath('Packages/@cards/screens/Main.tao', rootDir)
-      const results = await runCheck(directory)
-
-      Expect(statusByFile(results, rootDir)).toEqual({ 'Packages/@cards/screens/Main.tao': 'changed' })
-      Expect(await FS.readText(path)).toContain('LocalText, Missing')
-    })
-  })
-
-  Test('uses package-aware workspace roots for relative paths inside nested package directories', async () => {
-    await withTaoFixture({
-      'Packages/@cards/screens/Main.tao': Text.stripIndent(`
-        use LocalText, Missing from @cards/widgets
-
-        view MainView { }
-      `),
-      'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
-    }, async (rootDir) => {
-      const cwd = FS.resolvePath('Packages/@cards/screens', rootDir)
-      const path = FS.resolvePath('Main.tao', cwd)
-
-      Expect(statusByBasename(await runCheck('.', { cwd }))).toEqual({ 'Main.tao': 'changed' })
-      Expect(statusByBasename(await runCheck('Main.tao', { cwd }))).toEqual({ 'Main.tao': 'changed' })
-      Expect(await FS.readText(path)).toContain('LocalText, Missing')
-    })
-  })
+  }
 })
