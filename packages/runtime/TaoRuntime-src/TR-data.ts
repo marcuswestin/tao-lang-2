@@ -1,7 +1,7 @@
 import React from 'react'
 import { DataLoadRecovery } from './TR-data-load-recovery'
 
-type DataStatus = 'error' | 'loading' | 'ready'
+type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'
 
@@ -657,6 +657,9 @@ class RuntimeDataSchema {
     }
     if (this.status === 'loading') {
       return { status: 'loading' }
+    }
+    if (this.status === 'unauthorized') {
+      return { status: 'unauthorized' }
     }
     if (this.status === 'error') {
       return { message: this.error, status: 'error' }

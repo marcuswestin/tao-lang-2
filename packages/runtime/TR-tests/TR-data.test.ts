@@ -1,10 +1,6 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
-import type {
-  TaoDataProvider,
-  TaoDataSchemaDefinition,
-  TaoEntityAvailability,
-} from '../TaoRuntime-src/TR-data'
+import type { TaoDataProvider, TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
 
 const noteDefinition: TaoDataSchemaDefinition = {
   name: 'RuntimeNotes',
@@ -189,9 +185,25 @@ Describe('TR.Data provider foundation', () => {
     Expect(TR.Data.EntityAvailability(note)).toEqual({ status: 'missing' })
     Expect(TR.GuardAction(TR.Value(note), branches)).toBe(true)
     Expect(cases).toEqual(['loading', 'error: Provider unavailable', 'missing'])
+  })
 
-    const reservedProviderState: TaoEntityAvailability = { status: 'unauthorized' }
-    Expect(reservedProviderState.status).toBe('unauthorized')
+  Test('renders an unauthorized entity guard from provider status', () => {
+    const schema = TR.Data.Schema(noteDefinition, TR.DataProvider.Memory())
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('Private') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0] as Record<string, unknown>
+
+    schema.setStatus('unauthorized', '')
+
+    Expect(
+      TR.GuardRender(
+        TR.Value(note),
+        [['unauthorized', () => 'You no longer have access to this document.']],
+        () => 'Document editor',
+      ),
+    ).toBe('You no longer have access to this document.')
+
+    schema.setStatus('ready', '')
+    Expect(TR.GuardRender(TR.Value(note), [], () => 'Document editor')).toBe('Document editor')
   })
 
   Test('keeps the text literal "now" distinct from the time clock default', () => {
