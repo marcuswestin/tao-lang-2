@@ -21,6 +21,13 @@ import type {
   PresentableEntry,
   Subscription,
 } from './TR-navigation-state'
+import {
+  NavigationBackAffordance,
+  navigationHostStyle,
+  NavigationLevel,
+  navigationProps,
+  NavigationSurface,
+} from './TR-navigation-surfaces'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 import { Views } from './TR-views'
@@ -1147,47 +1154,6 @@ function usePlatformBack(target: { back(): boolean }): void {
   }, [target])
 }
 
-/** NavigationLevel hides covered stack entries without unmounting their local React state. */
-function NavigationLevel(props: {
-  children?: React.ReactNode
-  fill?: boolean
-  hidden: boolean
-}): React.JSX.Element {
-  const runtime = requireReactNativeRuntime()
-  return React.createElement(runtime.View, {
-    accessibilityElementsHidden: props.hidden,
-    children: props.children,
-    importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
-    style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
-  })
-}
-
-/** NavigationBackAffordance exposes the same root-safe reducer through an accessible control. */
-function NavigationBackAffordance(props: {
-  target: { back(): boolean }
-}): React.JSX.Element | null {
-  return Views.Pressable(
-    {
-      action: {
-        invoke: () => {
-          backNavigation(props.target)
-        },
-      },
-      title: 'Back',
-    },
-    { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },
-  )
-}
-
-const navigationHostStyle = { flex: 1, position: 'relative' } as const
-const overlayLayerStyle = {
-  bottom: 0,
-  left: 0,
-  position: 'absolute',
-  right: 0,
-  top: 0,
-  zIndex: 1,
-} as const
 const toastLayerStyle = {
   bottom: 0,
   left: 0,
@@ -1195,46 +1161,9 @@ const toastLayerStyle = {
   right: 0,
   zIndex: 2,
 } as const
-const hiddenNavigationLevelStyle = { display: 'none' } as const
-const visibleOverlayLevelStyle = { flex: 1 } as const
 const selectionContentStyle = { flex: 1 } as const
 const selectionDrawerControlsStyle = { flexDirection: 'column' } as const
 const selectionTabControlsStyle = { flexDirection: 'row' } as const
-
-/** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
-function NavigationSurface(props: {
-  content?: React.ReactNode
-  navigation: TaoNavigationValue
-  overlays: OverlayEntry[]
-  taoProps?: TaoProps
-}): React.JSX.Element {
-  const runtime = requireReactNativeRuntime()
-  const overlays = props.overlays.length > 0
-    ? React.createElement(runtime.View, {
-      children: props.overlays.map((entry, index) =>
-        React.createElement(NavigationLevel, {
-          children: entry.presentable.render(
-            entry.arguments,
-            entry.dialogue
-              ? dialogueProps(props.taoProps, props.navigation, entry.dialogue)
-              : navigationProps(props.taoProps, props.navigation),
-          ),
-          fill: true,
-          hidden: index !== props.overlays.length - 1,
-          key: entry.instanceId,
-        })
-      ),
-      pointerEvents: 'box-none',
-      style: overlayLayerStyle,
-    })
-    : null
-  return React.createElement(
-    runtime.View,
-    { pointerEvents: 'box-none', style: navigationHostStyle },
-    props.content,
-    overlays,
-  )
-}
 
 function resolveNavigationTarget(
   taoProps: TaoProps | undefined,
@@ -1424,18 +1353,6 @@ function assertNavKind(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(`NavKind conformance failed: ${message}`)
   }
-}
-
-function navigationProps(props: TaoProps | undefined, navigation: TaoNavigationValue): TaoProps {
-  return { ...props, navigation }
-}
-
-function dialogueProps(
-  props: TaoProps | undefined,
-  navigation: TaoNavigationValue,
-  dialogue: DialogueOccurrenceState,
-): TaoProps {
-  return { ...props, dialogue, navigation }
 }
 
 function isNavigation(value: TaoPresentable | TaoNavigationValue): value is TaoNavigationValue {
