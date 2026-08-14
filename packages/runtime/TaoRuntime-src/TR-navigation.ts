@@ -1,7 +1,7 @@
 import { Errors, Switch } from '@shared/core'
 import React from 'react'
 import { DataControls } from './TR-data'
-import { RuntimeSlotNav, RuntimeStackNav } from './TR-navigation-mounts'
+import { RuntimeSelectionNav, RuntimeSlotNav, RuntimeStackNav } from './TR-navigation-mounts'
 import {
   type Evaluable,
   RuntimeDialogue,
@@ -16,24 +16,11 @@ import {
   setActiveBackTarget,
 } from './TR-navigation-registry'
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
-import {
-  NavigationBackAffordance,
-  navigationHostStyle,
-  NavigationLevel,
-  navigationProps,
-} from './TR-navigation-surfaces'
+import { NavigationBackAffordance, navigationHostStyle } from './TR-navigation-surfaces'
 import { RuntimeNavigationValue } from './TR-navigation-value'
-import {
-  assertPatchKeys,
-  isNavigation,
-  isPresentable,
-  patchedEvaluable,
-  patchedSelectionKey,
-  renderPresentable,
-} from './TR-navigation-values'
+import { isPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
-import { Views } from './TR-views'
 
 export type TaoNavigationArguments = Record<string, Evaluable>
 
@@ -366,182 +353,6 @@ function resolveStrictAppTarget(
     `Cannot ${operation} app '${target.declaration.name}': no enclosing instance matches its declaration.`,
     { details: { appDeclaration: target.declaration.name, operation } },
   )
-}
-
-type SelectionItemState = {
-  definition: TaoSelectionNavItemDefinition
-  entries: Array<{
-    arguments: TaoNavigationArguments
-    instanceId: number
-    presentable: TaoPresentable | TaoNavigationValue
-  }>
-  key: string
-}
-
-/** RuntimeSelectionNav switches keyed content without adding presentation history. */
-class RuntimeSelectionNav extends RuntimeNavigationValue {
-  readonly kind = 'selection'
-  readonly name: string
-  private activeKey: string
-  private readonly items: SelectionItemState[]
-  private nextEntryId = 1
-
-  constructor(readonly descriptor: TaoNavDescriptor<'selection', TaoSelectionNavConfiguration>) {
-    super()
-    const definition = descriptor.config
-    this.name = descriptor.declaration.name
-    if (!definition.items[definition.initial]) {
-      throw new Error(`SelectionNav ${this.name} has no initial item '@${definition.initial}'.`)
-    }
-    this.activeKey = definition.initial
-    this.items = Object.entries(definition.items).map(([key, item]) => ({
-      definition: item,
-      entries: [this.initialEntry(item.content)],
-      key,
-    }))
-    for (const item of Object.values(definition.items)) {
-      if (isNavigation(item.content)) {
-        item.content.subscribe(() => this.emit())
-      }
-    }
-  }
-
-  override activate(key: string): boolean {
-    if (!this.item(key)) {
-      return false
-    }
-    if (key !== this.activeKey) {
-      this.activeKey = key
-      this.emit()
-    }
-    return true
-  }
-
-  present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
-    this.activeItem().entries.push({
-      arguments: { ...arguments_ },
-      instanceId: this.nextEntryId++,
-      presentable,
-    })
-    this.emit()
-  }
-
-  patched(patch: TaoNavigationPatch): RuntimeNavigationValue {
-    assertPatchKeys(patch, ['Display', 'Initial'], this.name)
-    const display = patchedEvaluable(
-      patch['Display'],
-      this.descriptor.config.display,
-      this.name,
-      'Display',
-    )
-    const initial = patch['Initial'] === undefined
-      ? this.descriptor.config.initial
-      : patchedSelectionKey(patch['Initial'], this.name)
-    const descriptor = this.descriptor.kind.configure(
-      this.descriptor.declaration,
-      { ...this.descriptor.config, display, initial },
-    )
-    return descriptor.kind.mount(descriptor) as RuntimeNavigationValue
-  }
-
-  protected canGoBackContent(): boolean {
-    const active = this.activeItem()
-    if (active.entries.length > 1) {
-      return true
-    }
-    const content = active.definition.content
-    return isNavigation(content) && content.canGoBack
-  }
-
-  protected dismissContent(): boolean {
-    return this.backContent()
-  }
-
-  protected backContent(): boolean {
-    const active = this.activeItem()
-    if (active.entries.length > 1) {
-      active.entries.pop()
-      this.emit()
-      return true
-    }
-    const content = active.definition.content
-    return isNavigation(content) ? content.back() : false
-  }
-
-  protected resetContent(): void {
-    this.activeKey = this.descriptor.config.initial
-    for (const item of this.items) {
-      item.entries = [this.initialEntry(item.definition.content)]
-      if (isNavigation(item.definition.content)) {
-        item.definition.content.reset()
-      }
-    }
-  }
-
-  protected renderContent(taoProps?: TaoProps): React.ReactNode {
-    const runtime = requireReactNativeRuntime()
-    const display = String(this.descriptor.config.display.evaluate().jsValue)
-    return React.createElement(runtime.View, {
-      children: [
-        React.createElement(runtime.View, {
-          children: this.items.map(item =>
-            React.createElement(
-              React.Fragment,
-              { key: item.key },
-              Views.Pressable(
-                {
-                  action: {
-                    invoke: () => {
-                      this.activate(item.key)
-                    },
-                  },
-                  title: String(item.definition.label.evaluate().jsValue),
-                },
-                {
-                  nativeProps: {
-                    accessibilityRole: 'tab',
-                    accessibilityState: { selected: item.key === this.activeKey },
-                  },
-                },
-              ),
-            )
-          ),
-          key: 'selection-controls',
-          style: display === 'drawer' ? selectionDrawerControlsStyle : selectionTabControlsStyle,
-        }),
-        React.createElement(runtime.View, {
-          children: this.items.flatMap(item =>
-            item.entries.map((entry, index) =>
-              React.createElement(NavigationLevel, {
-                children: renderPresentable(
-                  entry.presentable,
-                  entry.arguments,
-                  navigationProps(taoProps, this),
-                ),
-                hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
-                key: `${item.key}-${entry.instanceId}`,
-              })
-            )
-          ),
-          key: 'selection-content',
-          style: selectionContentStyle,
-        }),
-      ],
-      style: navigationHostStyle,
-    })
-  }
-
-  private activeItem(): SelectionItemState {
-    return this.item(this.activeKey)!
-  }
-
-  private initialEntry(content: TaoPresentable | TaoNavigationValue): SelectionItemState['entries'][number] {
-    return { arguments: {}, instanceId: this.nextEntryId++, presentable: content }
-  }
-
-  private item(key: string): SelectionItemState | undefined {
-    return this.items.find(item => item.key === key)
-  }
 }
 
 type NavMountFactory<ProfileT extends TaoNavKindProfile, ConfigurationT extends object> = (
@@ -893,9 +704,6 @@ const toastLayerStyle = {
   right: 0,
   zIndex: 2,
 } as const
-const selectionContentStyle = { flex: 1 } as const
-const selectionDrawerControlsStyle = { flexDirection: 'column' } as const
-const selectionTabControlsStyle = { flexDirection: 'row' } as const
 
 function resolveNavigationTarget(
   taoProps: TaoProps | undefined,
