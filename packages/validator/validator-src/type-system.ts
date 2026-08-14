@@ -15,101 +15,9 @@ export type { TaoSpecifics, TaoTypirServices } from './TypeSystemHelpers'
 export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> {
   /** onInitialize registers static Tao type rules. */
   onInitialize(typir: TaoTypirServices): void {
-    typir.factory.Primitives.create({ primitiveName: 'text' })
-      .inferenceRule({ filter: AST.isStringLiteral })
-      .finish()
-
-    typir.factory.Primitives.create({ primitiveName: 'number' })
-      .inferenceRule({ filter: AST.isNumberLiteral })
-      .finish()
-
-    typir.factory.Primitives.create({ primitiveName: 'boolean' })
-      .inferenceRule({ filter: AST.isBooleanLiteral })
-      .finish()
-
-    typir.factory.Primitives.create({ primitiveName: 'time' }).finish()
-
-    typir.factory.Primitives.create({ primitiveName: 'none' })
-      .inferenceRule({ filter: AST.isNoneLiteral })
-      .finish()
-
-    typir.factory.Primitives.create({ primitiveName: 'action' })
-      .inferenceRule({ filter: AST.isActionExpression })
-      .finish()
-
-    typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
-    typir.factory.Primitives.create({ primitiveName: 'ui' }).finish()
-    typir.factory.Primitives.create({ primitiveName: 'nav' }).finish()
-    typir.factory.Primitives.create({ primitiveName: 'list' })
-      .inferenceRule({ filter: AST.isListLiteral })
-      .finish()
-
-    for (const primitive of statefulPrimitiveTypes) {
-      const baseType = TypeSystemHelpers.taoPrimitiveType(primitive, typir)
-      const statefulType = typir.factory.Primitives.create({ primitiveName: statefulPrimitiveName(primitive) })
-        .finish()
-      if (baseType) {
-        typir.Conversion.markAsConvertible(statefulType, baseType, 'IMPLICIT_EXPLICIT')
-      }
-    }
-
-    typir.Inference.addInferenceRulesForAstNodes({
-      BinaryExpression: (node) =>
-        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
-          ?? InferenceRuleNotApplicable,
-      ConfigurationConstructor: (node) =>
-        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
-          ?? InferenceRuleNotApplicable,
-      CaseTestExpression: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
-      WhenExpression: (node) =>
-        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
-          ?? InferenceRuleNotApplicable,
-      FunctionCallExpression: (node) =>
-        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
-          ?? InferenceRuleNotApplicable,
-      InterpolatedString: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
-      MemberAccessExpression: (node) =>
-        TypeSystemHelpers.taoType(Type.ofMemberAccess(node), typir)
-          ?? InferenceRuleNotApplicable,
-      TypedConstructor: (node) =>
-        TypeSystemHelpers.taoType(Type.ofConstructorReference(node.type), typir)
-          ?? InferenceRuleNotApplicable,
-      ValueReference: (node) => {
-        const target = node.target.ref
-        if (!target) {
-          return InferenceRuleNotApplicable
-        }
-        return Switch.type(target, {
-          ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
-          AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
-          AppDeclaration: () => InferenceRuleNotApplicable,
-          AskStatement: ask =>
-            TypeSystemHelpers.taoType(Type.ofValueDeclaration(ask), typir)
-              ?? InferenceRuleNotApplicable,
-          CasePayload: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
-          EntityDataField: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
-          EntityQueryDeclaration: () => InferenceRuleNotApplicable,
-          EnumCase: enumCase =>
-            TypeSystemHelpers.taoType(Type.ofValueDeclaration(enumCase), typir) ?? InferenceRuleNotApplicable,
-          ForStatement: () => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
-          ParameterDeclaration: parameter =>
-            TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
-          StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
-          UiDeclaration: () => TypeSystemHelpers.taoPrimitiveType('ui', typir) ?? InferenceRuleNotApplicable,
-        })
-      },
-      UnaryExpression: (node) =>
-        TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
-          ?? InferenceRuleNotApplicable,
-      StateDeclaration: (node) => {
-        const valueType = TypeSystemHelpers.safeInferType(typir, node.value)
-        const underlying = TypeSystemHelpers.underlyingPrimitiveName(valueType)
-        return underlying
-          ? taoStatefulPrimitiveType(underlying, typir) ?? InferenceRuleNotApplicable
-          : InferenceRuleNotApplicable
-      },
-    })
-
+    registerPrimitiveTypes(typir)
+    registerStatefulPrimitiveTypes(typir)
+    registerAstInferenceRules(typir)
     ActionsValidator.registerTypeValidation(typir)
     StateValidator.registerTypeValidation(typir)
   }
@@ -124,6 +32,106 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
       }
     }
   }
+}
+
+function registerPrimitiveTypes(typir: TaoTypirServices): void {
+  typir.factory.Primitives.create({ primitiveName: 'text' })
+    .inferenceRule({ filter: AST.isStringLiteral })
+    .finish()
+  typir.factory.Primitives.create({ primitiveName: 'number' })
+    .inferenceRule({ filter: AST.isNumberLiteral })
+    .finish()
+  typir.factory.Primitives.create({ primitiveName: 'boolean' })
+    .inferenceRule({ filter: AST.isBooleanLiteral })
+    .finish()
+  typir.factory.Primitives.create({ primitiveName: 'time' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'none' })
+    .inferenceRule({ filter: AST.isNoneLiteral })
+    .finish()
+  typir.factory.Primitives.create({ primitiveName: 'action' })
+    .inferenceRule({ filter: AST.isActionExpression })
+    .finish()
+  typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'ui' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'nav' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'list' })
+    .inferenceRule({ filter: AST.isListLiteral })
+    .finish()
+}
+
+function registerStatefulPrimitiveTypes(typir: TaoTypirServices): void {
+  for (const primitive of statefulPrimitiveTypes) {
+    const baseType = TypeSystemHelpers.taoPrimitiveType(primitive, typir)
+    const statefulType = typir.factory.Primitives.create({ primitiveName: statefulPrimitiveName(primitive) })
+      .finish()
+    if (baseType) {
+      typir.Conversion.markAsConvertible(statefulType, baseType, 'IMPLICIT_EXPLICIT')
+    }
+  }
+}
+
+function registerAstInferenceRules(typir: TaoTypirServices): void {
+  typir.Inference.addInferenceRulesForAstNodes({
+    BinaryExpression: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
+    ConfigurationConstructor: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
+    CaseTestExpression: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
+    WhenExpression: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
+    FunctionCallExpression: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
+    InterpolatedString: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
+    MemberAccessExpression: (node) =>
+      TypeSystemHelpers.taoType(Type.ofMemberAccess(node), typir)
+        ?? InferenceRuleNotApplicable,
+    TypedConstructor: (node) =>
+      TypeSystemHelpers.taoType(Type.ofConstructorReference(node.type), typir)
+        ?? InferenceRuleNotApplicable,
+    ValueReference: node => inferValueReference(node, typir),
+    UnaryExpression: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
+    StateDeclaration: (node) => {
+      const valueType = TypeSystemHelpers.safeInferType(typir, node.value)
+      const underlying = TypeSystemHelpers.underlyingPrimitiveName(valueType)
+      return underlying
+        ? taoStatefulPrimitiveType(underlying, typir) ?? InferenceRuleNotApplicable
+        : InferenceRuleNotApplicable
+    },
+  })
+}
+
+function inferValueReference(
+  node: AST.ValueReference,
+  typir: TaoTypirServices,
+): TypirType | typeof InferenceRuleNotApplicable {
+  const target = node.target.ref
+  if (!target) {
+    return InferenceRuleNotApplicable
+  }
+  return Switch.type(target, {
+    ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
+    AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
+    AppDeclaration: () => InferenceRuleNotApplicable,
+    AskStatement: ask =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(ask), typir)
+        ?? InferenceRuleNotApplicable,
+    CasePayload: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
+    EntityDataField: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
+    EntityQueryDeclaration: () => InferenceRuleNotApplicable,
+    EnumCase: enumCase =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(enumCase), typir) ?? InferenceRuleNotApplicable,
+    ForStatement: () => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
+    ParameterDeclaration: parameter =>
+      TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
+    StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
+    UiDeclaration: () => TypeSystemHelpers.taoPrimitiveType('ui', typir) ?? InferenceRuleNotApplicable,
+  })
 }
 
 function typirBaseTypeForDefinition(
