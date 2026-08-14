@@ -2,7 +2,7 @@ import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { parseCodeWithErrors, testParseCode } from './test-parse'
 
-Describe('functional core parser', () => {
+Describe('parser: functional core', () => {
   Test('parses expressions, functions, total conditionals, actions, and iteration', async () => {
     const result = await testParseCode(`
       function HasCount Count is number returns boolean = Count > 0 and not false

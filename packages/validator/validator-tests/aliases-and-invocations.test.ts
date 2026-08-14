@@ -5,204 +5,161 @@ import { InvocationsValidator } from '../validator-src/validators/invocations-va
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
-  fence,
-  testValidateCode,
+  accepts,
+  app,
+  rejects,
+  stubLayout,
+  stubView,
   testValidateCodeWithErrors,
-  tsFence,
   validationErrorMessages,
 } from './test-validate'
 
-const aliasValidationMessages = AliasesValidator.messages
-const invocationValidationMessages = InvocationsValidator.messages
+const aliasMessages = AliasesValidator.messages
+const invocationMessages = InvocationsValidator.messages
+const textView = stubView('Text', 'Value is text')
+const stackLayout = stubLayout('Stack')
 
-Describe('Tao validator structural diagnostics', () => {
-  Test('rejects let references to later values', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let Greeting = Later
-      let Later = "Hello"
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        render Text(Greeting)
-      }
-    `)
+const eventViews = `
+  ${stackLayout}
+  ${stubView('Input', 'Value is text, Change is action(text), Submit is action()')}
+  ${stubView('NumericInput', 'Value is number, Change is action(number)')}
+  ${stubView('LabelButton', 'Press is text')}
+`
 
-    Expect(validationErrorMessages(result)).toContain(
-      AliasesValidator.messages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
-    )
-  })
+function eventApp(child: string, setup = ''): string {
+  return app(
+    `
+    state Draft = ""
+    action Submit { }
+    action Normalize Value is text { }
+    action NumberChange Value is number { }
+    ${setup}
+    render Stack() { ${child} }
+  `,
+    eventViews,
+  )
+}
 
-  Test('rejects local let references to later values', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView Label is text {
-        let Greeting = Later
-        let Later = Label
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
-      AliasesValidator.messages.aliasUsedBeforeDeclaration('Greeting', 'Later'),
-    )
-  })
-
-  Test('rejects local render arguments that reference later aliases', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        render Stack(){
-          Text(Local)
-          let Local = "Hello"
+Describe('validator: aliases and invocations', () => {
+  for (
+    const { title, source, messages } of [
+      {
+        title: 'rejects let references to later file-level values',
+        source: app('render Text(Greeting)', `let Greeting = Later\nlet Later = "Hello"\n${textView}`),
+        messages: [aliasMessages.aliasUsedBeforeDeclaration('Greeting', 'Later')],
+      },
+      {
+        title: 'rejects local let references to later values',
+        source: `
+        app MyApp { view MainView }
+        view MainView Label is text {
+          let Greeting = Later
+          let Later = Label
         }
-      }
-    `)
+      `,
+        messages: [aliasMessages.aliasUsedBeforeDeclaration('Greeting', 'Later')],
+      },
+      {
+        title: 'rejects render arguments that reference later local aliases',
+        source: app('render Stack(){ Text(Local)\nlet Local = "Hello" }', `${stackLayout}\n${textView}`),
+        messages: [aliasMessages.usedBeforeDeclaration('Local')],
+      },
+      {
+        title: 'rejects recursive let member access without recursing forever',
+        source: app('', 'let A = A.X'),
+        messages: [aliasMessages.aliasUsedBeforeDeclaration('A', 'A')],
+      },
+      {
+        title: 'rejects member access on action declarations',
+        source: app('render Text(Save.Label)', `action Save { }\n${textView}`),
+        messages: [typeValidationMessages.memberNotItem('Label')],
+      },
+      {
+        title: 'rejects local aliases that shadow visible parameters',
+        source: 'app MyApp { view MainView }\nview MainView Label is text { let Label = "shadow" }',
+        messages: [aliasMessages.duplicateName('Label')],
+      },
+      {
+        title: 'rejects let self references as declaration-order violations',
+        source: app('', 'let First = First'),
+        messages: [aliasMessages.aliasUsedBeforeDeclaration('First', 'First')],
+      },
+      {
+        title: 'rejects mutually recursive aliases through declaration order',
+        source: app('', 'let First = Second\nlet Second = First'),
+        messages: [aliasMessages.aliasUsedBeforeDeclaration('First', 'Second')],
+      },
+      {
+        title: 'preserves declaration-order diagnostics when invalid aliases reach render arguments',
+        source: app('render Text(First)', `let First = Second\nlet Second = First\n${textView}`),
+        messages: [aliasMessages.aliasUsedBeforeDeclaration('First', 'Second')],
+      },
+    ] as const
+  ) {
+    Test(title, rejects(source, ...messages))
+  }
 
-    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.usedBeforeDeclaration('Local'))
-  })
+  Test('attaches duplicate-alias diagnostics to the alias AST node and source range', async () => {
+    const result = await testValidateCodeWithErrors(app('', 'let Greeting = "Hello"\nlet Greeting = "Again"'))
+    const diagnostic = result.diagnostics.find(({ message }) => message === aliasMessages.duplicateName('Greeting'))
 
-  Test('rejects recursive let member access without recursing forever', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let A = A.X
-      view MainView { }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.aliasUsedBeforeDeclaration('A', 'A'))
-  })
-
-  Test('rejects member access on action declarations', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      action Save { }
-      view MainView {
-        render Text(Save.Label)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.memberNotItem('Label'))
-  })
-
-  Test('rejects duplicate file-level aliases', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let Greeting = "Hello"
-      let Greeting = "Again"
-      view MainView { }
-    `)
-    const diagnostic = result.diagnostics.find(diagnostic =>
-      diagnostic.message === AliasesValidator.messages.duplicateName('Greeting')
-    )
-
-    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Greeting'))
+    Expect(validationErrorMessages(result)).toContain(aliasMessages.duplicateName('Greeting'))
     Expect(diagnostic?.nodeType).toBe(AST.AliasDeclaration.$type)
     Expect(diagnostic?.range).toBeDefined()
   })
 
-  Test('rejects duplicate file-level declaration names', async () => {
-    const aliasBeforeView = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let Text = "Hello"
-      view MainView { }
-      view Text Value is text { }
-    `)
-    const aliasAfterApp = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let MyApp = "Hello"
-      view MainView { }
-    `)
-    const viewAfterApp = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MyApp { }
-      view MainView { }
-    `)
+  for (
+    const [title, source, message] of [
+      [
+        'rejects aliases that duplicate view names',
+        app('', `let Text = "Hello"\n${stubView('Text', 'Value is text')}`),
+        aliasMessages.duplicateName('Text'),
+      ],
+      [
+        'rejects aliases that duplicate app names',
+        app('', 'let MyApp = "Hello"'),
+        aliasMessages.duplicateName('MyApp'),
+      ],
+      ['rejects views that duplicate app names', app('', 'view MyApp { }'), aliasMessages.duplicateName('MyApp')],
+    ] as const
+  ) {
+    Test(title, rejects(source, message))
+  }
 
-    Expect(validationErrorMessages(aliasBeforeView)).toContain(AliasesValidator.messages.duplicateName('Text'))
-    Expect(validationErrorMessages(aliasAfterApp)).toContain(AliasesValidator.messages.duplicateName('MyApp'))
-    Expect(validationErrorMessages(viewAfterApp)).toContain(AliasesValidator.messages.duplicateName('MyApp'))
-  })
+  Test(
+    'keeps type and value names in separate namespaces',
+    accepts(app('render Text(Name)', `type Name is text\nlet Name = Name "Ro"\n${textView}`)),
+  )
 
-  Test('keeps type and value names in separate namespaces', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      type Name is text
-      let Name = Name "Ro"
-      view MainView {
-        render Text(Name)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
+  Test(
+    'rejects duplicate names within the type namespace',
+    rejects(app('', 'type Name is text\ntype Name is number'), aliasMessages.duplicateName('Name')),
+  )
 
-    const duplicateTypes = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Name is number
-      view MainView { }
-    `)
+  for (
+    const [title, source] of [
+      [
+        'rejects local aliases that shadow view declarations',
+        app('let Text = "Hello"\nrender Text(Text)', textView),
+      ],
+      [
+        'rejects view parameters that shadow view declarations',
+        `app MyApp { view MainView }
+       view MainView Text is text { render Text(Text) }
+       ${textView}`,
+      ],
+    ] as const
+  ) {
+    Test(title, rejects(source, aliasMessages.duplicateName('Text')))
+  }
 
-    Expect(validationErrorMessages(duplicateTypes)).toContain(aliasValidationMessages.duplicateName('Name'))
-  })
-
-  Test('rejects local aliases that shadow view declarations', async () => {
-    const aliasShadow = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        let Text = "Hello"
-        render Text(Text)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const parameterShadow = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView Text is text {
-        render Text(Text)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(aliasShadow)).toContain(AliasesValidator.messages.duplicateName('Text'))
-    Expect(validationErrorMessages(parameterShadow)).toContain(AliasesValidator.messages.duplicateName('Text'))
-  })
-
-  Test('allows local aliases that shadow file-level aliases', async () => {
-    await testValidateCode(`
+  Test(
+    'allows local aliases to shadow file-level aliases without hiding earlier references',
+    accepts(`
       app MyApp { view MainView }
       let Greeting = "Outer"
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
+      ${stackLayout}
+      ${textView}
       view MainView {
         let OuterGreeting = Greeting
         render Stack(){
@@ -211,324 +168,147 @@ Describe('Tao validator structural diagnostics', () => {
           Text(OuterGreeting)
         }
       }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-  })
+    `),
+  )
 
-  Test('rejects local aliases that shadow visible values', async () => {
-    const parameterShadow = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView Label is text {
-        let Label = "shadow"
-      }
-    `)
+  for (
+    const [title, source, message] of [
+      [
+        'requires explicit change handlers for non-state values',
+        eventApp('Input(Value: ReadOnly) { on submit Submit }', 'let ReadOnly = ""'),
+        invocationMessages.implicitChangeTarget('Input'),
+      ],
+      [
+        'rejects event handlers that duplicate explicit action arguments',
+        eventApp('Input(Value: Draft, Change: Normalize) { on change -> { } }'),
+        invocationMessages.eventArgumentConflict('Input', 'change', 'Change'),
+      ],
+      [
+        'rejects event actions with incompatible signatures',
+        eventApp('Input(Value: Draft, Submit: Submit) { on change NumberChange }'),
+        invocationMessages.eventActionType('Input', 'change', 'action(text)', 'action(NumberChange.Value)'),
+      ],
+      [
+        'rejects duplicate event handlers',
+        eventApp('Input(Value: Draft, Submit: Submit) { on change -> { } on change -> { } }'),
+        invocationMessages.duplicateEvent('Input', 'change'),
+      ],
+      [
+        'rejects payloads on events that do not provide them',
+        eventApp('Input(Value: Draft) { on submit -> Payload { } }'),
+        invocationMessages.unexpectedEventPayload('submit'),
+      ],
+      [
+        'rejects change events with nonstandard parameter types',
+        eventApp('NumericInput(Value: 1) { on change -> Changed { } }'),
+        invocationMessages.unsupportedEvent('NumericInput', 'change', 'Change'),
+      ],
+      [
+        'rejects press events backed by non-action parameters',
+        eventApp('LabelButton("Label") { on press Submit }'),
+        invocationMessages.unsupportedEvent('LabelButton', 'press', 'Press'),
+      ],
+      [
+        'rejects event handlers outside render invocations',
+        eventApp('when true { true -> { on press Submit } otherwise -> { } }'),
+        ViewsValidator.messages.eventPlacement,
+      ],
+    ] as const
+  ) {
+    Test(title, rejects(source, message))
+  }
 
-    Expect(validationErrorMessages(parameterShadow)).toContain(AliasesValidator.messages.duplicateName('Label'))
-  })
-
-  Test('rejects let self references as undeclared-before references', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let First = First
-      view MainView { }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
-      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'First'),
+  Test('attaches missing-render-argument diagnostics to the render AST node', async () => {
+    const message = invocationMessages.missingArgument('Tile', 'Count')
+    const result = await testValidateCodeWithErrors(
+      app('render Tile("Open")', stubView('Tile', 'Title is text, Count is number')),
     )
+    const diagnostic = result.diagnostics.find(candidate => candidate.message === message)
+
+    Expect(validationErrorMessages(result)).toContain(message)
+    Expect(diagnostic?.nodeType).toBe(AST.RenderStatement.$type)
   })
 
-  Test('rejects mutually recursive aliases through declaration order', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let First = Second
-      let Second = First
-      view MainView { }
-    `)
+  Test(
+    'rejects extra render arguments',
+    rejects(app('render Text("Open", 1)', textView), invocationMessages.unmatchedArgument('Text')),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(
-      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second'),
-    )
-  })
+  Test(
+    'rejects missing arguments in child view invocations',
+    rejects(
+      app('render Stack(){ Tile(42) }', `${stackLayout}\n${stubView('Tile', 'Title is text, Count is number')}`),
+      invocationMessages.missingArgument('Tile', 'Title'),
+    ),
+  )
 
-  Test('returns let declaration-order diagnostics when invalid aliases are used as render arguments', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let First = Second
-      let Second = First
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        render Text(First)
-      }
-    `)
+  Test(
+    'reports both unmatched and missing arguments for positional type mismatches',
+    rejects(
+      app('render Tile("not a count")', stubView('Tile', 'Count is number')),
+      invocationMessages.unmatchedArgument('Tile'),
+      invocationMessages.missingArgument('Tile', 'Count'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(
-      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second'),
-    )
-  })
-
-  Test('binds control events and diagnoses invalid explicit or automatic handlers', async () => {
-    await testValidateCode(`
-      app EventsApp { view MainView }
-      layout Stack { render inject ${tsFence} return null ${fence} }
-      view Input Value is text, Change is action(text), Submit is action() {
-        render inject ${tsFence} return null ${fence}
-      }
-      view Button Press is action() { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        state Draft = ""
-        action Submit { }
-        action Normalize Value is text { set Draft = Value }
-        render Stack() {
-          Input(Value: Draft) { on submit Submit }
-          Input(Value: Draft, Submit: Submit) { on change Normalize }
-          Button() { on press -> { set Draft = "pressed" } }
-        }
-      }
-    `)
-
-    const invalid = await testValidateCodeWithErrors(`
-      app EventsApp { view MainView }
-      layout Stack { render inject ${tsFence} return null ${fence} }
-      view Input Value is text, Change is action(text), Submit is action() {
-        render inject ${tsFence} return null ${fence}
-      }
-      view NumericInput Value is number, Change is action(number) {
-        render inject ${tsFence} return null ${fence}
-      }
-      view LabelButton Press is text { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        state Draft = ""
-        let ReadOnly = ""
-        action Submit { }
-        action NumberChange Value is number { }
-        render Stack() {
-          Input(Value: ReadOnly) { on submit Submit }
-          Input(Value: Draft, Change: NumberChange) {
-            on change -> { }
-            on submit Submit
-          }
-          Input(Value: Draft, Submit: Submit) { on change NumberChange }
-          Input(Value: Draft, Submit: Submit) {
-            on change -> { }
-            on change -> { }
-          }
-          Input(Value: Draft) { on submit -> Payload { } }
-          NumericInput(Value: 1) { on change -> Changed { } }
-          LabelButton("Label") { on press Submit }
-          when true {
-            true -> { on press Submit }
-            otherwise -> { }
-          }
-        }
-      }
-    `)
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(invocationValidationMessages.implicitChangeTarget('Input'))
-    Expect(messages).toContain(
-      invocationValidationMessages.eventArgumentConflict('Input', 'change', 'Change'),
-    )
-    Expect(messages).toContain(
-      invocationValidationMessages.eventActionType(
-        'Input',
-        'change',
-        'action(text)',
-        'action(NumberChange.Value)',
+  Test(
+    'rejects duplicate exact argument types before nominal fallback',
+    rejects(
+      app(
+        'render Pair(Name "Ada", Name "Grace")',
+        `
+        type Base is text
+        type Name is Base
+        ${stubView('Pair', 'Base, Name')}
+      `,
       ),
-    )
-    Expect(messages).toContain(invocationValidationMessages.duplicateEvent('Input', 'change'))
-    Expect(messages).toContain(invocationValidationMessages.unexpectedEventPayload('submit'))
-    Expect(messages).toContain(
-      invocationValidationMessages.unsupportedEvent('NumericInput', 'change', 'Change'),
-    )
-    Expect(messages).toContain(
-      invocationValidationMessages.unsupportedEvent('LabelButton', 'press', 'Press'),
-    )
-    Expect(messages).toContain(ViewsValidator.messages.eventPlacement)
-  })
+      invocationMessages.duplicateArgumentType('Pair'),
+      invocationMessages.missingArgument('Pair', 'Base'),
+    ),
+  )
 
-  Test('rejects render invocation arity errors', async () => {
-    const missing = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Tile("Open")
-      }
-      view Tile Title is text, Count is number {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const extra = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Text("Open", 1)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(missing)).toContain(InvocationsValidator.messages.missingArgument('Tile', 'Count'))
-    Expect(
-      missing.diagnostics.find(diagnostic =>
-        diagnostic.message === InvocationsValidator.messages.missingArgument('Tile', 'Count')
-      )?.nodeType,
-    ).toBe(AST.RenderStatement.$type)
-    Expect(validationErrorMessages(extra)).toContain(invocationValidationMessages.unmatchedArgument('Text'))
-  })
-
-  Test('rejects child view invocation arity and type errors', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view MainView {
-        render Stack(){
-          Tile(42)
+  Test(
+    'rejects duplicate exact property types before nominal fallback',
+    rejects(
+      app(
+        '',
+        `
+        type Base is text
+        type Name is Base
+        type Pair is {
+          Base
+          Name
         }
-      }
-      view Tile Title is text, Count is number {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
+        let BadPair = Pair { Name "Ada", Name "Grace" }
+      `,
+      ),
+      typeValidationMessages.duplicateProvidedPropertyType,
+      typeValidationMessages.missingProperty('Base'),
+    ),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.missingArgument('Tile', 'Title'))
-  })
-
-  Test('rejects text and number argument mismatches by type', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Tile("not a count")
-      }
-      view Tile Count is number {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.unmatchedArgument('Tile'))
-    Expect(validationErrorMessages(result)).toContain(invocationValidationMessages.missingArgument('Tile', 'Count'))
-  })
-
-  Test('validates custom type declarations, constructors, casts, member access, and type-based binding', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      type Name is text
-      type Age is number
-      type Tags is list
-      type Job is {
-        Title is text
-        Level is number
-      }
-      type Person is {
-        Name
-        Age
-        Tags
-        Job
-      }
-      type InlineJob is {
-        Role is text
-        Rank is number
-      }
-      type CurrentJob is InlineJob
-      let DisplayName = Name "Ada"
-      let DemoPerson = Person {
-        Tags: Tags ["types"],
-        Job: Job { Level: 2, Title: "Compiler engineer" },
-        Age: 40,
-        Name: DisplayName
-      }
-      let DemoCurrentJob = CurrentJob { Role: "Architect", Rank: 3 }
-      layout Stack {
-        render inject ${tsFence}
-          return <>{_ViewProps.children}</>
-        ${fence}
-      }
-      view MainView {
-        render Stack(){
-          Profile(DemoPerson)
-          Summary(Count: 2, "People")
-        }
-      }
-      type Count is number
-      view Profile Person {
-        render Stack(){
-          TextValue(Person.Name)
-          TextValue(Person.Job.Title)
-        }
-      }
-      view Summary Label is text, Count {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view TextValue Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-  })
-
-  Test('rejects duplicate provided exact types before nominal lineage fallback', async () => {
-    const duplicateArguments = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Base is text
-      type Name is Base
-      view MainView {
-        render Pair(Name "Ada", Name "Grace")
-      }
-      view Pair Base, Name {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const duplicateProperties = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Base is text
-      type Name is Base
-      type Pair is {
-        Base
-        Name
-      }
-      let BadPair = Pair { Name "Ada", Name "Grace" }
-      view MainView { }
-    `)
-    const duplicateLineageArguments = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
+  Test('uses duplicate-lineage diagnostics instead of ambiguous-argument diagnostics', async () => {
+    const result = await testValidateCodeWithErrors(app(
+      'render Pair(Leaf "Ada", Leaf "Grace")',
+      `
       type Base is text
       type Middle is Base
       type Leaf is Middle
-      view MainView {
-        render Pair(Leaf "Ada", Leaf "Grace")
-      }
-      view Pair Base, Middle {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const duplicateLineageProperties = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
+      ${stubView('Pair', 'Base, Middle')}
+    `,
+    ))
+    const messages = validationErrorMessages(result)
+
+    Expect(messages).toContain(invocationMessages.duplicateArgumentType('Pair'))
+    Expect(messages).toContain(invocationMessages.missingArgument('Pair', 'Base'))
+    Expect(messages).toContain(invocationMessages.missingArgument('Pair', 'Middle'))
+    Expect(messages.some(message => message.includes('matches multiple parameters by type'))).toBe(false)
+  })
+
+  Test('uses duplicate-lineage property diagnostics instead of ambiguous-field diagnostics', async () => {
+    const result = await testValidateCodeWithErrors(app(
+      '',
+      `
       type Base is text
       type Middle is Base
       type Leaf is Middle
@@ -537,137 +317,76 @@ Describe('Tao validator structural diagnostics', () => {
         Middle
       }
       let BadPair = Pair { Leaf "Ada", Leaf "Grace" }
-      view MainView { }
-    `)
-
-    Expect(validationErrorMessages(duplicateArguments)).toContain(
-      invocationValidationMessages.duplicateArgumentType('Pair'),
-    )
-    Expect(validationErrorMessages(duplicateArguments)).toContain(
-      invocationValidationMessages.missingArgument('Pair', 'Base'),
-    )
-    Expect(validationErrorMessages(duplicateProperties)).toContain(typeValidationMessages.duplicateProvidedPropertyType)
-    Expect(validationErrorMessages(duplicateProperties)).toContain(typeValidationMessages.missingProperty('Base'))
-    Expect(validationErrorMessages(duplicateLineageArguments)).toContain(
-      invocationValidationMessages.duplicateArgumentType('Pair'),
-    )
-    Expect(validationErrorMessages(duplicateLineageArguments)).toContain(
-      invocationValidationMessages.missingArgument('Pair', 'Base'),
-    )
-    Expect(validationErrorMessages(duplicateLineageArguments)).toContain(
-      invocationValidationMessages.missingArgument('Pair', 'Middle'),
-    )
-    Expect(
-      validationErrorMessages(duplicateLineageArguments).some(message =>
-        message.includes('matches multiple parameters by type')
-      ),
-    ).toBe(false)
-    Expect(validationErrorMessages(duplicateLineageProperties)).toContain(
-      typeValidationMessages.duplicateProvidedPropertyType,
-    )
-    Expect(validationErrorMessages(duplicateLineageProperties)).toContain(
-      typeValidationMessages.missingProperty('Base'),
-    )
-    Expect(validationErrorMessages(duplicateLineageProperties)).toContain(
-      typeValidationMessages.missingProperty('Middle'),
-    )
-    Expect(
-      validationErrorMessages(duplicateLineageProperties).some(message =>
-        message.includes('matches multiple fields by type')
-      ),
-    ).toBe(false)
-  })
-
-  Test('binds same-root nominal siblings while rejecting duplicate root literals', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      type Name is text
-      type Title is text
-      view MainView {
-        render Pair(Name: "Ada", Title: "Engineer")
-      }
-      view Pair Name, Title {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    const duplicateRootArguments = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Title is text
-      view MainView {
-        render Pair("Ada", "Engineer")
-      }
-      view Pair Name, Title {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(duplicateRootArguments)).toContain(
-      invocationValidationMessages.duplicateArgumentType('Pair'),
-    )
-    Expect(validationErrorMessages(duplicateRootArguments)).toContain(
-      invocationValidationMessages.missingArgument('Pair', 'Name'),
-    )
-    Expect(validationErrorMessages(duplicateRootArguments)).toContain(
-      invocationValidationMessages.missingArgument('Pair', 'Title'),
-    )
-  })
-
-  Test('binds duplicate primitive parameter types by explicit argument name', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      view MainView {
-        action Change Value is text { }
-        action Submit { }
-        render Field(Value: "Draft", Change: Change, Submit: Submit, Label: "Title", Disabled: false)
-      }
-      view Field Value is text, Change is action(text), Submit is action(), Label is text, Disabled is boolean {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    const invalid = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Field(Missing: "Draft", Value: 3, Value: "Again")
-      }
-      view Field Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-    const messages = validationErrorMessages(invalid)
-    Expect(messages).toContain(invocationValidationMessages.unknownNamedArgument('Field', 'Missing'))
-    Expect(messages).toContain(
-      invocationValidationMessages.namedArgumentType('Field', 'Value', 'Field.Value', 'number'),
-    )
-    Expect(messages).toContain(invocationValidationMessages.duplicateNamedArgument('Field', 'Value'))
-  })
-
-  Test('resolves owner labels without treating visible type names as parameters', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Title is text
-      view MainView {
-        render Card(Title: "Visible type names are not labels")
-      }
-      view Card Label is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
+    `,
+    ))
     const messages = validationErrorMessages(result)
-    Expect(messages).toContain(invocationValidationMessages.unknownNamedArgument('Card', 'Title'))
-    Expect(messages).toContain(invocationValidationMessages.missingArgument('Card', 'Label'))
+
+    Expect(messages).toContain(typeValidationMessages.duplicateProvidedPropertyType)
+    Expect(messages).toContain(typeValidationMessages.missingProperty('Base'))
+    Expect(messages).toContain(typeValidationMessages.missingProperty('Middle'))
+    Expect(messages.some(message => message.includes('matches multiple fields by type'))).toBe(false)
   })
+
+  Test(
+    'binds same-root nominal siblings by explicit argument name',
+    accepts(app(
+      'render Pair(Name: "Ada", Title: "Engineer")',
+      `
+      type Name is text
+      type Title is text
+      ${stubView('Pair', 'Name, Title')}
+    `,
+    )),
+  )
+
+  Test(
+    'rejects duplicate root literals for same-root nominal siblings',
+    rejects(
+      app(
+        'render Pair("Ada", "Engineer")',
+        `
+        type Name is text
+        type Title is text
+        ${stubView('Pair', 'Name, Title')}
+      `,
+      ),
+      invocationMessages.duplicateArgumentType('Pair'),
+      invocationMessages.missingArgument('Pair', 'Name'),
+      invocationMessages.missingArgument('Pair', 'Title'),
+    ),
+  )
+
+  for (
+    const [title, invocation, message] of [
+      [
+        'rejects unknown named arguments',
+        'Field(Missing: "Draft")',
+        invocationMessages.unknownNamedArgument('Field', 'Missing'),
+      ],
+      [
+        'rejects named argument type mismatches',
+        'Field(Value: 3)',
+        invocationMessages.namedArgumentType('Field', 'Value', 'Field.Value', 'number'),
+      ],
+      [
+        'rejects duplicate named arguments',
+        'Field(Value: "Draft", Value: "Again")',
+        invocationMessages.duplicateNamedArgument('Field', 'Value'),
+      ],
+    ] as const
+  ) {
+    Test(title, rejects(app(`render ${invocation}`, stubView('Field', 'Value is text')), message))
+  }
+
+  Test(
+    'does not treat visible type names as owner parameter labels',
+    rejects(
+      app(
+        'render Card(Title: "Visible type names are not labels")',
+        `type Title is text\n${stubView('Card', 'Label is text')}`,
+      ),
+      invocationMessages.unknownNamedArgument('Card', 'Title'),
+      invocationMessages.missingArgument('Card', 'Label'),
+    ),
+  )
 })

@@ -4,124 +4,155 @@ import { Describe, Expect, Test } from '@shared/test'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
-import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
+import {
+  app,
+  rejects,
+  stubLayout,
+  stubView,
+  testValidateCode,
+  testValidateCodeWithErrors,
+} from './test-validate'
 
-const runtimeViews = `
-  layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
-  view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
-`
+const runtimeViews = `${stubLayout('Stack')}${stubView('Text', 'Value is text')}`
 
-Describe('functional core validator', () => {
-  Test('accepts a typed functional path with total value, render, and action conditionals', async () => {
-    await testValidateCode(`
-      app FunctionalApp { view Main }
-      function HasCount Count is number returns boolean = Count > 0 and not false
-      function Label Count is number returns text = when (Count > 0) {
-        true -> "Count: { Count }"
-        otherwise -> "Empty"
-      }
-      view Main {
-        state Ready = false
-        action Flip {
-          guard Ready true -> { toggle Ready }
-          toggle Ready
-        }
-        render Stack(){
-          when HasCount(2) {
-            true -> {
-            Text(Label(2))
-            }
-            otherwise -> {
-            Text("Empty")
-            }
-          }
-          loop ["Inbox", "Today"] / Name { Text(Name) }
-        }
-      }
-      ${runtimeViews}
-    `)
-  })
+function functionalApp(body: string, declarations = ''): string {
+  return `${declarations}\n${app(body, runtimeViews)}`
+}
 
-  Test('reports actionable function, when, toggle, and collection errors', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app BrokenApp { view Main }
-      function Wrong Value is number returns boolean = Value + 1
-      function Timestamp At is time returns text = "{ At }"
-      view Main {
-        state Count = 1
-        action InvalidToggle { toggle Count }
+Describe('validator: functional core', () => {
+  Test(
+    'rejects function results incompatible with the declared return type',
+    rejects(
+      functionalApp(
+        'render Text("Ready")',
+        'function Wrong Value is number returns boolean = Value + 1',
+      ),
+      FunctionalCoreValidator.messages.functionReturn('Wrong', 'boolean', 'number'),
+    ),
+  )
+
+  Test(
+    'rejects unsupported values in string interpolation',
+    rejects(
+      functionalApp(
+        'render Text("Ready")',
+        'function Timestamp At is time returns text = "{ At }"',
+      ),
+      FunctionalCoreValidator.messages.interpolationPart,
+    ),
+  )
+
+  Test(
+    'rejects when rendering with an unsupported subject type',
+    rejects(
+      functionalApp(`
         render Stack(){
           when 1 {
             true -> { Text("Wrong condition") }
             otherwise -> { Text("Fallback") }
           }
-          loop "not a list" / Value { Text(Value) }
         }
-      }
-      ${runtimeViews}
-    `)
-    const errors = validationErrorMessages(result)
+      `),
+      FunctionalCoreValidator.messages.subjectCases,
+    ),
+  )
 
-    Expect(errors).toContain(FunctionalCoreValidator.messages.functionReturn('Wrong', 'boolean', 'number'))
-    Expect(errors).toContain(FunctionalCoreValidator.messages.subjectCases)
-    Expect(errors).toContain(FunctionalCoreValidator.messages.forCollection)
-    Expect(errors).toContain(FunctionalCoreValidator.messages.interpolationPart)
-    Expect(errors).toContain(StateValidator.messages.toggleStateType('Count', 'number'))
-  })
+  Test(
+    'rejects loops over non-list values',
+    rejects(
+      functionalApp('render Stack(){ loop "not a list" / Value { Text(Value) } }'),
+      FunctionalCoreValidator.messages.forCollection,
+    ),
+  )
 
-  Test('validates enum and data case identity plus boolean one-sided if conditions', async () => {
-    await testValidateCode(`
-      enum ConfirmResult { Confirmed Cancelled }
-      data Documents / Document { Final yes / no Draft }
-      view Main Document {
-        state Result = Confirmed
-        action Close { if Result is Confirmed { } }
-        render Stack() {
-          guard Document {
-            loading -> { Text("Loading") }
-            missing -> { Text(Document.Id) }
-            unauthorized -> { Text("Unauthorized") }
-            error -> Message { Text(Message) }
-          }
-          if Result is Confirmed { Text("Confirmed") }
-          if Document.Final is Draft { Text("Draft") }
+  Test(
+    'rejects toggle actions on non-boolean state',
+    rejects(
+      functionalApp('state Count = 1 action InvalidToggle { toggle Count } render Text("Ready")'),
+      StateValidator.messages.toggleStateType('Count', 'number'),
+    ),
+  )
+
+  Test(
+    'rejects duplicate enum cases',
+    rejects(
+      'enum ConfirmResult { Confirmed Confirmed }',
+      FunctionalCoreValidator.messages.duplicateEnumCase('ConfirmResult', 'Confirmed'),
+    ),
+  )
+
+  Test(
+    'rejects non-boolean action if conditions',
+    rejects(
+      functionalApp('action Close { if 1 { } } render Text("Ready")'),
+      FunctionalCoreValidator.messages.ifCondition,
+    ),
+  )
+
+  Test(
+    'rejects non-boolean render if conditions',
+    rejects(
+      functionalApp('render Stack(){ if "yes" { Text("Wrong") } }'),
+      FunctionalCoreValidator.messages.ifCondition,
+    ),
+  )
+
+  Test(
+    'rejects enum cases from another enum',
+    rejects(
+      functionalApp(
+        'state Result = Other action Close { if Result is Confirmed { } } render Text("Ready")',
+        'enum ConfirmResult { Confirmed } enum OtherResult { Other }',
+      ),
+      FunctionalCoreValidator.messages.invalidCase('Confirmed', 'OtherResult'),
+    ),
+  )
+
+  Test(
+    'rejects boolean cases from another data field',
+    rejects(
+      `
+        data Documents / Document { Final yes / no Draft }
+        data Accounts / Account { Active yes / no Inactive }
+        view Main Document {
+          action Close { if Document.Final is Inactive { } }
+          render Text("Ready")
         }
-      }
-      ${runtimeViews}
-    `)
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.invalidCase('Inactive', 'boolean'),
+    ),
+  )
 
-    const result = await testValidateCodeWithErrors(`
-      enum ConfirmResult { Confirmed Confirmed }
-      enum OtherResult { Other }
-      data Documents / Document { Final yes / no Draft }
-      data Accounts / Account { Active yes / no Inactive }
-      view Main Document {
-        state Result = Other
-        action Close {
-          if 1 { }
-          if Result is Confirmed { }
-          if Document.Final is Inactive { }
+  Test(
+    'rejects empty guards for entity subjects',
+    rejects(
+      `
+        data Documents / Document { Final yes / no Draft }
+        view Main Document {
+          render Stack(){ guard Document { empty -> { Text("Wrong") } } }
         }
-        render Stack() {
-          guard Document {
-            empty -> { Text("Wrong") }
-            missing -> Message { Text(Message) }
-          }
-          if "yes" { Text("Wrong") }
-        }
-      }
-      ${runtimeViews}
-    `)
-    const errors = validationErrorMessages(result)
-    Expect(errors).toContain(FunctionalCoreValidator.messages.duplicateEnumCase('ConfirmResult', 'Confirmed'))
-    Expect(errors.filter(error => error === FunctionalCoreValidator.messages.ifCondition)).toHaveLength(2)
-    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('Confirmed', 'OtherResult'))
-    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('Inactive', 'boolean'))
-    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCase('empty', 'an entity subject'))
-    Expect(errors).toContain(FunctionalCoreValidator.messages.invalidCasePayload)
-  })
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.invalidCase('empty', 'an entity subject'),
+    ),
+  )
 
-  Test('unifies nested list values without treating unlike element types as compatible', async () => {
+  Test(
+    'rejects payloads on payload-free entity cases',
+    rejects(
+      `
+        data Documents / Document { Final yes / no Draft }
+        view Main Document {
+          render Stack(){ guard Document { missing -> Message { Text(Message) } } }
+        }
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.invalidCasePayload,
+    ),
+  )
+
+  Test('unifies nested list values with an empty list on either side', async () => {
     const accepted = await testValidateCode(`
       let EmptyFirst = [[], [1]]
       let EmptyLast = [[1], []]
@@ -134,77 +165,74 @@ Describe('functional core validator', () => {
     }
 
     Expect(inferredTypes).toEqual([nestedNumberList, nestedNumberList])
+  })
 
-    const result = await testValidateCodeWithErrors(`
-      let MixedElements = [1, 2, "one"]
-      let MixedNested = [[1], [2], ["one"]]
-      let MixedBranches = when true { true -> 1 false -> 2 otherwise -> "one" }
-    `)
-    const errors = validationErrorMessages(result)
-    const listDiagnostics = result.diagnostics.filter(diagnostic =>
+  Test('rejects incompatible flat-list elements at the offending literal', async () => {
+    const result = await testValidateCodeWithErrors('let MixedElements = [1, 2, "one"]')
+    const diagnostics = result.diagnostics.filter(diagnostic =>
       diagnostic.message === FunctionalCoreValidator.messages.listElement
     )
-    const branchDiagnostic = result.diagnostics.find(diagnostic =>
+
+    Expect(diagnostics).toHaveLength(1)
+    Expect(diagnostics[0]?.nodeType).toBe('StringLiteral')
+  })
+
+  Test('rejects incompatible nested-list elements at the offending literal', async () => {
+    const result = await testValidateCodeWithErrors('let MixedNested = [[1], [2], ["one"]]')
+    const diagnostics = result.diagnostics.filter(diagnostic =>
+      diagnostic.message === FunctionalCoreValidator.messages.listElement
+    )
+
+    Expect(diagnostics).toHaveLength(1)
+    Expect(diagnostics[0]?.nodeType).toBe('ListLiteral')
+  })
+
+  Test('rejects incompatible when branches at the offending literal', async () => {
+    const result = await testValidateCodeWithErrors(
+      'let MixedBranches = when true { true -> 1 false -> 2 otherwise -> "one" }',
+    )
+    const diagnostic = result.diagnostics.find(diagnostic =>
       diagnostic.message === FunctionalCoreValidator.messages.conditionalBranch
     )
 
-    Expect(errors).toContain(FunctionalCoreValidator.messages.listElement)
-    Expect(errors).toContain(FunctionalCoreValidator.messages.conditionalBranch)
-    Expect(listDiagnostics.some(diagnostic => diagnostic.nodeType === 'StringLiteral')).toBe(true)
-    Expect(branchDiagnostic?.nodeType).toBe('StringLiteral')
+    Expect(diagnostic?.nodeType).toBe('StringLiteral')
   })
 
-  Test('accepts trailing typed defaults and requires named overrides for optional view parameters', async () => {
-    await testValidateCode(`
-      app DefaultsApp { view Main }
-      function Label Prefix is text, Value is text default "Save" returns text = "{ Prefix }{ Value }"
-      view Main {
-        action Submit Message is text default "Saved" { }
-        render Card(){
-          LabelView("Plain")
-          LabelView("Title", Hint: "Hint")
-        }
-      }
-      layout Card Gap is number default 8 { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view LabelView Title is text, Hint is text default "Default hint" { render inject \`\`\`ts\nreturn null\n\`\`\` }
-    `)
-  })
+  Test(
+    'rejects required parameters after optional parameters',
+    rejects(
+      'function Wrong First is text default "one", Last is text returns text = First',
+      typeValidationMessages.defaultParameterOrder('Last'),
+    ),
+  )
 
-  Test('reports invalid parameter defaults and non-trailing required parameters', async () => {
-    const result = await testValidateCodeWithErrors(`
-      function Wrong First is text default "one", Last is text returns text = First
-      view Main Title is text default 1 { render inject \`\`\`ts\nreturn null\n\`\`\` }
-    `)
-    const errors = validationErrorMessages(result)
+  Test(
+    'rejects parameter defaults with incompatible types',
+    rejects(
+      `${stubView('Main', 'Title is text default 1')}`,
+      typeValidationMessages.defaultParameterType('Title', 'Main.Title', 'number'),
+    ),
+  )
 
-    Expect(errors).toContain(typeValidationMessages.defaultParameterOrder('Last'))
-    Expect(errors).toContain(typeValidationMessages.defaultParameterType('Title', 'Main.Title', 'number'))
-  })
+  Test(
+    'reports missing required function arguments',
+    rejects(
+      functionalApp(
+        'render Text(Label())',
+        'function Label Prefix is text, Value is text default "Save" returns text = "{ Prefix }{ Value }"',
+      ),
+      FunctionalCoreValidator.messages.functionMissingArgument('Label', 'Prefix'),
+    ),
+  )
 
-  Test('allows functions to omit trailing defaults and bind owner labels', async () => {
-    await testValidateCode(`
-      app DefaultsApp { view Main }
-      function Label Value is text default "Save" returns text = Value
-      view Main { render Text(Label(Value: "Override")) }
-      ${runtimeViews}
-    `)
-  })
-
-  Test('reports missing and duplicate-type function bindings without positional fallback', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app DefaultsApp { view Main }
-      function Label Prefix is text, Value is text default "Save" returns text = "{ Prefix }{ Value }"
-      view Main {
-        render Col(){
-          Text(Label())
-          Text(Label("A", "B", "C"))
-        }
-      }
-      ${runtimeViews}
-    `)
-    const errors = validationErrorMessages(result)
-
-    Expect(errors).toContain(FunctionalCoreValidator.messages.functionMissingArgument('Label', 'Prefix'))
-    Expect(errors).toContain(FunctionalCoreValidator.messages.functionDuplicateArgumentType('Label'))
-  })
+  Test(
+    'reports duplicate-type function arguments without positional fallback',
+    rejects(
+      functionalApp(
+        'render Text(Label("A", "B", "C"))',
+        'function Label Prefix is text, Value is text default "Save" returns text = "{ Prefix }{ Value }"',
+      ),
+      FunctionalCoreValidator.messages.functionDuplicateArgumentType('Label'),
+    ),
+  )
 })

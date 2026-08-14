@@ -11,6 +11,7 @@ import {
   type TestRuntime,
   withTaoFiles,
 } from './Test'
+export { app, fence, stubLayout, stubView, tsFence } from './TaoFixtures'
 
 const testGlobals = globalThis as unknown as Partial<TestRuntime>
 

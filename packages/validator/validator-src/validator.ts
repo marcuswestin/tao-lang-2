@@ -13,6 +13,11 @@ export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
   diagnostics: readonly Diagnostic[]
 }
 
+/** ValidatorSession reuses standalone parser and Typir services across independent source strings. */
+export type ValidatorSession = {
+  validateCode(code: string): Promise<ValidationResult>
+}
+
 /** createContext creates validator invocation state. */
 function createContext(
   packagesContext: Packages.Context,
@@ -51,11 +56,11 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
   return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
 }
 
-/** validateCode validates Tao source code using a standalone validator context. */
-async function validateCode(code: string): Promise<ValidationResult> {
-  const packagesContext = await Packages.createContext(codeProjectRoot)
+/** createSession creates a reusable standalone validator context for batch validation. */
+async function createSession(packagesContext?: Packages.Context): Promise<ValidatorSession> {
+  const sharedPackagesContext = packagesContext ?? await Packages.createContext(codeProjectRoot)
   const parserContext = Parser.createContext({
-    packages: Packages.createResolver(packagesContext),
+    packages: Packages.createResolver(sharedPackagesContext),
   })
   const typir = createTypirLangiumServices<TaoSpecifics>(
     parserContext.services.shared,
@@ -63,16 +68,39 @@ async function validateCode(code: string): Promise<ValidationResult> {
     new TaoTypeSystem(),
   )
   initializeLangiumTypirServices(parserContext.services.language, typir)
-  const parseResult = await Parser.parseSource(parserContext, code, { validation: false })
-  return validateParseResult(
-    parseResult,
-    createContext(packagesContext, typir, parseResult.files.map(file => file.ast), parseResult.entry.path),
-  )
+
+  // Langium's document builder mutates the session document store. Serialize
+  // callers so a batch can safely share the synthetic source URI.
+  let pending = Promise.resolve()
+  return {
+    validateCode(code: string): Promise<ValidationResult> {
+      const result = pending.then(async () => {
+        const parseResult = await Parser.parseSource(parserContext, code, { validation: false })
+        return validateParseResult(
+          parseResult,
+          createContext(
+            sharedPackagesContext,
+            typir,
+            parseResult.files.map(file => file.ast),
+            parseResult.entry.path,
+          ),
+        )
+      })
+      pending = result.then(() => undefined, () => undefined)
+      return result
+    },
+  }
+}
+
+/** validateCode validates Tao source code using a standalone validator context. */
+async function validateCode(code: string): Promise<ValidationResult> {
+  return await (await createSession()).validateCode(code)
 }
 
 /** Validator exposes Tao source validation functions. */
 const Validator = {
   createContext,
+  createSession,
   validateCode,
   validateParseResult,
 }

@@ -2,17 +2,18 @@ import { FS, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import SourceActions from '../source-actions-src/source-actions'
 import {
+  organized,
+  organizes,
   parseDocument,
   parseRawDocument,
   parseRawDocumentAt,
   sourceActionOptionsFor,
-  testOrganizeSource,
-  testOrganizeSourceUnchanged,
 } from './test-source-actions'
 
 Describe('organizeSource use statements', () => {
-  Test('produces no edit for an already organized file', async () => {
-    await testOrganizeSourceUnchanged(`
+  Test(
+    'produces no edit for an already organized file',
+    organized(`
       use Stack, Text from @tao/ui
 
       app MyApp {
@@ -23,11 +24,12 @@ Describe('organizeSource use statements', () => {
          render Stack() {
             Text("hi")
       }  }
-    `)
-  })
+    `),
+  )
 
-  Test('merges duplicate imports from the same source', async () => {
-    await testOrganizeSource(
+  Test(
+    'merges duplicate imports from the same source',
+    organizes(
       `
         use Text from @tao/ui
         use Row from @tao/ui
@@ -45,11 +47,12 @@ Describe('organizeSource use statements', () => {
               Text("hi")
         }  }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('removes unused imported symbols', async () => {
-    await testOrganizeSource(
+  Test(
+    'removes unused imported symbols',
+    organizes(
       `
         use Text, Row, Button from @tao/ui
         view MainView {
@@ -63,11 +66,12 @@ Describe('organizeSource use statements', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('drops use statements whose imports are all unused', async () => {
-    await testOrganizeSource(
+  Test(
+    'drops use statements whose imports are all unused',
+    organizes(
       `
         use Button from @tao/ui
         view MainView { }
@@ -75,11 +79,12 @@ Describe('organizeSource use statements', () => {
       `
         view MainView { }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('sorts imports with package sources before relative sources', async () => {
-    await testOrganizeSource(
+  Test(
+    'sorts imports with package sources before relative sources',
+    organizes(
       `
         use Two from ./z-local
         use One from ./a-local
@@ -102,11 +107,12 @@ Describe('organizeSource use statements', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('sorts imported symbols alphabetically within each import', async () => {
-    await testOrganizeSource(
+  Test(
+    'sorts imported symbols alphabetically within each import',
+    organizes(
       `
         use Text, Stack, Row from @tao/ui
         view MainView {
@@ -124,11 +130,12 @@ Describe('organizeSource use statements', () => {
                  Text("hi")
         }  }  }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('keeps unresolved imports when organizing source', async () => {
-    await testOrganizeSource(
+  Test(
+    'keeps unresolved imports when organizing source',
+    organizes(
       `
         view MainView { }
         use Missing from ./missing
@@ -138,13 +145,14 @@ Describe('organizeSource use statements', () => {
 
         view MainView { }
       `,
-    )
-  })
+    ),
+  )
 })
 
 Describe('organizeSource canonical statement order', () => {
-  Test('moves use statements above other top-level statements', async () => {
-    await testOrganizeSource(
+  Test(
+    'moves use statements above other top-level statements',
+    organizes(
       `
         app MyApp {
            view MainView
@@ -165,11 +173,12 @@ Describe('organizeSource canonical statement order', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('moves app declarations after imports and keeps other statements after the app', async () => {
-    await testOrganizeSource(
+  Test(
+    'moves app declarations after imports and keeps other statements after the app',
+    organizes(
       `
         let Greeting = "hi"
         app MyApp {
@@ -193,11 +202,12 @@ Describe('organizeSource canonical statement order', () => {
            render Text(Greeting)
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('moves project metadata after imports and before the app', async () => {
-    await testOrganizeSource(
+  Test(
+    'moves project metadata after imports and before the app',
+    organizes(
       `
         app MyApp { view MainView }
         view MainView { render Text("hi") }
@@ -225,11 +235,12 @@ Describe('organizeSource canonical statement order', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('preserves the relative order of non-app statements', async () => {
-    await testOrganizeSource(
+  Test(
+    'preserves the relative order of non-app statements',
+    organizes(
       `
         let Second = First
         app MyApp { view MainView }
@@ -251,11 +262,12 @@ Describe('organizeSource canonical statement order', () => {
            render Text(First)
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('keeps comments attached to the statements below them', async () => {
-    await testOrganizeSource(
+  Test(
+    'keeps comments attached to the statements below them',
+    organizes(
       `
         // the app
         app MyApp { view MainView }
@@ -278,11 +290,12 @@ Describe('organizeSource canonical statement order', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('drops comments attached to imports that are removed', async () => {
-    await testOrganizeSource(
+  Test(
+    'drops comments attached to imports that are removed',
+    organizes(
       `
         // unused import
         use Button from @tao/ui
@@ -300,11 +313,12 @@ Describe('organizeSource canonical statement order', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('drops statement comments when organizing partially pruned imports', async () => {
-    await testOrganizeSource(
+  Test(
+    'drops statement comments when organizing partially pruned imports',
+    organizes(
       `
         // unused button import
         use Text, Button from @tao/ui
@@ -319,11 +333,12 @@ Describe('organizeSource canonical statement order', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('preserves trailing comments after the last statement', async () => {
-    await testOrganizeSource(
+  Test(
+    'preserves trailing comments after the last statement',
+    organizes(
       `
         app MyApp { view MainView }
         use Text from @tao/ui
@@ -343,11 +358,12 @@ Describe('organizeSource canonical statement order', () => {
 
         // footer note
       `,
-    )
-  })
+    ),
+  )
 
-  Test('splits same-line top-level statements safely when organizing', async () => {
-    await testOrganizeSource(
+  Test(
+    'splits same-line top-level statements safely when organizing',
+    organizes(
       `app MyApp { view MainView } use Text from @tao/ui view MainView { render Text("hi") }`,
       `
         use Text from @tao/ui
@@ -360,8 +376,8 @@ Describe('organizeSource canonical statement order', () => {
            render Text("hi")
         }
       `,
-    )
-  })
+    ),
+  )
 
   Test('produces no edit for source with syntax errors', async () => {
     const document = await parseRawDocument('view Broken {')

@@ -1,9 +1,10 @@
 import { Describe, Test } from '@shared/test'
-import { fence, testFormatCode, tsFence } from './test-format'
+import { fence, formats, tsFence } from './test-format'
 
 Describe('Tao formatter injections', () => {
-  Test('formats injection fence bodies with dprint TypeScript style', async () => {
-    await testFormatCode(
+  Test(
+    'formats injection fence bodies with dprint TypeScript style',
+    formats(
       `
         view MainView {
         render inject ${tsFence}
@@ -20,11 +21,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('indents injection fence bodies one level below the inject line', async () => {
-    await testFormatCode(
+  Test(
+    'indents injection fence bodies one level below the inject line',
+    formats(
       `
         view CountText Count is number {
         render inject Count ${tsFence}
@@ -39,11 +41,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('preserves relative indentation and brace lines inside fence bodies', async () => {
-    await testFormatCode(
+  Test(
+    'preserves relative indentation and brace lines inside fence bodies',
+    formats(
       `
         view MainView {
         render inject ${tsFence}
@@ -64,11 +67,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('detects fences with trailing whitespace after the opener and leaves their bodies untouched', async () => {
-    await testFormatCode(
+  Test(
+    'detects fences with trailing whitespace after the opener and leaves their bodies untouched',
+    formats(
       `
         view MainView {
         render inject ${tsFence}${' '}
@@ -91,11 +95,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('ignores comment lines that mention inject fences', async () => {
-    await testFormatCode(
+  Test(
+    'ignores comment lines that mention inject fences',
+    formats(
       `
         view MainView {
         // inject some TS via ${tsFence}
@@ -112,11 +117,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('preserves trailing whitespace inside fence bodies', async () => {
-    await testFormatCode(
+  Test(
+    'preserves trailing whitespace inside fence bodies',
+    formats(
       `
         view MainView {
         render inject ${tsFence}
@@ -135,11 +141,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('moves body content sharing the close-fence line onto its own body line', async () => {
-    await testFormatCode(
+  Test(
+    'moves body content sharing the close-fence line onto its own body line',
+    formats(
       `
         view MainView {
         render inject ${tsFence}
@@ -155,11 +162,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('falls back to reindent-only for invalid embedded TypeScript', async () => {
-    await testFormatCode(
+  Test(
+    'falls back to reindent-only for invalid embedded TypeScript',
+    formats(
       `
         view MainView {
         render inject ${tsFence}
@@ -176,11 +184,12 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 
-  Test('normalizes injection argument spacing', async () => {
-    await testFormatCode(
+  Test(
+    'normalizes injection argument spacing',
+    formats(
       `
         let UserName = "Ro"
         view MainView {
@@ -198,6 +207,6 @@ Describe('Tao formatter injections', () => {
            ${fence}
         }
       `,
-    )
-  })
+    ),
+  )
 })

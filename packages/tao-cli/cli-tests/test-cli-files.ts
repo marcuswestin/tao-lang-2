@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS, Platform, Text } from '@shared'
 import { mkTestDir } from '@shared/test'
 import { Writable } from 'node:stream'
 import type { InPlace } from '../cli-src/in-place-files'
@@ -12,6 +12,57 @@ export type TaoCliTestResult = {
   stderr: string
   stdout: string
 }
+
+type PackageAwareCliPathCase = {
+  name: string
+  resolve: (rootDir: string) => {
+    cwd?: string
+    path: string
+  }
+}
+
+export const packageAwareCliMainPath = 'Packages/@cards/screens/Main.tao'
+export const packageAwareCliFixture = {
+  [packageAwareCliMainPath]: Text.stripIndent(`
+    use LocalText, Missing from @cards/widgets
+
+    view MainView { }
+  `),
+  'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
+} as const
+export const packageAwareCliFixedSource = `${
+  Text.stripIndent(`
+    use Missing from @cards/widgets
+
+    view MainView { }
+  `)
+}\n`
+
+/** packageAwareCliPathCases covers absolute and cwd-relative file and directory entrypoints. */
+export const packageAwareCliPathCases: readonly PackageAwareCliPathCase[] = [
+  {
+    name: 'an explicit nested package file',
+    resolve: (rootDir: string) => ({ path: FS.resolvePath(packageAwareCliMainPath, rootDir) }),
+  },
+  {
+    name: 'an explicit nested package directory',
+    resolve: (rootDir: string) => ({ path: FS.resolvePath(FS.dirname(packageAwareCliMainPath), rootDir) }),
+  },
+  {
+    name: 'a relative directory path inside a nested package',
+    resolve: (rootDir: string) => ({
+      cwd: FS.resolvePath(FS.dirname(packageAwareCliMainPath), rootDir),
+      path: '.',
+    }),
+  },
+  {
+    name: 'a relative file path inside a nested package',
+    resolve: (rootDir: string) => ({
+      cwd: FS.resolvePath(FS.dirname(packageAwareCliMainPath), rootDir),
+      path: FS.basename(packageAwareCliMainPath),
+    }),
+  },
+]
 
 /** withTaoFixture writes a temp directory of files, runs the tests, and cleans up. */
 export async function withTaoFixture(

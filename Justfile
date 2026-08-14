@@ -70,10 +70,10 @@ _agent-config:
     bun run scripts/generate-agent-config.ts
 
 [parallel]
-_parallel-check: _ide-extension-build _tao-check _dprint-check _typecheck _test
+_parallel-check: _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test
 
 [parallel]
-_parallel-verify-check: _ide-extension-build _typecheck _test
+_parallel-verify-check: _ide-extension-build _repo-lint _typecheck _test
 
 _compile-word-flower-app: _parser-gen
     ./tao compile "{{ WORD_FLOWER_APP }}" --app WordFlower
@@ -91,6 +91,9 @@ _tao-check: _parser-gen
 _dprint-check:
     dprint check --incremental=false
     just --fmt --check
+
+_repo-lint:
+    bun run packages/dev/dev-src/commands/repo-lint.ts
 
 _typecheck:
     bunx tsc --build packages/*/tsconfig.json

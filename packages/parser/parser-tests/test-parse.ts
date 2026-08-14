@@ -43,6 +43,44 @@ export async function parseCodeWithErrors(source: string): Promise<ParseResult> 
   return parseResult
 }
 
+/** parses returns a test callback that parses clean Tao source before making optional focused assertions. */
+export function parses(
+  source: string,
+  assertResult?: (result: ParseResult) => Promise<void> | void,
+): () => Promise<void> {
+  return async () => {
+    const result = await testParseCode(source)
+    await assertResult?.(result)
+  }
+}
+
+/** rejectsParser returns a test callback that requires parser-owned diagnostics for Tao source. */
+export function rejectsParser(source: string): () => Promise<void> {
+  return async () => {
+    const result = await parseCodeWithErrors(source)
+
+    Expect(result.entry.document.parseResult.lexerErrors).toEqual([])
+    Expect(result.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
+  }
+}
+
+/** rejectsLexer returns a test callback that requires lexer errors touching the expected text. */
+export function rejectsLexer(source: string, ...unexpectedText: string[]): () => void {
+  return () => {
+    const result = lexCodeWithErrors(source)
+
+    for (const text of unexpectedText) {
+      Expect(
+        result.errors.some(error =>
+          (typeof error.offset === 'number' && source.slice(error.offset).startsWith(text))
+          || (error.message ?? '').includes(text)
+        ),
+      ).toBe(true)
+    }
+  }
+}
+
 function expectNoLexerErrors(parseResult: ParseResult): void {
   Expect(parseResult.entry.document.parseResult.lexerErrors.map(error => error.message)).toEqual([])
 }

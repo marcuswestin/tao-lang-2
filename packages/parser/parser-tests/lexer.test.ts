@@ -1,23 +1,23 @@
 import { Describe, Expect, Test } from '@shared/test'
 import type { LexResult } from '../parser-src/parser'
-import { lexCodeWithErrors, testLexCode } from './test-parse'
+import { rejectsLexer, testLexCode } from './test-parse'
 
-Describe('minimal Tao lexer', () => {
+Describe('parser: lexer', () => {
   Test('lexes identifiers', () => {
-    const result = expectLexes('_foo bar123 _under_score')
+    const result = testLexCode('_foo bar123 _under_score')
 
     Expect(tokenImages(result)).toEqual(['_foo', 'bar123', '_under_score'])
   })
 
   Test('lexes double-quoted strings', () => {
-    const result = expectLexes('"hello world" "hello \\"world\\""')
+    const result = testLexCode('"hello world" "hello \\"world\\""')
 
     Expect(tokenNames(result)).toEqual(['STRING', 'STRING'])
     Expect(tokenImages(result)).toEqual(['"hello world"', '"hello \\"world\\""'])
   })
 
   Test('switches lexer modes for interpolated strings and nested expression braces', () => {
-    const result = expectLexes('"Hello { Greeting }, { action { } }!"')
+    const result = testLexCode('"Hello { Greeting }, { action { } }!"')
 
     Expect(tokenNames(result)).toEqual([
       'INTERPOLATED_STRING_START',
@@ -37,27 +37,27 @@ Describe('minimal Tao lexer', () => {
   })
 
   Test('keeps escaped braces in ordinary strings', () => {
-    const result = expectLexes('"literal \\{ brace, \\"quote\\", and \\\\ slash"')
+    const result = testLexCode('"literal \\{ brace, \\"quote\\", and \\\\ slash"')
 
     Expect(tokenNames(result)).toEqual(['STRING'])
   })
 
   Test('ignores line and block comments', () => {
-    const result = expectLexes('view // comment\nMainView /* block */')
+    const result = testLexCode('view // comment\nMainView /* block */')
 
     Expect(tokenImages(result)).toEqual(['view', 'MainView'])
     Expect(result.hidden.map(token => token.image)).toEqual(['// comment', '/* block */'])
   })
 
   Test('lexes ts code blocks', () => {
-    const result = expectLexes('```ts\nconst x = 1\n```')
+    const result = testLexCode('```ts\nconst x = 1\n```')
 
     Expect(tokenNames(result)).toEqual(['TS_CODE_BLOCK'])
     Expect(tokenImages(result)).toEqual(['```ts\nconst x = 1\n```'])
   })
 
   Test('lexes a reserved word as a contextual boolean no-case alias', () => {
-    const result = expectLexes('Enabled yes / no Name (default Enabled)')
+    const result = testLexCode('Enabled yes / no Name (default Enabled)')
 
     Expect(tokenNames(result)).toEqual([
       'ID',
@@ -72,39 +72,12 @@ Describe('minimal Tao lexer', () => {
     ])
   })
 
-  Test('rejects unknown characters', () => {
-    expectLexErrors('@', '@')
-    expectLexErrors('#', '#')
-    expectLexErrors('$', '$')
-  })
-
-  Test('rejects unclosed ts code blocks', () => {
-    expectLexErrors('```ts\nconst x = 1', '`')
-  })
-})
-
-function expectLexes(source: string): LexResult {
-  return testLexCode(source)
-}
-
-function expectLexErrors(source: string, ...unexpectedCharacters: string[]): LexResult {
-  const result = lexCodeWithErrors(source)
-
-  for (const unexpectedCharacter of unexpectedCharacters) {
-    Expect(
-      result.errors.some(error => errorTouches(error, source, unexpectedCharacter)),
-    ).toBe(true)
+  for (const character of ['@', '#', '$']) {
+    Test(`rejects unknown ${character} characters`, rejectsLexer(character, character))
   }
 
-  return result
-}
-
-function errorTouches(error: { offset?: number; message?: string }, source: string, text: string): boolean {
-  return (
-    (typeof error.offset === 'number' && source.slice(error.offset).startsWith(text))
-    || (error.message ?? '').includes(text)
-  )
-}
+  Test('rejects unclosed ts code blocks', rejectsLexer('```ts\nconst x = 1', '`'))
+})
 
 function tokenImages(result: LexResult): string[] {
   return result.tokens.map(token => token.image)

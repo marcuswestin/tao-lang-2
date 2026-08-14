@@ -1,20 +1,16 @@
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { lexCodeWithErrors, parseCodeWithErrors, testParseCode } from './test-parse'
+import { lexCodeWithErrors, parseCodeWithErrors, parses, rejectsParser } from './test-parse'
 
-Describe('minimal Tao parser diagnostics', () => {
-  Test('parses compact source without newlines', async () => {
-    const parseResult = await testParseCode('app MyApp { view MyView } view MyView { }')
+Describe('parser: diagnostics', () => {
+  Test(
+    'parses compact source without newlines',
+    parses('app MyApp { view MyView } view MyView { }', result => {
+      Expect(result.entry.ast.statements).toHaveLength(2)
+    }),
+  )
 
-    Expect(parseResult.entry.ast.statements).toHaveLength(2)
-  })
-
-  Test('requires parentheses for child renders', async () => {
-    const parseResult = await parseCodeWithErrors('Legacy { }')
-
-    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
-  })
+  Test('requires parentheses for child renders', rejectsParser('Legacy { }'))
 
   Test('reports parser errors for incomplete render statements', async () => {
     const parseResult = await parseCodeWithErrors('view Broken { render }')
@@ -25,56 +21,48 @@ Describe('minimal Tao parser diagnostics', () => {
     Expect(parserDiagnostics.every(diagnostic => diagnostic.range !== undefined)).toBe(true)
   })
 
-  Test('requires parentheses for explicit renders', async () => {
-    const parseResult = await parseCodeWithErrors('render Text "hello"')
+  Test('requires parentheses for explicit renders', rejectsParser('render Text "hello"'))
 
-    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
-  })
+  Test('requires parentheses for action invocations', rejectsParser('action Save { } action Run { do Save }'))
 
-  Test('requires parentheses for action invocations', async () => {
-    const parseResult = await parseCodeWithErrors('action Save { } action Run { do Save }')
+  Test(
+    'parses nested declarations for later validator checks',
+    parses('app MyApp { view MyView } view MyView { view Nested { } }', result => {
+      Expect(result.entry.ast.statements).toHaveLength(2)
+    }),
+  )
 
-    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
-  })
+  Test(
+    'parses aliases in app blocks for later validator checks',
+    parses('app MyApp { let Greeting = "hello" view MyView } view MyView { }', result => {
+      Expect(result.entry.ast.statements).toHaveLength(2)
+    }),
+  )
 
-  Test('parses nested declarations for later validator checks', async () => {
-    const parseResult = await testParseCode('app MyApp { view MyView } view MyView { view Nested { } }')
+  Test(
+    'parses top-level renders for later validator checks',
+    parses('render Text("hello") { } view Text Value is text { }', result => {
+      Expect(result.entry.ast.statements).toHaveLength(2)
+    }),
+  )
 
-    Expect(parseResult.entry.ast.statements).toHaveLength(2)
-  })
+  Test(
+    'parses number-typed parameters in semantically invalid positions',
+    parses(
+      `
+        app MyApp { view MyView }
+        view MyView Count is number {
+          render Text(Count) { }
+        }
+        view Text Value is text { }
+      `,
+      result => {
+        Expect(result.entry.ast.statements).toHaveLength(3)
+      },
+    ),
+  )
 
-  Test('parses aliases in app blocks for later validator checks', async () => {
-    const parseResult = await testParseCode('app MyApp { let Greeting = "hello" view MyView } view MyView { }')
-
-    Expect(parseResult.entry.ast.statements).toHaveLength(2)
-  })
-
-  Test('parses top-level renders for later validator checks', async () => {
-    const parseResult = await testParseCode('render Text("hello") { } view Text Value is text { }')
-
-    Expect(parseResult.entry.ast.statements).toHaveLength(2)
-  })
-
-  Test('parses number-typed parameters in semantically invalid positions', async () => {
-    const parseResult = await testParseCode(`
-      app MyApp { view MyView }
-      view MyView Count is number {
-        render Text(Count) { }
-      }
-      view Text Value is text { }
-    `)
-
-    Expect(parseResult.entry.ast.statements).toHaveLength(3)
-  })
-
-  Test('reports parser errors for old name-first parameter syntax', async () => {
-    const parseResult = await parseCodeWithErrors('view Text Value text { }')
-
-    Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
-  })
+  Test('reports parser errors for old name-first parameter syntax', rejectsParser('view Text Value text { }'))
 
   Test('reports linker diagnostics for values outside their owning view', async () => {
     const parseResult = await parseCodeWithErrors(`

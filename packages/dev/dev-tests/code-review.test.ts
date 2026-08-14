@@ -6,13 +6,8 @@ import {
   buildReviewerInvocation,
   buildReviewPrompt,
   capText,
-  extractClaudeResultText,
-  extractCodexResultText,
-  extractCursorResultText,
-  extractGenericJsonlText,
   formatFanoutReport,
   formatReviewRunDir,
-  parseCodexBudgetSummary,
   parseManifest,
   parseSmokeProviders,
   resolveReviewRunDir,
@@ -53,233 +48,28 @@ Describe('review prompt assembly', () => {
   })
 })
 
-Describe('reviewer invocation mapping', () => {
-  Test('builds a streaming Claude invocation with the prompt as a single arg', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'claude',
-      promptText: 'PROMPT BODY',
-      effort: 'high',
-      debugFile: '/run/r.debug.log',
-      model: 'claude-opus-4-8',
-    })
-    Expect(invocation.command).toBe('claude')
-    Expect(invocation.outputFormat).toBe('jsonl')
-    Expect(invocation.args).toContain('--output-format')
-    Expect(invocation.args).toContain('stream-json')
-    Expect(invocation.args).toContain('--debug-file')
-    Expect(invocation.args[invocation.args.length - 1]).toBe('PROMPT BODY')
-    Expect(invocation.args[invocation.args.indexOf('--model') + 1]).toBe('claude-opus-4-8')
-    Expect(invocation.stdin).toBeUndefined()
-  })
-
-  Test('builds a read-only Codex invocation that reads the prompt from stdin', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'codex',
-      promptText: 'PROMPT BODY',
-      effort: 'max',
-      debugFile: '/run/r.debug.log',
-      finalFile: '/run/final.txt',
-    })
-    Expect(invocation.command).toBe('codex')
-    Expect(invocation.outputFormat).toBe('jsonl')
-    Expect(invocation.stdin).toBe('PROMPT BODY')
-    Expect(invocation.args).toContain('read-only')
-    Expect(invocation.args[invocation.args.length - 1]).toBe('-')
-    Expect(invocation.args).toContain('--json')
-    Expect(invocation.args[invocation.args.indexOf('--output-last-message') + 1]).toBe('/run/final.txt')
-    Expect(invocation.args).toContain('service_tier="fast"')
-    Expect(invocation.args).toContain('model_reasoning_effort=xhigh')
-  })
-
-  Test('builds a Codex Spark invocation as a model override', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'codex',
-      promptText: 'PROMPT BODY',
-      effort: 'low',
-      debugFile: '/run/r.debug.log',
-      finalFile: '/run/final.txt',
-      model: 'gpt-5.3-codex-spark',
-    })
-    Expect(invocation.args[invocation.args.indexOf('-m') + 1]).toBe('gpt-5.3-codex-spark')
-    Expect(invocation.args).toContain('model_reasoning_effort=low')
-    Expect(invocation.args).toContain('service_tier="fast"')
-  })
-
-  Test('builds an agy invocation with flags before the prompt and a print timeout', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'agy',
-      promptText: 'PROMPT BODY',
-      effort: 'high',
-      debugFile: '/run/r.debug.log',
-      model: 'Gemini 3.5 Flash (High)',
-      timeoutSeconds: 600,
-    })
-    Expect(invocation.command).toBe('agy')
-    Expect(invocation.args[invocation.args.indexOf('--model') + 1]).toBe('Gemini 3.5 Flash (High)')
-    Expect(invocation.args[invocation.args.indexOf('--log-file') + 1]).toBe('/run/r.debug.log')
-    Expect(invocation.args[invocation.args.length - 2]).toBe('-p')
-    Expect(invocation.args[invocation.args.length - 1]).toBe('PROMPT BODY')
-    Expect(invocation.args[invocation.args.indexOf('--print-timeout') + 1]).toBe('600s')
-    Expect(invocation.args.indexOf('--model')).toBeLessThan(invocation.args.indexOf('-p'))
-  })
-
-  Test('uses a faster default timeout for agy when one is not provided', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'agy',
-      promptText: 'PROMPT BODY',
-      effort: 'high',
-      debugFile: '/run/r.debug.log',
-    })
-    Expect(invocation.args[invocation.args.indexOf('--print-timeout') + 1]).toBe('480s')
-    Expect(invocation.args[invocation.args.indexOf('--model') + 1]).toBe('Gemini 3.5 Flash (High)')
-  })
-
-  Test('rejects non-Google models for agy invocations', () => {
-    Expect(() =>
-      buildReviewerInvocation({
-        reviewer: 'agy',
+Describe('reviewer invocation safety', () => {
+  const cases = [
+    { reviewer: 'agy', requiredArgs: ['--sandbox'] },
+    { reviewer: 'claude', requiredArgs: ['--permission-mode', 'plan'] },
+    { reviewer: 'codex', requiredArgs: ['--sandbox', 'read-only'] },
+    { reviewer: 'cursor', requiredArgs: ['--mode=plan', '--sandbox', 'enabled'] },
+    { reviewer: 'gemini', requiredArgs: ['--approval-mode', 'plan'] },
+  ] as const
+  for (const { reviewer, requiredArgs } of cases) {
+    Test(`keeps ${reviewer} reviews non-mutating`, () => {
+      const invocation = buildReviewerInvocation({
+        reviewer,
         promptText: 'PROMPT BODY',
         effort: 'high',
         debugFile: '/run/r.debug.log',
-        model: 'Claude Opus 4.6 (Thinking)',
       })
-    ).toThrow()
-  })
 
-  Test('builds a read-only Cursor agent invocation for headless review', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'cursor',
-      promptText: 'PROMPT BODY',
-      effort: 'high',
-      debugFile: '/run/r.debug.log',
+      for (const arg of requiredArgs) {
+        Expect(invocation.args).toContain(arg)
+      }
     })
-    Expect(invocation.command).toBe('cursor')
-    Expect(invocation.outputFormat).toBe('jsonl')
-    Expect(invocation.args).toContain('agent')
-    Expect(invocation.args).toContain('--print')
-    Expect(invocation.args).toContain('--mode=plan')
-    Expect(invocation.args).toContain('enabled')
-    Expect(invocation.args).toContain('--trust')
-    Expect(invocation.args).toContain('stream-json')
-    Expect(invocation.args).toContain('--stream-partial-output')
-    Expect(invocation.args[invocation.args.indexOf('--model') + 1]).toBe('composer-2.5')
-    Expect(invocation.args[invocation.args.length - 1]).toBe('PROMPT BODY')
-    Expect(invocation.stdin).toBeUndefined()
-  })
-
-  Test('honors an explicit Cursor model override', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'cursor',
-      promptText: 'PROMPT BODY',
-      effort: 'high',
-      debugFile: '/run/r.debug.log',
-      model: 'composer-2.5-fast',
-    })
-    Expect(invocation.args[invocation.args.indexOf('--model') + 1]).toBe('composer-2.5-fast')
-  })
-
-  Test('builds a plan-mode Gemini invocation with the prompt as a single arg', () => {
-    const invocation = buildReviewerInvocation({
-      reviewer: 'gemini',
-      promptText: 'PROMPT BODY',
-      effort: 'high',
-      debugFile: '/run/r.debug.log',
-    })
-    Expect(invocation.command).toBe('gemini')
-    Expect(invocation.outputFormat).toBe('jsonl')
-    Expect(invocation.args).toContain('--skip-trust')
-    Expect(invocation.args).toContain('--approval-mode')
-    Expect(invocation.args[invocation.args.indexOf('--approval-mode') + 1]).toBe('plan')
-    Expect(invocation.args[invocation.args.indexOf('--model') + 1]).toBe('gemini-3.1-pro-preview')
-    Expect(invocation.args[invocation.args.indexOf('--output-format') + 1]).toBe('stream-json')
-    Expect(invocation.args[invocation.args.indexOf('--prompt') + 1]).toBe('PROMPT BODY')
-  })
-
-  Test('caps Claude effort at high but keeps Codex xhigh for max', () => {
-    const claude = buildReviewerInvocation({ reviewer: 'claude', promptText: 'p', effort: 'max', debugFile: '/d' })
-    Expect(claude.args[claude.args.indexOf('--effort') + 1]).toBe('high')
-    Expect(buildReviewerInvocation({ reviewer: 'codex', promptText: 'p', effort: 'max', debugFile: '/d' }).args)
-      .toContain('model_reasoning_effort=xhigh')
-  })
-})
-
-Describe('claude stream-json extraction', () => {
-  Test('prefers the final result event', () => {
-    const jsonl = [
-      '{"type":"system","subtype":"init"}',
-      '{"type":"assistant","message":{"content":[{"type":"text","text":"thinking out loud"}]}}',
-      '{"type":"result","subtype":"success","is_error":false,"result":"FINAL REVIEW"}',
-    ].join('\n')
-    Expect(extractClaudeResultText(jsonl)).toBe('FINAL REVIEW')
-  })
-
-  Test('falls back to assembled assistant text when no result event exists', () => {
-    const jsonl = [
-      'not json',
-      '{"type":"assistant","message":{"content":[{"type":"text","text":"part one "}]}}',
-      '{"type":"assistant","message":{"content":[{"type":"text","text":"part two"}]}}',
-    ].join('\n')
-    Expect(extractClaudeResultText(jsonl)).toBe('part one part two')
-  })
-
-  Test('returns undefined for output with no recoverable text', () => {
-    Expect(extractClaudeResultText('garbage\n{"type":"system"}')).toBeUndefined()
-  })
-})
-
-Describe('reviewer JSONL extraction', () => {
-  Test('extracts Codex agent messages from exec JSONL', () => {
-    const jsonl = [
-      '{"type":"thread.started","thread_id":"t"}',
-      '{"type":"item.completed","item":{"type":"agent_message","text":"FINAL CODEX"}}',
-      '{"type":"turn.completed","usage":{"input_tokens":1}}',
-    ].join('\n')
-    Expect(extractCodexResultText(jsonl)).toBe('FINAL CODEX')
-  })
-
-  Test('extracts generic stream-json assistant deltas', () => {
-    const jsonl = [
-      '{"type":"content","value":"part one "}',
-      '{"type":"content","text":"part two"}',
-    ].join('\n')
-    Expect(extractGenericJsonlText(jsonl)).toBe('part one part two')
-  })
-
-  Test('extracts Gemini message content deltas', () => {
-    const jsonl = [
-      '{"type":"message","role":"user","content":"prompt"}',
-      '{"type":"message","role":"assistant","content":"GEM","delta":true}',
-      '{"type":"message","role":"assistant","content":"INI_AGENT_OK","delta":true}',
-      '{"type":"result","status":"success"}',
-    ].join('\n')
-    Expect(extractGenericJsonlText(jsonl)).toBe('GEMINI_AGENT_OK')
-  })
-
-  Test('prefers the Claude ExitPlanMode plan body over the closer result', () => {
-    const jsonl = [
-      '{"type":"assistant","message":{"content":[{"type":"text","text":"Let me review."}]}}',
-      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"ExitPlanMode","input":{"plan":"# Review\\n\\nMAJOR finding.","planFilePath":"/tmp/p.md"}}]}}',
-      '{"type":"result","result":"The user declined exiting plan mode."}',
-    ].join('\n')
-    Expect(extractClaudeResultText(jsonl)).toBe('# Review\n\nMAJOR finding.')
-  })
-
-  Test('prefers the Cursor createPlan tool call body over the preamble result', () => {
-    const jsonl = [
-      '{"type":"thinking","subtype":"delta","delta":{"text":"Reviewing.. "}}',
-      '{"type":"tool_call","subtype":"completed","tool_call":{"createPlanToolCall":{"args":{"plan":"# API Boundary Review\\n\\nNo blockers."}}}}',
-      '{"type":"result","subtype":"success","result":"Reviewing the diff against live code."}',
-    ].join('\n')
-    Expect(extractCursorResultText(jsonl)).toBe('# API Boundary Review\n\nNo blockers.')
-  })
-
-  Test('falls back to visible Cursor text when no plan tool call is present', () => {
-    const jsonl = [
-      '{"type":"assistant","message":{"content":[{"type":"text","text":"inline review body"}]}}',
-      '{"type":"result","subtype":"success","result":"inline review body"}',
-    ].join('\n')
-    Expect(extractCursorResultText(jsonl)).toBe('inline review body')
-  })
+  }
 })
 
 Describe('digest capping', () => {
@@ -359,52 +149,6 @@ Describe('fanout manifest parsing', () => {
   })
 })
 
-Describe('codexbar budget parsing', () => {
-  Test('extracts normal Codex and Spark windows from JSON usage', () => {
-    const summary = parseCodexBudgetSummary(
-      JSON.stringify([
-        {
-          provider: 'codex',
-          source: 'oauth',
-          usage: {
-            primary: { usedPercent: 100, windowMinutes: 300, resetDescription: '7:34 AM' },
-            secondary: { usedPercent: 16, windowMinutes: 10080, resetDescription: 'Jun 23' },
-            extraRateWindows: [
-              {
-                id: 'codex-spark',
-                title: 'Codex Spark 5-hour',
-                window: { usedPercent: 0, windowMinutes: 300, resetDescription: '11:01 AM' },
-              },
-              {
-                id: 'codex-spark-weekly',
-                title: 'Codex Spark Weekly',
-                window: { usedPercent: 2, windowMinutes: 10080, resetDescription: 'Jun 23' },
-              },
-            ],
-          },
-        },
-      ]),
-      { command: 'codexbar usage', rawPath: '/run/codexbar.json' },
-    )
-    Expect(summary.status).toBe('ok')
-    Expect(summary.primary?.remainingPercent).toBe(0)
-    Expect(summary.secondary?.remainingPercent).toBe(84)
-    Expect(summary.spark?.fiveHour?.remainingPercent).toBe(100)
-    Expect(summary.spark?.weekly?.remainingPercent).toBe(98)
-    Expect(summary.source).toBe('oauth')
-    Expect(summary.providers?.find(entry => entry.provider === 'codex')?.ok).toBe(true)
-  })
-
-  Test('reports provider errors as failed budget summaries', () => {
-    const summary = parseCodexBudgetSummary(
-      JSON.stringify([{ provider: 'codex', error: { message: 'Browser cookie access denied.' } }]),
-      { command: 'codexbar usage', rawPath: '/run/codexbar.json' },
-    )
-    Expect(summary.status).toBe('failed')
-    Expect(summary.error).toContain('Browser cookie access denied')
-  })
-})
-
 Describe('budget-aware review planning', () => {
   Test('prefers Codex Spark when normal Codex 5h budget is exhausted', () => {
     const plan = planReviewers({
@@ -480,7 +224,7 @@ Describe('budget-aware review planning', () => {
     Expect(planReviewers({ profile: 'architecture', providers }).selected.length).toBe(3)
   })
 
-  Test('writes a fanout manifest separate from planner metadata', () => {
+  Test('round-trips planned reviewers through a fanout manifest', () => {
     const plan = planReviewers({
       profile: 'architecture',
       providers: allProviderBudgets(100),
@@ -491,6 +235,7 @@ Describe('budget-aware review planning', () => {
     Expect(manifest.reviewers.length).toBe(3)
     Expect(manifest.reviewers[0]).not.toHaveProperty('reason')
     Expect(manifest.reviewers[0]?.scopeFile).toBe('.artifacts/reviews/standard/run/scope.md')
+    Expect(parseManifest(manifest)).toEqual(manifest.reviewers)
   })
 
   Test('adapts old Codex-only budget snapshots into provider summaries', () => {

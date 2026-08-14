@@ -4,7 +4,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { AST } from '../parser-src/parser'
 import { parseCodeWithErrors, testParseCode } from './test-parse'
 
-Describe('Tao injection parser', () => {
+Describe('parser: injections', () => {
   Test('parses top-level injections for later validator checks', async () => {
     const parseResult = await testParseCode('inject ```ts\nreturn null\n```')
 

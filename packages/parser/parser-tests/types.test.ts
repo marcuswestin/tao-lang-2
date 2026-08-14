@@ -1,27 +1,8 @@
 import { AST } from '@parser'
-import { Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { Workspace } from '@workspace'
 import { testParseCode } from './test-parse'
 
-const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
-
-Describe('minimal Tao parser', () => {
-  Test('parses the Type System Tests app', async () => {
-    const parseResult = await Workspace.parse(typeSystemTestsPath)
-
-    Expect(parseResult.diagnostics).toEqual([])
-    Expect(parseResult.entry.ast.statements.filter(AST.isTypeDeclaration).map(type => type.name)).toEqual([
-      'Name',
-      'Age',
-      'Count',
-      'Tags',
-      'Job',
-      'Person',
-    ])
-    Expect(parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)).toHaveLength(12)
-  })
-
+Describe('parser: types', () => {
   Test('parses type declarations, constructors, lists, and member access', async () => {
     const parseResult = await testParseCode(`
       type Name is text

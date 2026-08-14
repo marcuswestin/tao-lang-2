@@ -5,394 +5,295 @@ import { InvocationsValidator } from '../validator-src/validators/invocations-va
 import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
-  fence,
-  testValidateCode,
+  accepts,
+  app,
+  rejects,
+  stubLayout,
+  stubView,
   testValidateCodeWithErrors,
-  tsFence,
   validationErrorMessages,
 } from './test-validate'
 
-const invocationValidationMessages = InvocationsValidator.messages
+const invocationMessages = InvocationsValidator.messages
+const textView = stubView('Text', 'Value is text')
+const stackLayout = stubLayout('Stack')
 
-Describe('Tao validator structural diagnostics', () => {
-  Test('validates set, do, parameters is action, and stateful render arguments', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      view Button Title is text, Action is action {
-        render inject Title ${tsFence}
-          return null
-        ${fence}
-      }
-      view Number Value is number {
-        render inject Value ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        let DisplayCount = Count
-        action AddStep Step is number {
-          set Count += Step
-        }
-        action AddFive {
-          do AddStep(5)
-        }
-        render Button("Add", AddFive) {
-          Number(DisplayCount)
-          Button("Reset", action {
-            set Count = 0
-          })
-        }
-      }
-    `)
-  })
+function actionApp(body: string, extra = ''): string {
+  return app(`${body}\nrender Text("Ready")`, `${textView}\n${extra}`)
+}
 
-  Test('allows file-level actions and forward action references inside action bodies', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      action SharedAction { }
-      view Button Title is text, Action is action {
-        render inject Title ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        action AddTwo {
-          do AddOne()
-          do AddOne()
-        }
-        action AddOne {
-          set Count += 1
-        }
-        render Button("Shared", SharedAction)
-      }
-    `)
-  })
+Describe('validator: actions and state', () => {
+  Test(
+    'allows file-level actions as render arguments',
+    accepts(
+      app(
+        'render Button("Shared", SharedAction)',
+        `action SharedAction { }\n${stubView('Button', 'Title is text, Action is action')}`,
+      ),
+    ),
+  )
 
-  Test('allows inline action bodies to reference later local actions', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      view Button Title is text, Action is action {
-        render inject Title ${tsFence}
-          return null
-        ${fence}
+  Test(
+    'allows forward action references inside action bodies',
+    accepts(actionApp(`
+      state Count = 0
+      action AddTwo {
+        do AddOne()
+        do AddOne()
       }
-      view MainView {
-        let LaterClick = action {
-          do AddOne()
-        }
-        action AddOne { }
-        render Button("Add", LaterClick)
-      }
-    `)
-  })
+      action AddOne { set Count += 1 }
+    `)),
+  )
 
-  Test('rejects local let initializers that reference later local actions directly', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        let LaterClick = AddOne
-        action AddOne { }
-        render Text("hi")
-      }
-    `)
+  Test(
+    'allows inline action bodies to reference later local actions',
+    accepts(app(
+      `
+      let LaterClick = action { do AddOne() }
+      action AddOne { }
+      render Button("Add", LaterClick)
+    `,
+      stubView('Button', 'Title is text, Action is action'),
+    )),
+  )
 
-    Expect(validationErrorMessages(result)).toContain(
-      AliasesValidator.messages.aliasUsedBeforeDeclaration('LaterClick', 'AddOne'),
-    )
-  })
+  for (
+    const [title, body, extra] of [
+      [
+        'allows state initializers to reference later file-level values',
+        'state Count = InitialCount',
+        'let InitialCount = 1',
+      ],
+      [
+        'allows local aliases to reference later file-level values',
+        'let Greeting = LateGreeting',
+        'let LateGreeting = "Hello"',
+      ],
+      [
+        'allows local aliases to reference later file-level actions',
+        'let Save = SharedAction',
+        'action SharedAction { }',
+      ],
+    ] as const
+  ) {
+    Test(title, accepts(actionApp(body, extra)))
+  }
 
-  Test('allows local state and let initializers to reference later file-level values', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = InitialCount
-        let Greeting = LateGreeting
-        let Save = SharedAction
-        render Text(Greeting)
-      }
-      let InitialCount = 1
-      let LateGreeting = "Hello"
-      action SharedAction { }
-    `)
-  })
+  Test(
+    'allows action arguments through unambiguous nominal lineage',
+    accepts(actionApp(
+      `
+      action Save Base { }
+      action CallSave { do Save(Leaf "x") }
+    `,
+      'type Base is text\ntype Leaf is Base',
+    )),
+  )
 
-  Test('reports action arity and action argument type mismatches', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        action AddStep Step is number {
-          set Count += Step
-        }
-        action DynamicArgs {
-          do action { }(1)
-        }
-        action Missing {
-          do AddStep()
-        }
-        action Extra {
-          do AddStep(1, 2)
-        }
-        action WrongType {
-          do AddStep("one")
-        }
-        render Text("hi")
-      }
-    `)
+  for (
+    const { title, body, extra = '', messages } of [
+      {
+        title: 'rejects local aliases that directly reference later local actions',
+        body: 'let LaterClick = AddOne\naction AddOne { }',
+        messages: [AliasesValidator.messages.aliasUsedBeforeDeclaration('LaterClick', 'AddOne')],
+      },
+      {
+        title: 'rejects arguments passed to untyped action callbacks',
+        body: 'action Call { do action { }(1) }',
+        messages: [ActionsValidator.messages.dynamicActionArguments],
+      },
+      {
+        title: 'reports a missing action argument',
+        body: 'action AddStep Step is number { }\naction Call { do AddStep() }',
+        messages: [ActionsValidator.messages.missingArgument('AddStep', 'Step')],
+      },
+      {
+        title: 'reports an unmatched action argument',
+        body: 'action AddStep Step is number { }\naction Call { do AddStep("one") }',
+        messages: [ActionsValidator.messages.unmatchedArgument('AddStep')],
+      },
+      {
+        title: 'reports duplicate exact action argument types',
+        body: 'action AddStep Step is number { }\naction Call { do AddStep(1, 2) }',
+        messages: [ActionsValidator.messages.duplicateArgumentType('AddStep')],
+      },
+      {
+        title: 'reports arguments ambiguous between same-typed action parameters',
+        body: 'action Save First is number, Second is number { }\naction Call { do Save(1) }',
+        messages: ['Action Save has an argument that matches multiple parameters by type: First, Second.'],
+      },
+      {
+        title: 'reports arguments ambiguous across nominal lineage parameters',
+        body: 'action Save Base, Middle { }\naction Call { do Save(Leaf "x") }',
+        extra: 'type Base is text\ntype Middle is Base\ntype Leaf is Middle',
+        messages: ['Action Save has an argument that matches multiple parameters by type: Base, Middle.'],
+      },
+      {
+        title: 'reports nominal action parameters matched by multiple arguments',
+        body: 'action Save Base { }\naction Call { do Save(Name "x", Title "y") }',
+        extra: 'type Base is text\ntype Name is Base\ntype Title is Base',
+        messages: [ActionsValidator.messages.ambiguousParameter('Save', 'Base')],
+      },
+      {
+        title: 'rejects incompatible values assigned to item-valued state',
+        body: 'state Current = Person { Name "Ada" }\naction Break { set Current = "not a person" }',
+        extra: 'type Name is text\ntype Person is { Name }',
+        messages: [StateValidator.messages.setTypeMismatch('Current', 'Person', 'text')],
+      },
+      {
+        title: 'rejects unknown members of item-valued state',
+        body: 'state Current = Person { Name "Ada" }\nlet Missing = Current.Missing',
+        extra: 'type Name is text\ntype Person is { Name }',
+        messages: [typeValidationMessages.unknownMember('Person', 'Missing')],
+      },
+      {
+        title: 'rejects action parameters that shadow visible state declarations',
+        body: 'state Count = 0\naction Add Count is number { set Count += Count }',
+        messages: [AliasesValidator.messages.duplicateName('Count')],
+      },
+      {
+        title: 'reports action arity through action aliases',
+        body: 'action AddStep Step is number { }\nlet CallAdd = AddStep\naction Missing { do CallAdd() }',
+        messages: [ActionsValidator.messages.missingArgument('AddStep', 'Step')],
+      },
+      {
+        title: 'reports declaration-order diagnostics through cyclic action aliases',
+        body: 'action Run { do First() }',
+        extra: 'let First = Second\nlet Second = First',
+        messages: [AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second')],
+      },
+      {
+        title: 'rejects incompatible set values',
+        body: 'state Count = 0\naction BadSet { set Count = "many" }',
+        messages: [StateValidator.messages.setTypeMismatch('Count', 'number', 'text')],
+      },
+      {
+        title: 'rejects compound mutation of non-number state',
+        body: 'state Name = "Ro"\naction BadCompound { set Name += "!" }',
+        messages: [StateValidator.messages.compoundStateType('Name', '+=', 'stateful text')],
+      },
+      {
+        title: 'rejects action-valued state',
+        body: 'state Click = action { }',
+        messages: [StateValidator.messages.stateActionType('Click')],
+      },
+      {
+        title: 'rejects set targets declared later in the same view',
+        body: 'action AddOne { set Count += 1 }\nstate Count = 0',
+        messages: [StateValidator.messages.usedBeforeDeclaration('Count')],
+      },
+      {
+        title: 'rejects toggle targets declared later in the same view',
+        body: 'action Flip { toggle Ready }\nstate Ready = false',
+        messages: [StateValidator.messages.usedBeforeDeclaration('Ready')],
+      },
+      {
+        title: 'reports self-referential state without recursing forever',
+        body: 'state Count = Count',
+        messages: [StateValidator.messages.usedBeforeDeclaration('Count')],
+      },
+      {
+        title: 'reports mutually recursive state without recursing forever',
+        body: 'state A = B\nstate B = A',
+        messages: [StateValidator.messages.usedBeforeDeclaration('B')],
+      },
+      {
+        title: 'rejects state initializer references to later local values',
+        body: 'state Count = LaterCount\nlet LaterCount = 1',
+        messages: [StateValidator.messages.usedBeforeDeclaration('LaterCount')],
+      },
+    ] as const
+  ) {
+    Test(title, rejects(actionApp(body, extra), ...messages))
+  }
 
-    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.dynamicActionArguments)
-    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.missingArgument('AddStep', 'Step'))
-    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.unmatchedArgument('AddStep'))
-  })
-
-  Test('reports action duplicate and ambiguous type binding diagnostics', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Base is text
-      type Middle is Base
-      type Leaf is Middle
-      type Name is Base
-      type Title is Base
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        action AddStep Step is number { }
-        action AmbiguousScoped First is number, Second is number { }
-        action AmbiguousArgument Base, Middle { }
-        action AmbiguousParameter Base { }
-        action CallActions {
-          do AddStep(1, 2)
-          do AmbiguousScoped(1)
-          do AmbiguousArgument(Leaf "x")
-          do AmbiguousParameter(Name "x", Title "y")
-        }
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.duplicateArgumentType('AddStep'))
-    Expect(validationErrorMessages(result)).toContain(
-      'Action AmbiguousScoped has an argument that matches multiple parameters by type: First, Second.',
-    )
-    Expect(validationErrorMessages(result)).toContain(
-      'Action AmbiguousArgument has an argument that matches multiple parameters by type: Base, Middle.',
-    )
-    Expect(validationErrorMessages(result)).toContain(
-      ActionsValidator.messages.ambiguousParameter('AmbiguousParameter', 'Base'),
-    )
-  })
-
-  Test('validates set and member access for item-valued state', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Name is text
-      type Person is {
-        Name
-      }
-      view MainView {
-        state Current = Person { Name "Ada" }
-        action Break {
-          set Current = "not a person"
-        }
-        render Text(Current.Missing)
-      }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
-      StateValidator.messages.setTypeMismatch('Current', 'Person', 'text'),
-    )
-    Expect(validationErrorMessages(result)).toContain(typeValidationMessages.unknownMember('Person', 'Missing'))
-  })
-
-  Test('allows action arguments through unambiguous nominal lineage', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      type Base is text
-      type Leaf is Base
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        action Save Base { }
-        action CallSave {
-          do Save(Leaf "x")
-        }
-        render Text("hi")
-      }
-    `)
-  })
-
-  Test('allows do targets through action aliases', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      let Save = action { }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        action Run {
-          do Save()
-        }
-        render Text("hi")
-      }
-    `)
-  })
-
-  Test('does not report dynamic action arguments for unresolved named do targets', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        action CallMissing {
-          do Missing(1)
-        }
-        render Text("hi")
-      }
-    `)
-
+  Test('does not classify unresolved named do targets as dynamic actions', async () => {
+    const result = await testValidateCodeWithErrors(actionApp('action CallMissing { do Missing(1) }'))
     Expect(validationErrorMessages(result)).not.toContain(ActionsValidator.messages.dynamicActionArguments)
   })
 
-  Test('reports dynamic action arguments for action-typed parameters', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        render Wrapper(action { })
-      }
-      view Wrapper Callback is action {
-        action CallCallback {
-          do Callback(1)
-        }
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.dynamicActionArguments)
-  })
-
-  Test('validates callback signatures and positional dynamic action invocation', async () => {
-    await testValidateCode(`
-      app MyApp { view MainView }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        action Change Value is text { }
-        action Submit { }
-        render Forwarder(Change: Change, Submit: Submit)
-      }
-      view Forwarder Change is action(text), Submit is action() {
-        render Field(Change: Change, Submit: Submit)
-      }
-      view Field Change is action(text), Submit is action() {
-        action Relay Value is text {
-          do Change(Value)
-        }
-        action Send {
-          do Submit()
-        }
+  Test(
+    'rejects arguments passed to action-typed parameters without signatures',
+    rejects(
+      app(
+        'render Wrapper(action { })',
+        `${textView}\nview Wrapper Callback is action {
+        action CallCallback { do Callback(1) }
         render Text("Ready")
-      }
-    `)
-  })
+      }`,
+      ),
+      ActionsValidator.messages.dynamicActionArguments,
+    ),
+  )
 
-  Test('rejects incompatible callback values and invalid dynamic callback calls', async () => {
-    const contracts = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        action Change Value is number { }
-        render Field(Change: Change, Submit: Change)
-      }
-      view Field Change is action(text), Submit is action() {
-        render Text("Ready")
-      }
-    `)
-    const dynamicCalls = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        action Change Value is text { }
-        render Wrapper(Change)
-      }
-      view Wrapper Callback is action(text) {
-        action Call {
-          do Callback()
-          do Callback(1)
-          do Callback(Value: "named")
-        }
-        render Text("Ready")
-      }
-    `)
-
-    const contractMessages = validationErrorMessages(contracts)
-    Expect(contractMessages).toContain(
-      invocationValidationMessages.namedArgumentType('Field', 'Change', 'action(text)', 'action(Change.Value)'),
+  for (
+    const { title, call, message } of [
+      {
+        title: 'reports missing positional callback arguments',
+        call: 'do Callback()',
+        message: ActionsValidator.messages.dynamicActionArity(1, 0),
+      },
+      {
+        title: 'reports positional callback argument type mismatches',
+        call: 'do Callback(1)',
+        message: ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'),
+      },
+      {
+        title: 'rejects named arguments for dynamic callbacks',
+        call: 'do Callback(Value: "named")',
+        message: ActionsValidator.messages.dynamicActionNamedArgument,
+      },
+    ] as const
+  ) {
+    Test(
+      title,
+      rejects(
+        app(
+          'action Change Value is text { }\nrender Wrapper(Change)',
+          `${textView}\nview Wrapper Callback is action(text) {
+          action Call { ${call} }
+          render Text("Ready")
+        }`,
+        ),
+        message,
+      ),
     )
-    Expect(contractMessages).toContain(
-      invocationValidationMessages.namedArgumentType('Field', 'Submit', 'action()', 'action(Change.Value)'),
-    )
-    const dynamicMessages = validationErrorMessages(dynamicCalls)
-    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionArity(1, 0))
-    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'))
-    Expect(dynamicMessages).toContain(ActionsValidator.messages.dynamicActionNamedArgument)
-  })
+  }
 
-  Test('validates computed action callbacks and honors their optional parameters', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Message is text
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        action First Message { }
-        action Second Message { }
-        action Optional Message default "Saved" { }
-        let Chosen = when true { true -> First otherwise -> Second }
-        let OptionalCallback = when true { true -> Optional otherwise -> Optional }
-        action Call {
-          do Chosen(1)
-          do OptionalCallback()
-          do OptionalCallback("Saved", "extra")
-        }
-        render Text("Ready")
+  for (
+    const [title, parameter, expected, actual] of [
+      ['rejects incompatible typed callbacks', 'Change', 'action(text)', 'action(Change.Value)'],
+      ['rejects callbacks with too many required parameters', 'Submit', 'action()', 'action(Change.Value)'],
+    ] as const
+  ) {
+    Test(
+      title,
+      rejects(
+        app(
+          'action Change Value is number { }\nrender Field(Change: Change, Submit: Change)',
+          `${textView}\n${stubView('Field', 'Change is action(text), Submit is action()')}`,
+        ),
+        invocationMessages.namedArgumentType('Field', parameter, expected, actual),
+      ),
+    )
+  }
+
+  Test('allows omitted optional computed-callback arguments while reporting other invalid calls', async () => {
+    const result = await testValidateCodeWithErrors(actionApp(
+      `
+      action First Message { }
+      action Second Message { }
+      action Optional Message default "Saved" { }
+      let Chosen = when true { true -> First otherwise -> Second }
+      let OptionalCallback = when true { true -> Optional otherwise -> Optional }
+      action Call {
+        do Chosen(1)
+        do OptionalCallback()
+        do OptionalCallback("Saved", "extra")
       }
-    `)
+    `,
+      'type Message is text',
+    ))
 
     const messages = validationErrorMessages(result)
     Expect(messages).toContain(ActionsValidator.messages.dynamicActionArgumentType(1, 'Message', 'number'))
@@ -400,42 +301,36 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(messages).not.toContain(ActionsValidator.messages.dynamicActionArity(1, 0))
   })
 
-  Test('validates action callbacks reached through typed item members', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type CallbackHolder is { Callback is action(text) }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-      view MainView {
+  Test(
+    'validates action callbacks reached through typed item members',
+    rejects(
+      actionApp(
+        `
         action Receive Value is text { }
         let Holder = CallbackHolder { Receive }
         action Call { do Holder.Callback(1) }
-        render Text("Ready")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
+      `,
+        'type CallbackHolder is { Callback is action(text) }',
+      ),
       ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'),
-    )
-  })
+    ),
+  )
 
-  Test('infers a safe action type for compatible when branches regardless of order', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      type Message is text
-      layout Stack { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        action Short Message { }
-        action Long Message, Count is number default 1 { }
-        render Stack(){
-          Consumer(Callback: when false { true -> Long otherwise -> Short })
-          Consumer(Callback: when false { true -> Short otherwise -> Long })
-        }
+  Test('infers safe action types for compatible when branches regardless of order', async () => {
+    const result = await testValidateCodeWithErrors(app(
+      `
+      action Short Message { }
+      action Long Message, Count is number default 1 { }
+      render Stack(){
+        Consumer(Callback: when false { true -> Long otherwise -> Short })
+        Consumer(Callback: when false { true -> Short otherwise -> Long })
       }
-      view Consumer Callback is action(text, number) { render inject ${tsFence} return null ${fence} }
-    `)
+    `,
+      `type Message is text\n${stackLayout}\n${stubView('Consumer', 'Callback is action(text, number)')}`,
+    ))
 
     const messages = validationErrorMessages(result)
-    const unsafeCallback = invocationValidationMessages.namedArgumentType(
+    const unsafeCallback = invocationMessages.namedArgumentType(
       'Consumer',
       'Callback',
       'action(text, number)',
@@ -445,227 +340,14 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(messages).not.toContain('`when` branches must produce compatible value types.')
   })
 
-  Test('does not allow an owner label to launder an incompatible action signature', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view MainView {
-        render Wrapper(Callback: action { })
-      }
-      view Wrapper Callback is action(text) {
-        render Text("Ready")
-      }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
-      invocationValidationMessages.namedArgumentType('Wrapper', 'Callback', 'action(text)', 'action()'),
-    )
-  })
-
-  Test('rejects action parameters that shadow visible state declarations', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        action Add Count is number {
-          set Count += Count
-        }
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(AliasesValidator.messages.duplicateName('Count'))
-  })
-
-  Test('reports action arity for do invocations through action aliases', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        action AddStep Step is number {
-          set Count += Step
-        }
-        let CallAdd = AddStep
-        action Missing {
-          do CallAdd()
-        }
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(ActionsValidator.messages.missingArgument('AddStep', 'Step'))
-  })
-
-  Test('reports let diagnostics when cyclic action aliases are invoked', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      let First = Second
-      let Second = First
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        action Run {
-          do First()
-        }
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
-      AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second'),
-    )
-  })
-
-  Test('reports invalid set value and compound set state types', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = 0
-        state Name = "Ro"
-        action BadSet {
-          set Count = "many"
-        }
-        action BadCompound {
-          set Name += "!"
-        }
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(
-      StateValidator.messages.setTypeMismatch('Count', 'number', 'text'),
-    )
-    Expect(validationErrorMessages(result)).toContain(
-      StateValidator.messages.compoundStateType('Name', '+=', 'stateful text'),
-    )
-  })
-
-  Test('rejects action-valued state and mutation targets used before declaration', async () => {
-    const actionState = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Click = action { }
-        render Text("hi")
-      }
-    `)
-    const lateSetTarget = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        action AddOne {
-          set Count += 1
-        }
-        state Count = 0
-        render Text("hi")
-      }
-    `)
-    const lateToggleTarget = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
-      view MainView {
-        action Flip {
-          toggle Ready
-        }
-        state Ready = false
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(actionState)).toContain(StateValidator.messages.stateActionType('Click'))
-    Expect(validationErrorMessages(lateSetTarget)).toContain(StateValidator.messages.usedBeforeDeclaration('Count'))
-    Expect(validationErrorMessages(lateToggleTarget)).toContain(StateValidator.messages.usedBeforeDeclaration('Ready'))
-  })
-
-  Test('rejects action-valued state', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Click = action { }
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.stateActionType('Click'))
-  })
-
-  Test('reports recursive state references without recursing forever', async () => {
-    const selfReference = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = Count
-        render Text("hi")
-      }
-    `)
-    const mutualReference = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state A = B
-        state B = A
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(selfReference)).toContain(StateValidator.messages.usedBeforeDeclaration('Count'))
-    Expect(validationErrorMessages(mutualReference)).toContain(StateValidator.messages.usedBeforeDeclaration('B'))
-  })
-
-  Test('rejects local state initializer references to later local values', async () => {
-    const result = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
-      view Text Value is text {
-        render inject ${tsFence}
-          return null
-        ${fence}
-      }
-      view MainView {
-        state Count = LaterCount
-        let LaterCount = 1
-        render Text("hi")
-      }
-    `)
-
-    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.usedBeforeDeclaration('LaterCount'))
-  })
+  Test(
+    'does not let owner labels launder incompatible action signatures',
+    rejects(
+      app(
+        'render Wrapper(Callback: action { })',
+        `${textView}\nview Wrapper Callback is action(text) { render Text("Ready") }`,
+      ),
+      invocationMessages.namedArgumentType('Wrapper', 'Callback', 'action(text)', 'action()'),
+    ),
+  )
 })
