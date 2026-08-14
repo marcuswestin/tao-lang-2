@@ -33,7 +33,7 @@ async function removeUnusedImports(document: AST.Document): Promise<string | und
   )
 }
 
-/** moveRendersLast returns the document with each view body's single render statement moved to the end. */
+/** moveRendersLast returns the document with each visual declaration's single render moved to the end. */
 async function moveRendersLast(document: AST.Document): Promise<string | undefined> {
   if (hasSyntaxErrors(document)) {
     return undefined
