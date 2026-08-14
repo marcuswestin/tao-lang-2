@@ -166,6 +166,30 @@ Describe('Tao validator structural diagnostics', () => {
     )
   })
 
+  Test('rejects with patches on non-configurable aliases and follows configurable alias chains', async () => {
+    await testValidateCode(`
+      use StackNav from @tao/nav
+      let BaseNavigation = StackNav { Initial Home }
+      let NavigationAlias = BaseNavigation
+      let PatchedNavigation = NavigationAlias with { Initial Other }
+      app Demo { Name "Demo" Navigator PatchedNavigation }
+      ui Home { render Empty() }
+      ui Other { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const invalid = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      let Plain = 5
+      let Patched = Plain with { X: 1 }
+      app Demo { Name "Demo" Navigator StackNav { Initial Home } }
+      ui Home { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(validationErrorMessages(invalid)).toContain(navigationValidationMessages.patchTarget('Plain'))
+  })
+
   Test('validates self-hosted declaration placement, visibility, shape, and protocol', async () => {
     const invalid = await testValidateCodeWithErrors(`
       nav HiddenNav {

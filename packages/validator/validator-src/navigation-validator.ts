@@ -33,6 +33,8 @@ export const navigationValidationMessages = {
   toastDurationNegative: 'Toast Duration cannot be negative.',
   activationContext: 'Selection activation is allowed only inside a ui declaration.',
   unknownSelection: (app: string, key: string) => `App ${app} navigator has no selection item named '@${key}'.`,
+  patchTarget: (name: string) =>
+    `\`with\` can patch only an app, nav, or datasource value; ${name} is not configurable.`,
   presentationTarget: (actual: string) => `Presentation target expects nav, got ${actual}.`,
   dismissContext: '`dismiss` is allowed only inside a ui declaration.',
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
@@ -84,13 +86,21 @@ export function validateNavigation(file: AST.TaoFile, ctx: ValidationContext): v
   }
   for (const patch of AST.streamAllContents(file).filter(AST.isPatchedValueReference)) {
     const base = patch.target.ref
-    if (!AST.isAliasDeclaration(base) || AST.isAppVariantDeclaration(patch.$container)) {
+    if (AST.isAppVariantDeclaration(patch.$container)) {
+      continue
+    }
+    if (!AST.isAliasDeclaration(base)) {
+      if (base) {
+        ctx.error(navigationValidationMessages.patchTarget(patch.target.$refText), patch)
+      }
       continue
     }
     const declaration = configuredDeclaration(base.value)
-    if (declaration) {
-      validateConfigurationBlock(patch.patchBlock, declaration, false, ctx)
+    if (!declaration) {
+      ctx.error(navigationValidationMessages.patchTarget(base.name), patch)
+      continue
     }
+    validateConfigurationBlock(patch.patchBlock, declaration, false, ctx)
   }
   for (const variant of file.statements.filter(AST.isAppVariantDeclaration)) {
     const root = AST.appDeclarationOf(variant)
@@ -322,13 +332,20 @@ function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationCont
   validateConfigurationBlock(value.block, declaration, true, ctx)
 }
 
-function configuredDeclaration(value: AST.Expression): AST.ConfigurableDeclaration | undefined {
+function configuredDeclaration(
+  value: AST.Expression,
+  seen: Set<AST.AliasDeclaration> = new Set(),
+): AST.ConfigurableDeclaration | undefined {
   if (AST.isConfigurationConstructor(value)) {
     return AST.isConfigurableDeclaration(value.type.ref) ? value.type.ref : undefined
   }
-  if (AST.isPatchedValueReference(value)) {
+  if (AST.isValueReference(value)) {
     const base = value.target.ref
-    return AST.isAliasDeclaration(base) ? configuredDeclaration(base.value) : undefined
+    if (!AST.isAliasDeclaration(base) || seen.has(base)) {
+      return undefined
+    }
+    seen.add(base)
+    return configuredDeclaration(base.value, seen)
   }
   return undefined
 }
