@@ -64,7 +64,7 @@ export const ExpressionsCompiler = {
     return Compile.Expression(value)
   },
 
-  /** ConfigurationPatchObject lowers named public-property replacements without mutating the base. */
+  /** ConfigurationPatchObject lowers property replacements and keyed additions without mutating the base. */
   ConfigurationPatchObject(block: AST.ConfigurationBlock): Compiled {
     return compileConfigurationPatchObject(block)
   },
@@ -388,6 +388,9 @@ function compileConfigurationPatchObject(block: AST.ConfigurationBlock): Compile
   return gen`{
     ${
     gen.list(block.entries, entry => {
+      if (entry.key && entry.block) {
+        return gen`${gen.jsLiteral(entry.key)}: ${compileConfigurationObject(entry.block)},`
+      }
       Assert.defined(entry.name, 'validated patch entry has a property name')
       Assert.defined(entry.value, 'validated patch entry has a property value')
       return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`

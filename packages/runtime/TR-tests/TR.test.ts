@@ -851,6 +851,22 @@ Describe('TR.Navigation', () => {
     Expect(() => TR.Navigation.Patch(selection, { Unknown: TR.Value('bad') })).toThrow(
       "Navigation Base selection has no configurable property 'Unknown'.",
     )
+
+    const declaration = TR.Navigation.Declaration('Configured selection', TR.NavKind.Selection())
+    const configured = TR.Navigation.Configure(declaration, {
+      '@home': { Content: home, Label: TR.Value('Home') },
+      Display: TR.Value('tabs'),
+      Initial: TR.Value('@home'),
+    })
+    const configuredWithOther = TR.Navigation.Patch(configured, {
+      '@other': { Content: detail, Label: TR.Value('Other') },
+    })
+    const app = TR.Navigation.App({
+      name: 'Configured selection app',
+      navigator: () => configuredWithOther,
+      auxiliaries: () => ({}),
+    })
+    Expect(() => TR.Navigation.Activate({ app }, app, 'other')).not.toThrow()
   })
 
   Test('resolves the nearest navigation through nested caller props', () => {

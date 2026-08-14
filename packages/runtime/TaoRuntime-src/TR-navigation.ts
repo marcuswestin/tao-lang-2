@@ -35,7 +35,7 @@ export type TaoAppDefinition = {
   navigator(): TaoNavigationInput
 }
 
-export type TaoNavigationPatch = Record<string, Evaluable | TaoNavigationValue | TaoPresentable>
+export type TaoNavigationPatch = Readonly<Record<string, unknown>>
 export type TaoNavigationConfiguration = Readonly<Record<string, unknown>>
 export type TaoConfiguredNavigation = Readonly<{
   config: TaoNavigationConfiguration
@@ -1512,7 +1512,7 @@ function isPresentable(value: unknown): value is TaoPresentable | TaoNavigationV
 }
 
 function patchedPresentable<ValueT extends TaoPresentable | TaoNavigationValue>(
-  patch: Evaluable | TaoNavigationValue | TaoPresentable | undefined,
+  patch: unknown,
   fallback: ValueT,
   navigationName: string,
   property: string,
@@ -1527,10 +1527,10 @@ function patchedPresentable<ValueT extends TaoPresentable | TaoNavigationValue>(
 }
 
 function patchedSelectionKey(
-  value: Evaluable | TaoNavigationValue | TaoPresentable,
+  value: unknown,
   navigationName: string,
 ): string {
-  if (isPresentable(value)) {
+  if (isPresentable(value) || !isEvaluable(value)) {
     throw new Error(`SelectionNav ${navigationName} patch 'Initial' expects an @key.`)
   }
   const key = String(value.evaluate().jsValue)
@@ -1541,7 +1541,7 @@ function patchedSelectionKey(
 }
 
 function patchedEvaluable(
-  patch: Evaluable | TaoNavigationValue | TaoPresentable | undefined,
+  patch: unknown,
   fallback: Evaluable,
   navigationName: string,
   property: string,
@@ -1549,10 +1549,15 @@ function patchedEvaluable(
   if (patch === undefined) {
     return fallback
   }
-  if (isPresentable(patch)) {
+  if (isPresentable(patch) || !isEvaluable(patch)) {
     throw new Error(`Navigation ${navigationName} patch '${property}' expects a scalar value.`)
   }
   return patch
+}
+
+function isEvaluable(value: unknown): value is Evaluable {
+  return typeof value === 'object' && value !== null && 'evaluate' in value
+    && typeof value.evaluate === 'function'
 }
 
 function assertPatchKeys(

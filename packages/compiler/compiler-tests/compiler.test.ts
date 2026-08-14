@@ -355,6 +355,30 @@ Describe('Tao compiler', () => {
     Expect(compiled.code).toContain('TR.Navigation.Activate(')
   })
 
+  Test('compiles keyed additions in configured navigation patches', async () => {
+    const compiled = await Compiler.compileCode(`
+      use SelectionNav from @tao/nav
+      let MainNavBase = SelectionNav {
+        Initial @home
+        Display "tabs"
+        @home { Label "Home" Content Home }
+      }
+      let MainNav = MainNavBase with {
+        @other { Label "Other" Content Other }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNav }
+      ui Home { render Empty() }
+      ui Other { render Empty() }
+      view Empty { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.validation.diagnostics).toEqual([])
+    Expect(compiled.code).toContain('TR.Navigation.Patch(_Scope.MainNavBase.evaluate(), {')
+    Expect(compiled.code).toContain('"@other": {')
+    Expect(compiled.code).toContain('"Label": TR.Value("Other")')
+    Expect(compiled.code).toContain('"Content": TR.Navigation.UI({')
+  })
+
   Test('compiles typed dynamic action arguments in source order', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
