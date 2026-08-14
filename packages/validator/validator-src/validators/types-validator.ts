@@ -144,34 +144,29 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
     return
   }
   const expectedKind = constructorLiteralKind(expected)
-  if (AST.isStringLiteral(constructor.value)) {
-    validateConstructorKind(constructor, expectedKind === 'text', expectedKind, ctx)
-    return
-  }
-  if (AST.isNumberLiteral(constructor.value)) {
-    validateConstructorKind(constructor, expectedKind === 'number', expectedKind, ctx)
-    return
-  }
-  if (AST.isListLiteral(constructor.value)) {
-    validateConstructorKind(constructor, expectedKind === 'list', expectedKind, ctx)
-    return
-  }
-  validateConstructorKind(constructor, expectedKind === 'item', expectedKind, ctx)
-  if (expected.kind !== 'item') {
-    return
-  }
-  if (!expected.item) {
-    if (constructor.value.properties.length > 0) {
-      ctx.error(
-        typeValidationMessages.shapelessItemConstructor(
-          Type.referenceName(constructor.type),
-        ),
-        constructor.value,
-      )
-    }
-    return
-  }
-  validateItemConstructor(constructor.value, expected.item, ctx)
+  Switch.type(constructor.value, {
+    ItemLiteral: value => {
+      validateConstructorKind(constructor, expectedKind === 'item', expectedKind, ctx)
+      if (expected.kind !== 'item') {
+        return
+      }
+      if (!expected.item) {
+        if (value.properties.length > 0) {
+          ctx.error(
+            typeValidationMessages.shapelessItemConstructor(
+              Type.referenceName(constructor.type),
+            ),
+            value,
+          )
+        }
+        return
+      }
+      validateItemConstructor(value, expected.item, ctx)
+    },
+    ListLiteral: () => validateConstructorKind(constructor, expectedKind === 'list', expectedKind, ctx),
+    NumberLiteral: () => validateConstructorKind(constructor, expectedKind === 'number', expectedKind, ctx),
+    StringLiteral: () => validateConstructorKind(constructor, expectedKind === 'text', expectedKind, ctx),
+  })
 }
 
 function constructorLiteralKind(type: ASTUtils.TaoType): string {
@@ -596,20 +591,21 @@ function typeReferenceReferencesRoot(
   type: AST.TypeReference,
   seen: Set<AST.TypeDefinition>,
 ): boolean {
-  if (AST.isPrimitiveTypeReference(type)) {
-    return false
-  }
-  if (AST.isActionTypeReference(type)) {
-    return type.parameterTypes.some(parameter => typeReferenceReferencesRoot(root, parameter, new Set(seen)))
-  }
-  const target = Type.definitionOfReference(type)
-  if (!target) {
-    return false
-  }
-  if (target === root) {
-    return true
-  }
-  return typeDefinitionReferencesRoot(root, target, seen)
+  return Switch.type(type, {
+    ActionTypeReference: type =>
+      type.parameterTypes.some(parameter => typeReferenceReferencesRoot(root, parameter, new Set(seen))),
+    NamedTypeReference: type => {
+      const target = Type.definitionOfReference(type)
+      if (!target) {
+        return false
+      }
+      if (target === root) {
+        return true
+      }
+      return typeDefinitionReferencesRoot(root, target, seen)
+    },
+    PrimitiveTypeReference: () => false,
+  })
 }
 
 function typeDefinitionOwnedBy(definition: AST.TypeDefinition, root: AST.TypeDefinition): boolean {

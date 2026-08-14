@@ -656,21 +656,19 @@ class RuntimeDataSchema {
     if (metadata.schema !== this) {
       return { status: 'missing' }
     }
-    if (this.status === 'loading') {
-      return { status: 'loading' }
-    }
-    if (this.status === 'unauthorized') {
-      return { status: 'unauthorized' }
-    }
-    if (this.status === 'error') {
-      return { message: this.error, status: 'error' }
-    }
-    if (metadata.generation !== this.generation) {
-      return { status: 'missing' }
-    }
-    return this.storedRow(metadata.entity, metadata.id)
-      ? { status: 'available' }
-      : { status: 'missing' }
+    return Switch<DataStatus, TaoEntityAvailability>(this.status, {
+      error: () => ({ message: this.error, status: 'error' }),
+      loading: () => ({ status: 'loading' }),
+      ready: () => {
+        if (metadata.generation !== this.generation) {
+          return { status: 'missing' }
+        }
+        return this.storedRow(metadata.entity, metadata.id)
+          ? { status: 'available' }
+          : { status: 'missing' }
+      },
+      unauthorized: () => ({ status: 'unauthorized' }),
+    })
   }
 
   async settle(): Promise<void> {

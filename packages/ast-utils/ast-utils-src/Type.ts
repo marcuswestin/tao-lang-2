@@ -146,10 +146,7 @@ export class Type {
   /** ofConfiguredValue resolves one declaration-linked named constructor. */
   static ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
     const declaration = value.type.ref
-    if (AST.isTypeDeclaration(declaration)) {
-      return Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? [])
-    }
-    if (AST.isParameterizedDeclaration(declaration)) {
+    const typeOfParameterizedDeclaration = (declaration: AST.ParameterizedDeclaration): TaoType => {
       const [member, ...remainingMembers] = value.members ?? []
       const parameterType = member
         ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === member)?.inlineType
@@ -158,13 +155,18 @@ export class Type {
         ? Type.atMemberPath(Type.ofDefinition(parameterType), remainingMembers)
         : unresolvedType()
     }
-    if (AST.isNavDeclaration(declaration)) {
-      return primitiveType('nav')
-    }
-    if (AST.isDatasourceDeclaration(declaration)) {
-      return { kind: 'item' }
-    }
-    return unresolvedType()
+    return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
+      TypeDeclaration: declaration => Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? []),
+      ActionDeclaration: typeOfParameterizedDeclaration,
+      DialogueDeclaration: typeOfParameterizedDeclaration,
+      DatasourceDeclaration: () => ({ kind: 'item' }),
+      FunctionDeclaration: typeOfParameterizedDeclaration,
+      LayoutDeclaration: typeOfParameterizedDeclaration,
+      NavDeclaration: () => primitiveType('nav'),
+      UiDeclaration: typeOfParameterizedDeclaration,
+      ViewDeclaration: typeOfParameterizedDeclaration,
+      undefined: unresolvedType,
+    })
   }
 
   /** ofValue resolves an ordinary expression or configured runtime value. */

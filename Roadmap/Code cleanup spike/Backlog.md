@@ -3,7 +3,7 @@
 Branch: `feat/cleanup-spike`\
 Base: `2906cfa60ece4fe4766087f36a9af67f56e48938` (`feat/wordflower-tranche-3`)\
 Last full sweep: baseline, 2026-08-14
-Last touched-package re-sweep: after 10 commits, 2026-08-14
+Last touched-package re-sweep: after 20 commits, 2026-08-14
 
 This is the live state for the in-between-tranches cleanup spike. A value score is the estimated
 number of rule violations removed divided by non-mechanical lines changed. Pure file moves are not
@@ -50,6 +50,22 @@ function when it is over 40 lines or its control-flow nesting exceeds three leve
 - Native `switch`, compound-condition, direct platform/Langium, TODO-marker, and unused-export
   scans found no new cleanup-written violations.
 
+## Twenty-commit checkpoint
+
+- Tracked non-generated TypeScript/TSX: 49,044 lines, up eight from baseline. The five chartered
+  navigation boundaries add 79 lines; all other cleanup work has net-deleted 71 lines.
+- Complexity-qualified source functions: 70, unchanged from the ten-commit checkpoint; none of the
+  five new navigation owners contains a qualifying function.
+- Files over 400 lines: 23 (13 source, 10 test); six tests remain over 800 lines.
+  `TR-navigation.ts` is down from 1,583 to 1,294 lines and remains charter work in progress.
+- `expressions-compiler.ts` is back under threshold at 399 lines. No cleanup-written threshold
+  crossing remains.
+- Native `switch`, direct platform/Langium access, and TODO/legacy/compat scans remain clean in the
+  touched packages. An explicit sequential-branch sweep found four pre-existing R13 misses, so R13
+  is reopened until those sites are converted and rechecked.
+- The R6 literal sweep found one qualifying owner: six planner timeout outcomes repeat constants
+  already owned by the review subsystem. All other high-frequency literals failed the value bar.
+
 ## Added rules
 
 R13 EXHAUSTIVE UNION DISPATCH. Closed literal or `$type`/`kind` discriminated-union dispatch with
@@ -60,9 +76,10 @@ input, structural unions without a supported discriminator, and intentional spec
 grouping where exhaustive handlers would add duplication. Never cast, stringify, or invent a
 discriminator merely to make `Switch` fit.
 
-The repo-wide audit found ten qualifying pre-existing sites across ast-utils, compiler, validator,
-and runtime. Applying the rule immediately is net-negative and leaves open-input/stateful false
-positives alone.
+The initial repo-wide audit found ten qualifying pre-existing sites across ast-utils, compiler,
+validator, and runtime. The twenty-commit sequential-branch sweep found four further misses in
+ast-utils, validator, and runtime. Applying all fourteen is net-negative and leaves open-input,
+stateful, guard, structural-union, and intentional special/default false positives alone.
 
 ## Chartered and threshold backlog
 
@@ -77,10 +94,10 @@ positives alone.
 | queued             | `packages/runtime/TR-tests/TR.test.ts`                                    | R10 / charter 3 |      mostly moves + ~35 |        1/~35 | Split the 1,040-line TR test along runtime module seams.                                                                                                                                     |
 | queued             | `packages/compiler/compiler-tests/compiler.test.ts`                       | R10 / charter 3 |      mostly moves + ~35 |        1/~35 | Split the 991-line compiler test by codegen feature seams.                                                                                                                                   |
 | queued             | `packages/formatter/formatter-tests/formatter.test.ts`                    | R10 / charter 3 |      mostly moves + ~35 |        1/~35 | Split the 956-line formatter test by formatter feature seams.                                                                                                                                |
-| queued             | 14 source files currently over 400 lines                                  | R3              |        inspect per seam |       14/TBD | Split only where a real second concept exists; `expressions-compiler.ts` is cleanup-created threshold churn, not a new split candidate.                                                      |
-| queued             | 70 source functions over 40 lines or nesting depth three                  | R2              |    inspect per function |       70/TBD | Decompose only into meaningful named steps with lower nesting or sub-threshold owners; two former validator dispatch functions are already gone.                                             |
+| queued             | 12 non-chartered source files currently over 400 lines                    | R3              |        inspect per seam |        8/TBD | Eight audited files have real second concepts; leave cohesive `Type`, `value-scope`, `TR`, and `Packages` owners alone.                                                                      |
+| queued             | 70 source functions over 40 lines or nesting depth three                  | R2              |    inspect per function |       15/TBD | Fifteen pass value review; run overlapping R3 splits first, then remeasure before decomposing them into meaningful named steps.                                                              |
 | queued             | 76 mechanically flagged conditions                                        | R1              |   inspect per predicate |       76/TBD | Name non-obvious decisions; reject short guard clauses whose extraction would be churn.                                                                                                      |
-| queued             | repeated meaningful non-message literals found by the package sweep       | R6 / charter 4  |       inspect per owner |          TBD | Name repeated values at the module that owns their meaning.                                                                                                                                  |
+| queued             | `packages/dev/dev-src/commands/code-review/planner.ts` timeouts           | R6 / charter 4  |                      11 |         6/11 | Reuse the two owning review-timeout constants across six provider outcomes, collapsing the repeated values and net-deleting five lines.                                                      |
 | done               | repeated Android, compiler assertion, and unexpected-error messages       | R12 / charter 4 |                      26 |         6/26 | Replace ten byte-identical message literals in four owners with four local constants; four abstractions each pay at two or three sites.                                                      |
 | baseline-satisfied | parser creation and ordinary Tao parse output                             | R7 / charter 5  |                       0 |          n/a | The Tranche 3 base already sets the parser configuration that suppresses the deliberate ambiguity log; a live `./tao check` emits no warning. Revisit only if the full sweep disproves this. |
 
@@ -92,7 +109,7 @@ positives alone.
 | done               | compiler, formatter, and source-actions internal module exports      | R5   |             36 |       18/36 | Make 17 file-local types private and delete one unused `Compile` re-export, net two lines; retain the package-facing test-plan and formatter/action types.                     |
 | done               | `packages/shared/shared-tests/shared.test.ts`                        | R7   |              2 |         1/2 | Preserve formatter-sorted imports; baseline `./agent verify` exposed and corrected this pre-existing formatting violation.                                                     |
 | done               | direct `process` use in dev, IDE extension, and runtime test owners  | R7   |             19 |        7/19 | Route seven environment, cwd, and stdout accesses through the existing `Platform.runtimeProcess` boundary.                                                                     |
-| done               | closed-union dispatch across ast-utils, compiler, validator, runtime | R13  |            215 |      10/215 | Convert all ten audited closed-union sites to shared Switch helpers, net-delete 17 code lines, and leave open-input/stateful false positives unchanged.                        |
+| done               | closed-union dispatch across ast-utils, compiler, validator, runtime | R13  |            347 |      14/347 | Convert all fourteen audited closed-union sites to shared Switch helpers, net-delete 21 code lines, and leave open-input/stateful false positives unchanged.                   |
 | baseline-satisfied | all non-generated package source                                     | R7   |              0 |         n/a | The baseline contains no native `switch`, no direct Langium import outside the parser owner, and direct Node filesystem/process imports are confined to shared wrapper owners. |
 
 ## Findings outside the spike
