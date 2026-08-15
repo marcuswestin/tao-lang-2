@@ -15,15 +15,15 @@ type Count is number
 type Tags is list
 
 type Job is {
-   Title is text
-   Level is number
+   Title text,
+   Level number,
 }
 
 type Person is {
-   Name
-   Age
-   Tags
-   Job
+   Name,
+   Age,
+   Tags,
+   Job,
 }
 
 let FirstTitle = "Open"

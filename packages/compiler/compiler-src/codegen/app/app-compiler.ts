@@ -109,7 +109,7 @@ export default {
   },
 } as const
 
-function compileAppValue(value: AST.ConfiguredAppPropertyValue | AST.ConfigurationConstructor): Compiled {
+function compileAppValue(value: AST.AppPropertyValue | AST.ConfigurationConstructor): Compiled {
   if (AST.isConfigurationConstructor(value)) {
     return Compile.ConfiguredValue(value)
   }
@@ -191,12 +191,15 @@ function compileEffectiveDatasource(value: AST.AppValueDeclaration): Compiled | 
   return result
 }
 
-function compileDatasourceValue(value: AST.ConfiguredAppPropertyValue): Compiled {
+function compileDatasourceValue(value: AST.AppPropertyValue): Compiled {
   return compileConfiguredAppProperty(value)
 }
 
-function compileConfiguredAppProperty(value: AST.ConfiguredAppPropertyValue): Compiled {
-  const target = resolveRef(value.target)
+function compileConfiguredAppProperty(value: AST.AppPropertyValue): Compiled {
+  const target = AST.isConfiguredAppPropertyValue(value)
+    ? resolveRef(value.target)
+    : AST.inferredAppPropertyDeclaration(value)
+  Assert.defined(target, 'validated bare app property resolves its slot-named declaration')
   if (AST.isConfigurableDeclaration(target)) {
     const block = value.block ?? {
       $type: 'ConfigurationBlock',
@@ -205,7 +208,9 @@ function compileConfiguredAppProperty(value: AST.ConfiguredAppPropertyValue): Co
     } as unknown as AST.ConfigurationBlock
     const constructor = {
       $type: 'ConfigurationConstructor',
-      type: value.target,
+      type: AST.isConfiguredAppPropertyValue(value)
+        ? value.target
+        : { $refText: target.name, ref: target },
       members: [],
       block,
       $container: value.$container,

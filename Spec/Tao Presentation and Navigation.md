@@ -126,9 +126,10 @@ The implemented declarations are:
   text and `Content` presentable. Selecting another key reveals its mounted item without pushing a
   content occurrence. Inactive items stay mounted but hidden, preserving their state.
 
-The configured `Initial` value is a descriptor, not an invoked rendered element. It must be
-mountable without runtime arguments. A `StackNav` initial value is a `ui`; a `SlotNav` initial value
-and SelectionNav item content may be a `ui` or configured `nav`.
+The configured `Initial` value is a descriptor, not an invoked rendered element. The general
+declaration-completeness rule requires every supplied slot to be filled before any declaration is
+used as a value. A `StackNav` initial value is a `ui`; a `SlotNav` initial value and SelectionNav item
+content may be a `ui` or configured `nav`.
 
 Selection keys belong to their configured declaration's namespace. `Initial` must name one of its
 items. The visible controls use each item's `Label`. A target-only activation reveals a root

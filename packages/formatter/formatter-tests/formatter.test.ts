@@ -628,17 +628,17 @@ Describe('Tao formatter types and constructors', () => {
   Test(
     'normalizes type declarations, constructors, casts, lists, and member access',
     formats(
-      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nlet Demo = Person {Tags: Tags ["a","b"],Job: Job {Level: 2,Title: "Engineer"},Age: 40,Name: "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
+      `type Job is {Title text,Level number}\ntype Person is {Name,Age,Tags,Job}\nlet Demo = Person {Tags: Tags ["a","b"],Job: Job {Level: 2,Title: "Engineer"},Age: 40,Name: "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
       `
         type Job is {
-           Title is text
-           Level is number
+           Title text,
+           Level number
         }
 
         type Person is {
-           Name
-           Age
-           Tags
+           Name,
+           Age,
+           Tags,
            Job
         }
 

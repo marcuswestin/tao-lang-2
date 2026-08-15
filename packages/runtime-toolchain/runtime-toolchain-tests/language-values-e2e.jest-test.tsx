@@ -269,8 +269,8 @@ Describe('Expo runtime', () => {
         type Name is text
         type Age is number
         type Person is {
-          Name
-          Age
+          Name,
+          Age,
         }
 
         let Ada = Person { Age: 40, Name: "Ada" }
@@ -300,7 +300,7 @@ Describe('Expo runtime', () => {
 
         type Name is text
         type Person is {
-          Name
+          Name,
         }
 
         view MainView {

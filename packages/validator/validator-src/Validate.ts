@@ -4,6 +4,7 @@ import type { ValidationContext } from './validation'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
+import { completenessValidationChecks } from './validators/completeness-validator'
 import { configurationValidationChecks } from './validators/configuration-validator'
 import {
   configuredValueValidationChecks,
@@ -17,6 +18,7 @@ import { injectionValidationChecks } from './validators/injections-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
+import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
@@ -39,6 +41,8 @@ const nodeValidationChecks = NodeValidation.compile(
     FunctionalCoreValidator.checks,
     dataValidationChecks,
     configurationValidationChecks,
+    completenessValidationChecks,
+    preludeValidationChecks,
     DialogueValidator.checks,
     navigationValidationChecks,
     configuredValueValidationChecks,
@@ -50,6 +54,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   validateProjectFile(file, ctx)
   AliasesValidator.validateFile(file, ctx)
   validateDataFile(file, ctx)
+  validatePreludeFile(file, ctx)
   const nodes = AST.streamAllContents(file)
   NodeValidation.validate(nodes, file, ctx, nodeValidationChecks)
   validateConfiguredValuesFile(file, ctx)

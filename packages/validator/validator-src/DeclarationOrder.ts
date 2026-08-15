@@ -25,6 +25,7 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     WhenExpression: expressionValueReferences,
     FunctionCallExpression: expressionValueReferences,
     InterpolatedString: expressionValueReferences,
+    InferredConfigurationConstructor: expressionValueReferences,
     ListLiteral: expressionValueReferences,
     MemberAccessExpression: reference => [reference],
     NoneLiteral: expressionValueReferences,

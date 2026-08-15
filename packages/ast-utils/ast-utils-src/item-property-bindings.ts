@@ -51,7 +51,7 @@ export function resolveItemPropertyBindings(
   const state: ItemPropertyBindingState = {
     diagnostics: [],
     pairs: [],
-    remainingExpected: new Set(expectedProperties),
+    remainingExpected: new Set(expectedProperties.filter(property => !Type.propertyIsFilled(property))),
     remainingProperties: new Set(properties),
   }
   bindNamedItemProperties(state)
@@ -178,6 +178,9 @@ function reportMissingItemProperties(
     }
     if (ambiguities.unresolvedProperties > 0) {
       ambiguities.unresolvedProperties -= 1
+      continue
+    }
+    if (Type.propertyHasDefault(expected)) {
       continue
     }
     state.diagnostics.push({

@@ -54,6 +54,8 @@ function CompileExpressionJsType(expression: AST.Expression): Compiled {
         time: () => gen`number`,
         nav: () => gen`TR.NavigationValue`,
         ui: () => gen`TR.Presentable`,
+        datasource: () => gen`any`,
+        app: () => gen`any`,
       }),
     list: () => gen`any[]`,
     item: () => gen`any`,

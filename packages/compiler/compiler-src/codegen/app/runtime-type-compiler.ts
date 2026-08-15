@@ -23,6 +23,8 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
         time: () => gen`TR.Value<number>`,
         nav: () => gen`TR.NavigationValue`,
         ui: () => gen`TR.Presentable`,
+        datasource: () => gen`TR.Evaluable`,
+        app: () => gen`TR.Evaluable`,
       }),
     list: () => gen`TR.Value<any[]>`,
     item: () => gen`TR.Value<Record<string, any>>`,

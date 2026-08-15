@@ -5,7 +5,7 @@ import { Switch } from '@shared'
 export type TaoType =
   | {
     kind: 'primitive'
-    primitive: 'text' | 'number' | 'boolean' | 'time' | 'none' | 'ui' | 'nav'
+    primitive: 'text' | 'number' | 'boolean' | 'time' | 'none' | 'ui' | 'nav' | 'datasource' | 'app'
     nominal?: AST.TypeDefinition
   }
   | {
@@ -15,11 +15,14 @@ export type TaoType =
     nominal?: AST.TypeDefinition
   }
   | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
-  | { kind: 'item'; item?: AST.ItemTypeExpression; nominal?: AST.TypeDefinition }
+  | { kind: 'item'; item?: ItemShape; nominal?: AST.TypeDefinition }
   | { kind: 'entity'; entity: DataEntityDefinition }
   | { kind: 'enum'; declaration: AST.EnumDeclaration }
   | { kind: 'union'; members: readonly TaoType[] }
   | { kind: 'unresolved' }
+
+/** ItemShape is the effective slot surface of an item type, including derived slots. */
+export type ItemShape = { readonly properties: readonly AST.TypeProperty[] }
 
 export type DataEntityDefinition = AST.EntityDataDeclaration
 export type DataFieldDefinition = AST.EntityDataField
@@ -169,6 +172,16 @@ export class Type {
     })
   }
 
+  /** ofInferredConfiguration resolves a bare block from its same-name declaration context. */
+  static ofInferredConfiguration(value: AST.InferredConfigurationConstructor): TaoType {
+    const owner = value.$container
+    if (!AST.isAliasDeclaration(owner)) {
+      return unresolvedType()
+    }
+    const declaration = visibleTypeDeclaration(value, owner.name)
+    return declaration ? Type.ofDefinition(declaration) : unresolvedType()
+  }
+
   /** ofValue resolves an ordinary expression or configured runtime value. */
   static ofValue(value: AST.Expression | AST.ConfiguredValue): TaoType {
     return AST.isConfiguredValue(value) ? Type.ofConfiguredValue(value) : Type.ofExpression(value)
@@ -185,7 +198,7 @@ export class Type {
   }
 
   /** constructorReferenceItemType resolves a typed constructor type prefix to an item shape, when it has one. */
-  static constructorReferenceItemType(type: AnyTypeReference): AST.ItemTypeExpression | undefined {
+  static constructorReferenceItemType(type: AnyTypeReference): ItemShape | undefined {
     const resolved = AST.isConstructablePrimitiveTypeReference(type)
       ? Type.ofConstructorReference(type)
       : Type.ofReference(type)
@@ -197,6 +210,21 @@ export class Type {
     return new TypeResolutionContext().ofProperty(property)
   }
 
+  /** propertyIsFilled identifies a slot whose declaration fixes its value rather than only its type. */
+  static propertyIsFilled(property: AST.TypeProperty): boolean {
+    return property.type === undefined && property.value !== undefined
+  }
+
+  /** propertyHasDefault identifies a typed slot whose declared value can be overridden by construction. */
+  static propertyHasDefault(property: AST.TypeProperty): boolean {
+    return property.type !== undefined && property.value !== undefined
+  }
+
+  /** propertyRequiresValue identifies an open supplied slot that construction must fill. */
+  static propertyRequiresValue(property: AST.TypeProperty): boolean {
+    return property.value === undefined
+  }
+
   /** ofConfigurationProperty resolves a nav/datasource contract property's accepted Tao type. */
   static ofConfigurationProperty(property: AST.ConfigurationPropertyDeclaration): TaoType {
     return AST.configurationPropertyIsKey(property)
@@ -206,7 +234,7 @@ export class Type {
 
   /** shorthandPropertyDefinition resolves the same-name type used by a shorthand item field. */
   static shorthandPropertyDefinition(property: AST.TypeProperty): AST.TypeDeclaration | undefined {
-    return property.type ? undefined : visibleTypeDeclaration(property, property.name)
+    return property.type || property.value ? undefined : visibleTypeDeclaration(property, property.name)
   }
 
   /** visibleDeclaration resolves a type name in the lexical file/import scope of a node. */
@@ -393,9 +421,7 @@ export class Type {
       ...root.statements.filter(AST.isEntityDataDeclaration),
       ...root.statements
         .filter(AST.isUseStatement)
-        .flatMap(useStatement =>
-          useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isEntityDataDeclaration)
-        ),
+        .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
     ]
   }
 
@@ -461,7 +487,7 @@ function isItemKind(type: TaoType): type is Extract<TaoType, { kind: 'item' }> {
   return type.kind === 'item'
 }
 
-function itemShape(type: TaoType): AST.ItemTypeExpression | undefined {
+function itemShape(type: TaoType): ItemShape | undefined {
   return isItemKind(type) ? type.item : undefined
 }
 
@@ -582,7 +608,7 @@ function nominalsAreCastCompatible(from: AST.TypeDefinition, target: AST.TypeDef
   return nominalChainReaches(from, target) || nominalChainReaches(target, from)
 }
 
-function propertyNamed(itemType: AST.ItemTypeExpression, name: string): AST.TypeProperty | undefined {
+function propertyNamed(itemType: ItemShape, name: string): AST.TypeProperty | undefined {
   return itemType.properties.find(property => property.name === name)
 }
 
@@ -627,6 +653,7 @@ class TypeResolutionContext {
       BooleanLiteral: () => primitiveType('boolean'),
       CaseTestExpression: () => primitiveType('boolean'),
       ConfigurationConstructor: value => Type.ofConfiguredValue(value),
+      InferredConfigurationConstructor: value => Type.ofInferredConfiguration(value),
       WhenExpression: when => this.whenExpressionType(when),
       FunctionCallExpression: call =>
         call.function.ref ? this.ofReference(call.function.ref.returnType) : unresolvedType(),
@@ -807,6 +834,9 @@ class TypeResolutionContext {
     if (property.type) {
       return this.ofReference(property.type)
     }
+    if (property.value) {
+      return this.ofExpression(property.value)
+    }
     const shorthandType = Type.shorthandPropertyDefinition(property)
     return shorthandType ? this.ofDefinition(shorthandType) : unresolvedType()
   }
@@ -818,6 +848,7 @@ class TypeResolutionContext {
   private ofExpressionType(type: AST.TypeExpression): TaoType {
     return Switch.type(type, {
       ActionTypeReference: reference => this.ofReference(reference),
+      DerivedTypeExpression: derived => this.derivedType(derived),
       ItemTypeExpression: item => ({ kind: 'item', item }),
       NamedTypeReference: reference => this.ofReference(reference),
       PrimitiveTypeReference: reference => this.ofReference(reference),
@@ -826,6 +857,23 @@ class TypeResolutionContext {
         members: union.members.map(member => this.ofReference(member)),
       }),
     })
+  }
+
+  private derivedType(derived: AST.DerivedTypeExpression): TaoType {
+    const base = this.ofReference(derived.base)
+    if (base.kind !== 'item') {
+      return base
+    }
+    const properties = [...(base.item?.properties ?? [])]
+    for (const property of derived.slots.properties) {
+      const existing = properties.findIndex(candidate => candidate.name === property.name)
+      if (existing === -1) {
+        properties.push(property)
+      } else {
+        properties[existing] = property
+      }
+    }
+    return { ...base, item: { properties } }
   }
 }
 
@@ -841,6 +889,8 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     item: () => ({ kind: 'item' }),
     nav: () => ({ kind: 'primitive', primitive: 'nav' }),
     ui: () => ({ kind: 'primitive', primitive: 'ui' }),
+    datasource: () => ({ kind: 'primitive', primitive: 'datasource' }),
+    app: () => ({ kind: 'primitive', primitive: 'app' }),
   })
 }
 
@@ -878,7 +928,7 @@ function canCarryNominal(
   return isPrimitiveKind(type) || type.kind === 'list' || isItemKind(type)
 }
 
-function itemTypeOfDefinition(definition: AST.TypeDefinition): AST.ItemTypeExpression | undefined {
+function itemTypeOfDefinition(definition: AST.TypeDefinition): ItemShape | undefined {
   return itemShape(new TypeResolutionContext().ofDefinition(definition))
 }
 
@@ -917,13 +967,19 @@ function nominalChain(
 
 function parentTypeDefinition(definition: AST.TypeDefinition): AST.TypeDefinition | undefined {
   return Switch.type(definition, {
-    ParameterTypeDeclaration: declaration => namedParentDefinition(declaration.type),
-    TypeDeclaration: declaration => namedParentDefinition(declaration.type),
+    ParameterTypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type),
+    TypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type),
     TypeProperty: property =>
       property.type
         ? namedParentDefinition(property.type)
         : Type.shorthandPropertyDefinition(property),
   })
+}
+
+function parentDefinitionOfExpression(type: AST.TypeExpression): AST.TypeDefinition | undefined {
+  return AST.isDerivedTypeExpression(type)
+    ? namedParentDefinition(type.base)
+    : namedParentDefinition(type)
 }
 
 function namedParentDefinition(type: AST.TypeExpression): AST.TypeDefinition | undefined {
@@ -947,9 +1003,7 @@ function visibleEntityDataDeclarations(node: AST.Node): AST.EntityDataDeclaratio
     ...root.statements.filter(AST.isEntityDataDeclaration),
     ...root.statements
       .filter(AST.isUseStatement)
-      .flatMap(useStatement =>
-        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isEntityDataDeclaration)
-      ),
+      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
   ]
 }
 
@@ -958,9 +1012,7 @@ function typeDeclarationsInFile(file: AST.TaoFile): AST.TypeDeclaration[] {
     ...file.statements.filter(AST.isTypeDeclaration),
     ...file.statements
       .filter(AST.isUseStatement)
-      .flatMap(useStatement =>
-        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isTypeDeclaration)
-      ),
+      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isTypeDeclaration)),
   ]
 }
 
@@ -977,9 +1029,7 @@ function parameterizedDeclarationsInFile(file: AST.TaoFile): AST.ParameterizedDe
     ...file.statements.filter(AST.isParameterizedDeclaration),
     ...file.statements
       .filter(AST.isUseStatement)
-      .flatMap(useStatement =>
-        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isParameterizedDeclaration)
-      ),
+      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isParameterizedDeclaration)),
   ]
 }
 
@@ -1028,7 +1078,7 @@ function itemConstructorProperty(reference: AST.NamedTypeReference, name: string
   return itemType ? propertyNamed(itemType, name) : undefined
 }
 
-function owningItemLiteralType(reference: AST.NamedTypeReference): AST.ItemTypeExpression | undefined {
+function owningItemLiteralType(reference: AST.NamedTypeReference): ItemShape | undefined {
   let current: AST.Node | undefined = reference.$container
   while (current) {
     if (AST.isItemLiteral(current)) {
@@ -1039,7 +1089,7 @@ function owningItemLiteralType(reference: AST.NamedTypeReference): AST.ItemTypeE
   return undefined
 }
 
-function itemLiteralType(item: AST.ItemLiteral): AST.ItemTypeExpression | undefined {
+function itemLiteralType(item: AST.ItemLiteral): ItemShape | undefined {
   const parent = item.$container
   if (AST.isTypedConstructor(parent)) {
     return Type.constructorReferenceItemType(parent.type)

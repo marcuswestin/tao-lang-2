@@ -235,8 +235,8 @@ Describe('Tao AST invocation resolution', () => {
       type Name is text
       type Age is number
       type Person is {
-        Name
-        Age
+        Name,
+        Age,
       }
       let DemoPerson = item { Age: 40, Name: "Ada" }
       view MainView { }
@@ -265,7 +265,7 @@ Describe('Tao AST invocation resolution', () => {
       type Name is Base
       type Title is Base
       type Pair is {
-        Base
+        Base,
       }
       let BadPair = item { Name "Ada", Title "Grace" }
       view MainView { }

@@ -68,6 +68,10 @@ export namespace Packages {
   /** createResolver creates a parser package resolver backed by this package context. */
   export function createResolver(context: Context): PackageResolver {
     return {
+      async intrinsicFilePaths() {
+        const prelude = FS.resolvePath('tao/Prelude.tao', context.stdlibRoot)
+        return await FS.isFile(prelude) ? [prelude] : []
+      },
       collectTargetDeclarations(useStatement, request) {
         const resolution = resolveUse(context, useStatement, request.fromFilePath)
         const workspaceFilePaths = new Set(request.workspaceFiles.map(workspaceFilePath))

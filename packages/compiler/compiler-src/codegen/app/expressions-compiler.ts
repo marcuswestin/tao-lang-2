@@ -18,6 +18,7 @@ export const ExpressionsCompiler = {
       WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
       InterpolatedString: Compile.InterpolatedString,
+      InferredConfigurationConstructor: Compile.InferredConfiguration,
       NumberLiteral: Compile.NumberLiteral,
       NoneLiteral: Compile.NoneLiteral,
       StringLiteral: Compile.StringLiteral,
@@ -47,6 +48,15 @@ export const ExpressionsCompiler = {
     return AST.isNavDeclaration(declaration)
       ? gen`TR.Navigation.Configure(${gen.scopeName(declaration)}, ${config})`
       : gen`TR.Data.Configure(${gen.scopeName(declaration)}, ${config})`
+  },
+
+  /** InferredConfiguration lowers a bare block through its same-name declaration type. */
+  InferredConfiguration(value: AST.InferredConfigurationConstructor): Compiled {
+    const resolvedType = Type.ofInferredConfiguration(value)
+    if (resolvedType.kind !== 'item') {
+      return Assert.never(resolvedType as never, 'validated inferred configuration resolves an item type')
+    }
+    return compileConfiguredItemBlock(value.block, resolvedType.item)
   },
 
   /** ConfigurationValue compiles a scalar/reference slot or a nested configured value. */
@@ -258,7 +268,7 @@ export const ExpressionsCompiler = {
 
 function itemPropertyBindingPairs(
   item: AST.ItemLiteral,
-  itemType: AST.ItemTypeExpression,
+  itemType: ASTUtils.ItemShape,
 ): ASTUtils.ItemPropertyBindingPair[] {
   const result = ASTUtils.resolveItemPropertyBindings(itemType.properties, item.properties)
   Assert(result.diagnostics.length === 0, 'validated item constructor has no binding diagnostics')
@@ -267,16 +277,28 @@ function itemPropertyBindingPairs(
 
 function compileConfiguredItem(
   value: AST.ConfigurationConstructor,
-  itemType: AST.ItemTypeExpression | undefined,
+  itemType: ASTUtils.ItemShape | undefined,
 ): Compiled {
   Assert.defined(value.block, 'validated item constructor has a block')
+  return compileConfiguredItemBlock(value.block, itemType)
+}
+
+function compileConfiguredItemBlock(
+  block: AST.ConfigurationBlock,
+  itemType: ASTUtils.ItemShape | undefined,
+): Compiled {
   if (!itemType) {
-    Assert(value.block.entries.length === 0, shapelessItemConstructorMessage)
+    Assert(block.entries.length === 0, shapelessItemConstructorMessage)
     return gen`TR.Value({})`
   }
-  const remaining = new Set(itemType.properties)
-  const pairs: Array<{ expected: AST.TypeProperty; compiled: Compiled }> = []
-  for (const entry of value.block.entries) {
+  const remaining = new Set(itemType.properties.filter(property => !Type.propertyIsFilled(property)))
+  const pairs: Array<{ expected: AST.TypeProperty; compiled: Compiled }> = itemType.properties
+    .filter(Type.propertyIsFilled)
+    .map(expected => {
+      Assert.defined(expected.value, 'filled item slot has a value')
+      return { expected, compiled: Compile.Expression(expected.value) }
+    })
+  for (const entry of block.entries) {
     if (entry.label && entry.expression) {
       const expected: AST.TypeProperty | undefined = itemType.properties.find(
         (property: AST.TypeProperty) => property.name === entry.label,
@@ -286,7 +308,7 @@ function compileConfiguredItem(
       pairs.push({ expected, compiled: Compile.Expression(entry.expression) })
       continue
     }
-    const candidate = compileConfiguredItemEntry(entry)
+    const candidate = compileConfiguredItemEntry(entry, itemType)
     Assert.defined(candidate, 'validated configured item entry has a constructable value')
     const actual = candidate.type
     const exact = [...remaining].filter(property =>
@@ -300,6 +322,14 @@ function compileConfiguredItem(
     remaining.delete(expected)
     pairs.push({ expected, compiled: candidate.compiled })
   }
+  for (const expected of [...remaining]) {
+    if (!Type.propertyHasDefault(expected)) {
+      continue
+    }
+    Assert.defined(expected.value, 'defaulted item slot has a value')
+    pairs.push({ expected, compiled: Compile.Expression(expected.value) })
+    remaining.delete(expected)
+  }
   Assert(remaining.size === 0, 'validated configured item constructor binds every field')
   pairs.sort((left, right) => itemType.properties.indexOf(left.expected) - itemType.properties.indexOf(right.expected))
   return gen`TR.Value({
@@ -309,6 +339,7 @@ function compileConfiguredItem(
 
 function compileConfiguredItemEntry(
   entry: AST.ConfigurationEntry,
+  itemType: ASTUtils.ItemShape,
 ): { compiled: Compiled; type: ASTUtils.TaoType } | undefined {
   if (entry.expression) {
     return { compiled: Compile.Expression(entry.expression), type: Type.ofExpression(entry.expression) }
@@ -318,6 +349,15 @@ function compileConfiguredItemEntry(
     return {
       compiled: Compile.ValueDeclarationReference(declaration),
       type: Type.ofValueDeclaration(declaration),
+    }
+  }
+  if (entry.name && entry.value) {
+    const ownerProperty = itemType.properties.find(property => property.name === entry.name)
+    if (ownerProperty) {
+      return {
+        compiled: Compile.ConfigurationValue(entry.value),
+        type: Type.ofProperty(ownerProperty),
+      }
     }
   }
   if (entry.name && (entry.block || entry.value)) {
@@ -378,9 +418,51 @@ function compileConfiguredPatch(value: AST.PatchedValueReference): Compiled {
     return gen`TR.Navigation.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
   }
   if (type.kind === 'item') {
+    if (type.item) {
+      return compileItemPatch(value, base, type.item)
+    }
     return gen`TR.Data.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
   }
   return Assert.never(type as never, 'validated configured patch targets nav, datasource, or app')
+}
+
+function compileItemPatch(
+  value: AST.PatchedValueReference,
+  base: AST.AliasDeclaration,
+  itemType: ASTUtils.ItemShape,
+): Compiled {
+  const available = new Set(itemType.properties.filter(property => !Type.propertyIsFilled(property)))
+  const pairs: Array<{ expected: AST.TypeProperty; compiled: Compiled }> = []
+  for (const entry of value.patchBlock.entries) {
+    if (entry.label && entry.expression) {
+      const expected = itemType.properties.find(property => property.name === entry.label)
+      Assert.defined(expected, 'validated item patch label resolves one slot')
+      available.delete(expected)
+      pairs.push({ expected, compiled: Compile.Expression(entry.expression) })
+      continue
+    }
+    const named = entry.name
+      ? itemType.properties.find(property => property.name === entry.name)
+      : undefined
+    const candidate = compileConfiguredItemEntry(entry, itemType)
+    Assert.defined(candidate, 'validated item patch entry has a value')
+    const expected = named ?? (() => {
+      const exact = [...available].filter(property =>
+        Type.identityKey(Type.ofProperty(property)) === Type.identityKey(candidate.type)
+      )
+      const assignable = exact.length === 1
+        ? exact
+        : [...available].filter(property => Type.isAssignable(candidate.type, Type.ofProperty(property)))
+      Assert(assignable.length === 1, 'validated item patch entry binds one slot')
+      return assignable[0]!
+    })()
+    available.delete(expected)
+    pairs.push({ expected, compiled: candidate.compiled })
+  }
+  return gen`TR.Value({
+    ...${Compile.ValueDeclarationReference(base)}.jsValue,
+    ${gen.list(pairs, pair => gen`[${gen.nameLiteral(pair.expected)}]: ${pair.compiled}.jsValue,`)}
+  })`
 }
 
 function compileConfigurationPatchObject(block: AST.ConfigurationBlock): Compiled {

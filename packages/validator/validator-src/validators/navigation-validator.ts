@@ -153,9 +153,11 @@ function appVariantChain(
 }
 
 function configuredAppPropertyConfiguration(
-  value: AST.ConfiguredAppPropertyValue,
+  value: AST.AppPropertyValue,
 ): EffectiveNavigatorConfiguration | undefined {
-  const target = value.target.ref
+  const target = AST.isConfiguredAppPropertyValue(value)
+    ? value.target.ref
+    : AST.inferredAppPropertyDeclaration(value)
   if (AST.isConfigurableDeclaration(target)) {
     return configuration(target, value.block)
   }

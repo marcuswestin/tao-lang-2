@@ -37,6 +37,7 @@ export const StatementsCompiler = {
       PressTextStep: Compile.PressTextStep,
       TagPressStep: Compile.TagPressStep,
       ProjectDeclaration: Compile.ProjectDeclaration,
+      PrimitiveDeclaration: Compile.PrimitiveDeclaration,
       RenderStatement: Compile.RenderStatement,
       RunStep: Compile.RunStep,
       StateDeclaration: Compile.StateDeclaration,
@@ -55,6 +56,11 @@ export const StatementsCompiler = {
 
   /** TypeDeclaration emits no runtime code; Tao named types are compile-time only. */
   TypeDeclaration(): Compiled {
+    return gen.noop()
+  },
+
+  /** PrimitiveDeclaration is parsed semantic input and emits no runtime binding. */
+  PrimitiveDeclaration(): Compiled {
     return gen.noop()
   },
 

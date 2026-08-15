@@ -276,8 +276,8 @@ Describe('validator: aliases and invocations', () => {
         type Base is text
         type Name is Base
         type Pair is {
-          Base
-          Name
+          Base,
+          Name,
         }
         let BadPair = Pair { Name "Ada", Name "Grace" }
       `,
@@ -313,8 +313,8 @@ Describe('validator: aliases and invocations', () => {
       type Middle is Base
       type Leaf is Middle
       type Pair is {
-        Base
-        Middle
+        Base,
+        Middle,
       }
       let BadPair = Pair { Leaf "Ada", Leaf "Grace" }
     `,

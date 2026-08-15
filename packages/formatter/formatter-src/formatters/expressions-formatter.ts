@@ -19,6 +19,12 @@ export default {
     f.oneSpaceBeforeProperty('block', 'value')
   },
 
+  /** InferredConfigurationConstructor formats a context-typed bare value block. */
+  InferredConfigurationConstructor() {},
+
+  /** InferredAppPropertyValue formats a slot-typed bare app property block. */
+  InferredAppPropertyValue() {},
+
   /** ValueReference formats an optional immutable `with` patch. */
   ValueReference(f) {
     f.oneSpaceAround('with')

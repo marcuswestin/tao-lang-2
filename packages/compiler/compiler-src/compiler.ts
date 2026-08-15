@@ -144,7 +144,9 @@ function compileValidatedInput(
   selectedAppName: string,
 ): CompileResult {
   const entryPath = validationResult.entry.path
-  const sourceFiles = validationResult.files
+  const sourceFiles = validationResult.files.filter(file =>
+    file.ast.statements.length === 0 || !file.ast.statements.every(AST.isPrimitiveDeclaration)
+  )
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
   const compiledFiles = sourceFiles.flatMap(file =>

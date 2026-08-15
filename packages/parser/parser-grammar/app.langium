@@ -22,7 +22,7 @@ AppName:
     name='Name' value=StringLiteral;
 
 AppNavigator:
-    name='Navigator' value=ConfiguredAppPropertyValue;
+    name='Navigator' (value=ConfiguredAppPropertyValue | value=InferredAppPropertyValue);
 
 AppAuxiliaryNavigator:
     name=USE_IMPORT_PATH value=ConfigurationConstructor;
@@ -31,7 +31,12 @@ AppView:
     'view' view=[ViewDeclaration:ID];
 
 AppDatasource:
-    name='Datasource' value=ConfiguredAppPropertyValue;
+    name='Datasource' (value=ConfiguredAppPropertyValue | value=InferredAppPropertyValue);
+
+type AppPropertyValue = ConfiguredAppPropertyValue | InferredAppPropertyValue;
 
 ConfiguredAppPropertyValue:
     target=[NamedDeclaration:ID] block=ConfigurationBlock?;
+
+InferredAppPropertyValue:
+    block=ConfigurationBlock;

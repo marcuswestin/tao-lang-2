@@ -22,6 +22,8 @@ const appValidationMessages = {
   duplicateAuxiliary: (name: string, key: string) => `App ${name} declares auxiliary navigator @${key} more than once.`,
   auxiliaryKey: (key: string) => `App auxiliary '${key}' must be a single @name key.`,
   datasourceType: (name: string) => `App ${name} Datasource expects a datasource configuration.`,
+  inferredProperty: (name: string, property: string, kind: string) =>
+    `App ${name} ${property} bare block requires exactly one visible ${kind} declaration named '${property}'.`,
   datasourceCount: (name: string, count: number) => `App ${name} may declare at most one Datasource, found ${count}.`,
   propertyName: (expected: string, actual: string) => `App property '${actual}' must be spelled '${expected}'.`,
   variantProperty: (name: string, property: string) =>
@@ -51,8 +53,9 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
 
 function validateAppVariant(variant: AST.AppVariantDeclaration, ctx: ValidationContext): void {
   const entries = new Map<string, AST.ConfigurationEntry>()
+  const appSlots = new Set(AST.primitiveSlots(ctx.workspaceFiles, 'app').map(property => property.name))
   for (const entry of variant.value.patchBlock.entries) {
-    if (!entry.name || !entry.value || !['Name', 'Navigator', 'Datasource'].includes(entry.name)) {
+    if (!entry.name || !entry.value || !appSlots.has(entry.name)) {
       ctx.error(appValidationMessages.variantProperty(variant.name, entry.name ?? entry.key ?? ''), entry)
       continue
     }
@@ -168,7 +171,7 @@ function validateAppNames(app: AST.AppDeclaration, statements: AppStatements, ct
       ctx.error(appValidationMessages.propertyName('Name', name.name), name)
     }
   }
-  if (names.length !== 1) {
+  if (primitiveSlotRequiresValue(ctx, 'app', 'Name') && names.length !== 1) {
     ctx.error(appValidationMessages.nameCount(app.name, names.length), app)
   }
 }
@@ -180,15 +183,28 @@ function validateAppNavigators(app: AST.AppDeclaration, statements: AppStatement
       ctx.error(appValidationMessages.propertyName('Navigator', navigator.name), navigator)
     }
   }
-  if (navigators.length !== 1) {
+  if (primitiveSlotRequiresValue(ctx, 'app', 'Navigator') && navigators.length !== 1) {
     ctx.error(appValidationMessages.appRootCount(app.name, navigators.length), app)
   }
   for (const navigator of navigators) {
+    if (AST.isInferredAppPropertyValue(navigator.value) && !AST.inferredAppPropertyDeclaration(navigator.value)) {
+      ctx.error(appValidationMessages.inferredProperty(app.name, 'Navigator', 'nav'), navigator.value)
+      continue
+    }
     const actual = configuredAppPropertyType(navigator.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
       ctx.error(appValidationMessages.navigatorType(app.name, Type.displayName(actual)), navigator)
     }
   }
+}
+
+function primitiveSlotRequiresValue(
+  ctx: ValidationContext,
+  primitive: AST.PrimitiveType,
+  name: string,
+): boolean {
+  const slot = AST.primitiveSlots(ctx.workspaceFiles, primitive).find(property => property.name === name)
+  return slot ? Type.propertyRequiresValue(slot) : true
 }
 
 function validateAppAuxiliaryNavigators(
@@ -222,7 +238,11 @@ function validateAppDatasources(app: AST.AppDeclaration, statements: AppStatemen
     if (datasource.name !== 'Datasource') {
       ctx.error(appValidationMessages.propertyName('Datasource', datasource.name ?? ''), datasource)
     }
-    const target = datasource.value.target.ref
+    const target = appPropertyTarget(datasource.value)
+    if (AST.isInferredAppPropertyValue(datasource.value) && !target) {
+      ctx.error(appValidationMessages.inferredProperty(app.name, 'Datasource', 'datasource'), datasource.value)
+      continue
+    }
     const valid = AST.isDatasourceDeclaration(target)
       || (AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value))
     if (!valid) {
@@ -231,8 +251,8 @@ function validateAppDatasources(app: AST.AppDeclaration, statements: AppStatemen
   }
 }
 
-function configuredAppPropertyType(value: AST.ConfiguredAppPropertyValue): ASTUtils.TaoType {
-  const target = value.target.ref
+function configuredAppPropertyType(value: AST.AppPropertyValue): ASTUtils.TaoType {
+  const target = appPropertyTarget(value)
   if (AST.isNavDeclaration(target)) {
     return { kind: 'primitive', primitive: 'nav' }
   }
@@ -240,6 +260,12 @@ function configuredAppPropertyType(value: AST.ConfiguredAppPropertyValue): ASTUt
     return { kind: 'item' }
   }
   return referencedConfigurationType(target)
+}
+
+function appPropertyTarget(value: AST.AppPropertyValue): AST.NamedDeclaration | undefined {
+  return AST.isConfiguredAppPropertyValue(value)
+    ? value.target.ref
+    : AST.inferredAppPropertyDeclaration(value)
 }
 
 function validateLegacyApp(app: AST.AppDeclaration, ctx: ValidationContext): void {

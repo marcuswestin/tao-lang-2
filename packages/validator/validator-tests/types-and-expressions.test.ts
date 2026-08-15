@@ -102,6 +102,69 @@ Describe('validator: types and expressions', () => {
     })
   })
 
+  Test(
+    'accepts defaulted and filled declaration slots without requiring constructor values',
+    accepts(typeApp(
+      `
+        type Document is {
+          Name text,
+          Title text is "Untitled",
+          Kind is "document",
+        }
+        let Draft = Document { Name "Roadmap" }
+      `,
+      'render Empty()',
+      stubView('Empty'),
+    )),
+  )
+
+  Test(
+    'rejects a declaration slot default with the wrong type',
+    rejects(
+      typeApp('type Document is { Count number is "many" }'),
+      typeValidationMessages.slotDefaultType('Count', 'number', 'text'),
+    ),
+  )
+
+  Test(
+    'accepts derived slots, same-name bare construction, and generic immutable value patches',
+    accepts(typeApp(
+      `
+        type Person is { Name text, Role text is "member" }
+        type Admin is Person with { Role is "admin", Access number is 1 }
+        let Admin = { Name "Ro" }
+        let Renamed = Admin with { Name "Grace", Access 2 }
+      `,
+      'render Text(Renamed.Name)',
+      stubView('Text', 'Value is text'),
+    )),
+  )
+
+  Test(
+    'rejects derived types that reopen filled or defaulted slots',
+    rejects(
+      typeApp(`
+        type Fixed is { Kind is "fixed" }
+        type Opened is Fixed with { Kind text }
+        type Defaulted is { Label text is "default" }
+        type ReopenedDefault is Defaulted with { Label text }
+      `),
+      typeValidationMessages.derivedSlotReopened('Kind'),
+    ),
+  )
+
+  Test(
+    'rejects value derivation that changes a filled slot',
+    rejects(
+      typeApp(`
+        type Person is { Name text, Kind is "person" }
+        let Person = { Name "Ro" }
+        let Invalid = Person with { Kind "admin" }
+      `),
+      typeValidationMessages.filledProperty('Kind'),
+    ),
+  )
+
   const ambiguousBindingCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'arguments matching multiple same-typed parameters',
@@ -119,7 +182,7 @@ Describe('validator: types and expressions', () => {
     ],
     [
       'duplicate item property types',
-      typeApp('type Name is text type Person is { Name Name } let BadPerson = Person { Name "Ada" }'),
+      typeApp('type Name is text type Person is { Name, Name } let BadPerson = Person { Name "Ada" }'),
       typeValidationMessages.duplicatePropertyType('Name'),
     ],
     [
@@ -128,7 +191,7 @@ Describe('validator: types and expressions', () => {
         type Base is text
         type Middle is Base
         type Leaf is Middle
-        type Person is { Base Middle }
+        type Person is { Base, Middle }
         let BadPerson = Person { Leaf "Ada" }
       `),
       typeValidationMessages.ambiguousProperty(['Base', 'Middle']),
@@ -170,7 +233,7 @@ Describe('validator: types and expressions', () => {
       typeApp(`
         type Name is text
         type Age is number
-        type Person is { Name Age }
+        type Person is { Name, Age }
         let BadPerson = Person { Name "Ada" }
       `),
       typeValidationMessages.missingProperty('Age'),
@@ -180,7 +243,7 @@ Describe('validator: types and expressions', () => {
       typeApp(`
         type Name is text
         type Age is number
-        type Person is { Name Age }
+        type Person is { Name, Age }
         let BadPerson = Person { Name "Ada", Age 40, "extra" }
       `),
       typeValidationMessages.unmatchedProperty,
@@ -284,7 +347,7 @@ Describe('validator: types and expressions', () => {
       `
         type Name is text
         type LastName is Name
-        type FullNamePerson is { Name is text LastName }
+        type FullNamePerson is { Name text, LastName }
         let OuterName = Name "Outer"
         let FamilyName = LastName "Lovelace"
         let Ada = FullNamePerson { Name: "Ada", FamilyName }
@@ -300,7 +363,7 @@ Describe('validator: types and expressions', () => {
       typeApp(
         'type Age is number let OuterAge = Age 42',
         'render Card(Card.Details { OuterAge })',
-        stubView('Card', 'Details is { Age is number }'),
+        stubView('Card', 'Details is { Age number }'),
       ),
       typeValidationMessages.unmatchedProperty,
       typeValidationMessages.missingProperty('Age'),
@@ -315,7 +378,7 @@ Describe('validator: types and expressions', () => {
     ],
     [
       'qualified aliases',
-      typeApp('type A is B.C type B is { C is A } let Bad = A "value"'),
+      typeApp('type A is B.C type B is { C A } let Bad = A "value"'),
       [typeValidationMessages.cyclicType('A'), typeValidationMessages.cyclicType('B')],
     ],
     [
@@ -339,7 +402,7 @@ Describe('validator: types and expressions', () => {
       'parameter item property types',
       app(
         'render Empty()',
-        `${stubView('Empty')}${stubView('Card', 'Details is { Age is Card.Details.Age }')}`,
+        `${stubView('Empty')}${stubView('Card', 'Details is { Age Card.Details.Age }')}`,
       ),
       typeValidationMessages.cyclicType('Card.Details'),
     ],
@@ -351,7 +414,7 @@ Describe('validator: types and expressions', () => {
 
   Test(
     'allows item type properties to reference sibling properties without false cycles',
-    accepts(typeApp('type A is { X is text Y is A.X }', 'render Empty()', stubView('Empty'))),
+    accepts(typeApp('type A is { X text, Y A.X }', 'render Empty()', stubView('Empty'))),
   )
 
   Test(

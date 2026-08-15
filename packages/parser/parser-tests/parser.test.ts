@@ -550,6 +550,29 @@ Describe('parser: core language syntax', () => {
     Expect(activation.key).toBe('@home')
   })
 
+  Test('parses bare app slot blocks as inferred property values', async () => {
+    const parseResult = await testParseCode(`
+      app Notes {
+        Name "Notes"
+        Navigator { Initial Home }
+        Datasource { StorageKey "NotesData" }
+      }
+      ui Home { }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
+    Expect.Is(app, AST.isAppDeclaration)
+    const navigator = AST.blockStatements(app).find(AST.isAppNavigator)
+    const datasource = AST.blockStatements(app).find(AST.isAppDatasource)
+    Expect.Is(navigator, AST.isAppNavigator)
+    Expect.Is(datasource, AST.isAppDatasource)
+    Expect.Is(navigator.value, AST.isInferredAppPropertyValue)
+    Expect.Is(datasource.value, AST.isInferredAppPropertyValue)
+    Expect(navigator.value.block.entries[0]?.name).toBe('Initial')
+    Expect(datasource.value.block.entries[0]?.name).toBe('StorageKey')
+  })
+
   Test('parses arbitrary declaration-owned nav and datasource contracts by identity', async () => {
     const parseResult = await testParseCode(`
       public nav CustomNav {
@@ -635,13 +658,13 @@ Describe('parser: core language syntax', () => {
     const parseResult = await testParseCode(`
       type PromptTags is list
       type PromptCard is {
-        Label is text
+        Label text,
       }
       type WritingPrompt is {
-        Title is text
-        Minutes is number
-        PromptTags
-        Card is PromptCard
+        Title text,
+        Minutes number,
+        PromptTags,
+        Card PromptCard,
       }
       let StarterTags = PromptTags ["daily", "warmup"]
       let StarterPrompt = WritingPrompt {

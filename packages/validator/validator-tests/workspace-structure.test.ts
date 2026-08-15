@@ -5,6 +5,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { Validation } from '../validator-src/validation'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { AppValidator } from '../validator-src/validators/app-validator'
+import { preludeValidationMessages } from '../validator-src/validators/prelude-validator'
 import { projectValidationMessages } from '../validator-src/validators/project-validator'
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
 import { useValidationMessages, validateVisibleDeclarations } from '../validator-src/validators/use-validator'
@@ -80,6 +81,38 @@ Describe('validator: workspace structure', () => {
       Expect(validationErrorMessages(result)).toEqual([])
     })
   })
+
+  Test('auto-loads the parsed Tao prelude and exposes its primitive slot contracts', async () => {
+    await withValidationParse(stubApp(), ({ result }) => {
+      const prelude = result.files.find(file => file.path.endsWith('/tao/Prelude.tao'))
+      Expect(prelude).toBeDefined()
+      const primitives = prelude?.ast.statements.filter(AST.isPrimitiveDeclaration) ?? []
+      Expect(primitives.map(declaration => declaration.name)).toEqual([
+        'item',
+        'number',
+        'text',
+        'boolean',
+        'list',
+        'time',
+        'action',
+        'ui',
+        'nav',
+        'datasource',
+        'app',
+      ])
+      const appPrimitive = primitives.find(declaration => declaration.name === 'app')
+      Expect(appPrimitive?.slots?.properties.map(property => property.name)).toEqual([
+        'Name',
+        'Navigator',
+        'Datasource',
+      ])
+    })
+  })
+
+  Test(
+    'rejects primitive declarations outside the pinned prelude',
+    rejects('primitive text', preludeValidationMessages.location),
+  )
 
   Test('does not report duplicate visible declarations for repeated LSP document instances', async () => {
     const parserContext = Parser.createContext()

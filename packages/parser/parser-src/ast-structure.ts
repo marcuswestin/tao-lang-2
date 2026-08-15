@@ -1,6 +1,81 @@
 import { Langium } from './langium-exports'
 import * as AST from './parserASTExport'
 
+/** DeclarationNamespace identifies the independent declaration table a name occupies. */
+export type DeclarationNamespace = 'type' | 'value'
+
+const resolvedUseTargets = new WeakMap<AST.UseStatement, readonly AST.Declaration[]>()
+
+/** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
+export function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
+  return AST.isPrimitiveDeclaration(declaration)
+      || AST.isTypeDeclaration(declaration)
+      || AST.isConfigurableDeclaration(declaration)
+    ? 'type'
+    : 'value'
+}
+
+/** primitiveDeclaration finds one parsed intrinsic primitive in the loaded workspace. */
+export function primitiveDeclaration(
+  files: readonly AST.TaoFile[],
+  name: AST.PrimitiveType,
+): AST.PrimitiveDeclaration | undefined {
+  return files.flatMap(file => file.statements.filter(AST.isPrimitiveDeclaration))
+    .find(declaration => declaration.name === name)
+}
+
+/** primitiveSlots returns the pinned supplied-slot contract for one parsed primitive. */
+export function primitiveSlots(
+  files: readonly AST.TaoFile[],
+  name: AST.PrimitiveType,
+): readonly AST.TypeProperty[] {
+  return primitiveDeclaration(files, name)?.slots?.properties ?? []
+}
+
+/** inferredAppPropertyDeclaration resolves a bare app slot block from its slot name and primitive role. */
+export function inferredAppPropertyDeclaration(
+  value: AST.InferredAppPropertyValue,
+): AST.ConfigurableDeclaration | undefined {
+  const owner = value.$container
+  if (!AST.isAppNavigator(owner) && !AST.isAppDatasource(owner)) {
+    return undefined
+  }
+  const root = findRoot(value)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const candidates = [
+    ...root.statements.filter(AST.isConfigurableDeclaration),
+    ...root.statements.filter(AST.isUseStatement).flatMap(resolvedImportedDeclarations)
+      .filter(AST.isConfigurableDeclaration),
+  ].filter(declaration => declaration.name === owner.name)
+    .filter(declaration =>
+      AST.isAppNavigator(owner) ? AST.isNavDeclaration(declaration) : AST.isDatasourceDeclaration(declaration)
+    )
+  return candidates.length === 1 ? candidates[0] : undefined
+}
+
+/** declarationKey returns a namespace-qualified key suitable for collision checks. */
+export function declarationKey(declaration: AST.Declaration): string {
+  return `${declarationNamespace(declaration)}:${declaration.name}`
+}
+
+/** rememberUseTargets records every declaration visible through a use target before one Langium ref is chosen. */
+export function rememberUseTargets(
+  useStatement: AST.UseStatement,
+  declarations: readonly AST.Declaration[],
+): void {
+  resolvedUseTargets.set(useStatement, declarations)
+}
+
+/** resolvedImportedDeclarations returns every requested declaration, preserving type/value namespace peers. */
+export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AST.Declaration[] {
+  const names = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
+  const declarations = resolvedUseTargets.get(useStatement)
+    ?? useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDeclaration)
+  return declarations.filter(declaration => names.has(declaration.name))
+}
+
 type ArgumentListOwner =
   | AST.Render
   | AST.DoStatement

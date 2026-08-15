@@ -50,12 +50,16 @@ UnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PrimaryExpression;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | ValueReference;
+    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | ValueReference;
 
 // A bare configuration block instantiates a declared type. `with` is reserved for copying and
 // patching an existing configured value.
 ConfigurationConstructor:
     type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
+
+// A bare block takes its base type from the declaration context that owns it.
+InferredConfigurationConstructor:
+    block=ConfigurationBlock;
 
 type ConfiguredValue = ConfigurationConstructor;
 type ConstructorDeclaration = TypeDeclaration | ConfigurableDeclaration | ParameterizedDeclaration;

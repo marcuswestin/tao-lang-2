@@ -17,6 +17,12 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
     if (isImportedShorthandPropertyReference(node)) {
       names.add(node.name)
     }
+    if (AST.isInferredConfigurationConstructor(node) && AST.isAliasDeclaration(node.$container)) {
+      names.add(node.$container.name)
+    }
+    if (AST.isInferredAppPropertyValue(node)) {
+      names.add(node.$container.name)
+    }
   }
   return names
 }

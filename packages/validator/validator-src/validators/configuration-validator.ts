@@ -88,7 +88,10 @@ function validateConfigurationKeyDeclarations(declaration: AST.ConfigurableDecla
 
 function validateConfigurationImplementations(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const implementations = declaration.block.entries.filter(AST.isConfigurationImplementation)
-  if (implementations.length === 0) {
+  const primitive = AST.isNavDeclaration(declaration) ? 'nav' : 'datasource'
+  const implementationSlot = AST.primitiveSlots(ctx.workspaceFiles, primitive)
+    .find(property => property.name === 'implement')
+  if (implementationSlot && Type.propertyRequiresValue(implementationSlot) && implementations.length === 0) {
     ctx.error(configurationValidationMessages.missingImplementation(declaration.name), declaration)
   }
   if (implementations.length > 1) {
