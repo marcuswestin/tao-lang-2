@@ -1,9 +1,9 @@
 # Tao Type System
 
-Status: authoritative contract for the implemented WordFlower tranche. Intended syntax that is not
-yet implemented lives in the app tiers — `Apps/WordFlower/2 - Next` for the tranche being built,
-`3 - MVP` and `4 - Revolution` beyond it — and open questions live in
-`Roadmap/Deferred Tao language decisions.md`. This file describes only what runs today.
+Status: authoritative contract for the implemented WordFlower tranche and the language decisions
+settled by `Apps/WordFlower/2 - Next`. Sections explicitly labelled as the Next contract are not yet
+implemented. Compatible later work remains in `3 - MVP` and `4 - Revolution`; unresolved questions
+live in `Roadmap/Deferred Tao language decisions.md`.
 
 ## Implemented value and control-flow contract
 
@@ -23,8 +23,69 @@ compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homoge
 such as `Presentable is ui | nav`; top-level data/query/write forms; declaration-owned configuration;
 dialogue `ask`/`respond`; and typed injection.
 
-Optional item fields, `match`, heterogeneous lists, richer collection transforms, and async remain
-future work.
+`match`, heterogeneous lists, richer collection transforms, and general concurrency policy remain
+future work. Optional item fields and non-blocking `async { ... }` are settled by the Next contract
+below but are not yet implemented.
+
+## Settled Next declaration and value contract
+
+Next retains auto-typed `let` for every value and adds an equivalent primitive-headed spelling for
+frequently declared app, navigation, and datasource values:
+
+```tao
+let HomeStack = StackNav { Initial Home }
+nav HomeStack = StackNav { Initial Home }
+
+let Store = Memory { }
+datasource Store = Memory { }
+```
+
+The primitive head supplies the declared value type; it is not a reusable type declaration. New
+types always use `type Name is Base with { ... }`. `Base { ... }` constructs a value and is sugar
+for `Base with { ... }` in value-construction position. Extending an existing value uses
+`ExistingValue with { ... }`. A value may only specify properties declared by its type, and the Next
+tranche does not allow per-instance property-function overrides.
+
+Type and value namespaces are distinct. If both contain the same name, bare `Name { ... }` resolves
+the type and constructs a value. In a value expression, `Name with { ... }` resolves the value first
+and falls back to the type only when no value exists. After `type Derived is`, the base resolves only
+the type namespace. A delta may fill or override declared data/configuration properties but may not
+introduce a member or reopen a filled member back into an unfilled requirement.
+
+A direct `nav Name { ... }` instantiates the primitive `nav`; it is valid only when the supplied
+fills plus primitive defaults make the value complete. It never declares a reusable nav type or
+adds a member. The corresponding direct forms exist for `app` and `datasource` values.
+
+An explicit annotation remains available as `let Name is Type = Value`. `Age Name = 10`-style
+arbitrary type-headed value declarations are not part of this contract; only the named primitive
+value heads are privileged.
+
+Every `view`, `layout`, `frame`, `ui`, `dialogue`, `action`, and `function` declaration has a
+parenthesized parameter list, including `()` when empty. Product functions use statement blocks,
+explicit `return`, and an optional inferred return type:
+
+```tao
+function DocumentLabel(Title is text) returns text {
+   return "Document: { Title }"
+}
+
+function Double(Value is number) {
+   return Value * 2
+}
+```
+
+Lists declare their element type as `list of T`. Enums are nominal types whose cases are nominal
+values; a one-case enum is valid. Optional item fields use `optional Field Type`. `async { ... }`
+runs its block without delaying later statements and surfaces failures as provider error state;
+async functions, `await`, scheduling, and fork/concurrency policy remain future work.
+
+Next also makes injection bindings explicit. `inject Type` produces a typed value outside render
+position. A TypeScript-backed visual uses
+`render inject Name expression, Content @@content, Layout @@layout, Tag @@tag`; a bare name binds the
+same-named Tao value. `TR`, `RN`, and `process` are always available in injected TypeScript, while no
+other Tao value or compiler-prefixed props bag is implicit. The returned element is the visual root;
+Tao adds no wrapper, and applying layout/tag plus rendering content exactly once is the injected
+implementation's responsibility.
 
 ### Owner-bound arguments
 
@@ -75,11 +136,15 @@ require numbers; boolean operators require booleans.
 
 ### Product functions
 
-A product function is a top-level, expression-bodied, pure declaration:
+A product function is a top-level pure declaration. The currently implemented tranche accepts the
+expression-bodied form:
 
 ```tao
 function DocumentLabel Title is text returns text = "Document: { Title }"
 ```
+
+The settled Next form is block-bodied and parenthesized, as specified above. The return annotation is
+optional when it can be inferred from the returned expression.
 
 Calls use the same non-positional owner binder as other invocations. Parameters are immutable, the
 declared return type must accept the expression result, and the body cannot read reactive state or
@@ -92,10 +157,10 @@ comma-separated. Contracts are structural. Named actions infer their callback si
 action with incompatible value types or required arity is rejected.
 
 ```tao
-view Editor {
+view Editor() {
    state Draft = ""
-   action ChangeDraft Value is text { set Draft = Value }
-   action Save { }
+   action ChangeDraft(Value is text) { set Draft = Value }
+   action Save() { }
    render TextInput(Value: Draft, Label: "Draft") {
       on change ChangeDraft
       on submit Save
@@ -184,14 +249,17 @@ deferred.
 
 ### Dialogue
 
-`dialogue Name <Parameters> responds <Enum>` is response-demanding presentable content. `ask`
+The implemented dialogue form is `dialogue Name <Parameters> responds <Enum>`; Next requires the
+parameters to be parenthesized, including `dialogue Name() responds <Enum>`. A dialogue is
+response-demanding presentable content. `ask`
 creates a fresh stacked occurrence and suspends its action until that occurrence answers.
 `respond Case` supplies the declared enum case; bare `respond`, Back, or dismissal supplies `none`.
 Each occurrence owns its resolver, so nested or repeated asks cannot answer one another.
 
 ### Collections and entities
 
-List literals are homogeneous and comma-separated. Rendering iteration uses
+List literals are homogeneous and comma-separated. Next requires every declared list type to spell
+its element type as `list of T`; bare `list` is not valid Next source. Rendering iteration uses
 `loop Collection / Binder`; the binder type is inferred from the collection element and is scoped to
 the loop body. Queries are reactive lists of live entities. Relationship fields accept and return
 the declared related entity type, never arbitrary text. Strict `update` and `delete` require such a
@@ -244,9 +312,9 @@ These are intended, not implemented. Each is expressed as working product code i
 tiers or catalogued as an open decision; this section only names them so the contract above stays
 complete about its own boundaries.
 
-- **Items and named types.** Optional fields, item type extension, structural `like` types, and
-  owner-qualified property types. Sketched in `Apps/WordFlower/4 - Revolution`; catalogued as
-  LANG-004 through LANG-006.
+- **Items and named types.** Item type extension, structural `like` types, and owner-qualified
+  property types. Optional fields are already settled for Next. The remaining work is sketched in
+  `Apps/WordFlower/4 - Revolution` and catalogued as LANG-004 through LANG-006.
 - **`match` and overloaded declarations.** Closed unions matched exhaustively, and declarations
   overloaded by argument shape. Sketched in `4 - Revolution`; LANG-006 and LANG-021.
 - **Declaration properties in longhand.** A property block with `optional` and `default` entries
@@ -257,7 +325,7 @@ complete about its own boundaries.
   member conversions such as a duration read in minutes. LANG-026.
 - **Automation and lifecycle events.** Declared events and time, app, and network hooks, which
   would extend the `on` vocabulary beyond control events. LANG-020.
-- **Async and concurrency.** A fork form plus the concurrency policy that must accompany it —
+- **Concurrency.** A fork form plus the concurrency policy that must accompany it —
   queue, single-flight, cancel-previous, or exclusive. LANG-019 and DEF-NAV-011.
 - **Errors and boundaries.** Result values, structured failure handling, and exhaustive case
   matching over them. LANG-021.

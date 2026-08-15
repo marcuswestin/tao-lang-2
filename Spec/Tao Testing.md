@@ -1,6 +1,7 @@
 # Tao Testing
 
-Status: authoritative executable contract for the current WordFlower tranche.
+Status: authoritative executable contract for the current WordFlower tranche, with explicitly
+labelled additions settled for `Apps/WordFlower/2 - Next`.
 
 Tao behavior tests exercise compiled apps through the Expo/React Native render harness. Tests are
 black-box: they act on rendered controls and assert rendered output rather than reading Tao state,
@@ -66,6 +67,11 @@ ID-based selectors are retired. Entity handles do expose a stable, read-only `.I
 retain it after deletion, but that value is not a selector. Stable entity-ID row selection is
 deliberately not implemented.
 
+Next shares one lexical terminal between tags and hexadecimal design colors. AST context determines
+the role: a tag must match `#[A-Za-z_][A-Za-z0-9_]*`; a design color is validated separately as
+`#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`. Digit-leading `#...` therefore cannot silently become a
+tag, and letter-leading colors are not misclassified by the lexer.
+
 Global selectors use exact normalized user-visible text, accessibility labels, or placeholders:
 
 ```tao
@@ -129,6 +135,16 @@ Executable steps run in source order:
 - `expect` and `expect missing` inspect the current rendered tree;
 - grouped and tag-scoped expectations run as one plan step;
 - `select #tag[N] { ... }` supplies a dynamically re-resolved row scope.
+
+Next adds a control-specific assertion for the new two-state surface:
+
+```tao
+expect checkbox #rememberMe checked
+expect checkbox #marketingOptIn unchecked
+```
+
+The selector resolves exactly one `Checkbox`; `checked` and `unchecked` assert its current exposed
+control state. This does not expose arbitrary Tao state or provider data.
 
 Each event runs inside React's `act` boundary so synchronous Tao state, data, and navigation updates
 settle before the next step. Assertions do not currently poll or sleep.

@@ -1,15 +1,25 @@
 # Tao Presentation and Navigation
 
-Status: authoritative implemented contract for the current WordFlower tranche.
+Status: authoritative implemented contract for the current WordFlower tranche, with explicitly
+labelled declaration-model additions settled for `Apps/WordFlower/2 - Next`.
 
 Tao separates embeddable `view` values from first-class `ui` values that may enter an app's
-presentation tree. A configured `nav` is also presentable. The shared role is declared in Tao:
+presentation tree. A configured `nav` is also presentable. Current code represents their closed
+role as `Presentable is ui | nav`. Next replaces that special union with the core hierarchy:
 
 ```tao
-public type Presentable is ui | nav
+primitive visual
+primitive presentable is visual
+primitive view is visual
+primitive layout is visual
+primitive frame is visual
+primitive ui is presentable
+primitive nav is presentable with { implement }
 ```
 
-Apps mount navigation; they do not render ordinary content directly.
+Every presentable is therefore visual, but an embeddable `view`, `layout`, or `frame` is not directly
+presentable by a navigator. A configured nav is not a render-bearing declaration despite sharing
+the visual type root. Apps mount navigation; they do not render ordinary content directly.
 
 ## Apps and configured navigation
 
@@ -17,13 +27,13 @@ Apps mount navigation; they do not render ordinary content directly.
 use Local from @tao/data
 use SelectionNav, StackNav from @tao/nav
 
-let HomeStack = StackNav {
+nav HomeStack = StackNav {
    Initial Home
 }
-let SettingsStack = StackNav {
+nav SettingsStack = StackNav {
    Initial Settings
 }
-let WordFlowerNavigator = SelectionNav {
+nav WordFlowerNavigator = SelectionNav {
    Initial @home
    Display "automatic"
    @home {
@@ -49,8 +59,13 @@ app WordFlower {
 app's provider; Local's storage identity is specified in `Tao Data.md`. App auxiliaries remain valid
 for genuine app-specific hosts such as windows. Overlays and toasts never require auxiliary hosts.
 
-An app value and each configured nav descriptor have process-local declaration identity. A `let`
-may name a descriptor without changing that identity. Mounting creates occurrence state; targeting
+An app value and each configured nav descriptor have process-local declaration identity. Universal
+auto-typed `let` remains equivalent and may name any of the descriptors above without changing that
+identity. The Next `nav Name = Assignment` and `app Name = Assignment` heads constrain their value
+families without erasing the more precise inferred type; they declare values, not reusable types.
+Reusable derivation uses `type Name is nav|app with { ... }`. `Type { ... }` constructs a value and
+is sugar for `Type with { ... }`, while derivation from an existing value must retain `with`.
+Mounting creates occurrence state; targeting
 the descriptor resolves its mounted occurrence within the enclosing app. Neither configuration nor
 target resolution consults a shipped-name table. Two declarations or generated modules may reuse a
 display name without overwriting each other's app or nav definitions.
@@ -66,6 +81,10 @@ workspace let WordFlowerDrawer = WordFlower with {
    }
 }
 ```
+
+Next requires every app value, including variants, to be declared in the entry file; cross-module
+variant derivation is unreachable. `run`, imports, and strict app identity accept any complete app
+value uniformly whether its declaration uses a primitive `app` head or inferred `let`.
 
 Strict app targets name a declaration statically and select its running occurrence dynamically.
 `present App@key`, `present Ui() in App@key`, and `replace Nav in App` walk the enclosing app chain
@@ -86,6 +105,12 @@ select an app.
 
 The stdlib navs are ordinary Tao declarations whose public properties are their complete generic
 configuration contract:
+
+The example below is the currently implemented declaration spelling. Next has settled that `nav`
+heads declare values and that reusable types use `type Name is nav with { ... }`; it has not yet
+settled whether the protocol binding in that type block becomes `implement is ...` or retains the
+current `implement inject nav ...` clause. That remaining spelling is tracked as declaration-spike
+Q11 and does not change the current behavior described here.
 
 ````tao
 public nav StackNav {
@@ -190,12 +215,12 @@ incorrectly typed arguments are diagnostics, and source order never disambiguate
 A dialogue declares the enum it can answer:
 
 ```tao
-dialogue ConfirmClose Document responds ConfirmResult {
+dialogue ConfirmClose(Document) responds ConfirmResult {
    // ...
    on press -> { respond Confirmed }
 }
 
-action CloseDocument {
+action CloseDocument() {
    let Result = ask ConfirmClose(Document)
    if Result is Confirmed { dismiss }
 }

@@ -12,6 +12,28 @@ Apps/Test Apps/<App Name>/
 
 This file is the contract for each app's scope. When a change would expand an app beyond its entry below, update the entry first. Product behavior belongs in `Apps/WordFlower/`, never here.
 
+## Settled expansion when Next is implemented
+
+The entries below describe the executable apps today. Absorbing `Apps/WordFlower/2 - Next` must
+expand the positive examples without erasing compatible coverage:
+
+- Functional Core covers parenthesized block-bodied functions, explicit `return`, inferred return
+  types, and non-blocking `async { ... }`.
+- Layout and App Shell covers `frame`, intrinsic `@@content`, optional single-fill named slots,
+  named design bundles and direct-clause precedence, `width max`, `Panes`, and `ScrollView`.
+- Runtime Stdlib covers `Image`, `Checkbox`, `ScrollView`, `Spinner`, and `Progress`, while collection
+  rendering remains language-owned through `loop` and no `List` component is added. Package coverage
+  includes `@tao/text` `CountWords` and `Join`.
+- Type System Tests cover `list of T`, nominal enums including one-case enums, optional item fields,
+  `let Name is Type = Value`, primitive app/nav/datasource value heads, and the settled `with`
+  construction-versus-value-derivation rules.
+- Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
+- All `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declarations use a
+  parenthesized parameter list, including `()`.
+
+The current expression-bodied function and pre-frame statements below remain accurate until that
+absorption; the settled expansion supersedes those particular forms when Current advances.
+
 ## Navigation MVP
 
 Exercise app-mounted navigation: presentation, covered-entry state preservation, and back behavior.

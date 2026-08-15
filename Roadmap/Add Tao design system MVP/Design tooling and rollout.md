@@ -1,7 +1,10 @@
 # Design tooling and rollout
 
 Moved out of `Spec/Tao Design - WIP.md` so that spec covers the design language and this file covers
-the tooling, artifacts, and rollout around it. None of this is implemented.
+the tooling, artifacts, and rollout around it. None of this is implemented. The preceding language
+slice is now settled in `Apps/WordFlower/2 - Next`: flat tokens and named clause bundles inside an
+ordinary `.tao` design declaration, selected by the app's `Design` property. The tooling and richer
+design layers below remain compatible later work.
 
 ## `tao design`
 
@@ -205,15 +208,18 @@ This should build on Tao-native testing and app-state modeling rather than inven
 
 Phase 1: deterministic source and runtime design
 
-- Parse combined layout/design specs and the MVP design declaration surface.
-- Add design declarations or an equivalent app-local design file.
-- Add token and semantic-token resolution.
-- Add a small recipe/default system.
+- Parse the exact Next `design Name { ... }` surface in ordinary `.tao` source.
+- Resolve flat tokens and named clause bundles.
+- Compose bundles and direct clauses left to right; the last value for the same clause wins, then
+  reject semantically incompatible resolved clause sets.
+- Lex `#...` through `TagOrHexColor` and validate tag and CSS hexadecimal color contexts separately.
 - Lower design to React Native styles through runtime helpers.
+- Apply the app's selected `Design` value.
+
+Phase 2: semantic tokens, recipes, defaults, and design diagnostics
+
+- Add semantic-token resolution and a small recipe/default system.
 - Add deterministic app defaults for core views.
-
-Phase 2: recipes and design diagnostics
-
 - Add recipe variants and state styles.
 - Add source-level design diagnostics.
 - Warn on raw values where semantic tokens are preferred.
@@ -246,14 +252,18 @@ Phase 5: ecosystem
 
 ## Open Questions
 
-- What declaration syntax best defines tokens, named specs, recipes, and recipe variants?
+- ~~What declaration syntax defines the first tokens and named specs?~~ **Decided for Next:** flat
+  `name value` tokens and `name [clauses]` bundles inside `design Name { ... }`. Semantic-token,
+  recipe, and recipe-variant syntax remains open.
 - ~~Does source use `design`, `theme`, or both as public capability names?~~ **Decided: `design`.** The declaration is `design <Name> { ... }` and an app selects it with `Design <Name>`.
 - ~~Should the first design data live in `.tao` source, a `tao.design` file, or both?~~ **Decided: `.tao` source.** Design is an ordinary Tao declaration subject to the same visibility, imports, and validation as the rest of the language; no separate design file format.
-- Which visual treatments can apply to `layout` and future `frame` declarations?
-- How do combined specs interact with named render slots and caller content?
+- Which visual treatments can apply to `layout` and `frame` declarations?
+- How do combined specs interact with future slot forms beyond Next's opaque single-fill named slot
+  and intrinsic `@@content`?
 - Which diagnostics are ordinary validator diagnostics, and which belong to `tao design check`?
 - How are app defaults selected before the user has authored a design?
-- How should raw values be represented so they remain useful for prototypes without becoming the main style language?
+- Beyond Next's unquoted CSS hexadecimal color literal, which raw value forms should remain useful
+  for prototypes without becoming the main style language?
 - What is the first useful cross-platform adaptation axis: color scheme, platform, density, text scale, motion, locale, or pointer/hover capability?
 
 ## Prior Art

@@ -1,4 +1,4 @@
-use WordFlowerFoundationTest from ./
+use WordFlowerDeclarationHead, WordFlowerDeclarationHeadWith, WordFlowerDeclarationLet, WordFlowerDeclarationLetWith, WordFlowerFoundationTest from ./
 
 test "WordFlower navigation foundation" {
    check "native back uses the semantic reducer" {
@@ -19,5 +19,30 @@ test "WordFlower navigation foundation" {
       press text "Restore initial stack"
       expect text "Foundation home marker"
       expect missing text "Foundation slot marker"
+   }
+}
+
+// All four checks must mount the same complete app/nav behavior. Together they prove that primitive
+// value heads and inferred `let` bindings are equivalent, and that an explicit constructor `with`
+// is equivalent to its canonical omission.
+test "WordFlower declaration refinement forms" {
+   check "a primitive head with canonical construction works" {
+      run WordFlowerDeclarationHead
+      expect text "Foundation home marker"
+   }
+
+   check "a primitive head with explicit refinement works" {
+      run WordFlowerDeclarationHeadWith
+      expect text "Foundation home marker"
+   }
+
+   check "an inferred let with canonical construction works" {
+      run WordFlowerDeclarationLet
+      expect text "Foundation home marker"
+   }
+
+   check "an inferred let with explicit refinement works" {
+      run WordFlowerDeclarationLetWith
+      expect text "Foundation home marker"
    }
 }

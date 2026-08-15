@@ -1,70 +1,126 @@
-use InstantDB from @instantdb
 use Local from @tao/data
 use SelectionNav, SlotNav, StackNav from @tao/nav
 use Col, FormButton, Text from @tao/ui
-use BuildStamp, FoundationNavigator, WordFlowerDesign, WorkspaceChooser, WorkspaceList from ./
+use BuildStamp, Card, FoundationNavigator, FoundationStack, FoundationStackLet, FoundationStackLetWith, FoundationStackWith, Scroller, SessionGoal, Toolbar, WordBadge, WordFlowerDesign, WorkspaceChooser, WorkspaceList from ./
 
 // Tranche status: open
 //
-// SURFACES AND REMOTE DATA. This tranche gives WordFlower the UI primitives and adaptive layout a
-// real app needs, puts it on a remote provider, and closes several small language gaps. It ends
-// with a deliberately minimal first styling pass.
+// SURFACES AND DECLARATIONS. This tranche gives WordFlower the UI primitives, adaptive layout,
+// declaration model, and minimal design system used by the code in this directory.
 //
 // The contract is now a DIRECTORY. Every file here is part of it:
 //
-//   WordFlower.tao-next   this file — project, apps, navigation, providers, variants, app shell
+//   WordFlower.tao-next   this file — project, apps, navigation, local datasource, variants, shell
 //   Data.tao-next         the data catalog
 //   Shared.tao-next       shared types, functions, and injected views
 //   Workspaces.tao-next   the workspace area
 //   Documents.tao-next    the document area
 //   Foundation.tao-next   the deterministic navigation harness
 //   Design.tao-next       the minimal design system — IMPLEMENT LAST, see that file
+//   @tao-next/Prelude.tao-next
+//                         the tranche Prelude contract — graduates to packages/stdlib during its
+//                         implementation slice, then this scratch package is deleted
+//   @tao-next/text/Text.tao-next
+//                         the `@tao/text` contract — graduates to packages/stdlib/tao/text during
+//                         its implementation slice, then this scratch package is deleted
 //
-// Because a tier is a directory now, the absorption gates must compare `1 - Current` and
-// `2 - Next` as whole directories: same file set, and every file byte-identical to its counterpart
-// when the tranche is closed. Teaching the gates about directories is part of this tranche. Until
-// it lands they still pair two named files, so the marker below is repeated in this file's sidecar;
-// once directory gating exists, one marker in this file governs the tier.
+// The absorption gates must compare `1 - Current` and `2 - Next` as whole directories: the same
+// file set, with every file byte-identical to its counterpart when the tranche closes. Implementing
+// directory gating is part of this tranche. The repeated sidecar marker remains only as bootstrap
+// input to that implementation; the directory contract has one status after the new gate lands.
 //
 // This tranche decides:
-// - Stdlib surfaces: `ScrollView`, `Image`, `Icon`, `Checkbox`, `List` with `on select`, `Spinner`,
-//   and `Progress`
-// - Adaptive layout: `Panes()` lays its children side by side when the container is wide enough and
-//   stacks them otherwise, and `width max <n>` bounds a readable column. Responsiveness is a
-//   container behavior, not a language-level breakpoint
-// - The app shell honors safe-area and keyboard insets. This is runtime behavior with no source
-//   surface; apps do not opt in
-// - Remote data: `Datasource InstantDB { AppId "..." }` on the published provider protocol,
-//   extended for inbound subscription deltas, write acknowledgement, externally originated store
-//   revisions, and reconciliation between provider row identity and generated ids
-// - `unauthorized` becomes a provider-produced availability state. `data unauthorized` and
-//   `data delayed <milliseconds>` drive it and latency deterministically in checks
+// - Stdlib surfaces: `ScrollView`, `Image`, `Checkbox`, `Spinner`, and `Progress`. Selectable
+//   collection rendering stays language-owned: `loop Plural / Singular { ... }` scopes its template
+//   block and optional `on select` to the row, so no stdlib `List` or function-typed row slot is
+//   introduced
+// - Text stdlib: `@tao/text` exports the injected functions `CountWords(text)` and
+//   `Join(list of text, Separator: text)` with the exact behavior specified by
+//   `@tao-next/text/Text.tao-next`
+// - Adaptive layout: `Panes()` lays its children side by side when, after gaps, each child can
+//   receive at least 320 logical pixels; otherwise it stacks them in source order. In horizontal
+//   mode, `claim` distributes remaining width proportionally. `width max <n>` bounds a readable
+//   column. This adaptation is fixed stdlib container behavior, not language breakpoint syntax
 // - `async { }` runs its block without delaying the statements after it; failures surface as
-//   provider error state. The concurrency policy vocabulary stays deferred under DEF-NAV-011
-// - Declaration kinds name configured values, replacing `let` for them: `Kind Name { ... }`
-//   declares a new one and `Kind Name = <value>` names or derives one, so `app X = Y with { ... }`
-//   `datasource S = Local { ... }` / `datasource T = S with { ... }`, and `nav N = StackNav { ... }`
-//   read like every other declaration. The `AppValueDeclaration` union collapses to `AppDeclaration`, and app variants
-//   inherit the entry-file rule — every app and variant is declared in the entry file, which is
-//   what keeps cross-module variant derivation unreachable
+//   provider error state
+// - Primitive value heads make the common product declaration explicit: `nav N = StackNav { ... }`,
+//   `datasource S = Local { ... }`, and `app X = Y with { ... }` declare values, while the rarer
+//   reusable type form is `type T is nav|datasource|app with { ... }`. A direct `nav N { ... }`
+//   instantiates primitive `nav`; it fills only members `nav` already declares. It never declares a
+//   new nav type or adds members, and it is usable only when those fills plus primitive defaults make
+//   the value complete. `let` remains the universal auto-typed immutable binding for local,
+//   supporting, computed, and copied values; a primitive head constrains the value family without
+//   widening away the more precise inferred type
+// - `with` is THE core refinement operation underlying type derivation, type instantiation, and
+//   value derivation. It may be omitted only for construction from a base resolved as a type:
+//   `Type { <fills> }` is sugar for `Type with { <fills> }`. Derivation from an existing value must
+//   keep it visible as `Value with { <delta> }`; `Value { ... }` is not legal. If type and value
+//   namespaces both contain a name, bare `Name { ... }` resolves the type namespace and constructs
+//   a value. In a value expression, `Name with { ... }` resolves the value namespace first and the
+//   type namespace only when no value exists; after `type T is`, the base resolves only the type
+//   namespace. The delta always narrows or fills and never reopens a filled member. A value may fill
+//   or override declared data/configuration properties but may never introduce a member
+//   No `required` keyword is introduced: a supplied property without a default remains required
+// - Every app value is declared in the entry file, which keeps cross-module variant derivation
+//   unreachable. `run`, imports, and strict app identity accept any complete app value uniformly,
+//   whether a primitive head or an inferred `let` declared it; no AST-kind union leaks into semantics
+// - A render site composes named clause bundles and direct clauses in one list, and the last
+//   specification of a given clause wins: `[screen, claim 2, width max 720]` reads left to right.
+//   After same-clause replacement, validation rejects a resolved clause set whose remaining clauses
+//   are semantically incompatible; source order never makes incompatible clause categories valid
+// - Rendering and presentability are orthogonal core roles. `visual` is their common rendering
+//   root; `presentable` refines it, and `ui` and `nav` refine `presentable`. `view`, `layout`, and
+//   `frame` refine `visual` without becoming presentable. Content acceptance belongs intrinsically
+//   to the declaration kind, not to a property or slot: `view` is a leaf, while `layout` and `frame`
+//   accept caller content and place it with `@@content`. A TypeScript-backed container therefore
+//   declares itself a `layout`. A layout clause is ambient on every visual occurrence, so nothing
+//   declares it and no user name collides with it. `@tao-next/Prelude.tao-next` pins this hierarchy
+// - A frame declares an optional named content slot with `@name = empty`. The name is in the frame's
+//   slot namespace, `empty` contributes no rendered node, and a caller fills it at most once with
+//   `@name <visual>`. A filled slot is opaque visual content placed exactly where `@name` occurs in
+//   the frame render body; `Card` and its `@actions` call site exercise the complete contract
+// - An injection has no compiler-prefixed names. `TR`, `RN`, and `process` are always in scope in
+//   injected TypeScript; the inject list explicitly names every additional Tao-provided binding.
+//   Each entry is `<Name> <value>` over any expression, and a bare name binds a property under its
+//   own name:
+//   `render inject Total, Suffix " words", Content @@content, Layout @@layout, Tag @@tag`.
+//   This retires the implicit `_ViewProps` bag and is the form to implement across Tao, stdlib
+//   included. The ambient channels are exactly `@@content`, `@@layout` — which carries the parent
+//   direction the occurrence lays out against — and `@@tag`; navigation, dialogue, app, and caller
+//   inheritance stay private and never reach a hand-written implementation
+// - The value of `render inject` is the view's root element and Tao wraps nothing around it, which
+//   is already the emitted behavior. Applying `Layout` and `Tag`, and rendering `Content` exactly
+//   once, are the implementation's responsibility and are not checked
+// - Every `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declaration has a
+//   parenthesized parameter list, including `()` when empty, mirroring its call sites:
+//   `view WordCountLabel(Value is text)`, `action SaveDocument()`, `ui Settings()`. Omitting the list
+//   is invalid. A `function` has a block body and hands its result back with `return`, so early
+//   returns are available; `returns <type>` is optional and inferred when omitted
+// - `let X is Type = value` ascribes a binding: `is` narrows, `=` binds. It keeps aligned `let`
+//   columns and preserves `Name is Type` order rather than inverting to type-first
+// - List types always name their element type as `list of T`; bare `list` is invalid in type
+//   declarations and parameter ascriptions
+// - `enum Name { Cases }` declares a nominal type in the ordinary type system, and each case is a
+//   value of that type. One-case enums are valid; `ConfirmResult` deliberately uses `none` for
+//   dismissal rather than declaring a second case
 // - `inject <type>` produces a typed value outside render position
 // - `optional <Name> <type>` declares an item field that may be absent
 // - `expect checkbox <selector> checked|unchecked` joins the test vocabulary, since a two-state
 //   control cannot be asserted through visible text
 // - Minimal design: flat tokens plus named clause bundles applied at render sites, and an app
-//   `Design` property
-//
-// Deliberately NOT here: splits and windows, snapshots, restoration and routes, the concurrency
-// policy vocabulary, and bare asset literals — assets are ordinary text paths in this tranche and
-// LANG-025 still owns the `./images/hero.png` literal form.
-
+//   `Design` property. The lexer replaces `TAG` with one shared terminal,
+//   `TagOrHexColor: /#[A-Za-z0-9_]+/`. AST context distinguishes tag and design-token positions.
+//   The validator requires tags to match `#[A-Za-z_][A-Za-z0-9_]*` and design color values to match
+//   CSS hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively
 project {
    name "WordFlower"
    remote none
    license MIT
 }
 
-// A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
+// A configured nav declaration is a nav value: an immutable descriptor, not a mounted occurrence
+// or exposed runtime state. `StackNav` is its inferred concrete type; the `nav` head checks the
+// primitive family without erasing that more precise type.
 nav HomeStack = StackNav {
    Initial WorkspaceList
 }
@@ -79,7 +135,7 @@ nav SignedOutNav = StackNav {
 }
 
 // Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
-// target-key namespace. `Icon` names a stdlib system icon.
+// target-key namespace. The `Icon` property contains a system-icon name; it is not an Icon view.
 nav WordFlowerNavigator = SelectionNav {
    Initial @home
    Display "automatic"
@@ -99,16 +155,11 @@ nav WordFlowerNavigator = SelectionNav {
       Content SettingsStack
 }  }
 
-// A configured datasource is a named value like any other: constructed from a provider with a bare
-// block, or derived from another with `with`.
+// A configured datasource is a named value like any other. The bare constructor block is the
+// canonical surface spelling for the same refinement operation that explicit `with` exposes;
+// deriving from an existing datasource keeps `with` visible.
 datasource DeviceStore = Local {
    StorageKey "WordFlowerData"
-}
-datasource CloudStore = InstantDB {
-   AppId "wordflower-dev"
-}
-datasource StagingStore = CloudStore with {
-   AppId "wordflower-staging"
 }
 
 // An app mounts navs, it does not render content directly. Overlay and toast hosting are universal
@@ -118,19 +169,6 @@ app WordFlower {
    Design WordFlowerDesign
    Navigator WordFlowerNavigator
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
-}
-
-// The same app against the remote provider. A variant patches public properties; the original and
-// its declaration identity are unchanged, so strict targets still name `WordFlower`. An app variant
-// is an app, so it needs no visibility marking to be imported by a test sidecar beside it.
-app WordFlowerCloud = WordFlower with {
-   Name "WordFlower Cloud"
-   Datasource CloudStore
-}
-
-app WordFlowerStaging = WordFlowerCloud with {
-   Name "WordFlower Staging"
-   Datasource StagingStore
 }
 
 app WordFlowerDrawer = WordFlower with {
@@ -145,17 +183,45 @@ app WordFlowerFoundationTest {
    // An app without data omits `Datasource` entirely
 }
 
-workspace ui Settings {
-   render Col() [screen, width max 720, centered, gap 10] {
-      Text("Settings") [title]
-      Text("Build { BuildStamp }") [body] // a typed injected value, not a render
-      #resetSignedOut
-      FormButton("Reset to signed out") {
-         on press -> {
-            replace SignedOutNav in WordFlower
-}  }  }  }
+// These four apps cross the two independent declaration sugars. Each is a complete app value with
+// the same mounted behavior: primitive head versus inferred `let`, and canonical construction versus
+// explicit `with`. Foundation.test.tao-next runs all four, so every spelling must compile and work.
+app WordFlowerDeclarationHead {
+   Name "WordFlower Declaration Head"
+   Navigator FoundationStack
+}
 
-workspace ui SignedOut {
+app WordFlowerDeclarationHeadWith = app with {
+   Name "WordFlower Declaration Head With"
+   Navigator FoundationStackWith
+}
+
+workspace let WordFlowerDeclarationLet = app {
+   Name "WordFlower Declaration Let"
+   Navigator FoundationStackLet
+}
+
+workspace let WordFlowerDeclarationLetWith = app with {
+   Name "WordFlower Declaration Let With"
+   Navigator FoundationStackLetWith
+}
+
+workspace ui Settings() {
+   render Scroller() [screen] {
+      Col() [width max 720, centered, gap 10] {
+         Toolbar() {
+            Text("Settings") [title]
+         }
+         Card(Title: "Writing session") {
+            WordBadge(SessionGoal)
+            Text("Build { BuildStamp }") [body] // a typed injected value, not a render
+            @actions FormButton("Reset to signed out") {
+               #resetSignedOut
+               on press -> {
+                  replace SignedOutNav in WordFlower
+}  }  }  }  }  }
+
+workspace ui SignedOut() {
    render Col() [screen, centered] {
       Text("Signed out") [title]
 }  }

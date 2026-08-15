@@ -1,6 +1,7 @@
 # Tao Data
 
-Status: authoritative implemented contract for the current WordFlower tranche.
+Status: authoritative implemented contract for the current WordFlower tranche, with explicitly
+labelled value-declaration additions settled for `Apps/WordFlower/2 - Next`.
 
 Tao's data layer is provider-neutral in source and generated schema metadata. Top-level `data`
 declarations define entity shape, queries and writes operate on live typed values, and each `app`
@@ -67,7 +68,7 @@ Relationship values are live entity handles, not text IDs.
 ## App datasource configuration
 
 The catalog does not own provider identity. An app constructs a datasource from a declaration. A
-constructor takes a bare block; `with` is reserved for immutable patches of an existing value:
+constructor takes a bare block; derivation from an existing value keeps `with` visible:
 
 ```tao
 use Local, Memory from @tao/data
@@ -84,6 +85,10 @@ let WordFlowerDemo = WordFlower with {
    Datasource Memory
 }
 
+datasource PreviewStore = Local {
+   StorageKey "WordFlowerPreviewData"
+}
+
 workspace let WordFlowerPreview = WordFlower with {
    Datasource with {
       StorageKey "WordFlowerPreviewData"
@@ -91,11 +96,14 @@ workspace let WordFlowerPreview = WordFlower with {
 }
 ```
 
-`Local { ... }` is construction, and its declaration requires a text `StorageKey`. `Memory` declares
+`Local { ... }` is construction, and its declaration requires a text `StorageKey`. In the settled
+Next model it is sugar for `Local with { ... }` in value-construction position. `Memory` declares
 no properties, so bare `Datasource Memory` constructs its all-defaulted value. A property-position
 `Datasource with { ... }` patch starts from the datasource held by the base app; it does not mutate
 that app or reconstruct by provider name. The same patch rule applies to a configured datasource
-named with `let`.
+named with `let`. The Next `datasource Name = Assignment` head is a family-constrained value
+declaration equivalent to auto-typed `let`, not a new datasource type; reusable types use
+`type Name is datasource with { ... }`.
 
 The storage key belongs to the configured provider—not to a display `Name`, source filename, or
 data declaration. Local persists the version-1 envelope containing schema version, rows, and the
@@ -110,6 +118,11 @@ restart. Schemas with no bound datasource keep their ordinary query error state 
 ## Self-hosted datasource declarations
 
 `Local` and `Memory` are ordinary public Tao declarations in `@tao/data`, not compiler-known names:
+
+The examples below use the currently implemented declaration spelling. Next has settled that a
+`datasource` head declares a value and that a reusable provider type uses
+`type Name is datasource with { ... }`; the exact migration of `implement inject provider` into that
+type block remains declaration-spike Q11.
 
 ````tao
 public datasource Local {

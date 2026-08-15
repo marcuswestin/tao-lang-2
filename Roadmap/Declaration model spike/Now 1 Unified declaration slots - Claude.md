@@ -1,16 +1,17 @@
 # Now 1 - Unified Declaration Slots
 
-Ready to build now. No dependency on anything in `Open questions - Declaration model spike - Claude.md`
-— every item below was settled in dialogue with no branch left open. Companion to
+Historical build slice, now landed. Every item below was settled in dialogue with no branch left
+open. Companion to
 `Implementation - Declaration model spike - Claude.md`, which this narrows to a priority-ordered build
 list. Grammar facts verified against `main` at `6cfd88be` on 2026-08-14; re-verify line numbers before
 starting, since concurrent work may have moved them.
 
 ## The rule being built
 
-`is` narrows a type. `=` binds a value. `with { }` derives a value. Bare `{ }` constructs from a type.
-A declaration is complete when every **supplied** slot is filled — not derived ones (`render`,
-function results, action bodies) — and only complete declarations can be used as values.
+`is` narrows a type. `=` binds a value. `with { }` is the core type/value refinement operation. Bare
+`{ }` may omit `with` only when constructing from a type; derivation from a value keeps it visible. A
+declaration is complete when every **supplied** slot is filled — not derived ones (`render`, function
+results, action bodies) — and only complete declarations can be used as values.
 
 ## Slices, in build order
 
@@ -75,17 +76,22 @@ of keeping two statements of the same constraint.
 
 ### 9. The prelude
 
-`primitive` declarations as real, parsed, validated `.tao` — not prose. Contents: `item`, `number`,
-`text`, `boolean`, `list`, `time`, `action`, `nav` (slot: `implement`), `datasource` (slot:
-`implement`), `app` (slots: `Name`, `Navigator`, `Datasource`). Leave `ui`'s slot list exactly as it
-stands today — no `Children`/`Layout`, that is gated on an open question. The validator should read
-primitive slot lists from this file rather than any hardcoded list, if it doesn't already.
+`primitive` declarations as real, parsed, validated `.tao` — not prose. This slice introduced the
+initial roots. The subsequent Next contract replaces the Prelude with the complete hierarchy in
+`Apps/WordFlower/2 - Next/@tao-next/Prelude.tao-next`: `visual`, `presentable`, `view`, `layout`,
+`frame`, `ui`, `nav`, `datasource`, `app`, and `design`, alongside the scalar roots. `layout` and
+`frame` accept content intrinsically; they do not declare `Children` or `Layout` slots. During that
+implementation slice the Next Prelude moves into `packages/stdlib/tao/Prelude.tao`, then the scratch
+copy is deleted. The validator should ultimately read primitive contracts from the Prelude rather
+than a hardcoded list.
 
 ## Deliberately excluded
 
-Anything under `ui` beyond its current shape, `List`, and primitive-head legality for product
-declarations like `app`/`data` (i.e. whether `app Foo { }` stays legal alongside `let Foo = app { }`)
-— all open questions, do not guess at them. Sidecar `.ts` imports are `Now 2`.
+These were deliberately excluded from this landed slice, but are no longer all open. Next settles
+the visual/presentable hierarchy, `render inject`, intrinsic caller content, and primitive value
+heads for `app`, `nav`, and `datasource` alongside universal `let`. It deliberately introduces no
+stdlib `List`; collection rendering stays language-owned through `loop`. Sidecar `.ts` imports were
+`Now 2`.
 
 ## Validation
 

@@ -63,7 +63,7 @@ test "WordFlower documents" {
       }
    }
 
-   check "adds paragraphs without waiting for the write" {
+   check "adds paragraphs and clears the input from the asynchronous action" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -75,16 +75,14 @@ test "WordFlower documents" {
       select #drafts[1] {
          press #edit
       }
-      data delayed 250 // milliseconds; the provider now settles slowly
       enter "It began at sea." into #newParagraph
       submit #newParagraph
-      // `async` lets the action finish before the write settles, so the input clears at once.
+      // The statement after `async` clears the input without awaiting the write.
       expect #newParagraph input value ""
       expect {
          text "Paragraphs: 1"
          text "It began at sea."
       }
-      data ready
    }
 
    check "asks before closing" {

@@ -1,7 +1,7 @@
 // Tranche status: open
-use WordFlower, WordFlowerCloud, WordFlowerDrawer, WordFlowerStaging from ./
+use WordFlower, WordFlowerDrawer from ./
 
-// App-level journeys: selection navigation, variants, the app shell, and the remote provider.
+// App-level journeys: selection navigation, variants, and the app shell.
 
 test "WordFlower app shell" {
    check "activates the workspace tab and opens a document from the chooser" {
@@ -11,7 +11,7 @@ test "WordFlower app shell" {
       expect text "Novel"
       press #activateWorkspaceTab
       expect text "Choose a workspace"
-      // A List row is pressable; pressing its content selects the row.
+      // A loop row with `on select` is pressable; pressing its content selects the row.
       select #chooseWorkspace[1] {
          press text "Novel"
       }
@@ -34,50 +34,10 @@ test "WordFlower app shell" {
    check "reports the injected build stamp" {
       run WordFlower
       press text "Settings"
-      expect text "Build development"
-   }
-}
-
-test "WordFlower remote data" {
-   // Checks always run against an isolated provider, so these drive provider states directly
-   // rather than reaching a remote service.
-   check "surfaces an unauthorized document" {
-      run WordFlowerCloud
-      enter "Novel" into #workspaceName
-      submit #workspaceName
-      select #workspaces[1] {
-         press #openWorkspace
-      }
-      enter "Chapter one" into #newDocumentTitle
-      submit #newDocumentTitle
-      select #drafts[1] {
-         press #edit
-      }
-      expect text "Document: Chapter one"
-      data unauthorized
-      expect text "You no longer have access to this document."
-      data ready
-      expect text "Document: Chapter one"
-   }
-
-   check "a derived datasource configures a deployment variant" {
-      run WordFlowerStaging
-      expect text "No workspaces yet"
-      enter "Novel" into #workspaceName
-      submit #workspaceName
-      expect text "Novel"
-   }
-
-   check "recovers from a remote failure" {
-      run WordFlowerCloud
-      data loading
-      expect text "Loading workspaces…"
-      data error "The workspace could not be reached"
       expect {
-         text "Could not load WordFlower"
-         text "The workspace could not be reached"
+         text "Writing session"
+         text "10 words"
+         text "Build development"
       }
-      data ready
-      expect text "No workspaces yet"
    }
 }

@@ -1,0 +1,57 @@
+// PRELUDE CONTRACT FOR THIS OPEN TRANCHE.
+//
+// Keep this file under Next while its syntax and semantics are unimplemented. During the Prelude
+// implementation slice, teach the grammar, scoping, validator, formatter, compiler, and runtime
+// these declarations, then replace `packages/stdlib/tao/Prelude.tao` with this contract as Current
+// migrates. After focused package coverage and `./agent verify` pass, delete this `@tao-next`
+// scratch package before closing the tranche and arming the Next/Current byte-identity gates.
+//
+// Core primitives are compiler-known types. A primitive without `is` is an opaque root; `is`
+// declares a nominal refinement of another core type.
+
+primitive item
+
+primitive number
+
+primitive text
+
+primitive boolean
+
+primitive list
+
+primitive time
+
+primitive action
+
+primitive design
+
+// Rendering and presentability are independent roles. Every presentable is visual, but an
+// embeddable view, layout, or frame is not thereby directly presentable by a navigator.
+primitive visual
+
+primitive presentable is visual
+
+primitive view is visual
+
+// `layout` and `frame` intrinsically accept caller content and bind `@@content` in their render
+// bodies. Content acceptance is a declaration-kind capability, not a declared property or slot.
+primitive layout is visual
+
+primitive frame is visual
+
+primitive ui is presentable
+
+primitive nav is presentable with {
+   implement,
+}
+
+primitive datasource with {
+   implement,
+}
+
+primitive app with {
+   Name text,
+   Navigator nav,
+   Datasource datasource is none,
+   Design design is none,
+}

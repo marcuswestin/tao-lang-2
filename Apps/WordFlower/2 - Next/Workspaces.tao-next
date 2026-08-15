@@ -1,14 +1,13 @@
-use Col, FormButton, Image, List, Panes, ScrollView, Spinner, Text, TextInput from @tao/ui
-use StarterPrompt, TagLine, Tagline, Workspaces from ./
-use DocumentScreen from ./
+use Col, FormButton, Image, Panes, ScrollView, Spinner, Text, TextInput from @tao/ui
+use DocumentScreen, StarterPrompt, TagSummary, WordFlowerTagline, Workspaces from ./
 
 // The workspace area. `ui` is content that can enter the app's presentation tree; `view` stays
 // embeddable content. Presenting a `ui` is the whole navigation contract.
 
-workspace ui WorkspaceList {
+workspace ui WorkspaceList() {
    state WorkspaceName = ""
    query Workspaces { }
-   action AddWorkspace {
+   action AddWorkspace() {
       guard WorkspaceName empty -> { // a match runs its handler and skips the rest of this action
          present WorkspaceNameNotice() as overlay
       }
@@ -22,7 +21,7 @@ workspace ui WorkspaceList {
    render ScrollView() [screen] {
       Col() [width max 720, centered, gap 10] {
          Text("WordFlower") [title]
-         Text(Tagline) [body]
+         Text(WordFlowerTagline) [body]
          // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
          guard Workspaces {
             loading -> {
@@ -53,13 +52,14 @@ workspace ui WorkspaceList {
                present WordFlower@workspace
          }  }
          guard Workspaces empty -> {
-            // A decorative image needs no accessibility label. Assets are text paths for now.
+            // A decorative image needs no accessibility label. This tranche represents assets as
+            // text paths.
             Image("./images/empty-workspaces.png", Decorative: true) [width 160, centered]
             Text("No workspaces yet") [title]
             Text("Create one to start capturing documents.") [body]
             Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
             Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
-            TagLine(StarterPrompt.PromptTags)
+            TagSummary(StarterPrompt.PromptTags)
          }
          #workspaces
          loop Workspaces / Workspace {
@@ -77,7 +77,7 @@ workspace ui WorkspaceList {
 }  }  }  }  }  }  }
 
 // Presented above the nearest nav; overlays stack above content and are dismissible.
-ui WorkspaceNameNotice {
+ui WorkspaceNameNotice() {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name") [body]
       #dismissNotice
@@ -86,7 +86,7 @@ ui WorkspaceNameNotice {
             dismiss
 }  }  }  }
 
-workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same-named entity type
+workspace ui WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    query Drafts from Workspace.Documents {
@@ -95,12 +95,12 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
    query FinishedDocuments from Workspace.Documents {
       where is Final
    }
-   action SaveWorkspace {
+   action SaveWorkspace() {
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
    }  }
-   action AddDocument {
+   action AddDocument() {
       guard DocumentTitle empty
       create Document {
          Title: DocumentTitle
@@ -198,24 +198,23 @@ workspace ui WorkspaceDetail Workspace { // a bare parameter name binds the same
                            delete Document
 }  }  }  }  }  }  }  }  }
 
-workspace ui WorkspaceChooser {
+workspace ui WorkspaceChooser() {
    query Workspaces { }
    render Col() [screen, width max 720, centered, gap 10] {
       Text("Choose a workspace") [title]
       guard Workspaces empty -> {
          Text("No workspaces yet") [body]
       }
-      // `List` renders a selectable collection, binding its row exactly as `loop` does; the row
-      // name scopes the template and `on select`, so a selectable list needs no per-row button.
-      // `loop` remains the form for non-selectable rendering.
+      // A loop with `on select` makes each row selectable. Its singular name scopes both the template and
+      // `on select`, so a selectable collection needs no stdlib List or per-row button.
       #chooseWorkspace
-      List(Workspaces / Workspace) {
+      loop Workspaces / Workspace {
          Text(Workspace.Name) [body]
          on select -> {
             present WorkspaceDocuments(Workspace) in WorkspaceNav
 }  }  }  }
 
-workspace ui WorkspaceDocuments Workspace {
+workspace ui WorkspaceDocuments(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [screen, width max 720, centered, gap 10] {
       Text("Documents in { Workspace.Name }") [title]
@@ -223,7 +222,7 @@ workspace ui WorkspaceDocuments Workspace {
          Text("No documents yet") [body]
       }
       #workspaceDocuments
-      List(Documents / Document) {
+      loop Documents / Document {
          Text(Document.Title) [body]
          on select -> {
             present DocumentScreen(Document)

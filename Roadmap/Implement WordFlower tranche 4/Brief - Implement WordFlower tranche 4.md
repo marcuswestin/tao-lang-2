@@ -1,19 +1,14 @@
 # Brief - Implement WordFlower Tranche 4
 
-Draft for review. Orchestrator brief: findings and constraints, not a plan. Devise the plan yourself.
-Verified against `main` at `6cfd88be` on 2026-08-14. **Substantial repository work is scheduled to
-land before you start**, so re-verify everything below against `main` as it stands when you begin.
+Implementation brief: findings and constraints, not a plan. Devise the plan yourself. Re-verify all
+repository seams against the live checkout before beginning.
 
 `Apps/WordFlower/README.md` owns the tranche process and is the first thing to read. This brief
 records where the contract lives, what it spans, and what it collides with.
 
-> **Correction, 2026-08-14 — parts of "Scope" below are superseded.** Ro settled a unified declaration
-> model after this brief was written. See `Roadmap/Declaration model spike/`. Two scope items are
-> affected: the **Declaration kinds** bullet is wrong as written (`let` survives; `=` no longer
-> connects a kind to a base), and the **stdlib surfaces** bullet now sits under a decision that stdlib
-> components become ordinary `@tao/ui` declarations rather than compiler-known names. Whether tranche 4
-> builds those surfaces the current way and migrates later, or waits, is Ro's call — ask before
-> planning either. `List` specifically is an open question (Q4 in that spike's open-questions file).
+`Apps/WordFlower/2 - Next/` is the authoritative, settled tranche contract. Its code and header replace
+older scope wording in this brief and in the declaration-model spike; do not reopen those decisions
+while planning implementation.
 
 ## What changed before you
 
@@ -22,9 +17,8 @@ rather than retrofit them afterwards. Confirm each against live `main`; if one d
 before planning around it.
 
 - **`packages/runtime` was split.** The shipped React Native runtime, the app-generation and Jest
-  harness, and the `.tao` stdlib no longer share one package or one dependency manifest. A boundary
-  now exists for what ships to users versus what stays in the toolchain — your remote-provider package
-  lands inside that established structure, not alongside it.
+  harness, and the `.tao` stdlib no longer share one package or one dependency manifest. Preserve the
+  established boundary between shipped runtime code and toolchain-only support.
 - **`packages/dev` was reorganized**, and the AI review subsystem, AI usage accounting, and the
   merge-readiness command were deleted. `repo-lint.ts` survived but may have moved; locate it before
   assuming a path.
@@ -41,65 +35,42 @@ which matters when you are adding a dozen language features at once.
 
 ## Where the contract is
 
-The tranche contract is **uncommitted in the working tree** at `Apps/WordFlower/2 - Next/`. It was
-restored there from tag `archive/wip-7354-tranche` after the worktree that authored it was archived. A
-byte-identical copy is at `archive/wip-2b19-tranche`.
+The tranche contract is at `Apps/WordFlower/2 - Next/`. Treat the live directory as authoritative;
+do not substitute archived copies or earlier descriptions from this brief.
 
-Nothing is committed. Treat it as a proposal under Ro's review until Ro says otherwise, and confirm it
-is still the current contract before planning against it.
-
-`Roadmap.md` reads `- [ ] Cut tranche 4 from the gap between Current and MVP`. That item is satisfied
-by this contract — update it as part of the work rather than leaving it stale.
+`Roadmap.md` now records the tranche-cut item as complete and tracks implementation into Current as
+the open work. Keep those statuses aligned as the tranche is absorbed.
 
 ## What the contract changes structurally
 
-**The tier becomes a directory.** `2 - Next` goes from two files to eleven:
+**The tier becomes a directory.** Its product contract contains:
 
 ```text
-WordFlower.tao-next   project, apps, navigation, providers, variants, app shell
+WordFlower.tao-next   project, apps, navigation, local datasource, variants, app shell
 Data.tao-next         the data catalog
 Shared.tao-next       shared types, functions, injected views
 Workspaces.tao-next   the workspace area
 Documents.tao-next    the document area
 Foundation.tao-next   the deterministic navigation harness
 Design.tao-next       the minimal design system — implement LAST, see that file
+@tao-next/Prelude.tao-next
+                      the Prelude contract that graduates into packages/stdlib/tao
+@tao-next/text/Text.tao-next
+                      the @tao/text contract that graduates into packages/stdlib/tao/text
 ```
 
-plus `Foundation`, `Documents`, `Workspaces`, and `WordFlower` test sidecars. Roughly 1,070 lines.
+plus `Foundation`, `Documents`, `Workspaces`, and `WordFlower` test sidecars.
 
 This is the first time a WordFlower tier is a directory, and it is the single most disruptive part of
 the tranche, because two mechanical gates assume single files. See "Collisions" below.
 
 ## Scope
 
-Taken from the contract header; the file itself is authoritative.
-
-- **Stdlib surfaces**: `ScrollView`, `Image`, `Icon`, `Checkbox`, `List` with `on select`, `Spinner`,
-  `Progress`.
-- **Adaptive layout**: `Panes()` lays children side by side when the container is wide enough and
-  stacks them otherwise; `width max <n>` bounds a readable column. Responsiveness is a container
-  behavior, not a language-level breakpoint.
-- **App shell** honors safe-area and keyboard insets. Runtime behavior with no source surface; apps do
-  not opt in.
-- **Remote data**: `Datasource InstantDB { AppId "…" }` on the published provider protocol, extended
-  for inbound subscription deltas, write acknowledgement, externally originated store revisions, and
-  reconciliation between provider row identity and generated ids.
-- **`unauthorized`** becomes a provider-produced availability state; `data unauthorized` and
-  `data delayed <ms>` drive it and latency deterministically in checks.
-- **`async { }`** runs its block without delaying following statements; failures surface as provider
-  error state. Concurrency policy vocabulary stays deferred under `DEF-NAV-011`.
-- **Declaration kinds** name configured values, replacing `let` for them: `Kind Name { … }` declares,
-  `Kind Name = <value>` names or derives. The `AppValueDeclaration` union collapses to
-  `AppDeclaration`.
-- **`inject <type>`** produces a typed value outside render position.
-- **`optional <Name> <type>`** declares an item field that may be absent.
-- **`expect checkbox <selector> checked|unchecked`** joins the test vocabulary.
-- **Minimal design**: flat tokens plus named clause bundles applied at render sites, and an app
-  `Design` property. `Design.tao-next` is explicitly ordered last — it styles primitives, so the
-  primitives must exist first.
-
-Deliberately excluded: splits and windows, snapshots, restoration and routes, the concurrency policy
-vocabulary, and bare asset literals.
+The complete scope and semantics are the code and `This tranche decides` header in
+`Apps/WordFlower/2 - Next/WordFlower.tao-next`. Do not maintain a second copied scope list here.
+Everything represented in Next is required in this tranche; nothing there is a sketch or deferral.
+InstantDB, authorization states, and `data ...` provider-control journeys belong to `3 - MVP`, not
+this tranche.
 
 ## Collisions to plan around
 
@@ -119,10 +90,6 @@ turns Current into a directory, so this changes too. Any CI added concurrently i
 through `just` / `./agent` recipes rather than paths, so updating the recipe should be sufficient —
 verify that assumption rather than trusting it.
 
-**3. Your provider package is a packaging decision.** `@instantdb` ships to users. The runtime split
-that preceded you established where that boundary sits; put the provider inside it rather than
-inventing a parallel arrangement, and record what you decided and why.
-
 ## Reference material worth reading once
 
 `archive/wip-1493` holds 47 `TR-*` modules (~4,100 lines) wrapping React Native and Expo surfaces —
@@ -131,9 +98,9 @@ permissions, safe-area, secure store, share, status bar, storage, vibration, and
 documented, and uses a driver-injection pattern for testability, but it sits on an old base and
 conflicts structurally with the current runtime, so **do not merge it**.
 
-Its value is the inventory and the shape: `TR-safe-area`, `TR-keyboard`, `TR-image`, `TR-native-list`,
-and `TR-indicator` overlap directly with this tranche's stdlib surfaces and app-shell insets. Read it
-before writing those, then write them fresh against the current runtime.
+Its value is the inventory and the shape: `TR-image`, scrolling, and indicator modules overlap with
+this tranche's stdlib surfaces. Read those relevant pieces before writing fresh implementations
+against the current runtime; do not import unrelated safe-area, keyboard, or native-list scope.
 
 ## Constraints
 
@@ -154,8 +121,9 @@ before writing those, then write them fresh against the current runtime.
 
 - Slice order, and how it honors the contract's own instruction that `Design.tao-next` lands last.
 - When the directory-aware gates land relative to the first multi-file change.
-- Which parts of the provider protocol extension are observable from Tao source and therefore need
-  validator diagnostics, versus pure runtime reconciliation.
-- What gets deferred, recorded against the existing `DEF-NAV-*` numbering rather than a new scheme.
+- When the Prelude and `@tao/text` scratch contracts graduate to their final stdlib locations and
+  their scratch copies are deleted.
+- How `TagOrHexColor` is introduced across lexer, AST contexts, validator diagnostics, formatter,
+  syntax highlighting, and tests without regressing existing `#tag` syntax.
 - Which of the four preceding foundations you confirmed actually landed, and what you changed in
   response if one did not.

@@ -7,6 +7,21 @@ use Col, FormButton, Row, Spinner, Text, TextInput from @tao/ui
 // reconciled — not frozen — whenever Current absorbs a Next slice and the implementation teaches us
 // something. Intended functionality beyond the release lives in `../4 - Revolution`.
 //
+// MVP retains the requirements intentionally moved out of the current Next tranche:
+// - The InstantDB provider protocol handles inbound subscription deltas, write acknowledgement,
+//   externally originated store revisions, and reconciliation between provider row identity and
+//   generated Tao ids.
+// - Remote providers can report `unauthorized` for an entity handle. Test providers expose
+//   `data loading`, `data error <message>`, `data unauthorized`, `data delayed <milliseconds>`, and
+//   `data ready` so provider transitions and asynchronous writes are deterministic in journeys.
+// - The universal app shell applies safe-area and keyboard insets without a source-level opt-in.
+// - Property-function syntax must settle type-level addition and override plus the identity,
+//   equality, capture, and anonymous-expression consequences of per-value behavior.
+// - Design grows beyond flat tokens and clause bundles into recipes, variants, states, patterns,
+//   rules, and platform blocks only when corresponding MVP code exercises each form.
+// - Concurrency-policy vocabulary, asset literals, and route/restoration policy remain MVP design
+//   work and must enter a future Next contract as executable code before implementation.
+//
 // Navs and datasources are ordinary package declarations. Their declarations own generic
 // configuration validation and carry stable identity across imports and aliases; package-level
 // `implement inject` binds shipped implementations to the published TR.NavKind and TR.DataProvider

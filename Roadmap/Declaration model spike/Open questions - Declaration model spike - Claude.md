@@ -1,7 +1,8 @@
 # Open Questions - Declaration Model Spike
 
-Draft for review. Ro and Claude are resolving these in dialogue; nothing here is decided. The settled
-half is in `Implementation - Declaration model spike - Claude.md`, which is safe to build against.
+Live decision record. Q1–Q6 are now resolved by `Apps/WordFlower/2 - Next`; later entries remain open
+unless explicitly marked otherwise. The settled base is also recorded in
+`Implementation - Declaration model spike - Claude.md`.
 
 Each entry states the question, the options, what it blocks, and a recommendation where there is one.
 A recommendation is a starting position for the dialogue, not a decision. Do not implement against
@@ -9,7 +10,15 @@ these.
 
 ---
 
-## Q1 — Do children and layout become slots?
+## Q1 — Do children and layout become slots? — Resolved
+
+**Resolved by `Apps/WordFlower/2 - Next`: no.** Content acceptance belongs intrinsically to the
+declaration kind: `view` is a leaf, while `layout` and `frame` accept opaque caller content and place
+it through `@@content`. A layout clause is ambient on every visual occurrence and is exposed to an
+injected implementation through `@@layout`; neither content nor layout is a user-declared property
+or named slot.
+
+The exploration below is retained as the superseded alternative that motivated the decision.
 
 This is the largest one, and it gates everything else in the `ui` direction.
 
@@ -35,7 +44,16 @@ inline-only) and `LANG-015` (named render slots with defaults).
 increase in surface area, but after it nothing inside a render call is special syntax, which is the
 whole point of the unification.
 
-## Q2 — What exactly does the `ui` surface desugar to?
+## Q2 — What exactly does the `ui` surface desugar to? — Resolved for Next
+
+**Resolved by `Apps/WordFlower/2 - Next`:** declaration header parameters remain typed public
+properties and standard control events remain action-valued properties configured through
+`on press|change|submit`. Caller content is the intrinsic channel settled in Q1, not a property.
+TypeScript-backed visual declarations use `render inject`, which explicitly names every Tao binding
+in addition to ambient `@@content`, `@@layout`, and `@@tag`; `TR`, `RN`, and `process` always exist in
+the injected TypeScript scope. Richer event vocabularies remain future work.
+
+The exploration below is retained as background.
 
 Ro wants `ui Greeting <params> <layouts> { <event handlers> … }` kept for readability. The open part is
 the mapping. Parameters are clearly slots. Layout is Q1. Event handlers are the unclear ones: is
@@ -49,7 +67,15 @@ call site agree by construction. If they are not, TS-backed components need a se
 **Recommendation:** handlers are supplied slots of `action(…)` type. `action(text)` is already a
 structural type in the language, so the vocabulary exists.
 
-## Q3 — Is the rule `render` xor `implement`?
+## Q3 — Is the rule `render` xor `implement`? — Resolved for visuals
+
+**Resolved by `Apps/WordFlower/2 - Next`:** no visual declaration uses an `implement` alternative.
+Tao-authored visuals use `render`; TypeScript-backed visuals use `render inject`, whose returned
+element is the declaration's root and receives no compiler wrapper. `implement` remains the protocol
+binding concept for non-render-bearing `nav` and `datasource` families. Whether those declarations
+eventually spell that binding as a filled slot or retain `implement inject nav|provider` is Q11.
+
+The exploration below is retained as background.
 
 Proposed: a `ui` has exactly one, and one is required — `render` means behavior in Tao, `implement`
 means behavior in TypeScript, and a `ui` with neither is incomplete for the same reason a `nav`
@@ -65,53 +91,31 @@ exclusivity has to soften.
 
 ## Q4 — What is `List`?
 
-Ro flagged genuine uncertainty here. Two readings:
-
-- **A `ui` type** with an items slot, an item-template slot, and `on select` — a real native list,
-  implemented over a virtualizing React Native component, which is where the performance argument
-  points for long collections.
-- **Already covered** by `loop` inside a render block, in which case `List` is a layout convenience
-  and `on select` belongs to the rows rather than to a list component.
-
-`Brief - Implement WordFlower tranche 4.md` has "`List` with `on select`" in scope, so this needs an
-answer before that tranche reaches it. `archive/wip-1493` contains a `TR-native-list` worth reading as
-evidence of what the runtime side wants.
-
-**Blocks:** tranche 4 stdlib surfaces.
-**Recommendation:** a `ui` type. `loop` produces elements eagerly, which is the wrong shape for a long
-collection, and an item-template slot is expressible under Q1's `Children` work.
+**Resolved by `Apps/WordFlower/2 - Next`:** there is no stdlib `List` in this tranche. Collection
+rendering remains language-owned through `loop Plural / Singular { ... }`; an optional `on select`
+handler makes each rendered row selectable in the singular binding's scope. A virtualized collection
+can return through a later executable Next contract if a forcing app requires it.
 
 ## Q5 — Do primitive heads survive for complete declarations?
 
-This is the question the whole dialogue started from and it is not closed. Given `let` survives, is
+**Resolved by `Apps/WordFlower/2 - Next`:** primitive value heads survive for complete `app`, `nav`,
+and `datasource` product values, while `let` remains the universal auto-typed immutable binding. Both
+of these are legal and infer the same precise app type:
 
 ```tao
 app WordFlower { Name "WordFlower" … }
 let WordFlower = app { Name "WordFlower" … }
 ```
 
-both legal? Ro's stated preference in turn one was that losing `app Foo { … }` and
-`datasource Bar { … }` would be a real loss. Against that, two legal spellings for one declaration is
-exactly the kind of surface redundancy this dialogue set out to remove, and it puts every primitive
-name back into statement-head position.
-
-A middle reading: primitive heads are legal only for _top-level product declarations_ — `app`, `data`,
-`ui` — where the head carries real information about what the file contains, and `let` is the only
-form for everything else. `Apps/WordFlower/2 - Next` currently has 16 kind-headed declarations to 2
-`let`s, so this decision has the largest migration cost of anything here.
-
-**Blocks:** the `Next` tier rewrite, and the grammar shape of `AliasDeclaration`'s `BindingKeyword`.
-**Recommendation:** the middle reading. Ro should confirm the exact list of privileged heads.
+The primitive head constrains the value family without erasing its more precise inferred type. It is
+a declaration spelling for a value, never a type declaration; reusable types still use `type`.
 
 ## Q6 — Does `enum` fold into the type model?
 
-`enum X { … }` exists at `types.langium:10`, and `UnionTypeExpression` at `types.langium:25` would
-already parse `type Status is Draft | Sent`. Two forms for one concept. `LANG-004` owns this and lists
-string-valued enums and identifier cases as preserved options.
-
-**Blocks:** nothing immediately; worth settling before `LANG-004` becomes active work.
-**Recommendation:** fold it, once the case-value question in `LANG-004` is answered — a union of bare
-identifiers and an enum of cases are the same thing spelled twice.
+**Resolved by `Apps/WordFlower/2 - Next`:** yes. `enum X { ... }` remains dedicated declaration syntax
+but declares a nominal type in the ordinary type system. Every case is a value of `X`; a one-case enum
+is valid. This does not make an enum declaration textual sugar for an anonymous union: nominal enum
+identity and exhaustiveness are preserved.
 
 ## Q7 — Can a derived type wrap the parent's implementation?
 
@@ -181,5 +185,6 @@ and document the split by context, or move the slot form to a different word.
 
 **Blocks:** nothing today; both forms work and are tested. Blocks coherence once `ui` gains an
 `implement` slot, since that will need one of the two spellings and will make the split permanent.
-**Recommendation:** fold into the slot form, but not before Q1–Q3 settle what `ui` does — that is the
-decision that determines which spelling has to generalize.
+**Recommendation:** fold into the slot form. Q1–Q3 have now settled that visual declarations use
+`render inject`, so this remaining choice affects the non-render-bearing `nav` and `datasource`
+families rather than needing to generalize across `ui`.

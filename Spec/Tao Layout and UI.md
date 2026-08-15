@@ -11,7 +11,9 @@ input binding, and the first bracketed layout clauses for `content`, `claim`, `g
 always parenthesized, and layout remains a distinct following clause: `render View(args) [layout]
 { children }` or `View(args) [layout] { children }`. Tags merge into an existing concrete native
 root and do not add a layout node. The repo does not yet implement `frame`, `@@content`, named render
-slots, visual style entries, or the complete merge/lowering contract described here. The old repo
+slots, visual style entries, or the complete merge/lowering contract described here. Their first
+implementable contract is now settled in `Apps/WordFlower/2 - Next`; compatible material beyond
+that contract remains future direction in this document. The old repo
 implemented most of this layout contract with older spellings; this document keeps the behavior that
 still fits and uses the current public `view`, `ui`, `content`, and `@@content` names.
 
@@ -29,7 +31,13 @@ Visual entries describe appearance in the same brackets:
 
 ### UI Kinds
 
-There are three UI kinds in Tao:
+The settled Next core hierarchy separates rendering from presentation. `visual` is the common
+rendering root; `presentable` refines `visual`; `ui` and `nav` refine `presentable`; and `view`,
+`layout`, and `frame` refine `visual` without thereby becoming presentable. A `nav` is consequently
+visual in the type hierarchy but is not a render-bearing declaration and cannot be embedded as an
+ordinary child.
+
+There are three render-bearing visual declaration kinds in Tao:
 
 - A `frame` container receives arbitrary content, sizes itself to `hug` that content, and resists compressing when space is tight. It is used inside object-like UI such as buttons, chips, icons-with-labels, and similar pieces.
 - A `layout` container receives arbitrary content, expands into available space, and can compress when space gets tight. It is used for app regions like headers, lists, panes, and screens.
@@ -41,7 +49,7 @@ Presentation adds separate declaration roles without changing these visual roles
 
 - `ui` is presentable content whose visual body follows the same render rules as a `view`.
 - `dialogue` is response-demanding content whose body follows the same render rules.
-- `nav` declares a package-configured presentation kind and binds its runtime behavior through
+- `nav` is a package-configured presentation kind and binds its runtime behavior through
   `implement inject nav`; it is not a render-bearing visual declaration. A configured nav may be
   mounted only as an app navigator, a genuine app auxiliary, or content of another nav. Rendering a
   nav inside a `view` or `ui` is a validation error.
@@ -63,7 +71,8 @@ Hugging containers:
 - `Stack`: hugs its content and lays it out top-to-bottom
 - `Box`: hugs its content and lays it out horizontally
 
-All five ship today as `layout` declarations. The separate `frame` role is intended, not implemented.
+All five ship today as `layout` declarations. The separate `frame` role is not yet implemented, but
+its intrinsic caller-content behavior and `@@content` contract are settled for Next.
 
 UI containers usually do not paint pixels themselves. Instead, they focus on how visible content is arranged and sized.
 
@@ -77,13 +86,18 @@ Shipped today, alongside the containers above: `Text`, `TextFrame`, `TextMultili
 `Button`, `TextInput`, and `FormButton`. `TextInput` and `FormButton` carry the label, placeholder,
 disabled, and submitting properties that forms rely on.
 
-Intended, not implemented:
+Settled for Next, not yet implemented:
 
 - `Image`: displays an image and allows you to size and transform it.
+- `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
+
+Compatible future surfaces beyond Next include:
+
 - `Icon`: a specialized `Image` for icons, including system icons.
 - `Pressable`: a pressable surface. Its exact role classification is part of the broader UI design.
 - `ImageInput`: a button that lets the user select an image, with options such as where to store it.
-- `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
+- `List`: a higher-level collection component if a later forcing app demonstrates behavior beyond
+  language-owned `loop`.
 
 #### Control events and two-way inputs
 
@@ -111,9 +125,9 @@ TextInput(Value: Draft, Label: "Title")
 
 Computed values, aliases, parameters, entity fields, and unlabeled arguments are not writable bindings; they require an explicit `on change`. An explicit change handler replaces the synthesized update. Disabled controls suppress their configured native press/change/submit delivery in the runtime.
 
-Also intended: `List` (a list of items with header and footer options), `ScrollView` (a scrollable
-container), `Spinner` (a loading indicator), and `Progress` (a progress indicator). Rendering a
-collection today uses `loop` inside an ordinary container.
+Also settled for Next are `ScrollView` (a scrollable container), `Spinner` (a loading indicator),
+and `Progress` (a progress indicator). Rendering a collection remains language-owned through
+`loop`; Next deliberately introduces no stdlib `List` or function-typed row slot.
 
 Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces use
 `present X() as overlay`, which layers above the nearest nav or an explicit `in` target. Every nav
@@ -123,30 +137,34 @@ separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
-Intended, not implemented; the slot-presence test shown below is illustrative rather than settled
-syntax. When creating a UI element, you can allow for parts of the UI to be rendered by the caller. This is done using `@<name>` render slots.
+The first named-slot contract is settled for Next and not yet implemented. A `frame` declares an
+optional named content slot with `@name = empty`. A caller may fill it at most once with
+`@name <visual>`. The filled value is opaque visual content and renders exactly where the frame body
+places `@name`; `empty` contributes no node. Parameterized, repeatable, and required slots remain
+future work.
 
 ```tao
-use Icon, Text, Box, Row from @tao/ui
+use Col, FormButton, Row, Text from @tao/ui
 
-view Label Title is text {
-   @icon = empty
+frame Card(Title is text) {
+   @actions = empty
 
-   render Box() {
-      if @icon {
-         @icon [centered, pad 2] { }
-      }
-      Box() [content center, gap 2, pad horizontal 4 vertical 2] {
+   render Col() [gap 8, pad 12] {
+      Row() [content spread center] {
          Text(Title)
+         @actions
+      }
+      Col() [gap 6] {
+         @@content
       }
    }
 }
 
-render Row() {
-   Label("Info") {
-      @icon Icon("info") // Renders Label with an icon
+Card("Draft") {
+   Text("Unsaved changes")
+   @actions FormButton("Save") {
+      on press Save
    }
-   Label("...") { }
 }
 ```
 
@@ -155,7 +173,7 @@ render Row() {
 When `frame` and `layout` UI render, they get to choose where to render it using `@@content`:
 
 ```tao
-frame Card {
+frame Card() {
    @title = empty
 
    render Stack() [content top stretch, gap 8, pad 16, background white, radius 2, shadow gray] {
@@ -167,14 +185,17 @@ frame Card {
 
 ### Declaration Properties, Children, And Slots
 
-Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header parameters are shorthand for the same public properties. Header parameters ship today; the longhand property block, named render slots, and `@@content` are intended, not implemented:
+Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header
+parameters are shorthand for the same public properties. Header parameters ship today and Next
+requires their parentheses, including `()`. The longhand property block remains future work. Named
+render slots and `@@content` are settled for Next but are not yet implemented:
 
 ```tao
-view Profile User {
+view Profile(User) {
    render Text(User.Name)
 }
 
-view ProfileLonghand {
+view ProfileLonghand() {
    User User
    render Text(User.Name)
 }
@@ -203,7 +224,7 @@ contract. A declaration without the contract rejects keyed entries. A render dec
 Only a targetable keyed entry creates an owner-qualified target such as `WordFlower@home`. A render slot never becomes a navigation target merely because it uses `@`.
 
 ```tao
-frame UserCard {
+frame UserCard() {
    User User
    @actions = empty
 
@@ -217,7 +238,7 @@ frame UserCard {
 render UserCard() {
    User CurrentUser       // property
    Text("Recent activity") // unnamed child
-   @actions Button("Edit") // named render slot
+   @actions Button("Edit") // named render slot, filled once
 }
 ```
 
@@ -248,6 +269,8 @@ To describe how a UI element resizes when necessary, use:
 - `width <positive number>` and `height <positive number>` to set physical dimensions directly
 - `width fill` and `height fill` to fill one physical axis; Tao lowers this at runtime using the actual parent container direction
 - Within one layout clause, bare `fill` cannot appear with `width` or `height`; use physical-axis sizing when per-axis control is needed.
+- `width max N`, settled for Next, caps a readable region without forcing it wider than available
+  space.
 
 To specify how to align a single item in a container, use:
 
@@ -272,7 +295,8 @@ To describe spacing, use:
 
 ### Example: Row of Icons
 
-If we want a row with three icons aligned to its right edge and vertically centered:
+`Icon` remains a compatible future stdlib surface beyond Next. If it is introduced, a row with three
+icons aligned to its right edge and vertically centered would read:
 
 ```tao
 use Row, Icon from @tao/ui
@@ -325,7 +349,7 @@ Or, if we want to:
 ### Example: App Shell
 
 ```tao
-layout AppShell {
+layout AppShell() {
    render Col() [fill, content top stretch, gap 12, pad 16] {
       Header() [hug]
       Row() [fill, gap 16] {
@@ -343,7 +367,7 @@ Here, the outer `Col` fills the screen. The header hugs its content. The body ro
 `frame` and `layout` receive unnamed caller content through `@@content`.
 
 ```tao
-frame Card {
+frame Card() {
    render Stack() [content top stretch, gap 8, pad 16] {
       @@content
    }
@@ -362,7 +386,7 @@ The caller writes the content. The `Card` decides where that content goes.
 Caller container layout, such as `gap` and `content`, applies at the explicit container that directly contains `@@content`.
 
 ```tao
-layout ToolbarArea {
+layout ToolbarArea() {
    render Row() [content spread center, gap 12] {
       @@content
    }
@@ -381,7 +405,7 @@ ToolbarArea() [gap 8] {
 If the declaration has fixed siblings and caller content, put `@@content` inside an explicit inner host when caller layout should affect only caller content:
 
 ```tao
-frame LabeledSection Label is text {
+frame LabeledSection(Label is text) {
    render Stack() [gap 12, pad 16] {
       Text(Label)
 
@@ -392,7 +416,8 @@ frame LabeledSection Label is text {
 }
 ```
 
-Render slots are different from `@@content`. Slots are named holes such as `@actions` or `@row Item`. This layout doc only mentions slots where content routing affects layout. Detailed slot invocation and fill rules still need their own spec.
+Render slots are different from `@@content`. Next settles optional single-fill holes such as
+`@actions`; parameterized forms such as `@row Item` still need their own design.
 
 ## Advanced Layout
 
@@ -446,6 +471,13 @@ WrappingRow() [gap 8] {
 
 Future Tao may need more wrapped-line controls, such as how whole rows of wrapped content pack vertically. Those should be named around the shape Tao authors care about, not copied directly from CSS or React Native props.
 
+### Adaptive Panes
+
+Next adds `Panes()` as fixed stdlib behavior rather than general breakpoint syntax. It lays out its
+children horizontally when the available width after gaps gives every child at least 320 logical
+pixels; otherwise it stacks them in source order. In horizontal mode, `claim N` distributes the
+remaining width proportionally.
+
 ### Overflow, Scroll, And Layers
 
 Most normal layout should stay inside its bounds. If content is larger than its container, Tao should generally clip it unless the author chose a container that scrolls or intentionally draws outside its normal box.
@@ -453,7 +485,7 @@ Most normal layout should stay inside its bounds. If content is larger than its 
 Use a real scrolling view when the user should scroll:
 
 ```tao
-layout FeedPage {
+layout FeedPage() {
    render Col() [fill] {
       Header()
       ScrollView() [fill] {
@@ -498,7 +530,10 @@ These are the layout values of Tao's stdlib containers, and the React Native sty
 - `WrappingRow`: `[content baseline left, compress, hug]`
   - `{ flexDirection: row, justifyContent: flex-start, alignItems: baseline, flexGrow: 0, flexShrink: 1, flexWrap: wrap }`
 
-A caller layout clause overlays the render site's defaults. Terms that target the same layout slot replace that default slot; unrelated defaults remain:
+A caller layout clause overlays the render site's defaults. Named clause bundles and direct clauses
+form one left-to-right list. The last specification of a given clause replaces the earlier value;
+unrelated clauses remain. After replacement, the validator rejects a resolved set containing
+semantically incompatible clauses—source order cannot make incompatible categories valid:
 
 ```tao
 Row() [content spread center, compress] {
@@ -516,14 +551,13 @@ Some things are known to belong in or near Tao layout, but still need their own 
 - `nudge`: small post-layout movement that does not affect siblings
 - `overlay`: a possible in-layout positioning term, distinct from implemented presentation
   `as overlay`
-- scroll containers
 - safe-area and keyboard-aware helpers
 - design-token spacing and size values
 - logical direction, such as `start` and `end`
 - aspect ratio
 - wrapped-line layout controls
 - empty-container behavior
-- exact render-slot layout merging
+- layout merging for future slot forms beyond Next's opaque single-fill slots
 - fixed child-count constraints
 
 The main unresolved ownership questions:

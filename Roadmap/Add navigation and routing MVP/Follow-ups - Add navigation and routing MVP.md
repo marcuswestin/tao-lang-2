@@ -18,16 +18,16 @@ are written against the current model.
 ### FOLLOW-NAV-001: Selection, Split, And Keyed Navigation
 
 Static `SelectionNav` with keyed items, `Initial @key`, `Display`, adaptive drawer display, and
-target-only activation (`present App@key`) are decided in the WordFlower Next contract and are being
-implemented there. Still open here: `SplitNav` and panes, dynamic selection, `key of Items` typing,
+target-only activation (`present App@key`) ship in Current. Still open here: `SplitNav`, dynamic selection, `key of Items` typing,
 compiler-created selection/split items, keyed and relative path segments beyond app auxiliaries,
-directional delegation, pane reveal, and occurrence-key behavior.
+directional delegation, pane reveal, and occurrence-key behavior. Next's `Panes()` is a responsive
+visual layout container, not a navigation kind and not an implicit `SplitNav` decision.
 
 ### FOLLOW-NAV-002: Window Auxiliaries And Toast Delivery
 
-App auxiliary registration shipped with the navigation MVP; keyed toasts are decided as a
-presentation mode in the WordFlower Next contract. Still open here: `WindowHost`/`Window` as keyed
-auxiliaries, reducer-owned toast expiration, native dismissal and close events, key-based focus,
+App auxiliary registration and keyed toasts as an app-level presentation mode ship in Current.
+Still open here: `WindowHost`/`Window` as keyed auxiliaries, deterministic test-clock control for
+toast expiry, native dismissal and close events, key-based focus,
 safe stacking, and platform-support diagnostics. `DEF-NAV-017` blocks interactive toasts and must be
 settled while toasts are implemented.
 
@@ -35,8 +35,8 @@ settled while toasts are implemented.
 
 Implement the versioned presentation-state schema, round-trip restoration, invalid-state fallback,
 stable public route declarations, and deep-link transactions that do not expose internal mount
-paths. Loading, missing, and unauthorized entity references are decided as entity availability
-guards in the WordFlower Next contract. Settle the source-facing restoration API under
+paths. Loading, missing, and unauthorized entity-reference guards ship in Current. Settle the
+source-facing restoration API under
 `DEF-NAV-013` before implementation planning.
 
 Restorable descriptor identity depends on a checked-in project ID, whose contract is settled:
@@ -52,13 +52,13 @@ Restorable descriptor identity depends on a checked-in project ID, whose contrac
 
 ### FOLLOW-NAV-004: Dialogue Scheduling
 
-`dialogue … responds`, `ask`, and `respond` with optional results are decided in the WordFlower Next
-contract. Still open here: exactly-once completion guarantees, platform cancellation, concurrent-ask
+`dialogue … responds`, `ask`, and `respond` with optional results ship in Current. Still open here:
+exactly-once completion guarantees, platform cancellation, concurrent-ask
 policy, and native-dismiss races. Durable continuations remain out of scope under `DEF-NAV-005`.
 
 ### FOLLOW-NAV-005: Repository Conformance (absorbed)
 
-The WordFlower Next tranche migrated executable sources to `let`, retired the former binding and
+The absorbed WordFlower tranche migrated executable sources to `let`, retired the former binding and
 visibility spellings, removed obsolete source navigation APIs, and added Current/Test App coverage.
 Future work adds source actions only where a later migration is semantically mechanical.
 

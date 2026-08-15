@@ -4,14 +4,28 @@ use Col, FormButton, Text from @tao/ui
 // A deterministic navigation harness. It keeps stack, slot, and root-replacement acceptance
 // independent of the product app, its data, and its design.
 
-nav FoundationStack = StackNav {
-   Initial FoundationHome
+// One complete type and four equivalent value spellings make the declaration/refinement contract
+// executable. `FoundationHomeStack` is the rare type declaration; each value below has that same
+// precise inferred type and the same configured behavior. The primitive `nav` head adds a family
+// constraint, while `let` infers it. A constructor block may expose or omit the core `with` without
+// changing the result.
+type FoundationHomeStack is StackNav with {
+   Initial is FoundationHome
 }
+
+workspace nav FoundationStack = FoundationHomeStack {}
+
+workspace nav FoundationStackWith = FoundationHomeStack with {}
+
+workspace let FoundationStackLet = FoundationHomeStack {}
+
+workspace let FoundationStackLetWith = FoundationHomeStack with {}
+
 workspace nav FoundationNavigator = SlotNav {
    Initial FoundationStack
 }
 
-ui FoundationHome {
+ui FoundationHome() {
    render Col() {
       Text("Foundation home marker")
       FormButton("Open deterministic detail") {
@@ -23,7 +37,7 @@ ui FoundationHome {
             present FoundationSlot() in FoundationNavigator
 }  }  }  }
 
-ui FoundationDetail {
+ui FoundationDetail() {
    render Col() {
       Text("Foundation detail marker")
       FormButton("Reset foundation app") {
@@ -34,7 +48,7 @@ ui FoundationDetail {
             replace FoundationNavigator in WordFlowerFoundationTest
 }  }  }  }
 
-ui FoundationSlot {
+ui FoundationSlot() {
    render Col() {
       Text("Foundation slot marker")
       FormButton("Restore initial stack") {

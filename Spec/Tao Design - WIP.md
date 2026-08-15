@@ -1,8 +1,43 @@
 # Tao Design
 
-Status: intended design draft for the design _language_. Nothing here is implemented. Tooling, artifacts, and rollout live in `Roadmap/Add Tao design system MVP/Design tooling and rollout.md`.
+Status: intended design for the design _language_. Nothing here is implemented yet. The first
+language slice is settled by `Apps/WordFlower/2 - Next`; compatible layers beyond that slice remain
+future direction here. Tooling, artifacts, and rollout live in
+`Roadmap/Add Tao design system MVP/Design tooling and rollout.md`.
 
 Current implementation status: this repo currently has bracketed layout clauses, runtime layout lowering through `TR.Layout`, a default app shell, and stdlib view/layout primitives that receive Tao-owned props. It does not yet implement Tao-authored design declarations, visual spec entries, design tokens, semantic tokens, recipes, `tao design` commands, design diagnostics, screenshot comparison, design lockfiles, or AI-assisted design iteration.
+
+## Settled Next Slice
+
+Next implements exactly flat tokens and named clause bundles in ordinary `.tao` source. An app
+selects a design through its `Design` property:
+
+```tao
+workspace design WordFlowerDesign {
+   paper #f6f7f3
+   ink #121826
+   accent #2f6b4f
+
+   screen [fill, content top stretch, pad 16, bg paper]
+   title [size 28, weight 700, fg ink]
+}
+
+app WordFlower {
+   Name "WordFlower"
+   Navigator HomeStack
+   Design WordFlowerDesign
+}
+```
+
+A bundle contains the same clauses a render site may write inline. Bundles and direct clauses form
+one left-to-right list; the last specification of a given clause wins. After replacement, a
+semantically incompatible resolved clause set is invalid regardless of source order.
+
+The lexer uses one `TagOrHexColor: /#[A-Za-z0-9_]+/` terminal. AST context supplies the meaning: the
+validator requires tags to match `#[A-Za-z_][A-Za-z0-9_]*`, while design color values must be CSS
+hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively. Nested token categories,
+semantic tokens, recipes, patterns, rules, and design tooling remain compatible later work; they are
+not implied by this first slice.
 
 ## Goals
 
@@ -57,7 +92,7 @@ Screen() [fill, bg canvas, fg text] {
 Tao should allow raw values for early prototyping only where the language deliberately supports them:
 
 ```tao
-Box() [bg "#ff00aa"]
+Box() [bg #ff00aa]
 ```
 
 Raw values should not become the idiomatic surface. `tao design check` should be able to prefer semantic tokens such as:
@@ -67,9 +102,10 @@ Box() [bg accent]
 Box() [bg brand.primary]
 ```
 
-## Design System Layers
+## Design System Layers Beyond the First Slice
 
-Tao design has five layers.
+The broader Tao design direction has five layers. Next implements only the flat-token foundation;
+the structured forms below remain future work unless a later tranche settles them.
 
 ### Raw Tokens
 
@@ -333,12 +369,16 @@ review, the phased implementation path, prior art, and the remaining tooling dec
 
 ## Open Questions
 
-- What declaration syntax best defines tokens, named specs, recipes, and recipe variants?
+- ~~What declaration syntax best defines the first tokens and named specs?~~ **Decided for Next:**
+  flat `name value` tokens and `name [clauses]` bundles inside `design Name { ... }`. Nested token
+  syntax, recipes, and recipe variants remain open.
 - ~~Does source use `design`, `theme`, or both as public capability names?~~ **Decided: `design`.** The declaration is `design <Name> { ... }` and an app selects it with `Design <Name>`.
 - ~~Should the first design data live in `.tao` source, a `tao.design` file, or both?~~ **Decided: `.tao` source.** Design is an ordinary Tao declaration subject to the same visibility, imports, and validation as the rest of the language; no separate design file format.
-- Which visual treatments can apply to `layout` and future `frame` declarations?
-- How do combined specs interact with named render slots and caller content?
+- Which visual treatments can apply to `layout` and `frame` declarations?
+- How do combined specs interact with future slot forms beyond Next's opaque single-fill named slot
+  and intrinsic `@@content`?
 - Which diagnostics are ordinary validator diagnostics, and which belong to `tao design check`?
 - How are app defaults selected before the user has authored a design?
-- How should raw values be represented so they remain useful for prototypes without becoming the main style language?
+- Beyond Next's unquoted CSS hexadecimal color literal, which raw value forms should remain useful
+  for prototypes without becoming the main style language?
 - What is the first useful cross-platform adaptation axis: color scheme, platform, density, text scale, motion, locale, or pointer/hover capability?

@@ -1,8 +1,11 @@
 # Plan - Add Tao design system MVP
 
-This plan predates the WordFlower tranche process. Re-cut its slices as a tranche — decided first in
-`Apps/WordFlower/2 - Next`, then implemented into `1 - Current` — before running it. The intended
-design surface is expressed in `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp`.
+This plan predates the WordFlower tranche process. Its first slice has now been re-cut and fully
+specified in `Apps/WordFlower/2 - Next`: flat tokens, named clause bundles, app `Design` selection,
+shared `TagOrHexColor` lexing with contextual validation, and deterministic clause composition.
+Implement that exact slice through the active WordFlower tranche brief before continuing with the
+compatible semantic-token, recipe, diagnostic, and tooling work retained here. Later design surface
+is expressed in `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp`.
 
 ## Goal
 
@@ -21,7 +24,9 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Assumptions
 
-- Layout and visual design entries share one typed `[ ... ]` application surface. Step 1 settles only the design declaration and recipe shapes, not a second render-site delimiter.
+- Layout and visual design entries share one typed `[ ... ]` application surface. Next has settled
+  the first design declaration and named-bundle shape; recipe shapes remain later work, not a second
+  render-site delimiter.
 - The first runtime target is the existing Expo/React Native runtime.
 - Generated code imports default `TR` from `@runtime/TR` and delegates reusable design semantics to `TR.*` or generated design data consumed by `TR`.
 - The first implementation should update `Apps/WordFlower/1 - Current/WordFlower.tao` only after the slice is executable.
@@ -37,33 +42,36 @@ Add executable coverage once the parser, validator, compiler, and runtime can su
 
 ## Implementation steps
 
-### 1. Settle and parse design declarations and combined entries
+### 1. Parse the settled Next design declarations and combined entries
 
 Concrete work:
 
-- Decide the first public source shape for design declarations and combined spec application:
-  - `design AppTheme { ... }` declarations and app selection;
-  - token and semantic-token blocks;
-  - recipe definitions or semantic variants;
-  - visual entries and named combined specs applied through existing `[ ... ]` clauses.
-- Define typed merge and precedence rules between layout entries, visual entries, named specs, recipes, and caller overrides.
-- Extend parser grammar and AST for the chosen design declaration subset.
-- Add parser tests for positive design declarations, token references, recipe declarations, combined entries, and ambiguous merge cases.
+- Implement `design AppTheme { ... }` in ordinary `.tao` source, with flat `name value` tokens,
+  `name [clauses]` bundles, and app `Design AppTheme` selection.
+- Replace `TAG` with `TagOrHexColor: /#[A-Za-z0-9_]+/`; leave tag-versus-color meaning to AST
+  context and validation.
+- Compose named bundles and direct clauses left to right. The last value for the same clause wins;
+  validation rejects semantically incompatible resolved clause sets regardless of source order.
+- Extend parser grammar and AST only for that chosen subset.
+- Add parser tests for both digit- and letter-leading hexadecimal colors, token references, named
+  bundles, combined entries, and precedence cases.
 - Add formatter support for the new declarations and clauses in the same slice if the parser accepts source files.
 
 Likely commit unit: parser grammar, generated parser artifacts, AST-facing tests, formatter handling for syntax introduced here.
 
 Validation: parser and formatter package tests.
 
-Exit criteria: the chosen MVP design source parses and formats deterministically, and unresolved syntax alternatives are recorded as deferrals instead of staying implicit.
+Exit criteria: the exact Next design source parses and formats deterministically; recipes, semantic
+tokens, and other richer alternatives remain explicit later work.
 
 ### 2. Add design model validation and references
 
 Concrete work:
 
 - Add a feature-sliced validator module for design declarations and design references.
-- Validate token category names, duplicate tokens, duplicate semantic aliases, unknown token references, recipe names, recipe variant names, and app design selection.
-- Keep raw values either disallowed or accepted with clear diagnostics according to the Step 1 decision.
+- Validate duplicate flat token and bundle names, unknown token and bundle references, recursive
+  bundles, contextual tag/color spelling, incompatible resolved clauses, and app design selection.
+- Accept the CSS hexadecimal color forms settled by Next; other raw-value policy remains later work.
 - Define how design declarations participate in visibility/import rules before enabling cross-file design references.
 - Add validator diagnostics that are purely source-structural; defer rendered contrast and tap-target checks to later design tooling.
 
@@ -73,7 +81,7 @@ Validation: validator package tests and focused workspace validation fixtures.
 
 Exit criteria: invalid design declarations produce stable diagnostics, and valid app-local design declarations are visible to compiler codegen.
 
-### 3. Lower deterministic tokens and recipes through `TR`
+### 3. Lower deterministic flat tokens and bundles through `TR`
 
 Concrete work:
 
@@ -81,12 +89,11 @@ Concrete work:
 - Extend generated app code only enough to pass design data or design references to runtime helpers.
 - Add or extend `TR` design/runtime helpers for:
   - token lookup;
-  - semantic token resolution;
-  - recipe/variant/default merging;
-  - state style selection where the first slice supports it;
+  - named clause-bundle resolution;
+  - deterministic same-clause replacement and style production;
   - React Native style production.
 - Keep reusable semantics in `packages/runtime/TaoRuntime-src/`; generated app TypeScript should stay declarative and minimal.
-- Add runtime tests for token resolution, recipe merging, fallback behavior, and style precedence.
+- Add runtime tests for token and bundle resolution, fallback behavior, and style precedence.
 
 Likely commit unit: compiler design lowering plus `TR` design helpers and runtime tests.
 
@@ -94,12 +101,13 @@ Validation: compiler tests through compile success/failure, `packages/runtime/TR
 
 Exit criteria: a Tao app can select a design and render at least Text, Button, and a surface/container with deterministic styles produced by the runtime.
 
-### 4. Apply design at UI call sites and defaults
+### 4. Apply the first design slice at UI call sites
 
 Concrete work:
 
-- Implement the first design-application surface from Step 1 through visual entries in combined specs, recipe variants, semantic component variants, or app default recipes.
-- Define precedence among stdlib defaults, app selected design defaults, recipe defaults, call-site variants, raw visual values, and native props from injected views.
+- Apply named bundles and direct visual entries through the combined spec list settled in Step 1.
+- Define precedence among stdlib defaults, the selected app design, named bundles, direct clauses,
+  and native props from injected views without inventing recipe or semantic-variant behavior.
 - Ensure current layout clauses still merge independently from visual styles.
 - Add focused compiler/runtime tests that inspect behavior through rendered output or runtime style resolution, not brittle generated-code substrings.
 - Add the implemented slice to `Apps/Test Apps/Design System MVP/` and then WordFlower/1 - Current once the app compiles and renders.
@@ -108,9 +116,20 @@ Likely commit unit: call-site design application, test app, WordFlower coverage.
 
 Validation: parser, validator, compiler, formatter, runtime tests; `just compile-app 'Apps/WordFlower/1 - Current/WordFlower.tao'`.
 
-Exit criteria: visible Tao source can request a semantic treatment such as primary button, raised card, muted text, or screen surface, and runtime output reflects it.
+Exit criteria: visible Tao source can apply the exact WordFlower bundles such as `screen`, `title`,
+`body`, and `panel`, and runtime output reflects their resolved clauses.
 
-### 5. Add deterministic design diagnostics and CLI surface
+### 5. Extend the settled foundation with semantic tokens and recipes
+
+After the Next slice is absorbed, use a later WordFlower tranche to settle the still-open source
+shape for semantic tokens, component recipes, variants, state styles, rules, and deterministic app
+defaults. Extend validation, lowering, and runtime tests only for the forms that tranche represents.
+This preserves the broader MVP goal without expanding the already-solidified Next contract.
+
+Exit criteria: ordinary Tao source can request the accepted semantic treatments and the runtime
+resolves their tokens, defaults, variants, and states deterministically.
+
+### 6. Add deterministic design diagnostics and CLI surface
 
 Concrete work:
 
@@ -130,7 +149,7 @@ Validation: CLI tests, fixture diagnostics tests, and repo `verify`.
 
 Exit criteria: design diagnostics can run deterministically in CI and editor workflows without launching Expo or invoking AI.
 
-### 6. Close the MVP and plan the next design phase
+### 7. Close the MVP and plan the next design phase
 
 Concrete work:
 

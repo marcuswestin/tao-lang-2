@@ -9,14 +9,15 @@ guess at those; several of them would change the shape of what you build. Ask Ro
 
 ## The model
 
-One rule replaces the values/types/kinds distinction:
+One model relates values, types, and declaration kinds:
 
 > A declaration is a named record of **slots**. `is` narrows a type; `=` binds a value. A declaration
 > is **complete** when every supplied slot is filled, and only complete declarations may be used where
 > a value is expected.
 
-Types and values stop being separate categories and become two ends of one gradient — a value is a
-type narrowed to a single inhabitant.
+Types and values retain distinct namespaces and roles but share one refinement model: a type may
+leave supplied slots open, while a value is a complete instantiation with every required supplied
+slot filled.
 
 ```tao
 type Age      is number                        // value slot open  → a type
@@ -31,9 +32,9 @@ let Ro     = Employee Marcus with { Team "Language" }
 
 Three sub-rules carry most of the weight:
 
-- **`{ }` after a type constructs; `with { }` after a value derives.** This preserves the
-  construction/derivation distinction rather than collapsing it, and is what lets the type be omitted.
-  `LANG-006` already records this as partly settled.
+- **`with` is the core refinement operation.** It derives types, constructs values from types, and
+  derives values. `Type { ... }` may omit it as construction sugar; `Value with { ... }` must retain
+  it so value derivation stays visible. `LANG-005` and `LANG-006` record the exact Next resolution.
 - **The head decides the block.** Under `type`, entries declare slots. Under `let` or a primitive
   head, entries fill them. Inside a type block, `is` marks a default or a fill.
 - **Slots are supplied or derived.** `Initial`, `Name`, `implement` are supplied — someone hands you a
@@ -60,13 +61,25 @@ primitive item
 primitive number
 primitive text
 primitive boolean
+primitive list
+primitive time
+primitive action
+primitive design
+
+primitive visual
+primitive presentable is visual
+primitive view is visual
+primitive layout is visual
+primitive frame is visual
+primitive ui is presentable
 
 primitive nav        with { implement }
 primitive datasource with { implement }
 primitive app with {
    Name       text
    Navigator  nav
-   Datasource datasource
+   Datasource datasource is none
+   Design     design is none
 }
 ```
 
@@ -76,17 +89,18 @@ arithmetic as the one honest gap.
 
 ### Also settled, recorded so it is not relitigated
 
-- **`ui` gets an open `implement` slot.** `Text`, `Col`, `Slider`, `ScrollView` and the rest become
-  ordinary `@tao/ui` declarations rather than compiler-known names, and a user can write an equivalent
-  with the same mechanism and no privilege. This resolves `LANG-016` toward its third option. The
-  _direction_ is settled; the mechanics are not, which is why it is absent from the build list below.
-- **`function` and `action` keep their own heads.** The unified form is strictly worse to read —
-  `function DocumentLabel Title is text returns text = "…"` beats spelling the result as a derived
-  slot. This is the one place ergonomics is allowed to beat uniformity.
+- **Visual declarations use `render`, not an `implement` slot.** A TypeScript-backed visual uses
+  `render inject`; its returned element is the root. `TR`, `RN`, and `process` are always available,
+  and every additional Tao binding is explicit. This lets stdlib and user-authored native-backed
+  visuals share one mechanism without turning content or layout into declared slots.
+- **`function` and `action` keep their own heads.** Next requires parenthesized parameter lists,
+  including `()`. Functions are block-bodied, use `return`, and may omit an inferable `returns`
+  annotation rather than spelling their result as a declaration slot.
 - **`data` is not `item`.** Data types are persisted and stay a distinct primitive, with an
   `implement` slot reserved for stores other than the built-in one.
-- **`ui Name <params> <layouts> { … }` keeps its current surface shape** as sugar over the slot form.
-  Ro's position is that the reading and writing ergonomics matter more than surface uniformity here.
+- **`ui Name(<params>) { … }` keeps its dedicated surface shape.** Its layout remains ambient at
+  occurrences rather than becoming a property. The same mandatory parenthesized declaration list
+  applies to `view`, `layout`, `frame`, `dialogue`, `action`, and `function`.
 
 ### Sidecar implementations
 
@@ -180,30 +194,24 @@ win in the set. Keep the inline form working until the sidecar form is proven.
 **9. The prelude.** As a real `.tao` file the validator reads primitive slots from, not a prose
 appendix — otherwise it drifts.
 
-Deliberately not in this list: `ui` gaining an `implement` slot, `Children`/`Layout` becoming slots,
-`data` gaining `implement`, and moving nav implementations out of `TR`. Each depends on an open
-question. See the companion file.
+Deliberately not in this historical build list: the later Next work for the visual/presentable
+hierarchy, intrinsic `@@content`, ambient `@@layout`, `render inject`, and the new stdlib surfaces;
+those are now settled in the Next directory and its tranche brief. `data` gaining `implement` and
+moving nav implementations out of `TR` remain future questions. See the companion file.
 
 ## Collisions
 
-**1. `Brief - Implement WordFlower tranche 4.md` has a superseded scope item.** It reads:
+**1. Declaration heads are resolved.** `Apps/WordFlower/2 - Next` is authoritative: primitive heads
+survive for complete `app`, `nav`, and `datasource` values, and `let` survives as the universal
+auto-typed immutable binding. The equivalent forms in the Foundation acceptance harness must all
+compile and mount the same behavior.
 
-> **Declaration kinds** name configured values, replacing `let` for them: `Kind Name { … }` declares,
-> `Kind Name = <value>` names or derives. The `AppValueDeclaration` union collapses to
-> `AppDeclaration`.
+**2. The tranche implementation brief points directly to Next.** Its copied, superseded declaration
+scope has been removed; do not reconstruct it from this spike.
 
-`let` is **not** replaced — it survives as the value-binding head. `=` no longer connects a kind to a
-base. Strike the item and replace it with a pointer here. Whether `nav X = …` remains legal alongside
-`let X = …` is an open question, so do not assume either way.
-
-**2. `Apps/WordFlower/2 - Next/WordFlower.tao-next:44-49` states the same superseded rule** in its
-header comment and must be rewritten with it. The tier's own declarations follow the superseded form:
-16 kind-headed declarations across the tier, 13 of them using `= <base>`, against 2 uses of `let`. The
-rewrite is small but touches `WordFlower.tao-next` and `Foundation.tao-next`.
-
-**3. `LANG-016 UI primitive boundary`** in `Deferred Tao language decisions.md` lists exactly the three
-options this dialogue chose between, and Ro chose the third — "first-class native bridge components."
-Update the row when the `ui` question closes, not before.
+**3. `LANG-016 UI primitive boundary` is resolved for Next.** Native-backed visuals use
+`render inject`; Next names the exact first surfaces. Broader bridge and recipe design remains later
+work in `Deferred Tao language decisions.md`.
 
 **4. `LANG-005` and `LANG-006`** are advanced by items 4 and 6 above. `LANG-006`'s "a type instantiates
 with a bare block and `with` patches an existing value" is now the general rule rather than an

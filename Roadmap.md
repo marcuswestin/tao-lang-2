@@ -10,8 +10,16 @@ Language features are built in tranches through the WordFlower app family: decis
 
 - [x] Implement the WordFlower tranche 3 contract into Current
   - Selection navigation, entity availability guards, dialogues, keyed toasts as a presentation mode, reshaped data fields, the third data level, and self-hosted navs and datasources graduated into `packages/stdlib/tao`.
-- [ ] Cut tranche 4 from the gap between Current and MVP
-  - `2 - Next` now matches `1 - Current`, so the next tranche is chosen from what `3 - MVP` still expresses and Current does not: splits and windows, design tokens and recipes, a remote provider, snapshots, and `async` with its concurrency policy.
+- [x] Cut and solidify the WordFlower tranche 4 contract in Next
+  - `2 - Next` is now the complete implementation contract: the declaration/value model, Prelude
+    hierarchy, required declaration parentheses, block-bodied functions, typed injection, optional
+    item fields, `list of T`, nominal enums, `@tao/text`, new UI surfaces, adaptive panes,
+    non-blocking `async { ... }`, named frame slots, and the first flat-token design slice.
+- [ ] Implement the WordFlower tranche 4 contract into Current
+  - Follow `Roadmap/Implement WordFlower tranche 4/Brief - Implement WordFlower tranche 4.md` and
+    absorb the complete Next directory slice by slice. InstantDB, remote authorization semantics,
+    richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general
+    concurrency policy remain in later tiers.
 
 ## Toward v1
 

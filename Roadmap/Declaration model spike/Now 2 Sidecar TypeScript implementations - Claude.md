@@ -1,10 +1,7 @@
 # Now 2 - Sidecar TypeScript Implementations
 
-Ready to build now. No dependency on anything in `Open questions - Declaration model spike - Claude.md`.
-Self-contained from `Now 1` — this only touches the `implement` clause's right-hand side and the
-compiler's module-resolution path, not the slot/declaration model — so it can run in a separate
-worktree in parallel with it. Verified against `main` at `6cfd88be` on 2026-08-14; re-verify before
-starting.
+Historical build slice, now landed. It was self-contained from `Now 1`: it touched the `implement`
+clause's right-hand side and compiler module-resolution path, not the slot/declaration model.
 
 ## What exists today
 
@@ -60,7 +57,9 @@ not here) — this slice's whole job is a second RHS form for the clause that al
   move anything that ships today.
 - Any protocol-version negotiation between a sidecar and `TR`. Stays single-version and implicit, as it
   is today.
-- `ui`'s `implement` slot — gated on open questions, not this.
+- Native-backed visual declarations. Next has since settled those on `render inject`, not a `ui`
+  `implement` slot; that work belongs to the active Next tranche rather than this landed sidecar
+  slice.
 
 ## Validation
 

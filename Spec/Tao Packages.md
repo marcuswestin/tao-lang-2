@@ -8,6 +8,13 @@ workspace package index, and public self-hosted `nav` and `datasource` declarati
 `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
+The settled Next package surface additionally introduces `@tao/text`, exporting injected
+`CountWords(text)` and `Join(list of text, Separator: text)`, and requires parentheses on all visual,
+dialogue, action, and function declaration parameter lists. Those additions are not yet implemented.
+`CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
+all-whitespace text. `Join` preserves source order, inserts the separator only between adjacent
+values, returns empty text for an empty list, and returns a one-item list's value unchanged.
+
 ## Creating a Tao Project
 
 - The intended command is `tao create <id>`.
@@ -43,7 +50,7 @@ app ChatApp {
    }
 }
 
-ui ThreadListUi {
+ui ThreadListUi() {
    query Messages { }
 
    render Col() {
@@ -56,7 +63,7 @@ ui ThreadListUi {
    }
 }
 
-ui ThreadUi Message {
+ui ThreadUi(Message) {
    render Col() {
       Text(Message.Text)
       FormButton("Open another occurrence") {
@@ -87,10 +94,10 @@ Packages can make code available to other packages, and even other workspaces.
 - You make a declaration available to other files by declaring its visibility: `file`, `package`, `workspace`, or `public`.
 
   - `file` is the default and is normally omitted.
-    - `view Foo { ... }` is equivalent to `file view Foo { ... }` and cannot be used outside its file.
+    - `view Foo() { ... }` is equivalent to `file view Foo() { ... }` and cannot be used outside its file.
 
   - To make declarations visible to other files in _the same package_ you use `package` visibility:
-    - `package view Foo { ... }`
+    - `package view Foo() { ... }`
       - `Foo` can now be referenced from other files in the same package, e.g:
       - `use Foo` from any file in the same package
       - `use Foo from ./` from a file in the same folder
@@ -98,24 +105,24 @@ Packages can make code available to other packages, and even other workspaces.
       - `use Foo from ../<parent-folder>` from a child folder (that's in the same package)
 
   - To make declarations visible to files in the same workspace you use `workspace` visibility:
-    - If `workspace view Bar { ... }` is declared in `@foo/filename.tao`:
+    - If `workspace view Bar() { ... }` is declared in `@foo/filename.tao`:
       - then `use Bar from @foo` can be used from any file in the same workspace
     - If `Bar` is declared in `@foo/bar/utils.tao`
       - then `use Bar from @foo/bar` can be used from any file
     - A `workspace` declaration remains inaccessible to consumers even when the workspace is published.
 
   - To make declarations visible to consumers of a published workspace you use `public`:
-    - If workspace `<workspace id>` has package `@animals` with `public view Cat { ... }`
+    - If workspace `<workspace id>` has package `@animals` with `public view Cat() { ... }`
       - then a workspace with `requires <workspace id> @animals`
       - can `use Cat from @animals`
     - `public` is a visibility rule. `tao publish` is the CLI operation that distributes the workspace and its public API.
 
   - A folder is not allowed to make two declarations with the same name visible
-    - If `@<package>/file.tao` has `package view Foo { ... }`, then:
-      - `@<package>/file2.tao` with `package view Foo { ... }` is not ok
-      - `@<package>/file2.tao` with `workspace view Foo { ... }` is not ok
-      - `@<package>/file2.tao` with `public view Foo { ... }` is not ok
-      - `@<package>/subfolder/file3.tao` with `<visibility> view Foo { ... }` _is_ ok
+    - If `@<package>/file.tao` has `package view Foo() { ... }`, then:
+      - `@<package>/file2.tao` with `package view Foo() { ... }` is not ok
+      - `@<package>/file2.tao` with `workspace view Foo() { ... }` is not ok
+      - `@<package>/file2.tao` with `public view Foo() { ... }` is not ok
+      - `@<package>/subfolder/file3.tao` with `<visibility> view Foo() { ... }` _is_ ok
 
 ## Using available code from other packages
 
@@ -143,10 +150,10 @@ Packages can make code available to other packages, and even other workspaces.
 
 - Declarations are referenced by their folder, not their file names
   - If `@<package>/<filename>.tao` has:
-    - `public view Foo { ... }`, then Foo is available via `@<package>`:
+    - `public view Foo() { ... }`, then Foo is available via `@<package>`:
     - `use Foo from @<package>`
   - If `@<package>/<subfolder>/<filename>.tao` has:
-    - `public view Bar { ... }` then Bar is available via `@<package>/subfolder`:
+    - `public view Bar() { ... }` then Bar is available via `@<package>/subfolder`:
     - `use Bar from @<package>/<subfolder>`
 
 ### Package cycles and order of evaluation
@@ -162,6 +169,11 @@ Packages can make code available to other packages, and even other workspaces.
 
 Navigation kinds and datasource providers are self-hosted by ordinary package declarations. The
 stdlib definitions are the proof rather than compiler exceptions:
+
+The examples below show the currently implemented spelling. Next repurposes `nav` and `datasource`
+heads for values and uses `type Name is nav|datasource with { ... }` for reusable types. Whether the
+protocol binding becomes a filled `implement` slot or retains the current `implement inject`
+clause is still declaration-spike Q11, so this section does not invent its final spelling.
 
 ````tao
 public nav StackNav {
@@ -210,6 +222,12 @@ Configuration is declaration-driven. The validator reads ordinary property names
 entries, and keyed-item shape from the linked declaration; it does not branch on names such as
 `StackNav`, `Local`, or `Memory`. A bare block constructs a configured value. `with` patches an
 existing value while retaining the originating declaration and leaving the base unchanged.
+
+Next makes that construction model uniform. `Type { ... }` is value-position sugar for
+`Type with { ... }`; deriving from an existing value must retain `with`. Universal auto-typed `let`
+remains valid, while `nav Name = ...`, `datasource Name = ...`, and `app Name = ...` provide
+equivalent family-constrained heads for common product values. Those heads declare values, not new
+types; reusable types use `type Name is Base with { ... }`.
 
 Every generated protocol declaration owns a unique runtime identity. Its defining module exports
 that binding, and imports and value aliases carry the same binding rather than looking the name up

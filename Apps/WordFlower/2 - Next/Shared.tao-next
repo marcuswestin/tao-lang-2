@@ -1,22 +1,31 @@
-use Joined, Words from @tao/text
-use Text from @tao/ui
+use CountWords, Join from @tao/text
+use Col, Row, Text from @tao/ui
 
 // Shared values, types, and the typed-injection escape hatch.
 
+// This one-case enum is deliberate: `ConfirmResult` is a nominal type, `Confirmed` is its one
+// value, and a dismissed dialogue answers `none` rather than requiring a second enum case.
 workspace enum ConfirmResult {
    Confirmed
 }
 
-workspace let Tagline = "A quiet place for words that matter."
+workspace let WordFlowerTagline = "A quiet place for words that matter."
 
 // A writing session's goal, used by the editor's progress indicator.
 workspace let ParagraphGoal = 10
+
+// `is` narrows, `=` binds. An ascribed binding keeps the `let` column while naming the type it must
+// satisfy; `ParagraphGoal` above demonstrates the equivalent inferred form without the constraint.
+workspace let SessionGoal is number = 10
 
 type PromptTitle is text
 
 type PromptMinutes is number
 
-type PromptTags is list
+type PromptTags is list of text
+
+// Primitive-rooted types remain scalar values and may not add supplied per-value fields that change
+// the primitive representation.
 
 workspace type WritingPrompt is {
    PromptTitle
@@ -36,10 +45,19 @@ workspace let StarterPrompt = WritingPrompt {
    // PromptSubtitle is optional and omitted here
 }
 
-workspace function DocumentLabel Title is text returns text = "Document: { Title }"
+// A function body is a block and hands its result back with `return`, so an early return can
+// take a guard's place. `returns <type>` is optional and inferred when omitted.
+workspace function DocumentLabel(Title is text) returns text {
+   return "Document: { Title }"
+}
 
 // A fraction between 0 and 1 for `Progress`.
-workspace function GoalFraction Count is number returns number = Count / ParagraphGoal
+workspace function GoalFraction(Count is number) {
+   if Count is 0 {
+      return 0
+   }
+   return Count / ParagraphGoal
+}
 
 // `inject <type>` produces a typed value outside render position. The declared Tao type is checked
 // against what the injected TypeScript returns.
@@ -47,11 +65,72 @@ workspace let BuildStamp = inject text ```ts
    return process.env.TAO_BUILD ?? 'development'
 ```
 
-// Typed TS injection also stays the permanent escape hatch for rendering Tao does not own.
-workspace view WordCount Value is text {
-   render Text("Words: { Words(Value).Count }") [body]
+// Content acceptance belongs to the kind. A `view` is a leaf and accepts none; a `layout` and a
+// `frame` accept caller content and choose where it lands with `@@content`.
+
+// The simplest case: a layout places caller content directly.
+workspace layout Toolbar() {
+   render Row() [gap 8, content right] {
+      @@content
+   }
 }
 
-workspace view TagLine Tags is list {
-   render Text("Tagged: { Joined(Tags, Separator: ", ") }") [body]
+// A frame surrounds caller content with its own fixed siblings. Putting `@@content` inside an
+// explicit inner host means caller layout applies to the caller's children rather than to the
+// frame's own structure. `@actions` is a named slot with a default, so callers may omit it.
+workspace frame Card(Title is text) {
+   @actions = empty
+
+   render Col() [gap 8, pad 12, panel] {
+      Row() [content spread center] {
+         Text(Title) [title]
+         @actions
+      }
+      Col() [gap 6] {
+         @@content
+      }
+   }
+}
+
+// `TR`, `RN`, and `process` are always in scope inside injected TypeScript. The inject list names
+// every additional binding received from Tao: no `_ViewProps`, no `_tao`, and no compiler-prefixed
+// name of any kind. Each entry is `<Name> <value>`, and a bare name is shorthand for binding a
+// property under its own name. Literal values and ambient channels are ordinary expressions in
+// that position. This retires the implicit props bag across Tao, stdlib included.
+//
+// Three ambient channels are exposed, which is what a non-stdlib implementation needs to cover its
+// cases: `@@content` is caller content, `@@layout` is the layout resolved for this occurrence
+// including the parent direction it lays out against, and `@@tag` is the call site's test tag.
+// Everything else Tao propagates today — navigation, dialogue, app, caller inheritance — stays
+// private and travels on its own, so a hand-written implementation never touches it.
+workspace view WordBadge(Total is number) {
+   render inject Total, Suffix " words", Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [`${Total}${Suffix}`], layout: Layout, tag: Tag })
+   ```
+}
+
+// A TypeScript-backed container is a `layout` like any other, so it takes the content channel too.
+// The value of `render inject` is the view's root element: Tao wraps nothing around it. Applying
+// `Layout` and `Tag` is therefore the implementation's job, as is rendering `Content` exactly once,
+// and Tao checks none of it.
+//
+// `Content` is opaque: it may be placed anywhere, but it is not a collection to inspect, map over,
+// or take apart. The compiled shape of caller content is not a public interface.
+workspace layout Scroller() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({
+        children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
+        layout: Layout,
+        tag: Tag,
+      })
+   ```
+}
+
+// Typed TS injection also stays the permanent escape hatch for rendering Tao does not own.
+workspace view WordCountLabel(Value is text) {
+   render Text("Words: { CountWords(Value) }") [body]
+}
+
+workspace view TagSummary(Tags is PromptTags) {
+   render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
 }

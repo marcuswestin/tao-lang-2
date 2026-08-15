@@ -111,17 +111,4 @@ test "WordFlower workspaces" {
          text "No drafts"
    }  }
 
-   check "renders deterministic loading, failure, and recovery states" {
-      run WordFlower
-      data loading // `data` drives the app's datasource provider state
-      expect missing text "Workspace name is required"
-      data error "Local storage is unavailable"
-      expect {
-         text "Could not load WordFlower"
-         text "Local storage is unavailable"
-      }
-      data ready
-      expect {
-         text "No workspaces yet"
-         text "Workspace name is required"
-}  }  }
+}

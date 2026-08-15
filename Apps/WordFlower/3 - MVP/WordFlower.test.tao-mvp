@@ -1,4 +1,4 @@
-use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest from ./
+use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest, WordFlowerStage from ./
 
 // Directional journeys for the full target. Steps that reach panes, overlays, toasts, windows,
 // and dialogues reuse the implemented #tag / select vocabulary; anything beyond that vocabulary
@@ -109,6 +109,65 @@ test "WordFlower full target" {
       expect text "Settings"
       press #resetSignedOut
       expect text "Signed out"
+   }
+}
+
+// Provider-state controls operate on the run's isolated InstantDB test provider; journeys never
+// contact a shared remote service.
+test "WordFlower remote data" {
+   check "surfaces and recovers from an unauthorized document" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] {
+         press #openDocument
+      }
+      expect text "Document: Chapter one"
+      data unauthorized
+      expect text "You no longer have access to this document."
+      data ready
+      expect text "Document: Chapter one"
+   }
+
+   check "a derived datasource configures a deployment variant" {
+      run WordFlowerStage
+      expect text "No workspaces yet"
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      expect text "Novel"
+   }
+
+   check "recovers from a remote provider failure" {
+      run WordFlower
+      data loading
+      expect missing text "No workspaces yet"
+      data error "The workspace could not be reached"
+      expect {
+         text "Could not load WordFlower"
+         text "The workspace could not be reached"
+      }
+      data ready
+      expect text "No workspaces yet"
+   }
+
+   check "continues an async action while its remote write is delayed" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      data delayed 250
+      enter "Delayed draft" into #newDocumentTitle
+      submit #newDocumentTitle
+      expect #newDocumentTitle input value ""
+      data ready
+      expect text "Delayed draft"
    }
 }
 

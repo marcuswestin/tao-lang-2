@@ -2,25 +2,25 @@
 // IMPLEMENT THIS FILE LAST.
 //
 // Do NOT begin any design or styling work until every other part of this tranche is implemented,
-// absorbed into `1 - Current`, and green: the stdlib surfaces, adaptive layout, safe-area and
-// keyboard insets, the InstantDB provider and its protocol extension, `unauthorized`, the new test
-// steps, `async`, typed `inject` values, and optional item fields.
+// absorbed into `1 - Current`, and green: the stdlib surfaces, adaptive layout, declaration model,
+// `async`, typed injection, functions, declaration parameter lists, and optional item fields.
 //
 // The reason is ordering, not preference: design styles primitives, so the primitives must exist
 // first or the app gets restyled twice. The bundles below are applied at render sites throughout
 // the other files ([screen], [title], [body]) — those clauses are written already and are inert
 // until this file lands, which is the intended sequence.
 //
-// This is deliberately the SMALLEST useful design system: flat tokens and named clause bundles.
-// It exists so styling can be iterated on with real usage, not so it can be finished. Recipes,
-// variants, states, patterns, rules, and platform blocks all stay in `3 - MVP` for a later tranche;
-// do not pull them forward, and do not generalize this file beyond what the app below uses.
+// This tranche implements exactly the flat tokens and named clause bundles exercised below. Do not
+// generalize the implementation beyond those two represented forms.
 // ============================================================================================
 
 // A design declaration is ordinary Tao source, subject to the same visibility, imports, and
-// validation as everything else. An app selects one with its `Design` property.
+// validation as everything else. An app selects one with its `Design` property. `#...` lexes as
+// `TagOrHexColor`; in these value positions the validator accepts exactly 3-, 4-, 6-, or 8-digit
+// CSS hexadecimal colors. The values deliberately include both letter-leading forms that also fit
+// tag lexemes and digit-leading forms, proving that lexical choice never decides their AST meaning.
 workspace design WordFlowerDesign {
-   // Flat tokens. A token is a name bound to a value; there is no token category syntax yet.
+   // Flat tokens. A token is a name bound to a value; tokens have no separate category syntax.
    paper #f6f7f3
    ink #121826
    inkMuted #5b6472
