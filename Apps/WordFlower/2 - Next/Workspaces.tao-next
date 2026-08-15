@@ -205,12 +205,13 @@ workspace ui WorkspaceChooser {
       guard Workspaces empty -> {
          Text("No workspaces yet") [body]
       }
-      // `List` renders a selectable collection. `on select` receives the row, so a selectable list
-      // needs no per-row button; `loop` remains the form for non-selectable rendering.
+      // `List` renders a selectable collection, binding its row exactly as `loop` does; the row
+      // name scopes the template and `on select`, so a selectable list needs no per-row button.
+      // `loop` remains the form for non-selectable rendering.
       #chooseWorkspace
-      List(Workspaces) {
+      List(Workspaces / Workspace) {
          Text(Workspace.Name) [body]
-         on select -> Workspace {
+         on select -> {
             present WorkspaceDocuments(Workspace) in WorkspaceNav
 }  }  }  }
 
@@ -222,8 +223,8 @@ workspace ui WorkspaceDocuments Workspace {
          Text("No documents yet") [body]
       }
       #workspaceDocuments
-      List(Documents) {
+      List(Documents / Document) {
          Text(Document.Title) [body]
-         on select -> Document {
+         on select -> {
             present DocumentScreen(Document)
 }  }  }  }

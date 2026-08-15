@@ -1,3 +1,6 @@
+use Joined, Words from @tao/text
+use Text from @tao/ui
+
 // Shared values, types, and the typed-injection escape hatch.
 
 workspace enum ConfirmResult {
@@ -46,13 +49,9 @@ workspace let BuildStamp = inject text ```ts
 
 // Typed TS injection also stays the permanent escape hatch for rendering Tao does not own.
 workspace view WordCount Value is text {
-   render inject Value ```ts
-      return <RN.Text>Words: {Value.trim() === '' ? 0 : Value.trim().split(/\s+/).length}</RN.Text>
-   ```
+   render Text("Words: { Words(Value).Count }") [body]
 }
 
 workspace view TagLine Tags is list {
-   render inject Tags ```ts
-      return <RN.Text>Tagged: {Tags.join(', ')}</RN.Text>
-   ```
+   render Text("Tagged: { Joined(Tags, Separator: ", ") }") [body]
 }
