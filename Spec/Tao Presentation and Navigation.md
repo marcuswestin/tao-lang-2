@@ -104,7 +104,10 @@ inline configuration. The validator reads property names, types, required values
 `@key` item contract from the linked declaration. Copied or third-party nav declarations therefore
 receive the same validation and compilation without compiler name cases.
 
-The injected value implements the published `TR.NavKind` protocol. Its immutable descriptor keeps
+The implementation may remain an inline `ts` fence or name a sibling TypeScript sidecar, for
+example `implement inject nav "./StackNav.ts"`. A sidecar default-exports a zero-argument factory;
+the compiler copies and imports it into generated output and evaluates it once for the declaration.
+The resulting value implements the published `TR.NavKind` protocol. Its immutable descriptor keeps
 the Tao declaration identity and normalized configuration. Each mount creates independent state.
 The protocol owns `configure`, `mount`, `render`, `present`, `dismiss`, `back`, `reset`,
 `canGoBack`, and keyed activation; it does not drive native navigation directly. Every implementation

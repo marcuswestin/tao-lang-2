@@ -2,6 +2,7 @@ import { Packages } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
+import { configurationSidecarBindingName } from './codegen/app/configuration-compiler'
 import RuntimeGen from './codegen/app/runtime-gen'
 import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
 
@@ -18,6 +19,23 @@ export type CompiledFile = {
 type ResolvedImports = {
   bySource: Map<string, Set<string>>
   importedNames: Set<string>
+}
+
+type PlannedSidecar = {
+  declaration: AST.ConfigurableDeclaration
+  sourcePath: string
+  relativePath: string
+}
+
+type PlannedSourceOutputs = {
+  modulePath: string
+  declarationsPath?: string
+  sidecars: PlannedSidecar[]
+}
+
+type PlannedOutputs = {
+  bySourcePath: ReadonlyMap<string, PlannedSourceOutputs>
+  modulePathBySourcePath: ReadonlyMap<string, string>
 }
 
 /** CompileResult declares generated output for a Tao app entry. */
@@ -128,11 +146,11 @@ function compileValidatedInput(
   const entryPath = validationResult.entry.path
   const sourceFiles = validationResult.files
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
-  const outputPathBySourcePath = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
-  const compiledFiles = sourceFiles.map(file =>
+  const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
+  const compiledFiles = sourceFiles.flatMap(file =>
     compileSourceFile(file, {
       sourceByPath,
-      outputPathBySourcePath,
+      outputPaths,
       packagesContext: context.packagesContext,
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
     })
@@ -145,36 +163,72 @@ function planOutputPaths(
   sourceFiles: readonly ParsedFile[],
   entryPath: string,
   sourceRoot: string,
-): Map<string, string> {
+): PlannedOutputs {
   // Basename buckets in moduleOutputPath can collide across distinct sources;
   // suffix deterministically instead of silently overwriting generated files.
-  const outputPathBySourcePath = new Map<string, string>()
+  const modulePathBySourcePath = new Map<string, string>()
   const usedOutputPaths = new Set<string>()
   for (const file of sourceFiles) {
     const preferredPath = file.path === entryPath ? 'App.tsx' : moduleOutputPath(file.path, entryPath, sourceRoot)
-    let outputPath = preferredPath
-    for (let suffix = 2; usedOutputPaths.has(outputPath); suffix++) {
-      outputPath = preferredPath.replace(/\.tsx$/, `-${suffix}.tsx`)
-    }
-    usedOutputPaths.add(outputPath)
-    outputPathBySourcePath.set(file.path, outputPath)
+    modulePathBySourcePath.set(file.path, reserveModuleOutputPath(file, preferredPath, usedOutputPaths))
   }
-  return outputPathBySourcePath
+
+  const bySourcePath = new Map<string, PlannedSourceOutputs>()
+  for (const file of sourceFiles) {
+    const modulePath = modulePathBySourcePath.get(file.path)
+    Assert.defined(modulePath, compiledSourceOutputPathMessage, { sourcePath: file.path })
+    const declarations = file.ast.statements.filter(AST.isConfigurableDeclaration)
+    const companionDirectory = declarations.length === 0
+      ? outputDirectory(modulePath)
+      : companionOutputDirectory(file.path, modulePath, usedOutputPaths)
+    const declarationsPath = declarations.length === 0
+      ? undefined
+      : reserveOutputPath(
+        outputPathInDirectory(companionDirectory, `${FS.basename(file.path)}.d.ts`),
+        usedOutputPaths,
+      )
+    const sidecarPathBySourcePath = new Map<string, string>()
+    const sidecars = declarations.flatMap(declaration => {
+      const sidecarPath = AST.configurationImplementationOf(declaration)?.sidecarPath
+      if (sidecarPath === undefined) {
+        return []
+      }
+      const sourcePath = FS.resolvePath(sidecarPath, FS.dirname(file.path))
+      let relativePath = sidecarPathBySourcePath.get(sourcePath)
+      if (relativePath === undefined) {
+        relativePath = reserveOutputPath(
+          outputPathInDirectory(companionDirectory, FS.basename(sourcePath)),
+          usedOutputPaths,
+        )
+        sidecarPathBySourcePath.set(sourcePath, relativePath)
+      }
+      return [{ declaration, sourcePath, relativePath }]
+    })
+    bySourcePath.set(file.path, { modulePath, declarationsPath, sidecars })
+  }
+  return { bySourcePath, modulePathBySourcePath }
 }
 
 type CompileSourceFileOptions = {
   sourceByPath: Map<string, ParsedFile>
-  outputPathBySourcePath: ReadonlyMap<string, string>
+  outputPaths: PlannedOutputs
   packagesContext: Packages.Context
   selectedAppName: string | undefined
 }
 
-function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile {
-  const { sourceByPath, outputPathBySourcePath, packagesContext, selectedAppName } = options
+function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
+  const { sourceByPath, outputPaths, packagesContext, selectedAppName } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
-  const currentOutputPath = outputPathBySourcePath.get(file.path)
-  Assert.defined(currentOutputPath, compiledSourceOutputPathMessage, { sourcePath: file.path })
-  const importLines = importLinesForCompiledFile(imports, currentOutputPath, outputPathBySourcePath)
+  const planned = outputPaths.bySourcePath.get(file.path)
+  Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
+  const importLines = [
+    ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
+    ...planned.sidecars.map(sidecar =>
+      `import ${configurationSidecarBindingName(sidecar.declaration)} from '${
+        relativeImportPath(planned.modulePath, sidecar.relativePath)
+      }'`
+    ),
+  ]
   const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
   const exportedNames = file.ast.statements
     .filter(AST.isExportableDeclaration)
@@ -182,16 +236,38 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     .filter(declarationVisibleOutsideFile)
     .map((statement: AST.Declaration) => statement.name)
 
-  return {
+  const module: CompiledFile = {
     sourcePath: file.path,
-    relativePath: currentOutputPath,
+    relativePath: planned.modulePath,
     code: RuntimeGen.TaoFile(file.ast, {
+      configurationTypes: planned.declarationsPath === undefined
+        ? undefined
+        : RuntimeGen.ConfigurationTypes(file.ast),
       importLines,
       scopeBindings,
       exportedNames,
       selectedAppName,
     }),
   }
+  const declarations: CompiledFile[] = planned.declarationsPath === undefined
+    ? []
+    : [{
+      sourcePath: file.path,
+      relativePath: planned.declarationsPath,
+      code: RuntimeGen.ConfigurationDeclarations(file.ast),
+    }]
+  const copiedSidecars = new Map<string, CompiledFile>()
+  for (const sidecar of planned.sidecars) {
+    Assert(FS.existsSync(sidecar.sourcePath), 'validated configuration sidecar exists', {
+      sourcePath: sidecar.sourcePath,
+    })
+    copiedSidecars.set(sidecar.relativePath, {
+      sourcePath: sidecar.sourcePath,
+      relativePath: sidecar.relativePath,
+      code: FS.readTextSync(sidecar.sourcePath),
+    })
+  }
+  return [module, ...declarations, ...copiedSidecars.values()]
 }
 
 function importLinesForCompiledFile(
@@ -284,8 +360,82 @@ function resolveImports(
 function relativeImportPath(fromOutputPath: string, toOutputPath: string): string {
   const fromDir = FS.dirname(fromOutputPath)
   const relative = FS.relativePath(fromDir, toOutputPath)
-  const withoutExtension = relative.replace(/\.tsx$/, '')
+  const withoutExtension = relative.replace(/\.(?:d\.ts|tsx?)$/, '')
   return withoutExtension.startsWith('.') ? withoutExtension : `./${withoutExtension}`
+}
+
+function companionOutputDirectory(
+  sourcePath: string,
+  modulePath: string,
+  usedOutputPaths: ReadonlySet<string>,
+): string {
+  const directory = outputDirectory(modulePath)
+  const declarationName = `${FS.basename(sourcePath)}.d.ts`
+  if (!usedOutputPaths.has(outputPathInDirectory(directory, declarationName))) {
+    return directory
+  }
+
+  const moduleName = FS.basename(modulePath, FS.extname(modulePath))
+  for (let suffix = 1;; suffix++) {
+    const name = suffix === 1 ? `${moduleName}.files` : `${moduleName}.files-${suffix}`
+    const candidate = outputPathInDirectory(outputPathInDirectory(directory, name), declarationName)
+    if (!usedOutputPaths.has(candidate)) {
+      return outputPathInDirectory(directory, name)
+    }
+  }
+}
+
+function outputDirectory(outputPath: string): string {
+  const directory = FS.dirname(outputPath)
+  return directory === '.' ? '' : directory
+}
+
+function outputPathInDirectory(directory: string, name: string): string {
+  return directory === '' ? name : `${directory}/${name}`
+}
+
+function reserveOutputPath(preferredPath: string, usedOutputPaths: Set<string>): string {
+  let outputPath = preferredPath
+  for (let suffix = 2; usedOutputPaths.has(outputPath); suffix++) {
+    outputPath = suffixedOutputPath(preferredPath, suffix)
+  }
+  usedOutputPaths.add(outputPath)
+  return outputPath
+}
+
+function reserveModuleOutputPath(
+  file: ParsedFile,
+  preferredPath: string,
+  usedOutputPaths: Set<string>,
+): string {
+  if (!usedOutputPaths.has(preferredPath)) {
+    usedOutputPaths.add(preferredPath)
+    return preferredPath
+  }
+  if (!file.ast.statements.some(AST.isConfigurableDeclaration)) {
+    return reserveOutputPath(preferredPath, usedOutputPaths)
+  }
+
+  const directory = outputDirectory(preferredPath)
+  const preferredName = FS.basename(preferredPath, FS.extname(preferredPath))
+  for (let suffix = 2;; suffix++) {
+    const collisionDirectory = outputPathInDirectory(directory, `${preferredName}-${suffix}.files`)
+    const candidate = outputPathInDirectory(collisionDirectory, `${FS.basename(file.path)}.tsx`)
+    if (!usedOutputPaths.has(candidate)) {
+      usedOutputPaths.add(candidate)
+      return candidate
+    }
+  }
+}
+
+function suffixedOutputPath(outputPath: string, suffix: number): string {
+  if (outputPath.endsWith('.d.ts')) {
+    return `${outputPath.slice(0, -'.d.ts'.length)}-${suffix}.d.ts`
+  }
+  const extension = FS.extname(outputPath)
+  return extension === ''
+    ? `${outputPath}-${suffix}`
+    : `${outputPath.slice(0, -extension.length)}-${suffix}${extension}`
 }
 
 function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {

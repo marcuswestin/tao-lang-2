@@ -1,4 +1,4 @@
-import { type Dirent, existsSync as nodeExistsSync } from 'node:fs'
+import { type Dirent, existsSync as nodeExistsSync, readFileSync as nodeReadFileSync } from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
@@ -118,6 +118,11 @@ export async function isEmptyDirectory(inputPath: string): Promise<boolean> {
 /** readText reads a UTF-8 file. */
 export async function readText(inputPath: string): Promise<string> {
   return nodeFs.readFile(inputPath, 'utf8')
+}
+
+/** readTextSync reads UTF-8 text for synchronous compiler and validator passes. */
+export function readTextSync(inputPath: string): string {
+  return nodeReadFileSync(inputPath, 'utf8')
 }
 
 /** readFile reads a file as bytes. */

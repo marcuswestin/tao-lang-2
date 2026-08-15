@@ -49,7 +49,7 @@ Describe('Tao formatter configurable declarations', () => {
   Test(
     'formats declaration-owned nav and datasource contracts with injected implementations',
     formats(
-      `public nav CustomNav{Initial ui @key{Label text Content Presentable}implement inject nav ${tsFence}\nreturn TR.NavKind.Stack()\n${fence}}\npublic datasource CustomData{StorageKey text implement inject provider ${tsFence}\nreturn TR.DataProvider.Local()\n${fence}}`,
+      `public nav CustomNav{Initial ui @key{Label text Content Presentable}implement inject nav ${tsFence}\nreturn TR.NavKind.Stack()\n${fence}}\npublic datasource CustomData{StorageKey text implement inject provider "./CustomData.ts"}`,
       `
         public nav CustomNav {
            Initial ui
@@ -66,9 +66,7 @@ Describe('Tao formatter configurable declarations', () => {
         public datasource CustomData {
            StorageKey text
 
-           implement inject provider ${tsFence}
-              return TR.DataProvider.Local()
-           ${fence}
+           implement inject provider "./CustomData.ts"
         }
       `,
     ),

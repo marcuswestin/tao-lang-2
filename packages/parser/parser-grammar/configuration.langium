@@ -29,7 +29,8 @@ ConfigurationPropertyBlock:
     '{' properties+=ConfigurationPropertyDeclaration* '}';
 
 ConfigurationImplementation:
-    'implement' 'inject' protocol=ConfigurationImplementationProtocol tsCodeBlock=TS_CODE_BLOCK;
+    'implement' 'inject' protocol=ConfigurationImplementationProtocol
+    (tsCodeBlock=TS_CODE_BLOCK | sidecarPath=STRING);
 
 ConfigurationImplementationProtocol returns string:
     'nav' | 'provider';

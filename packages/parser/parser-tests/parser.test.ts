@@ -565,9 +565,7 @@ Describe('parser: core language syntax', () => {
       }
       public datasource CustomData {
         StorageKey text
-        implement inject provider \`\`\`ts
-          return TR.DataProvider.Local()
-        \`\`\`
+        implement inject provider "./CustomData.ts"
       }
       ui Home { }
       let Main = CustomNav {
@@ -618,7 +616,8 @@ Describe('parser: core language syntax', () => {
     Expect.Is(providerImplementation, AST.isConfigurationImplementation)
     Expect(storageKey.name).toBe('StorageKey')
     Expect(providerImplementation.protocol).toBe('provider')
-    Expect(providerImplementation.tsCodeBlock).toContain('TR.DataProvider.Local()')
+    Expect(providerImplementation.tsCodeBlock).toBeUndefined()
+    Expect(providerImplementation.sidecarPath).toBe('./CustomData.ts')
 
     Expect.Is(main.value, AST.isConfigurationConstructor)
     Expect.Is(store.value, AST.isConfigurationConstructor)

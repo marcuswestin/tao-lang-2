@@ -1,6 +1,7 @@
 import Runtime from '@runtime-toolchain'
-import { Assert, FS, Repo } from '@shared'
-import { AfterEach, Describe, Expect, mkTestDir, Test } from '@shared/test'
+import TR from '@runtime/TR'
+import { Assert, CLI, FS, Repo } from '@shared'
+import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 
 const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
@@ -78,6 +79,91 @@ Describe('Tao runtime app generation', () => {
     // Type System Tests now imports @tao/nav, so the shared generated stdlib directory remains.
     Expect(await FS.exists(stdlibModuleDir)).toBe(true)
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
+  })
+
+  Test('generates, type-checks, and conforms a sidecar navigation implementation', async () => {
+    const executableRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/sidecar-tests')
+    await FS.mkdir(executableRoot)
+    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('runtime-', executableRoot))
+    runtimeRoots.push(runtimePackageRoot)
+    await withTaoFiles(
+      'tao-runtime-sidecar-',
+      {
+        'Main.tao': `
+          use SidecarStack from ./Constructs.tao
+          app SidecarApp {
+            Name "Sidecar App"
+            Navigator SidecarStack { Initial Home }
+          }
+          ui Home { render inject \`\`\`ts return null \`\`\` }
+        `,
+        'Constructs.tao': `
+          public nav SidecarStack {
+            Initial ui
+            implement inject nav "./SidecarStack.ts"
+          }
+        `,
+        'SidecarStack.ts': `
+          import TR from '@runtime/TR'
+          import type { SidecarStackConfig } from './Constructs.tao'
+
+          let factoryCalls = 0
+          export default function createSidecarStack(): TR.NavKind<'stack', SidecarStackConfig> {
+            factoryCalls++
+            if (factoryCalls !== 1) throw new Error('sidecar factory must be evaluated exactly once')
+            return TR.NavKind.Stack()
+          }
+        `,
+      },
+      async paths => {
+        await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
+        const modulePath = await findGeneratedModule(runtimePackageRoot, 'Constructs.tao.tsx')
+        const declarationsPath = await findGeneratedModule(runtimePackageRoot, 'Constructs.tao.d.ts')
+        const sidecarPath = await findGeneratedModule(runtimePackageRoot, 'SidecarStack.ts')
+        const moduleCode = await FS.readText(modulePath)
+
+        Expect(await FS.exists(declarationsPath)).toBe(true)
+        Expect(await FS.exists(sidecarPath)).toBe(true)
+        Expect(moduleCode).toContain(
+          "import __tao_configuration_implementation_SidecarStack__ from './SidecarStack'",
+        )
+        Expect(moduleCode).toContain('__tao_configuration_implementation_SidecarStack__')
+
+        const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
+        const typecheckConfig = FS.resolvePath('tsconfig.json', runtimePackageRoot)
+        await FS.writeJson(typecheckConfig, {
+          extends: Repo.resolvePath('packages/tsconfig.base.json'),
+          compilerOptions: {
+            allowImportingTsExtensions: true,
+            composite: false,
+            declaration: false,
+            incremental: false,
+            jsx: 'react',
+            lib: ['ES2023', 'DOM'],
+            noEmit: true,
+            rootDir: '/',
+            typeRoots: [Repo.resolvePath('node_modules/@types')],
+            types: ['bun', 'node'],
+          },
+          include: [`${generatedRoot}/**/*.ts`, `${generatedRoot}/**/*.tsx`],
+        })
+        const typecheck = await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {
+          args: ['--project', typecheckConfig],
+        })
+        Assert(typecheck.exitCode === 0, 'generated sidecar configuration contract type-checks', {
+          stderr: typecheck.stderr,
+          stdout: typecheck.stdout,
+        })
+
+        const generatedModule = await import(modulePath) as {
+          SidecarStack: {
+            kind: TR.NavKind<'stack', TR.StackNavConfiguration>
+          }
+        }
+        Expect(generatedModule.SidecarStack.kind.profile).toBe('stack')
+        TR.testNavKind(generatedModule.SidecarStack.kind, 'stack')
+      },
+    )
   })
 })
 
