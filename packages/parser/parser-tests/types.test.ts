@@ -8,12 +8,12 @@ Describe('parser: types', () => {
       type Name is text
       type Tags is list
       type Job is {
-        Title is text
+        Title text,
       }
       type Person is {
-        Name
-        Tags
-        Job
+        Name,
+        Tags,
+        Job,
       }
 
       let DisplayName = Name "Ada"
@@ -70,10 +70,10 @@ Describe('parser: types', () => {
   Test('parses nested item property blocks from their declaration-owned property shape', async () => {
     const parseResult = await testParseCode(`
       type Job is {
-        Title is text
+        Title text,
       }
       type Profile is {
-        Role is Job
+        Role Job,
       }
       let DemoProfile = Profile { Role { Title "Compiler engineer" } }
       view MainView { }
@@ -101,5 +101,58 @@ Describe('parser: types', () => {
     Expect.Is(title, AST.isConfigurationEntry)
     Expect(title.name).toBe('Title')
     Expect.Is(title.value, AST.isStringLiteral)
+  })
+
+  Test('parses space-separated slots, shorthand names, defaults, and fills', async () => {
+    const parseResult = await testParseCode(`
+      type Age is number
+      type Profile is {
+        Name text,
+        Age,
+        Header ui is none,
+        implement is "./Profile.ts",
+      }
+      view MainView { }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const profile = parseResult.entry.ast.statements.find(
+      statement => AST.isTypeDeclaration(statement) && statement.name === 'Profile',
+    )
+    Expect.Is(profile, AST.isTypeDeclaration)
+    Expect.Is(profile.type, AST.isItemTypeExpression)
+    const [name, age, header, implementation] = profile.type.properties
+    Expect(name?.name).toBe('Name')
+    Expect.Is(name?.type, AST.isPrimitiveTypeReference)
+    Expect(age?.name).toBe('Age')
+    Expect(age?.type).toBeUndefined()
+    Expect.Is(header?.type, AST.isPrimitiveTypeReference)
+    Expect.Is(header?.value, AST.isNoneLiteral)
+    Expect(implementation?.type).toBeUndefined()
+    Expect.Is(implementation?.value, AST.isStringLiteral)
+  })
+
+  Test('parses derived slot types, inferred bare blocks, and generic value patches', async () => {
+    const parseResult = await testParseCode(`
+      type Person is { Name text, Role text }
+      type Admin is Person with { Role is "admin", Access number }
+      let Admin = { Name "Ro", Access 3 }
+      let Renamed = Admin with { Name "Grace" }
+      view MainView { }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const adminType = parseResult.entry.ast.statements.find(
+      statement => AST.isTypeDeclaration(statement) && statement.name === 'Admin',
+    )
+    const aliases = parseResult.entry.ast.statements.filter(AST.isAliasDeclaration)
+    Expect.Is(adminType, AST.isTypeDeclaration)
+    Expect.Is(adminType.type, AST.isDerivedTypeExpression)
+    Expect.Is(adminType.type.base, AST.isNamedTypeReference)
+    Expect(adminType.type.base.root).toBe('Person')
+    Expect(adminType.type.slots.properties.map(property => property.name)).toEqual(['Role', 'Access'])
+    Expect.Is(aliases[0]?.value, AST.isInferredConfigurationConstructor)
+    Expect.Is(aliases[1]?.value, AST.isValueReference)
+    Expect(AST.isPatchedValueReference(aliases[1].value)).toBe(true)
   })
 })

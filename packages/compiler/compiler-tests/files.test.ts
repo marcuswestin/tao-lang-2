@@ -69,6 +69,107 @@ Describe('compiler: files and packages', () => {
     )
   })
 
+  Test('copies configuration sidecars, wires their factories, and emits configuration declarations', async () => {
+    const sidecarCode = [
+      "import TR from '@runtime/TR'",
+      "import type { SidecarStackConfig } from './Constructs.tao'",
+      '',
+      "export default function createSidecarStack(): TR.NavKind<'stack', SidecarStackConfig> {",
+      '  return TR.NavKind.Stack()',
+      '}',
+    ].join('\n')
+    await withTaoFiles(
+      'tao-compiler-configuration-sidecar-',
+      {
+        'Main.tao': `
+          use SidecarStack, InlineStore from ./Constructs.tao
+          app Demo {
+            Name "Demo"
+            Navigator SidecarStack { Initial Home }
+            Datasource InlineStore { StorageKey "demo" }
+          }
+          ui Home { render inject ${tsFence} return null ${fence} }
+        `,
+        'Constructs.tao': `
+          public type Presentable is ui | nav
+          public nav SidecarStack {
+            Initial ui
+            implement inject nav "./SidecarStack.ts"
+          }
+          public nav InlineSlot {
+            Initial Presentable
+            implement inject nav ${tsFence}
+              return TR.NavKind.Slot()
+            ${fence}
+          }
+          public nav InlineSelection {
+            Initial key
+            Display text
+            @key { Label text Content Presentable }
+            implement inject nav ${tsFence}
+              return TR.NavKind.Selection()
+            ${fence}
+          }
+          public nav InlineCustom {
+            Query text
+            implement inject nav ${tsFence}
+              return TR.NavKind.Stack()
+            ${fence}
+          }
+          public datasource InlineStore {
+            StorageKey text
+            implement inject provider ${tsFence}
+              return TR.DataProvider.Memory()
+            ${fence}
+          }
+        `,
+        'SidecarStack.ts': sidecarCode,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['Main.tao'])
+        const module = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.tsx')
+        const declarations = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.d.ts')
+        const sidecar = requireRelativeCompiledFile(compiled.files, 'modules/SidecarStack.ts')
+
+        Expect(module.code).toContain(
+          "import __tao_configuration_implementation_SidecarStack__ from './SidecarStack'",
+        )
+        Expect(module.code.replace(/\s+/g, ' ')).toContain(
+          'TR.Navigation.Declaration( "SidecarStack", Reflect.apply( '
+            + '__tao_configuration_implementation_SidecarStack__, undefined, [], ), )',
+        )
+        Expect(module.code).toContain('function __tao_configuration_implementation__()')
+        Expect(module.code).toContain('return TR.DataProvider.Memory()')
+        Expect(sidecar.sourcePath).toBe(paths['SidecarStack.ts'])
+        Expect(sidecar.code).toBe(sidecarCode)
+        Expect(declarations.code).toContain("import type TR from '@runtime/TR'")
+        const declarationText = declarations.code.replace(/\s+/g, ' ')
+        Expect(declarationText).toContain(
+          'export type SidecarStackConfig = Readonly<{ readonly initial: TR.Presentable }>',
+        )
+        Expect(declarationText).toContain(
+          'export type InlineStoreConfig = Readonly<{ readonly "StorageKey": TR.Value<string> }>',
+        )
+        Expect(declarationText).toContain(
+          'export type InlineSlotConfig = Readonly<{ '
+            + 'readonly initial: TR.Presentable | TR.NavigationValue }>',
+        )
+        Expect(declarationText).toContain(
+          'export type InlineSelectionConfig = Readonly<{ '
+            + 'readonly display: TR.Evaluable readonly initial: string '
+            + 'readonly items: Readonly<Record<string, Readonly<{ '
+            + 'readonly label: TR.Evaluable readonly content: TR.Presentable | TR.NavigationValue }>>> }>',
+        )
+        Expect(declarationText).toContain(
+          'export type InlineCustomConfig = Readonly<Record<string, unknown>>',
+        )
+        Expect(module.code.replace(/\s+/g, ' ')).toContain(
+          'export type SidecarStackConfig = Readonly<{ readonly initial: TR.Presentable }>',
+        )
+      },
+    )
+  })
+
   Test('compiles sibling Tao file dependencies', async () => {
     await withCompiledFiles(
       'Main.tao',
@@ -323,6 +424,61 @@ Describe('compiler: files and packages', () => {
     )
   })
 
+  Test('keeps same-named external sidecar companion groups collision-safe', async () => {
+    await withTaoFiles(
+      'tao-compiler-sidecar-collisions-',
+      {
+        'app/Main.tao': `
+          use AStack from ../liba
+          use BStack from ../libb
+          app CollisionApp {
+            Name "Collision"
+            Navigator AStack { Initial Home }
+          }
+          ui Home { render inject ${tsFence} return null ${fence} }
+        `,
+        'liba/Views.tao': `
+          public nav AStack {
+            Initial ui
+            implement inject nav "./Implementation.ts"
+          }
+        `,
+        'liba/Implementation.ts': `
+          import TR from '@runtime/TR'
+          import type { AStackConfig } from './Views.tao'
+          export default function createA(): TR.NavKind<'stack', AStackConfig> {
+            return TR.NavKind.Stack()
+          }
+        `,
+        'libb/Views.tao': `
+          public nav BStack {
+            Initial ui
+            implement inject nav "./Implementation.ts"
+          }
+        `,
+        'libb/Implementation.ts': `
+          import TR from '@runtime/TR'
+          import type { BStackConfig } from './Views.tao'
+          export default function createB(): TR.NavKind<'stack', BStackConfig> {
+            return TR.NavKind.Stack()
+          }
+        `,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['app/Main.tao'])
+        const relativePaths = compiled.files.map(file => file.relativePath)
+
+        Expect(new Set(relativePaths).size).toBe(relativePaths.length)
+        Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
+        Expect(relativePaths).toContain('modules/external/Views.tao.d.ts')
+        Expect(relativePaths).toContain('modules/external/Implementation.ts')
+        Expect(relativePaths).toContain('modules/external/Views.tao-2.files/Views.tao.tsx')
+        Expect(relativePaths).toContain('modules/external/Views.tao-2.files/Views.tao.d.ts')
+        Expect(relativePaths).toContain('modules/external/Views.tao-2.files/Implementation.ts')
+      },
+    )
+  })
+
   Test('rejects entry files without an app declaration', async () => {
     await Expect(TestCompiler.compileCode(`
       view MainView {
@@ -397,6 +553,12 @@ async function withCompiledFiles<
 
 function requireCompiledFile(files: readonly CompiledFile[], sourcePath: string): CompiledFile {
   const file = files.find(compiledFile => compiledFile.sourcePath === sourcePath)
+  Expect(file).toBeDefined()
+  return file!
+}
+
+function requireRelativeCompiledFile(files: readonly CompiledFile[], relativePath: string): CompiledFile {
+  const file = files.find(compiledFile => compiledFile.relativePath === relativePath)
   Expect(file).toBeDefined()
   return file!
 }

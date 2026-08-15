@@ -1,5 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
+import { completenessValidationMessages } from '../validator-src/validators/completeness-validator'
 import { configurationValidationMessages } from '../validator-src/validators/configuration-validator'
+import { configuredValueValidationMessages } from '../validator-src/validators/configured-values-validator'
 import { dataValidationMessages } from '../validator-src/validators/data-validator'
 import { DialogueValidator } from '../validator-src/validators/dialogue-validator'
 import { navigationValidationMessages } from '../validator-src/validators/navigation-validator'
@@ -18,6 +20,63 @@ import {
 } from './test-validate'
 
 Describe('validator: declaration contracts', () => {
+  Test(
+    'infers bare app slot blocks from the slot name and primitive role',
+    accepts(`
+      public nav Navigator {
+        Initial ui
+        ${implementation('nav', 'return TR.NavKind.Stack()')}
+      }
+      public datasource Datasource {
+        StorageKey text
+        ${implementation('provider', 'return TR.DataProvider.Local()')}
+      }
+      app Demo {
+        Name "Demo"
+        Navigator { Initial Home }
+        Datasource { StorageKey "demo" }
+      }
+      ui Home { render Empty() }
+      ${stubView('Empty')}
+    `),
+  )
+
+  Test(
+    'rejects a bare app slot block without its uniquely named declaration',
+    rejects(
+      `
+        app Demo { Name "Demo" Navigator { Initial Home } }
+        ui Home { render Empty() }
+        ${stubView('Empty')}
+      `,
+      "App Demo Navigator bare block requires exactly one visible nav declaration named 'Navigator'.",
+    ),
+  )
+
+  Test(
+    'rejects incomplete declarations used as values',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        app Demo { Name "Demo" Navigator StackNav { Initial Detail } }
+        ui Detail Label is text { render Empty() }
+        ${stubView('Empty')}
+      `,
+      completenessValidationMessages.incomplete('Detail', ['Label']),
+    ),
+  )
+
+  Test(
+    'requires direct app configurations to fill their supplied slots',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        app Demo { Name "Demo" Navigator StackNav }
+      `,
+      configuredValueValidationMessages.missingConfiguration('StackNav', 'Initial'),
+    ),
+  )
+
   Test(
     'accepts arbitrary self-hosted declaration contracts without shipped-name tables',
     accepts(`

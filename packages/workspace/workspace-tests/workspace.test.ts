@@ -40,7 +40,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const validation = await workspace.validate(paths['Main.tao']!)
         const compiled = await workspace.compile(paths['Main.tao']!)
 
-        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(3)
+        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(4)
+        Expect(parseResult.files.some(file => file.path.endsWith('/tao/Prelude.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
         Expect(compiled.files.map(file => file.sourcePath).sort()).toEqual([
           paths['Main.tao']!,

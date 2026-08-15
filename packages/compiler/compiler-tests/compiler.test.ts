@@ -8,6 +8,67 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: language lowering', () => {
+  Test('compiles bare app slot blocks through their inferred declaration identities', async () => {
+    const compiled = await Compiler.compileCode(`
+      public nav Navigator {
+        Initial ui
+        implement inject nav ${tsFence} return TR.NavKind.Stack() ${fence}
+      }
+      public datasource Datasource {
+        StorageKey text
+        implement inject provider ${tsFence} return TR.DataProvider.Local() ${fence}
+      }
+      app Demo {
+        Name "Demo"
+        Navigator { Initial Home }
+        Datasource { StorageKey "demo" }
+      }
+      ui Home { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.Navigator, {')
+    Expect(compiled.code).toContain('TR.Data.Configure(_Scope.Datasource, {')
+    Expect(compiled.code).toContain('"StorageKey": TR.Value("demo")')
+  })
+
+  Test('materializes defaulted and filled declaration slots in constructed values', async () => {
+    const compiled = await Compiler.compileCode(app(
+      'render Text(Draft.Title)',
+      `
+        type Document is {
+          Name text,
+          Title text is "Untitled",
+          Kind is "document",
+        }
+        let Draft = Document { Name "Roadmap" }
+        ${stubView('Text', 'Value is text')}
+      `,
+    ))
+
+    Expect(compiled.code).toContain('["Name"]: TR.Value("Roadmap").jsValue')
+    Expect(compiled.code).toContain('["Title"]: TR.Value("Untitled").jsValue')
+    Expect(compiled.code).toContain('["Kind"]: TR.Value("document").jsValue')
+  })
+
+  Test('compiles derived item slots, inferred bare values, and generic immutable patches', async () => {
+    const compiled = await Compiler.compileCode(app(
+      'render Text(Renamed.Name)',
+      `
+        type Person is { Name text, Role text is "member" }
+        type Admin is Person with { Role is "admin", Access number is 1 }
+        let Admin = { Name "Ro" }
+        let Renamed = Admin with { Name "Grace", Access 2 }
+        ${stubView('Text', 'Value is text')}
+      `,
+    ))
+
+    Expect(compiled.code).toContain('["Role"]: TR.Value("admin").jsValue')
+    Expect(compiled.code).toContain('["Access"]: TR.Value(1).jsValue')
+    Expect(compiled.code).toContain('..._Scope.Admin.evaluate().jsValue')
+    Expect(compiled.code).toContain('["Name"]: TR.Value("Grace").jsValue')
+    Expect(compiled.code).toContain('["Access"]: TR.Value(2).jsValue')
+  })
+
   Test('compiles the top-level data catalog, inferred relations, defaults, and explicit Local key', async () => {
     const compiled = await Compiler.compileCode(`
       use Local from @tao/data

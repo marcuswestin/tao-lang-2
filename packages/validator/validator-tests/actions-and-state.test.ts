@@ -310,7 +310,7 @@ Describe('validator: actions and state', () => {
         let Holder = CallbackHolder { Receive }
         action Call { do Holder.Callback(1) }
       `,
-        'type CallbackHolder is { Callback is action(text) }',
+        'type CallbackHolder is { Callback action(text) }',
       ),
       ActionsValidator.messages.dynamicActionArgumentType(1, 'text', 'number'),
     ),

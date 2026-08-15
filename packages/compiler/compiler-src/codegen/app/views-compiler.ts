@@ -1,8 +1,8 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ViewsCompiler = {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
@@ -41,33 +41,7 @@ export const ViewsCompiler = {
 
   /** RuntimeType returns the generated wrapper type for one statically resolved Tao value. */
   RuntimeType(type: ASTUtils.TaoType): Compiled {
-    return Switch.kind(type, {
-      primitive: type =>
-        Switch(type.primitive, {
-          action: () => {
-            const parameters = type.primitive === 'action' ? type.parameters : []
-            return gen`TR.Action<[${
-              gen.join(
-                parameters,
-                parameter => gen`${Compile.RuntimeType(parameter.type)}${parameter.optional ? '?' : ''}`,
-              )
-            }]>`
-          },
-          boolean: () => gen`TR.Value<boolean>`,
-          none: () => gen`TR.Value<null>`,
-          number: () => gen`TR.Value<number>`,
-          text: () => gen`TR.Value<string>`,
-          time: () => gen`TR.Value<number>`,
-          nav: () => gen`TR.NavigationValue`,
-          ui: () => gen`TR.Presentable`,
-        }),
-      list: () => gen`TR.Value<any[]>`,
-      item: () => gen`TR.Value<Record<string, any>>`,
-      entity: () => gen`TR.Value<Record<string, any>>`,
-      enum: () => gen`TR.Value<TR.EnumCaseIdentity>`,
-      unresolved: () => gen`TR.Value<Record<string, any>>`,
-      union: () => gen`TR.Evaluable`,
-    })
+    return compileRuntimeType(type)
   },
 
   /** RenderBlockBody compiles render child setup statements followed by JSX children. */

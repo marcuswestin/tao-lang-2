@@ -1,6 +1,13 @@
 import type { FormatHandlers } from '../formatting'
 
 export default {
+  /** PrimitiveDeclaration formats the pinned intrinsic shape declaration. */
+  PrimitiveDeclaration(f) {
+    f.oneSpaceAfter('primitive')
+    f.oneSpaceAround('with')
+    f.oneSpaceBeforeProperty('slots')
+  },
+
   /** TypeDeclaration formats `type Name is ...` declarations. */
   TypeDeclaration(f) {
     f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'type')
@@ -25,6 +32,7 @@ export default {
   /** ItemTypeExpression formats item type property blocks. */
   ItemTypeExpression(f) {
     f.indentedBraceBlock(f.node.properties)
+    f.commaLineList()
     f.lineSeparatedList(f.node.properties)
   },
 
@@ -33,8 +41,15 @@ export default {
     f.oneSpaceAround('|')
   },
 
-  /** TypeProperty formats explicit `Name is Type` item fields and shorthand same-name fields. */
+  /** DerivedTypeExpression spaces immutable slot derivation around `with`. */
+  DerivedTypeExpression(f) {
+    f.oneSpaceAround('with')
+    f.oneSpaceBeforeProperty('slots')
+  },
+
+  /** TypeProperty formats `Name Type`, shorthand `Type`, and optional `is value` fills. */
   TypeProperty(f) {
+    f.oneSpaceBetweenProperties('name', 'type')
     f.oneSpaceAround('is')
   },
 

@@ -12,6 +12,7 @@ export type PackageFileResolveRequest = {
 
 /** PackageResolver resolves declarations and files reachable through Tao use statements. */
 export type PackageResolver = {
+  intrinsicFilePaths(): Promise<readonly string[]>
   collectTargetDeclarations(
     useStatement: AST.UseStatement,
     request: PackageDeclarationResolveRequest,
@@ -24,6 +25,7 @@ export type PackageResolver = {
 
 /** emptyPackageResolver resolves no package declarations or files for standalone parser contexts. */
 export const emptyPackageResolver: PackageResolver = {
+  intrinsicFilePaths: async () => [],
   collectTargetDeclarations: () => [],
   candidateFilePaths: async () => [],
 }

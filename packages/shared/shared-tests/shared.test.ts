@@ -48,6 +48,7 @@ Describe('FS', () => {
     }
 
     Expect(await FS.readText(textPath)).toBe('hello')
+    Expect(FS.readTextSync(textPath)).toBe('hello')
     Expect(await FS.readJson<{ answer: number }>(jsonPath)).toEqual({ answer: 42 })
     Expect(await FS.readText(bytesPath)).toBe('bytes appended')
     Expect(await FS.isFile(textPath)).toBe(true)

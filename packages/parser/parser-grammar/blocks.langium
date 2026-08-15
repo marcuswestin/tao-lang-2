@@ -22,7 +22,7 @@ Statement:
     Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | DataStatusStep | StateDeclaration | EntityQueryDeclaration | Injection | TagStatement | RenderStatement | ViewRender | EventHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement;
 
 Declaration:
-    AppDeclaration | ViewDeclaration | LayoutDeclaration | UiDeclaration | DialogueDeclaration | AliasDeclaration | TypeDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration;
+    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | LayoutDeclaration | UiDeclaration | DialogueDeclaration | AliasDeclaration | TypeDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;

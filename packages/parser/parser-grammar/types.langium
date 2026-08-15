@@ -1,11 +1,15 @@
 grammar TaoTypes
 
 import "./visibility"
+import "./expressions"
 import "./terminals"
 
 entry TypesGrammarEntrypoint:
     // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
-    TypeDeclaration | EnumDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference;
+    PrimitiveDeclaration | TypeDeclaration | EnumDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference;
+
+PrimitiveDeclaration:
+    'primitive' name=PrimitiveType ('with' slots=ItemTypeExpression)?;
 
 EnumDeclaration:
     visibility=DeclarationVisibility? 'enum' name=ID block=EnumDeclarationBlock;
@@ -20,16 +24,22 @@ TypeDeclaration:
     visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;
 
 TypeExpression:
-    UnionTypeExpression | ItemTypeExpression | TypeReference;
+    DerivedTypeExpression | UnionTypeExpression | ItemTypeExpression | TypeReference;
+
+DerivedTypeExpression:
+    base=TypeReference 'with' slots=ItemTypeExpression;
 
 UnionTypeExpression:
     members+=TypeReference ('|' members+=TypeReference)+;
 
 ItemTypeExpression:
-    '{' properties+=TypeProperty* '}';
+    '{' (properties+=TypeProperty (',' properties+=TypeProperty)* ','?)? '}';
 
 TypeProperty:
-    name=ID ('is' type=TypeReference)?;
+    name=TypeSlotName type=TypeReference? ('is' value=Expression)?;
+
+TypeSlotName returns string:
+    ID | 'implement';
 
 ParameterTypeDeclaration:
     name=ID 'is' type=TypeExpression;
@@ -50,7 +60,7 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action' | 'ui' | 'nav';
+    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action' | 'ui' | 'nav' | 'datasource' | 'app';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

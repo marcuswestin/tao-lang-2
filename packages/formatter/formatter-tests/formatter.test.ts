@@ -49,7 +49,7 @@ Describe('Tao formatter configurable declarations', () => {
   Test(
     'formats declaration-owned nav and datasource contracts with injected implementations',
     formats(
-      `public nav CustomNav{Initial ui @key{Label text Content Presentable}implement inject nav ${tsFence}\nreturn TR.NavKind.Stack()\n${fence}}\npublic datasource CustomData{StorageKey text implement inject provider ${tsFence}\nreturn TR.DataProvider.Local()\n${fence}}`,
+      `public nav CustomNav{Initial ui @key{Label text Content Presentable}implement inject nav ${tsFence}\nreturn TR.NavKind.Stack()\n${fence}}\npublic datasource CustomData{StorageKey text implement inject provider "./CustomData.ts"}`,
       `
         public nav CustomNav {
            Initial ui
@@ -66,9 +66,7 @@ Describe('Tao formatter configurable declarations', () => {
         public datasource CustomData {
            StorageKey text
 
-           implement inject provider ${tsFence}
-              return TR.DataProvider.Local()
-           ${fence}
+           implement inject provider "./CustomData.ts"
         }
       `,
     ),
@@ -630,17 +628,17 @@ Describe('Tao formatter types and constructors', () => {
   Test(
     'normalizes type declarations, constructors, casts, lists, and member access',
     formats(
-      `type Job is {Title is text Level is number}\ntype Person is {Name Age Tags Job}\nlet Demo = Person {Tags: Tags ["a","b"],Job: Job {Level: 2,Title: "Engineer"},Age: 40,Name: "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
+      `type Job is {Title text,Level number}\ntype Person is {Name,Age,Tags,Job}\nlet Demo = Person {Tags: Tags ["a","b"],Job: Job {Level: 2,Title: "Engineer"},Age: 40,Name: "Ada"}\nview Profile Person { render Text(Person.Job.Title) }`,
       `
         type Job is {
-           Title is text
-           Level is number
+           Title text,
+           Level number
         }
 
         type Person is {
-           Name
-           Age
-           Tags
+           Name,
+           Age,
+           Tags,
            Job
         }
 

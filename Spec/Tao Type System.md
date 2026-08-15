@@ -222,10 +222,21 @@ let HomeNav = CopiedStack {
 ````
 
 `implement inject nav|provider` is a top-level, visible declaration binding rather than app or
-configuration content. It supplies the published `TR.NavKind` or `TR.DataProvider` protocol value.
-Third-party declarations and the shipped `StackNav` and `Memory` declarations use the same path and
-must pass the published conformance suites. An app variant retains its originating app declaration
-identity while replacing or patching public app properties.
+configuration content. Its source is either an inline `ts` fence or a sibling `.ts` path such as
+`"./CopiedStack.ts"`; the sidecar form default-exports a zero-argument factory that generated output
+copies, imports, and evaluates once. It supplies the published `TR.NavKind` or `TR.DataProvider`
+protocol value. Third-party declarations and the shipped `StackNav` and `Memory` declarations use
+the same path and must pass the published conformance suites.
+
+For a source module `X.tao`, the compiler emits each configurable declaration's readonly contract as
+`<DeclarationName>Config`. TypeScript sidecars import it from that Tao module, for example
+`import type { CopiedStackConfig } from "./X.tao"`. Recognized navigation profiles expose their
+normalized `TR.NavKind` configuration; other configurable declarations expose readonly
+declaration-facing properties. Unknown future navigation profiles receive a conservative readonly
+string-keyed contract until their normalization is part of the compiler. This is generated
+TypeScript surface, while runtime protocol behavior remains the responsibility of the published
+conformance suites. An app variant retains its originating app declaration identity while replacing
+or patching public app properties.
 
 ## Future directions
 

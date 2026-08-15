@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { referencedConfigurationType } from './configuration-type'
+import { validateConfiguredItemPatch } from './configured-item-validator'
 
 export const configuredValueValidationMessages = {
   patchTarget: (name: string) =>
@@ -25,6 +26,8 @@ export const configuredValueValidationMessages = {
 
 export const configuredValueValidationChecks = {
   [AST.ConfiguredValue.$type]: validateConfiguredValue,
+  [AST.ConfiguredAppPropertyValue.$type]: validateAppPropertyValue,
+  [AST.InferredAppPropertyValue.$type]: validateAppPropertyValue,
   [AST.ValueReference.$type]: (value, ctx) => {
     if (!AST.isPatchedValueReference(value)) {
       return
@@ -38,6 +41,11 @@ export const configuredValueValidationChecks = {
       if (base) {
         ctx.error(configuredValueValidationMessages.patchTarget(patch.target.$refText), patch)
       }
+      return
+    }
+    const baseType = Type.ofValueDeclaration(base)
+    if (baseType.kind === 'item' && baseType.item) {
+      validateConfiguredItemPatch(patch.patchBlock, baseType.item, ctx)
       return
     }
     const declaration = configuredDeclaration(base.value)
@@ -79,11 +87,44 @@ function appPropertyConfiguredType(
   if (!statement || (!AST.isAppNavigator(statement) && !AST.isAppDatasource(statement))) {
     return undefined
   }
-  const target = statement.value.target.ref
+  const target = appPropertyTarget(statement.value)
   if (AST.isConfigurableDeclaration(target) || AST.isTypeDeclaration(target)) {
     return AST.isConfigurableDeclaration(target) ? target : undefined
   }
   return AST.isAliasDeclaration(target) ? configuredDeclaration(target.value) : undefined
+}
+
+function validateAppPropertyValue(value: AST.AppPropertyValue, ctx: ValidationContext): void {
+  const target = appPropertyTarget(value)
+  const declaration = AST.isConfigurableDeclaration(target)
+    ? target
+    : AST.isAliasDeclaration(target)
+    ? configuredDeclaration(target.value)
+    : undefined
+  if (!declaration) {
+    return
+  }
+  if (AST.isAliasDeclaration(target) && !value.block) {
+    return
+  }
+  if (value.block) {
+    validateConfigurationBlock(value.block, declaration, ctx, {
+      requireConstructorProperties: !AST.isAliasDeclaration(target),
+    })
+    return
+  }
+  for (const property of AST.configurationPropertiesOf(declaration)) {
+    ctx.error(configuredValueValidationMessages.missingConfiguration(declaration.name, property.name), value)
+  }
+  if (AST.configurationKeyOf(declaration)) {
+    ctx.error(configuredValueValidationMessages.missingKeyedItem(declaration.name), value)
+  }
+}
+
+function appPropertyTarget(value: AST.AppPropertyValue): AST.NamedDeclaration | undefined {
+  return AST.isConfiguredAppPropertyValue(value)
+    ? value.target.ref
+    : AST.inferredAppPropertyDeclaration(value)
 }
 
 function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationContext): void {

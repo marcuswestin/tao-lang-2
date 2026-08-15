@@ -78,13 +78,43 @@ Describe('validator: use and imports', () => {
     accepts(
       app(
         'render Text(CardName)',
-        `type Card is { Name is text }
+        `type Card is { Name text }
          let CardName = Card.Name "Ada"
          ${stubView('Card', 'Label is text')}
          ${stubView('Text', 'Value is text')}`,
       ),
     ),
   )
+
+  for (const valueFirst of [true, false]) {
+    Test(
+      `imports same-name type and value declarations when the ${valueFirst ? 'value' : 'type'} is declared first`,
+      checksFiles(
+        {
+          'Main.tao': `
+            use Person from ./Declarations.tao
+
+            app MyApp { view MainView }
+            let Primary = Person { Name Person }
+
+            view MainView {
+              render Text(Primary.Name)
+            }
+
+            ${stubView('Text', 'Value is text')}
+          `,
+          'Declarations.tao': valueFirst
+            ? `workspace let Person = "person"
+               workspace type Person is { Name text }`
+            : `workspace type Person is { Name text }
+               workspace let Person = "person"`,
+        },
+        result => {
+          Expect(validationErrorMessages(result)).toEqual([])
+        },
+      ),
+    )
+  }
 
   Test(
     'keeps invisible same-name imports out of value scopes',

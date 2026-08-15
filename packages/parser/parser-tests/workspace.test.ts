@@ -60,6 +60,7 @@ Describe('minimal Tao parser', () => {
         Expect(main.value.type.ref).toBe(nav)
         const appDatasource = AST.blockStatements(app).find(AST.isAppDatasource)
         Expect.Is(appDatasource, AST.isAppDatasource)
+        Expect.Is(appDatasource.value, AST.isConfiguredAppPropertyValue)
         Expect(appDatasource.value.target.ref).toBe(datasource)
       },
     )

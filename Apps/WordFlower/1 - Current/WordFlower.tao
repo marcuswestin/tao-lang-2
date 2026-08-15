@@ -151,9 +151,9 @@ type PromptMinutes is number
 type PromptTags is list
 
 type WritingPrompt is {
-   PromptTitle
-   PromptMinutes
-   PromptTags
+   PromptTitle,
+   PromptMinutes,
+   PromptTags,
 }
 
 // Typed constructors keep their value-literal form; item fields follow the same argument decisions

@@ -39,9 +39,9 @@ export default {
     f.lineSeparatedList(f.node.properties)
   },
 
-  /** ConfigurationImplementation formats the package-scope protocol binding and its TS fence. */
+  /** ConfigurationImplementation formats inline and sidecar package-scope protocol bindings. */
   ConfigurationImplementation(f) {
     f.oneSpaceAfter('implement', 'inject', 'nav', 'provider')
-    f.oneSpaceBeforeProperty('tsCodeBlock')
+    f.oneSpaceBeforeProperty('tsCodeBlock', 'sidecarPath')
   },
 } satisfies Partial<FormatHandlers>

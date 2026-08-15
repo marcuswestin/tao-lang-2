@@ -27,6 +27,8 @@ const primitiveTypes = [
   'list',
   'ui',
   'nav',
+  'datasource',
+  'app',
 ] as const satisfies readonly AST.PrimitiveType[]
 
 /** TypeSystemHelpers groups Tao Typir helper functions. */

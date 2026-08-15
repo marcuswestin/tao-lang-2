@@ -1,0 +1,30 @@
+// Tao primitives are opaque, parsed declarations. Their slots are the validator's pinned contracts.
+primitive item
+
+primitive number
+
+primitive text
+
+primitive boolean
+
+primitive list
+
+primitive time
+
+primitive action
+
+primitive ui
+
+primitive nav with {
+   implement,
+}
+
+primitive datasource with {
+   implement,
+}
+
+primitive app with {
+   Name text,
+   Navigator nav,
+   Datasource datasource is none,
+}

@@ -29,7 +29,7 @@ export const useValidationMessages = {
 type DeclarationRecord = {
   name: string
   kind: AST.Declaration['$type']
-  namespace: DeclarationNamespace
+  namespace: AST.DeclarationNamespace
   visibility?: AST.DeclarationVisibility
 }
 
@@ -39,14 +39,12 @@ type VisibleDeclarationRecord = {
   folderPath: string
 }
 
-type DeclarationNamespace = 'type' | 'value'
-
 /** validateUseStatements validates import path resolution and visibility rules. */
 export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext): void {
   const fromFilePath = AST.getDocument(file).uri.path
   const useStatements = file.statements.filter(AST.isUseStatement)
   const localDeclarationNames = new Set(
-    file.statements.filter(AST.isDeclaration).map(declarationKey),
+    file.statements.filter(AST.isDeclaration).map(AST.declarationKey),
   )
   const referencedNames = ASTUtils.referencedNames(file)
   const previouslyImportedNames = new Set<string>()
@@ -170,7 +168,7 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
       ctx.error(useValidationMessages.localDeclarationCollision(importedName), useStatement)
     }
   }
-  const matchesByNamespace = new Map<DeclarationNamespace, DeclarationRecord[]>()
+  const matchesByNamespace = new Map<AST.DeclarationNamespace, DeclarationRecord[]>()
   for (const match of visibleMatches) {
     const records = matchesByNamespace.get(match.namespace) ?? []
     records.push(match)
@@ -266,7 +264,7 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
     .map((declaration) => ({
       name: declaration.name,
       kind: declaration.$type,
-      namespace: declarationNamespace(declaration),
+      namespace: AST.declarationNamespace(declaration),
       visibility: Packages.visibilityOf(declaration),
     }))
 }
@@ -288,9 +286,9 @@ export function validateVisibleDeclarations(
     declarationsByFolder.set(folderPath, declarationsByName)
 
     for (const declaration of visibleDeclarations) {
-      const records = declarationsByName.get(declarationKey(declaration)) ?? []
+      const records = declarationsByName.get(AST.declarationKey(declaration)) ?? []
       records.push({ declaration, document, folderPath })
-      declarationsByName.set(declarationKey(declaration), records)
+      declarationsByName.set(AST.declarationKey(declaration), records)
     }
   }
 
@@ -316,16 +314,8 @@ function workspaceFilePath(file: AST.TaoFile): string {
   return AST.getDocument(file).uri.path
 }
 
-function declarationKey(declaration: AST.Declaration): string {
-  return `${declarationNamespace(declaration)}:${declaration.name}`
-}
-
 function declarationRecordKey(declaration: DeclarationRecord): string {
   return `${declaration.namespace}:${declaration.name}`
-}
-
-function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
-  return AST.isTypeDeclaration(declaration) || AST.isConfigurableDeclaration(declaration) ? 'type' : 'value'
 }
 
 function uniqueWorkspaceFiles(files: readonly AST.TaoFile[]): AST.TaoFile[] {

@@ -54,6 +54,8 @@ function registerPrimitiveTypes(typir: TaoTypirServices): void {
   typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'ui' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'nav' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'datasource' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'app' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'list' })
     .inferenceRule({ filter: AST.isListLiteral })
     .finish()
@@ -76,6 +78,9 @@ function registerAstInferenceRules(typir: TaoTypirServices): void {
       TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
         ?? InferenceRuleNotApplicable,
     ConfigurationConstructor: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
+    InferredConfigurationConstructor: (node) =>
       TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
         ?? InferenceRuleNotApplicable,
     CaseTestExpression: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
@@ -145,6 +150,9 @@ function typirBaseTypeForDefinition(
       if (property.type) {
         return TypeSystemHelpers.taoPrimitiveType(property.type, typir)
       }
+      if (property.value) {
+        return TypeSystemHelpers.safeInferType(typir, property.value)
+      }
       const shorthandType = Type.shorthandPropertyDefinition(property)
       return shorthandType ? TypeSystemHelpers.taoType(Type.ofDefinition(shorthandType), typir) : undefined
     },
@@ -157,6 +165,7 @@ function typirTypeForTypeExpression(
 ): TypirType | undefined {
   return Switch.type(type, {
     ActionTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
+    DerivedTypeExpression: derived => TypeSystemHelpers.taoPrimitiveType(derived.base, typir),
     ItemTypeExpression: () => TypeSystemHelpers.taoPrimitiveType('item', typir),
     NamedTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     PrimitiveTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),

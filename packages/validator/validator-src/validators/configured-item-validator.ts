@@ -22,6 +22,8 @@ export const configuredItemValidationMessages = {
     `Labeled item field '${name}:' expects ${expected}, got ${actual}.`,
   memberNotItem: (name: string) => `Cannot access member '${name}' on a non-item value.`,
   unknownMember: (type: string, name: string) => `Item type '${type}' has no field '${name}'.`,
+  inferredConstructorContext: 'A bare item block requires a same-name type declaration.',
+  filledProperty: (name: string) => `Filled slot '${name}' cannot be supplied or reopened.`,
 } as const
 
 export const configuredItemValidationChecks = {
@@ -30,6 +32,7 @@ export const configuredItemValidationChecks = {
       validateConfiguredItemConstructor(configured, ctx)
     }
   },
+  [AST.InferredConfigurationConstructor.$type]: validateInferredConfiguredItem,
 } satisfies NodeValidationChecks
 
 export function constructorLiteralKind(type: ASTUtils.TaoType): string {
@@ -86,6 +89,37 @@ function validateConfiguredItemConstructor(
   validateConfiguredItemBlock(block, constructed.item, ctx)
 }
 
+function validateInferredConfiguredItem(
+  value: AST.InferredConfigurationConstructor,
+  ctx: ValidationContext,
+): void {
+  const inferred = Type.ofInferredConfiguration(value)
+  if (inferred.kind === 'unresolved') {
+    ctx.error(configuredItemValidationMessages.inferredConstructorContext, value)
+    return
+  }
+  if (inferred.kind !== 'item') {
+    ctx.error(configuredItemValidationMessages.constructorShape('inferred', constructorLiteralKind(inferred)), value)
+    return
+  }
+  if (!inferred.item) {
+    if (value.block.entries.length > 0) {
+      ctx.error(configuredItemValidationMessages.shapelessItemConstructor('inferred'), value.block)
+    }
+    return
+  }
+  validateConfiguredItemBlock(value.block, inferred.item, ctx)
+}
+
+/** validateConfiguredItemPatch checks a partial immutable item update against its effective slots. */
+export function validateConfiguredItemPatch(
+  block: AST.ConfigurationBlock,
+  item: ASTUtils.ItemShape,
+  ctx: ValidationContext,
+): void {
+  validateConfiguredItemBlock(block, item, ctx, false)
+}
+
 type ConfiguredItemCandidate = { entry: AST.ConfigurationEntry; type: ASTUtils.TaoType }
 
 type ConfiguredItemBindingState = {
@@ -98,8 +132,9 @@ type ConfiguredItemBindingState = {
 
 function validateConfiguredItemBlock(
   block: AST.ConfigurationBlock,
-  item: AST.ItemTypeExpression,
+  item: ASTUtils.ItemShape,
   ctx: ValidationContext,
+  requireAll = true,
 ): void {
   const state: ConfiguredItemBindingState = {
     block,
@@ -111,18 +146,24 @@ function validateConfiguredItemBlock(
   collectConfiguredItemCandidates(state, item)
   const blockedCandidateTypes = bindUnambiguousConfiguredItemCandidates(state)
   reportRemainingConfiguredItemCandidates(state, blockedCandidateTypes)
-  reportRemainingConfiguredItemFields(state, blockedCandidateTypes)
+  if (requireAll) {
+    reportRemainingConfiguredItemFields(state, blockedCandidateTypes)
+  }
 }
 
 function collectConfiguredItemCandidates(
   state: ConfiguredItemBindingState,
-  item: AST.ItemTypeExpression,
+  item: ASTUtils.ItemShape,
 ): void {
   for (const entry of state.block.entries) {
     if (entry.label && entry.expression) {
       const expected = item.properties.find(property => property.name === entry.label)
       if (!expected) {
         state.ctx.error(configuredItemValidationMessages.unknownNamedProperty(entry.label), entry)
+        continue
+      }
+      if (Type.propertyIsFilled(expected)) {
+        state.ctx.error(configuredItemValidationMessages.filledProperty(expected.name), entry)
         continue
       }
       if (state.namedEntries.has(entry.label)) {
@@ -149,7 +190,7 @@ function collectConfiguredItemCandidates(
     }
   }
   for (const property of item.properties) {
-    if (!state.namedEntries.has(property.name)) {
+    if (!Type.propertyIsFilled(property) && !state.namedEntries.has(property.name)) {
       state.remainingExpected.add(property)
     }
   }
@@ -227,13 +268,16 @@ function reportRemainingConfiguredItemFields(
       unresolvedCandidates -= 1
       continue
     }
+    if (Type.propertyHasDefault(property)) {
+      continue
+    }
     state.ctx.error(configuredItemValidationMessages.missingProperty(property.name), state.block)
   }
 }
 
 function configuredItemEntryType(
   entry: AST.ConfigurationEntry,
-  item: AST.ItemTypeExpression,
+  item: ASTUtils.ItemShape,
   ctx: ValidationContext,
 ): ASTUtils.TaoType | undefined {
   if (entry.expression) {
@@ -246,6 +290,10 @@ function configuredItemEntryType(
     return undefined
   }
   const ownerProperty = item.properties.find(property => property.name === entry.name)
+  if (ownerProperty && Type.propertyIsFilled(ownerProperty)) {
+    ctx.error(configuredItemValidationMessages.filledProperty(ownerProperty.name), entry)
+    return { kind: 'unresolved' }
+  }
   const expected = ownerProperty
     ? Type.ofProperty(ownerProperty)
     : Type.visibleDeclaration(entry, entry.name)

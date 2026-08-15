@@ -20,7 +20,8 @@ type NamedFileValueDeclaration =
   | AST.FunctionDeclaration
   | AST.EnumDeclaration
   | AST.VisualDeclaration
-type NamedDeclaration = NamedValueDeclaration | AST.TypeDeclaration
+type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
+type NamedDeclaration = NamedValueDeclaration | NamedTypeDeclaration
 type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
 
 /** aliasValidationMessages declares name and immutable-binding reference diagnostics. */
@@ -61,7 +62,9 @@ function validateFile(file: AST.TaoFile, ctx: ValidationContext): void {
     ...file.statements.filter(isFileValueDeclaration),
     ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
   ]
-  const fileTypeDeclarations = file.statements.filter(AST.isTypeDeclaration)
+  const fileTypeDeclarations = file.statements
+    .filter(AST.isDeclaration)
+    .filter((declaration): declaration is NamedTypeDeclaration => AST.declarationNamespace(declaration) === 'type')
   reportDuplicateNames(fileValueDeclarations, new Map(), ctx)
   reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
 }

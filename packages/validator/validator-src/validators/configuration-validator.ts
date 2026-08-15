@@ -1,5 +1,6 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
+import { FS } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
@@ -12,6 +13,9 @@ export const configurationValidationMessages = {
   duplicateImplementation: 'A configuration declaration can bind exactly one implementation.',
   missingImplementation: (name: string) => `${name} must bind one package-scope implementation.`,
   protocol: (name: string, expected: string) => `${name} implementation must use the '${expected}' protocol.`,
+  sidecarLocation: (path: string) => `Configuration implementation sidecar '${path}' must be a sibling .ts file.`,
+  sidecarMissing: (path: string) => `Configuration implementation sidecar '${path}' does not exist.`,
+  sidecarDefaultExport: (path: string) => `Configuration implementation sidecar '${path}' must have a default export.`,
   datasourceKey: 'Datasource declarations cannot declare keyed configuration items.',
   keyProperty: (name: string) =>
     `Key type is only valid for a property of a keyed nav declaration; '${name}' is invalid.`,
@@ -84,7 +88,10 @@ function validateConfigurationKeyDeclarations(declaration: AST.ConfigurableDecla
 
 function validateConfigurationImplementations(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const implementations = declaration.block.entries.filter(AST.isConfigurationImplementation)
-  if (implementations.length === 0) {
+  const primitive = AST.isNavDeclaration(declaration) ? 'nav' : 'datasource'
+  const implementationSlot = AST.primitiveSlots(ctx.workspaceFiles, primitive)
+    .find(property => property.name === 'implement')
+  if (implementationSlot && Type.propertyRequiresValue(implementationSlot) && implementations.length === 0) {
     ctx.error(configurationValidationMessages.missingImplementation(declaration.name), declaration)
   }
   if (implementations.length > 1) {
@@ -97,5 +104,130 @@ function validateConfigurationImplementations(declaration: AST.ConfigurableDecla
     if (implementation.protocol !== expectedProtocol) {
       ctx.error(configurationValidationMessages.protocol(declaration.name, expectedProtocol), implementation)
     }
+    validateSidecarImplementation(implementation, ctx)
   }
+}
+
+function validateSidecarImplementation(
+  implementation: AST.ConfigurationImplementation,
+  ctx: ValidationContext,
+): void {
+  const sidecarPath = implementation.sidecarPath
+  if (sidecarPath === undefined) {
+    return
+  }
+
+  const documentPath = AST.getDocument(implementation).uri.path
+  const documentDirectory = FS.resolvePath(FS.dirname(documentPath))
+  const resolvedSidecarPath = FS.resolvePath(sidecarPath, documentDirectory)
+  if (
+    isAbsolutePath(sidecarPath)
+    || FS.extname(sidecarPath) !== '.ts'
+    || sidecarPath.endsWith('.d.ts')
+    || FS.dirname(resolvedSidecarPath) !== documentDirectory
+  ) {
+    ctx.error(configurationValidationMessages.sidecarLocation(sidecarPath), implementation)
+    return
+  }
+  if (!FS.existsSync(resolvedSidecarPath)) {
+    ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
+    return
+  }
+
+  let sidecarSource: string
+  try {
+    sidecarSource = FS.readTextSync(resolvedSidecarPath)
+  } catch {
+    ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
+    return
+  }
+  if (!hasDefaultExport(sidecarSource)) {
+    ctx.error(configurationValidationMessages.sidecarDefaultExport(sidecarPath), implementation)
+  }
+}
+
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith('/') || path.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(path)
+}
+
+function hasDefaultExport(source: string): boolean {
+  const executableSource = withoutCommentsAndLiterals(source)
+  if (/(?:^|[;}\n])\s*export\s+default\s+(?!(?:interface|type)\b)/m.test(executableSource)) {
+    return true
+  }
+  for (const match of executableSource.matchAll(/(?:^|[;}\n])\s*export\s+(?!type\b)\{([^}]*)\}/gm)) {
+    const fullMatch = match[0]
+    const matchEnd = (match.index ?? 0) + fullMatch.length
+    if (/^\s*from\b/.test(executableSource.slice(matchEnd))) {
+      continue
+    }
+    const exports = match[1]?.split(',') ?? []
+    if (exports.some(exported => !/^\s*type\b/.test(exported) && /\bas\s+default\s*$/.test(exported))) {
+      return true
+    }
+  }
+  return false
+}
+
+/** withoutCommentsAndLiterals keeps statement punctuation while blanking false export text. */
+function withoutCommentsAndLiterals(source: string): string {
+  let result = ''
+  let state: 'code' | 'line-comment' | 'block-comment' | 'single' | 'double' | 'template' = 'code'
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index] ?? ''
+    const next = source[index + 1] ?? ''
+    if (state === 'code') {
+      if (character === '/' && next === '/') {
+        result += '  '
+        index++
+        state = 'line-comment'
+      } else if (character === '/' && next === '*') {
+        result += '  '
+        index++
+        state = 'block-comment'
+      } else if (character === "'") {
+        result += ' '
+        state = 'single'
+      } else if (character === '"') {
+        result += ' '
+        state = 'double'
+      } else if (character === '`') {
+        result += ' '
+        state = 'template'
+      } else {
+        result += character
+      }
+      continue
+    }
+
+    if (character === '\n') {
+      result += '\n'
+      if (state === 'line-comment') {
+        state = 'code'
+      }
+      continue
+    }
+    if (state === 'block-comment' && character === '*' && next === '/') {
+      result += '  '
+      index++
+      state = 'code'
+      continue
+    }
+    if (
+      (state === 'single' && character === "'")
+      || (state === 'double' && character === '"')
+      || (state === 'template' && character === '`')
+    ) {
+      result += ' '
+      state = 'code'
+      continue
+    }
+    if ((state === 'single' || state === 'double' || state === 'template') && character === '\\') {
+      result += '  '
+      index++
+      continue
+    }
+    result += ' '
+  }
+  return result
 }

@@ -339,7 +339,10 @@ function isParsedFile(file: ParsedFile | undefined): file is ParsedFile {
 
 async function loadReachableDocuments(context: ParserContext, entryDocument: AST.Document): Promise<AST.Document[]> {
   const documents = new Map<string, AST.Document>()
-  const queue: AST.Document[] = [entryDocument]
+  const intrinsicDocuments = await Promise.all(
+    (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path)),
+  )
+  const queue: AST.Document[] = [entryDocument, ...intrinsicDocuments]
 
   while (queue.length > 0) {
     const document = queue.shift()!

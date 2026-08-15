@@ -13,6 +13,12 @@ import {
 export const typeValidationMessages = {
   unknownType: (name: string) => `Unknown type '${name}'.`,
   duplicateItemField: (name: string) => `Item field '${name}' is declared more than once.`,
+  slotDefaultType: (name: string, expected: string, actual: string) =>
+    `Default for slot '${name}' expects ${expected}, got ${actual}.`,
+  derivedBaseShape: (name: string) => `Derived type base '${name}' has no item slot shape.`,
+  derivedSlotReopened: (name: string) => `Derived slot '${name}' cannot reopen a filled base slot.`,
+  derivedSlotType: (name: string, expected: string, actual: string) =>
+    `Derived slot '${name}' must narrow ${expected}, got ${actual}.`,
   ...configuredItemValidationMessages,
   typeFixIncompatible: (type: string) => `Value cannot be type-fixed as '${type}'.`,
   cyclicType: (name: string) => `Type '${name}' cannot reference itself through its type definition.`,
@@ -24,6 +30,7 @@ export const typeValidationMessages = {
 /** typeValidationChecks validates custom type declarations and item/list/custom expression forms. */
 export const typeValidationChecks = {
   [AST.TypeDeclaration.$type]: validateTypeDeclaration,
+  [AST.DerivedTypeExpression.$type]: validateDerivedType,
   [AST.ItemTypeExpression.$type]: validateItemType,
   [AST.TypeProperty.$type]: validateTypeProperty,
   [AST.NamedTypeReference.$type]: validateNamedTypeReference,
@@ -85,9 +92,79 @@ function validateItemType(type: AST.ItemTypeExpression, ctx: ValidationContext):
   }
 }
 
+function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: ValidationContext): void {
+  const base = Type.ofReference(derived.base)
+  if (base.kind === 'unresolved') {
+    return
+  }
+  if (base.kind !== 'item' || !base.item) {
+    ctx.error(typeValidationMessages.derivedBaseShape(Type.referenceName(derived.base)), derived.base)
+    return
+  }
+  for (const slot of derived.slots.properties) {
+    const baseSlot = base.item.properties.find(candidate => candidate.name === slot.name)
+    if (!baseSlot) {
+      continue
+    }
+    if (baseSlot.value && !slot.value) {
+      ctx.error(typeValidationMessages.derivedSlotReopened(slot.name), slot)
+      continue
+    }
+    const expected = slotConstraintType(baseSlot)
+    const actual = slotConstraintType(slot)
+    if (
+      expected.kind !== 'unresolved'
+      && actual.kind !== 'unresolved'
+      && !Type.isAssignable(actual, expected)
+    ) {
+      ctx.error(
+        typeValidationMessages.derivedSlotType(
+          slot.name,
+          Type.displayName(expected),
+          Type.displayName(actual),
+        ),
+        slot,
+      )
+    }
+  }
+}
+
+function slotConstraintType(slot: AST.TypeProperty): ASTUtils.TaoType {
+  if (slot.type) {
+    return Type.ofReference(slot.type)
+  }
+  return slot.value ? Type.ofExpression(slot.value) : Type.ofProperty(slot)
+}
+
 function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext): void {
-  if (!property.type && Type.ofProperty(property).kind === 'unresolved') {
+  const itemOwner = property.$container.$container
+  if (AST.isPrimitiveDeclaration(itemOwner) && property.name === 'implement' && !property.type && !property.value) {
+    return
+  }
+  if (!property.type && !property.value && Type.ofProperty(property).kind === 'unresolved') {
     ctx.error(typeValidationMessages.unknownType(property.name), property)
+    return
+  }
+  if (!property.type || !property.value) {
+    return
+  }
+  const expected = Type.ofReference(property.type)
+  const actual = Type.ofExpression(property.value)
+  const defaultIsAbsent = actual.kind === 'primitive' && actual.primitive === 'none'
+  if (
+    !defaultIsAbsent
+    && expected.kind !== 'unresolved'
+    && actual.kind !== 'unresolved'
+    && !Type.isAssignable(actual, expected)
+  ) {
+    ctx.error(
+      typeValidationMessages.slotDefaultType(
+        property.name,
+        Type.displayName(expected),
+        Type.displayName(actual),
+      ),
+      property.value,
+    )
   }
 }
 
@@ -170,7 +247,7 @@ function validateConstructorKind(
 
 function validateItemConstructor(
   item: AST.ItemLiteral,
-  expected: AST.ItemTypeExpression,
+  expected: ASTUtils.ItemShape,
   ctx: ValidationContext,
 ): void {
   const result = ASTUtils.resolveItemPropertyBindings(expected.properties, item.properties)
@@ -241,6 +318,9 @@ function typeDefinitionReferencesRoot(
   if (propertyType) {
     return typeReferenceReferencesRoot(root, propertyType, seen)
   }
+  if (current.value) {
+    return false
+  }
   const shorthandType = Type.shorthandPropertyDefinition(current)
   return shorthandType ? typeDefinitionReferencesRoot(root, shorthandType, seen) : false
 }
@@ -255,6 +335,10 @@ function typeExpressionReferencesRoot(
   }
   if (AST.isUnionTypeExpression(type)) {
     return type.members.some(member => typeReferenceReferencesRoot(root, member, new Set(seen)))
+  }
+  if (AST.isDerivedTypeExpression(type)) {
+    return typeReferenceReferencesRoot(root, type.base, new Set(seen))
+      || type.slots.properties.some(property => typeDefinitionReferencesRoot(root, property, new Set(seen)))
   }
   return typeReferenceReferencesRoot(root, type, seen)
 }

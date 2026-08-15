@@ -21,7 +21,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
       if (AST.isPatchedValueReference(context.container)) {
-        return this.createConfigurationDeclarationScope(context.container)
+        return this.createPatchBaseScope(context.container)
       }
       if (AST.isDataWriteField(context.container.$container)) {
         return this.createDataWriteValueScope(context.container)
@@ -160,10 +160,21 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       AST.isAliasDeclaration(candidate)
       || AST.isAppDeclaration(candidate)
       || AST.isConfigurableDeclaration(candidate)
-      || AST.isTypeDeclaration(candidate)
       || AST.isUiDeclaration(candidate)
     let scope = this.createScopeForNodes(root.statements.filter(configurable))
     scope = this.createScopeForNodes(this.importedDeclarations(node, configurable), scope)
+    return scope
+  }
+
+  private createPatchBaseScope(node: AST.PatchedValueReference): Langium.Scope {
+    const patchable = (candidate: AST.Node): candidate is AST.AliasDeclaration | AST.AppDeclaration =>
+      AST.isAliasDeclaration(candidate) || AST.isAppDeclaration(candidate)
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(patchable))
+    scope = this.createScopeForNodes(this.importedDeclarations(node, patchable), scope)
     return scope
   }
 
@@ -321,8 +332,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return root.statements
       .filter(AST.isUseStatement)
       .flatMap(useStatement =>
-        useStatement.importedDeclarations
-          .map(reference => reference.ref)
+        AST.resolvedImportedDeclarations(useStatement)
           .filter(AST.isEnumDeclaration)
           .flatMap(declaration => declaration.block.cases)
       )
@@ -374,10 +384,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const allFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)
       .filter(AST.isTaoFile)
-    return [...this.packages.collectTargetDeclarations(useStatement, {
+    const declarations = [...this.packages.collectTargetDeclarations(useStatement, {
       fromFilePath: path,
       workspaceFiles: allFiles,
     })]
+    AST.rememberUseTargets(useStatement, declarations)
+    return declarations
   }
 }
 
@@ -473,9 +485,7 @@ function visibleEntityDataDeclarations(node: AST.Node): AST.EntityDataDeclaratio
     ...root.statements.filter(AST.isEntityDataDeclaration),
     ...root.statements
       .filter(AST.isUseStatement)
-      .flatMap(useStatement =>
-        useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isEntityDataDeclaration)
-      ),
+      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
   ]
 }
 

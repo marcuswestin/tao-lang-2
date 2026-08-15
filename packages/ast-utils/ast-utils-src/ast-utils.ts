@@ -41,6 +41,7 @@ export namespace ASTUtils {
   export type ItemPropertyBindingDiagnostic = import('./item-property-bindings').ItemPropertyBindingDiagnostic
   export type ItemPropertyBindingPair = import('./item-property-bindings').ItemPropertyBindingPair
   export type ItemPropertyBindingResult = import('./item-property-bindings').ItemPropertyBindingResult
+  export type ItemShape = import('./Type').ItemShape
   export type ImplicitChangeBinding = import('./invocations').ImplicitChangeBinding
   export type LayoutTermValue = import('./layouts').LayoutTermValue
   export type RenderEventBindingDiagnostic = import('./invocations').RenderEventBindingDiagnostic

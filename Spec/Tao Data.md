@@ -133,8 +133,11 @@ complete generic configuration contract: construction and patch validation read 
 types from the linked declaration, so copied and third-party datasources receive the same unknown,
 duplicate, missing, and type diagnostics without a shipped-name table.
 
-The injected package-scope value is evaluated once for that declaration and satisfies the published
-`TR.DataProvider` full-snapshot protocol. `load(storageKey)` returns the starting serialized snapshot
+The implementation may remain an inline `ts` fence or name a sibling TypeScript sidecar, for
+example `implement inject provider "./Local.ts"`. A sidecar default-exports a zero-argument factory;
+the compiler copies and imports it into generated output and evaluates it once for the declaration.
+The resulting package-scope value satisfies the published `TR.DataProvider` full-snapshot protocol.
+`load(storageKey)` returns the starting serialized snapshot
 or no value; `persist(storageKey, snapshot)` accepts complete committed snapshots in order and must
 propagate rejection. `TR.testProvider` checks empty load, exact round trips, storage-key and provider
 instance boundaries, ordered replacement, and rejection behavior. Instances must be isolated or

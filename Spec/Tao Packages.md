@@ -183,10 +183,28 @@ These declarations are top-level rather than nested and require `package`, `work
 visibility. Their physical file location does not change this rule: package scope describes
 declaration ownership, not a requirement to live in an `@package` folder. Each binds exactly one
 package-scope implementation with
-`implement inject nav` or `implement inject provider`. The injected expression is evaluated once
-when its defining generated module initializes. `TR.NavKind` and `TR.DataProvider` are published
-protocols, with `TR.testNavKind` and `TR.testProvider` conformance suites. The shipped `StackNav`
-and `Memory` declarations use the same mechanism available to copied or third-party packages.
+`implement inject nav` or `implement inject provider`. The implementation is either the existing
+inline `ts` fence or a quoted path such as `"./StackNav.ts"` to an existing sibling `.ts` file. In
+the path form, the compiler copies the sidecar into generated output and imports its default export.
+That export is a zero-argument factory, invoked once when its defining generated module initializes,
+just like the inline factory body. `TR.NavKind` and `TR.DataProvider` are published protocols, with
+`TR.testNavKind` and `TR.testProvider` conformance suites. Tao validation checks the sidecar's
+location, existence, and default export; generated-output TypeScript checks and those runtime suites
+establish type and behavioral conformance. The shipped `StackNav` and `Memory` declarations use the
+same mechanisms available to copied or third-party packages.
+
+This first sidecar slice copies only the named implementation file. A sidecar is therefore
+self-contained at runtime: it may import installed packages such as `@runtime/TR` and may type-import
+its sibling Tao contract, but relative runtime helper and asset dependency graphs remain deferred.
+
+For every Tao source `X.tao` containing these declarations, the compiler also emits TypeScript
+declarations named `<DeclarationName>Config`. A sibling sidecar can therefore import its readonly
+configuration contract directly from the Tao module, for example
+`import type { StackNavConfig } from "./X.tao"`. A recognized navigation profile exposes the
+normalized runtime configuration received by `TR.NavKind`; other configuration declarations expose
+their declaration-facing readonly property shape. A custom navigation profile that the compiler
+does not yet normalize receives a conservative readonly string-keyed contract and proves its more
+specific protocol/configuration join in TypeScript.
 
 Configuration is declaration-driven. The validator reads ordinary property names, types, required
 entries, and keyed-item shape from the linked declaration; it does not branch on names such as
