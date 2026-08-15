@@ -159,3 +159,27 @@ to remove.
 
 **Blocks:** nothing. Revisit only if a user ever needs to declare a derived slot.
 **Recommendation:** leave it hardcoded and see whether the need appears.
+
+## Q11 — Two spellings of `implement`
+
+Surfaced by combining the two build slices, not by either alone. Both landed as briefed, and together
+they leave `implement` meaning two things in two places:
+
+```tao
+primitive nav with { implement }                       // a declared slot, in a type block
+nav StackNav { implement inject nav "./StackNav.ts" }  // a keyword clause, in a configuration block
+```
+
+`Now 1` made `implement` a `TypeProperty` slot name (via `TypeSlotName: ID | 'implement'`, itself a
+keyword workaround). `Now 2` deliberately kept the existing `implement inject nav|provider`
+vocabulary rather than inventing new syntax. Neither decision was wrong in isolation; the pair is
+exactly the surface redundancy this whole direction set out to remove, and merging the branch makes
+it the status quo.
+
+Options: fold the configuration clause into the slot form (`implement is "./StackNav.ts"`), keep both
+and document the split by context, or move the slot form to a different word.
+
+**Blocks:** nothing today; both forms work and are tested. Blocks coherence once `ui` gains an
+`implement` slot, since that will need one of the two spellings and will make the split permanent.
+**Recommendation:** fold into the slot form, but not before Q1–Q3 settle what `ui` does — that is the
+decision that determines which spelling has to generalize.
