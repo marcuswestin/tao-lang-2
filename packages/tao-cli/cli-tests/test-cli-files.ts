@@ -26,15 +26,15 @@ export const packageAwareCliFixture = {
   [packageAwareCliMainPath]: Text.stripIndent(`
     use LocalText, Missing from @cards/widgets
 
-    view MainView { }
+    view MainView() { }
   `),
-  'Packages/@cards/widgets/Widget.tao': 'public view LocalText Value is text { }\n',
+  'Packages/@cards/widgets/Widget.tao': 'public view LocalText(Value is text) { }\n',
 } as const
 export const packageAwareCliFixedSource = `${
   Text.stripIndent(`
     use Missing from @cards/widgets
 
-    view MainView { }
+    view MainView() { }
   `)
 }\n`
 

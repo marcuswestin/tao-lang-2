@@ -16,13 +16,17 @@ function configuredSlot(
 function configuredSelection(definition: {
   display: TR.Evaluable
   initial: string
-  items: Record<string, { content: TR.Presentable | TR.NavigationValue; label: TR.Evaluable }>
+  items: Record<string, {
+    content: TR.Presentable | TR.NavigationValue
+    icon?: TR.Evaluable
+    label: TR.Evaluable
+  }>
   name: string
 }): TR.NavigationValue {
   const items = Object.fromEntries(
     Object.entries(definition.items).map(([key, item]) => [
       `@${key}`,
-      { Content: item.content, Label: item.label },
+      { Content: item.content, ...(item.icon ? { Icon: item.icon } : {}), Label: item.label },
     ]),
   )
   return TR.Navigation.Mount(TR.Navigation.Configure(
@@ -209,7 +213,7 @@ Describe('TR.Navigation', () => {
       display: TR.Value('automatic'),
       initial: 'home',
       items: {
-        home: { content: homeStack, label: TR.Value('Home') },
+        home: { content: homeStack, icon: TR.Value('house'), label: TR.Value('Home') },
         settings: { content: settingsStack, label: TR.Value('Settings') },
       },
       name: 'Main selection',
@@ -221,6 +225,8 @@ Describe('TR.Navigation', () => {
     })
     const taoProps: TR.TaoProps = { app }
 
+    Expect(selection.descriptor.config['items']['home'].icon?.evaluate().jsValue).toBe('house')
+    Expect(selection.descriptor.config['items']['settings'].icon).toBeUndefined()
     Expect(app.canGoBack).toBe(false)
     TR.Navigation.Activate(taoProps, app, 'settings')
     Expect(app.canGoBack).toBe(false)

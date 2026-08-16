@@ -11,6 +11,9 @@ export const ViewsCompiler = {
   /** LayoutDeclaration compiles a Tao layout declaration into a runtime component. */
   LayoutDeclaration: ViewDeclaration,
 
+  /** FrameDeclaration compiles a caller-content frame into a runtime component. */
+  FrameDeclaration: ViewDeclaration,
+
   /** UiDeclaration compiles presentation content through the same component body lowering as views. */
   UiDeclaration: ViewDeclaration,
 
@@ -23,6 +26,7 @@ export const ViewsCompiler = {
     return gen`{
       ${gen.list(parameters, Compile.ParameterDeclaration)}
       __tao?: TR.TaoProps
+      __taoSlots?: Readonly<Record<string, React.ReactNode>>
       children?: React.ReactNode
     }`
   },
@@ -49,13 +53,7 @@ export const ViewsCompiler = {
     const setupStatements = block.statements.filter(statement =>
       AST.isAliasDeclaration(statement) || AST.isEntityQueryDeclaration(statement)
     )
-    const renders = block.statements.filter(statement =>
-      AST.isRender(statement)
-      || AST.isWhenRenderStatement(statement)
-      || AST.isGuardRenderStatement(statement)
-      || AST.isIfRenderStatement(statement)
-      || AST.isForStatement(statement)
-    )
+    const renders = block.statements.filter(AST.isRenderFragment)
     return gen`
       ${gen.list(setupStatements, Compile.Statement)}
       return <>
@@ -66,9 +64,7 @@ export const ViewsCompiler = {
 
   /** RenderBlockFragments compiles sequential render fragments around the first block-scoped guard. */
   RenderBlockFragments(
-    statements: readonly (
-      AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.IfRenderStatement | AST.ForStatement
-    )[],
+    statements: readonly AST.RenderFragment[],
   ): Compiled {
     const guardIndex = statements.findIndex(AST.isGuardRenderStatement)
     if (guardIndex < 0) {
@@ -90,6 +86,18 @@ export const ViewsCompiler = {
     return parameter.defaultValue === undefined
       ? gen`${gen.scopeName(name)} = _ViewProps.${gen.Name(name)}`
       : gen`${gen.scopeName(name)} = _ViewProps.${gen.Name(name)} ?? ${Compile.Expression(parameter.defaultValue)}`
+  },
+
+  /** CallerContentStatement places the opaque unnamed React content supplied by this occurrence. */
+  CallerContentStatement(): Compiled {
+    return gen`{_ViewProps.children}`
+  },
+
+  /** RenderSlotUse places one opaque named slot; filled uses are consumed by their invocation. */
+  RenderSlotUse(use: AST.RenderSlotUse): Compiled {
+    return use.render
+      ? gen.noop()
+      : gen`{_ViewProps.__taoSlots?.[${gen.jsLiteral(use.slot.$refText)}] ?? null}`
   },
 } as const
 

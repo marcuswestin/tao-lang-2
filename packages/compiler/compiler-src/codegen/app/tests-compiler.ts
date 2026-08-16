@@ -63,6 +63,11 @@ export default {
     return gen.noop()
   },
 
+  /** ExpectCheckboxStateStep compiles only into test-plan IR. */
+  ExpectCheckboxStateStep(_expectation: AST.ExpectCheckboxStateStep): Compiled {
+    return gen.noop()
+  },
+
   /** ExpectInputValueStep compiles to no generated app output. */
   ExpectInputValueStep(_expectation: AST.ExpectInputValueStep): Compiled {
     return gen.noop()

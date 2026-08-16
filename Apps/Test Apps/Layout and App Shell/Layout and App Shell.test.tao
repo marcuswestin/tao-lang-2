@@ -10,5 +10,7 @@ test "Layout and App Shell" {
       expect text "Primary action"
       press text "Primary action"
       expect text "Deterministic"
+      expect text "Adaptive primary pane"
+      expect text "Adaptive secondary pane"
    }
 }

@@ -10,12 +10,12 @@ Describe('validator: layout clauses', () => {
     accepts(`
       app MyApp { view MainView }
       use Col, Text from @tao/ui
-      view Card {
+      view Card() {
         render Col(){
           Text("Wrapped")
         }
       }
-      view MainView {
+      view MainView() {
         render Card()[content center]
       }
     `),
@@ -25,12 +25,12 @@ Describe('validator: layout clauses', () => {
     'accepts content clauses without stdlib declaration identity',
     accepts(`
       app MyApp { view MainView }
-      view Row {
+      view Row() {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view MainView {
+      view MainView() {
         render Row()[content left center]
       }
     `),
@@ -87,7 +87,7 @@ Describe('validator: layout clauses', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render inject ${tsFence}
           return null
         ${fence} [gap 8]

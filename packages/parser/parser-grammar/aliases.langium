@@ -8,7 +8,7 @@ entry AliasesGrammarEntrypoint:
     AliasDeclaration;
 
 AliasDeclaration:
-    visibility=DeclarationVisibility? keyword=BindingKeyword name=ID '=' value=Expression;
+    visibility=DeclarationVisibility? keyword=BindingKeyword name=ID ('is' type=TypeReference)? '=' value=Expression;
 
 BindingKeyword returns string:
     'let';

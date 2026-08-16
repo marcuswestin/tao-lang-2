@@ -1,12 +1,15 @@
 import { AST } from '@parser'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { isRuntimeConfigurableDeclaration } from './configuration-compiler'
 
 type TaoFileCompileOptions = {
   configurationTypes?: string
+  dataEntities?: readonly AST.EntityDataDeclaration[]
+  emitDataCatalog?: boolean
   importLines?: string[]
   scopeBindings?: string[]
-  exportedNames?: string[]
+  exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   selectedAppName?: string
 }
 
@@ -16,11 +19,14 @@ export default {
     const configurationTypes = opts.configurationTypes ?? ''
     const importLines = opts.importLines?.join('\n') ?? ''
     const scopeBindings = opts.scopeBindings?.join('\n') ?? ''
-    const exportLines = opts.exportedNames?.map(name => `export const ${name} = _Scope.${name}`).join('\n') ?? ''
+    const exportLines = opts.exportedBindings
+      ?.map(({ exported, binding }) => `export const ${exported} = _Scope.${binding}`)
+      .join('\n') ?? ''
     const apps = AST.appValueDeclarationsInFile(taoFile)
-    const dataEntities = taoFile.statements.filter(AST.isEntityDataDeclaration)
+    const dataEntities = opts.dataEntities ?? taoFile.statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = taoFile.statements.some(statement =>
-      AST.isAppDeclaration(statement) || AST.isEmittingRuntimeBinding(statement)
+      AST.isEmittingRuntimeBinding(statement)
+      && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement))
     )
     if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines) {
       return gen`export {}`
@@ -44,7 +50,7 @@ export default {
       const _Scope: any = {}
       ${gen.textLines(scopeBindings)}
 
-      ${dataEntities.length > 0 ? Compile.DataCatalog(dataEntities) : gen.noop()}
+      ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
 
       ${gen.list(taoFile.statements, Compile.Statement, { newLines: 2 })}
       ${registry}

@@ -17,12 +17,14 @@ type NamedFileValueDeclaration =
   | AST.ActionDeclaration
   | AST.AliasDeclaration
   | AST.AppDeclaration
+  | AST.NavDeclaration
+  | AST.DatasourceDeclaration
   | AST.FunctionDeclaration
   | AST.EnumDeclaration
   | AST.VisualDeclaration
 type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
 type NamedDeclaration = NamedValueDeclaration | NamedTypeDeclaration
-type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
+type ValueReferenceLike = AST.ValueReference | AST.RefinementExpression | AST.MemberAccessExpression
 
 /** aliasValidationMessages declares name and immutable-binding reference diagnostics. */
 const aliasValidationMessages = {
@@ -30,6 +32,8 @@ const aliasValidationMessages = {
   reservedName: (name: string) => `Name '${name}' is reserved by Tao's generated runtime scope.`,
   aliasUsedBeforeDeclaration: (binding: string, value: string) =>
     `Binding '${binding}' cannot reference '${value}' because it is not declared before the binding.`,
+  ascriptionType: (name: string, expected: string, actual: string) =>
+    `Binding '${name}' is declared as ${expected}, but its value is ${actual}.`,
   usedBeforeDeclaration: (name: string) => `Name '${name}' is used before it is declared.`,
 } as const
 
@@ -37,8 +41,10 @@ const aliasValidationMessages = {
 export const AliasesValidator = {
   checks: {
     [AST.ActionDeclaration.$type]: reportReservedRuntimeName,
-    [AST.AliasDeclaration.$type]: [reportReservedRuntimeName, reportAliasReferenceOrder],
+    [AST.AliasDeclaration.$type]: [reportReservedRuntimeName, reportAliasAscription, reportAliasReferenceOrder],
     [AST.AppDeclaration.$type]: reportReservedRuntimeName,
+    [AST.NavDeclaration.$type]: reportReservedRuntimeName,
+    [AST.DatasourceDeclaration.$type]: reportReservedRuntimeName,
     [AST.ForStatement.$type]: reportReservedRuntimeName,
     [AST.AskStatement.$type]: reportReservedRuntimeName,
     [AST.FunctionDeclaration.$type]: reportReservedRuntimeName,
@@ -86,6 +92,25 @@ function reportReservedRuntimeName(declaration: NamedDeclaration, ctx: Validatio
   }
 }
 
+function reportAliasAscription(alias: AST.AliasDeclaration, ctx: ValidationContext): void {
+  if (!alias.type) {
+    return
+  }
+  const expected = Type.ofReference(alias.type)
+  const actual = Type.ofExpression(alias.value)
+  if (expected.kind === 'unresolved' || actual.kind === 'unresolved' || Type.isAssignable(actual, expected)) {
+    return
+  }
+  ctx.error(
+    aliasValidationMessages.ascriptionType(
+      alias.name,
+      Type.displayName(expected),
+      Type.displayName(actual),
+    ),
+    alias.value,
+  )
+}
+
 function reportDuplicateNames(
   declarations: readonly NamedDeclaration[],
   visible: Map<string, NamedDeclaration>,
@@ -121,7 +146,7 @@ function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<str
 function reportAliasReferenceOrder(alias: AST.AliasDeclaration, ctx: ValidationContext): void {
   for (const reference of aliasValueReferences(alias)) {
     const target = reference.target.ref
-    if (isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
+    if (AST.isValueDeclaration(target) && isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
       ctx.error(
         aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, Type.declarationName(target)),
         reference,
@@ -135,13 +160,17 @@ function reportLocalValueReferenceOrder(reference: ValueReferenceLike, ctx: Vali
     return
   }
   const target = reference.target.ref
-  if (isInvalidLocalValueReferenceOrder(target, reference)) {
+  if (AST.isValueDeclaration(target) && isInvalidLocalValueReferenceOrder(target, reference)) {
     ctx.error(aliasValidationMessages.usedBeforeDeclaration(Type.declarationName(target)), reference)
   }
 }
 
 function aliasValueReferences(alias: AST.AliasDeclaration): ValueReferenceLike[] {
-  if (AST.isValueReference(alias.value) || AST.isMemberAccessExpression(alias.value)) {
+  if (
+    AST.isValueReference(alias.value)
+    || AST.isRefinementExpression(alias.value)
+    || AST.isMemberAccessExpression(alias.value)
+  ) {
     return [alias.value]
   }
   return AST.streamAllContents(alias.value).filter(isValueReferenceLike)
@@ -225,13 +254,15 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
 }
 
 function isValueReferenceLike(node: AST.Node): node is ValueReferenceLike {
-  return AST.isValueReference(node) || AST.isMemberAccessExpression(node)
+  return AST.isValueReference(node) || AST.isRefinementExpression(node) || AST.isMemberAccessExpression(node)
 }
 
 function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclaration {
   return AST.isActionDeclaration(node)
     || AST.isAliasDeclaration(node)
     || AST.isAppDeclaration(node)
+    || AST.isNavDeclaration(node)
+    || AST.isDatasourceDeclaration(node)
     || AST.isFunctionDeclaration(node)
     || AST.isEnumDeclaration(node)
     || AST.isVisualDeclaration(node)

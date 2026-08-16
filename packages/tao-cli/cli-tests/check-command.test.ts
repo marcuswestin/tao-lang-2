@@ -12,50 +12,50 @@ import {
 Describe('tao check', () => {
   Test('reports canonical files as unchanged without writing', async () => {
     await withTaoFixture({
-      'canonical.tao': 'view MainView { }\n',
+      'canonical.tao': 'view MainView() { }\n',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'canonical.tao': 'unchanged' })
-      Expect(await FS.readText(FS.resolvePath('canonical.tao', rootDir))).toBe('view MainView { }\n')
+      Expect(await FS.readText(FS.resolvePath('canonical.tao', rootDir))).toBe('view MainView() { }\n')
     })
   })
 
   Test('reports drift without writing', async () => {
     await withTaoFixture({
-      'drift.tao': 'view   MainView { }',
+      'drift.tao': 'view   MainView() { }',
     }, async (rootDir) => {
       const path = FS.resolvePath('drift.tao', rootDir)
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'drift.tao': 'changed' })
-      Expect(await FS.readText(path)).toBe('view   MainView { }')
+      Expect(await FS.readText(path)).toBe('view   MainView() { }')
     })
   })
 
   Test('reports syntax errors without writing', async () => {
     await withTaoFixture({
-      'broken.tao': 'view Broken {',
+      'broken.tao': 'view Broken() {',
     }, async (rootDir) => {
       const path = FS.resolvePath('broken.tao', rootDir)
       const results = await runCheck(rootDir)
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'broken.tao': 'error' })
-      Expect(await FS.readText(path)).toBe('view Broken {')
+      Expect(await FS.readText(path)).toBe('view Broken() {')
     })
   })
 
   Test('walks non-git fixture directories without applying loose gitignore files', async () => {
     await withTaoFixture({
       '.gitignore': 'node_modules\n.artifacts\n.custom-hidden\nAndroid\nIOS\nPods\npods\n',
-      'canonical.tao': 'view MainView { }\n',
-      'node_modules/pkg/ignored.tao': 'view   Ignored { }',
-      '.artifacts/ignored.tao': 'view   Ignored { }',
-      '.custom-hidden/ignored.tao': 'view   Ignored { }',
-      'Android/ignored.tao': 'view   Ignored { }',
-      'IOS/ignored.tao': 'view   Ignored { }',
-      'Pods/ignored.tao': 'view   Ignored { }',
-      'pods/ignored.tao': 'view   Ignored { }',
+      'canonical.tao': 'view MainView() { }\n',
+      'node_modules/pkg/ignored.tao': 'view   Ignored() { }',
+      '.artifacts/ignored.tao': 'view   Ignored() { }',
+      '.custom-hidden/ignored.tao': 'view   Ignored() { }',
+      'Android/ignored.tao': 'view   Ignored() { }',
+      'IOS/ignored.tao': 'view   Ignored() { }',
+      'Pods/ignored.tao': 'view   Ignored() { }',
+      'pods/ignored.tao': 'view   Ignored() { }',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
@@ -65,10 +65,10 @@ Describe('tao check', () => {
 
   Test('skips hidden future-source directories without reserving user directory names', async () => {
     await withTaoFixture({
-      'canonical.tao': 'view MainView { }\n',
+      'canonical.tao': 'view MainView() { }\n',
       'Apps/WordFlower/.tao-archive/Future.tao': 'project app FutureMVP {',
-      'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP { }\n',
-      'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
+      'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP() { }\n',
+      'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch() { }\n',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
 
@@ -83,7 +83,7 @@ Describe('tao check', () => {
   Test('skips an explicitly named ignored directory', async () => {
     await withTaoFixture({
       '.gitignore': 'node_modules\n',
-      'node_modules/pkg/ignored.tao': 'view   Ignored { }',
+      'node_modules/pkg/ignored.tao': 'view   Ignored() { }',
     }, async (rootDir) => {
       await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: rootDir })
       const directory = FS.resolvePath('node_modules', rootDir)

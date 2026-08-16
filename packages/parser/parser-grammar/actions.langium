@@ -13,7 +13,7 @@ StateDeclaration:
     'state' name=ID '=' value=Expression;
 
 ActionDeclaration:
-    visibility=DeclarationVisibility? 'action' name=ID parameterList=ParameterList? block=ActionBlock;
+    visibility=DeclarationVisibility? 'action' name=ID parameterList=ParameterList block=ActionBlock;
 
 ActionExpression:
     ('action' | '->') block=ActionBlock;
@@ -22,7 +22,10 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    SetStatement | ToggleStatement | DoStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement;
+    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement;
+
+AsyncActionStatement:
+    'async' block=ActionBlock;
 
 AskStatement:
     'let' name=ID '=' 'ask' dialogue=[DialogueDeclaration:ID] '(' argumentList=ArgumentList? ')';

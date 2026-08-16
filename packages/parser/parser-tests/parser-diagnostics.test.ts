@@ -5,7 +5,7 @@ import { lexCodeWithErrors, parseCodeWithErrors, parses, rejectsParser } from '.
 Describe('parser: diagnostics', () => {
   Test(
     'parses compact source without newlines',
-    parses('app MyApp { view MyView } view MyView { }', result => {
+    parses('app MyApp { view MyView } view MyView() { }', result => {
       Expect(result.entry.ast.statements).toHaveLength(2)
     }),
   )
@@ -13,7 +13,7 @@ Describe('parser: diagnostics', () => {
   Test('requires parentheses for child renders', rejectsParser('Legacy { }'))
 
   Test('reports parser errors for incomplete render statements', async () => {
-    const parseResult = await parseCodeWithErrors('view Broken { render }')
+    const parseResult = await parseCodeWithErrors('view Broken() { render }')
     const parserDiagnostics = Diagnostics.errors(parseResult.diagnostics, 'parser')
 
     Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
@@ -23,25 +23,25 @@ Describe('parser: diagnostics', () => {
 
   Test('requires parentheses for explicit renders', rejectsParser('render Text "hello"'))
 
-  Test('requires parentheses for action invocations', rejectsParser('action Save { } action Run { do Save }'))
+  Test('requires parentheses for action invocations', rejectsParser('action Save() { } action Run() { do Save }'))
 
   Test(
     'parses nested declarations for later validator checks',
-    parses('app MyApp { view MyView } view MyView { view Nested { } }', result => {
+    parses('app MyApp { view MyView } view MyView() { view Nested() { } }', result => {
       Expect(result.entry.ast.statements).toHaveLength(2)
     }),
   )
 
   Test(
     'parses aliases in app blocks for later validator checks',
-    parses('app MyApp { let Greeting = "hello" view MyView } view MyView { }', result => {
+    parses('app MyApp { let Greeting = "hello" view MyView } view MyView() { }', result => {
       Expect(result.entry.ast.statements).toHaveLength(2)
     }),
   )
 
   Test(
     'parses top-level renders for later validator checks',
-    parses('render Text("hello") { } view Text Value is text { }', result => {
+    parses('render Text("hello") { } view Text(Value is text) { }', result => {
       Expect(result.entry.ast.statements).toHaveLength(2)
     }),
   )
@@ -51,10 +51,10 @@ Describe('parser: diagnostics', () => {
     parses(
       `
         app MyApp { view MyView }
-        view MyView Count is number {
+        view MyView(Count is number) {
           render Text(Count) { }
         }
-        view Text Value is text { }
+        view Text(Value is text) { }
       `,
       result => {
         Expect(result.entry.ast.statements).toHaveLength(3)
@@ -62,15 +62,15 @@ Describe('parser: diagnostics', () => {
     ),
   )
 
-  Test('reports parser errors for old name-first parameter syntax', rejectsParser('view Text Value text { }'))
+  Test('reports parser errors for old name-first parameter syntax', rejectsParser('view Text(Value text) { }'))
 
   Test('reports linker diagnostics for values outside their owning view', async () => {
     const parseResult = await parseCodeWithErrors(`
-      view Text Value is text { }
-      view Source Secret is text {
+      view Text(Value is text) { }
+      view Source(Secret is text) {
         let Local = Secret
       }
-      view Target {
+      view Target() {
         render Text(Secret) { }
         render Text(Local) { }
       }
@@ -89,8 +89,8 @@ Describe('parser: diagnostics', () => {
       let SignedOutNav = 1
       let Tagline = "Not an app"
       app WordFlower { view Home }
-      view Home { }
-      action Reset {
+      view Home() { }
+      action Reset() {
         replace SignedOutNav in Tagline
       }
     `)
@@ -106,7 +106,7 @@ Describe('parser: diagnostics', () => {
   })
 
   Test('reports lexer errors separately from parser errors', async () => {
-    const source = 'app MyApp { view MyView } @ view MyView { }'
+    const source = 'app MyApp { view MyView } @ view MyView() { }'
     lexCodeWithErrors(source)
     const parseResult = await parseCodeWithErrors(source)
 

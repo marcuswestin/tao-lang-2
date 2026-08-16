@@ -10,19 +10,13 @@ entry AppGrammarEntrypoint:
 type AppValueDeclaration = AppDeclaration | AliasDeclaration;
 
 AppDeclaration:
-    'app' name=ID block=AppBlock;
+    visibility=DeclarationVisibility? 'app' name=ID ('=' value=Expression | block=AppBlock);
 
 AppBlock:
-    '{' statements+=(AppStatement | Statement)* '}';
+    '{' statements+=(AppStatement | AppBlockDiagnosticStatement)* '}';
 
 AppStatement:
-    AppName | AppNavigator | AppAuxiliaryNavigator | AppView | AppDatasource;
-
-AppName:
-    name='Name' value=StringLiteral;
-
-AppNavigator:
-    name='Navigator' (value=ConfiguredAppPropertyValue | value=InferredAppPropertyValue);
+    AppAuxiliaryNavigator | AppView | AppProperty;
 
 AppAuxiliaryNavigator:
     name=USE_IMPORT_PATH value=ConfigurationConstructor;
@@ -30,13 +24,6 @@ AppAuxiliaryNavigator:
 AppView:
     'view' view=[ViewDeclaration:ID];
 
-AppDatasource:
-    name='Datasource' (value=ConfiguredAppPropertyValue | value=InferredAppPropertyValue);
-
-type AppPropertyValue = ConfiguredAppPropertyValue | InferredAppPropertyValue;
-
-ConfiguredAppPropertyValue:
-    target=[NamedDeclaration:ID] block=ConfigurationBlock?;
-
-InferredAppPropertyValue:
-    block=ConfigurationBlock;
+// Primitive app contracts are Prelude-owned, so supplied slots remain parseable without a grammar edit.
+AppProperty:
+    name=ID (patch=PropertyConfigurationPatch | value=Expression);

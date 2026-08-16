@@ -3,9 +3,11 @@ import { Compile } from '../Compile'
 
 type TaoFileCompileOptions = {
   configurationTypes?: string
+  dataEntities?: readonly AST.EntityDataDeclaration[]
+  emitDataCatalog?: boolean
   importLines?: string[]
   scopeBindings?: string[]
-  exportedNames?: string[]
+  exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   selectedAppName?: string
 }
 

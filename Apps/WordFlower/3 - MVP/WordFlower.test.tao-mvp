@@ -1,4 +1,4 @@
-use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest, WordFlowerStage from ./
+use WordFlower, WordFlowerDeclarationHead, WordFlowerDeclarationHeadWith, WordFlowerDeclarationLet, WordFlowerDeclarationLetWith, WordFlowerDrawer, WordFlowerFoundationTest, WordFlowerStage from ./
 
 // Directional journeys for the full target. Steps that reach panes, overlays, toasts, windows,
 // and dialogues reuse the implemented #tag / select vocabulary; anything beyond that vocabulary
@@ -16,7 +16,7 @@ test "WordFlower full target" {
       expect text "Choose a workspace"
       expect text "Novel" // target-only activation reveals preserved selection content; it does not present
       select #chooseWorkspace[1] {
-         press #choose
+         press text "Novel"
       }
       expect text "Files" // the split mounts with its pane titles
       expect text "Novel"
@@ -57,16 +57,24 @@ test "WordFlower full target" {
          press #openDocument
       }
       expect text "Saves this session: 0"
+      expect checkbox #markFinal unchecked
+      press #markFinal
+      expect checkbox #markFinal checked
       enter "" into #documentTitle
       press #save
       expect text "Document: Chapter one"
       expect text "Saves this session: 0"
       enter "Opening" into #documentTitle
       enter "The first line." into #documentBody
+      expect text "Words: 3"
       press #save
       expect text "Saved"
       expect text "Document: Opening"
       expect text "Saves this session: 1"
+      enter "It began at sea." into #newParagraph
+      submit #newParagraph
+      expect #newParagraph input value ""
+      expect text "It began at sea."
    }
 
    check "preserves workspace and document CRUD through lifecycle states" {
@@ -106,7 +114,12 @@ test "WordFlower full target" {
       press #activateWorkspaceTab
       expect text "Choose a workspace"
       press text "Settings"
-      expect text "Settings"
+      expect {
+         text "Settings"
+         text "Writing session"
+         text "10 words"
+         text "Build development"
+      }
       press #resetSignedOut
       expect text "Signed out"
    }
@@ -189,5 +202,27 @@ test "WordFlower navigation foundation" {
       press text "Restore initial stack"
       expect text "Foundation home marker"
       expect missing text "Foundation slot marker"
+   }
+}
+
+test "WordFlower declaration refinement forms" {
+   check "a primitive head with canonical construction works" {
+      run WordFlowerDeclarationHead
+      expect text "Foundation home marker"
+   }
+
+   check "a primitive head with explicit refinement works" {
+      run WordFlowerDeclarationHeadWith
+      expect text "Foundation home marker"
+   }
+
+   check "an inferred let with canonical construction works" {
+      run WordFlowerDeclarationLet
+      expect text "Foundation home marker"
+   }
+
+   check "an inferred let with explicit refinement works" {
+      run WordFlowerDeclarationLetWith
+      expect text "Foundation home marker"
    }
 }

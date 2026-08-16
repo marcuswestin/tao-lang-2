@@ -11,7 +11,7 @@ Describe('validator: reusable sessions', () => {
     const [textResult, numberResult, syntaxResult] = await Promise.all([
       session.validateCode(nominalApp('TextApp', 'text', '"Ada"', 'Text', 'text')),
       session.validateCode(nominalApp('NumberApp', 'number', '1', 'Text', 'text')),
-      session.validateCode('view Broken { render }'),
+      session.validateCode('view Broken() { render }'),
     ])
 
     Expect(appName(textResult)).toBe('TextApp')
@@ -41,8 +41,8 @@ function nominalApp(
   return `
     app ${appName} { view MainView }
     type Name is ${nominalBase}
-    view MainView { render ${renderedView}(Name ${value}) }
-    view ${renderedView} Value is ${renderedType} {
+    view MainView() { render ${renderedView}(Name ${value}) }
+    view ${renderedView}(Value is ${renderedType}) {
       render inject Value \`\`\`ts
         return null
       \`\`\`

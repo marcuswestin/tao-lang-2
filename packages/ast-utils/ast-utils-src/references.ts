@@ -4,23 +4,33 @@ import { Type } from './Type'
 /** referencedNames returns every cross-referenced name in `file` outside of use statements. */
 export function referencedNames(file: AST.TaoFile): Set<string> {
   const names = new Set<string>()
+  const dataEntitiesBySingularName = new Map(
+    Type.visibleDataEntities(file).map(entity => [entity.singularName, entity]),
+  )
   for (const node of AST.streamAllContents(file)) {
     if (AST.isUseStatement(node)) {
       continue
     }
     for (const reference of AST.streamReferences(node)) {
       names.add(reference.reference.$refText)
+      const target = 'ref' in reference.reference ? reference.reference.ref : undefined
+      if (AST.isEntityDataDeclaration(target)) {
+        // A data import names its plural declaration, while Tao source may refer to the declaration
+        // through its singular entity name (`Document`). Keep the owning `Documents` import too.
+        names.add(target.name)
+      }
     }
     if (AST.isNamedTypeReference(node)) {
       names.add(node.root)
+      const dataEntity = dataEntitiesBySingularName.get(node.root)
+      if (dataEntity) {
+        names.add(dataEntity.name)
+      }
     }
     if (isImportedShorthandPropertyReference(node)) {
       names.add(node.name)
     }
     if (AST.isInferredConfigurationConstructor(node) && AST.isAliasDeclaration(node.$container)) {
-      names.add(node.$container.name)
-    }
-    if (AST.isInferredAppPropertyValue(node)) {
       names.add(node.$container.name)
     }
   }

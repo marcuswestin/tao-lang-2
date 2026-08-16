@@ -5,6 +5,7 @@ import "./views"
 import "./aliases"
 import "./actions"
 import "./data"
+import "./design"
 import "./configuration"
 import "./injections"
 import "./imports"
@@ -19,19 +20,25 @@ entry BlocksGrammarEntrypoint:
 
 // Statement stays broad so validators can report context-specific placement errors.
 Statement:
-    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | DataStatusStep | StateDeclaration | EntityQueryDeclaration | Injection | TagStatement | RenderStatement | ViewRender | EventHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement;
+    AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement;
+
+// App properties and auxiliary navigators deliberately begin with the same ID and @name tokens as
+// bare visual/slot uses. Keep every other broad statement parseable in an app body for a semantic
+// placement diagnostic, while leaving those inherently overlapping bare forms to visual blocks.
+AppBlockDiagnosticStatement:
+    Declaration | ProjectDeclaration | UseStatement | TestDeclaration | CheckDeclaration | RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | DataStatusStep | StateDeclaration | EntityQueryDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 Declaration:
-    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | LayoutDeclaration | UiDeclaration | DialogueDeclaration | AliasDeclaration | TypeDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration;
+    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | LayoutDeclaration | FrameDeclaration | UiDeclaration | DialogueDeclaration | AliasDeclaration | TypeDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | TestDeclaration;
 // View statements are the declarations and render sites accepted by view/layout bodies.
-type ViewStatement = AliasDeclaration | StateDeclaration | EntityQueryDeclaration | ActionDeclaration | TagStatement | Render | EventHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement;
+type ViewStatement = AliasDeclaration | StateDeclaration | EntityQueryDeclaration | ActionDeclaration | TagStatement | Render | RenderSlotDeclaration | RenderSlotUse | CallerContentStatement | EventHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | EnumCase | AskStatement;
-type ExportableDeclaration = AliasDeclaration | VisualDeclaration | TypeDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | ConfigurableDeclaration;
-type EmittingRuntimeBinding = AliasDeclaration | VisualDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | ConfigurableDeclaration;
+type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | VisualDeclaration | TypeDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
+type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | VisualDeclaration | TypeDeclaration | EnumDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
 type ParameterizedDeclaration = VisualDeclaration | ActionDeclaration | FunctionDeclaration;
 type BlockStatementOwner = AppDeclaration | ProjectDeclaration | VisualDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;
 type CaseDeclaration = EnumCase | EntityDataField;
@@ -42,7 +49,7 @@ Block:
     '{' statements+=Statement* '}';
 
 ParameterList:
-    parameters+=ParameterDeclaration (',' parameters+=ParameterDeclaration)*;
+    '(' (parameters+=ParameterDeclaration (',' parameters+=ParameterDeclaration)*)? ')';
 
 ParameterDeclaration:
     (inlineType=ParameterTypeDeclaration | type=NamedTypeReference) ('default' defaultValue=Expression)?;

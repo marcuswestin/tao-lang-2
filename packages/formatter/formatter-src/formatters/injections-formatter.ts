@@ -8,6 +8,13 @@ export default {
     f.oneSpaceBeforeProperty('tsCodeBlock')
   },
 
+  /** TypedInjectionExpression separates the result type, arguments, and TS fence. */
+  TypedInjectionExpression(f) {
+    f.oneSpaceAfter('inject')
+    f.oneSpaceBetweenProperties('type', 'argumentList')
+    f.oneSpaceBeforeProperty('tsCodeBlock')
+  },
+
   /** InjectionArgumentList formats comma-separated injection arguments. */
   InjectionArgumentList(f) {
     f.commaSpacedList()
@@ -15,8 +22,11 @@ export default {
 
   /** NamedInjectionArgument formats `Name value` spacing. */
   NamedInjectionArgument(f) {
-    f.oneSpaceBeforeProperty('value')
+    f.oneSpaceBeforeProperty('value', 'ambient')
   },
+
+  /** RenderAmbientChannel is an atomic `@@content`, `@@layout`, or `@@tag` token. */
+  RenderAmbientChannel() {},
 
   /** ShorthandInjectionArgument is a single value reference; spacing is owned by InjectionArgumentList commas. */
   ShorthandInjectionArgument() {},

@@ -58,7 +58,9 @@ export const LayoutValidator = {
   checks: {
     [AST.Render.$type]: validateRender,
   } satisfies NodeValidationChecks,
+  isLayoutEntry,
   messages: layoutValidationMessages,
+  validateEntry: validateLayoutEntry,
 }
 
 function validateRender(render: AST.Render, ctx: ValidationContext): void {
@@ -73,10 +75,27 @@ function validateRender(render: AST.Render, ctx: ValidationContext): void {
 
 function validateLayoutClause(layoutClause: AST.LayoutClause, ctx: ValidationContext): void {
   for (const entry of layoutClause.entries) {
-    validateLayoutEntry(entry, ctx)
+    // A single unknown word may be a mounted-design bundle, while the visual heads share this
+    // same combined clause surface. DesignValidator owns those cases. Entries with terms cannot
+    // be bundle references and remain ordinary unsupported layout diagnostics here.
+    if (isLayoutEntry(entry) || !isPotentialDesignEntry(entry)) {
+      validateLayoutEntry(entry, ctx)
+    }
   }
   LayoutConflictValidator.validate(layoutClause.entries.flatMap(layoutEntryConflictItem), ctx, layoutValidationMessages)
 }
+
+function isLayoutEntry(entry: AST.LayoutEntry): boolean {
+  const head = layoutEntryHead(entry)
+  return head !== undefined && layoutHeadValue(head) !== undefined
+}
+
+function isPotentialDesignEntry(entry: AST.LayoutEntry): boolean {
+  const head = layoutEntryHeadText(entry)
+  return entry.terms.length === 0 || designVisualHeads.has(head)
+}
+
+const designVisualHeads = new Set(['bg', 'border', 'fg', 'line', 'radius', 'size', 'weight'])
 
 function validateLayoutEntry(
   entry: AST.LayoutEntry,
@@ -100,7 +119,7 @@ function validateLayoutEntry(
     gap: () => validateSingleNumber(entry, ctx),
     margin: () => validateSpacing(entry, ctx, 'margin'),
     pad: () => validateSpacing(entry, ctx, 'pad'),
-    width: () => validateDimension(entry, ctx),
+    width: () => validateDimension(entry, ctx, { supportsMaximum: true }),
     height: () => validateDimension(entry, ctx),
     fill: () => validateBareEntry(entry, ctx),
     hug: () => validateBareEntry(entry, ctx),
@@ -171,8 +190,20 @@ function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: '
   LayoutConflictValidator.validate(sideConflictItems, ctx, layoutValidationMessages)
 }
 
-function validateDimension(entry: AST.LayoutEntry, ctx: ValidationContext): void {
+function validateDimension(
+  entry: AST.LayoutEntry,
+  ctx: ValidationContext,
+  options: { supportsMaximum?: boolean } = {},
+): void {
   const terms = entry.terms
+  if (options.supportsMaximum && terms[0] && AST.isLayoutWord(terms[0]) && layoutWordText(terms[0]) === 'max') {
+    if (terms.length === 2 && AST.isLayoutNumberLiteral(terms[1])) {
+      validatePositiveNumber(entry, terms[1], ctx)
+      return
+    }
+    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    return
+  }
   if (terms.length !== 1) {
     ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
     return

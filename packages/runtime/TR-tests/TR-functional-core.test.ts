@@ -9,6 +9,7 @@ Describe('TR functional core', () => {
     Expect(TR.Unary('not', TR.Value(false)).jsValue).toBe(true)
     Expect(TR.Interpolate([TR.Value('Count: '), TR.Value(2), TR.Value(null)]).jsValue).toBe('Count: 2')
     Expect(TR.Member(TR.Value(['one']), ['Count']).jsValue).toBe(1)
+    Expect(TR.Member(TR.Value({}), ['Missing']).jsValue).toBe(null)
 
     const next = TR.Function((value: TR.Value<number>) => TR.Binary(value, '+', TR.Value(1)))
     Expect(TR.Call<number>(next, TR.Value(2)).jsValue).toBe(3)

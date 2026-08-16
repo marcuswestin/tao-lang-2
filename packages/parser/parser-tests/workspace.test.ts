@@ -13,7 +13,7 @@ Describe('minimal Tao parser', () => {
         'Main.tao': `
           use CustomData, CustomNav from @custom
 
-          ui Home { }
+          ui Home() { }
           let MainNav = CustomNav {
             Initial Home
           }
@@ -26,13 +26,13 @@ Describe('minimal Tao parser', () => {
           }
         `,
         'Packages/@custom/Constructs.tao': `
-          public nav CustomNav {
+          public type CustomNav is nav with {
             Initial ui
             implement inject nav \`\`\`ts
               return TR.NavKind.Stack()
             \`\`\`
           }
-          public datasource CustomData {
+          public type CustomData is datasource with {
             StorageKey text
             implement inject provider \`\`\`ts
               return TR.DataProvider.Local()
@@ -46,22 +46,28 @@ Describe('minimal Tao parser', () => {
 
         Expect(parseResult.diagnostics).toEqual([])
         const packageFile = parseResult.files.find(file => file.path === paths['Packages/@custom/Constructs.tao'])
-        const nav = packageFile?.ast.statements.find(AST.isNavDeclaration)
-        const datasource = packageFile?.ast.statements.find(AST.isDatasourceDeclaration)
+        const nav = packageFile?.ast.statements.find(statement =>
+          AST.isTypeDeclaration(statement) && statement.name === 'CustomNav'
+        )
+        const datasource = packageFile?.ast.statements.find(statement =>
+          AST.isTypeDeclaration(statement) && statement.name === 'CustomData'
+        )
         const main = parseResult.entry.ast.statements.find(
           statement => AST.isAliasDeclaration(statement) && statement.name === 'MainNav',
         )
         const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
-        Expect.Is(nav, AST.isNavDeclaration)
-        Expect.Is(datasource, AST.isDatasourceDeclaration)
+        Expect.Is(nav, AST.isTypeDeclaration)
+        Expect.Is(datasource, AST.isTypeDeclaration)
         Expect.Is(main, AST.isAliasDeclaration)
         Expect.Is(app, AST.isAppDeclaration)
         Expect.Is(main.value, AST.isConfigurationConstructor)
         Expect(main.value.type.ref).toBe(nav)
-        const appDatasource = AST.blockStatements(app).find(AST.isAppDatasource)
-        Expect.Is(appDatasource, AST.isAppDatasource)
-        Expect.Is(appDatasource.value, AST.isConfiguredAppPropertyValue)
-        Expect(appDatasource.value.target.ref).toBe(datasource)
+        const appDatasource = AST.blockStatements(app).find(statement =>
+          AST.isAppProperty(statement) && statement.name === 'Datasource'
+        )
+        Expect.Is(appDatasource, AST.isAppProperty)
+        Expect.Is(appDatasource.value, AST.isConfigurationConstructor)
+        Expect(appDatasource.value.type.ref).toBe(datasource)
       },
     )
   })
@@ -73,12 +79,12 @@ Describe('minimal Tao parser', () => {
         'Main.tao': `
         app MyApp { view MainView }
         use SharedView from ./
-        view MainView {
+        view MainView() {
           render SharedView()
         }
       `,
         'Shared.tao': `
-        workspace view SharedView {
+        workspace view SharedView() {
           render inject \`\`\`ts
             return null
           \`\`\`
@@ -107,17 +113,17 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       let Greeting = "File"
 
-      layout Stack {
-        render inject \`\`\`ts
-          return <>{_ViewProps.children}</>
+      layout Stack() {
+        render inject Content @@content \`\`\`ts
+          return <>{Content}</>
         \`\`\`
       }
-      view Text Value is text {
+      view Text(Value is text) {
         render inject \`\`\`ts
           return null
         \`\`\`
       }
-      view MainView Label is text {
+      view MainView(Label is text) {
         let Greeting = "View"
         let LabelAlias = Label
         render Stack(){
@@ -173,7 +179,7 @@ Describe('minimal Tao parser', () => {
   Test('parses Tao source strings', async () => {
     const source = `
       app InlineApp { view MainView }
-      view MainView {
+      view MainView() {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -190,17 +196,17 @@ Describe('minimal Tao parser', () => {
       app MyApp { view MainView }
       use Text, Stack from ./
       workspace let Greeting = "Hello"
-      workspace view MainView {
+      workspace view MainView() {
         render Stack(){
           Text(Greeting)
         }
       }
-      workspace layout Stack {
-        render inject \`\`\`ts
-          return <>{_ViewProps.children}</>
+      workspace layout Stack() {
+        render inject Content @@content \`\`\`ts
+          return <>{Content}</>
         \`\`\`
       }
-      workspace view Text Value is text {
+      workspace view Text(Value is text) {
         render inject Value \`\`\`ts
           return <RN.Text>{Value}</RN.Text>
         \`\`\`
@@ -230,7 +236,7 @@ Describe('minimal Tao parser', () => {
   Test('parses bare use statements', async () => {
     const parseResult = await testParseSyntax(`
       use Text
-      workspace view Text Value is text {
+      workspace view Text(Value is text) {
         render inject Value \`\`\`ts
           return null
         \`\`\`
@@ -262,8 +268,8 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       file let FileTitle = "File"
       package let PackageTitle = "Package"
-      workspace view ProjectView { }
-      public layout PublishedStack { }
+      workspace view ProjectView() { }
+      public layout PublishedStack() { }
     `)
 
     const [fileAlias, packageAlias, projectView, publishedLayout] = parseResult.entry.ast.statements

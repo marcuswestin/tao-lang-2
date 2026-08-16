@@ -12,6 +12,12 @@ const expectedPrimitives = [
   'list',
   'time',
   'action',
+  'design',
+  'visual',
+  'presentable',
+  'view',
+  'layout',
+  'frame',
   'ui',
   'nav',
   'datasource',
@@ -53,7 +59,7 @@ export function validatePreludeFile(file: AST.TaoFile, ctx: ValidationContext): 
   }
   validateSlots(declarations, 'nav', ['implement'], ctx)
   validateSlots(declarations, 'datasource', ['implement'], ctx)
-  validateSlots(declarations, 'app', ['Name', 'Navigator', 'Datasource'], ctx)
+  validateSlots(declarations, 'app', ['Name', 'Navigator', 'Datasource', 'Design'], ctx)
 }
 
 function validateSlots(

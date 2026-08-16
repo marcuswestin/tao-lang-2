@@ -154,6 +154,10 @@ function applyDimension(
   mainAxisDirection: TaoLayoutDirection,
 ): void {
   const [dimension, term] = entry
+  if (dimension === 'width' && term === 'max') {
+    style['maxWidth'] = entry[2]
+    return
+  }
   if (typeof term === 'number') {
     style[dimension] = term
     return

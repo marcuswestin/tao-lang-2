@@ -7,25 +7,40 @@ app FunctionalCoreMVP {
       Initial MainView
 }  }
 
-function HasCount Count is number returns boolean = Count > 0 and not false
-
-function CountLabel Count is number returns text = "Count: { Count }"
-
-function NextLabel Count is number returns text = "Next: { Count + 1 }"
-
-function PresenceLabel Present is boolean returns text = when Present {
-   true -> "Ready"
-   otherwise -> "Missing{ none }"
+function HasCount(Count is number) returns boolean {
+   return Count > 0 and not false
 }
 
-ui MainView {
+function CountLabel(Count is number) returns text {
+   return "Count: { Count }"
+}
+
+function NextLabel(Count is number) returns text {
+   return "Next: { Count + 1 }"
+}
+
+function PresenceLabel(Present is boolean) returns text {
+   return when Present {
+      true -> "Ready"
+      otherwise -> "Missing{ none }"
+}  }
+
+ui MainView() {
    state Count = 2
    state Visible = true
-   action HideCount {
+   state AsyncStarted = false
+   state AsyncContinued = false
+   action HideCount() {
       guard HasCount(Count) true -> {
          toggle Visible
          set Count = 0
    }  }
+   action LaunchAsync() {
+      async {
+         set AsyncStarted = true
+      }
+      set AsyncContinued = true
+   }
    render Col() [gap 8, pad 12] {
       Text("Functional core")
       Text(PresenceLabel(true))
@@ -47,6 +62,23 @@ ui MainView {
       loop ["Inbox", "Today"] / Label {
          Text(Label)
       }
+      when AsyncStarted {
+         true -> {
+            Text("Async launched")
+         }
+         otherwise -> {
+            Text("Async idle")
+      }  }
+      when AsyncContinued {
+         true -> {
+            Text("Action continued")
+         }
+         otherwise -> {
+            Text("Continuation idle")
+      }  }
       Button("Hide count") {
          on press HideCount
+      }
+      Button("Launch async") {
+         on press LaunchAsync
 }  }  }

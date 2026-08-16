@@ -2,7 +2,7 @@ use CardTitle, ChildFolderTitle, SiblingFileTitle, SiblingFolderTitle
 use ProjectNotice from @copy
 use ProjectWidget from @copy/widgets
 
-workspace ui MainView {
+workspace ui MainView() {
    render Stack() {
       Text(CardTitle)
       Text(SiblingFileTitle)
@@ -12,14 +12,14 @@ workspace ui MainView {
       ProjectWidget()
 }  }
 
-layout Stack {
-   render inject ```ts
-      return <>{_ViewProps.children}</>
+layout Stack() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
    ```
 }
 
-view Text Value is text {
-   render inject Value ```ts
-      return <RN.Text>{Value}</RN.Text>
+view Text(Value is text) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [Value], layout: Layout, tag: Tag })
    ```
 }

@@ -5,14 +5,22 @@ Describe('compiler: functional core', () => {
   Test('compiles pure functions and total control flow through validated Tao', async () => {
     const compiled = await Compiler.compileCode(`
       app FunctionalApp { view Main }
-      function HasCount Count is number returns boolean = Count > 0
-      function Label Count is number returns text = when (Count > 0) {
-        true -> "Count: { Count }"
-        otherwise -> "Empty"
+      function HasCount(Count is number) returns boolean {
+        return Count > 0
       }
-      view Main {
+      function Label(Count is number) returns text {
+        return when (Count > 0) {
+          true -> "Count: { Count }"
+          otherwise -> "Empty"
+        }
+      }
+      function GoalFraction(Count is number) {
+        if Count == 0 { return 0 }
+        return Count / 10
+      }
+      view Main() {
         state Ready = false
-        action Flip {
+        action Flip() {
           guard Ready true -> { toggle Ready }
           toggle Ready
         }
@@ -30,8 +38,8 @@ Describe('compiler: functional core', () => {
           }
         }
       }
-      layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     Expect(compiled.files).toHaveLength(1)
@@ -39,18 +47,19 @@ Describe('compiler: functional core', () => {
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
     Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
     Expect(compiled.files[0]?.code).toContain('TR.Toggle(')
+    Expect(compiled.files[0]?.code).toContain('if (TR.Binary(')
   })
 
   Test('lowers typed defaults in view, layout, action, and function callee scopes', async () => {
     const compiled = await Compiler.compileCode(`
       app DefaultsApp { view Main }
-      function Label Value is text default "Save" returns text = Value
-      view Main {
-        action Submit Message is text default "Saved" { }
+      function Label(Value is text default "Save") returns text { return Value }
+      view Main() {
+        action Submit(Message is text default "Saved") { }
         render Card(){ Greeting() }
       }
-      layout Card Gap is number default 8 { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Greeting Title is text default "Welcome" { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      layout Card(Gap is number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Greeting(Title is text default "Welcome") { render inject \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const code = compiled.files[0]?.code ?? ''
@@ -65,11 +74,11 @@ Describe('compiler: functional core', () => {
       app CaseApp { view Main }
       enum ConfirmResult { Confirmed Cancelled }
       data Documents / Document { Final yes / no Draft }
-      view Main {
+      view Main() {
         state Result = Confirmed
         state Ready = true
         query Documents { }
-        action Close {
+        action Close() {
           if Result is Confirmed { toggle Ready }
         }
         render Stack() {
@@ -86,8 +95,8 @@ Describe('compiler: functional core', () => {
           }
         }
       }
-      layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const code = compiled.files[0]?.code ?? ''
@@ -104,20 +113,20 @@ Describe('compiler: functional core', () => {
   Test('keeps a matched guard inside its action block while caller execution continues', async () => {
     const compiled = await Compiler.compileCode(`
       app GuardApp { view Main }
-      view Main {
+      view Main() {
         state Stop = true
         state Count = 0
-        action Callee {
+        action Callee() {
           guard Stop true -> { set Count = 1 }
           set Count = 2
         }
-        action Caller {
+        action Caller() {
           do Callee()
           set Count = 3
         }
         render Text("Ready")
       }
-      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const code = compiled.files[0]?.code ?? ''

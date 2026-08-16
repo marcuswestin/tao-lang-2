@@ -12,7 +12,7 @@ Describe('parser: injections', () => {
   })
 
   Test('parses render injections', async () => {
-    const parseResult = await testParseCode('view Native { render inject ```ts\nreturn null\n``` }')
+    const parseResult = await testParseCode('view Native() { render inject ```ts\nreturn null\n``` }')
     const view = parseResult.entry.ast.statements[0]
 
     Expect.Is(view, AST.isViewDeclaration)
@@ -24,7 +24,7 @@ Describe('parser: injections', () => {
   Test('parses inject arguments', async () => {
     const parseResult = await testParseCode(`
       let UserName = "Ro"
-      view Native Value is text {
+      view Native(Value is text) {
         render inject Value, Name UserName, Count 3, Greeting "Hello" \`\`\`ts
           return null
         \`\`\`
@@ -62,7 +62,7 @@ Describe('parser: injections', () => {
 
   Test('reports linker diagnostics for unresolved inject arguments', async () => {
     const parseResult = await parseCodeWithErrors(`
-      view Native {
+      view Native() {
         render inject Missing, Name OtherMissing \`\`\`ts
           return null
         \`\`\`

@@ -27,6 +27,14 @@ type TaoTestExpectation = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestCheckboxStateExpectation declares one tag-only accessible checkbox assertion. */
+type TaoTestCheckboxStateExpectation = {
+  checked: boolean
+  kind: 'expectCheckboxState'
+  source: TaoTestSourceLocation
+  tag: string
+}
+
 /** TaoTestInputValueExpectation declares one selector-targeted native input value assertion. */
 type TaoTestInputValueExpectation = {
   kind: 'expectInputValue'
@@ -102,6 +110,7 @@ type TaoTestStep =
   | TaoTestDataStatusStep
   | TaoTestEnterStep
   | TaoTestExpectation
+  | TaoTestCheckboxStateExpectation
   | TaoTestExpectationGroupStep
   | TaoTestInputValueExpectation
   | TaoTestPressStep
@@ -194,6 +203,12 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
     BackTestStep: compileBackTestStep,
     DataStatusStep: compileDataStatusStep,
     EnterTextStep: compileEnterTextStep,
+    ExpectCheckboxStateStep: step => ({
+      checked: step.state === 'checked',
+      kind: 'expectCheckboxState',
+      source: sourceLocation(step),
+      tag: tagName(step.tag),
+    }),
     ExpectInputValueStep: compileInputValueExpectation,
     TagInputValueExpectation: expectation => ({
       kind: 'expectInputValue',

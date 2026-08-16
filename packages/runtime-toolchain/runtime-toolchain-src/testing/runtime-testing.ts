@@ -14,7 +14,7 @@ const TAO_TEST_PLAN_MODULE_PATH = './tao-test-plan'
 const TEST_MANIFEST_ENV = 'TAO_TEST_RUNTIME_MANIFEST'
 
 type CompileAppModule = {
-  compileAndRenderApp(appPath: string): Promise<RuntimeApp.Screen>
+  compileAndRenderApp(appPath: string, options?: { appName?: string }): Promise<RuntimeApp.Screen>
 }
 
 type TestRunnerModule = {
@@ -76,9 +76,12 @@ export namespace RuntimeTesting {
   }
 }
 
-async function compileAndRenderApp(appPath: string): Promise<RuntimeApp.Screen> {
+async function compileAndRenderApp(
+  appPath: string,
+  options: { appName?: string } = {},
+): Promise<RuntimeApp.Screen> {
   const module = compileAppModule ??= require(COMPILE_APP_MODULE_PATH) as CompileAppModule
-  return await module.compileAndRenderApp(appPath)
+  return await module.compileAndRenderApp(appPath, options)
 }
 
 async function runTestFile(file: TestCompilerTypes.File): Promise<void> {

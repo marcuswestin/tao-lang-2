@@ -1,14 +1,50 @@
 import { jest } from '@jest/globals'
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
-import { act, fireEventAsync, render } from '@testing-library/react-native'
+import { act, fireEventAsync, render, waitFor } from '@testing-library/react-native'
 import { createElement, type ReactElement, useState } from 'react'
 import * as RN from 'react-native'
-import { ExpectScreen, registerRuntimeE2ELifecycle } from './test-compile-app'
+import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileFiles } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  Test('shares one data catalog across the app, schema, and query modules', async () => {
+    await testCompileFiles(
+      'App.tao',
+      {
+        'App.tao': `
+          use Memory from @tao/data
+          use StackNav from @tao/nav
+          use Main from ./Screen.tao
+
+          app MultiFileData {
+            Name "Multi-file data"
+            Navigator StackNav { Initial Main }
+            Datasource Memory { }
+          }
+        `,
+        'Data.tao': `
+          workspace data Notes / Note {
+            Title text
+          }
+        `,
+        'Screen.tao': `
+          use Notes from ./Data.tao
+          use Text from @tao/ui
+
+          workspace ui Main() {
+            query Notes { }
+            render Text("Notes: { Notes.Count }")
+          }
+        `,
+      },
+      async screen => {
+        await waitFor(() => ExpectScreen(screen).toHaveText('Notes: 0'))
+      },
+    )
+  })
+
   Test('binds an app datasource after render without updating an existing query subscriber during render', async () => {
     const datasource = TR.Data.Configure(
       TR.Data.Declaration('Memory', TR.DataProvider.Memory()),

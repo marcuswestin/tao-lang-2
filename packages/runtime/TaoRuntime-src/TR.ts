@@ -10,6 +10,11 @@ import {
   type TaoDatasourceDeclaration,
   testProvider as testDataProvider,
 } from './TR-data'
+import {
+  DesignControls,
+  type TaoDesign,
+  type TaoDesignSpec,
+} from './TR-design'
 import { LayoutControls } from './TR-layout'
 import {
   NavigationControls,
@@ -26,6 +31,7 @@ import {
   type TaoStackNavConfiguration,
   testNavKind as testNavigationKind,
 } from './TR-navigation'
+import { SelectableRow } from './TR-selectable-row'
 import RuntimeSwitch from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
 import * as TRViews from './TR-views'
@@ -178,7 +184,7 @@ class TR {
       }
       value = value?.[member]
     }
-    return new RuntimeValue(value)
+    return new RuntimeValue(value === undefined ? null : value)
   }
 
   /** Function creates a Tao pure-function value. */
@@ -195,23 +201,33 @@ class TR {
   static ForEach(
     collection: TR.Evaluable,
     render: (value: TR.Value<any>, index: number) => React.ReactNode,
+    select?: (value: TR.Value<any>, index: number) => unknown,
   ): React.ReactNode {
     const values = collection.evaluate().jsValue
     if (!Array.isArray(values)) {
       return null
     }
-    return values.map((value, index) =>
-      React.createElement(
+    return values.map((value, index) => {
+      const runtimeValue = new RuntimeValue(value)
+      const content = render(runtimeValue, index)
+      return React.createElement(
         React.Fragment,
         { key: stableListKey(value, index) },
-        render(new RuntimeValue(value), index),
+        select
+          ? React.createElement(SelectableRow, { onSelect: () => select(runtimeValue, index) }, content)
+          : content,
       )
-    )
+    })
   }
 
   /** Action creates runtime Tao actions from generated callbacks. */
   static Action<Args extends any[]>(body: (...args: Args) => unknown): TR.Action<Args> {
     return new RuntimeAction(body)
+  }
+
+  /** Async starts detached action work immediately and consumes its otherwise-unowned completion. */
+  static Async(body: () => PromiseLike<unknown>): void {
+    void Promise.resolve(body()).catch(() => undefined)
   }
 
   /** Alias creates live runtime Tao aliases that intentionally re-evaluate their initializer on every read. */
@@ -297,6 +313,16 @@ class TR {
     return TRTaoProps.TaoPropsControls.ambientContext(callerProps)
   }
 
+  /** VisualLayout exposes only the resolved layout snapshot to an injected visual implementation. */
+  static VisualLayout(props: TR.TaoProps | undefined): TR.TaoVisualLayout | undefined {
+    return TRTaoProps.TaoPropsControls.visualLayout(props)
+  }
+
+  /** VisualTag exposes the nearest concrete occurrence tag to an injected visual implementation. */
+  static VisualTag(props: TR.TaoProps | undefined): string | undefined {
+    return TRTaoProps.TaoPropsControls.visualTag(props)
+  }
+
   /** setDevMode configures Tao runtime development-only diagnostics. */
   static setDevMode(options?: TR.DevModeOptions): void {
     Dev.setMode(options)
@@ -313,6 +339,9 @@ class TR {
 
   /** DataProvider exposes the published provider factories used by datasource injections. */
   static readonly DataProvider = DataProviderControls
+
+  /** Design exposes declaration-local flat tokens, named bundles, and combined spec resolution. */
+  static readonly Design = DesignControls
 
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
@@ -460,6 +489,8 @@ namespace TR {
   export type Scope = Record<string, any>
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
   export type TaoProps = TRTaoProps.TaoProps
+  /** TaoVisualLayout is the layout-only snapshot exposed to injected visual implementations. */
+  export type TaoVisualLayout = TRTaoProps.TaoVisualLayout
   /** DevModeOptions declares runtime development-only diagnostic flags. */
   export type DevModeOptions = TaoDevModeOptions
   /** DataSchema declares one runtime-backed Tao data schema. */
@@ -470,6 +501,10 @@ namespace TR {
   export type DatasourceDeclaration = TaoDatasourceDeclaration
   /** ConfiguredDatasource is an immutable declaration-linked provider configuration. */
   export type ConfiguredDatasource = TaoConfiguredDatasource
+  /** Design is one immutable declaration-owned token and named-bundle catalog. */
+  export type Design = TaoDesign
+  /** DesignSpec preserves authored combined clauses until mounted-app-local resolution. */
+  export type DesignSpec = TaoDesignSpec
   /** NavKindProfile declares the shipped profile-specific lifecycle contracts. */
   export type NavKindProfile = TaoNavKindProfile
   /** NavDeclaration is the immutable declaration identity carried by configured descriptors. */

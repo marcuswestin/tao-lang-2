@@ -84,7 +84,7 @@ export namespace Packages {
         return targetFiles.flatMap(file =>
           file.statements
             .filter(AST.isDeclaration)
-            .filter(declaration => isDeclarationImportableFromUse(declaration, resolution, request.fromFilePath))
+            .filter(declaration => declarationIsImportableFromUse(declaration, resolution))
         )
       },
       async candidateFilePaths(useStatement, request) {
@@ -357,14 +357,17 @@ export namespace Packages {
     return !resolution.importPath?.startsWith('@')
   }
 
-  function isDeclarationImportableFromUse(
+  /** declarationIsImportableFromUse applies visibility without resolving aliases during linking. */
+  export function declarationIsImportableFromUse(
     declaration: AST.Declaration,
     resolution: Resolution,
-    fromFilePath: string,
   ): boolean {
+    // Scope construction must not resolve an alias initializer: doing so can re-enter the linker
+    // while the imported file's constructor and patch scopes are still being built. Primitive-head
+    // app declarations carry their app family syntactically; inferred aliases use ordinary Tao
+    // visibility (for example `workspace let App = app { ... }`).
     if (AST.isAppDeclaration(declaration)) {
-      return isTestSourcePath(fromFilePath)
-        && (resolution.relation === 'same-file' || resolution.relation === 'same-directory')
+      return resolution.relation === 'same-file' || resolution.relation === 'same-directory'
     }
     return isVisible(visibilityOf(declaration), resolution)
   }

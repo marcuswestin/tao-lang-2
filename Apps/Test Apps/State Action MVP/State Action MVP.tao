@@ -7,37 +7,37 @@ app StateActionMVP {
       Initial MainView
 }  }
 
-view CounterButton Title is text, Press is action() {
+view CounterButton(Title is text, Press is action()) {
    render Button(Title) {
       on press Press
 }  }
 
-ui MainView {
+ui MainView() {
    state Count = 0
    let DisplayCount = Count
-   action SetZero {
+   action SetZero() {
       set Count = 0
    }
-   action AddStep Step is number {
+   action AddStep(Step is number) {
       set Count += Step
    }
-   action AddFive {
+   action AddFive() {
       do AddStep(5)
    }
-   action AddTwice {
+   action AddTwice() {
       set Count += 1
       do AddOne()
    }
-   action AddOne {
+   action AddOne() {
       set Count += 1
    }
-   action Decrement {
+   action Decrement() {
       set Count -= 1
    }
-   action Double {
+   action Double() {
       set Count *= 2
    }
-   action Halve {
+   action Halve() {
       set Count /= 2
    }
    render Col() {

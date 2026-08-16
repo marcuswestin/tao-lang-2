@@ -20,7 +20,20 @@ ArgumentValue infers Expression:
     Expression;
 
 FunctionDeclaration:
-    visibility=DeclarationVisibility? 'function' name=ID parameterList=ParameterList? 'returns' returnType=TypeReference '=' value=Expression;
+    visibility=DeclarationVisibility? 'function' name=ID parameterList=ParameterList
+    ('returns' returnType=TypeReference)? block=FunctionBlock;
+
+FunctionBlock:
+    '{' statements+=FunctionStatement* '}';
+
+FunctionStatement:
+    ReturnStatement | IfFunctionStatement;
+
+ReturnStatement:
+    'return' value=Expression;
+
+IfFunctionStatement:
+    'if' condition=Expression block=FunctionBlock;
 
 Expression:
     OrExpression;
@@ -50,19 +63,27 @@ UnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PrimaryExpression;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | ActionExpression | TypedConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | ValueReference;
+    '(' Expression ')' | WhenExpression | ActionExpression | TypedInjectionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
 
 // A bare configuration block instantiates a declared type. `with` is reserved for copying and
 // patching an existing configured value.
 ConfigurationConstructor:
     type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
 
+// `with` is the one refinement operation. Primitive constructors accept the bare-block
+// construction sugar as well as its explicit spelling.
+PrimitiveConfigurationConstructor:
+    primitive=ConfigurationPrimitive ('with')? block=ConfigurationBlock;
+
+ConfigurationPrimitive returns string:
+    'app' | 'nav' | 'datasource';
+
 // A bare block takes its base type from the declaration context that owns it.
 InferredConfigurationConstructor:
     block=ConfigurationBlock;
 
 type ConfiguredValue = ConfigurationConstructor;
-type ConstructorDeclaration = TypeDeclaration | ConfigurableDeclaration | ParameterizedDeclaration;
+type ConstructorDeclaration = TypeDeclaration | ParameterizedDeclaration;
 
 ConfigurationBlock:
     '{' (entries+=ConfigurationEntry (','? entries+=ConfigurationEntry)*)? '}';
@@ -165,6 +186,10 @@ NoneLiteral:
     value='none';
 
 ValueReference:
-    target=[ValueDeclaration:ID] ('with' patchBlock=ConfigurationBlock)?;
+    target=[ValueDeclaration:ID];
 
-type ValueDeclaration = AppDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | UiDeclaration | EntityDataField | EnumCase | AskStatement;
+RefinementExpression:
+    target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;
+
+type RefinementBaseDeclaration = ValueDeclaration | TypeDeclaration;
+type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | UiDeclaration | EntityDataField | EnumCase | AskStatement | DesignDeclaration;

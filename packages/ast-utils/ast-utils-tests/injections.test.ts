@@ -6,7 +6,7 @@ Describe('Tao AST injection helpers', () => {
   Test('resolves inject argument local names', async () => {
     const parseResult = await Parser.parseCode(`
       let UserName = "Ro"
-      view Native Value is text {
+      view Native(Value is text) {
         render inject Value, Name UserName \`\`\`ts
           return null
         \`\`\`

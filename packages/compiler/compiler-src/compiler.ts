@@ -2,12 +2,17 @@ import { Packages } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
-import { configurationSidecarBindingName } from './codegen/app/configuration-compiler'
+import {
+  configurationRuntimeBindingName,
+  configurationSidecarBindingName,
+  isRuntimeConfigurableDeclaration,
+} from './codegen/app/configuration-compiler'
 import RuntimeGen from './codegen/app/runtime-gen'
 import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
 
 const codeProjectRoot = '/__tao__'
 const compiledSourceOutputPathMessage = 'compiled source output path exists'
+const dataCatalogBindingName = '_TaoDataCatalog'
 
 /** CompiledFile declares one generated TypeScript output file. */
 export type CompiledFile = {
@@ -18,7 +23,13 @@ export type CompiledFile = {
 
 type ResolvedImports = {
   bySource: Map<string, Set<string>>
-  importedNames: Set<string>
+  scopeBindings: Map<string, string>
+}
+
+type DataCatalogPlan = {
+  entities: readonly AST.EntityDataDeclaration[]
+  ownerPath: string
+  userPaths: ReadonlySet<string>
 }
 
 type PlannedSidecar = {
@@ -149,8 +160,10 @@ function compileValidatedInput(
   )
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
+  const dataCatalog = planDataCatalog(sourceFiles, entryPath)
   const compiledFiles = sourceFiles.flatMap(file =>
     compileSourceFile(file, {
+      dataCatalog,
       sourceByPath,
       outputPaths,
       packagesContext: context.packagesContext,
@@ -179,7 +192,7 @@ function planOutputPaths(
   for (const file of sourceFiles) {
     const modulePath = modulePathBySourcePath.get(file.path)
     Assert.defined(modulePath, compiledSourceOutputPathMessage, { sourcePath: file.path })
-    const declarations = file.ast.statements.filter(AST.isConfigurableDeclaration)
+    const declarations = file.ast.statements.filter(isRuntimeConfigurableDeclaration)
     const companionDirectory = declarations.length === 0
       ? outputDirectory(modulePath)
       : companionOutputDirectory(file.path, modulePath, usedOutputPaths)
@@ -212,6 +225,7 @@ function planOutputPaths(
 }
 
 type CompileSourceFileOptions = {
+  dataCatalog: DataCatalogPlan | undefined
   sourceByPath: Map<string, ParsedFile>
   outputPaths: PlannedOutputs
   packagesContext: Packages.Context
@@ -219,8 +233,12 @@ type CompileSourceFileOptions = {
 }
 
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
-  const { sourceByPath, outputPaths, packagesContext, selectedAppName } = options
+  const { dataCatalog, sourceByPath, outputPaths, packagesContext, selectedAppName } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
+  const ownsDataCatalog = dataCatalog?.ownerPath === file.path
+  if (dataCatalog && !ownsDataCatalog && dataCatalog.userPaths.has(file.path)) {
+    addResolvedImport(imports, dataCatalog.ownerPath, dataCatalogBindingName)
+  }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = [
@@ -231,12 +249,22 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       }'`
     ),
   ]
-  const scopeBindings = [...imports.importedNames].map(name => `TR.Use(_Scope, '${name}', () => ${name})`)
-  const exportedNames = file.ast.statements
+  const scopeBindings = [...imports.scopeBindings].map(([binding, imported]) =>
+    `TR.Use(_Scope, '${binding}', () => ${imported})`
+  )
+  const exportedBindings = file.ast.statements
     .filter(AST.isExportableDeclaration)
-    .filter(AST.isEmittingRuntimeBinding)
+    .filter(declarationEmitsRuntimeBinding)
     .filter(declarationVisibleOutsideFile)
-    .map((statement: AST.Declaration) => statement.name)
+    .map((declaration: AST.Declaration) => {
+      const binding = isRuntimeConfigurableDeclaration(declaration)
+        ? configurationRuntimeBindingName(declaration)
+        : declaration.name
+      return { exported: binding, binding }
+    })
+  if (ownsDataCatalog) {
+    exportedBindings.push({ exported: dataCatalogBindingName, binding: dataCatalogBindingName })
+  }
 
   const module: CompiledFile = {
     sourcePath: file.path,
@@ -245,9 +273,11 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       configurationTypes: planned.declarationsPath === undefined
         ? undefined
         : RuntimeGen.ConfigurationTypes(file.ast),
+      dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+      emitDataCatalog: ownsDataCatalog,
       importLines,
       scopeBindings,
-      exportedNames,
+      exportedBindings,
       selectedAppName,
     }),
   }
@@ -270,6 +300,35 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     })
   }
   return [module, ...declarations, ...copiedSidecars.values()]
+}
+
+function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {
+  const entities = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isEntityDataDeclaration))
+  const userPaths = new Set(
+    sourceFiles
+      .filter(fileUsesDataCatalog)
+      .map(file => file.path),
+  )
+  if (entities.length === 0 && userPaths.size === 0) {
+    return undefined
+  }
+  const ownerPath = sourceFiles.find(file => file.ast.statements.some(AST.isEntityDataDeclaration))?.path ?? entryPath
+  return { entities, ownerPath, userPaths }
+}
+
+function fileUsesDataCatalog(file: ParsedFile): boolean {
+  return AST.streamAllContents(file.ast).some(node =>
+    AST.isEntityQueryDeclaration(node)
+    || AST.isCreateStatement(node)
+    || (AST.isAppProperty(node) && node.name === 'Datasource')
+  )
+}
+
+function addResolvedImport(imports: ResolvedImports, sourcePath: string, binding: string): void {
+  const names = imports.bySource.get(sourcePath) ?? new Set<string>()
+  names.add(binding)
+  imports.bySource.set(sourcePath, names)
+  imports.scopeBindings.set(binding, binding)
 }
 
 function importLinesForCompiledFile(
@@ -322,7 +381,7 @@ function resolveImports(
   packagesContext: Packages.Context,
 ): ResolvedImports {
   const bySource = new Map<string, Set<string>>()
-  const importedNames = new Set<string>()
+  const scopeBindings = new Map<string, string>()
   const sourcePaths = new Set(sourceByPath.keys())
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
     const resolution = Packages.resolve(packagesContext, {
@@ -341,22 +400,31 @@ function resolveImports(
     for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
       const target = targets.find(candidate =>
         candidate.ast.statements.some(statement =>
-          AST.isDeclaration(statement)
-          && AST.isEmittingRuntimeBinding(statement)
+          declarationEmitsRuntimeBinding(statement)
           && statement.name === importedName
-          && Packages.isVisible(Packages.visibilityOf(statement), resolution)
+          && Packages.declarationIsImportableFromUse(statement, resolution)
         )
       )
       if (!target) {
         continue
       }
-      importedNames.add(importedName)
       const names = bySource.get(target.path) ?? new Set<string>()
-      names.add(importedName)
+      const declarations = target.ast.statements.filter(statement =>
+        declarationEmitsRuntimeBinding(statement)
+        && statement.name === importedName
+        && Packages.declarationIsImportableFromUse(statement, resolution)
+      )
+      for (const declaration of declarations) {
+        const binding = isRuntimeConfigurableDeclaration(declaration)
+          ? configurationRuntimeBindingName(declaration)
+          : importedName
+        names.add(binding)
+        scopeBindings.set(binding, binding)
+      }
       bySource.set(target.path, names)
     }
   }
-  return { bySource, importedNames }
+  return { bySource, scopeBindings }
 }
 
 function relativeImportPath(fromOutputPath: string, toOutputPath: string): string {
@@ -414,7 +482,7 @@ function reserveModuleOutputPath(
     usedOutputPaths.add(preferredPath)
     return preferredPath
   }
-  if (!file.ast.statements.some(AST.isConfigurableDeclaration)) {
+  if (!file.ast.statements.some(isRuntimeConfigurableDeclaration)) {
     return reserveOutputPath(preferredPath, usedOutputPaths)
   }
 
@@ -441,5 +509,11 @@ function suffixedOutputPath(outputPath: string, suffix: number): string {
 }
 
 function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {
-  return Packages.visibilityOf(declaration) !== undefined
+  return AST.isAppDeclaration(declaration) || Packages.visibilityOf(declaration) !== undefined
+}
+
+function declarationEmitsRuntimeBinding(node: AST.Node): node is AST.Declaration {
+  return AST.isDeclaration(node)
+    && AST.isEmittingRuntimeBinding(node)
+    && (!AST.isTypeDeclaration(node) || isRuntimeConfigurableDeclaration(node))
 }

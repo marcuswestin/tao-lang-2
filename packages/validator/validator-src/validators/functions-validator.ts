@@ -27,8 +27,11 @@ const messages = {
   functionLabelType: (name: string, label: string, expected: string, actual: string) =>
     `Labeled argument '${label}:' of function '${name}' expects ${expected}, got ${actual}.`,
   functionPlacement: 'Pure functions must be declared at file level.',
+  functionMissingReturn: (name: string) => `Function '${name}' must end with a return so every path produces a value.`,
   functionReturn: (name: string, expected: string, actual: string) =>
-    `Function '${name}' returns ${expected}, but its expression produces ${actual}.`,
+    `Function '${name}' returns ${expected}, but a return produces ${actual}.`,
+  functionReturnInference: (name: string, expected: string, actual: string) =>
+    `Function '${name}' cannot infer one return type from ${expected} and ${actual}.`,
 } as const
 
 export const FunctionsValidator = {
@@ -51,10 +54,61 @@ function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): 
     }
     seen.add(name)
   }
-  const expected = Type.ofReference(fn.returnType)
-  const actual = Type.ofExpression(fn.value)
-  if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
-    ctx.error(messages.functionReturn(fn.name, Type.displayName(expected), Type.displayName(actual)), fn.value)
+  if (!AST.functionHasFallthroughReturn(fn)) {
+    ctx.error(messages.functionMissingReturn(fn.name), fn.block)
+  }
+  const returns = AST.returnStatementsOf(fn)
+  if (fn.returnType) {
+    validateExplicitReturnType(fn, returns, ctx)
+  } else {
+    validateInferredReturnType(fn, returns, ctx)
+  }
+}
+
+function validateExplicitReturnType(
+  fn: AST.FunctionDeclaration,
+  returns: readonly AST.ReturnStatement[],
+  ctx: ValidationContext,
+): void {
+  const expected = Type.ofReference(fn.returnType!)
+  if (expected.kind === 'unresolved') {
+    return
+  }
+  for (const statement of returns) {
+    const actual = Type.ofExpression(statement.value)
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+      ctx.error(
+        messages.functionReturn(fn.name, Type.displayName(expected), Type.displayName(actual)),
+        statement.value,
+      )
+    }
+  }
+}
+
+function validateInferredReturnType(
+  fn: AST.FunctionDeclaration,
+  returns: readonly AST.ReturnStatement[],
+  ctx: ValidationContext,
+): void {
+  let inferred: ReturnType<typeof Type.ofExpression> | undefined
+  for (const statement of returns) {
+    const actual = Type.ofExpression(statement.value)
+    if (actual.kind === 'unresolved') {
+      continue
+    }
+    if (!inferred) {
+      inferred = actual
+      continue
+    }
+    const common = Type.commonType([inferred, actual])
+    if (!common) {
+      ctx.error(
+        messages.functionReturnInference(fn.name, Type.displayName(inferred), Type.displayName(actual)),
+        statement.value,
+      )
+      return
+    }
+    inferred = common
   }
 }
 

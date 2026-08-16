@@ -16,7 +16,7 @@ Describe('tao fix', () => {
       'app.tao': Text.stripIndent(`
         app   MyApp { view MainView }
         use Text,Button from @tao/ui
-        view MainView {
+        view MainView() {
            render Text(Greeting)
            let Greeting = "hi"
         }
@@ -34,7 +34,7 @@ Describe('tao fix', () => {
            view MainView
         }
 
-        view MainView {
+        view MainView() {
            let Greeting = "hi"
            render Text(Greeting)
         }
@@ -45,8 +45,8 @@ Describe('tao fix', () => {
 
   Test('leaves canonical files unchanged and reports broken files', async () => {
     await withTaoFixture({
-      'canonical.tao': 'use Text from @tao/ui\n\nview MainView {\n   render Text("hi")\n}\n',
-      'broken.tao': 'view Broken {',
+      'canonical.tao': 'use Text from @tao/ui\n\nview MainView() {\n   render Text("hi")\n}\n',
+      'broken.tao': 'view Broken() {',
     }, async (rootDir) => {
       const results = await runFix(rootDir)
 
@@ -54,7 +54,7 @@ Describe('tao fix', () => {
         'canonical.tao': 'unchanged',
         'broken.tao': 'error',
       })
-      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe('view Broken {')
+      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe('view Broken() {')
     })
   })
 

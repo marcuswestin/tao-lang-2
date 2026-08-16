@@ -1,4 +1,5 @@
 import type React from 'react'
+import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError } from './TR-errors'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
@@ -38,6 +39,7 @@ export type TaoDialogueDefinition = TaoPresentableDefinition
 
 export type TaoSelectionNavItemDefinition = {
   content: TaoPresentable | TaoNavigationValue
+  icon?: Evaluable
   label: Evaluable
 }
 
@@ -49,6 +51,7 @@ export type TaoAppDeclaration = Readonly<{
 export type TaoAppDefinition = {
   auxiliaries(): Record<string, TaoNavigationInput>
   declaration?: TaoAppDeclaration
+  design?(): TaoDesign
   name: string
   navigator(): TaoNavigationInput
 }

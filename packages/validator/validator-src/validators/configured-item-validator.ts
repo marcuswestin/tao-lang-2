@@ -6,6 +6,8 @@ import type { ValidationContext } from '../validation'
 
 export const configuredItemValidationMessages = {
   constructorShape: (type: string, expected: string) => `Typed constructor '${type}' expects a ${expected} literal.`,
+  constructorValueType: (type: string, expected: string, actual: string) =>
+    `Typed constructor '${type}' expects ${expected}, got ${actual}.`,
   shapelessItemConstructor: (type: string) =>
     `Typed constructor '${type}' cannot accept fields because its item type has no declared shape.`,
   missingProperty: (name: string) => `Item constructor is missing required field '${name}'.`,
@@ -28,7 +30,10 @@ export const configuredItemValidationMessages = {
 
 export const configuredItemValidationChecks = {
   [AST.ConfiguredValue.$type]: (configured, ctx) => {
-    if (AST.isTypeDeclaration(configured.type.ref) || AST.isParameterizedDeclaration(configured.type.ref)) {
+    if (
+      (AST.isTypeDeclaration(configured.type.ref) && !AST.isConfigurableDeclaration(configured.type.ref))
+      || AST.isParameterizedDeclaration(configured.type.ref)
+    ) {
       validateConfiguredItemConstructor(configured, ctx)
     }
   },
@@ -68,6 +73,18 @@ function validateConfiguredItemConstructor(
     })
     if (actualKind !== expectedKind) {
       ctx.error(configuredItemValidationMessages.constructorShape(typeName, expectedKind), value)
+      return
+    }
+    const actual = Type.ofExpression(value.value)
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, constructed)) {
+      ctx.error(
+        configuredItemValidationMessages.constructorValueType(
+          typeName,
+          Type.displayName(constructed),
+          Type.displayName(actual),
+        ),
+        value.value,
+      )
     }
     return
   }
@@ -93,6 +110,16 @@ function validateInferredConfiguredItem(
   value: AST.InferredConfigurationConstructor,
   ctx: ValidationContext,
 ): void {
+  const owner = value.$container
+  const inferredName = AST.isAliasDeclaration(owner)
+    ? owner.name
+    : AST.isAppProperty(owner)
+    ? owner.name
+    : undefined
+  const declaration = inferredName ? Type.visibleDeclaration(value, inferredName) : undefined
+  if (declaration && AST.isConfigurableDeclaration(declaration)) {
+    return
+  }
   const inferred = Type.ofInferredConfiguration(value)
   if (inferred.kind === 'unresolved') {
     ctx.error(configuredItemValidationMessages.inferredConstructorContext, value)
@@ -118,6 +145,15 @@ export function validateConfiguredItemPatch(
   ctx: ValidationContext,
 ): void {
   validateConfiguredItemBlock(block, item, ctx, false)
+}
+
+/** validateConfiguredItemConstruction checks a complete slot fill against one effective shape. */
+export function validateConfiguredItemConstruction(
+  block: AST.ConfigurationBlock,
+  item: ASTUtils.ItemShape,
+  ctx: ValidationContext,
+): void {
+  validateConfiguredItemBlock(block, item, ctx, true)
 }
 
 type ConfiguredItemCandidate = { entry: AST.ConfigurationEntry; type: ASTUtils.TaoType }
@@ -268,7 +304,7 @@ function reportRemainingConfiguredItemFields(
       unresolvedCandidates -= 1
       continue
     }
-    if (Type.propertyHasDefault(property)) {
+    if (!Type.propertyRequiresValue(property)) {
       continue
     }
     state.ctx.error(configuredItemValidationMessages.missingProperty(property.name), state.block)
@@ -332,7 +368,10 @@ function validateConfiguredEntryLiteral(
     return
   }
   const actual = configurationValueType(entry.value)
-  if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expected)) {
+  const isCompatible = AST.isConfigurationReference(entry.value)
+    ? Type.isAssignable(actual, expected)
+    : Type.isCastCompatible(actual, expected)
+  if (actual.kind !== 'unresolved' && !isCompatible) {
     ctx.error(
       configuredItemValidationMessages.constructorShape(entry.name ?? '', constructorLiteralKind(expected)),
       entry,
@@ -343,7 +382,7 @@ function validateConfiguredEntryLiteral(
 function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
   if (AST.isConfigurationReference(value)) {
     const target = value.target.ref
-    return AST.isAliasDeclaration(target) || AST.isUiDeclaration(target)
+    return AST.isValueDeclaration(target)
       ? Type.ofValueDeclaration(target)
       : { kind: 'unresolved' }
   }

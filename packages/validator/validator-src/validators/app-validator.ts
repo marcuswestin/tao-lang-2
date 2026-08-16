@@ -1,17 +1,15 @@
-import { type ASTUtils, Packages, Type } from '@ast-utils'
+import { Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import type { ValidationContext } from '../validation'
-import { referencedConfigurationType } from './configuration-type'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {
   topLevel:
-    'Only project, app, ui, dialogue, view, layout, let, function, action, data, type, enum, test declarations, and use statements are allowed at file level.',
+    'Only project, app, nav, datasource, ui, dialogue, view, layout, let, function, action, data, type, enum, test declarations, and use statements are allowed at file level.',
   appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
   appBlock: (name: string) => `App ${name} contains a statement that is not app configuration.`,
-  duplicateDatasource: (name: string, data: string) => `App ${name} binds datasource ${data} more than once.`,
   appRootCount: (name: string, count: number) =>
     `App ${name} must declare exactly one Navigator (or transitional root view), found ${count}.`,
   rootViewParameters: (appName: string, viewName: string) =>
@@ -21,20 +19,18 @@ const appValidationMessages = {
   auxiliaryType: (name: string, key: string, actual: string) => `App ${name}@${key} expects nav, got ${actual}.`,
   duplicateAuxiliary: (name: string, key: string) => `App ${name} declares auxiliary navigator @${key} more than once.`,
   auxiliaryKey: (key: string) => `App auxiliary '${key}' must be a single @name key.`,
-  datasourceType: (name: string) => `App ${name} Datasource expects a datasource configuration.`,
-  inferredProperty: (name: string, property: string, kind: string) =>
-    `App ${name} ${property} bare block requires exactly one visible ${kind} declaration named '${property}'.`,
+  datasourceType: (name: string) => `App ${name} Datasource expects datasource, got another value.`,
   datasourceCount: (name: string, count: number) => `App ${name} may declare at most one Datasource, found ${count}.`,
-  propertyName: (expected: string, actual: string) => `App property '${actual}' must be spelled '${expected}'.`,
   variantProperty: (name: string, property: string) =>
     `App variant ${name} cannot patch unknown property '${property}'.`,
   variantDuplicate: (name: string, property: string) => `App variant ${name} patches '${property}' more than once.`,
-  variantName: (name: string) => `App variant ${name} Name expects text.`,
-  variantNavigator: (name: string, actual: string) => `App variant ${name} Navigator expects nav, got ${actual}.`,
-  variantDatasource: (name: string) => `App variant ${name} Datasource expects a datasource configuration.`,
+  propertyDuplicate: (name: string, property: string) => `App ${name} supplies '${property}' more than once.`,
+  propertyType: (name: string, property: string, expected: string, actual: string) =>
+    `App ${name} ${property} expects ${expected}, got ${actual}.`,
+  headType: (name: string, actual: string) => `App head ${name} expects app, got ${actual}.`,
 } as const
 
-/** AppValidator validates Tao app placement and structure. */
+/** AppValidator validates Tao app placement and Prelude-owned supplied slots. */
 export const AppValidator = {
   messages: appValidationMessages,
   validate,
@@ -42,178 +38,141 @@ export const AppValidator = {
 
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   validateTopLevelStatements(file, ctx)
-  for (const app of file.statements.filter(AST.isAppDeclaration)) {
+  const apps = [
+    ...file.statements.filter(AST.isAppDeclaration),
+    ...AST.appValueDeclarationsInFile(file).filter(app => !AST.isAppDeclaration(app)),
+  ]
+  for (const app of apps) {
     validateAppPlacement(app, file, ctx)
-    validateAppDeclaration(app, ctx)
-  }
-  for (const variant of file.statements.filter(AST.isAppVariantDeclaration)) {
-    validateAppVariant(variant, ctx)
-  }
-}
-
-function validateAppVariant(variant: AST.AppVariantDeclaration, ctx: ValidationContext): void {
-  const entries = new Map<string, AST.ConfigurationEntry>()
-  const appSlots = new Set(AST.primitiveSlots(ctx.workspaceFiles, 'app').map(property => property.name))
-  for (const entry of variant.value.patchBlock.entries) {
-    if (!entry.name || !entry.value || !appSlots.has(entry.name)) {
-      ctx.error(appValidationMessages.variantProperty(variant.name, entry.name ?? entry.key ?? ''), entry)
-      continue
+    if (AST.isAppDeclaration(app)) {
+      validateAppDeclaration(app, ctx)
     }
-    if (entries.has(entry.name)) {
-      ctx.error(appValidationMessages.variantDuplicate(variant.name, entry.name), entry)
-    }
-    entries.set(entry.name, entry)
-  }
-  const name = entries.get('Name')?.value
-  if (name && !AST.isStringLiteral(name)) {
-    ctx.error(appValidationMessages.variantName(variant.name), name)
-  }
-  const navigator = entries.get('Navigator')?.value
-  if (navigator && !AST.isPropertyConfigurationPatch(navigator)) {
-    const actual = configurationValueType(navigator)
-    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
-      ctx.error(appValidationMessages.variantNavigator(variant.name, Type.displayName(actual)), navigator)
-    }
-  }
-  const datasource = entries.get('Datasource')?.value
-  if (datasource && !AST.isPropertyConfigurationPatch(datasource) && !configurationIsDatasource(datasource)) {
-    ctx.error(appValidationMessages.variantDatasource(variant.name), datasource)
-  }
-}
-
-function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
-  if (AST.isConfigurationConstructor(value)) {
-    return Type.ofConfiguredValue(value)
-  }
-  if (AST.isConfigurationReference(value)) {
-    return referencedConfigurationType(value.target.ref)
-  }
-  return { kind: 'unresolved' }
-}
-
-function configurationIsDatasource(value: AST.ConfigurationValue): boolean {
-  if (AST.isConfigurationConstructor(value)) {
-    return AST.isDatasourceDeclaration(value.type.ref)
-  }
-  if (AST.isConfigurationReference(value)) {
-    const target = value.target.ref
-    if (AST.isDatasourceDeclaration(target)) {
-      return true
-    }
-    return AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value)
-  }
-  return false
-}
-
-function configurationExpressionIsDatasource(value: AST.Expression): boolean {
-  if (AST.isConfigurationConstructor(value)) {
-    return AST.isDatasourceDeclaration(value.type.ref)
-  }
-  if (AST.isValueReference(value)) {
-    const target = value.target.ref
-    return AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value)
-  }
-  return false
-}
-
-function validateAppPlacement(app: AST.AppDeclaration, file: AST.TaoFile, ctx: ValidationContext): void {
-  const filePath = AST.getDocument(file).uri.path
-  if (isInsidePackage(filePath, ctx)) {
-    ctx.error(appValidationMessages.appPackage(app.name), app)
-    return
-  }
-  if (filePath !== ctx.entryFilePath && !isTestCompanionAppFile(filePath, ctx)) {
-    ctx.error(appValidationMessages.appEntryFile(app.name), app)
-  }
-}
-
-function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const statement of file.statements) {
-    if (!AST.isTopLevelStatement(statement)) {
-      ctx.error(appValidationMessages.topLevel, statement)
+    if (app.value && AST.isRefinementExpression(app.value)) {
+      validateAppVariant(app, app.value, ctx)
     }
   }
 }
-
-type AppStatements = readonly AST.OwnedBlockStatement[]
 
 function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext): void {
+  if (app.value) {
+    const actual = Type.ofExpression(app.value)
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'app' })) {
+      ctx.error(appValidationMessages.headType(app.name, Type.displayName(actual)), app.value)
+    }
+    return
+  }
   const statements = AST.blockStatements(app)
-  const modern = statements.some(statement => AST.isAppName(statement) || AST.isAppNavigator(statement))
-  if (!modern) {
+  const properties = statements.filter(AST.isAppProperty)
+  const roots = statements.filter(AST.isAppView)
+  if (properties.length === 0 && roots.length > 0) {
     validateLegacyApp(app, ctx)
     return
   }
-
-  validateModernAppStatements(app, statements, ctx)
-  validateAppNames(app, statements, ctx)
-  validateAppNavigators(app, statements, ctx)
-  validateAppAuxiliaryNavigators(app, statements, ctx)
-  validateAppDatasources(app, statements, ctx)
-}
-
-function validateModernAppStatements(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
   for (const statement of statements) {
-    const isModernAppConfigurationStatement = AST.isAppName(statement)
-      || AST.isAppNavigator(statement)
-      || AST.isAppAuxiliaryNavigator(statement)
-      || AST.isAppDatasource(statement)
-    if (!isModernAppConfigurationStatement) {
+    if (!AST.isAppProperty(statement) && !AST.isAppAuxiliaryNavigator(statement)) {
       ctx.error(appValidationMessages.appBlock(app.name), statement)
     }
   }
+  validateAppProperties(app.name, properties, app, ctx, true)
+  validateAppAuxiliaryNavigators(app, ctx)
 }
 
-function validateAppNames(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
-  const names = statements.filter(AST.isAppName)
-  for (const name of names) {
-    if (name.name !== 'Name') {
-      ctx.error(appValidationMessages.propertyName('Name', name.name), name)
-    }
-  }
-  if (primitiveSlotRequiresValue(ctx, 'app', 'Name') && names.length !== 1) {
-    ctx.error(appValidationMessages.nameCount(app.name, names.length), app)
-  }
-}
-
-function validateAppNavigators(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
-  const navigators = statements.filter(AST.isAppNavigator)
-  for (const navigator of navigators) {
-    if (navigator.name !== 'Navigator') {
-      ctx.error(appValidationMessages.propertyName('Navigator', navigator.name), navigator)
-    }
-  }
-  if (primitiveSlotRequiresValue(ctx, 'app', 'Navigator') && navigators.length !== 1) {
-    ctx.error(appValidationMessages.appRootCount(app.name, navigators.length), app)
-  }
-  for (const navigator of navigators) {
-    if (AST.isInferredAppPropertyValue(navigator.value) && !AST.inferredAppPropertyDeclaration(navigator.value)) {
-      ctx.error(appValidationMessages.inferredProperty(app.name, 'Navigator', 'nav'), navigator.value)
+function validateAppProperties(
+  appName: string,
+  properties: readonly AST.AppProperty[],
+  owner: AST.Node,
+  ctx: ValidationContext,
+  requireComplete: boolean,
+): void {
+  const contract = AST.primitiveSlots(ctx.workspaceFiles, 'app')
+  const contractByName = new Map(contract.map(slot => [slot.name, slot]))
+  const seen = new Set<string>()
+  for (const property of properties) {
+    const expected = contractByName.get(property.name)
+    if (!expected) {
+      ctx.error(appValidationMessages.variantProperty(appName, property.name), property)
       continue
     }
-    const actual = configuredAppPropertyType(navigator.value)
-    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
-      ctx.error(appValidationMessages.navigatorType(app.name, Type.displayName(actual)), navigator)
+    if (seen.has(property.name)) {
+      ctx.error(appValidationMessages.propertyDuplicate(appName, property.name), property)
+    }
+    seen.add(property.name)
+    if (!property.value) {
+      if (property.patch && !requireComplete) {
+        continue
+      }
+      ctx.error(
+        appValidationMessages.propertyType(
+          appName,
+          property.name,
+          Type.displayName(Type.ofProperty(expected)),
+          'patch',
+        ),
+        property,
+      )
+      continue
+    }
+    const actual = Type.ofExpression(property.value)
+    const expectedType = Type.ofProperty(expected)
+    if (
+      actual.kind !== 'unresolved' && expectedType.kind !== 'unresolved' && !Type.isAssignable(actual, expectedType)
+    ) {
+      ctx.error(
+        appValidationMessages.propertyType(
+          appName,
+          property.name,
+          Type.displayName(expectedType),
+          Type.displayName(actual),
+        ),
+        property.value,
+      )
+    }
+  }
+  if (!requireComplete) {
+    return
+  }
+  for (const required of contract.filter(Type.propertyRequiresValue)) {
+    if (seen.has(required.name)) {
+      continue
+    }
+    if (required.name === 'Name') {
+      ctx.error(appValidationMessages.nameCount(appName, 0), properties[0] ?? owner)
+    } else if (required.name === 'Navigator') {
+      ctx.error(appValidationMessages.appRootCount(appName, 0), properties[0] ?? owner)
+    } else {
+      ctx.error(
+        appValidationMessages.variantProperty(appName, required.name),
+        properties[0] ?? owner,
+      )
     }
   }
 }
 
-function primitiveSlotRequiresValue(
-  ctx: ValidationContext,
-  primitive: AST.PrimitiveType,
-  name: string,
-): boolean {
-  const slot = AST.primitiveSlots(ctx.workspaceFiles, primitive).find(property => property.name === name)
-  return slot ? Type.propertyRequiresValue(slot) : true
-}
-
-function validateAppAuxiliaryNavigators(
-  app: AST.AppDeclaration,
-  statements: AppStatements,
+function validateAppVariant(
+  variant: AST.AppValueDeclaration,
+  refinement: AST.RefinementExpression,
   ctx: ValidationContext,
 ): void {
+  const entries = refinement.patchBlock.entries
+  const properties: AST.AppProperty[] = entries.flatMap(entry => {
+    if (!entry.name) {
+      ctx.error(appValidationMessages.variantProperty(variant.name, entry.key ?? ''), entry)
+      return []
+    }
+    return [{
+      $type: 'AppProperty',
+      name: entry.name,
+      value: entry.value && !AST.isPropertyConfigurationPatch(entry.value) ? entry.value : undefined,
+      patch: AST.isPropertyConfigurationPatch(entry.value) ? entry.value : undefined,
+      $container: variant,
+    } as unknown as AST.AppProperty]
+  })
+  validateAppProperties(variant.name, properties, variant, ctx, false)
+}
+
+function validateAppAuxiliaryNavigators(app: AST.AppDeclaration, ctx: ValidationContext): void {
   const auxiliaryKeys = new Set<string>()
-  for (const auxiliary of statements.filter(AST.isAppAuxiliaryNavigator)) {
+  for (const auxiliary of AST.blockStatements(app).filter(AST.isAppAuxiliaryNavigator)) {
     const key = auxiliary.name.slice(1)
     if (!/^@[A-Za-z_][A-Za-z0-9_]*$/.test(auxiliary.name)) {
       ctx.error(appValidationMessages.auxiliaryKey(auxiliary.name), auxiliary)
@@ -229,60 +188,38 @@ function validateAppAuxiliaryNavigators(
   }
 }
 
-function validateAppDatasources(app: AST.AppDeclaration, statements: AppStatements, ctx: ValidationContext): void {
-  const datasources = statements.filter(AST.isAppDatasource)
-  if (datasources.length > 1) {
-    ctx.error(appValidationMessages.datasourceCount(app.name, datasources.length), datasources[1]!)
-  }
-  for (const datasource of datasources) {
-    if (datasource.name !== 'Datasource') {
-      ctx.error(appValidationMessages.propertyName('Datasource', datasource.name ?? ''), datasource)
-    }
-    const target = appPropertyTarget(datasource.value)
-    if (AST.isInferredAppPropertyValue(datasource.value) && !target) {
-      ctx.error(appValidationMessages.inferredProperty(app.name, 'Datasource', 'datasource'), datasource.value)
-      continue
-    }
-    const valid = AST.isDatasourceDeclaration(target)
-      || (AST.isAliasDeclaration(target) && configurationExpressionIsDatasource(target.value))
-    if (!valid) {
-      ctx.error(appValidationMessages.datasourceType(app.name), datasource)
-    }
-  }
-}
-
-function configuredAppPropertyType(value: AST.AppPropertyValue): ASTUtils.TaoType {
-  const target = appPropertyTarget(value)
-  if (AST.isNavDeclaration(target)) {
-    return { kind: 'primitive', primitive: 'nav' }
-  }
-  if (AST.isDatasourceDeclaration(target)) {
-    return { kind: 'item' }
-  }
-  return referencedConfigurationType(target)
-}
-
-function appPropertyTarget(value: AST.AppPropertyValue): AST.NamedDeclaration | undefined {
-  return AST.isConfiguredAppPropertyValue(value)
-    ? value.target.ref
-    : AST.inferredAppPropertyDeclaration(value)
-}
-
 function validateLegacyApp(app: AST.AppDeclaration, ctx: ValidationContext): void {
   for (const statement of AST.blockStatements(app)) {
-    if (AST.isAppView(statement)) {
-      continue
+    if (!AST.isAppView(statement)) {
+      ctx.error(appValidationMessages.appBlock(app.name), statement)
     }
-    ctx.error(appValidationMessages.appBlock(app.name), statement)
   }
-
   const roots = AST.blockStatements(app).filter(AST.isAppView)
   if (roots.length !== 1) {
     ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
   }
   for (const root of roots) {
-    if (AST.isAppView(root) && root.view.ref && AST.parametersOf(root.view.ref).length > 0) {
+    if (root.view.ref && AST.parametersOf(root.view.ref).length > 0) {
       ctx.error(appValidationMessages.rootViewParameters(app.name, root.view.ref.name), root)
+    }
+  }
+}
+
+function validateAppPlacement(app: AST.AppValueDeclaration, file: AST.TaoFile, ctx: ValidationContext): void {
+  const filePath = AST.getDocument(file).uri.path
+  if (isInsidePackage(filePath, ctx)) {
+    ctx.error(appValidationMessages.appPackage(app.name), app)
+    return
+  }
+  if (filePath !== ctx.entryFilePath && !isTestCompanionAppFile(filePath, ctx)) {
+    ctx.error(appValidationMessages.appEntryFile(app.name), app)
+  }
+}
+
+function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): void {
+  for (const statement of file.statements) {
+    if (!AST.isTopLevelStatement(statement)) {
+      ctx.error(appValidationMessages.topLevel, statement)
     }
   }
 }

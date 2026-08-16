@@ -1,4 +1,5 @@
-// Tao primitives are opaque, parsed declarations. Their slots are the validator's pinned contracts.
+// Core primitives are compiler-known opaque types. `is` declares a nominal refinement, and `with`
+// pins the supplied-slot contract that ordinary Tao declarations fill.
 primitive item
 
 primitive number
@@ -13,9 +14,23 @@ primitive time
 
 primitive action
 
-primitive ui
+primitive design
 
-primitive nav with {
+// Rendering and presentability are independent roles. Every presentable is visual, while an
+// embeddable view, layout, or frame is not thereby directly presentable by a navigator.
+primitive visual
+
+primitive presentable is visual
+
+primitive view is visual
+
+primitive layout is visual
+
+primitive frame is visual
+
+primitive ui is presentable
+
+primitive nav is presentable with {
    implement,
 }
 
@@ -27,4 +42,5 @@ primitive app with {
    Name text,
    Navigator nav,
    Datasource datasource is none,
+   Design design is none,
 }

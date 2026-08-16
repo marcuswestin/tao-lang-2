@@ -14,13 +14,14 @@ Describe('Expo runtime', () => {
 
         use Col, Text from @tao/ui
 
-        layout Screen {
+        layout Screen() {
             render Col(){
                 Text("Wrapped center")
+                @@content
             }
         }
 
-        view MainView {
+        view MainView() {
             render Screen()[content center]
         }
       `,
@@ -45,15 +46,16 @@ Describe('Expo runtime', () => {
 
         use Col, Row, Text from @tao/ui
 
-        layout Card {
+        layout Card() {
             render Col(){
                 render Row(){
                     Text("Nested render layout")
                 }
+                @@content
             }
         }
 
-        view MainView {
+        view MainView() {
             render Card()[gap 9]
         }
       `,
@@ -78,13 +80,14 @@ Describe('Expo runtime', () => {
 
         use Row, Text from @tao/ui
 
-        layout Screen {
+        layout Screen() {
             render Row()[gap 12, content spread center] {
                 Text("Wrapped gap")
+                @@content
             }
         }
 
-        view MainView {
+        view MainView() {
             render Screen()[gap 8]
         }
       `,
@@ -109,7 +112,7 @@ Describe('Expo runtime', () => {
 
         use Row, Text from @tao/ui
 
-        view MainView {
+        view MainView() {
             render Row()[content right, gap 4, claim 2] {
                 Text("Explicit row")
             }
@@ -142,13 +145,14 @@ Describe('Expo runtime', () => {
 
         use Box, Row, Text from @tao/ui
 
-        layout Screen {
+        layout Screen() {
             render Box()[fill] {
                 Text("Root fill")
+                @@content
             }
         }
 
-        view MainView {
+        view MainView() {
             render Row()[gap 3] {
                 Screen()
             }
@@ -170,29 +174,26 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('does not apply stdlib layout identity to local stdlib-named views', async () => {
+  Test('does not apply stdlib layout identity to local stdlib-named layouts', async () => {
     await testCompileApp(
       `
         app LocalRowIdentity {
             view MainView
         }
 
-        view Row {
-            render inject \`\`\`ts
-                const style = TR.Layout.resolve({
-                  entries: _ViewProps.__tao?.layout?.entries ?? [],
-                })
-                return <RN.View style={style}>{_ViewProps.children}</RN.View>
+        layout Row() {
+            render inject Content @@content, Layout @@layout \`\`\`ts
+                return TR.Views.View({ children: Content, layout: Layout })
             \`\`\`
         }
 
-        view Text Value is text {
+        view Text(Value is text) {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
         }
 
-        view MainView {
+        view MainView() {
             render Row()[gap 4] {
                 Text("Local row")
             }

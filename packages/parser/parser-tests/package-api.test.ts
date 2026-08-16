@@ -7,9 +7,9 @@ import { testParseCode } from './test-parse'
 
 Describe('parser package API', () => {
   Test('exports parser, AST, Langium, package, and workspace entrypoints', async () => {
-    Expect(Parser.lexCode('app MyApp { view MainView } view MainView { }').errors).toEqual([])
+    Expect(Parser.lexCode('app MyApp { view MainView } view MainView() { }').errors).toEqual([])
 
-    const parseResult = await testParseCode('app MyApp { view MainView } view MainView { }')
+    const parseResult = await testParseCode('app MyApp { view MainView } view MainView() { }')
 
     const app = parseResult.entry.ast.statements[0]
     const view = parseResult.entry.ast.statements[1]

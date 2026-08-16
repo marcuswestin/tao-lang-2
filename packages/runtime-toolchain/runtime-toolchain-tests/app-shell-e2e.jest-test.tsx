@@ -1,7 +1,7 @@
 import TR from '@runtime/TR'
 import { Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { render } from '@testing-library/react-native'
+import { fireEvent, render } from '@testing-library/react-native'
 import { createElement } from 'react'
 import * as RN from 'react-native'
 import {
@@ -26,12 +26,30 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Safe default app frame')
     ExpectScreen(screen).toHaveText('Primary action')
     ExpectScreen(screen).toHaveText('Deterministic')
+    ExpectScreen(screen).toHaveText('Adaptive primary pane')
+    ExpectScreen(screen).toHaveText('Adaptive secondary pane')
     Expect(viewStyles.some(style => style.gap === 12 && style.padding === 16 && style.flexGrow === 1)).toBe(true)
     Expect(viewStyles.some(style => style.gap === 8 && style.padding === 12 && style.alignSelf === 'stretch')).toBe(
       true,
     )
     Expect(viewStyles.some(style => style.flexShrink === 1)).toBe(true)
     Expect(viewStyles.some(style => String(style.backgroundColor).startsWith('hsl('))).toBe(false)
+
+    const panes = screen.getByTestId('layoutPanes')
+    Expect(RN.StyleSheet.flatten(panes.props.style)).toMatchObject({ flexDirection: 'column', gap: 16 })
+    fireEvent(panes, 'layout', { nativeEvent: { layout: { width: 656 } } })
+    Expect(RN.StyleSheet.flatten(panes.props.style)).toMatchObject({ flexDirection: 'row', gap: 16 })
+
+    const scrollView = screen.getByTestId('layoutScroll')
+    Expect(RN.StyleSheet.flatten(scrollView.props.style)).toMatchObject({ flexGrow: 2 })
+    Expect(RN.StyleSheet.flatten(scrollView.props.contentContainerStyle)).toMatchObject({
+      flexDirection: 'column',
+      flexGrow: 1,
+      gap: 6,
+      padding: 8,
+    })
+    Expect(RN.StyleSheet.flatten(screen.getByTestId('layoutReadable').props.style)).toMatchObject({ maxWidth: 720 })
+    Expect(RN.StyleSheet.flatten(screen.getByTestId('layoutSecondary').props.style)).toMatchObject({ flexGrow: 1 })
   })
 
   Test('renders the app shell with safe-area padding and keyboard scroll defaults', () => {
@@ -71,7 +89,7 @@ Describe('Expo runtime', () => {
 
         use Text from @tao/ui
 
-        view MainView {
+        view MainView() {
             render Text("Root width fill") [width fill]
         }
       `,
@@ -91,23 +109,22 @@ Describe('Expo runtime', () => {
             view MainView
         }
 
-        layout Screen {
-            render inject \`\`\`ts
-                const style = TR.Layout.resolve({
-                  parentDirection: _ViewProps.__tao?.parentDirection,
-                  entries: _ViewProps.__tao?.layout?.entries ?? [],
-                })
-                return <RN.View testID="root-screen" style={style}>{_ViewProps.children}</RN.View>
+        layout Screen() {
+            render inject Content @@content, Layout @@layout \`\`\`ts
+                return TR.Views.View(
+                  { children: Content, layout: Layout },
+                  { nativeProps: { testID: 'root-screen' } },
+                )
             \`\`\`
         }
 
-        view Text Value is text {
+        view Text(Value is text) {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
         }
 
-        view MainView {
+        view MainView() {
             render Screen()[width fill] {
                 Text("Root injected fill")
             }

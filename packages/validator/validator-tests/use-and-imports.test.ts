@@ -97,7 +97,7 @@ Describe('validator: use and imports', () => {
             app MyApp { view MainView }
             let Primary = Person { Name Person }
 
-            view MainView {
+            view MainView() {
               render Text(Primary.Name)
             }
 
@@ -190,7 +190,7 @@ Describe('validator: use and imports', () => {
       importedTextFiles(
         'use Text from ./',
         `
-          workspace view Text Value is text {
+          workspace view Text(Value is text) {
             render inject Value, Value ${tsFence}
               return null
             ${fence}
@@ -209,7 +209,7 @@ Describe('validator: use and imports', () => {
 
   Test(
     'reports parser errors inside imported Tao files',
-    checksFiles(importedTextFiles('use Text from ./', 'view Text Value is text {'), result => {
+    checksFiles(importedTextFiles('use Text from ./', 'view Text(Value is text) {'), result => {
       Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
     }),
   )
@@ -223,8 +223,8 @@ Describe('validator: use and imports', () => {
            use BrokenTwo from ./two`,
           '',
         ),
-        'one/BrokenOne.tao': 'view BrokenOne {',
-        'two/BrokenTwo.tao': 'view BrokenTwo {',
+        'one/BrokenOne.tao': 'view BrokenOne() {',
+        'two/BrokenTwo.tao': 'view BrokenTwo() {',
       },
       result => {
         const parserDiagnostics = Diagnostics.errors(result.diagnostics, 'parser')
@@ -241,7 +241,7 @@ Describe('validator: use and imports', () => {
       importedTextFiles(
         'use Text from ./',
         `
-          workspace view Text Value is text {
+          workspace view Text(Value is text) {
             render MissingView()
           }
         `,
@@ -279,16 +279,29 @@ Describe('validator: use and imports', () => {
   )
 
   Test(
-    'rejects app imports',
-    rejectsFiles(
+    'allows a same-directory supporting file to import the entry app identity for a strict target',
+    checksFiles(
       {
-        'Main.tao': importingApp('use OtherApp from ./Other.tao', ''),
-        'Other.tao': `
-          app OtherApp { view OtherView }
-          ${stubView('OtherView')}
+        'Main.tao': `
+          use Helper, ResetNav from ./Support.tao
+          app MyApp { Name "My app" Navigator ResetNav }
+          workspace let AppLet = MyApp with { Name "Inferred app" }
+        `,
+        'Support.tao': `
+          use StackNav from @tao/nav
+          use Col from @tao/ui
+          use AppLet, MyApp from ./
+          workspace nav ResetNav = StackNav { Initial Helper }
+          workspace ui Helper() {
+            action Reset() { replace ResetNav in MyApp }
+            render Col() { }
+          }
+          test "support app imports" {
+            check "runs the inferred app value" { run AppLet }
+          }
         `,
       },
-      useValidationMessages.appImport('OtherApp'),
+      result => Expect(validationErrorMessages(result)).toEqual([]),
     ),
   )
 
@@ -371,6 +384,27 @@ Describe('validator: use organization', () => {
         Expect(validationErrorMessages(result)).toEqual([])
         Expect(
           result.diagnostics.some(diagnostic => diagnostic.message === useValidationMessages.unusedImport('Name')),
+        ).toBe(false)
+      },
+    ),
+  )
+
+  Test(
+    'treats plural data imports referenced through their singular entity type as used',
+    checksFiles(
+      {
+        'Main.tao': `
+          use Documents from ./Schema.tao
+          app Main { view Empty }
+          view Editor(Document) { render Empty() }
+          ${stubView('Empty')}
+        `,
+        'Schema.tao': 'workspace data Documents / Document { Title text }',
+      },
+      result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+        Expect(
+          result.diagnostics.some(diagnostic => diagnostic.message === useValidationMessages.unusedImport('Documents')),
         ).toBe(false)
       },
     ),

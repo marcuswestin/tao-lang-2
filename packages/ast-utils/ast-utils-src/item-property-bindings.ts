@@ -180,7 +180,7 @@ function reportMissingItemProperties(
       ambiguities.unresolvedProperties -= 1
       continue
     }
-    if (Type.propertyHasDefault(expected)) {
+    if (!Type.propertyRequiresValue(expected)) {
       continue
     }
     state.diagnostics.push({

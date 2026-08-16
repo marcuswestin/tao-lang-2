@@ -1,5 +1,5 @@
 use StackNav from @tao/nav
-use Col, FormButton, Text, TextInput from @tao/ui
+use Checkbox, Col, FormButton, Text, TextInput from @tao/ui
 
 app FormsInteractionMVP {
    Name "Forms and Interaction MVP"
@@ -7,19 +7,25 @@ app FormsInteractionMVP {
       Initial MainView
 }  }
 
-function SubmittedLabel Title is text returns text = "Submitted: { Title }"
+function SubmittedLabel(Title is text) returns text {
+   return "Submitted: { Title }"
+}
 
-ui MainView {
+ui MainView() {
    state Draft = ""
    state Submitted = ""
    state NamedChange = ""
    state InlineChange = ""
+   state Completed = false
    state Submitting = false
    state SubmissionCount = 0
-   action RecordNamedChange Value is text {
+   action RecordNamedChange(Value is text) {
       set NamedChange = "Named: { Value }"
    }
-   action Submit {
+   action SetCompleted(Value is boolean) {
+      set Completed = Value
+   }
+   action Submit() {
       guard Draft empty
       set Submitted = Draft
       set SubmissionCount += 1
@@ -46,6 +52,17 @@ ui MainView {
       }
       Text("Named value: { NamedChange }")
       Text("Inline value: { InlineChange }")
+      #completed
+      Checkbox(Value: Completed, Label: "Complete") {
+         on change SetCompleted
+      }
+      when Completed {
+         true -> {
+            Text("Checkbox: checked")
+         }
+         otherwise -> {
+            Text("Checkbox: unchecked")
+      }  }
       when Draft {
          empty -> {
             Text("Title is required")
@@ -59,7 +76,7 @@ ui MainView {
             set Draft = ""
       }  }
       #save
-      FormButton(Title: "Save", Disabled: Draft is empty, Submitting: Submitting) {
+      FormButton(Title: "Save", Icon: "check", Disabled: Draft is empty, Submitting: Submitting) {
          on press Submit
       }
       Text("Submissions: { SubmissionCount }")

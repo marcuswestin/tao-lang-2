@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { appDefinitionReference } from './app-compiler'
 
 /** NavigationCompiler lowers configured navigation actions to TR.Navigation. */
 export const NavigationCompiler = {
@@ -74,11 +75,4 @@ function compileNavigationTarget(target: AST.NavigationTarget): Compiled {
     ${appDefinitionReference(app)},
     ${gen.jsLiteral(target.key.slice(1))},
   )`
-}
-
-/** appDefinitionReference preserves the selected declaration's generated module identity. */
-function appDefinitionReference(app: AST.AppValueDeclaration): Compiled {
-  return AST.isAliasDeclaration(app)
-    ? gen.scopeName(app)
-    : gen.Name({ name: `_TaoAppDefinition_${app.name}` })
 }

@@ -6,6 +6,7 @@ test "Runtime Stdlib Tests" {
 
       expect text "Runtime stdlib smoke"
       expect text "3"
+      expect text "Media and status primitives"
       expect text "Tap me"
       press text "Tap me"
       expect text "Label"

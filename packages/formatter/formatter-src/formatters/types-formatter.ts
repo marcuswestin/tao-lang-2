@@ -1,11 +1,12 @@
+import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
 
 export default {
   /** PrimitiveDeclaration formats the pinned intrinsic shape declaration. */
   PrimitiveDeclaration(f) {
     f.oneSpaceAfter('primitive')
+    f.oneSpaceAround('is')
     f.oneSpaceAround('with')
-    f.oneSpaceBeforeProperty('slots')
   },
 
   /** TypeDeclaration formats `type Name is ...` declarations. */
@@ -31,9 +32,14 @@ export default {
 
   /** ItemTypeExpression formats item type property blocks. */
   ItemTypeExpression(f) {
-    f.indentedBraceBlock(f.node.properties)
+    const entries = [...f.node.properties, ...f.node.keys, ...f.node.implementations]
+      .toSorted((left, right) => (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0))
+    f.indentedBraceBlock(entries)
     f.commaLineList()
-    f.lineSeparatedList(f.node.properties)
+    f.separateIndentedLines(
+      entries,
+      (_previous, next) => AST.isConfigurationImplementation(next) ? 2 : 1,
+    )
   },
 
   /** UnionTypeExpression keeps closed-union members readable. */
@@ -44,11 +50,11 @@ export default {
   /** DerivedTypeExpression spaces immutable slot derivation around `with`. */
   DerivedTypeExpression(f) {
     f.oneSpaceAround('with')
-    f.oneSpaceBeforeProperty('slots')
   },
 
   /** TypeProperty formats `Name Type`, shorthand `Type`, and optional `is value` fills. */
   TypeProperty(f) {
+    f.oneSpaceAfter('optional')
     f.oneSpaceBetweenProperties('name', 'type')
     f.oneSpaceAround('is')
   },
@@ -60,6 +66,11 @@ export default {
 
   /** Type references have no interior spacing. */
   PrimitiveTypeReference() {},
+
+  /** ListTypeReference preserves the required `list of T` spacing. */
+  ListTypeReference(f) {
+    f.oneSpaceAround('of')
+  },
 
   /** Action callback type references keep their positional signature compact. */
   ActionTypeReference(f) {

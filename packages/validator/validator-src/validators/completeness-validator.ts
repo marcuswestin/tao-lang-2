@@ -17,7 +17,8 @@ export const completenessValidationChecks = {
   },
   [AST.ValueReference.$type]: (reference, ctx) => {
     if (!AST.isPatchedValueReference(reference)) {
-      reportIncomplete(reference.target.ref, reference, ctx)
+      const target = reference.target.ref
+      reportIncomplete(AST.isNamedDeclaration(target) ? target : undefined, reference, ctx)
     }
   },
 } satisfies NodeValidationChecks
@@ -39,7 +40,7 @@ function incompleteSuppliedSlots(declaration: AST.NamedDeclaration | undefined):
       .filter(parameter => parameter.defaultValue === undefined)
       .map(Type.parameterName)
   }
-  if (AST.isConfigurableDeclaration(declaration)) {
+  if (declaration && AST.isConfigurableDeclaration(declaration)) {
     return AST.configurationPropertiesOf(declaration).map(property => property.name)
   }
   if (AST.isTypeDeclaration(declaration)) {

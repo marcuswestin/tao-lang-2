@@ -6,7 +6,7 @@ Describe('parser: types', () => {
   Test('parses type declarations, constructors, lists, and member access', async () => {
     const parseResult = await testParseCode(`
       type Name is text
-      type Tags is list
+      type Tags is list of text
       type Job is {
         Title text,
       }
@@ -21,10 +21,10 @@ Describe('parser: types', () => {
       let DemoJob = Job { Title: "Compiler engineer" }
       let DemoPerson = Person { Name: DisplayName, Tags: DemoTags, Job: DemoJob }
 
-      view Profile Person {
+      view Profile(Person) {
         render Text(Person.Job.Title)
       }
-      view Text Value is text { }
+      view Text(Value is text) { }
     `)
 
     Expect(parseResult.diagnostics).toEqual([])
@@ -76,7 +76,7 @@ Describe('parser: types', () => {
         Role Job,
       }
       let DemoProfile = Profile { Role { Title "Compiler engineer" } }
-      view MainView { }
+      view MainView() { }
     `)
 
     Expect(parseResult.diagnostics).toEqual([])
@@ -112,7 +112,7 @@ Describe('parser: types', () => {
         Header ui is none,
         implement is "./Profile.ts",
       }
-      view MainView { }
+      view MainView() { }
     `)
 
     Expect(parseResult.diagnostics).toEqual([])
@@ -138,7 +138,7 @@ Describe('parser: types', () => {
       type Admin is Person with { Role is "admin", Access number }
       let Admin = { Name "Ro", Access 3 }
       let Renamed = Admin with { Name "Grace" }
-      view MainView { }
+      view MainView() { }
     `)
 
     Expect(parseResult.diagnostics).toEqual([])
@@ -152,7 +152,11 @@ Describe('parser: types', () => {
     Expect(adminType.type.base.root).toBe('Person')
     Expect(adminType.type.slots.properties.map(property => property.name)).toEqual(['Role', 'Access'])
     Expect.Is(aliases[0]?.value, AST.isInferredConfigurationConstructor)
-    Expect.Is(aliases[1]?.value, AST.isValueReference)
-    Expect(AST.isPatchedValueReference(aliases[1].value)).toBe(true)
+    const renamedValue = aliases[1]?.value
+    Expect(renamedValue !== undefined && AST.isPatchedValueReference(renamedValue)).toBe(true)
+    if (!renamedValue || !AST.isPatchedValueReference(renamedValue)) {
+      throw new Error('Expected Renamed to refine the Admin value')
+    }
+    Expect(renamedValue.target.ref).toBe(aliases[0])
   })
 })

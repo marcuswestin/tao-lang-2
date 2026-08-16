@@ -67,13 +67,13 @@ Describe('validator: types and expressions', () => {
         app MyApp { view MainView }
         type Person is text
         let LocalPerson = Person "Ada"
-        view MainView { render Text(LocalPerson) }
+        view MainView() { render Text(LocalPerson) }
         ${stubView('Text', 'Value is text')}
       `,
       'Other.tao': `
         type Person is text
         workspace let OtherPerson = Person "Grace"
-        view OtherView { }
+        view OtherView() { }
       `,
     }, async paths => {
       const workspace = await Workspace.open(FS.dirname(paths['Entry.tao']))
@@ -439,7 +439,7 @@ Describe('validator: types and expressions', () => {
       app MyApp { view Target }
       ${stubView('Text', 'Value is text')}
       ${stubView('Source', 'Secret is text')}
-      view Target { render Text(Secret) }
+      view Target() { render Text(Secret) }
     `)
 
     const diagnostic = result.diagnostics.find(candidate => candidate.message === message)
@@ -453,8 +453,8 @@ Describe('validator: types and expressions', () => {
     rejects(
       `
       app MyApp { view Target }
-      view Source { state Ready = false render Empty() }
-      view Target { action Flip { toggle Ready } render Empty() }
+      view Source() { state Ready = false render Empty() }
+      view Target() { action Flip() { toggle Ready } render Empty() }
       ${stubView('Empty')}
     `,
       "Could not resolve reference to StateDeclaration named 'Ready'.",
@@ -536,7 +536,7 @@ function caseScopeApp(body: string, declarations = ''): string {
   return `
     data Workspaces / Workspace { Name text }
     app ScopeApp { view Main }
-    view Main {
+    view Main() {
       ${declarations}
       query Workspaces { }
       render Col() { ${body} }

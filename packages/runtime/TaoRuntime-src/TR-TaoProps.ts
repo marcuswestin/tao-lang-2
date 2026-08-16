@@ -1,5 +1,12 @@
 import type React from 'react'
-import { LayoutRuntime, type TaoLayoutDirection, type TaoLayoutProps, type TaoResolvedLayoutProps } from './TR-layout'
+import { DesignControls, type TaoDesign, type TaoDesignSpec } from './TR-design'
+import {
+  LayoutControls,
+  LayoutRuntime,
+  type TaoLayoutDirection,
+  type TaoLayoutProps,
+  type TaoResolvedLayoutProps,
+} from './TR-layout'
 import type { TaoNavigationValue } from './TR-navigation'
 import type { TaoRuntimeApp } from './TR-navigation'
 import { ParentDirectionContext } from './TR-parent-direction'
@@ -14,6 +21,8 @@ export type TaoProps = TaoLayoutProps & {
   navigation?: TaoNavigationValue
   /** dialogue is private occurrence-owned response metadata inherited by nested generated views. */
   dialogue?: TaoDialogueOccurrence
+  /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
+  designSpec?: TaoDesignSpec
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
   testTag?: string
 }
@@ -26,10 +35,16 @@ export type TaoDialogueOccurrence = {
   respond(value?: { evaluate(): { jsValue: unknown } }): void
 }
 
-/** TaoViewProps declares React props generated Tao views receive. */
+/** TaoVisualLayout is the public layout-only snapshot exposed to an injected visual implementation. */
+export type TaoVisualLayout = TaoResolvedLayoutProps
+
+/** TaoViewProps declares the explicit public props accepted by runtime-backed visual primitives. */
 export type TaoViewProps = {
+  /** __tao remains private compatibility plumbing for generated components; inject fences never receive it. */
   __tao?: TaoProps
   children?: React.ReactNode
+  layout?: TaoVisualLayout
+  tag?: string
 }
 
 /** TaoViewRuntimeProps declares runtime props passed alongside generated Tao view props. */
@@ -54,6 +69,8 @@ export const TaoPropsControls = {
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
+  visualLayout,
+  visualTag,
 } as const
 
 /** Copies only ambient presentation context from a generated caller-props chain. */
@@ -104,18 +121,68 @@ function mergeViewProps(
   parentDirection?: TaoLayoutDirection,
 ): MergedTaoViewProps {
   const { direction, nativeProps = {}, testTag, ...taoRuntimeProps } = runtimeProps
+  const explicitLayoutProps = props.layout
+    ? { ...props.layout, callerProps: props.__tao }
+    : props.__tao
+  const mountedApp = appInChain(taoRuntimeProps) ?? appInChain(explicitLayoutProps)
+  const design = mountedApp?.design
   return {
     children: props.children,
     direction,
     nativeProps,
     props: LayoutRuntime.resolveProps(
       direction,
-      taoRuntimeProps,
-      props.__tao,
+      resolveDesignProps(taoRuntimeProps, design),
+      resolveDesignProps(explicitLayoutProps, design),
       ParentDirectionContext.propsForDirection(parentDirection),
     ),
-    testTag: testTag ?? testTagInChain(taoRuntimeProps) ?? testTagInChain(props.__tao),
+    testTag: props.tag ?? testTag ?? testTagInChain(taoRuntimeProps) ?? testTagInChain(props.__tao),
   }
+}
+
+function resolveDesignProps(props: TaoProps | undefined, design: TaoDesign | undefined): TaoProps | undefined {
+  if (!props) {
+    return undefined
+  }
+  const resolved = DesignControls.resolve(design, props.designSpec)
+  const callerProps = resolveDesignProps(props.callerProps, design)
+  const style = mergeResolvedStyles(props.style, resolved.style)
+  return {
+    ...props,
+    callerProps,
+    designSpec: undefined,
+    layout: LayoutControls.merge(props.layout, resolved.layout),
+    style,
+  }
+}
+
+function mergeResolvedStyles(
+  base: TaoResolvedLayoutProps['style'],
+  overlay: TaoResolvedLayoutProps['style'],
+): TaoResolvedLayoutProps['style'] {
+  if (!base) {
+    return overlay
+  }
+  if (!overlay) {
+    return base
+  }
+  return { ...base, ...overlay }
+}
+
+/** Returns only the occurrence layout and immediate parent direction for an injected visual root. */
+function visualLayout(props: TaoProps | undefined): TaoVisualLayout | undefined {
+  const mountedDesign = appInChain(props)?.design
+  return LayoutRuntime.resolveProps(
+    undefined,
+    undefined,
+    resolveDesignProps(props, mountedDesign),
+    ParentDirectionContext.propsForDirection(ParentDirectionContext.use()),
+  )
+}
+
+/** Returns the nearest concrete occurrence tag without exposing any other Tao-owned metadata. */
+function visualTag(props: TaoProps | undefined): string | undefined {
+  return testTagInChain(props)
 }
 
 function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknown> {

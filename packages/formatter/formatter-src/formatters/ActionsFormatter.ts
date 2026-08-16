@@ -18,11 +18,14 @@ export const ActionsFormatter = {
   /** ActionDeclaration formats a named action header and body. */
   ActionDeclaration(f) {
     f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'action')
-    f.oneSpaceBeforeProperty('parameterList')
+    f.noSpaceBefore('(')
   },
 
   /** ActionExpression formats inline action bodies. */
   ActionExpression() {},
+
+  /** AsyncActionStatement delegates keyword-to-block spacing to ActionBlock. */
+  AsyncActionStatement() {},
 
   /** ToggleStatement formats boolean state inversion. */
   ToggleStatement(f) {

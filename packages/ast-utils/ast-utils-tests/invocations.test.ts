@@ -6,10 +6,10 @@ Describe('Tao AST invocation resolution', () => {
   Test('resolves render argument pairs by type', async () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Tile("Open", 1)
       }
-      view Tile Title is text, Count is number { }
+      view Tile(Title is text, Count is number) { }
     `)
     const mainView = findMainView(parseResult)
     const render = AST.blockStatementOf(mainView, 0)
@@ -24,10 +24,10 @@ Describe('Tao AST invocation resolution', () => {
   Test('resolves out-of-order render arguments by type', async () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Tile(1, "Open")
       }
-      view Tile Title is text, Count is number { }
+      view Tile(Title is text, Count is number) { }
     `)
     const mainView = findMainView(parseResult)
     const render = AST.blockStatementOf(mainView, 0)
@@ -42,14 +42,14 @@ Describe('Tao AST invocation resolution', () => {
   Test('resolves out-of-order action arguments by type', async () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
-      view MainView {
-        action Save Count is number, Label is text { }
-        action CallSave {
+      view MainView() {
+        action Save(Count is number, Label is text) { }
+        action CallSave() {
           do Save("Open", 1)
         }
         render Text("Done")
       }
-      view Text Value is text { }
+      view Text(Value is text) { }
     `)
     const mainView = findMainView(parseResult)
     const callSave = AST.blockStatementOf(mainView, {
@@ -69,14 +69,14 @@ Describe('Tao AST invocation resolution', () => {
   Test('reports action binding diagnostics by type', async () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
-      view MainView {
-        action AddStep Step is number { }
-        action CallAddStep {
+      view MainView() {
+        action AddStep(Step is number) { }
+        action CallAddStep() {
           do AddStep("wrong")
         }
         render Text("Done")
       }
-      view Text Value is text { }
+      view Text(Value is text) { }
     `)
     const mainView = findMainView(parseResult)
     const callAddStep = AST.blockStatementOf(mainView, {
@@ -98,15 +98,15 @@ Describe('Tao AST invocation resolution', () => {
   Test('resolves action invocations through aliases', async () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
-      action Save { }
+      action Save() { }
       let SaveAlias = Save
-      view MainView {
-        action CallSave {
+      view MainView() {
+        action CallSave() {
           do SaveAlias()
         }
         render Text("Done")
       }
-      view Text Value is text { }
+      view Text(Value is text) { }
     `)
     const mainView = findMainView(parseResult)
     const callSave = AST.blockStatementOf(mainView, {
@@ -127,10 +127,10 @@ Describe('Tao AST invocation resolution', () => {
   Test('resolves only type-matched pairs and reports remaining arguments or parameters', async () => {
     const missingParseResult = await parseClean(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Tile("Open")
       }
-      view Tile Title is text, Count is number { }
+      view Tile(Title is text, Count is number) { }
     `)
     const missingRender = AST.blockStatementOf(findMainView(missingParseResult), 0)
     Expect.Is(missingRender, AST.isRenderStatement)
@@ -138,10 +138,10 @@ Describe('Tao AST invocation resolution', () => {
 
     const extraParseResult = await parseClean(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Tile("Open", 1, "extra")
       }
-      view Tile Title is text, Count is number { }
+      view Tile(Title is text, Count is number) { }
     `)
     const extraRender = AST.blockStatementOf(findMainView(extraParseResult), 0)
     Expect.Is(extraRender, AST.isRenderStatement)
@@ -162,10 +162,10 @@ Describe('Tao AST invocation resolution', () => {
       type Base is text
       type Middle is Base
       type Leaf is Middle
-      view MainView {
+      view MainView() {
         render Pair(Leaf "Ada", Leaf "Grace")
       }
-      view Pair Base, Middle { }
+      view Pair(Base, Middle) { }
     `)
     const render = AST.blockStatementOf(findMainView(parseResult), 0)
     Expect.Is(render, AST.isRenderStatement)
@@ -186,10 +186,10 @@ Describe('Tao AST invocation resolution', () => {
       type Base is text
       type Name is Base
       type Title is Base
-      view MainView {
+      view MainView() {
         render Pair(Name "Ada", Title "Grace")
       }
-      view Pair Base { }
+      view Pair(Base) { }
     `)
     const render = AST.blockStatementOf(findMainView(parseResult), 0)
     Expect.Is(render, AST.isRenderStatement)
@@ -203,17 +203,17 @@ Describe('Tao AST invocation resolution', () => {
   Test('resolves child view invocation argument pairs by type', async () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Stack(){
           Tile("Open", 1)
         }
       }
-      layout Stack {
-        render inject \`\`\`ts
-          return <>{_ViewProps.children}</>
+      layout Stack() {
+        render inject Content @@content \`\`\`ts
+          return <>{Content}</>
         \`\`\`
       }
-      view Tile Title is text, Count is number {
+      view Tile(Title is text, Count is number) {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -239,7 +239,7 @@ Describe('Tao AST invocation resolution', () => {
         Age,
       }
       let DemoPerson = item { Age: 40, Name: "Ada" }
-      view MainView { }
+      view MainView() { }
     `)
     const person = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Person',
@@ -268,7 +268,7 @@ Describe('Tao AST invocation resolution', () => {
         Base,
       }
       let BadPair = item { Name "Ada", Title "Grace" }
-      view MainView { }
+      view MainView() { }
     `)
     const pair = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Pair',

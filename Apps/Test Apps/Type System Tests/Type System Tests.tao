@@ -12,7 +12,7 @@ type Age is number
 
 type Count is number
 
-type Tags is list
+type Tags is list of text
 
 type Job is {
    Title text,
@@ -56,7 +56,7 @@ let Team = [
 }  }
 ]
 
-ui Demo {
+ui Demo() {
    let OuterScopeLabel = ScopeLabel
    render Stack() {
       let ScopeLabel = "Nested scope label"
@@ -81,19 +81,19 @@ ui Demo {
       TextValue(ScopeLabel)
 }  }
 
-layout Stack {
-   render inject ```ts
-      return <>{_ViewProps.children}</>
+layout Stack() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
    ```
 }
 
-view Tile Title is text, Count is number {
-   render inject Title, Count ```ts
-      return <RN.Text>{Title}: {Count}</RN.Text>
+view Tile(Title is text, Count is number) {
+   render inject Title, Count, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [`${Title}: ${Count}`], layout: Layout, tag: Tag })
    ```
 }
 
-view ProfileCard Person {
+view ProfileCard(Person) {
    render Stack() {
       TextValue(Person.Name)
       NumberValue(Person.Age)
@@ -101,38 +101,38 @@ view ProfileCard Person {
       TagList(Person.Tags)
 }  }
 
-view MemberLine RoleTitle is Job.Title, Name {
+view MemberLine(RoleTitle is Job.Title, Name) {
    render Stack() {
       TextValue(Name)
       TextValue(RoleTitle)
 }  }
 
-view SummaryLine Label is text, Count {
-   render inject Label, Count ```ts
-      return <RN.Text>{Label}: {Count}</RN.Text>
+view SummaryLine(Label is text, Count) {
+   render inject Label, Count, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [`${Label}: ${Count}`], layout: Layout, tag: Tag })
    ```
 }
 
-view TextValue Value is text {
-   render inject Value ```ts
-      return <RN.Text>{Value}</RN.Text>
+view TextValue(Value is text) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [Value], layout: Layout, tag: Tag })
    ```
 }
 
-view NumberValue Value is number {
-   render inject Value ```ts
-      return <RN.Text>{Value}</RN.Text>
+view NumberValue(Value is number) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [String(Value)], layout: Layout, tag: Tag })
    ```
 }
 
-view TagList Values is list {
-   render inject Values ```ts
-      return <RN.Text>{Values.join(', ')}</RN.Text>
+view TagList(Values is list of text) {
+   render inject Values, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [Values.join(', ')], layout: Layout, tag: Tag })
    ```
 }
 
-view TeamList People is list {
-   render inject People ```ts
-      return <RN.Text>{People.length} team member(s)</RN.Text>
+view TeamList(People is list of Person) {
+   render inject People, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [`${People.length} team member(s)`], layout: Layout, tag: Tag })
    ```
 }

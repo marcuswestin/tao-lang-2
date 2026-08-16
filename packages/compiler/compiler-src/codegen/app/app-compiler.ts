@@ -1,100 +1,44 @@
+import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 
+type AppPropertySource = AST.Expression | AST.ConfigurationValue
+
+type EffectiveAppProperty = {
+  patches: AST.ConfigurationBlock[]
+  value: AppPropertySource
+}
+
+type EffectiveAppConfiguration = Map<string, EffectiveAppProperty>
+
 export default {
-  /** App compiles a Tao app declaration into the generated default app component. */
+  /** App compiles legacy root-view apps and complete primitive-headed app values. */
   App(app: AST.AppDeclaration): Compiled {
-    const statements = AST.blockStatements(app)
-    const datasources = statements.filter(AST.isAppDatasource)
-    const navigator = statements.find(AST.isAppNavigator)
-    if (navigator) {
-      const appName = statements.find(AST.isAppName)?.value.value ?? app.name
-      const auxiliaries = statements.filter(AST.isAppAuxiliaryNavigator)
-      const definition = { name: `_TaoAppDefinition_${app.name}` }
-      return gen`
-        const ${gen.Name(definition)} = TR.Navigation.App({
-          declaration: TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}),
-          name: ${gen.jsLiteral(appName)},
-          navigator: () => ${compileAppValue(navigator.value)},
-          auxiliaries: () => ({
-            ${
-        gen.list(auxiliaries, auxiliary =>
-          gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${compileAppValue(auxiliary.value)},`)
-      }
-          }),
-        })
-        function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
-          ${gen.list(datasources, Compile.AppDatasource)}
-          return <TR.AppShell>
-            <TR.Navigation.AppHost app={${gen.Name(definition)}} />
-          </TR.AppShell>
-        }
-      `
-    }
-    const roots = statements.filter(AST.isAppView)
-    return gen`
-      function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
-        ${gen.list(datasources, Compile.AppDatasource)}
-        ${gen.list(roots, Compile.AppView)}
-      }
-    `
+    return isLegacyViewApp(app) ? compileLegacyViewApp(app) : compileAppValue(app)
   },
 
-  /** AppVariant emits an independently mounted app descriptor derived from declaration-linked config. */
-  AppVariant(variant: AST.AliasDeclaration): Compiled {
-    const definition = { name: `_TaoAppDefinition_${variant.name}` }
-    const navigator = compileEffectiveNavigator(variant)
-    const datasource = compileEffectiveDatasource(variant)
-    const auxiliaries = AST.blockStatements(rootApp(variant)).filter(AST.isAppAuxiliaryNavigator)
-    // Cross-module apps require lazy derivation from the immediate base variant's runtime value.
-    return gen`
-      const ${gen.Name(definition)} = TR.Navigation.App({
-        declaration: ${gen.Name({ name: `_TaoAppDefinition_${rootApp(variant).name}` })}.declaration,
-        name: ${compileEffectiveAppName(variant)},
-        navigator: () => ${navigator},
-        auxiliaries: () => ({
-          ${
-      gen.list(auxiliaries, auxiliary =>
-        gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${compileAppValue(auxiliary.value)},`)
-    }
-        }),
-      })
-      function ${gen.Name({ name: `TaoApp_${variant.name}` })}() {
-        ${
-      datasource
-        ? gen`TR.Data.UseConfigured(${gen.scopeName({ name: '_TaoDataCatalog' })}, ${datasource})`
-        : gen.noop()
-    }
-        return <TR.AppShell>
-          <TR.Navigation.AppHost app={${gen.Name(definition)}} />
-        </TR.AppShell>
-      }
-      ${gen.scopeName(variant)} = ${gen.Name(definition)}
-    `
+  /** AppValue compiles an inferred `let` whose value family is app. */
+  AppValue(app: AST.AppValueDeclaration): Compiled {
+    return compileAppValue(app)
   },
 
-  /** AppDatasource uses lifecycle-safe provider binding for one stable schema at the app root. */
-  AppDatasource(datasource: AST.AppDatasource): Compiled {
-    return gen`TR.Data.UseConfigured(
-      ${gen.scopeName({ name: '_TaoDataCatalog' })},
-      ${compileDatasourceValue(datasource.value)},
-    )`
+  /** PrimitiveValueDeclaration binds one complete nav or datasource descriptor as an immutable Tao value. */
+  PrimitiveValueDeclaration(declaration: AST.NavDeclaration | AST.DatasourceDeclaration): Compiled {
+    const value = declaration.value
+      ? Compile.Expression(declaration.value)
+      : compilePrimitiveBlock(declaration)
+    return gen`${gen.scopeName(declaration)} = TR.Alias(${value})`
   },
 
-  /** AppName is compiled as part of its owning app definition. */
-  AppName(): Compiled {
-    return gen.noop()
-  },
-
-  /** AppNavigator is compiled as part of its owning app definition. */
-  AppNavigator(): Compiled {
-    return gen.noop()
-  },
-
-  /** AppAuxiliaryNavigator is compiled as part of its owning app definition. */
+  /** AppAuxiliaryNavigator is compiled as part of its root app definition. */
   AppAuxiliaryNavigator(): Compiled {
+    return gen.noop()
+  },
+
+  /** AppProperty is compiled as part of its owning app definition. */
+  AppProperty(): Compiled {
     return gen.noop()
   },
 
@@ -109,116 +53,238 @@ export default {
   },
 } as const
 
-function compileAppValue(value: AST.AppPropertyValue | AST.ConfigurationConstructor): Compiled {
-  if (AST.isConfigurationConstructor(value)) {
-    return Compile.ConfiguredValue(value)
+function compileAppValue(app: AST.AppValueDeclaration): Compiled {
+  const configuration = effectiveAppConfiguration(app)
+  const navigator = configuration.get('Navigator')
+  Assert.defined(navigator, 'validated app value has a Navigator')
+  const name = configuration.get('Name')
+  const datasource = configuration.get('Datasource')
+  const design = configuration.get('Design')
+  const root = rootAppValue(app)
+  const definition = { name: `_TaoAppDefinition_${app.name}` }
+  const rootDeclaration = root === app
+    ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)})`
+    : gen`${appDefinitionReference(root)}.declaration`
+  const auxiliaries = rootAuxiliaryNavigators(root)
+  return gen`
+    const ${gen.Name(definition)} = TR.Navigation.App({
+      declaration: ${rootDeclaration},
+      name: ${name ? gen`${compileAppProperty(name, 'Name')}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
+      navigator: () => ${compileAppProperty(navigator, 'Navigator')},
+      ${
+    design && !AST.isNoneLiteral(design.value)
+      ? gen`design: () => ${compileAppProperty(design, 'Design')},`
+      : gen.noop()
   }
-  return compileConfiguredAppProperty(value)
-}
-
-function appVariantChain(value: AST.AppValueDeclaration): AST.AppVariantDeclaration[] {
-  if (AST.isAppDeclaration(value)) {
-    return []
+      auxiliaries: () => ({
+        ${
+    gen.list(auxiliaries, auxiliary =>
+      gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${Compile.ConfiguredValue(auxiliary.value)},`)
   }
-  const variant = AST.isAppVariantDeclaration(value)
-    ? value
-    : Assert.never(value as never, 'validated app value alias is an app variant')
-  const base = resolveRef(variant.value.target)
-  Assert.is(base, AST.isAppValueDeclaration, 'validated app patch base is an app value')
-  return [...appVariantChain(base), variant]
+      }),
+    })
+    function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
+      ${
+    datasource
+      ? gen`TR.Data.UseConfigured(
+          ${gen.scopeName({ name: '_TaoDataCatalog' })},
+          ${compileAppProperty(datasource, 'Datasource')},
+        )`
+      : gen.noop()
+  }
+      return <TR.AppShell>
+        <TR.Navigation.AppHost app={${gen.Name(definition)}} />
+      </TR.AppShell>
+    }
+    ${gen.scopeName(app)} = ${gen.Name(definition)}
+  `
 }
 
-function rootApp(value: AST.AppValueDeclaration): AST.AppDeclaration {
-  const app = AST.appDeclarationOf(value)
-  Assert.defined(app, 'validated app value resolves its root declaration')
-  return app
+function compileLegacyViewApp(app: AST.AppDeclaration): Compiled {
+  const roots = AST.blockStatements(app).filter(AST.isAppView)
+  return gen`
+    function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
+      ${gen.list(roots, Compile.AppView)}
+    }
+  `
 }
 
-function propertyPatch(
-  variant: AST.AppVariantDeclaration,
-  name: 'Name' | 'Navigator' | 'Datasource',
-): AST.ConfigurationValue | undefined {
-  return variant.value.patchBlock.entries.find(entry => entry.name === name)?.value
+function isLegacyViewApp(app: AST.AppDeclaration): boolean {
+  return app.block !== undefined && AST.blockStatements(app).some(AST.isAppView)
 }
 
-function compileEffectiveAppName(value: AST.AppValueDeclaration): Compiled {
-  let result: Compiled = gen`${
-    gen.jsLiteral(
-      AST.blockStatements(rootApp(value)).find(AST.isAppName)?.value.value ?? rootApp(value).name,
+function effectiveAppConfiguration(
+  declaration: AST.AppValueDeclaration,
+  seen: Set<AST.AppValueDeclaration> = new Set(),
+): EffectiveAppConfiguration {
+  Assert(!seen.has(declaration), 'validated app derivation is acyclic')
+  seen.add(declaration)
+  if (AST.isAppDeclaration(declaration) && declaration.block) {
+    const configuration: EffectiveAppConfiguration = new Map()
+    for (const property of AST.blockStatements(declaration).filter(AST.isAppProperty)) {
+      if (property.patch) {
+        applyAppPropertyPatch(configuration, property.name, property.patch.block)
+      } else if (property.value) {
+        configuration.set(property.name, { patches: [], value: property.value })
+      }
+    }
+    return configuration
+  }
+  const expression = declaration.value
+  Assert.defined(expression, 'validated app value has an initializer')
+  return effectiveAppExpression(expression, seen)
+}
+
+function effectiveAppExpression(
+  expression: AST.Expression,
+  seen: Set<AST.AppValueDeclaration>,
+): EffectiveAppConfiguration {
+  if (AST.isPrimitiveConfigurationConstructor(expression)) {
+    Assert(expression.primitive === 'app', 'validated app primitive constructor has the app family')
+    const configuration: EffectiveAppConfiguration = new Map()
+    applyConfigurationBlock(configuration, expression.block)
+    return configuration
+  }
+  if (AST.isConfigurationConstructor(expression)) {
+    const declaration = resolveRef(expression.type)
+    Assert.is(declaration, isConfigurableDeclaration, 'validated app constructor resolves a configurable type')
+    Assert(
+      AST.configurationPrimitiveOf(declaration) === 'app',
+      'validated app constructor resolves an app type',
     )
-  }`
-  for (const variant of appVariantChain(value)) {
-    const patch = propertyPatch(variant, 'Name')
-    if (patch) {
-      Assert(!AST.isPropertyConfigurationPatch(patch), 'validated app Name patch overwrites a text value')
-      result = gen`${Compile.ConfigurationValue(patch)}.evaluate().jsValue as string`
-    }
+    const configuration = configurationDefaults(declaration)
+    Assert.defined(expression.block, 'validated app type construction has a block')
+    applyConfigurationBlock(configuration, expression.block)
+    return configuration
   }
-  return result
+  if (AST.isInferredConfigurationConstructor(expression)) {
+    const owner = expression.$container
+    Assert.is(owner, AST.isAliasDeclaration, 'inferred app construction is owned by a let declaration')
+    const declaration = typeDeclarationForInferredApp(owner)
+    const configuration = configurationDefaults(declaration)
+    applyConfigurationBlock(configuration, expression.block)
+    return configuration
+  }
+  if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
+    const target = resolveRef(expression.target)
+    Assert.is(target, AST.isAppValueDeclaration, 'validated app reference resolves a complete app value')
+    const configuration = effectiveAppConfiguration(target, seen)
+    if (AST.isRefinementExpression(expression)) {
+      applyConfigurationBlock(configuration, expression.patchBlock)
+    }
+    return configuration
+  }
+  return Assert.never(expression as never, 'validated app value uses a supported declaration initializer')
 }
 
-function compileEffectiveNavigator(value: AST.AppValueDeclaration): Compiled {
-  const navigator = AST.blockStatements(rootApp(value)).find(AST.isAppNavigator)
-  Assert.defined(navigator, 'validated app has a navigator')
-  let result = compileAppValue(navigator.value)
-  for (const variant of appVariantChain(value)) {
-    const patch = propertyPatch(variant, 'Navigator')
-    if (!patch) {
-      continue
-    }
-    result = AST.isPropertyConfigurationPatch(patch)
-      ? gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch.block)})`
-      : Compile.ConfigurationValue(patch)
-  }
-  return result
+function typeDeclarationForInferredApp(owner: AST.AliasDeclaration): AST.ConfigurableDeclaration {
+  const declaration = Type.visibleDeclaration(owner, owner.name)
+  Assert.defined(declaration, 'validated inferred app block resolves its same-name type')
+  Assert.is(declaration, isConfigurableDeclaration, 'validated inferred app block resolves a configurable type')
+  Assert(
+    AST.configurationPrimitiveOf(declaration) === 'app',
+    'validated inferred app block resolves its same-name app type',
+  )
+  return declaration
 }
 
-function compileEffectiveDatasource(value: AST.AppValueDeclaration): Compiled | undefined {
-  const datasource = AST.blockStatements(rootApp(value)).find(AST.isAppDatasource)
-  let result = datasource ? compileDatasourceValue(datasource.value) : undefined
-  for (const variant of appVariantChain(value)) {
-    const patch = propertyPatch(variant, 'Datasource')
-    if (!patch) {
+function configurationDefaults(declaration: AST.ConfigurableDeclaration): EffectiveAppConfiguration {
+  const configuration: EffectiveAppConfiguration = new Map()
+  for (const property of AST.configurationPropertiesOf(declaration)) {
+    if (property.value) {
+      configuration.set(property.name, { patches: [], value: property.value })
+    }
+  }
+  return configuration
+}
+
+function applyConfigurationBlock(
+  configuration: EffectiveAppConfiguration,
+  block: AST.ConfigurationBlock,
+): void {
+  for (const entry of block.entries) {
+    if (!entry.name || !entry.value) {
       continue
     }
-    if (AST.isPropertyConfigurationPatch(patch)) {
-      Assert.defined(result, 'validated app datasource property patch has a base value')
-      result = gen`TR.Data.Patch(${result}, ${Compile.ConfigurationPatchObject(patch.block)})`
+    if (AST.isPropertyConfigurationPatch(entry.value)) {
+      applyAppPropertyPatch(configuration, entry.name, entry.value.block)
     } else {
-      result = Compile.ConfigurationValue(patch)
+      configuration.set(entry.name, { patches: [], value: entry.value })
+    }
+  }
+}
+
+function applyAppPropertyPatch(
+  configuration: EffectiveAppConfiguration,
+  name: string,
+  patch: AST.ConfigurationBlock,
+): void {
+  const property = configuration.get(name)
+  Assert.defined(property, 'validated app property patch has a base value')
+  property.patches.push(patch)
+}
+
+function compileAppProperty(
+  property: EffectiveAppProperty,
+  name: 'Name' | 'Navigator' | 'Datasource' | 'Design',
+): Compiled {
+  let result = compileAppPropertySource(property.value)
+  for (const patch of property.patches) {
+    if (name === 'Navigator') {
+      result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
+    } else if (name === 'Datasource') {
+      result = gen`TR.Data.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
+    } else {
+      Assert(false, `validated app ${name} cannot be patched`)
     }
   }
   return result
 }
 
-function compileDatasourceValue(value: AST.AppPropertyValue): Compiled {
-  return compileConfiguredAppProperty(value)
+function compileAppPropertySource(value: AppPropertySource): Compiled {
+  return AST.isExpression(value) ? Compile.Expression(value) : Compile.ConfigurationValue(value)
 }
 
-function compileConfiguredAppProperty(value: AST.AppPropertyValue): Compiled {
-  const target = AST.isConfiguredAppPropertyValue(value)
-    ? resolveRef(value.target)
-    : AST.inferredAppPropertyDeclaration(value)
-  Assert.defined(target, 'validated bare app property resolves its slot-named declaration')
-  if (AST.isConfigurableDeclaration(target)) {
-    const block = value.block ?? {
-      $type: 'ConfigurationBlock',
-      entries: [],
-      $container: value,
-    } as unknown as AST.ConfigurationBlock
-    const constructor = {
-      $type: 'ConfigurationConstructor',
-      type: AST.isConfiguredAppPropertyValue(value)
-        ? value.target
-        : { $refText: target.name, ref: target },
-      members: [],
-      block,
-      $container: value.$container,
-    } as unknown as AST.ConfigurationConstructor
-    return Compile.ConfiguredValue(constructor)
+function rootAppValue(
+  declaration: AST.AppValueDeclaration,
+  seen: Set<AST.AppValueDeclaration> = new Set(),
+): AST.AppValueDeclaration {
+  Assert(!seen.has(declaration), 'validated app derivation is acyclic')
+  seen.add(declaration)
+  if (AST.isAppDeclaration(declaration) && declaration.block) {
+    return declaration
   }
-  if (AST.isAliasDeclaration(target)) {
-    return Compile.ValueDeclarationReference(target)
+  const expression = declaration.value
+  if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
+    const target = resolveRef(expression.target)
+    Assert.is(target, AST.isAppValueDeclaration, 'validated app base resolves an app value')
+    return rootAppValue(target, seen)
   }
-  return Assert.never(target as never, 'validated app property references a configured declaration')
+  return declaration
+}
+
+function rootAuxiliaryNavigators(root: AST.AppValueDeclaration): AST.AppAuxiliaryNavigator[] {
+  return AST.isAppDeclaration(root)
+    ? AST.blockStatements(root).filter(AST.isAppAuxiliaryNavigator)
+    : []
+}
+
+/** appDefinitionReference preserves each app value's generated module identity. */
+export function appDefinitionReference(app: AST.AppValueDeclaration): Compiled {
+  return gen.scopeName(app)
+}
+
+function compilePrimitiveBlock(declaration: AST.NavDeclaration | AST.DatasourceDeclaration): Compiled {
+  Assert.defined(declaration.block, 'parsed primitive value declaration has a value or block')
+  const constructor = {
+    $type: 'PrimitiveConfigurationConstructor',
+    primitive: AST.isNavDeclaration(declaration) ? 'nav' : 'datasource',
+    block: declaration.block,
+    $container: declaration,
+  } as unknown as AST.PrimitiveConfigurationConstructor
+  return Compile.PrimitiveConfigurationConstructor(constructor)
+}
+
+function isConfigurableDeclaration(value: unknown): value is AST.ConfigurableDeclaration {
+  return AST.isNode(value) && AST.isConfigurableDeclaration(value)
 }

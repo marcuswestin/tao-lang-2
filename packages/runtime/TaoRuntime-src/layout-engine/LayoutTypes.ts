@@ -28,6 +28,7 @@ export type TaoLayoutContentEntry =
 export type TaoLayoutDimensionEntry =
   | readonly ['height', TaoLayoutDimensionTerm]
   | readonly ['width', TaoLayoutDimensionTerm]
+  | readonly ['width', 'max', number]
 export type TaoLayoutGapEntry = readonly ['gap', number]
 export type TaoLayoutSpacingEntry<HeadT extends 'margin' | 'pad' = 'margin' | 'pad'> =
   | readonly [HeadT, number]

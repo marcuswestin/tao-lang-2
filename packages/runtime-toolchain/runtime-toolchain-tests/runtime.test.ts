@@ -95,10 +95,10 @@ Describe('Tao runtime app generation', () => {
             Name "Sidecar App"
             Navigator SidecarStack { Initial Home }
           }
-          ui Home { render inject \`\`\`ts return null \`\`\` }
+          ui Home() { render inject \`\`\`ts return null \`\`\` }
         `,
         'Constructs.tao': `
-          public nav SidecarStack {
+          public type SidecarStack is nav with {
             Initial ui
             implement inject nav "./SidecarStack.ts"
           }
@@ -156,12 +156,13 @@ Describe('Tao runtime app generation', () => {
         })
 
         const generatedModule = await import(modulePath) as {
-          SidecarStack: {
+          __tao_type_SidecarStack: {
             kind: TR.NavKind<'stack', TR.StackNavConfiguration>
           }
         }
-        Expect(generatedModule.SidecarStack.kind.profile).toBe('stack')
-        TR.testNavKind(generatedModule.SidecarStack.kind, 'stack')
+        const sidecarDeclaration = generatedModule.__tao_type_SidecarStack
+        Expect(sidecarDeclaration.kind.profile).toBe('stack')
+        TR.testNavKind(sidecarDeclaration.kind, 'stack')
       },
     )
   })

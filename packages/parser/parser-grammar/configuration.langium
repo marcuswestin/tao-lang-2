@@ -5,19 +5,20 @@ import "./visibility"
 import "./terminals"
 
 entry ConfigurationGrammarEntrypoint:
-    NavDeclaration | DatasourceDeclaration;
+    // Includes declaration-contract helpers consumed from `types` so Langium marks them reachable.
+    NavDeclaration | DatasourceDeclaration | ConfigurationDeclarationBlock;
 
 NavDeclaration:
-    visibility=DeclarationVisibility? 'nav' name=ID block=ConfigurationDeclarationBlock;
+    visibility=DeclarationVisibility? 'nav' name=ID ('=' value=Expression | block=ConfigurationBlock);
 
 DatasourceDeclaration:
-    visibility=DeclarationVisibility? 'datasource' name=ID block=ConfigurationDeclarationBlock;
+    visibility=DeclarationVisibility? 'datasource' name=ID ('=' value=Expression | block=ConfigurationBlock);
 
 ConfigurationDeclarationBlock:
     '{' entries+=(ConfigurationPropertyDeclaration | ConfigurationKeyDeclaration | ConfigurationImplementation)* '}';
 
 ConfigurationPropertyDeclaration:
-    name=ID type=ConfigurationPropertyType;
+    name=ID type=ConfigurationPropertyType ('is' value=Expression)?;
 
 ConfigurationPropertyType:
     TypeReference;
@@ -35,4 +36,4 @@ ConfigurationImplementation:
 ConfigurationImplementationProtocol returns string:
     'nav' | 'provider';
 
-type ConfigurableDeclaration = NavDeclaration | DatasourceDeclaration;
+type PrimitiveValueDeclaration = NavDeclaration | DatasourceDeclaration;

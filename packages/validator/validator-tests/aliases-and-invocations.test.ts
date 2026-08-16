@@ -22,6 +22,7 @@ const stackLayout = stubLayout('Stack')
 const eventViews = `
   ${stackLayout}
   ${stubView('Input', 'Value is text, Change is action(text), Submit is action()')}
+  ${stubView('BooleanInput', 'Value is boolean, Change is action(boolean)')}
   ${stubView('NumericInput', 'Value is number, Change is action(number)')}
   ${stubView('LabelButton', 'Press is text')}
 `
@@ -30,9 +31,10 @@ function eventApp(child: string, setup = ''): string {
   return app(
     `
     state Draft = ""
-    action Submit { }
-    action Normalize Value is text { }
-    action NumberChange Value is number { }
+    action Submit() { }
+    action Normalize(Value is text) { }
+    action BooleanChange(Value is boolean) { }
+    action NumberChange(Value is number) { }
     ${setup}
     render Stack() { ${child} }
   `,
@@ -52,7 +54,7 @@ Describe('validator: aliases and invocations', () => {
         title: 'rejects local let references to later values',
         source: `
         app MyApp { view MainView }
-        view MainView Label is text {
+        view MainView(Label is text) {
           let Greeting = Later
           let Later = Label
         }
@@ -71,12 +73,12 @@ Describe('validator: aliases and invocations', () => {
       },
       {
         title: 'rejects member access on action declarations',
-        source: app('render Text(Save.Label)', `action Save { }\n${textView}`),
+        source: app('render Text(Save.Label)', `action Save() { }\n${textView}`),
         messages: [typeValidationMessages.memberNotItem('Label')],
       },
       {
         title: 'rejects local aliases that shadow visible parameters',
-        source: 'app MyApp { view MainView }\nview MainView Label is text { let Label = "shadow" }',
+        source: 'app MyApp { view MainView }\nview MainView(Label is text) { let Label = "shadow" }',
         messages: [aliasMessages.duplicateName('Label')],
       },
       {
@@ -120,7 +122,7 @@ Describe('validator: aliases and invocations', () => {
         app('', 'let MyApp = "Hello"'),
         aliasMessages.duplicateName('MyApp'),
       ],
-      ['rejects views that duplicate app names', app('', 'view MyApp { }'), aliasMessages.duplicateName('MyApp')],
+      ['rejects views that duplicate app names', app('', 'view MyApp() { }'), aliasMessages.duplicateName('MyApp')],
     ] as const
   ) {
     Test(title, rejects(source, message))
@@ -145,7 +147,7 @@ Describe('validator: aliases and invocations', () => {
       [
         'rejects view parameters that shadow view declarations',
         `app MyApp { view MainView }
-       view MainView Text is text { render Text(Text) }
+       view MainView(Text is text) { render Text(Text) }
        ${textView}`,
       ],
     ] as const
@@ -160,7 +162,7 @@ Describe('validator: aliases and invocations', () => {
       let Greeting = "Outer"
       ${stackLayout}
       ${textView}
-      view MainView {
+      view MainView() {
         let OuterGreeting = Greeting
         render Stack(){
           let Greeting = "Inner"
@@ -217,6 +219,11 @@ Describe('validator: aliases and invocations', () => {
   ) {
     Test(title, rejects(source, message))
   }
+
+  Test(
+    'accepts boolean change events for checkbox-style controls',
+    accepts(eventApp('BooleanInput(Value: true) { on change BooleanChange }')),
+  )
 
   Test('attaches missing-render-argument diagnostics to the render AST node', async () => {
     const message = invocationMessages.missingArgument('Tile', 'Count')

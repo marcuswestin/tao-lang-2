@@ -6,8 +6,8 @@ import AppCompiler from './app-compiler'
 export default {
   /** AliasDeclaration compiles a Tao alias into a generated Tao value binding. */
   AliasDeclaration(alias: AST.AliasDeclaration): Compiled {
-    if (AST.isAppVariantDeclaration(alias)) {
-      return AppCompiler.AppVariant(alias)
+    if (AST.configuredPrimitiveOfExpression(alias.value) === 'app') {
+      return AppCompiler.AppValue(alias)
     }
     return AST.isConfiguredValue(alias.value)
       ? gen`${gen.scopeName(alias)} = TR.Alias(${Compile.ConfiguredValue(alias.value)})`

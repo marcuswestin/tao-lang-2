@@ -31,7 +31,6 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
     const stringEnd = requiredToken(byName, 'STRING_END')
     const interpolationStart = requiredToken(byName, 'INTERPOLATION_START')
     const booleanNoAlias = requiredToken(byName, 'BOOLEAN_NO_ALIAS')
-    const identifier = requiredToken(byName, 'ID')
     const openBrace = requiredToken(byName, '{')
     const closeBrace = requiredToken(byName, '}')
 
@@ -48,13 +47,6 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
     // The optional no-case alias may itself be an otherwise reserved word (`Name`, for example),
     // so its contextual token must win before both keywords and the ordinary identifier token.
     tokens.unshift(booleanNoAlias)
-    // Capitalized app-property words remain usable in ordinary declaration/reference positions.
-    for (const name of ['Name', 'Navigator', 'Datasource']) {
-      const keyword = requiredToken(byName, name)
-      keyword.CATEGORIES = [...(keyword.CATEGORIES ?? []), identifier]
-      keyword.LONGER_ALT = identifier
-    }
-
     // Pushing the expression mode for every ordinary brace makes nested action/item/block
     // expressions balance naturally. The final interpolation brace then returns to string mode.
     openBrace.PUSH_MODE = expressionMode

@@ -28,6 +28,7 @@ async function compileApp(
   options: TestCompiler.CompileAppOptions,
 ): Promise<TestCompiler.Worker.AppOutput['app']> {
   const output = await runWorker({
+    appName: options.appName,
     appPath,
     kind: 'app',
     runtimePackageRoot: options.runtimePackageRoot,

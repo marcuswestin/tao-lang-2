@@ -61,6 +61,12 @@ export default {
     f.oneSpaceBetweenProperties('selector', 'text')
   },
 
+  /** ExpectCheckboxStateStep formats tag-only checked-state assertions. */
+  ExpectCheckboxStateStep(f) {
+    f.oneSpaceAfter('expect', 'checkbox')
+    f.oneSpaceBeforeProperty('state')
+  },
+
   /** ExpectInputValueStep formats input value assertions. */
   ExpectInputValueStep(f) {
     f.oneSpaceAfter('expect', 'input', 'value')

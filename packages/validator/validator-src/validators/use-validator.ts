@@ -27,8 +27,8 @@ export const useValidationMessages = {
 } as const
 
 type DeclarationRecord = {
+  isAppValue: boolean
   name: string
-  kind: AST.Declaration['$type']
   namespace: AST.DeclarationNamespace
   visibility?: AST.DeclarationVisibility
 }
@@ -149,16 +149,12 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
     ctx.error(useValidationMessages.missingImport(importedName, importLabel(useStatement)), useStatement)
     return
   }
-  const importableMatches = matches.filter(declaration =>
-    declaration.kind !== AST.AppDeclaration.$type || canImportApp(useStatement, resolution)
-  )
-  if (importableMatches.length === 0 && matches.some(declaration => declaration.kind === AST.AppDeclaration.$type)) {
+  const importableMatches = matches.filter(declaration => !declaration.isAppValue || canImportApp(resolution))
+  if (importableMatches.length === 0 && matches.some(declaration => declaration.isAppValue)) {
     ctx.error(useValidationMessages.appImport(importedName), useStatement)
     return
   }
-  const visibleMatches = importableMatches.filter(declaration =>
-    importedDeclarationIsVisible(declaration, resolution, useStatement)
-  )
+  const visibleMatches = importableMatches.filter(declaration => importedDeclarationIsVisible(declaration, resolution))
   if (visibleMatches.length === 0) {
     ctx.error(useValidationMessages.notVisible(importedName), useStatement)
     return
@@ -193,24 +189,15 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
 function importedDeclarationIsVisible(
   declaration: DeclarationRecord,
   resolution: Packages.Resolution,
-  useStatement: AST.UseStatement,
 ): boolean {
-  if (declaration.kind === AST.AppDeclaration.$type) {
-    return canImportApp(useStatement, resolution)
+  if (declaration.isAppValue) {
+    return canImportApp(resolution)
   }
   return Packages.isVisible(declaration.visibility, resolution)
 }
 
-function canImportApp(useStatement: AST.UseStatement, resolution: Packages.Resolution): boolean {
-  return useBelongsToTestSidecar(useStatement)
-    && (resolution.relation === 'same-file' || resolution.relation === 'same-directory')
-}
-
-function useBelongsToTestSidecar(useStatement: AST.UseStatement): boolean {
-  if (!AST.isTaoFile(useStatement.$container)) {
-    return false
-  }
-  return Packages.isTestSourcePath(AST.getDocument(useStatement.$container).uri.path)
+function canImportApp(resolution: Packages.Resolution): boolean {
+  return resolution.relation === 'same-file' || resolution.relation === 'same-directory'
 }
 
 function importLabel(useStatement: AST.UseStatement): string {
@@ -262,8 +249,8 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
   return file.statements
     .filter(AST.isDeclaration)
     .map((declaration) => ({
+      isAppValue: AST.isConcreteAppValueDeclaration(declaration),
       name: declaration.name,
-      kind: declaration.$type,
       namespace: AST.declarationNamespace(declaration),
       visibility: Packages.visibilityOf(declaration),
     }))

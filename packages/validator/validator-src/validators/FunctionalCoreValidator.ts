@@ -73,6 +73,9 @@ export const FunctionalCoreValidator = {
     [AST.IfActionStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)
     },
+    [AST.IfFunctionStatement.$type]: (statement, ctx) => {
+      validateIfCondition(statement.condition, ctx)
+    },
     [AST.IfRenderStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)
       validateRenderControlPlacement(statement, ctx)

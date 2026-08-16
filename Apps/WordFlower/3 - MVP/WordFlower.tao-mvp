@@ -1,6 +1,7 @@
 use InstantDB from @instantdb
 use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, Window, WindowHost from @tao/nav
-use Col, FormButton, Row, Spinner, Text, TextInput from @tao/ui
+use CountWords, Join from @tao/text
+use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
 
 // WordFlower/MVP is the malleable full target for the v1 release: everything Tao must cover to call
 // itself shipped, written with the syntax decisions settled so far (see `../2 - Next`). It is
@@ -22,14 +23,13 @@ use Col, FormButton, Row, Spinner, Text, TextInput from @tao/ui
 // - Concurrency-policy vocabulary, asset literals, and route/restoration policy remain MVP design
 //   work and must enter a future Next contract as executable code before implementation.
 //
-// Navs and datasources are ordinary package declarations. Their declarations own generic
-// configuration validation and carry stable identity across imports and aliases; package-level
-// `implement inject` binds shipped implementations to the published TR.NavKind and TR.DataProvider
-// protocols and their conformance suites rather than to compiler-maintained name tables. StackNav
-// and Memory are the stdlib proof that a package declaration can own either kind of implementation.
-// Configured `with` patches may add direct keyed entries when the declaration owns a keyed contract.
-// A strict `App@key` target names the root app declaration, and the key must exist on that root and
-// every in-file variant so each launch configuration can honor the same static target.
+// Navs and datasources are ordinary values. Primitive value heads constrain their family while
+// preserving the precise configured type; reusable contracts use `type T is nav|datasource with`.
+// Package-level `implement inject` binds those rarer types to the published TR.NavKind and
+// TR.DataProvider protocols rather than to compiler-maintained name tables. Configured `with`
+// patches may add direct keyed entries when the declaration owns a keyed contract.
+// A strict `App@key` target may name a complete root or in-file variant. Variants retain their root
+// declaration identity, and the key must exist on every launch configuration of that root.
 
 project {
    name "WordFlower"
@@ -37,25 +37,29 @@ project {
    license MIT
 }
 
-// Design is a directional capability: deterministic tokens plus named clause bundles that render
-// sites apply like layout clauses. The design-system roadmap owns the final shape.
+// Design starts with flat tokens plus named clause bundles that render sites apply like direct
+// layout clauses. Bundles and inline clauses resolve left to right, with the last same-clause value
+// winning; incompatible surviving clause categories remain invalid.
 design WordFlowerDesign {
    paper #f6f7f3
    ink #121826
+   inkMuted #5b6472
    accent #2f6b4f
+   line #d9dcd4
 
-   screen [fill, content top stretch, pad 24, bg paper]
-   title [size 34, weight 800, fg ink]
-   body [size 16, line 22, fg ink]
+   screen [fill, content top stretch, pad 16, bg paper]
+   title [size 28, weight 700, fg ink]
+   body [size 16, line 22, fg inkMuted]
+   panel [pad 12, radius 8, bg paper, border line]
 }
 
 // A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
-let HomeStack = StackNav { Initial WorkspaceList }
-let SettingsStack = StackNav { Initial Settings }
-let WorkspaceNav = SlotNav { Initial WorkspaceChooser }
-let SignedOutNav = StackNav { Initial SignedOut }
+nav HomeStack = StackNav { Initial WorkspaceList }
+nav SettingsStack = StackNav { Initial Settings }
+nav WorkspaceNav = SlotNav { Initial WorkspaceChooser }
+nav SignedOutNav = StackNav { Initial SignedOut }
 
-let WordFlowerNavigator = SelectionNav {
+nav WordFlowerNavigator = SelectionNav {
    Initial @home
    Display "automatic"
 
@@ -63,16 +67,27 @@ let WordFlowerNavigator = SelectionNav {
    // target-key namespace.
    @home {
       Label "Home"
+      Icon "house"
       Content HomeStack
    }
    @workspace {
       Label "Workspace"
+      Icon "folder"
       Content WorkspaceNav
    }
    @settings {
       Label "Settings"
+      Icon "gear"
       Content SettingsStack
    }
+}
+
+datasource WordFlowerStore = InstantDB {
+   AppId "wordflower-mvp"
+}
+
+datasource WordFlowerStageStore = WordFlowerStore with {
+   AppId "wordflower-stage"
 }
 
 // An app mounts navs, it does not render content directly. `Navigator` is the primary nav.
@@ -81,8 +96,8 @@ let WordFlowerNavigator = SelectionNav {
 // Toasts are app-level, transient, replace the same key rather than stacking, and neither consume
 // Back nor expose plain dismissal. Keyed auxiliary entries remain for app-specific hosts such as
 // windows, and their keys are navigation targets.
-// A Local datasource is constructed as `Datasource Local { StorageKey "WordFlowerData" }`; `with`
-// patches an existing configured value. Memory is keyless, while remote providers own their
+// A datasource value uses a primitive head, such as `datasource WordFlowerStore = InstantDB { ... }`;
+// `with` patches an existing configured value. Memory is keyless, while remote providers own their
 // provider-specific configuration below.
 app WordFlower {
    Name "WordFlower"
@@ -92,46 +107,50 @@ app WordFlower {
    // Declaring a nav does not mount it. App-owned direct keys mount these auxiliary hosts.
    @windows WindowHost { }
 
-   Datasource InstantDB { // bare block constructs the remote provider; Local stays for tests and offline development
-      AppId "wordflower-mvp"
-   }
+   Datasource WordFlowerStore
 }
 
 // `with` copies public properties into a configured variant. A property-position `with` merge-copies
 // the original property without repeating it; WordFlower and WordFlowerNavigator are unchanged.
-workspace let WordFlowerDrawer = WordFlower with {
+app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
    Navigator with { Display "drawer" }
 }
 
-let WordFlowerStage = WordFlower with {
+app WordFlowerStage = WordFlower with {
    Name "WordFlower - Stage"
-   Datasource InstantDB {
-      AppId "wordflower-stage"
-   }
+   Datasource WordFlowerStageStore
 }
 
 let Tagline = "A quiet place for words that matter."
+
+let ParagraphGoal = 10
+
+let SessionGoal is number = 10
 
 type PromptTitle is text
 
 type PromptMinutes is number
 
-type PromptTags is list
+type PromptTags is list of text
 
 type WritingPrompt is {
-   PromptTitle
-   PromptMinutes
-   PromptTags
+   PromptTitle,
+   PromptMinutes,
+   PromptTags,
+   optional PromptSubtitle text
 }
+
+let StarterTags = PromptTags ["daily", "warmup"]
 
 let StarterPrompt = WritingPrompt {
    PromptTitle: "Morning pages"
    PromptMinutes: 10
-   PromptTags: PromptTags ["daily", "warmup"]
+   StarterTags
 }
 
-enum ConfirmResult { // enum shape is directional; two-state fields prefer `Final yes / no Draft`
+// One-case enums are nominal types; a dismissed dialogue answers `none`.
+enum ConfirmResult {
    Confirmed
 }
 
@@ -167,12 +186,63 @@ data Paragraphs / Paragraph {
    order by Ordering
 }
 
-function DocumentLabel Title is text returns text = "Document: { Title }"
+function DocumentLabel(Title is text) returns text {
+   return "Document: { Title }"
+}
 
-ui WorkspaceList {
+function GoalFraction(Count is number) {
+   if Count == 0 {
+      return 0
+   }
+   return Count / ParagraphGoal
+}
+
+let BuildStamp = inject text ```ts
+   return process.env['TAO_BUILD'] ?? 'development'
+```
+
+frame Card(Title is text) {
+   @actions = empty
+
+   render Col() [gap 8, pad 12, panel] {
+      Row() [content spread center] {
+         Text(Title) [title]
+         @actions
+      }
+      Col() [gap 6] {
+         @@content
+      }
+   }
+}
+
+layout Scroller() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({
+        children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
+        layout: Layout,
+        tag: Tag,
+      })
+   ```
+}
+
+view WordBadge(Total is number) {
+   render inject Total, Suffix " words", Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [`${Total}${Suffix}`], layout: Layout, tag: Tag })
+   ```
+}
+
+view WordCount(Value is text) {
+   render Text("Words: { CountWords(Value) }") [body]
+}
+
+view TagSummary(Tags is PromptTags) {
+   render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
+}
+
+ui WorkspaceList() {
    state WorkspaceName = ""
    query Workspaces { }
-   action AddWorkspace {
+   action AddWorkspace() {
       guard WorkspaceName empty -> {
          present WorkspaceNameNotice() as overlay
       }
@@ -181,54 +251,57 @@ ui WorkspaceList {
       }
       set WorkspaceName = ""
    }
-   render Col() [screen, gap 10] {
-      Text("WordFlower") [title]
-      Text(Tagline)
-      guard Workspaces {
-         loading -> { Spinner() }
-         error -> Message {
-            Text("Could not load WordFlower")
-            Text(Message)
+   render ScrollView() [screen] {
+      Col() [width max 720, centered, gap 10] {
+         Text("WordFlower") [title]
+         Text(Tagline) [body]
+         guard Workspaces {
+            loading -> { Spinner() }
+            error -> Message {
+               Text("Could not load WordFlower")
+               Text(Message)
+            }
          }
-      }
-      #workspaceName
-      TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
-         on submit AddWorkspace
-      }
-      #addWorkspace
-      FormButton("Add workspace", Disabled: WorkspaceName is empty) {
-         on press AddWorkspace
-      }
-      #activateWorkspaceTab
-      FormButton("Activate workspace") {
-         // Target-only activation names the root app declaration and reveals without new content.
-         on press -> { present WordFlower@workspace }
-      }
-      guard Workspaces empty -> {
-         Text("No workspaces yet")
-         Text("Starter prompt: { StarterPrompt.PromptTitle }")
-         Text("Try writing for { StarterPrompt.PromptMinutes } minutes")
-         TagLine(StarterPrompt.PromptTags)
-      }
-      #workspaces
-      loop Workspaces / Workspace {
-         Col() [gap 6, pad 10] {
-            Text(Workspace.Name)
-            #openWorkspace
-            FormButton("Open workspace") {
-               // Omitted target delegates to the nearest enclosing nav (HomeStack), pushing a new occurrence.
-               on press -> { present WorkspaceDetails(Workspace) }
-            }
-            #deleteWorkspace
-            FormButton("Delete workspace") {
-               on press -> { delete Workspace }
-            }
-            #openInSplit
-            FormButton("Open in workspace tab") {
-               on press -> {
-                  // A configured nav value locates its one equal active mount. The next statement sees the update synchronously.
-                  present WorkspaceSplit(Workspace) in WorkspaceNav
-                  present WordFlower@workspace
+         #workspaceName
+         TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
+            on submit AddWorkspace
+         }
+         #addWorkspace
+         FormButton("Add workspace", Icon: "plus", Disabled: WorkspaceName is empty) {
+            on press AddWorkspace
+         }
+         #activateWorkspaceTab
+         FormButton("Activate workspace") {
+            // Target-only activation names a complete app value and reveals without new content.
+            on press -> { present WordFlower@workspace }
+         }
+         guard Workspaces empty -> {
+            Image("./images/empty-workspaces.png", Decorative: true) [width 160, centered]
+            Text("No workspaces yet") [title]
+            Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
+            Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
+            TagSummary(StarterPrompt.PromptTags)
+         }
+         #workspaces
+         loop Workspaces / Workspace {
+            Col() [gap 6, pad 10] {
+               Text(Workspace.Name)
+               #openWorkspace
+               FormButton("Open workspace") {
+                  // Omitted target delegates to the nearest enclosing nav (HomeStack), pushing a new occurrence.
+                  on press -> { present WorkspaceDetails(Workspace) }
+               }
+               #deleteWorkspace
+               FormButton("Delete workspace", Icon: "trash") {
+                  on press -> { delete Workspace }
+               }
+               #openInSplit
+               FormButton("Open in workspace tab") {
+                  on press -> {
+                     // A configured nav value locates its one equal active mount. The next statement sees the update synchronously.
+                     present WorkspaceSplit(Workspace) in WorkspaceNav
+                     present WordFlower@workspace
+                  }
                }
             }
          }
@@ -238,7 +311,7 @@ ui WorkspaceList {
 
 // Presented above the nearest enclosing nav. An explicit `in <target>` would override that contextual
 // scope. Every nav's overlay entries stack above covered content while preserving its mounted state.
-ui WorkspaceNameNotice {
+ui WorkspaceNameNotice() {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name")
       #dismissNotice
@@ -248,7 +321,7 @@ ui WorkspaceNameNotice {
    }
 }
 
-workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the same-named entity type
+workspace ui WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    let SectionLabel = "Drafts"
@@ -258,13 +331,13 @@ workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the sam
    query FinishedDocuments from Workspace.Documents {
       where is Final
    }
-   action SaveWorkspace {
+   action SaveWorkspace() {
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
       }
    }
-   action AddDocument {
+   action AddDocument() {
       guard DocumentTitle empty
       async {
          create Document { // don't wait for creation completion to update the text input
@@ -274,87 +347,95 @@ workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the sam
       }
       set DocumentTitle = ""
    }
-   render Col() [screen, gap 10] {
-      Text("Workspace: { Workspace.Name }") [title]
-      #workspaceTitle
-      TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
-         on submit SaveWorkspace
-      }
-      #saveWorkspace
-      FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
-         on press SaveWorkspace
-      }
-      Text("{ SectionLabel }: { Drafts.Count }")
-      #pushTwice
-      FormButton("Push this workspace twice") {
-         on press -> {
-            // Presenting the same semantic value twice still creates two distinct occurrences.
-            present WorkspaceDetails(Workspace)
-            present WorkspaceDetails(Workspace)
+   render ScrollView() [screen] {
+      Col() [width max 960, centered, gap 10] {
+         Text("Workspace: { Workspace.Name }") [title]
+         #workspaceTitle
+         TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
+            on submit SaveWorkspace
          }
-      }
-      guard Drafts {
-         loading -> { Spinner() }
-         error -> Message { Text("Could not load documents: { Message }") }
-      }
-      guard FinishedDocuments {
-         loading -> { Spinner() }
-         error -> Message { Text("Could not load documents: { Message }") }
-      }
-      #newDocumentTitle
-      TextInput(Value: DocumentTitle, Label: "New document title", Placeholder: "Draft the next chapter") {
-         on submit AddDocument
-      }
-      when DocumentTitle {
-         empty -> { Text("Document title is required") }
-         otherwise -> { Text(DocumentTitle) }
-      }
-      #addDocument
-      FormButton("Add document", Disabled: DocumentTitle is empty) {
-         on press AddDocument
-      }
-      when Drafts {
-         empty -> { Text("No drafts") }
-         otherwise -> {
-            #documents
-            loop Drafts / Document {
-               Col() [gap 6] {
-                  #openDocument
-                  FormButton(Document.Title) {
-                     on press -> {
-                        present WorkspaceSplit(Workspace) in WordFlower@workspace
-                        present DocumentScreen(Document) in WordFlower@workspace@documents
+         #saveWorkspace
+         FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
+            on press SaveWorkspace
+         }
+         Text("{ SectionLabel }: { Drafts.Count }")
+         #pushTwice
+         FormButton("Push this workspace twice") {
+            on press -> {
+               // Presenting the same semantic value twice still creates two distinct occurrences.
+               present WorkspaceDetails(Workspace)
+               present WorkspaceDetails(Workspace)
+            }
+         }
+         guard Drafts {
+            loading -> { Spinner() }
+            error -> Message { Text("Could not load documents: { Message }") }
+         }
+         guard FinishedDocuments {
+            loading -> { Spinner() }
+            error -> Message { Text("Could not load documents: { Message }") }
+         }
+         #newDocumentTitle
+         TextInput(Value: DocumentTitle, Label: "New document title", Placeholder: "Draft the next chapter") {
+            on submit AddDocument
+         }
+         when DocumentTitle {
+            empty -> { Text("Document title is required") }
+            otherwise -> { Text(DocumentTitle) }
+         }
+         #addDocument
+         FormButton("Add document", Disabled: DocumentTitle is empty) {
+            on press AddDocument
+         }
+         // Panes uses a horizontal row only when, after gaps, every child can receive at least 320
+         // logical pixels; otherwise it preserves source order in a vertical stack.
+         Panes() [gap 16] {
+            Col() [gap 6] {
+               when Drafts {
+                  empty -> { Text("No drafts") }
+                  otherwise -> {
+                     #documents
+                     loop Drafts / Document {
+                        Col() [gap 6] {
+                           #openDocument
+                           FormButton(Document.Title) {
+                              on press -> {
+                                 present WorkspaceSplit(Workspace) in WordFlower@workspace
+                                 present DocumentScreen(Document) in WordFlower@workspace@documents
+                              }
+                           }
+                           #finish
+                           FormButton("Finish document") {
+                              on press -> { update Document { Final } }
+                           }
+                           #delete
+                           FormButton("Delete document", Icon: "trash") {
+                              on press -> { delete Document }
+                           }
+                        }
                      }
-                  }
-                  #finish
-                  FormButton("Finish document") {
-                     on press -> { update Document { Final } }
-                  }
-                  #delete
-                  FormButton("Delete document") {
-                     on press -> { delete Document }
                   }
                }
             }
-         }
-      }
-      guard FinishedDocuments empty -> {
-         Text("No finished documents")
-      }
-      Col() [gap 6] {
-         let SectionLabel = "Finished"
-         Text(SectionLabel)
-         #finishedDocuments
-         loop FinishedDocuments / Document {
             Col() [gap 6] {
-               Text(Document.Title)
-               #reopen
-               FormButton("Reopen document") {
-                  on press -> { update Document { Draft } }
+               let SectionLabel = "Finished"
+               Text(SectionLabel)
+               guard FinishedDocuments empty -> {
+                  Text("No finished documents")
                }
-               #deleteFinished
-               FormButton("Delete finished document") {
-                  on press -> { delete Document }
+               #finishedDocuments
+               loop FinishedDocuments / Document {
+                  Col() [gap 6] {
+                     Text(Document.Title)
+                     #reopen
+                     FormButton("Reopen document") {
+                        on press -> { update Document { Draft } }
+                     }
+                     #deleteFinished
+                     FormButton("Delete finished document", Icon: "trash") {
+                        on press -> { delete Document }
+                     }
+                  }
                }
             }
          }
@@ -362,57 +443,59 @@ workspace ui WorkspaceDetails Workspace { // a bare parameter name binds the sam
    }
 }
 
-ui WorkspaceChooser {
+ui WorkspaceChooser() {
    query Workspaces { }
    render Col() [screen, gap 10] {
       Text("Choose a workspace")
       #chooseWorkspace
       loop Workspaces / Workspace {
-         #choose
-         FormButton(Workspace.Name) {
-            on press -> { present WorkspaceSplit(Workspace) in WordFlower@workspace }
+         Text(Workspace.Name) [body]
+         on select -> {
+            present WorkspaceSplit(Workspace) in WordFlower@workspace
          }
       }
    }
 }
 
-// A product function constructs a configured SplitNav descriptor. Package `nav` declarations are
-// reserved for configuration contracts bound to implementations through `implement inject nav`.
-function WorkspaceSplit Workspace returns nav = SplitNav {
-   Axis "horizontal"
+// A product function constructs a configured SplitNav descriptor. Primitive `nav` heads declare
+// configured values; reusable package contracts use `type T is nav with` and `implement inject nav`.
+function WorkspaceSplit(Workspace) returns nav {
+   return SplitNav {
+      Axis "horizontal"
 
-   // Direct keys bind to Panes. The nested dynamic selection starts its own key namespace.
-   @files {
-      // A ui with bound arguments is a presentable value; it renders only when the nav mounts it.
-      Content SlotNav { Initial FileTree(Workspace) }
-      Title "Files"
-      IdealSize 280
-      CollapsePriority 2
-   }
-   @documents {
-      // This MVP-target future declaration is distinct from shipped SelectionNav: it starts empty
-      // and accepts runtime-added items, so it has no required static Initial and no undeclared
-      // Items/Dynamic flags.
-      Content DynamicSelectionNav {
-         Display "tabs"
+      // Direct keys bind to Panes. The nested dynamic selection starts its own key namespace.
+      @files {
+         // A ui with bound arguments is a presentable value; it renders only when the nav mounts it.
+         Content SlotNav { Initial FileTree(Workspace) }
+         Title "Files"
+         IdealSize 280
+         CollapsePriority 2
       }
-      Title "Documents"
-      Grow 1
-      CollapsePriority 3
-   }
-   @inspector {
-      Content SlotNav { Initial EmptyInspector }
-      Title "Inspector"
-      IdealSize 340
-      CollapsePriority 1
+      @documents {
+         // This MVP-target future declaration is distinct from shipped SelectionNav: it starts empty
+         // and accepts runtime-added items, so it has no required static Initial and no undeclared
+         // Items/Dynamic flags.
+         Content DynamicSelectionNav {
+            Display "tabs"
+         }
+         Title "Documents"
+         Grow 1
+         CollapsePriority 3
+      }
+      @inspector {
+         Content SlotNav { Initial EmptyInspector }
+         Title "Inspector"
+         IdealSize 340
+         CollapsePriority 1
+      }
    }
 }
 
-ui EmptyInspector {
+ui EmptyInspector() {
    render Text("No inspector selected")
 }
 
-workspace ui FileTree Workspace {
+workspace ui FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap 6, pad 10] {
       Text(Workspace.Name)
@@ -453,7 +536,7 @@ workspace ui FileTree Workspace {
 }
 
 // The pane-level entry guards entity availability; the editor below assumes an available document.
-workspace ui DocumentScreen Document {
+workspace ui DocumentScreen(Document) {
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -466,12 +549,20 @@ workspace ui DocumentScreen Document {
 }
 
 // `view` stays embeddable content; DocumentEditor only appears inside another render tree.
-workspace view DocumentEditor Document {
+workspace view DocumentEditor(Document) {
    state TitleDraft = Document.Title
    state BodyDraft = Document.Body
+   state ParagraphText = ""
    state SaveCount = 0
    query Paragraphs from Document.Paragraphs { }
-   action SaveDocument {
+   action SetBodyDraft(Value is text) {
+      set BodyDraft = Value
+   }
+   action SetFinished(Value is boolean) {
+      if Value { update Document { Final } }
+      if not Value { update Document { Draft } }
+   }
+   action SaveDocument() {
       guard TitleDraft empty
       update Document {
          Title: TitleDraft
@@ -482,7 +573,18 @@ workspace view DocumentEditor Document {
       // unit literals remain deferred.
       present SavedToast() as toast (Key: "document-saved", Duration: 3)
    }
-   action CloseDocument {
+   action AddParagraph() {
+      guard ParagraphText empty
+      async {
+         create Paragraph {
+            Text: ParagraphText
+            Ordering: Paragraphs.Count + 1
+            Document
+         }
+      }
+      set ParagraphText = ""
+   }
+   action CloseDocument() {
       // `ask` suspends the action until the dialogue responds; a bare `respond` answers none.
       let Result = ask ConfirmCloseDialogue(Document)
       // `when` is always exhaustive, so a one-sided test uses `if`, which never takes `else`.
@@ -496,13 +598,24 @@ workspace view DocumentEditor Document {
       }
       #documentBody
       TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
+         on change SetBodyDraft
          on submit SaveDocument
       }
       WordCount(BodyDraft)
+      #markFinal
+      Checkbox(Value: Document.Final is Final, Label: "Final") {
+         on change SetFinished
+      }
       Text("Saves this session: { SaveCount }")
+      Progress(Value: GoalFraction(Paragraphs.Count))
+      Text("Goal: { ParagraphGoal } paragraphs") [body]
       guard Paragraphs {
          loading -> { Spinner() }
          error -> Message { Text("Could not load paragraphs: { Message }") }
+      }
+      #newParagraph
+      TextInput(Value: ParagraphText, Label: "New paragraph", Placeholder: "Add a paragraph") {
+         on submit AddParagraph
       }
       #paragraphs
       loop Paragraphs / Paragraph {
@@ -546,11 +659,11 @@ workspace view DocumentEditor Document {
    }
 }
 
-ui ParagraphInspector Paragraph {
+ui ParagraphInspector(Paragraph) {
    render Text("{ Paragraph.Document.Title } - { Paragraph.Text }")
 }
 
-ui DocumentInfo Document {
+ui DocumentInfo(Document) {
    render Col() [gap 6, pad 10] {
       Text(Document.Title)
       Text("{ Document.Paragraphs.Count } paragraphs")
@@ -561,7 +674,7 @@ ui DocumentInfo Document {
    }
 }
 
-ui DocumentSnapshot Snapshot is Document.Snapshot {
+ui DocumentSnapshot(Snapshot is Document.Snapshot) {
    render Col() [gap 6, pad 10] {
       Text("Captured version")
       Text(Snapshot.Title)
@@ -572,12 +685,12 @@ ui DocumentSnapshot Snapshot is Document.Snapshot {
    }
 }
 
-ui SavedToast {
+ui SavedToast() {
    render Text("Saved")
 }
 
 // A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none.
-dialogue ConfirmCloseDialogue Document responds ConfirmResult {
+dialogue ConfirmCloseDialogue(Document) responds ConfirmResult {
    render Col() [gap 6, pad 10] {
       Text("Close { Document.Title }?")
       #confirmClose
@@ -591,45 +704,65 @@ dialogue ConfirmCloseDialogue Document responds ConfirmResult {
    }
 }
 
-ui Settings {
-   render Col() [screen, gap 10] {
-      Text("Settings")
-      #resetSignedOut
-      FormButton("Reset to signed out") {
-         // From a visual declaration, `replace` is the only root operation an app host accepts.
-         on press -> { replace SignedOutNav in WordFlower }
+ui Settings() {
+   render Scroller() [screen] {
+      Col() [width max 720, centered, gap 10] {
+         Text("Settings") [title]
+         Card(Title: "Writing session") {
+            WordBadge(SessionGoal)
+            Text("Build { BuildStamp }") [body]
+            @actions FormButton("Reset to signed out") {
+               #resetSignedOut
+               // From a visual declaration, `replace` is the only root operation an app host accepts.
+               on press -> { replace SignedOutNav in WordFlower }
+            }
+         }
       }
    }
 }
 
-ui SignedOut {
+ui SignedOut() {
    render Text("Signed out")
-}
-
-// Typed TS injection stays the permanent escape hatch for behavior Tao does not own.
-view WordCount Value is text {
-   render inject Value ```ts
-      return <RN.Text>Words: {Value.trim() === '' ? 0 : Value.trim().split(/\s+/).length}</RN.Text>
-   ```
-}
-
-view TagLine Tags is list {
-   render inject Tags ```ts
-      return <RN.Text>Tagged: {Tags.join(', ')}</RN.Text>
-   ```
 }
 
 // Deterministic navigation-foundation harness: only StackNav and SlotNav, with no Design or
 // Datasource capability, so navigation foundations stay executable independently of them.
-let FoundationStack = StackNav { Initial FoundationHome }
-let FoundationNavigator = SlotNav { Initial FoundationStack }
+workspace type FoundationHomeStack is StackNav with {
+   Initial is FoundationHome
+}
+
+workspace nav FoundationStack = FoundationHomeStack {}
+workspace nav FoundationStackWith = FoundationHomeStack with {}
+workspace let FoundationStackLet = FoundationHomeStack {}
+workspace let FoundationStackLetWith = FoundationHomeStack with {}
+workspace nav FoundationNavigator = SlotNav { Initial FoundationStack }
 
 app WordFlowerFoundationTest {
    Name "WordFlower Navigation Foundation Test"
    Navigator FoundationNavigator
 }
 
-ui FoundationHome {
+app WordFlowerDeclarationHead {
+   Name "WordFlower Declaration Head"
+   Navigator FoundationStack
+}
+
+app WordFlowerDeclarationHeadWith = app with {
+   Name "WordFlower Declaration Head With"
+   Navigator FoundationStackWith
+}
+
+workspace let WordFlowerDeclarationLet = app {
+   Name "WordFlower Declaration Let"
+   Navigator FoundationStackLet
+}
+
+workspace let WordFlowerDeclarationLetWith = app with {
+   Name "WordFlower Declaration Let With"
+   Navigator FoundationStackLetWith
+}
+
+ui FoundationHome() {
    render Col() {
       Text("Foundation home marker")
       FormButton("Open deterministic detail") {
@@ -641,7 +774,7 @@ ui FoundationHome {
    }
 }
 
-ui FoundationDetail {
+ui FoundationDetail() {
    render Col() {
       Text("Foundation detail marker")
       FormButton("Reset foundation app") {
@@ -650,7 +783,7 @@ ui FoundationDetail {
    }
 }
 
-ui FoundationSlot {
+ui FoundationSlot() {
    render Col() {
       Text("Foundation slot marker")
       FormButton("Restore initial stack") {
