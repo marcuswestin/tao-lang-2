@@ -27,9 +27,9 @@ An alternative right-hand side: a path to a sibling `.ts` file instead of an inl
 implement inject nav "./StackNav.ts"
 ```
 
-Keep today's `implement inject nav|provider` vocabulary rather than inventing new keywords
-(`implement is "..."` reads on the declaration-model side and belongs to `Now 1`/the open questions,
-not here) — this slice's whole job is a second RHS form for the clause that already exists.
+Keep today's `implement inject nav|provider` vocabulary rather than inventing new keywords. The
+later Q11 resolution explicitly rejected the historical `implement is "..."` alternative; this
+slice's whole job was a second RHS form for the clause that already exists.
 
 **Compiler:**
 

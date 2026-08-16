@@ -21,22 +21,23 @@ Only `1 - Current` is executable. The others use their own file extensions (`.ta
 
 `2 - Next` holds the tranche of decided syntax and semantics that implementation moves into `1 - Current`, slice by slice. Decisions live there as working code plus comments: the file's header lists the tranche, and every construct in the sketch is the agreed target form.
 
-Next's app and test-sidecar headers each declare `// Tranche status: absorbed` at a tranche boundary.
-Cutting work for either pair changes that pair's line in Next alone to `// Tranche status: open`
-before it diverges from Current. Repository validation gates the pairs independently: a matching
-pair proves byte identity, while a divergent pair requires its own explicit open marker. It compares
-each pair after normalizing only its status line, so an otherwise matching pair cannot remain marked
-`open` indefinitely. Absorption changes each open marker back to `absorbed` in both Next and Current
-only after that pair matches again.
+Current and Next each declare exactly one status for their whole directory. Current remains
+`// Tranche status: absorbed`; Next is `// Tranche status: open` whenever any mapped file path or
+content differs. Repository validation walks both directories recursively, maps each `.tao-next`
+suffix to `.tao`, and compares the complete file set and byte content after normalizing only the
+status line. The flat `@tao-next/` scratch package therefore keeps the tranche open until its
+declarations graduate into the real stdlib and the scratch files are deleted. At a tranche boundary
+the mapped directories are identical and both statuses are `absorbed`; sidecars and sibling files do
+not carry independent markers.
 
 ## Moving Next into Current
 
 Work the tranche one slice at a time; a slice is one decision group from Next's header.
 
 1. **Implement the vertical.** Grammar → scoping → validator → formatter → compiler → runtime, with package tests at each layer. The validator is authoritative for AST correctness; downstream layers assume validated input.
-2. **Migrate Current.** Rewrite `1 - Current/WordFlower.tao` and its journeys to the new form, matching Next's spelling exactly, and extend the journeys to prove the new behavior. Migrate any Test Apps and specs the slice touches in the same change.
+2. **Migrate Current.** Rewrite the corresponding files in `1 - Current/` to the new form, matching Next's spelling exactly, and extend the journeys to prove the new behavior. Migrate any Test Apps and specs the slice touches in the same change.
 3. **Verify and commit.** Focused tests while working, `./agent verify` before committing; every commit leaves Current green.
-4. **Repeat** until Current expresses everything Next expresses. The tranche is done when the two files say the same thing — Next just says it with decision comments.
+4. **Repeat** until Current expresses everything Next expresses. The tranche is done when the mapped directories have the same file set and byte-identical content after status normalization.
 5. **Reconcile the later versions.** As the final step of the tranche, fold every decision Next settled — including changes discovered during implementation — into `3 - MVP` and `4 - Revolution` in one pass.
 
 A change of mind mid-sprint goes through Next first: amend the sketch, then implement. Current never leads; it follows Next. The next tranche is then cut from the gap between Current and MVP.
@@ -51,8 +52,8 @@ If reflecting a Next decision reveals a **contradiction** — the decision canno
 
 ## Version contents
 
-- **`1 - Current/WordFlower.tao`** + `WordFlower.test.tao` — the executable app and its journey tests. The repository's canonical compile target (`just _compile-word-flower-app`) and the fixed-point fixture for parser/validator/formatter tests. It exercises the whole implemented language surface.
-- **`2 - Next/WordFlower.tao-next`** + test — the sprint contract; the header comment lists the full tranche. A tranche may carry a flat `@tao-next/` scratch package while it develops a self-hosted stdlib contract. At absorption those declarations graduate into `packages/stdlib/tao`, imports return to their real stdlib paths, and the scratch package is deleted before the byte-identity gates arm.
+- **`1 - Current/`** — the executable app sources and journey sidecars. `WordFlower.tao` remains the repository's canonical compile entry and fixed-point fixture for parser/validator/formatter tests; the directory as a whole exercises the implemented language surface.
+- **`2 - Next/`** — the sprint contract directory; the `WordFlower.tao-next` header lists the full tranche. A tranche may carry a flat `@tao-next/` scratch package while it develops a self-hosted stdlib contract. At absorption those declarations graduate into `packages/stdlib/tao`, imports return to their real stdlib paths, and the scratch package is deleted before the directory byte-identity gate arms.
 - **`3 - MVP/WordFlower.tao-mvp`** + test + `Justfile` — the full MVP target: three-level related data, every navigation family, dialogues with `ask`/`respond`, snapshots, `with` app variants, design tokens, a remote provider, functions, and the typed injection escape hatch. Its `Justfile` demonstrates every `tao` CLI capability the MVP release intends to ship.
 - **`4 - Revolution/WordFlower.tao-revolution`** + test + `Justfile` — intended functionality that is explicitly _not_ part of the MVP release, plus a TODO list at the top of the app file naming intended capabilities that do not yet have expressible syntax. Its `Justfile` demonstrates the CLI surface intended beyond the MVP.
 

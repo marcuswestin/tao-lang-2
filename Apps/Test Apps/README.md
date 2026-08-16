@@ -46,7 +46,7 @@ Exercise app-mounted navigation: presentation, covered-entry state preservation,
 
 Exercise controlled text input, event configuration, and form feedback.
 
-**Belongs here:** `TextInput` and `FormButton` from `@tao/ui`; labeled arguments such as `Value:`, `Placeholder:`, `Disabled:`, including control defaults; automatic two-way updates when `Value:` directly references writable text state; `on press|change|submit` with named actions or inline handlers, including the scoped `on change -> Payload` form that replaces the automatic binding; `#tag`, label, and placeholder selectors for entry, submission, and presses; input-value assertions; reactive validation, disabled submit, and duplicate-press suppression while submitting.
+**Belongs here:** `TextInput`, `Checkbox`, and `FormButton` from `@tao/ui`; labeled arguments such as `Value:`, `Placeholder:`, `Disabled:`, and the represented optional `Icon:`, including control defaults; automatic two-way text updates when `Value:` directly references writable text state; `on press|change|submit` with named actions or inline handlers, including boolean checkbox change and the scoped `on change -> Payload` form that replaces automatic text binding; `#tag`, label, and placeholder selectors for entry, submission, presses, and checkbox state; input-value and checkbox-state assertions; reactive validation, disabled submit, and duplicate-press suppression while submitting.
 
 **Does not belong here:** durable collections, relationships, filtering, or ordering; navigation; invocation, selector, or event diagnostics.
 
@@ -54,7 +54,7 @@ Exercise controlled text input, event configuration, and form feedback.
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
 
-**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with `on delete cascade`; `Datasource Memory with { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and the deterministic `data loading|error|ready` test steps.
+**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with `on delete cascade`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and the deterministic `data loading|error|ready` test steps.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
 
@@ -70,9 +70,9 @@ Exercise the executable functional core: expressions, pure functions, and contro
 
 Exercise bracketed layout clauses and the default app-shell baseline.
 
-**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric and `fill` `width`/`height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
+**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
 
-**Does not belong here:** visual style clauses; `frame`, `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or scroll containers beyond app-shell basics.
+**Does not belong here:** visual style clauses; `frame`, `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 
 ## Package Access
 
@@ -86,7 +86,7 @@ Exercise local workspace package resolution and project metadata.
 
 Exercise runtime-backed `@tao/ui` imports and the first stdlib primitives.
 
-**Belongs here:** `use … from @tao/ui`; rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, and `TextMultiline`; a no-op `on press` binding required by `Button`; basic nested stdlib composition.
+**Belongs here:** `use … from @tao/ui`; rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, `TextMultiline`, `Image`, `ScrollView`, `Spinner`, and `Progress`; informative and decorative image accessibility, bounded progress, a no-op `on press` binding required by `Button`, and basic nested stdlib composition.
 
 **Does not belong here:** type-system cases owned by Type System Tests; import-visibility errors; design and styling behavior; stateful interaction beyond the no-op binding.
 

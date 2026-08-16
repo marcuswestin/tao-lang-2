@@ -1,10 +1,10 @@
 # Design tooling and rollout
 
 Moved out of `Spec/Tao Design - WIP.md` so that spec covers the design language and this file covers
-the tooling, artifacts, and rollout around it. None of this is implemented. The preceding language
-slice is now settled in `Apps/WordFlower/2 - Next`: flat tokens and named clause bundles inside an
-ordinary `.tao` design declaration, selected by the app's `Design` property. The tooling and richer
-design layers below remain compatible later work.
+the tooling, artifacts, and rollout around it. None of the tooling in this document is implemented.
+The preceding language slice now ships: flat tokens and named clause bundles inside an ordinary
+`.tao` design declaration, selected by the app's `Design` property and resolved through the mounted
+app. The tooling and richer design layers below remain compatible later work.
 
 ## `tao design`
 
@@ -204,17 +204,18 @@ tao design screenshots --scenarios all
 
 This should build on Tao-native testing and app-state modeling rather than inventing a separate scenario system too early.
 
-## First Implementation Path
+## Implementation Path
 
-Phase 1: deterministic source and runtime design
+Phase 1 (shipped by WordFlower Tranche 4): deterministic source and runtime design
 
-- Parse the exact Next `design Name { ... }` surface in ordinary `.tao` source.
-- Resolve flat tokens and named clause bundles.
+- Parse the `design Name { ... }` surface in ordinary `.tao` source. **Shipped.**
+- Resolve flat tokens and named clause bundles. **Shipped.**
 - Compose bundles and direct clauses left to right; the last value for the same clause wins, then
-  reject semantically incompatible resolved clause sets.
+  reject semantically incompatible resolved clause sets. **Shipped.**
 - Lex `#...` through `TagOrHexColor` and validate tag and CSS hexadecimal color contexts separately.
-- Lower design to React Native styles through runtime helpers.
-- Apply the app's selected `Design` value.
+  **Shipped.**
+- Lower design to React Native styles through runtime helpers. **Shipped.**
+- Apply the app's selected `Design` value. **Shipped.**
 
 Phase 2: semantic tokens, recipes, defaults, and design diagnostics
 
@@ -252,17 +253,17 @@ Phase 5: ecosystem
 
 ## Open Questions
 
-- ~~What declaration syntax defines the first tokens and named specs?~~ **Decided for Next:** flat
+- ~~What declaration syntax defines the first tokens and named specs?~~ **Decided and implemented:** flat
   `name value` tokens and `name [clauses]` bundles inside `design Name { ... }`. Semantic-token,
   recipe, and recipe-variant syntax remains open.
 - ~~Does source use `design`, `theme`, or both as public capability names?~~ **Decided: `design`.** The declaration is `design <Name> { ... }` and an app selects it with `Design <Name>`.
 - ~~Should the first design data live in `.tao` source, a `tao.design` file, or both?~~ **Decided: `.tao` source.** Design is an ordinary Tao declaration subject to the same visibility, imports, and validation as the rest of the language; no separate design file format.
 - Which visual treatments can apply to `layout` and `frame` declarations?
-- How do combined specs interact with future slot forms beyond Next's opaque single-fill named slot
+- How do combined specs interact with future slot forms beyond the implemented opaque single-fill named slot
   and intrinsic `@@content`?
 - Which diagnostics are ordinary validator diagnostics, and which belong to `tao design check`?
 - How are app defaults selected before the user has authored a design?
-- Beyond Next's unquoted CSS hexadecimal color literal, which raw value forms should remain useful
+- Beyond the implemented unquoted CSS hexadecimal color literal, which raw value forms should remain useful
   for prototypes without becoming the main style language?
 - What is the first useful cross-platform adaptation axis: color scheme, platform, density, text scale, motion, locale, or pointer/hover capability?
 

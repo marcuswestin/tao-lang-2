@@ -1,9 +1,9 @@
 # Tao Type System
 
-Status: authoritative contract for the implemented WordFlower tranche and the language decisions
-settled by `Apps/WordFlower/2 - Next`. Sections explicitly labelled as the Next contract are not yet
-implemented. Compatible later work remains in `3 - MVP` and `4 - Revolution`; unresolved questions
-live in `Roadmap/Deferred Tao language decisions.md`.
+Status: authoritative contract for the implemented WordFlower tranche. Tranche 4 absorbed the
+declaration/value contract formerly staged in `Apps/WordFlower/2 - Next`; compatible later work
+remains in `3 - MVP` and `4 - Revolution`, and unresolved questions live in
+`Roadmap/Deferred Tao language decisions.md`.
 
 ## Implemented value and control-flow contract
 
@@ -19,17 +19,17 @@ row becomes missing; application code may retain that identity without gaining a
 The executable language includes precedence-aware arithmetic, comparison, equality, and boolean
 expressions; pure functions; immutable `let`; reactive `state`; named and inline actions; `set`,
 compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
-`loop`; first-class `view`, `layout`, `ui`, `dialogue`, and configured `nav` values; closed role unions
-such as `Presentable is ui | nav`; top-level data/query/write forms; declaration-owned configuration;
-dialogue `ask`/`respond`; and typed injection.
+`loop`; first-class `view`, `layout`, `frame`, `ui`, `dialogue`, and configured `nav` values; the
+primitive `visual`/`presentable` role hierarchy; top-level data/query/write forms; declaration-owned
+configuration; dialogue `ask`/`respond`; and typed injection.
 
 `match`, heterogeneous lists, richer collection transforms, and general concurrency policy remain
-future work. Optional item fields and non-blocking `async { ... }` are settled by the Next contract
-below but are not yet implemented.
+future work. Optional item fields and non-blocking `async { ... }` are implemented as described
+below.
 
-## Settled Next declaration and value contract
+## Implemented declaration and value contract
 
-Next retains auto-typed `let` for every value and adds an equivalent primitive-headed spelling for
+Tao retains auto-typed `let` for every value and adds an equivalent primitive-headed spelling for
 frequently declared app, navigation, and datasource values:
 
 ```tao
@@ -43,8 +43,8 @@ datasource Store = Memory { }
 The primitive head supplies the declared value type; it is not a reusable type declaration. New
 types always use `type Name is Base with { ... }`. `Base { ... }` constructs a value and is sugar
 for `Base with { ... }` in value-construction position. Extending an existing value uses
-`ExistingValue with { ... }`. A value may only specify properties declared by its type, and the Next
-tranche does not allow per-instance property-function overrides.
+`ExistingValue with { ... }`. A value may only specify properties declared by its type, and the
+implemented contract does not allow per-instance property-function overrides.
 
 Type and value namespaces are distinct. If both contain the same name, bare `Name { ... }` resolves
 the type and constructs a value. In a value expression, `Name with { ... }` resolves the value first
@@ -79,7 +79,7 @@ values; a one-case enum is valid. Optional item fields use `optional Field Type`
 runs its block without delaying later statements and surfaces failures as provider error state;
 async functions, `await`, scheduling, and fork/concurrency policy remain future work.
 
-Next also makes injection bindings explicit. `inject Type` produces a typed value outside render
+Injection bindings are explicit. `inject Type` produces a typed value outside render
 position. A TypeScript-backed visual uses
 `render inject Name expression, Content @@content, Layout @@layout, Tag @@tag`; a bare name binds the
 same-named Tao value. `TR`, `RN`, and `process` are always available in injected TypeScript, while no
@@ -136,15 +136,9 @@ require numbers; boolean operators require booleans.
 
 ### Product functions
 
-A product function is a top-level pure declaration. The currently implemented tranche accepts the
-expression-bodied form:
-
-```tao
-function DocumentLabel Title is text returns text = "Document: { Title }"
-```
-
-The settled Next form is block-bodied and parenthesized, as specified above. The return annotation is
-optional when it can be inferred from the returned expression.
+A product function is a top-level pure declaration. Its parameter list is parenthesized and its
+body is a statement block that returns explicitly, as specified above. The return annotation is
+optional when it can be inferred from all returned expressions.
 
 Calls use the same non-positional owner binder as other invocations. Parameters are immutable, the
 declared return type must accept the expression result, and the body cannot read reactive state or
@@ -249,8 +243,8 @@ deferred.
 
 ### Dialogue
 
-The implemented dialogue form is `dialogue Name <Parameters> responds <Enum>`; Next requires the
-parameters to be parenthesized, including `dialogue Name() responds <Enum>`. A dialogue is
+The implemented dialogue form is `dialogue Name(<Parameters>) responds <Enum>`, including
+`dialogue Name() responds <Enum>` when it has no parameters. A dialogue is
 response-demanding presentable content. `ask`
 creates a fresh stacked occurrence and suspends its action until that occurrence answers.
 `respond Case` supplies the declared enum case; bare `respond`, Back, or dismissal supplies `none`.
@@ -258,8 +252,8 @@ Each occurrence owns its resolver, so nested or repeated asks cannot answer one 
 
 ### Collections and entities
 
-List literals are homogeneous and comma-separated. Next requires every declared list type to spell
-its element type as `list of T`; bare `list` is not valid Next source. Rendering iteration uses
+List literals are homogeneous and comma-separated. Every declared list type spells its element type
+as `list of T`; bare `list` is not valid user source. Rendering iteration uses
 `loop Collection / Binder`; the binder type is inferred from the collection element and is scoped to
 the loop body. Queries are reactive lists of live entities. Relationship fields accept and return
 the declared related entity type, never arbitrary text. Strict `update` and `delete` require such a
@@ -268,7 +262,7 @@ surface; raw provider rows and ID-based test selectors remain private.
 
 ## Declaration-owned configuration
 
-Apps, `nav`, and `datasource` declarations already use a declaration-owned configured-value model.
+Apps, `nav`, and `datasource` values use a declaration-owned configured-value model.
 The linked declaration is the source of truth for property names and types; validation, formatting,
 and compilation do not dispatch on shipped names. A bare block constructs a descriptor, `with`
 patches its named entries and may add direct keyed entries when the declaration owns a keyed item
@@ -276,7 +270,7 @@ contract. The descriptor retains its declaration identity across imports, aliase
 modules.
 
 ````tao
-public nav CopiedStack {
+public type CopiedStack is nav with {
    Initial ui
 
    implement inject nav ```ts
@@ -313,7 +307,7 @@ tiers or catalogued as an open decision; this section only names them so the con
 complete about its own boundaries.
 
 - **Items and named types.** Item type extension, structural `like` types, and owner-qualified
-  property types. Optional fields are already settled for Next. The remaining work is sketched in
+  property types. Optional fields are implemented. The remaining work is sketched in
   `Apps/WordFlower/4 - Revolution` and catalogued as LANG-004 through LANG-006.
 - **`match` and overloaded declarations.** Closed unions matched exhaustively, and declarations
   overloaded by argument shape. Sketched in `4 - Revolution`; LANG-006 and LANG-021.

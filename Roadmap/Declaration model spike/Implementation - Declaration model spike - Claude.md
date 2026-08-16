@@ -1,8 +1,9 @@
 # Implementation - Declaration Model Spike
 
-Draft for review. Records the decisions Ro settled in design dialogue on 2026-08-14 that are ready to
-build, and the collisions they create with scheduled work. Grammar claims below were verified against
-`main` at `6cfd88be`; re-verify before planning, since substantial work is landing concurrently.
+Historical design record. It records decisions Ro settled in dialogue on 2026-08-14 and the
+collisions they created with scheduled work. WordFlower Tranche 4 subsequently resolved Q11:
+reusable navigation and datasource types bind protocols with `implement inject nav|provider`, inline
+or by sidecar path. The superseded `implement is "./X.ts"` proposal is not current Tao syntax.
 
 Everything still unresolved lives in `Open questions - Declaration model spike - Claude.md`. Do not
 guess at those; several of them would change the shape of what you build. Ask Ro if one blocks you.
@@ -45,7 +46,7 @@ Three sub-rules carry most of the weight:
 type StackNav is nav with {
    Initial ui                       // declare
    Header  ui is none               // declare with default
-   implement is "./StackNav.ts"     // fill
+   implement inject nav "./StackNav.ts" // fill the primitive protocol slot
 }
 let HomeStack = StackNav { Initial WorkspaceList }
 ```
@@ -104,14 +105,15 @@ arithmetic as the one honest gap.
 
 ### Sidecar implementations
 
-The protocol an `implement` slot expects is determined by the primitive you derived from and is never
-written in Tao. `NavKind` traffics in mutable mount handles and React elements; naming it in Tao would
-import React's ontology into a type system built around frozen, structurally-comparable descriptors.
+The binding clause explicitly selects the narrow `nav` or `provider` protocol; its TypeScript
+implementation types remain outside Tao's value system. `NavKind` traffics in mutable mount handles
+and React elements, so importing its ontology into ordinary Tao types would break the frozen,
+structurally-comparable descriptor model.
 
 ```tao
 type StackNav is nav with {
    Initial ui
-   implement is "./StackNav.ts"
+   implement inject nav "./StackNav.ts"
 }
 ```
 
@@ -167,7 +169,7 @@ becomes an optional _name_ instead. Note this changes the meaning of an existing
 nothing depends on the current type-less reading before repurposing it.
 
 **3. `is` as default-and-fill marker inside a type block.** `Header ui is none` declares with a
-default; `implement is "./StackNav.ts"` fills.
+default; `implement inject nav "./StackNav.ts"` fills the protocol slot.
 
 **4. Base inference for a bare `{ }`.** Infer from the target slot's type first, the binding name
 second. Context covers `Datasource { StorageKey "ChatData" }` inside an app block; the name-matched
@@ -186,10 +188,9 @@ type. This keeps completeness monotonic and descriptor identity straightforward.
 `Spec/Tao Presentation and Navigation.md:127` says a configured `Initial` "must be mountable without
 runtime arguments," which is exactly completeness and should stop being stated separately.
 
-**8. `.tao` → `.ts` sidecar imports.** `implement is "./X.ts"` replacing
-`ConfigurationImplementation`'s inline `TS_CODE_BLOCK`, plus compiler-emitted `.d.ts` for the config
-shape. Self-contained, needed regardless of how the open questions resolve, and the largest single
-win in the set. Keep the inline form working until the sidecar form is proven.
+**8. `.tao` → `.ts` sidecar imports.** `implement inject nav|provider "./X.ts"` complements the
+inline `TS_CODE_BLOCK` form, with compiler-emitted `.d.ts` for the config shape. Both forms use the
+same explicit protocol binding.
 
 **9. The prelude.** As a real `.tao` file the validator reads primitive slots from, not a prose
 appendix — otherwise it drifts.

@@ -1,11 +1,10 @@
 # Plan - Add Tao design system MVP
 
-This plan predates the WordFlower tranche process. Its first slice has now been re-cut and fully
-specified in `Apps/WordFlower/2 - Next`: flat tokens, named clause bundles, app `Design` selection,
-shared `TagOrHexColor` lexing with contextual validation, and deterministic clause composition.
-Implement that exact slice through the active WordFlower tranche brief before continuing with the
-compatible semantic-token, recipe, diagnostic, and tooling work retained here. Later design surface
-is expressed in `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp`.
+This plan predates the WordFlower tranche process. WordFlower Tranche 4 implemented its first slice:
+flat tokens, named clause bundles, app `Design` selection, shared `TagOrHexColor` lexing with
+contextual validation, deterministic clause composition, compiler lowering, and mounted-app runtime
+resolution. Steps 1–4 below describe that landed milestone; continue from Step 5 through a later
+WordFlower tranche. Later design surface is expressed in `Apps/WordFlower/3 - MVP/WordFlower.tao-mvp`.
 
 ## Goal
 
@@ -24,12 +23,12 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Assumptions
 
-- Layout and visual design entries share one typed `[ ... ]` application surface. Next has settled
-  the first design declaration and named-bundle shape; recipe shapes remain later work, not a second
+- Layout and visual design entries share one typed `[ ... ]` application surface. The first design
+  declaration and named-bundle shape are implemented; recipe shapes remain later work, not a second
   render-site delimiter.
 - The first runtime target is the existing Expo/React Native runtime.
 - Generated code imports default `TR` from `@runtime/TR` and delegates reusable design semantics to `TR.*` or generated design data consumed by `TR`.
-- The first implementation should update `Apps/WordFlower/1 - Current/WordFlower.tao` only after the slice is executable.
+- The first implementation updated the complete `Apps/WordFlower/1 - Current/` directory only after the slice was executable.
 - Old repo design code is reference material only; do not port old implementation files wholesale.
 
 ## Tao code coverage
@@ -61,7 +60,7 @@ Likely commit unit: parser grammar, generated parser artifacts, AST-facing tests
 
 Validation: parser and formatter package tests.
 
-Exit criteria: the exact Next design source parses and formats deterministically; recipes, semantic
+Exit criteria: the exact absorbed design source parses and formats deterministically; recipes, semantic
 tokens, and other richer alternatives remain explicit later work.
 
 ### 2. Add design model validation and references
@@ -71,7 +70,7 @@ Concrete work:
 - Add a feature-sliced validator module for design declarations and design references.
 - Validate duplicate flat token and bundle names, unknown token and bundle references, recursive
   bundles, contextual tag/color spelling, incompatible resolved clauses, and app design selection.
-- Accept the CSS hexadecimal color forms settled by Next; other raw-value policy remains later work.
+- Accept the implemented CSS hexadecimal color forms; other raw-value policy remains later work.
 - Define how design declarations participate in visibility/import rules before enabling cross-file design references.
 - Add validator diagnostics that are purely source-structural; defer rendered contrast and tap-target checks to later design tooling.
 
@@ -121,7 +120,7 @@ Exit criteria: visible Tao source can apply the exact WordFlower bundles such as
 
 ### 5. Extend the settled foundation with semantic tokens and recipes
 
-After the Next slice is absorbed, use a later WordFlower tranche to settle the still-open source
+After the first slice, use a later WordFlower tranche to settle the still-open source
 shape for semantic tokens, component recipes, variants, state styles, rules, and deterministic app
 defaults. Extend validation, lowering, and runtime tests only for the forms that tranche represents.
 This preserves the broader MVP goal without expanding the already-solidified Next contract.

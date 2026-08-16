@@ -8,9 +8,9 @@ workspace package index, and public self-hosted `nav` and `datasource` declarati
 `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
-The settled Next package surface additionally introduces `@tao/text`, exporting injected
-`CountWords(text)` and `Join(list of text, Separator: text)`, and requires parentheses on all visual,
-dialogue, action, and function declaration parameter lists. Those additions are not yet implemented.
+The implemented package surface includes `@tao/text`, exporting injected
+`CountWords(Value is text)` and `Join(Values is list of text, Separator is text)`, and requires
+parentheses on every visual, dialogue, action, and function declaration parameter list.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
 all-whitespace text. `Join` preserves source order, inserts the separator only between adjacent
 values, returns empty text for an empty list, and returns a one-item list's value unchanged.
@@ -170,13 +170,12 @@ Packages can make code available to other packages, and even other workspaces.
 Navigation kinds and datasource providers are self-hosted by ordinary package declarations. The
 stdlib definitions are the proof rather than compiler exceptions:
 
-The examples below show the currently implemented spelling. Next repurposes `nav` and `datasource`
-heads for values and uses `type Name is nav|datasource with { ... }` for reusable types. Whether the
-protocol binding becomes a filled `implement` slot or retains the current `implement inject`
-clause is still declaration-spike Q11, so this section does not invent its final spelling.
+The `nav` and `datasource` heads declare values; reusable types use
+`type Name is nav|datasource with { ... }`. Their explicit `implement inject` clause fills the
+primitive family's implementation requirement as a protocol binding, not as ordinary Tao data.
 
 ````tao
-public nav StackNav {
+public type StackNav is nav with {
    Initial ui
 
    implement inject nav ```ts
@@ -184,7 +183,7 @@ public nav StackNav {
    ```
 }
 
-public datasource Memory {
+public type Memory is datasource with {
    implement inject provider ```ts
       return TR.DataProvider.Memory()
    ```
@@ -223,7 +222,7 @@ entries, and keyed-item shape from the linked declaration; it does not branch on
 `StackNav`, `Local`, or `Memory`. A bare block constructs a configured value. `with` patches an
 existing value while retaining the originating declaration and leaving the base unchanged.
 
-Next makes that construction model uniform. `Type { ... }` is value-position sugar for
+The construction model is uniform. `Type { ... }` is value-position sugar for
 `Type with { ... }`; deriving from an existing value must retain `with`. Universal auto-typed `let`
 remains valid, while `nav Name = ...`, `datasource Name = ...`, and `app Name = ...` provide
 equivalent family-constrained heads for common product values. Those heads declare values, not new

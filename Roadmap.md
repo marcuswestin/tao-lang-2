@@ -15,7 +15,7 @@ Language features are built in tranches through the WordFlower app family: decis
     hierarchy, required declaration parentheses, block-bodied functions, typed injection, optional
     item fields, `list of T`, nominal enums, `@tao/text`, new UI surfaces, adaptive panes,
     non-blocking `async { ... }`, named frame slots, and the first flat-token design slice.
-- [ ] Implement the WordFlower tranche 4 contract into Current
+- [x] Implement the WordFlower tranche 4 contract into Current
   - Follow `Roadmap/Implement WordFlower tranche 4/Brief - Implement WordFlower tranche 4.md` and
     absorb the complete Next directory slice by slice. InstantDB, remote authorization semantics,
     richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general
@@ -23,8 +23,9 @@ Language features are built in tranches through the WordFlower app family: decis
 
 ## Toward v1
 
-- [ ] Add typed TS value injection expressions
-  - `let X = inject text/number …` with a Tao-side declared type and generated TS return checking.
+- [x] Add typed TS value injection expressions
+  - Tranche 4 added `let X is T = inject T ...` with Tao-side typing and generated TypeScript return
+    checking.
 - [ ] Harden `tao test`
   - Filters, watch and CI output, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
 - [ ] Add the Tao design system MVP
@@ -51,8 +52,8 @@ Product and codebase backlog, unordered.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
 - [ ] Allow only one project definition per project root; scope workspace package lookup to that root, have the IDE extension manage one workspace per project folder, and stop requiring a Git repo at the project root.
 - [ ] Implement styling, and then all of `Spec/Tao Layout and UI.md`.
-- [ ] Allow `TYPE Value` construction in general positions.
-- [ ] Require the element type of lists.
+- [x] Allow `TYPE Value` construction in general positions.
+- [x] Require the element type of lists with `list of T`.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
 - [ ] Remove magical strings.

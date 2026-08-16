@@ -77,13 +77,11 @@ of keeping two statements of the same constraint.
 ### 9. The prelude
 
 `primitive` declarations as real, parsed, validated `.tao` — not prose. This slice introduced the
-initial roots. The subsequent Next contract replaces the Prelude with the complete hierarchy in
-`Apps/WordFlower/2 - Next/@tao-next/Prelude.tao-next`: `visual`, `presentable`, `view`, `layout`,
-`frame`, `ui`, `nav`, `datasource`, `app`, and `design`, alongside the scalar roots. `layout` and
-`frame` accept content intrinsically; they do not declare `Children` or `Layout` slots. During that
-implementation slice the Next Prelude moves into `packages/stdlib/tao/Prelude.tao`, then the scratch
-copy is deleted. The validator should ultimately read primitive contracts from the Prelude rather
-than a hardcoded list.
+initial roots. WordFlower Tranche 4 replaced them with the complete hierarchy now at
+`packages/stdlib/tao/Prelude.tao`: `visual`, `presentable`, `view`, `layout`, `frame`, `ui`, `nav`,
+`datasource`, `app`, and `design`, alongside the scalar roots. `layout` and `frame` accept content
+intrinsically; they do not declare `Children` or `Layout` slots. The former Next scratch copy was
+deleted at absorption, and validators read primitive contracts from the Prelude.
 
 ## Deliberately excluded
 
