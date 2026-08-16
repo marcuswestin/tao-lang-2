@@ -43,7 +43,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(4)
         Expect(parseResult.files.some(file => file.path.endsWith('/tao/Prelude.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
-        Expect(compiled.files.map(file => file.sourcePath).sort()).toEqual([
+        Expect([...new Set(compiled.files.map(file => file.sourcePath))].sort()).toEqual([
           paths['Main.tao']!,
           paths['Packages/@cards/Title.tao']!,
           paths['Packages/@cards/screens/Main.tao']!,

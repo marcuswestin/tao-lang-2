@@ -66,6 +66,78 @@ Describe('TR design runtime', () => {
     })
   })
 
+  Test('resolves nested layout clauses and direct overrides as one left-to-right list', () => {
+    const design = DesignControls.Declaration({
+      name: 'Composable',
+      tokens: {},
+      bundles: {
+        base: DesignControls.Spec([
+          ['claim', 1],
+          ['width', 'fill'],
+          ['aligned', 'left'],
+          ['gap', 8],
+          ['pad', 8],
+        ]),
+        override: DesignControls.Spec([
+          ['claim', 2],
+          ['width', 'max', 720],
+          ['centered'],
+          ['gap', 12],
+          ['pad', 'left', 4],
+        ]),
+      },
+    })
+
+    const resolved = DesignControls.resolve(
+      design,
+      DesignControls.Spec([['base'], ['override'], ['gap', 16]]),
+    )
+
+    Expect(LayoutControls.resolve({
+      entries: resolved.layout?.entries ?? [],
+      parentDirection: 'row',
+    })).toEqual({
+      alignSelf: 'center',
+      flexGrow: 2,
+      gap: 16,
+      maxWidth: 720,
+      paddingBottom: 8,
+      paddingLeft: 4,
+      paddingRight: 8,
+      paddingTop: 8,
+    })
+  })
+
+  Test('checks effective incompatibilities against the actual mounted design occurrence', () => {
+    const weighted = DesignControls.Spec([['weighted'], ['rigid']])
+    const light = DesignControls.Declaration({
+      name: 'Light',
+      tokens: {},
+      bundles: { weighted: DesignControls.Spec([['claim', 2]]) },
+    })
+    const dark = DesignControls.Declaration({
+      name: 'Dark',
+      tokens: {},
+      bundles: { weighted: DesignControls.Spec([['fill']]) },
+    })
+
+    Expect(() => DesignControls.resolve(light, weighted)).toThrow(
+      "Design entries 'claim' and 'rigid' cannot remain effective together.",
+    )
+    const darkLayout = DesignControls.resolve(dark, weighted).layout
+    Expect(LayoutControls.resolve({ entries: darkLayout?.entries ?? [] })).toEqual({
+      alignSelf: 'stretch',
+      flexGrow: 1,
+      flexShrink: 0,
+    })
+    Expect(() =>
+      DesignControls.resolve(
+        light,
+        DesignControls.Spec([['weighted'], ['rigid'], ['compress']]),
+      )
+    ).not.toThrow()
+  })
+
   Test('keeps bundle lookup mounted-design-local and reports dynamic failures', () => {
     const light = DesignControls.Declaration({
       name: 'Light',

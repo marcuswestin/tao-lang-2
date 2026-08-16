@@ -1,5 +1,6 @@
 import { AST, Langium } from '@parser'
 import { Compile } from '../Compile'
+import type { InlineInjection } from './injection-plan'
 
 type TaoFileCompileOptions = {
   configurationTypes?: string
@@ -15,6 +16,11 @@ export default {
   /** TaoFile compiles a parsed Tao file into Expo-compatible TSX source. */
   TaoFile(taoFile: AST.TaoFile, opts: TaoFileCompileOptions = {}): string {
     return Langium.toString(Compile.TaoFile(taoFile, opts))
+  },
+
+  /** InjectionBoundary emits one authored TypeScript block behind a generated module boundary. */
+  InjectionBoundary(injection: InlineInjection): string {
+    return Langium.toString(Compile.InjectionBoundary(injection))
   },
 
   /** ConfigurationDeclarations emits the sidecar-facing declaration companion for one Tao file. */

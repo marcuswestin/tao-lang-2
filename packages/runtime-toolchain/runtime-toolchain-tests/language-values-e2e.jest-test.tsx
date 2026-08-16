@@ -294,6 +294,55 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('mounts a reusable app value and renders absence from an omitted optional item member', async () => {
+    await testCompileApp(
+      `
+        use StackNav from @tao/nav
+
+        public type ReusableApp is app with {
+          Name text is "Reusable optional values"
+        }
+
+        let Product = ReusableApp {
+          Navigator StackNav { Initial Home }
+        }
+
+        type Profile is {
+          Name text,
+          optional Subtitle text,
+        }
+
+        let Basic = Profile { Name: "Ada" }
+
+        ui Home() {
+          render Stack() {
+            Text("Mounted reusable app")
+            when (Basic.Subtitle == none) {
+              true -> { Text("No subtitle") }
+              otherwise -> { Text("Unexpected subtitle") }
+            }
+          }
+        }
+
+        layout Stack() {
+          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
+          \`\`\`
+        }
+
+        view Text(Value is text) {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      screen => {
+        ExpectScreen(screen).toHaveText('Mounted reusable app')
+        ExpectScreen(screen).toHaveText('No subtitle')
+      },
+    )
+  })
+
   Test('rerenders state-backed item member access after state updates', async () => {
     await testCompileApp(
       `

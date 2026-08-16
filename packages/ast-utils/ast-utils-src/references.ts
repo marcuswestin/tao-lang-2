@@ -30,8 +30,14 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
     if (isImportedShorthandPropertyReference(node)) {
       names.add(node.name)
     }
-    if (AST.isInferredConfigurationConstructor(node) && AST.isAliasDeclaration(node.$container)) {
-      names.add(node.$container.name)
+    if (AST.isInferredConfigurationConstructor(node)) {
+      const owner = node.$container
+      const inferredName = AST.isAliasDeclaration(owner) || AST.isAppProperty(owner) ? owner.name : undefined
+      if (inferredName) {
+        // Bare configuration blocks resolve through their owner's same-name declaration without an
+        // explicit AST cross-reference. Keep that declaration's import as a semantic reference.
+        names.add(inferredName)
+      }
     }
   }
   return names

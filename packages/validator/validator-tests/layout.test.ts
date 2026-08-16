@@ -61,25 +61,52 @@ Describe('validator: layout clauses', () => {
     Test(`rejects malformed or unsupported [${clause}]`, rejects(layoutApp(clause), message))
   }
 
-  const conflictCases: ReadonlyArray<readonly [clause: string, message: string]> = [
-    ['gap 8, gap 12', messages.duplicateEntry('gap')],
-    ['claim 1, claim 2', messages.duplicateEntry('claim')],
-    ['compress, rigid', messages.conflictingEntries('compress', 'rigid')],
-    ['fill, centered', messages.conflictingEntries('fill', 'centered')],
-    ['fill, claim 2', messages.conflictingEntries('fill', 'claim')],
-    ['fill, width fill', messages.conflictingEntries('fill', 'width')],
-    ['fill, height fill', messages.conflictingEntries('fill', 'height')],
-    ['claim 2, rigid', messages.conflictingEntries('claim', 'rigid')],
+  const withinEntryConflictCases: ReadonlyArray<readonly [clause: string, message: string]> = [
     ['pad horizontal 8 left 4', messages.duplicateEntry('pad left')],
     ['margin vertical 8 top 4', messages.duplicateEntry('margin top')],
     ['content left right', messages.conflictingEntries('content left', 'content right')],
     ['content baseline stretch', messages.conflictingEntries('content baseline', 'content stretch')],
     ['content center center', messages.duplicateEntry('content center')],
-    ['width 100, width 200', messages.duplicateEntry('width')],
   ]
 
-  for (const [clause, message] of conflictCases) {
+  for (const [clause, message] of withinEntryConflictCases) {
     Test(`rejects conflicting [${clause}]`, rejects(layoutApp(clause), message))
+  }
+
+  for (
+    const clause of [
+      'gap 8, gap 12',
+      'claim 1, claim 2',
+      'compress, rigid',
+      'rigid, compress',
+      'fill, centered',
+      'fill, claim 2',
+      'fill, width fill',
+      'fill, height fill',
+      'fill, width 100',
+      'width 100, fill',
+      'fill, height 100',
+      'height 100, fill',
+      'fill, width max 720',
+      'width max 720, fill',
+      'pad 8, pad left 4',
+      'margin vertical 8, margin top 4',
+      'content left, content right',
+      'width 100, width 200',
+    ]
+  ) {
+    Test(`accepts left-to-right replacement in [${clause}]`, accepts(layoutApp(clause)))
+  }
+
+  for (const clause of ['claim 2, rigid', 'rigid, claim 2']) {
+    Test(
+      `rejects incompatible surviving clauses in [${clause}]`,
+      rejects(layoutApp(clause), messages.conflictingEntries('claim', 'rigid')),
+    )
+  }
+
+  for (const clause of ['claim 2, rigid, compress', 'rigid, claim 2, hug', 'claim 2, fill, rigid']) {
+    Test(`accepts replacement of an otherwise incompatible winner in [${clause}]`, accepts(layoutApp(clause)))
   }
 
   Test(

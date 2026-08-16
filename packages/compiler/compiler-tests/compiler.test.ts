@@ -156,6 +156,7 @@ Describe('compiler: language lowering', () => {
 
     Expect(compiled.code).toContain("name: 'Data'")
     Expect(compiled.code).toContain('collection: "Workspaces"')
+    Expect(compiled.code).toContain('indexed: true')
     Expect(compiled.code).toContain('defaultOrder: { field: "CreatedAt", direction: "desc" }')
     Expect(compiled.code).toContain('inverseField: "Workspace"')
     Expect(compiled.code).toContain('defaultValue: false')
@@ -227,8 +228,9 @@ Describe('compiler: language lowering', () => {
       }
     `)
 
-    Expect(compiled.code).toContain(
-      'function __injection__(Name: string, Count: number, Greeting: string)',
+    const boundary = compiled.files.find(file => file.relativePath === 'App.injection-1.tsx')
+    Expect(boundary?.code).toContain(
+      'export default function(Name: string, Count: number, Greeting: string)',
     )
     Expect(compiled.code).toContain(
       '[_Scope.UserName.evaluate().jsValue, TR.Value(3).jsValue, TR.Value("Hello").jsValue]',

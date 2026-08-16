@@ -34,7 +34,7 @@ use every from @tao/time
 //   - Overloaded declarations via `match` cases (Spec/Tao Type System.md, future design)
 //   - Structural `like` types, heterogeneous list element unions (Spec/Tao Type System.md)
 //   - `stateful T` contagion and collapse-on-read semantics (Spec/Tao Type System.md)
-//   - Contextual bare literals, and `TYPE Value` construction in any position (LANG-005, Roadmap.md)
+//   - Contextual bare scalar literals (LANG-005)
 //   - Generics, macros, async functions, higher-order collection APIs (Autonomous MVP deferrals)
 //   - `${…}` template-literal sugar alongside `"{ X }"` interpolation (Autonomous MVP decision log)
 // Data
@@ -66,7 +66,7 @@ use every from @tao/time
 //   - `nudge`, `overlay`, scroll helpers, safe-area and keyboard insets (LANG-017, Spec/Tao Layout and UI.md)
 //   - Logical `start`/`end` directions, aspect ratio, wrapped-line controls (Spec/Tao Layout and UI.md)
 //   - Visual layers, portals, popovers, one Modal abstraction (LANG-018)
-//   - Spec merge precedence, named-spec composition, inline-only modifiers (LANG-013)
+//   - Which future spec modifiers, if any, must remain inline-only (LANG-013)
 //   - Motion policy and recipes, with reduced motion expressible (LANG-024)
 //   - Container-query adaptive variants; the condition syntax is unsettled (Spec/Tao Design - WIP.md)
 // Accessibility, localization, assets

@@ -29,7 +29,7 @@ Two things follow from that:
 - Toolchain is nix/devenv + direnv + bun. A fresh worktree needs `direnv allow` then
   `direnv exec . ./agent setup`. Branch `feat/<name>`; never commit from detached HEAD.
 - `./agent verify` before every commit. The cleanup spike's R1–R13 rulebook in
-  `Roadmap/Code cleanup spike/Report.md` is the live quality bar. Read `AGENTS.md` and
+  `Roadmap/Archive/Code cleanup spike/Report.md` is the live quality bar. Read `AGENTS.md` and
   `packages/AGENTS.md` first.
 - Fifteen-plus worktrees share this repo and other agents commit concurrently. Preserve changes you
   did not make, and never write into another worktree.

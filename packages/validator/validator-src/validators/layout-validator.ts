@@ -39,25 +39,18 @@ type DimensionTerm = (typeof dimensionTermValues)[number]
 type PadSide = (typeof padSideValues)[number]
 type PhysicalPadSide = 'bottom' | 'left' | 'right' | 'top'
 type ContentTermConflictKey = 'center' | 'cross-alignment' | 'horizontal' | 'main-distribution' | 'vertical'
-type LayoutConflictKey =
-  | 'compression-pressure'
-  | 'content'
-  | 'gap'
-  | 'height'
-  | 'height-axis-sizing'
-  | 'main-size-pressure'
-  | 'margin'
-  | 'pad'
-  | 'rigid-weighted-claim'
-  | 'self-alignment'
-  | 'width'
-  | 'width-axis-sizing'
+
+export type WeightedRigidClaim = {
+  readonly claim: AST.LayoutEntry
+  readonly rigid: AST.LayoutEntry
+}
 
 /** LayoutValidator validates render-site layout clauses. */
 export const LayoutValidator = {
   checks: {
     [AST.Render.$type]: validateRender,
   } satisfies NodeValidationChecks,
+  effectiveWeightedRigidClaim,
   isLayoutEntry,
   messages: layoutValidationMessages,
   validateEntry: validateLayoutEntry,
@@ -82,7 +75,15 @@ function validateLayoutClause(layoutClause: AST.LayoutClause, ctx: ValidationCon
       validateLayoutEntry(entry, ctx)
     }
   }
-  LayoutConflictValidator.validate(layoutClause.entries.flatMap(layoutEntryConflictItem), ctx, layoutValidationMessages)
+  // A design bundle can replace either winner after expansion. DesignValidator owns the effective
+  // conflict check for every combined list; this local fast path is authoritative only when the
+  // entire list is already made of direct layout entries.
+  if (layoutClause.entries.every(isLayoutEntry)) {
+    const conflict = effectiveWeightedRigidClaim(layoutClause.entries)
+    if (conflict) {
+      ctx.error(layoutValidationMessages.conflictingEntries('claim', 'rigid'), conflict.rigid)
+    }
+  }
 }
 
 function isLayoutEntry(entry: AST.LayoutEntry): boolean {
@@ -282,30 +283,20 @@ function contentTermConflictKey(term: ContentTerm): ContentTermConflictKey {
   })
 }
 
-function layoutEntryConflictItem(entry: AST.LayoutEntry): readonly LayoutConflictItem<LayoutConflictKey>[] {
-  const head = layoutEntryHead(entry)
-  const headValue = head ? layoutHeadValue(head) : undefined
-  if (!headValue) {
-    return []
-  }
-  return [{ keys: layoutConflictKeysByHead[headValue], label: layoutEntryHeadText(entry), node: entry }]
+/**
+ * Returns the one incompatibility that can remain after left-to-right clause replacement.
+ *
+ * `fill`, `claim`, and `hug` are successive values of main-axis growth. `compress` and `rigid`
+ * are successive values of shrink pressure. A weighted claim and a final rigid value are the only
+ * incompatible winners; replacing either winner makes the resolved set valid again.
+ */
+function effectiveWeightedRigidClaim(entries: readonly AST.LayoutEntry[]): WeightedRigidClaim | undefined {
+  const growth = entries.findLast(entry => ['fill', 'claim', 'hug'].includes(layoutEntryHeadText(entry)))
+  const shrink = entries.findLast(entry => ['compress', 'rigid'].includes(layoutEntryHeadText(entry)))
+  return growth && layoutEntryHeadText(growth) === 'claim' && shrink && layoutEntryHeadText(shrink) === 'rigid'
+    ? { claim: growth, rigid: shrink }
+    : undefined
 }
-
-const layoutConflictKeysByHead = {
-  aligned: ['self-alignment'],
-  centered: ['self-alignment'],
-  claim: ['main-size-pressure', 'rigid-weighted-claim'],
-  compress: ['compression-pressure'],
-  content: ['content'],
-  fill: ['main-size-pressure', 'self-alignment', 'width-axis-sizing', 'height-axis-sizing'],
-  gap: ['gap'],
-  height: ['height', 'height-axis-sizing'],
-  hug: ['main-size-pressure'],
-  margin: ['margin'],
-  pad: ['pad'],
-  rigid: ['compression-pressure', 'rigid-weighted-claim'],
-  width: ['width', 'width-axis-sizing'],
-} as const satisfies Record<LayoutHead, readonly LayoutConflictKey[]>
 
 const layoutHeads = [
   'aligned',

@@ -1,7 +1,8 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Assert, Text } from '@shared'
+import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
+import { inlineInjectionBindingName } from './injection-plan'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ConfigurationCompiler = {
@@ -71,11 +72,8 @@ function configurationFactory(
   implementation: AST.ConfigurationImplementation,
 ): Compiled {
   if (implementation.tsCodeBlock !== undefined) {
-    const code = stripTsFence(implementation.tsCodeBlock)
     return gen`Reflect.apply(
-      function __tao_configuration_implementation__() {
-        ${gen.textLines(code)}
-      },
+      ${gen.Name({ name: inlineInjectionBindingName(implementation) })},
       undefined,
       [],
     )`
@@ -180,8 +178,4 @@ function configurationKeyType(key: AST.ConfigurationKeyDeclaration): Compiled {
   return gen`readonly [key: \`@\${string}\`]: Readonly<{
     ${gen.list(key.block.properties, configurationPropertyType)}
   }>`
-}
-
-function stripTsFence(code: string): string {
-  return Text.stripIndent(code.replace(/^```ts[ \t]*(?:\r?\n)?/, '').replace(/(?:\r?\n)?```$/, ''))
 }

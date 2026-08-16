@@ -20,8 +20,11 @@ Describe('compiler: files and packages', () => {
       }
     `)
 
-    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.files).toHaveLength(2)
     Expect(compiled.files[0]?.relativePath).toBe('App.tsx')
+    Expect(compiled.files[1]?.relativePath).toBe('App.injection-1.tsx')
+    Expect(compiled.files[0]?.code).toContain("import __tao_injection_1__ from './App.injection-1'")
+    Expect(compiled.files[1]?.code).toContain('export default function(Value: string)')
   })
 
   Test('compiles copied nav and datasource declarations through exported identity bindings', async () => {
@@ -30,6 +33,8 @@ Describe('compiler: files and packages', () => {
       {
         'Main.tao': `
           use CustomStack, SnapshotStore from @custom
+          workspace type LocalStack is CustomStack with { Initial is Home }
+          let LocalNav = LocalStack { }
           let MainNav = CustomStack { Initial Home }
           app Demo {
             Name "Demo"
@@ -55,15 +60,23 @@ Describe('compiler: files and packages', () => {
           ui PackageHome() { render inject ${tsFence} return null ${fence} }
         `,
       },
-      async compiled => {
+      async (compiled, files) => {
         const packageCode = compiled['Packages/@custom/Constructs.tao'].code
         const appCode = compiled['Main.tao'].code
+        const appInjections = files.filter(file =>
+          file.sourcePath === compiled['Main.tao'].sourcePath
+          && file.relativePath.includes('.injection-')
+        )
+        const packageInjections = files.filter(file =>
+          file.sourcePath === compiled['Packages/@custom/Constructs.tao'].sourcePath
+          && file.relativePath.includes('.injection-')
+        )
 
         Expect(packageCode).toContain('_Scope.__tao_type_CustomStack = TR.Navigation.Declaration(')
         Expect(packageCode).toContain('_Scope.CustomStack = TR.Alias(TR.Navigation.Configure(')
-        Expect(packageCode).toContain('return TR.NavKind.Stack()')
+        Expect(packageInjections.some(file => file.code.includes('return TR.NavKind.Stack()'))).toBe(true)
         Expect(packageCode).toContain('_Scope.__tao_type_SnapshotStore = TR.Data.Declaration(')
-        Expect(packageCode).toContain('return TR.DataProvider.Local()')
+        Expect(packageInjections.some(file => file.code.includes('return TR.DataProvider.Local()'))).toBe(true)
         Expect(packageCode).toContain(
           'export const __tao_type_CustomStack = _Scope.__tao_type_CustomStack',
         )
@@ -76,6 +89,10 @@ Describe('compiler: files and packages', () => {
         )
         Expect(appCode).toContain("TR.Use(_Scope, '__tao_type_CustomStack', () => __tao_type_CustomStack)")
         Expect(appCode).toContain("TR.Use(_Scope, 'CustomStack', () => CustomStack)")
+        Expect(appCode).toContain("import __tao_injection_1__ from './App.injection-1'")
+        Expect(appCode).toContain("import __tao_injection_2__ from './App.injection-2'")
+        Expect(appInjections).toHaveLength(2)
+        Expect(appInjections.some(file => file.code.includes('return TR.NavKind.Stack()'))).toBe(true)
         Expect(appCode).toContain('TR.Navigation.Configure(_Scope.__tao_type_CustomStack, {')
         Expect(appCode).toContain('TR.Data.Configure(_Scope.__tao_type_SnapshotStore, {')
       },
@@ -143,6 +160,9 @@ Describe('compiler: files and packages', () => {
         const module = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.tsx')
         const declarations = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.d.ts')
         const sidecar = requireRelativeCompiledFile(compiled.files, 'modules/SidecarStack.ts')
+        const inlineBoundaries = compiled.files.filter(file =>
+          file.relativePath.startsWith('modules/Constructs.tao.injection-')
+        )
 
         Expect(module.code).toContain(
           "import __tao_configuration_implementation_SidecarStack__ from './SidecarStack'",
@@ -151,8 +171,8 @@ Describe('compiler: files and packages', () => {
           'TR.Navigation.Declaration( "SidecarStack", Reflect.apply( '
             + '__tao_configuration_implementation_SidecarStack__, undefined, [], ), )',
         )
-        Expect(module.code).toContain('function __tao_configuration_implementation__()')
-        Expect(module.code).toContain('return TR.DataProvider.Memory()')
+        Expect(inlineBoundaries).toHaveLength(4)
+        Expect(inlineBoundaries.some(file => file.code.includes('return TR.DataProvider.Memory()'))).toBe(true)
         Expect(sidecar.sourcePath).toBe(paths['SidecarStack.ts'])
         Expect(sidecar.code).toBe(sidecarCode)
         Expect(declarations.code).toContain("import type TR from '@runtime/TR'")
@@ -464,14 +484,17 @@ Describe('compiler: files and packages', () => {
         'liba/Views.tao': sharedViewSource('AText'),
         'libb/Views.tao': sharedViewSource('BText'),
       },
-      compiled => {
-        const files = Object.values(compiled)
-        const relativePaths = files.map(file => file.relativePath)
+      (compiled, allFiles) => {
+        const sourceModules = Object.values(compiled)
+        const relativePaths = allFiles.map(file => file.relativePath)
 
-        Expect(files).toHaveLength(3)
+        Expect(sourceModules).toHaveLength(3)
+        Expect(allFiles).toHaveLength(5)
         Expect(new Set(relativePaths).size).toBe(relativePaths.length)
         Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.tsx')
+        Expect(relativePaths).toContain('modules/external/Views.tao.injection-1.tsx')
+        Expect(relativePaths).toContain('modules/external/Views.tao-2.injection-1.tsx')
       },
     )
   })
@@ -590,7 +613,7 @@ async function withCompiledFiles<
 >(
   entryFile: EntryFile,
   files: Files,
-  testFunction: (compiled: CompiledFiles<Files>) => Promise<void> | void,
+  testFunction: (compiled: CompiledFiles<Files>, files: readonly CompiledFile[]) => Promise<void> | void,
 ): Promise<void> {
   await withTaoFiles('tao-compiler-', files, async paths => {
     const result = await Workspace.compile(paths[entryFile])
@@ -599,7 +622,7 @@ async function withCompiledFiles<
       compiled[relativePath] = requireCompiledFile(result.files, paths[relativePath])
     }
 
-    await testFunction(compiled)
+    await testFunction(compiled, result.files)
   })
 }
 

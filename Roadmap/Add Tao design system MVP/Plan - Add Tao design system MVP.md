@@ -33,11 +33,15 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Tao code coverage
 
-Add executable coverage once the parser, validator, compiler, and runtime can support it:
+Tranche 4 proved the first slice through the owning package suites and WordFlower. The broader design
+MVP should add a dedicated Test App only when a later tranche settles semantic tokens and recipes:
 
-- `Apps/Test Apps/Design System MVP/` demonstrates tokens, semantic tokens, recipes, and one styled screen.
-- `Apps/WordFlower/1 - Current/WordFlower.tao` gains a compact design section after the first end-to-end slice compiles and renders.
-- `Apps/Test Apps/README.md` records the Design System MVP app's intended scope and behavior-test notes before the app is added.
+- Parser, validator, formatter, compiler, runtime, and runtime-toolchain tests cover flat tokens,
+  named bundles, diagnostics, lowering, mounted-app lookup, and precedence.
+- `Apps/WordFlower/1 - Current/Design.tao` and the WordFlower journeys prove the end-to-end first
+  slice in a product app.
+- A later focused Test App should demonstrate the accepted semantic-token and recipe surface, with
+  its purpose recorded in `Apps/Test Apps/README.md` before that app is created.
 
 ## Implementation steps
 
@@ -109,9 +113,12 @@ Concrete work:
   and native props from injected views without inventing recipe or semantic-variant behavior.
 - Ensure current layout clauses still merge independently from visual styles.
 - Add focused compiler/runtime tests that inspect behavior through rendered output or runtime style resolution, not brittle generated-code substrings.
-- Add the implemented slice to `Apps/Test Apps/Design System MVP/` and then WordFlower/1 - Current once the app compiles and renders.
+- Prove the implemented slice through owning package/runtime behavior coverage and WordFlower once
+  the app compiles and renders. Reserve a dedicated design Test App for the later semantic-token and
+  recipe slice described in Step 5.
 
-Likely commit unit: call-site design application, test app, WordFlower coverage.
+Likely commit unit: call-site design application, WordFlower coverage, and package/runtime behavior
+tests.
 
 Validation: parser, validator, compiler, formatter, runtime tests; `just compile-app 'Apps/WordFlower/1 - Current/WordFlower.tao'`.
 
@@ -167,9 +174,11 @@ Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deter
 
 - Parser and formatter tests prove the syntax.
 - Validator tests prove source-level design diagnostics and reference resolution.
-- Compiler tests prove successful design lowering without brittle generated-code substring checks.
+- Compiler tests prove the exact generated-code lowering boundary; runtime tests independently prove
+  its behavior.
 - `TR` and runtime tests prove token, recipe, state, and precedence behavior.
-- Test Apps and WordFlower prove the end-to-end Tao authoring experience.
+- Package/runtime behavior tests and WordFlower prove the end-to-end first-slice Tao authoring
+  experience; a later Test App will prove the richer semantic-token and recipe surface.
 - Final validation is `./agent verify`.
 
 ## Deferrals

@@ -12,27 +12,27 @@ Apps/Test Apps/<App Name>/
 
 This file is the contract for each app's scope. When a change would expand an app beyond its entry below, update the entry first. Product behavior belongs in `Apps/WordFlower/`, never here.
 
-## Settled expansion when Next is implemented
+## Tranche 4 reconciliation
 
-The entries below describe the executable apps today. Absorbing `Apps/WordFlower/2 - Next` must
-expand the positive examples without erasing compatible coverage:
+The entries below describe the executable apps today. Tranche 4 expanded the positive examples
+without erasing compatible coverage:
 
-- Functional Core covers parenthesized block-bodied functions, explicit `return`, inferred return
-  types, and non-blocking `async { ... }`.
-- Layout and App Shell covers `frame`, intrinsic `@@content`, optional single-fill named slots,
-  named design bundles and direct-clause precedence, `width max`, `Panes`, and `ScrollView`.
-- Runtime Stdlib covers `Image`, `Checkbox`, `ScrollView`, `Spinner`, and `Progress`, while collection
-  rendering remains language-owned through `loop` and no `List` component is added. Package coverage
-  includes `@tao/text` `CountWords` and `Join`.
-- Type System Tests cover `list of T`, nominal enums including one-case enums, optional item fields,
+- Functional Core covers parenthesized block-bodied functions, explicit `return`, and non-blocking
+  `async { ... }`; WordFlower and package tests additionally prove inferred return types.
+- Layout and App Shell covers `width max`, `Panes`, and `ScrollView`. WordFlower and package tests
+  own `frame`, intrinsic `@@content`, optional single-fill named slots, named design bundles, and
+  direct-clause precedence.
+- Runtime Stdlib covers `Image`, `Spinner`, and `Progress`; Forms and Interaction owns `Checkbox`,
+  and Layout and App Shell owns `ScrollView`. Collection rendering remains language-owned through
+  `loop`, and no `List` component is added. Package coverage includes `@tao/text` `CountWords` and
+  `Join`.
+- The Type System Tests app covers `list of T`, parenthesized declarations, and explicit `render inject`
+  bindings. WordFlower's Foundation harness and package tests own nominal enums, optional item fields,
   `let Name is Type = Value`, primitive app/nav/datasource value heads, and the settled `with`
   construction-versus-value-derivation rules.
 - Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
 - All `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declarations use a
   parenthesized parameter list, including `()`.
-
-The current expression-bodied function and pre-frame statements below remain accurate until that
-absorption; the settled expansion supersedes those particular forms when Current advances.
 
 ## Navigation MVP
 
@@ -62,7 +62,7 @@ Exercise the provider-neutral data catalog and an app-configured isolated Memory
 
 Exercise the executable functional core: expressions, pure functions, and control flow.
 
-**Belongs here:** boolean, absence, arithmetic, comparison, and boolean-logic expressions; expression-bodied `function` declarations with explicit `returns` types; interpolated strings; exhaustive `when Subject { … otherwise -> … }` in value and render positions; block-scoped `guard` in actions and renders; `loop Plural / Singular` in render blocks; `toggle`; reactive branch changes driven by Tao state and actions.
+**Belongs here:** boolean, absence, arithmetic, comparison, and boolean-logic expressions; parenthesized block-bodied `function` declarations with explicit `return`; interpolated strings; exhaustive `when Subject { … otherwise -> … }` in value and render positions; block-scoped `guard` in actions and renders; `loop Plural / Singular` in render blocks; `toggle`; non-blocking `async { ... }`; reactive branch changes driven by Tao state and actions.
 
 **Does not belong here:** control-flow or expression diagnostics; input events, data, or navigation; collection transforms beyond the shipped list members and iteration.
 
@@ -86,7 +86,7 @@ Exercise local workspace package resolution and project metadata.
 
 Exercise runtime-backed `@tao/ui` imports and the first stdlib primitives.
 
-**Belongs here:** `use … from @tao/ui`; rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, `TextMultiline`, `Image`, `ScrollView`, `Spinner`, and `Progress`; informative and decorative image accessibility, bounded progress, a no-op `on press` binding required by `Button`, and basic nested stdlib composition.
+**Belongs here:** `use … from @tao/ui`; rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, `TextMultiline`, `Image`, `Spinner`, and `Progress`; informative and decorative image accessibility, bounded progress, a no-op `on press` binding required by `Button`, and basic nested stdlib composition.
 
 **Does not belong here:** type-system cases owned by Type System Tests; import-visibility errors; design and styling behavior; stateful interaction beyond the no-op binding.
 

@@ -494,6 +494,51 @@ Describe('removeUnusedImports', () => {
     )
   })
 
+  Test('keeps same-name declarations inferred by bare app property configurations', async () => {
+    await withTaoFiles(
+      'tao-source-actions-inferred-app-property-',
+      {
+        'Main.tao': `
+        use Navigator from ./Navigation.tao
+
+        app Demo {
+          Name "Demo"
+          Navigator { Initial Home }
+        }
+
+        ui Home() {
+          render Empty()
+        }
+
+        view Empty() {
+          render inject \`\`\`ts
+            return null
+          \`\`\`
+        }
+      `,
+        'Navigation.tao': `
+        public type Navigator is nav with {
+          Initial ui
+
+          implement inject nav \`\`\`ts
+            return TR.NavKind.Stack()
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        const source = await FS.readText(paths['Main.tao']!)
+        const document = await parseRawDocumentAt(source, paths['Main.tao']!)
+
+        const updated = await SourceActions.removeUnusedImports(document)
+        Expect(updated ?? source).toContain('use Navigator from ./Navigation.tao')
+        Expect(await SourceActions.fixSource(document, await sourceActionOptionsFor(document))).toContain(
+          'use Navigator from ./Navigation.tao',
+        )
+      },
+    )
+  })
+
   Test('keeps unresolved imports even when they are not referenced', async () => {
     const document = await parseDocument(`
       use Missing from ./missing

@@ -131,6 +131,44 @@ Describe('validator: minimal design', () => {
       messages.weightedRigidClaim,
     ),
   )
+
+  Test(
+    'applies replacement across expanded bundles before checking surviving incompatibilities',
+    accepts(designApp(
+      `
+      workspace design Theme {
+        weighted [claim 2]
+        stiff [rigid]
+        flexible [compress]
+      }
+    `,
+      'render Surface() [weighted, stiff, flexible]',
+    )),
+  )
+
+  Test(
+    'lets an intervening bundle replace a direct winner before incompatibility validation',
+    accepts(designApp(
+      'workspace design Theme { resetGrowth [fill] }',
+      'render Surface() [claim 2, resetGrowth, rigid]',
+    )),
+  )
+
+  Test(
+    'rejects incompatible effects that survive across separate bundles',
+    rejects(
+      designApp(
+        `
+        workspace design Theme {
+          weighted [claim 2]
+          stiff [rigid]
+        }
+      `,
+        'render Surface() [stiff, weighted]',
+      ),
+      messages.weightedRigidClaim,
+    ),
+  )
 })
 
 function designApp(design: string, body: string): string {

@@ -80,6 +80,21 @@ test "WordFlower workspaces" {
       }
       select #finishedDocuments[1] {
          expect text "Draft the intro"
+         press #reopen
+      }
+      expect {
+         text "Drafts: 1"
+         text "Draft the intro"
+         text "No finished documents"
+      }
+      select #drafts[1] {
+         press #finish
+      }
+      expect {
+         text "Drafts: 0"
+         text "No drafts"
+      }
+      select #finishedDocuments[1] {
          press #deleteFinished
       }
       expect text "No finished documents"

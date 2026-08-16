@@ -12,9 +12,10 @@ Describe('Expo runtime minimal design', () => {
         use Col, Text from @tao/ui
 
         workspace design Light {
-          surface #ffffff
-          ink #121826
-          screen [fill, pad 16, bg surface]
+          surface #fff
+          outline #abcd
+          ink #121826cc
+          screen [fill, pad 16, bg surface, border outline]
           title [size 16, fg ink]
         }
 
@@ -50,7 +51,9 @@ Describe('Expo runtime minimal design', () => {
         const darkScreen = screens['DarkApp']!
         Expect(RN.StyleSheet.flatten(lightScreen.getByTestId('screen').props.style)).toMatchObject({
           alignSelf: 'center',
-          backgroundColor: '#ffffff',
+          backgroundColor: '#fff',
+          borderColor: '#abcd',
+          borderWidth: 1,
           flexGrow: 2,
           maxWidth: 720,
           padding: 16,
@@ -63,7 +66,7 @@ Describe('Expo runtime minimal design', () => {
           padding: 16,
         })
         Expect(RN.StyleSheet.flatten(lightScreen.getByTestId('title').props.style)).toMatchObject({
-          color: '#121826',
+          color: '#121826cc',
           fontSize: 20,
         })
         Expect(RN.StyleSheet.flatten(darkScreen.getByTestId('title').props.style)).toMatchObject({

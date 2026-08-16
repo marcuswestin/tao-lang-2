@@ -3,38 +3,56 @@ import { AST } from '@parser'
 import { Assert, Switch, Text } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import {
+  type InlineInjection,
+  inlineInjectionBindingName,
+} from './injection-plan'
 
 export const InjectionsCompiler = {
-  /** Injection generates a self-invoked block of the injected TS code. */
+  /** Injection calls an isolated generated module with only explicitly declared values. */
   Injection(injection: AST.Injection): Compiled {
     return CompileRawInjection(injection)
   },
 
   /** TypedInjectionExpression wraps a declared TypeScript result as a Tao runtime value. */
   TypedInjectionExpression(injection: AST.TypedInjectionExpression): Compiled {
-    return gen`TR.Value(${CompileRawInjection(injection, CompileTaoJsType(Type.ofReference(injection.type)))})`
+    return gen`TR.Value(${CompileRawInjection(injection)})`
+  },
+
+  /** InjectionBoundary emits authored TypeScript in a module with only the public ambient bindings. */
+  InjectionBoundary(injection: InlineInjection): Compiled {
+    const argumentList = AST.isConfigurationImplementation(injection)
+      ? []
+      : AST.injectionArgumentsOf(injection)
+    const parameters = gen.join(argumentList, CompileInjectionParameter)
+    const resultType = AST.isTypedInjectionExpression(injection)
+      ? CompileTaoJsType(Type.ofReference(injection.type))
+      : undefined
+    const returnAnnotation = resultType ? gen`: ${resultType}` : gen.noop()
+    const tsCodeBlock = injection.tsCodeBlock
+    Assert.defined(tsCodeBlock, 'inline injection has authored TypeScript')
+    const code = stripTsFence(tsCodeBlock)
+
+    return gen`
+      import TR from '@runtime/TR'
+      import * as RN from 'react-native'
+
+      void TR
+      void RN
+
+      export default function(${parameters})${returnAnnotation} {
+        ${gen.textLines(code)}
+      }
+    `
   },
 } as const
 
-function CompileRawInjection(
-  injection: AST.Injection | AST.TypedInjectionExpression,
-  resultType?: Compiled,
-): Compiled {
+function CompileRawInjection(injection: AST.Injection | AST.TypedInjectionExpression): Compiled {
   const argumentList = AST.injectionArgumentsOf(injection)
-  const parameters = gen.join(argumentList, CompileInjectionParameter)
   const values = gen.join(argumentList, CompileInjectionValue)
-  const code = stripTsFence(injection.tsCodeBlock)
-  const returnAnnotation = resultType ? gen`: ${resultType}` : gen.noop()
+  const binding = { name: inlineInjectionBindingName(injection) }
 
-  return gen`
-      Reflect.apply(
-        function __injection__(${parameters})${returnAnnotation} {
-          ${gen.textLines(code)}
-        },
-        undefined,
-        [${values}],
-      )
-    `
+  return gen`Reflect.apply(${gen.Name(binding)}, undefined, [${values}])`
 }
 
 function CompileInjectionParameter(argument: AST.InjectionArgument): Compiled {
@@ -58,7 +76,7 @@ function CompileInjectionValue(argument: AST.InjectionArgument): Compiled {
 
 function CompileAmbientParameterType(ambient: AST.RenderAmbientChannel): Compiled {
   return Switch(ambient.channel, {
-    '@@content': () => gen`React.ReactNode`,
+    '@@content': () => gen`import('react').ReactNode`,
     '@@layout': () => gen`ReturnType<typeof TR.VisualLayout>`,
     '@@tag': () => gen`string | undefined`,
   })
@@ -95,11 +113,11 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         text: () => gen`string`,
         time: () => gen`number`,
         design: () => gen`any`,
-        visual: () => gen`React.ReactNode`,
+        visual: () => gen`import('react').ReactNode`,
         presentable: () => gen`TR.Presentable`,
-        view: () => gen`React.ReactNode`,
-        layout: () => gen`React.ReactNode`,
-        frame: () => gen`React.ReactNode`,
+        view: () => gen`import('react').ReactNode`,
+        layout: () => gen`import('react').ReactNode`,
+        frame: () => gen`import('react').ReactNode`,
         nav: () => gen`TR.NavigationValue`,
         ui: () => gen`TR.Presentable`,
         datasource: () => gen`any`,

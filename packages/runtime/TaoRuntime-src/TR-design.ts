@@ -96,9 +96,21 @@ function resolve(design: TaoDesign | undefined, spec: TaoDesignSpec | undefined)
     applyVisualEntry(style, design, entry)
   }
 
+  const layout = layoutEntries.length > 0 ? LayoutControls.create(layoutEntries) : undefined
+  assertEffectiveLayoutCompatibility(layout)
+
   return {
-    ...(layoutEntries.length > 0 ? { layout: LayoutControls.create(layoutEntries) } : {}),
+    ...(layout ? { layout } : {}),
     ...(Object.keys(style).length > 0 ? { style } : {}),
+  }
+}
+
+function assertEffectiveLayoutCompatibility(layout: TaoLayout | undefined): void {
+  const entries = layout?.entries ?? []
+  const growth = entries.findLast(entry => ['fill', 'claim', 'hug'].includes(entry[0]))
+  const shrink = entries.findLast(entry => ['compress', 'rigid'].includes(entry[0]))
+  if (growth?.[0] === 'claim' && shrink?.[0] === 'rigid') {
+    throw new Error("Design entries 'claim' and 'rigid' cannot remain effective together.")
   }
 }
 

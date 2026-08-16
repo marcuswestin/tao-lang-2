@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode } from './test-parse'
@@ -53,5 +54,21 @@ Describe('parser: minimal design declarations', () => {
 
     const tagPress = AST.streamAllContents(parsed.entry.ast).find(AST.isTagPressStep)
     Expect(tagPress?.tag).toBe('#123abc')
+  })
+
+  Test('preserves repeated combined clauses in authored left-to-right order', async () => {
+    const parsed = await testParseCode(`
+      design Theme {
+        compact [gap 8, gap 12, width 960, width max 720]
+      }
+    `)
+
+    const bundle = AST.streamAllContents(parsed.entry.ast).find(AST.isDesignBundle)
+    Expect(bundle?.spec.entries.map(ASTUtils.layoutEntryValues)).toEqual([
+      ['gap', 8],
+      ['gap', 12],
+      ['width', 960],
+      ['width', 'max', 720],
+    ])
   })
 })

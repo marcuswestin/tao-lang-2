@@ -57,9 +57,9 @@ slice's whole job was a second RHS form for the clause that already exists.
   move anything that ships today.
 - Any protocol-version negotiation between a sidecar and `TR`. Stays single-version and implicit, as it
   is today.
-- Native-backed visual declarations. Next has since settled those on `render inject`, not a `ui`
-  `implement` slot; that work belongs to the active Next tranche rather than this landed sidecar
-  slice.
+- Native-backed visual declarations. WordFlower Tranche 4 subsequently settled those on
+  `render inject`, not a `ui` `implement` slot; that work was absorbed through the tranche rather
+  than this landed sidecar slice.
 
 ## Validation
 

@@ -34,7 +34,10 @@ Describe('compiler: typed values', () => {
     `)
 
     const code = compiled.files[0]?.code ?? ''
-    Expect(code).toContain('function __injection__(Values: Array<string>, Separator: string): string')
+    const typedBoundary = compiled.files.find(file => file.relativePath === 'App.injection-1.tsx')
+    Expect(typedBoundary?.code).toContain(
+      'export default function(Values: Array<string>, Separator: string): string',
+    )
     Expect(code).toContain('TR.Value(Reflect.apply(')
     Expect(code).toContain('["Name"]: TR.Value("Ada").jsValue')
     Expect(code).not.toContain('["Subtitle"]')

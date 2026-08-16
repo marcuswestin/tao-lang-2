@@ -20,11 +20,11 @@ Styling and layout remain distinct typed concerns, but Tao combines both in one 
 
 Layout describes how to arrange content on the screen - where it appears, and how it gets sized:
 
-`Row [content spread center, pad 2, rigid] { ... }`
+`Row() [content spread center, pad 2, rigid] { ... }`
 
 Visual entries describe appearance in the same brackets:
 
-`Row [content spread center, background black, border white, radius 2, shadow gray]`
+`Row() [content spread center, background black, border white, radius 2, shadow gray]`
 
 ### UI Kinds
 
@@ -272,7 +272,12 @@ To describe how a UI element resizes when necessary, use:
 - `rigid` to resist shrinking
 - `width <positive number>` and `height <positive number>` to set physical dimensions directly
 - `width fill` and `height fill` to fill one physical axis; Tao lowers this at runtime using the actual parent container direction
-- Within one layout clause, bare `fill` cannot appear with `width` or `height`; use physical-axis sizing when per-axis control is needed.
+- Bare `fill` contributes two semantic effects: parent-main-axis growth and parent-cross-axis stretch.
+  A later `claim` or `hug` replaces its growth effect, a later `aligned` or `centered` replaces its
+  stretch effect, and a later numeric physical dimension replaces only the effect on that physical
+  axis once the parent direction is known. A later bare `fill` replaces both earlier physical-axis
+  dimensions. `width max N` is a cap rather than a replacement and composes with `fill` in either
+  order.
 - `width max N` caps a readable region without forcing it wider than available space.
 
 To specify how to align a single item in a container, use:
@@ -442,7 +447,7 @@ Row() [content baseline left, gap 8] {
 }
 
 TextMultiline(Article.Summary)
-TextMultiline(Article.Summary, Lines 3)
+TextMultiline(Article.Summary, Lines: 3)
 ```
 
 This keeps text pressure visible in the view being rendered. A layout clause should not have to say "this text is multiline" or "this label clips instead of ellipsizing." That is part of the text view's job.
@@ -536,8 +541,10 @@ These are the layout values of Tao's stdlib containers, and the React Native sty
 
 A caller layout clause overlays the render site's defaults. Named clause bundles and direct clauses
 form one left-to-right list. The last specification of a given clause replaces the earlier value;
-unrelated clauses remain. After replacement, the validator rejects a resolved set containing
-semantically incompatible clauses—source order cannot make incompatible categories valid:
+unrelated clauses remain. Bare `fill` is lowered as the two growth and stretch effects described
+above, so a later specialized clause can replace one effect without erasing the other. After
+replacement, the validator rejects a resolved set containing semantically incompatible
+clauses—source order cannot make incompatible categories valid:
 
 ```tao
 Row() [content spread center, compress] {

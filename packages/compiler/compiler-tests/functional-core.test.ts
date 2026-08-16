@@ -42,7 +42,7 @@ Describe('compiler: functional core', () => {
       view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.files).toHaveLength(3)
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
     Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')

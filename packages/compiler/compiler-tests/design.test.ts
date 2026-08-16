@@ -12,6 +12,7 @@ Describe('compiler: minimal design', () => {
         ink #121826
         screen [fill, content top stretch, pad 16, bg paper]
         title [size 28, weight 700, fg ink]
+        compact [gap 8, gap 12]
       }
 
       app Demo {
@@ -21,7 +22,7 @@ Describe('compiler: minimal design', () => {
       }
 
       ui Main() {
-        render Surface() [screen, claim 2, width max 720, centered]
+        render Surface() [screen, compact, gap 16, claim 2, width max 720, centered]
       }
 
       view Surface() {
@@ -35,8 +36,11 @@ Describe('compiler: minimal design', () => {
     Expect(code).toContain('_Scope.Theme = TR.Design.Declaration({')
     Expect(code).toContain('"paper": "#f6f7f3"')
     Expect(code).toContain('"screen": TR.Design.Spec([["fill"],["content","top","stretch"],["pad",16],["bg","paper"]])')
+    Expect(code).toContain('"compact": TR.Design.Spec([["gap",8],["gap",12]])')
     Expect(code).toContain('design: () => _Scope.Theme.evaluate()')
-    Expect(code).toContain('designSpec: TR.Design.Spec([["screen"],["claim",2],["width","max",720],["centered"]])')
+    Expect(code).toContain(
+      'designSpec: TR.Design.Spec([["screen"],["compact"],["gap",16],["claim",2],["width","max",720],["centered"]])',
+    )
   })
 
   Test('imports and exports a visible design as an ordinary runtime value', async () => {

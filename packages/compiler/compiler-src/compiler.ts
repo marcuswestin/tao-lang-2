@@ -7,6 +7,11 @@ import {
   configurationSidecarBindingName,
   isRuntimeConfigurableDeclaration,
 } from './codegen/app/configuration-compiler'
+import {
+  type InlineInjection,
+  inlineInjectionsOf,
+  withInlineInjectionBindings,
+} from './codegen/app/injection-plan'
 import RuntimeGen from './codegen/app/runtime-gen'
 import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
 
@@ -39,9 +44,16 @@ type PlannedSidecar = {
 }
 
 type PlannedSourceOutputs = {
+  injections: PlannedInjection[]
   modulePath: string
   declarationsPath?: string
   sidecars: PlannedSidecar[]
+}
+
+type PlannedInjection = {
+  binding: string
+  node: InlineInjection
+  relativePath: string
 }
 
 type PlannedOutputs = {
@@ -192,6 +204,19 @@ function planOutputPaths(
   for (const file of sourceFiles) {
     const modulePath = modulePathBySourcePath.get(file.path)
     Assert.defined(modulePath, compiledSourceOutputPathMessage, { sourcePath: file.path })
+    const injections = inlineInjectionsOf(file.ast).map((node, index) => ({
+      // Bindings are local to this generated module. An inherited implementation may be owned
+      // by another Tao file, whose own ordinal must not collide with this file's injections.
+      binding: `__tao_injection_${index + 1}__`,
+      node,
+      relativePath: reserveOutputPath(
+        outputPathInDirectory(
+          outputDirectory(modulePath),
+          `${FS.basename(modulePath, FS.extname(modulePath))}.injection-${index + 1}.tsx`,
+        ),
+        usedOutputPaths,
+      ),
+    }))
     const declarations = file.ast.statements.filter(isRuntimeConfigurableDeclaration)
     const companionDirectory = declarations.length === 0
       ? outputDirectory(modulePath)
@@ -219,7 +244,7 @@ function planOutputPaths(
       }
       return [{ declaration, sourcePath, relativePath }]
     })
-    bySourcePath.set(file.path, { modulePath, declarationsPath, sidecars })
+    bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars })
   }
   return { bySourcePath, modulePathBySourcePath }
 }
@@ -243,6 +268,9 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = [
     ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
+    ...planned.injections.map(injection =>
+      `import ${injection.binding} from '${relativeImportPath(planned.modulePath, injection.relativePath)}'`
+    ),
     ...planned.sidecars.map(sidecar =>
       `import ${configurationSidecarBindingName(sidecar.declaration)} from '${
         relativeImportPath(planned.modulePath, sidecar.relativePath)
@@ -269,17 +297,21 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const module: CompiledFile = {
     sourcePath: file.path,
     relativePath: planned.modulePath,
-    code: RuntimeGen.TaoFile(file.ast, {
-      configurationTypes: planned.declarationsPath === undefined
-        ? undefined
-        : RuntimeGen.ConfigurationTypes(file.ast),
-      dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-      emitDataCatalog: ownsDataCatalog,
-      importLines,
-      scopeBindings,
-      exportedBindings,
-      selectedAppName,
-    }),
+    code: withInlineInjectionBindings(
+      new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+      () =>
+        RuntimeGen.TaoFile(file.ast, {
+          configurationTypes: planned.declarationsPath === undefined
+            ? undefined
+            : RuntimeGen.ConfigurationTypes(file.ast),
+          dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+          emitDataCatalog: ownsDataCatalog,
+          importLines,
+          scopeBindings,
+          exportedBindings,
+          selectedAppName,
+        }),
+    ),
   }
   const declarations: CompiledFile[] = planned.declarationsPath === undefined
     ? []
@@ -288,6 +320,11 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       relativePath: planned.declarationsPath,
       code: RuntimeGen.ConfigurationDeclarations(file.ast),
     }]
+  const injections: CompiledFile[] = planned.injections.map(injection => ({
+    sourcePath: file.path,
+    relativePath: injection.relativePath,
+    code: RuntimeGen.InjectionBoundary(injection.node),
+  }))
   const copiedSidecars = new Map<string, CompiledFile>()
   for (const sidecar of planned.sidecars) {
     Assert(FS.existsSync(sidecar.sourcePath), 'validated configuration sidecar exists', {
@@ -299,7 +336,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       code: FS.readTextSync(sidecar.sourcePath),
     })
   }
-  return [module, ...declarations, ...copiedSidecars.values()]
+  return [module, ...injections, ...declarations, ...copiedSidecars.values()]
 }
 
 function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {

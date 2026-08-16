@@ -42,9 +42,6 @@ export default {
       void React
       import TR from '@runtime/TR'
 
-      // @ts-ignore RN is available to Tao inject blocks
-      import * as RN from 'react-native'
-
       ${gen.textLines(importLines)}
 
       const _Scope: any = {}

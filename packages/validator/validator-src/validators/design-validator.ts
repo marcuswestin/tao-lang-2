@@ -113,7 +113,8 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   const designs = selectedWorkspaceDesigns(ctx)
   if (designs.length > 1) {
     // A source file can participate in multiple mounted apps. Name resolution is deliberately
-    // deferred in this case so identical private bundle names stay app-occurrence-local.
+    // deferred in this case so identical private bundle names stay app-occurrence-local. The
+    // mounted-design runtime checks the effective result for the actual app occurrence.
     return
   }
   const design = designs[0]
@@ -287,10 +288,9 @@ function expandEntries(
 }
 
 function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: ValidationContext): void {
-  const lastGrowth = entries.findLast(entry => ['fill', 'hug', 'claim'].includes(entryHead(entry)))
-  const lastShrink = entries.findLast(entry => ['compress', 'rigid'].includes(entryHead(entry)))
-  if (lastGrowth && entryHead(lastGrowth) === 'claim' && lastShrink && entryHead(lastShrink) === 'rigid') {
-    ctx.error(designValidationMessages.weightedRigidClaim, lastShrink)
+  const conflict = LayoutValidator.effectiveWeightedRigidClaim(entries)
+  if (conflict) {
+    ctx.error(designValidationMessages.weightedRigidClaim, conflict.rigid)
   }
 }
 

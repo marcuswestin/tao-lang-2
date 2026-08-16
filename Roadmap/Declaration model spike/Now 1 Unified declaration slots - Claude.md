@@ -44,10 +44,11 @@ its type reference. Grammar: `TypeProperty` gets a form where only a type is pre
 
 ### 3. `is` as default-and-fill marker inside a type block
 
-`Header ui is none` declares with a default; `implement is <expr>` fills. Build the grammar generically
-for any RHS expression — do not couple this to what `implement`'s RHS resolves to. Sidecar file paths
-for `implement` are `Now 2`'s concern, not this slice's; the inline `TS_CODE_BLOCK` form
-(`configuration.langium:31-35`) keeps working unchanged here.
+`Header ui is none` declares with a default. This historical slice proposed `implement is <expr>`
+for the protocol slot, but WordFlower Tranche 4 superseded that one spelling: reusable `nav` and
+`datasource` types fill the slot with `implement inject nav|provider`. The original grammar work was
+generic about ordinary default and fill expressions. Sidecar file paths for the protocol binding were
+`Now 2`'s concern; its inline `TS_CODE_BLOCK` form remained supported.
 
 ### 4. Type/value namespace separation
 
@@ -85,11 +86,11 @@ deleted at absorption, and validators read primitive contracts from the Prelude.
 
 ## Deliberately excluded
 
-These were deliberately excluded from this landed slice, but are no longer all open. Next settles
-the visual/presentable hierarchy, `render inject`, intrinsic caller content, and primitive value
-heads for `app`, `nav`, and `datasource` alongside universal `let`. It deliberately introduces no
-stdlib `List`; collection rendering stays language-owned through `loop`. Sidecar `.ts` imports were
-`Now 2`.
+These were deliberately excluded from this landed slice, but are no longer all open. WordFlower
+Tranche 4 subsequently settled the visual/presentable hierarchy, `render inject`, intrinsic caller
+content, and primitive value heads for `app`, `nav`, and `datasource` alongside universal `let`. It
+introduced no stdlib `List`; collection rendering stays language-owned through `loop`. Sidecar `.ts`
+imports were `Now 2`.
 
 ## Validation
 

@@ -54,15 +54,21 @@ Describe('compiler: frame content and render injection channels', () => {
       app Demo { view Main }
     `)
 
-    Expect(compiled.code).toContain(
-      'function __injection__(Content: React.ReactNode, Layout: ReturnType<typeof TR.VisualLayout>, Tag: string | undefined)',
+    const boundary = compiled.files.find(file => file.relativePath === 'App.injection-1.tsx')
+    Expect(boundary).toBeDefined()
+    Expect(boundary?.code).toContain(
+      "export default function(Content: import('react').ReactNode, Layout: ReturnType<typeof TR.VisualLayout>, Tag: string | undefined)",
+    )
+    Expect(boundary?.code).toContain(
+      'return TR.Views.View({ children: Content, layout: Layout, tag: Tag })',
     )
     Expect(compiled.code).toContain(
       '[_ViewProps.children, TR.VisualLayout(_ViewProps.__tao), TR.VisualTag(_ViewProps.__tao)]',
     )
-    const fenceBody = compiled.code.match(/function __injection__\([^)]*\)[^{]*\{([\s\S]*?)\n\s*\},\n\s*undefined/)
-    Expect(fenceBody?.[1]).not.toContain('_ViewProps')
-    Expect(fenceBody?.[1]).not.toContain('_tao')
-    Expect(fenceBody?.[1]).not.toContain('_Scope')
+    Expect(compiled.code).not.toContain('children: Content')
+    Expect(boundary?.code).not.toContain('_ViewProps')
+    Expect(boundary?.code).not.toContain('_tao')
+    Expect(boundary?.code).not.toContain('_Scope')
+    Expect(boundary?.code).not.toContain("from './App'")
   })
 })
