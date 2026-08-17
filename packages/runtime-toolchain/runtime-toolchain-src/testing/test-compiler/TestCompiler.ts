@@ -1,6 +1,7 @@
 import { FS } from '@shared'
 import type Workspace from '@workspace'
 import type { RuntimeApp } from '../RuntimeApp'
+import { TestRunId } from '../test-run-id'
 import { Worker as CompilerWorker } from './Worker'
 
 type CompiledTestPlan = Awaited<ReturnType<typeof Workspace.compileTestPlan>>
@@ -16,6 +17,7 @@ type RuntimeModule = {
 type WorkspaceModule = {
   default: {
     compileTestPlan: typeof Workspace.compileTestPlan
+    shared: typeof Workspace.shared
   }
 }
 
@@ -164,10 +166,11 @@ async function compileTestFile(
   testFilePath: string,
   options: TestCompiler.CompileFileOptions,
 ): Promise<TestCompiler.File> {
-  return await fileForPlan(
-    await workspace().compileTestPlan(testFilePath, { skipValidation: options.skipValidation }),
-    options.context,
-  )
+  const entryPath = FS.resolvePath(testFilePath)
+  const plan = await (await workspace().shared(FS.dirname(entryPath))).compileTestPlan(entryPath, {
+    skipValidation: options.skipValidation,
+  })
+  return await fileForPlan(plan, options.context)
 }
 
 function runtime(): RuntimeModule['default'] {
@@ -215,14 +218,36 @@ async function checkForPlan(
   }
 }
 
+const inflightAppCompiles = new WeakMap<TestCompiler.Context, Map<string, Promise<string>>>()
+
 async function appModulePath(appSourcePath: string, appName: string, context: TestCompiler.Context): Promise<string> {
   const cacheKey = `${appSourcePath}#${appName}`
   const cached = context.appModulePaths.get(cacheKey)
   if (cached !== undefined) {
     return cached
   }
-  const appRoot = FS.resolvePath(`app-${context.appModulePaths.size + 1}`, context.runRoot)
-  const outputPath = await compileApp(appSourcePath, { appName, runtimePackageRoot: appRoot })
-  context.appModulePaths.set(cacheKey, outputPath)
-  return outputPath
+  const inflight = inflightCompiles(context)
+  const pending = inflight.get(cacheKey)
+  if (pending !== undefined) {
+    return await pending
+  }
+  const compile = compileApp(appSourcePath, {
+    appName,
+    runtimePackageRoot: FS.resolvePath(`app-${TestRunId.create()}`, context.runRoot),
+  }).then(outputPath => {
+    context.appModulePaths.set(cacheKey, outputPath)
+    return outputPath
+  })
+  inflight.set(cacheKey, compile)
+  return await compile
+}
+
+function inflightCompiles(context: TestCompiler.Context): Map<string, Promise<string>> {
+  const existing = inflightAppCompiles.get(context)
+  if (existing !== undefined) {
+    return existing
+  }
+  const created = new Map<string, Promise<string>>()
+  inflightAppCompiles.set(context, created)
+  return created
 }

@@ -56,6 +56,10 @@ in
   env.LC_ALL = "en_US.UTF-8";
   env.LC_CTYPE = "en_US.UTF-8";
 
+  scripts.tao = {
+    exec = ''"$DEVENV_ROOT/tao" "$@" '';
+    description = "Tao language CLI";
+  };
   scripts.j = {
     exec = ''just "$@"'';
     description = "just";

@@ -111,46 +111,72 @@ async function writeTestManifest(
     context,
     skipValidation: options.skipValidation,
   }
-  const manifest: RuntimeTesting.TestCompiler.Manifest = { files: [] }
+  const compiledByPath = new Map<string, RuntimeTesting.TestCompiler.File>()
 
   await FS.mkdir(runRoot)
-  for (const testPath of testPaths) {
-    manifest.files.push(
-      await RuntimeTesting.TestCompiler.compileTestFile(testPath, compileOptions),
-    )
-  }
-  await FS.writeJson(manifestPath, manifest)
+  await forEachDirectoryGroup(testPaths, async (_directory, group) => {
+    for (const testPath of group) {
+      compiledByPath.set(testPath, await RuntimeTesting.TestCompiler.compileTestFile(testPath, compileOptions))
+    }
+  })
+  await FS.writeJson(manifestPath, {
+    files: testPaths.map(testPath => compiledByPath.get(testPath)!),
+  })
   return manifestPath
 }
 
 /** validateTaoTestFiles validates Tao test files before starting the runtime harness. */
 export async function validateTaoTestFiles(testPaths: readonly string[]): Promise<TaoTestValidationError[]> {
-  const validationErrors: TaoTestValidationError[] = []
-  for (const testPath of testPaths) {
-    const validationResult = await Workspace.validate(testPath)
-    const messagesByPath = new Map<string, string[]>()
-    for (const diagnostic of Diagnostics.errors(validationResult.diagnostics)) {
-      const path = diagnostic.filePath ?? testPath
-      const messages = messagesByPath.get(path) ?? []
-      messages.push(diagnostic.message)
-      messagesByPath.set(path, messages)
+  const errorsByPath = new Map<string, TaoTestValidationError[]>()
+  await forEachDirectoryGroup(testPaths, async (directory, group) => {
+    const workspace = await Workspace.shared(directory)
+    for (const testPath of group) {
+      errorsByPath.set(testPath, validationErrorsFor(await workspace.validate(testPath), testPath))
     }
-    for (const [path, messages] of messagesByPath) {
-      validationErrors.push({ path, messages })
-    }
+  })
+  return testPaths.flatMap(testPath => errorsByPath.get(testPath) ?? [])
+}
+
+function validationErrorsFor(
+  validationResult: Awaited<ReturnType<typeof Workspace.validate>>,
+  testPath: string,
+): TaoTestValidationError[] {
+  const messagesByPath = new Map<string, string[]>()
+  for (const diagnostic of Diagnostics.errors(validationResult.diagnostics)) {
+    const path = diagnostic.filePath ?? testPath
+    const messages = messagesByPath.get(path) ?? []
+    messages.push(diagnostic.message)
+    messagesByPath.set(path, messages)
   }
-  return validationErrors
+  return [...messagesByPath].map(([path, messages]) => ({ path, messages }))
 }
 
 /** findTaoTestFiles finds `.tao` files with Tao test declarations at or under `path`. */
 export async function findTaoTestFiles(path: string): Promise<string[]> {
-  const testPaths: string[] = []
-  for (const filePath of await findTaoFiles(path)) {
-    if (await fileDeclaresTaoTests(filePath)) {
-      testPaths.push(filePath)
-    }
+  const declared = await Promise.all(
+    (await findTaoFiles(path)).map(async filePath => await fileDeclaresTaoTests(filePath) ? filePath : undefined),
+  )
+  return declared.filter(filePath => filePath !== undefined).sort()
+}
+
+async function forEachDirectoryGroup(
+  paths: readonly string[],
+  runGroup: (directory: string, group: readonly string[]) => Promise<void>,
+): Promise<void> {
+  await Promise.all(
+    [...groupPathsByDirectory(paths)].map(([directory, group]) => runGroup(directory, group)),
+  )
+}
+
+function groupPathsByDirectory(paths: readonly string[]): Map<string, string[]> {
+  const groups = new Map<string, string[]>()
+  for (const path of paths) {
+    const directory = FS.dirname(path)
+    const group = groups.get(directory) ?? []
+    group.push(path)
+    groups.set(directory, group)
   }
-  return testPaths.sort()
+  return groups
 }
 
 async function fileDeclaresTaoTests(path: string): Promise<boolean> {
