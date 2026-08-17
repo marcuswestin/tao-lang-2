@@ -42,7 +42,7 @@ workspace ui WorkspaceList() {
             otherwise -> WorkspaceName
          }) [body]
          #addWorkspace
-         FormButton("Add workspace", Icon: "plus", Disabled: WorkspaceName is empty) {
+         FormButton("Add workspace", Disabled: WorkspaceName is empty) {
             on press AddWorkspace
          }
          #activateWorkspaceTab
@@ -70,7 +70,7 @@ workspace ui WorkspaceList() {
                      present WorkspaceDetail(Workspace)
                }  }
                #deleteWorkspace
-               FormButton("Delete workspace", Icon: "trash") {
+               FormButton("Delete workspace") {
                   on press -> {
                      delete Workspace
 }  }  }  }  }  }  }
@@ -144,7 +144,7 @@ workspace ui WorkspaceDetail(Workspace) { // a bare parameter name binds the sam
                Text(DocumentTitle) [body]
          }  }
          #addDocument
-         FormButton("Add document", Icon: "plus", Disabled: DocumentTitle is empty) {
+         FormButton("Add document", Disabled: DocumentTitle is empty) {
             on press AddDocument
          }
          // `Panes` lays its children side by side when the container is wide enough and stacks them
@@ -172,7 +172,7 @@ workspace ui WorkspaceDetail(Workspace) { // a bare parameter name binds the sam
                               Final // boolean cases are written by name
                      }  }  }
                      #delete
-                     FormButton("Delete document", Icon: "trash") {
+                     FormButton("Delete document") {
                         on press -> {
                            delete Document
             }  }  }  }  }
@@ -192,7 +192,7 @@ workspace ui WorkspaceDetail(Workspace) { // a bare parameter name binds the sam
                               Draft
                      }  }  }
                      #deleteFinished
-                     FormButton("Delete finished document", Icon: "trash") {
+                     FormButton("Delete finished document") {
                         on press -> {
                            delete Document
 }  }  }  }  }  }  }  }  }

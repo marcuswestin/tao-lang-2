@@ -76,7 +76,7 @@ ui MainView() {
             set Draft = ""
       }  }
       #save
-      FormButton(Title: "Save", Icon: "check", Disabled: Draft is empty, Submitting: Submitting) {
+      FormButton(Title: "Save", Disabled: Draft is empty, Submitting: Submitting) {
          on press Submit
       }
       Text("Submissions: { SubmissionCount }")

@@ -162,7 +162,7 @@ public view TextInput(Value is text, Change is action(text), Submit is action(),
    ```
 }
 
-public view FormButton(Title is text, Press is action(), Icon is text default "", Id is text default "", Disabled is boolean default false, Submitting is boolean default false) {
+public view FormButton(Title is text, Press is action(), Id is text default "", Disabled is boolean default false, Submitting is boolean default false) {
    render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
       const effectiveDisabled = Disabled || Submitting
       return TR.Views.Pressable(

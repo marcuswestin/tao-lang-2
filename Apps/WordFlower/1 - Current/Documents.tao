@@ -86,7 +86,7 @@ workspace view DocumentEditor(Document) {
                on change SetFinished
             }
             #saveDocument
-            FormButton("Save document", Icon: "check", Disabled: TitleDraft is empty) {
+            FormButton("Save document", Disabled: TitleDraft is empty) {
                on press SaveDocument
             }
             Text("Saved title: { Document.Title }") [body]
