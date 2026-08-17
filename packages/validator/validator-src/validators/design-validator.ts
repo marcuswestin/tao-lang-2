@@ -119,9 +119,10 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   }
   const design = designs[0]
   if (!design) {
-    for (const entry of designEntries) {
+    for (const entry of designEntries.filter(requiresDesignLookup)) {
       const text = entryText(entry)
       if (!isVisualEntry(entry)) {
+        // A bare word only names a bundle once a design defines it, so LayoutValidator defers it here.
         ctx.error(LayoutValidator.messages.unsupportedEntry(text), entry)
       }
       ctx.error(designValidationMessages.missingMountedDesign(text), entry)
@@ -321,6 +322,15 @@ function bundleReference(
 
 function isVisualEntry(entry: AST.LayoutEntry): boolean {
   return visualHeads.has(entryHead(entry))
+}
+
+/** requiresDesignLookup marks the entries a design resolves: bundle references and color tokens. Numeric visuals stand alone. */
+function requiresDesignLookup(entry: AST.LayoutEntry): boolean {
+  const values = ASTUtils.layoutEntryValues(entry)
+  if (isVisualEntry(entry)) {
+    return colorHeads.has(String(values[0])) && values.length === 2 && typeof values[1] === 'string'
+  }
+  return values.length === 1
 }
 
 function entryHead(entry: AST.LayoutEntry): string {

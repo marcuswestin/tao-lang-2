@@ -109,6 +109,27 @@ Describe('validator: minimal design', () => {
   )
 
   Test(
+    'accepts self-contained numeric visuals with no app design selected',
+    accepts(`
+      app Legacy { view Main }
+      view Main() { render Surface() [size 14, radius 8, weight 600, line 20] }
+      ${surfaceView}
+    `),
+  )
+
+  Test(
+    'still requires an app design for a color token with no design selected',
+    rejects(
+      `
+        app Legacy { view Main }
+        view Main() { render Surface() [size 14, fg ink] }
+        ${surfaceView}
+      `,
+      messages.missingMountedDesign('fg ink'),
+    ),
+  )
+
+  Test(
     'defers private bundle lookup when different mounted apps select different designs',
     accepts(`
       use StackNav from @tao/nav
