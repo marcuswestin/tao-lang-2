@@ -15,6 +15,7 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
+import { reportUnownedFailure } from './TR-errors'
 import { LayoutControls } from './TR-layout'
 import {
   NavigationControls,
@@ -225,9 +226,10 @@ class TR {
     return new RuntimeAction(body)
   }
 
-  /** Async starts detached action work immediately and consumes its otherwise-unowned completion. */
+  /** Async starts detached action work immediately and reports the failure its absent caller cannot observe. */
   static Async(body: () => PromiseLike<unknown>): void {
-    void Promise.resolve(body()).catch(() => undefined)
+    // The async wrapper gives a synchronous throw the same reported outcome as a rejection.
+    void (async () => await body())().catch(reportUnownedFailure)
   }
 
   /** Alias creates live runtime Tao aliases that intentionally re-evaluate their initializer on every read. */
