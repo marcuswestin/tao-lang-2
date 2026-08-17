@@ -390,6 +390,22 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Navigation.Activate(')
   })
 
+  Test('fills keyed defaults inside each keyed item and never on the enclosing configuration', async () => {
+    const compiled = await Compiler.compileCode(`
+      use SelectionNav from @tao/nav
+      let MainNavigation = SelectionNav {
+        Initial @home
+        Display "tabs"
+        @home { Label "Home" Content Home }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      ui Home() { render Empty() }
+      view Empty() { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain('"Icon": TR.Value(""), }, }))')
+  })
+
   Test('compiles keyed additions in configured navigation patches', async () => {
     const compiled = await Compiler.compileCode(`
       use SelectionNav from @tao/nav

@@ -255,7 +255,7 @@ export const ExpressionsCompiler = {
 
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
   ValueReference(reference: AST.ValueReference): Compiled {
-    if (AST.isPatchedValueReference(reference)) {
+    if (AST.isRefinementExpression(reference)) {
       return compileConfiguredPatch(reference)
     }
     const target = resolveRef(reference.target)
@@ -456,25 +456,26 @@ function compileConfigurationObject(block: AST.ConfigurationBlock): Compiled {
   return compileConfigurationObjectWithDefaults(block, [])
 }
 
+/** compileConfigurationObjectWithDefaults renders a block whose keyed items, not the block itself, fill the key defaults. */
 function compileConfigurationObjectWithDefaults(
   block: AST.ConfigurationBlock,
-  defaults: readonly AST.ConfigurationProperty[],
+  keyedDefaults: readonly AST.ConfigurationProperty[],
 ): Compiled {
   return gen`{
-    ${
-    gen.list(block.entries, entry => {
-      if (entry.key && entry.block) {
-        return gen`${gen.jsLiteral(entry.key)}: ${compileConfigurationObjectWithDefaults(entry.block, defaults)},`
-      }
-      Assert.defined(entry.name, 'validated configuration entry has a property name')
-      Assert.defined(entry.value, 'validated configuration property has a value')
-      Assert(!AST.isPropertyConfigurationPatch(entry.value), 'configuration property patch is compiled by its owner')
-      return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`
-    })
-  }
+    ${compileConfigurationEntries(block, keyedDefaults)}
+  }`
+}
+
+/** compileKeyedItemObject renders one keyed item and fills every key default it does not supply. */
+function compileKeyedItemObject(
+  block: AST.ConfigurationBlock,
+  keyedDefaults: readonly AST.ConfigurationProperty[],
+): Compiled {
+  return gen`{
+    ${compileConfigurationEntries(block, keyedDefaults)}
     ${
     gen.list(
-      defaults.filter(property =>
+      keyedDefaults.filter(property =>
         property.value !== undefined && !block.entries.some(entry => entry.name === property.name)
       ),
       property => {
@@ -486,7 +487,22 @@ function compileConfigurationObjectWithDefaults(
   }`
 }
 
-function compileConfiguredPatch(value: AST.PatchedValueReference): Compiled {
+function compileConfigurationEntries(
+  block: AST.ConfigurationBlock,
+  keyedDefaults: readonly AST.ConfigurationProperty[],
+): Compiled {
+  return gen.list(block.entries, entry => {
+    if (entry.key && entry.block) {
+      return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
+    }
+    Assert.defined(entry.name, 'validated configuration entry has a property name')
+    Assert.defined(entry.value, 'validated configuration property has a value')
+    Assert(!AST.isPropertyConfigurationPatch(entry.value), 'configuration property patch is compiled by its owner')
+    return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`
+  })
+}
+
+function compileConfiguredPatch(value: AST.RefinementExpression): Compiled {
   const base = resolveRef(value.target)
   Assert.is(base, AST.isValueDeclaration, 'validated refinement target is a value')
   const patch = compileConfigurationPatchObject(value.patchBlock, configuredDeclarationOfValue(base))
@@ -511,7 +527,7 @@ function compileConfiguredTypeObject(
   declaration: AST.ConfigurableDeclaration,
   block: AST.ConfigurationBlock,
 ): Compiled {
-  const keyedDefaults = declaration ? AST.configurationKeyOf(declaration)?.block.properties ?? [] : []
+  const keyedDefaults = AST.configurationKeyOf(declaration)?.block.properties ?? []
   const configured = compileConfigurationObjectWithDefaults(block, keyedDefaults)
   const filled = AST.configurationPropertiesOf(declaration)
     .filter(Type.propertyIsFilled)
@@ -533,7 +549,7 @@ function compileConfiguredTypeObject(
 }
 
 function compileItemPatch(
-  value: AST.PatchedValueReference,
+  value: AST.RefinementExpression,
   base: AST.AliasDeclaration,
   itemType: ASTUtils.ItemShape,
 ): Compiled {
@@ -580,7 +596,7 @@ function compileConfigurationPatchObject(
     ${
     gen.list(block.entries, entry => {
       if (entry.key && entry.block) {
-        return gen`${gen.jsLiteral(entry.key)}: ${compileConfigurationObjectWithDefaults(entry.block, keyedDefaults)},`
+        return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
       }
       Assert.defined(entry.name, 'validated patch entry has a property name')
       Assert.defined(entry.value, 'validated patch entry has a property value')
