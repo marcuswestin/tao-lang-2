@@ -16,7 +16,7 @@ export const completenessValidationChecks = {
     reportIncomplete(reference.target.ref, reference, ctx)
   },
   [AST.ValueReference.$type]: (reference, ctx) => {
-    if (!AST.isPatchedValueReference(reference)) {
+    if (!AST.isRefinementExpression(reference)) {
       const target = reference.target.ref
       reportIncomplete(AST.isNamedDeclaration(target) ? target : undefined, reference, ctx)
     }

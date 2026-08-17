@@ -248,7 +248,7 @@ function configuredExpressionConfiguration(
   }
   seen.add(target)
   const base = configuredExpressionConfiguration(target.value, seen)
-  return AST.isPatchedValueReference(value) ? applyConfigurationPatch(base, value.patchBlock) : base
+  return AST.isRefinementExpression(value) ? applyConfigurationPatch(base, value.patchBlock) : base
 }
 
 function configurationValueConfiguration(

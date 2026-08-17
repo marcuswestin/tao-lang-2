@@ -128,7 +128,8 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
     entity: () => gen`any`,
     enum: () => gen`TR.EnumCaseIdentity`,
     unresolved: () => gen`any`,
-    union: type => gen.join(type.members, CompileTaoJsType, { separator: ' | ' }),
+    union: type =>
+      type.members.length === 0 ? gen`any` : gen.join(type.members, CompileTaoJsType, { separator: ' | ' }),
   })
 }
 

@@ -167,7 +167,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  private createPatchBaseScope(node: AST.PatchedValueReference): Langium.Scope {
+  private createPatchBaseScope(node: AST.RefinementExpression): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])

@@ -153,8 +153,8 @@ Describe('parser: types', () => {
     Expect(adminType.type.slots.properties.map(property => property.name)).toEqual(['Role', 'Access'])
     Expect.Is(aliases[0]?.value, AST.isInferredConfigurationConstructor)
     const renamedValue = aliases[1]?.value
-    Expect(renamedValue !== undefined && AST.isPatchedValueReference(renamedValue)).toBe(true)
-    if (!renamedValue || !AST.isPatchedValueReference(renamedValue)) {
+    Expect(renamedValue !== undefined && AST.isRefinementExpression(renamedValue)).toBe(true)
+    if (!renamedValue || !AST.isRefinementExpression(renamedValue)) {
       throw new Error('Expected Renamed to refine the Admin value')
     }
     Expect(renamedValue.target.ref).toBe(aliases[0])

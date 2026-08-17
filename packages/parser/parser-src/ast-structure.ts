@@ -381,21 +381,13 @@ function baseTypeDeclarationOf(declaration: AST.TypeDeclaration): AST.TypeDeclar
   return visibleTypeDeclaration(base, base.root)
 }
 
-/** PatchedValueReference is a declaration-linked immutable `value with { ... }` expression. */
-export type PatchedValueReference = AST.RefinementExpression
-
-/** isPatchedValueReference identifies a `with` patch without name-table lookup. */
-export function isPatchedValueReference(node: AST.Node): node is PatchedValueReference {
-  return AST.isRefinementExpression(node)
-}
-
 /** AppVariantDeclaration is an alias whose initializer patches an app declaration identity. */
-export type AppVariantDeclaration = AST.AliasDeclaration & { value: PatchedValueReference }
+export type AppVariantDeclaration = AST.AliasDeclaration & { value: AST.RefinementExpression }
 
 /** isAppVariantDeclaration identifies an immutable `App with { ... }` value declaration. */
 export function isAppVariantDeclaration(node: AST.Node): node is AppVariantDeclaration {
   return AST.isAliasDeclaration(node)
-    && isPatchedValueReference(node.value)
+    && AST.isRefinementExpression(node.value)
     && configuredPrimitiveOfValueDeclaration(node.value.target.ref) === 'app'
 }
 
@@ -407,7 +399,7 @@ export function appDeclarationOf(
   if (AST.isAppDeclaration(node)) {
     return node
   }
-  if (!AST.isAliasDeclaration(node) || seen.has(node) || !isPatchedValueReference(node.value)) {
+  if (!AST.isAliasDeclaration(node) || seen.has(node) || !AST.isRefinementExpression(node.value)) {
     return undefined
   }
   seen.add(node)
