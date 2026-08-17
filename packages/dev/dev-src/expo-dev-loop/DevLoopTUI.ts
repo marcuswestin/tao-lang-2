@@ -75,12 +75,40 @@ let activeDevLoopOutput: {
 
 /** DevLoopTUI owns interactive output for the dev loop. */
 export const DevLoopTUI = {
+  askConfirm,
   devLoopOutputHandler,
   logDevLoop,
   printDevLoopControls,
   startDevLoopOutput,
   stopDevLoopOutput,
   writeDevLoopOutput,
+}
+
+type ConfirmPromptOptions = Parameters<typeof HCI.askConfirm>[0]
+
+/** askConfirm keeps confirmations visible in the dashboard footer while readline owns input. */
+async function askConfirm(options: ConfirmPromptOptions): Promise<boolean> {
+  const activeOutput = activeDevLoopOutput
+  if (activeOutput === undefined) {
+    return await HCI.askConfirm(options)
+  }
+
+  activeOutput.state.prompt = formatConfirmPrompt(options)
+  activeOutput.app.rerender(React.createElement(DevLoopOutputDashboard, { state: activeOutput.state }))
+  await activeOutput.app.waitUntilRenderFlush()
+  try {
+    return await HCI.askConfirm(options)
+  } finally {
+    if (activeDevLoopOutput === activeOutput) {
+      activeOutput.state.prompt = undefined
+      scheduleDevLoopRender()
+    }
+  }
+}
+
+function formatConfirmPrompt(options: ConfirmPromptOptions): string {
+  const choice = options.defaultValue === true ? 'Y/n' : options.defaultValue === false ? 'y/N' : 'y/n'
+  return `${options.message} ${choice}`
 }
 
 function startDevLoopOutput(): DevLoopOutputHandle | undefined {
