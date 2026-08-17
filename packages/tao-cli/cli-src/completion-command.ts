@@ -31,7 +31,12 @@ export async function runCompletionInstall(
   const existing = await FS.exists(startupFile) ? await FS.readText(startupFile) : ''
 
   if (existing.includes(hookMarker)) {
-    return { alreadyInstalled: true, shell, startupFile }
+    const binding = completionBindingLine(shell)
+    if (binding === undefined || existing.includes(binding)) {
+      return { alreadyInstalled: true, shell, startupFile }
+    }
+    await FS.writeText(startupFile, `${existing.trimEnd()}\n${binding}\n`)
+    return { alreadyInstalled: false, shell, startupFile }
   }
 
   await FS.mkdir(FS.dirname(startupFile))
@@ -39,13 +44,27 @@ export async function runCompletionInstall(
   return { alreadyInstalled: false, shell, startupFile }
 }
 
-/** completionHookLine returns the line a shell startup file runs to load tao completions. */
+/** completionHookLine returns the lines a shell startup file runs to load tao completions. */
 function completionHookLine(shell: CompletionShell): string {
+  const binding = completionBindingLine(shell)
   // Sourcing the CLI's live output keeps completions correct as commands change, unlike a generated file.
+  return binding === undefined ? completionScriptLine(shell) : `${completionScriptLine(shell)}\n${binding}`
+}
+
+function completionScriptLine(shell: CompletionShell): string {
   return Switch<CompletionShell, string>(shell, {
     bash: () => 'source <(tao complete bash)',
     fish: () => 'tao complete fish | source',
     zsh: () => 'source <(tao complete zsh)',
+  })
+}
+
+/** completionBindingLine binds the generated completer to `./tao` once `tao` is on PATH. */
+function completionBindingLine(shell: CompletionShell): string | undefined {
+  return Switch<CompletionShell, string | undefined>(shell, {
+    bash: () => 'complete -F __tao_complete ./tao',
+    fish: () => undefined,
+    zsh: () => 'compdef _tao ./tao',
   })
 }
 

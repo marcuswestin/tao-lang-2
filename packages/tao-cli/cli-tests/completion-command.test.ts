@@ -9,7 +9,22 @@ Describe('tao completion install', () => {
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout).toContain('Installed zsh completions')
-      Expect(await FS.readText(FS.resolvePath('.zshrc', homeDir))).toContain('source <(tao complete zsh)')
+      const startupFile = await FS.readText(FS.resolvePath('.zshrc', homeDir))
+      Expect(startupFile).toContain('source <(tao complete zsh)')
+      Expect(startupFile).toContain('compdef _tao ./tao')
+    })
+  })
+
+  Test('adds the ./tao binding when an older hook is already present', async () => {
+    await withShellHome({ ZDOTDIR: true }, async (homeDir) => {
+      const startupFile = FS.resolvePath('.zshrc', homeDir)
+      await FS.writeText(startupFile, '# tao shell completion\nsource <(tao complete zsh)\n')
+
+      const result = await runTaoCliForTest(['completion', 'install', '--shell', 'zsh'])
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('Installed zsh completions')
+      Expect(await FS.readText(startupFile)).toContain('compdef _tao ./tao')
     })
   })
 
@@ -37,6 +52,7 @@ Describe('tao completion install', () => {
       const contents = await FS.readText(startupFile)
       Expect(contents).toContain('export EDITOR=vim')
       Expect(contents).toContain('source <(tao complete zsh)')
+      Expect(contents).toContain('compdef _tao ./tao')
     })
   })
 
@@ -65,7 +81,9 @@ Describe('tao completion install', () => {
       const result = await runTaoCliForTest(['completion', 'install'])
 
       Expect(result.exitCode).toBe(0)
-      Expect(await FS.readText(FS.resolvePath('.bashrc', homeDir))).toContain('source <(tao complete bash)')
+      const startupFile = await FS.readText(FS.resolvePath('.bashrc', homeDir))
+      Expect(startupFile).toContain('source <(tao complete bash)')
+      Expect(startupFile).toContain('complete -F __tao_complete ./tao')
     })
   })
 })
