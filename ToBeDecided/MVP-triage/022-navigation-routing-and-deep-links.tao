@@ -1,0 +1,35 @@
+// decision: routing and deep-link metadata around parameterized base nav values
+// depends on: 001-project-package-and-visibility, 011-view-screen-layout-declarations
+// status: open
+
+use @tao/nav as Nav
+
+// decided foundation: `nav` defines native-backed constructors, while `let` binds configured nav values.
+workspace let HomeTabs = Nav.TabNav Tabs [DashboardUi, CaptureUi], Initial DashboardUi
+workspace let StillRootNavigation = Nav.StackNav Initial HomeTabs
+
+// option 1: routes are separate values that bind paths and parameters to callable UI values.
+workspace route WorkspaceRoute Workspace StillData.Workspace {
+   path "/workspace/:Workspace"
+   destination WorkspaceUi Workspace
+}
+
+workspace route TaskEditRoute Task StillData.Task {
+   path "/task/:Task"
+   destination TaskEditUi Task
+}
+
+present WorkspaceUi CurrentWorkspace
+
+// option 2: route metadata belongs directly to the UI declaration.
+ui WorkspaceUi Workspace StillData.Workspace {
+   path "/workspace/:Workspace"
+   title Workspace.Title
+   render WorkspaceView Workspace
+}
+
+// option 3: Tao derives routes from presented UI values and explicit path aliases.
+workspace alias "/workspace/:Workspace" = WorkspaceUi Workspace
+workspace alias "/task/:Task" = TaskEditUi Task
+
+// In every option, React Navigation or platform routing configuration remains generated implementation detail.

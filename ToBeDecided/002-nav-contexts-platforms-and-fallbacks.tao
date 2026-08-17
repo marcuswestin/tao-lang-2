@@ -1,0 +1,43 @@
+// Demonstrates named nav contexts, platform declarations, availability validation, and fallback diagnostics.
+// `in NavName` targets a logical presentation context, not a concrete parent walk or a direct native API.
+// Platform differences belong in nav declarations so call sites stay semantic.
+// TODO: Decide the exact platform/condition syntax for alternate definitions of one logical nav.
+
+use Button, Screen, Stack, Text from @tao/ui
+use @tao/nav as Nav // Different base nav values can satisfy the same logical nav name on different targets.
+
+ui DocumentUi DocId Document.Id {
+   render Screen [screen] {
+      Stack [stack] {
+         Text "Document" [title]
+      }
+   }
+}
+
+ui CommandPaletteUi { // Overlays are represented as ui presented in an overlay-style nav context.
+   render Stack [overlay] {
+      Text "Command palette" [title]
+   }
+}
+
+<platform is Desktop>
+   let WorkspaceNav = Nav.WindowNav Initial none // Desktop binds WorkspaceNav to the configured native window container.
+</platform>
+
+<platform is iOS | Android>
+   let WorkspaceNav = Nav.StackNav Initial none // Mobile binds the same name to a configured native stack container.
+</platform>
+
+let OverlayNav = Nav.OverlayNav Layout "sheet" // `let` binds the configured result of the imported nav constructor.
+
+ui WorkspaceActions Doc Document.Data {
+   render Stack [stack] {
+      Button "Open document" [primary]
+         on press -> { present DocumentUi Doc in WorkspaceNav } // Same call site works across platform-specific nav bindings.
+      Button "Open palette" [secondary]
+         on press -> { present CommandPaletteUi in OverlayNav } // Named nav is a logical presentation context.
+   }
+}
+
+// Validation rule: disabled platform branches make declarations unavailable for that target.
+// Resolver and availability validation must complete before compiler/codegen sees references.

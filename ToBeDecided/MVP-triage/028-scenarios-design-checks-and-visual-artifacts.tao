@@ -1,0 +1,46 @@
+// decision: scenarios, design checks, screenshots, and visual artifacts
+// depends on: 014-design-token-recipe-and-rule-model, 027-testing-syntax-selectors-and-runtime-flags
+// status: open
+
+// option 1: first-class scenarios plus design check declarations
+// This lets design tooling render known states without test syntax overload.
+scenario LoadingDashboard {
+   app StillTriageApp
+   screen Dashboard
+   data loading StillData.Tasks
+}
+
+scenario CompactWidth {
+   app StillTriageApp
+   screen Dashboard
+   width 360
+}
+
+project scenario check StillScenarioCheck {
+   scenarios LoadingDashboard, CompactWidth
+   design StillDesign
+   assert contrast AA
+   screenshot "dashboard-compact"
+   visual diff baseline "still"
+}
+
+// option 2: scenarios are test fixtures
+// This unifies test and visual state setup, but design tooling has to parse tests.
+test "dashboard compact visual" {
+   scenario CompactWidth
+
+   check "visual" {
+      run StillTriageApp
+      expect screenshot "dashboard-compact"
+   }
+}
+
+// option 3: design CLI owns visual artifact declarations
+// Source only names scenarios; command flags decide screenshots and diff behavior.
+scenario CompactWidth {
+   app StillTriageApp
+   screen Dashboard
+   width 360
+}
+
+// tao design check --scenario CompactWidth --screenshot --visual-diff still

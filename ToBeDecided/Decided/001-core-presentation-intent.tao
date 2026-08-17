@@ -1,0 +1,46 @@
+// Demonstrates the settled presentation intent, declaration roles, restorability, and navigation vocabulary.
+// Only ui is directly presentable; nav values are native containers, and response-capable dialogues are invoked with `ask`.
+// Dialogue declarations use `responds T`, every ask infers T?, and `respond` is valid only inside a dialogue.
+// ui parameters must be restorable, not merely serializable, so presentation state can survive restart, deep link, handoff, and restoration.
+
+use Button, Screen, Stack, Text from @tao/ui
+
+workspace data StillData {
+   Tasks/Task {
+      Title text indexed
+      Done yes TBD no default no
+   }
+}
+
+ui HomeUi { // ui is a presentable content, ie a screen on a phone, or a window on a desktop
+   render Screen [screen] {
+      Stack [stack] {
+         Text "Still" [title]
+         Button "Open task" [primary]
+            on press -> { present TaskUi TaskList.First } // present says what should be shown, not push/modal/window mechanics.
+         Button "Swap to signed-in app" [secondary]
+            on press -> { replace LoginUi with MainUi } // replace is semantic; the current nav decides what native operation realizes it.
+         Button "Leave current surface" [secondary]
+            on press -> { dismiss } // dismiss exits the current presentation according to the holding nav.
+      }
+   }
+}
+
+ui TaskUi Task StillData.Task { // All `ui` declarations may not have any non-restorable parameters. E.g you can't have an action parameter declared in a ui
+
+   render Screen [screen] {
+      Stack [stack] {
+         Text Task.Title [title]
+         Text "Presentation state stores enough information to restore this semantic task presentation." [body]
+      }
+   }
+}
+
+// ui NotAllowedUi Action action {} // This is not allowed, since actions can't be serialized and restored.
+ui LoginUi {
+   render Screen [screen] { Text "Sign in" [title] }
+}
+
+ui MainUi {
+   render Screen [screen] { Text "Main app" [title] }
+}

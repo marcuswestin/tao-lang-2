@@ -1,0 +1,41 @@
+// decision: Tao testing syntax, selectors, and runtime flags
+// depends on: 011-view-screen-layout-declarations, 015-render-slots-children-and-keyed-lists
+// status: open
+
+// option 1: keep app-oriented Tao tests with user-level interactions
+// This matches current test direction and adds richer selectors over time.
+test "capture creates a task" {
+   app = StillTriageApp with {
+      datasource StillLocalDatasource with appId "test-capture"
+   }
+
+   check "create task" {
+      run app
+      write into placeholder "Task title" "Book studio"
+      submit placeholder "Task title"
+      expect text "Book studio"
+      expect id TaskRow-BookStudio
+      expect button "Create" enabled
+      expect checkbox "Done" checked false
+   }
+}
+
+// option 2: focused render checks for components and slots
+// This keeps component behavior testable without launching a whole app.
+test "task row renders" {
+   using app StillTriageApp
+
+   check render TaskRow SampleTask {
+      expect role "button" name "Book studio"
+      expect visible text "next"
+   }
+}
+
+// option 3: CLI flags own filtering/runtime behavior, source stays minimal
+// tao test Apps --grep capture --runtime web --fail-fast --json
+test "capture creates a task" {
+   check "create task" {
+      run StillTriageApp
+      expect text "Still"
+   }
+}

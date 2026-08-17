@@ -1,4 +1,4 @@
-import { Errors, HCI, Platform, Switch } from '@shared'
+import { Completion, Errors, HCI, Platform, Switch } from '@shared'
 import { runWithCommands } from './commands/commands-utils'
 import { runDevLoop } from './dev-loop/dev-loop'
 import { ExpoRunner } from './dev-loop/expo-runner/ExpoRunner'
@@ -66,6 +66,11 @@ await runWithCommands(commands => {
     .action(async () => {
       await ExpoRunner.startExpo()
     })
+
+  Completion.register(commands, {
+    commandNames: ['./dev', 'dev'],
+    executableName: 'dev',
+  })
 })
 
 async function runTests(

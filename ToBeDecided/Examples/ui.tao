@@ -1,0 +1,439 @@
+use Screen, Stack, Text, TextInput from @tao/ui
+use @tao/nav as Nav
+
+// Demonstrates the settled presentation, dialogue, restorability, named-nav, fallback, and injection decisions.
+// Remaining design questions are called out only where the sketch presents a concrete option to evaluate.
+
+workspace design StillDesign { // workspace visibility means importable anywhere in this workspace, but not exported by `tao publish`.
+   token whiteChalk #f6f7f3
+   style screen [fill, pad 24, bg whiteChalk]
+   style stack [screen, gap 12]
+   style overlay [stack, pad 16, radius 18, bg white, border "#d0d5dd"]
+   style toast [pad 10, radius 12, bg "#121826"]
+   style widget [pad 12, radius 16, bg whiteChalk, gap 8]
+   font title {
+      size 34
+      weight 800
+      color "#121826"
+   }
+   font body {
+      size 16
+      line 22
+      color "#344054"
+   }
+   style primary [pad 12, radius 14, bg "#2f6b4f", body]
+   style secondary [pad 12, radius 14, bg white, body, border "#d0d5dd"]
+   style danger [pad 12, radius 14, bg "#b42318", body]
+}
+
+enum ConfirmDeleteResult {
+   "confirmed"
+}
+
+type PresentationStatus =
+   Presented |
+   Failed PresentationError |
+   FellBack PresentationFallback // TODO: Decide the exact immediate presentation-status type; dialogue responses are separate.
+
+type TaskUiFilter { // Restorable UI params may include serializable records and lists of restorable values.
+   Query text
+   TaskIds [StillData.Task.Id]
+   IncludeDone yes/no
+}
+
+type NativeHandle = native opaque // Native handles are intentionally non-restorable and invalid as UI presentation parameters.
+
+unsafe ts CreateNativeHandle -> NativeHandle // Unsafe/native values can exist inside implementation code but cannot cross presentation boundaries.
+
+frame Button Label is text {
+   does press
+
+   action Press {
+      did press
+   }
+
+   render Frame {
+      inject Label, Press ```ts
+         <RN.Button title={Label} onPress={() => {
+            Runtime.DoAction(Press)
+         }} />
+      ```
+   }
+}
+
+view YesNoToggle InitialValue is yes/no {
+   state Yes/No InitialValue
+   does toggle Yes/No
+
+   action Toggle {
+      set Yes/No = not Yes/No
+      did toggle Yes/No
+   }
+
+   render Frame {
+      inject Yes/No, Toggle ```ts
+         <RN.ToggleButton value={Yes} onValueChange={() => {
+            Runtime.DoAction(Toggle)
+         }} />
+      ```
+   }
+}
+
+package ui Home { // `ui` can be "presented"
+   state Intent = "capture"
+   state DraftTitle = StillData.Task.Title ""
+
+   action SaveDraft {
+      create StillData.Task { Title DraftTitle, Body "", Done no }
+      present TaskSavedToastUi in OverlayNav
+   }
+
+   render Screen [screen] {
+      Stack [stack] {
+         Text "Still" [title]
+         Text "A calm place to catch what matters and choose the next step." [font body]
+         Text when Intent is
+            "capture" -> "Ready to capture."
+            otherwise -> "Ready to plan.", [body]
+
+         TextInput DraftTitle, .Label "Task title", .Placeholder "Capture something", [secondary]
+            on submit -> Value text { set DraftTitle = StillData.Task.Title Value }
+
+         Button "Save task" [primary]
+            on press -> { do SaveDraft } // `on` handles the emitted press event; `do` invokes an action.
+
+         Button "Open task" [secondary]
+            on press -> { present TaskUi TaskList.First } // This presents a TaskUi, e.g pushed on nav stack or tab is selected.
+
+         Button "Open task" [secondary]
+            on press -> {
+               let TaskDestination = TaskUi TaskList.First // Applying TaskUi's argument produces a bound UI value that can be stored and passed around.
+               present TaskDestination in AppNav // The bound UI value remains restorable when its captured arguments are restorable.
+            }
+
+         Button "Replace with capture" [secondary]
+            on press -> { replace CaptureUi in AppNav } // `replace` displays the scene content by removing the previous one from e.g the stack or back-button history
+
+         Button "Dismiss current" [secondary]
+            on press -> { dismiss } //
+
+         Button "Quick capture" [secondary]
+            on press -> { present CaptureUi in OverlayNav }
+
+         Button "Ask and inspect response" [secondary]
+            on press -> {
+               let Decision = ask ConfirmDeleteUi TaskList.First // `ask` starts a platform-presented dialogue and suspends until it responds or produces none.
+               log Decision // A dialogue that responds T makes every ask expression infer T?.
+            }
+
+         Button "Open document window" [secondary]
+            on press -> {
+               let Opened = present DocumentUi CurrentDocument in WorkspaceNav // TODO: Decide whether `present` returns nothing, immediate acceptance status, or a restorable presentation reference; it should not wait for visual opening.
+               // TODO: Decide whether repeated presentation of the same UI and arguments focuses, duplicates, or replaces an existing window.
+               log Opened // This option represents immediate request acceptance, not waiting for the window to close.
+            }
+
+         Button "Ask before delete" [danger]
+            on press -> {
+               let Result = ask ConfirmDeleteUi TaskList.First // `ask` is visibly suspending, unlike fire-and-forget `present`.
+               when Result is
+                  ConfirmDeleteResult."confirmed" -> delete TaskList.First
+                  none -> log "delete cancelled" // Bare `respond` and system dismissal produce the optional empty case.
+            }
+
+         Button "Show palette without waiting" [secondary]
+            on press -> {
+               present CommandPaletteUi in OverlayNav
+               log "presentation requested" // Navigation presentation is non-blocking.
+            }
+
+         Button "Palette via missing nav" [secondary]
+            on press -> { present CommandPaletteUi in MaybeMountedPaletteNav } // Missing named nav falls back through providers and emits diagnostics instead of crashing.
+
+         Button "Stack overlays" [secondary]
+            on press -> {
+               present CommandPaletteUi in OverlayNav
+               let Decision = ask ConfirmDeleteUi TaskList.First // An asked conversation may appear above already-presented UI while this action waits for its response.
+               log Decision // The underlying presented UI remains independent of the asked conversation's typed completion.
+            }
+
+         Button "Run migration" [secondary]
+            on press -> {
+               let Done = ask BlockingMigrationUi // Asking this dialogue infers Done? even though it declares `responds Done`.
+               log Done // The caller handles a response or the universal none case after suspension.
+            }
+
+         Button "Unsafe diagnostic" [secondary]
+            on press -> { present UnsafeDiagnosticUi TaskList.First in OverlayNav } // Unsafe injected code remains behind an explicit ui boundary.
+
+         Button "Open restorable parameter lab" [secondary]
+            on press -> {
+               let Filter = TaskUiFilter { Query "today", TaskIds [TaskList.First.Id], IncludeDone no } // Primitive, record, and list values are valid when every nested value is restorable.
+               let CachedTask = cached TaskList.First // Cached entity values are valid when Tao can restore them from cache/provider metadata.
+               let Snapshot = snapshot TaskList.First // Explicit snapshots request snapshot semantics instead of current-entity reference semantics.
+               present RestorableParameterLab Filter TaskList.First CachedTask Snapshot in AppNav // Entity values may be passed ergonomically when Tao can restore equivalent semantic state.
+            }
+
+         Button "Try invalid native handle parameter" [secondary]
+            on press -> {
+               let Handle = CreateNativeHandle()
+               present InvalidNativeHandleUi Handle in AppNav // Validation error: native handles/functions/closures/component instances are not restorable presentation params.
+            }
+
+         Button "Plan"
+            on longPress -> {
+               set Intent = "capture"
+               alias Foo = "foo"
+               set Intent = "{Foo}"
+            }
+            on press -> { set Intent = "plan" }
+      }
+   }
+}
+
+package ui TaskUi Task StillData.Task { // Entity types always mean restorable references without a suffix.
+   let TaskId = Task.Id
+   query CurrentTask { Title, Body, Done, where ID is TaskId }
+
+   render Screen [screen] {
+      Stack [stack] {
+         Text FormatTitle(TaskId) [title] // Imported TS receives TaskId explicitly, not ambient Tao scope.
+         Text CurrentTask.Body [body]
+         Button "Delete safely" [danger]
+            on press -> { present DeleteAfterConfirmUi TaskId in OverlayNav }
+      }
+   }
+}
+
+package ui CaptureUi {
+   render Screen [screen] {
+      Stack [stack] {
+         CaptureForm
+         Button "Done" [secondary]
+            on press -> { dismiss }
+      }
+   }
+}
+
+package ui DocumentUi Document StillData.Document {
+   let DocumentId = Document.Id
+
+   render Screen [screen] {
+      Stack [stack] {
+         Text "Document" [title]
+         Text "Restored presentation state can reconstruct this document from its ID." [body]
+      }
+   }
+}
+
+package ui RestorableParameterLab Filter TaskUiFilter, Task StillData.Task, CachedTask StillData.Task.Cached, Snapshot StillData.Task.Snapshot { // A bare entity type is its reference form; cached values and snapshots remain explicit.
+   render Screen [screen] {
+      Stack [stack] {
+         Text "Restorable parameters" [title]
+         Text Filter.Query [body] // Primitive fields inside serializable records remain restorable.
+         Text Task.Title [body] // Bare entity parameters restore the current entity by identity.
+         Text CachedTask.Title [body] // Cached entity values can restore from local cache/provider state.
+         Text Snapshot.Title [body] // Explicit entity snapshots restore the captured value even if the live entity later changes.
+         Text "Bare entities are references; snapshots are explicit." [body]
+      }
+   }
+}
+
+package ui InvalidNativeHandleUi Handle NativeHandle { // Invalid example: this UI should fail validation because Handle cannot be reconstructed after restart.
+   render Screen [screen] {
+      Stack [stack] {
+         Text "Invalid presentation parameter" [title]
+      }
+   }
+}
+
+package ui CommandPaletteUi {
+   render Stack [overlay] {
+      Text "Command palette" [title]
+      Button "Close" [secondary]
+         on press -> { dismiss }
+   }
+}
+
+// `dialogue` is response-capable UI: `ask` accepts dialogues, while `present` rejects them.
+// `respond` is valid only inside a dialogue; every ask currently adds the optional none case to its declared response type.
+package dialogue ConfirmDeleteUi Task StillData.Task responds ConfirmDeleteResult { // A dialogue that responds ConfirmDeleteResult makes `ask ConfirmDeleteUi ...` infer ConfirmDeleteResult?.
+   render Stack [overlay] {
+      Text "Delete task?" [title]
+      Button "Delete" [danger]
+         on press -> { respond "confirmed" } // `respond Value` completes the current dialogue with a type-checked value.
+      Button "Cancel" [secondary]
+         on press -> { respond } // Bare `respond` completes with none; all ask expressions currently include this inferred optional case.
+   }
+}
+
+package dialogue BlockingMigrationUi responds Done { // Dialogue capability is declared rather than inferred from whether a caller captures a result.
+   render Stack [overlay] {
+      Text "Finishing migration" [title]
+      Button "Close" [primary]
+         on press -> { respond Done } // The dialogue declares its value type while optionality belongs uniformly to `ask`.
+   }
+}
+
+// TODO: Decide whether values crossing `ask` use snapshots, guarded live references, or ID-only re-query discipline.
+package ui DeleteAfterConfirmUi TaskId StillData.Task.Id {
+   render Stack [overlay] {
+      Button "Snapshot then delete" [danger]
+         on press -> {
+            let Snapshot = snapshot TaskId // Demonstrates snapshot option for values crossing suspension points.
+            let Decision = ask ConfirmDeleteUi TaskId // Values that remain live across `ask` must follow Tao's suspension rules.
+            when Decision is
+               "confirmed" -> log Snapshot.Title
+               none -> log "cancelled"
+         }
+
+      Button "Re-query after confirm" [secondary]
+         on press -> {
+            let Decision = ask ConfirmDeleteUi TaskId // The response resumes this action after the asked UI completes.
+            query FreshTask { Title, where ID is TaskId } // Demonstrates ID-only discipline across suspension points.
+            when Decision is "confirmed" -> delete FreshTask
+         }
+
+      Button "Guard deleted task" [secondary]
+         on press -> {
+            let Decision = ask ConfirmDeleteUi TaskId // Entity validity must be reconsidered after an asked conversation suspends execution.
+            guard TaskId when
+               Present -> log TaskId.Title
+               Deleted -> log TaskId.Snapshot.Title
+               Missing -> present MissingTaskUi in OverlayNav // Demonstrates deleted/missing guard option for long-running events.
+         }
+   }
+}
+
+package ui MissingTaskUi {
+   render Stack [overlay] {
+      Text "Task no longer exists" [body]
+      Button "Dismiss" [secondary]
+         on press -> { dismiss }
+   }
+}
+
+package ui PresentationStatusUi Status PresentationStatus {
+   render Stack [overlay] {
+      Text "Presentation status" [title]
+      Text Status [body]
+   }
+}
+
+package ui UnsafeDiagnosticUi Task StillData.Task { // Bare entity types remain references even at unsafe implementation boundaries.
+   render Stack [overlay] {
+      Text DangerousNativeEscape(Task.Id) [body] // Unsafe TS receives explicit inputs and cannot prove presentation safety guarantees.
+      Button "Dismiss" [secondary]
+         on press -> { dismiss }
+   }
+}
+
+ui TaskSavedToastUi { // No visibility keyword means file visibility by default.
+   render Stack [toast] {
+      Text "Saved" [body]
+   }
+}
+
+file ui CaptureForm { // `file` is shown once; it is the default and does not need to be specified.
+   state CaptureTitle = StillData.Task.Title ""
+
+   render Stack [stack] {
+      Text "Capture" [title]
+      TextInput CaptureTitle, .Label "Task title", .Placeholder "Capture something", [secondary]
+         on submit -> Value text { set CaptureTitle = StillData.Task.Title Value }
+      Button "Save" [primary]
+         on press -> {
+            create StillData.Task { Title CaptureTitle, Body "", Done no }
+            present TaskSavedToastUi in OverlayNav
+         }
+   }
+}
+
+public ui PublishedCaptureCard { // Public definitions become external API only when shipped with `tao publish <workspace>`.
+   render Stack [stack] {
+      CaptureForm // Public API can depend on file-private implementation that external workspaces cannot import.
+   }
+}
+
+// `nav` defines a native-backed constructor; `let` applies that constructor and binds the configured nav value.
+// TODO: Decide the shared runtime protocol, auxiliary-context mounting, and whether nav alone owns every presentation context.
+workspace let AppNav = Nav.StackNav Initial Home // The binding name gives this configured nav a stable workspace identity.
+workspace let OverlayNav = Nav.OverlayNav Layout "sheet" // Overlay stacking and dismissal use the standard safe defaults.
+workspace let MaybeMountedPaletteNav = Nav.OverlayNav Layout "sheet" // This logical nav is intentionally absent from the active tree so requests exercise fallback.
+workspace let CaptureStack = Nav.StackNav Initial CaptureUi // A configured nav can be nested in another nav without becoming a UI value.
+workspace let AppTabs = Nav.TabNav Tabs [AppNav, CaptureStack, PublishedCaptureCard], Initial AppNav // Nav.Content explicitly accepts nav or UI values for static composition.
+
+<platform is Desktop>
+   workspace let WorkspaceNav = Nav.WindowNav Initial none // Desktop maps the same logical context to windows opened by `present`.
+</platform>
+
+<platform is iOS | Android>
+   workspace let WorkspaceNav = Nav.StackNav Initial none // Mobile starts this context when its first UI value is presented.
+</platform>
+
+// TODO: Decide presentation-state migration and versioning across app/schema changes.
+state ActivePresentationTree = presentation AppNav // Navigation state is the active presentation tree, not a graph of all possible transitions.
+state SerializedPresentation = serialize presentation AppNav // Serialization is an implementation mechanism; the language rule is that presentation state must be restorable.
+
+on app restore -> {
+   let Restored = deserialize presentation SerializedPresentation
+   when Restored is
+      valid -> present Restored
+      invalid -> present Home in AppNav // Invalid restored state falls back to default nav/ui after validation.
+}
+
+unsafe ts DangerousNativeEscape TaskId StillData.Task.Id -> text // Unsafe injected code is explicit and cannot satisfy safety guarantees by default.
+
+test "fallback emits diagnostic" {
+   run Home
+   press "Open document window"
+   expect diagnostic "presentation fallback" // Best-effort fallback is visible to tests/tracing/Studio.
+}
+
+test "missing nav falls back" {
+   run Home
+   press "Palette via missing nav"
+   expect diagnostic "presentation fallback"
+   expect id CommandPaletteUi // The UI is still shown if reasonably possible.
+}
+
+test "disabled platform reference is validated before compile" {
+   target iOS
+   expect validation error WorkspaceNav.DesktopOnlyWindowHandle // Availability validation rejects disabled-platform references before codegen.
+}
+
+test "restorable presentation parameters are accepted" {
+   run Home
+   press "Open restorable parameter lab"
+   expect id RestorableParameterLab // Primitive, record/list, entity ref, cached entity, and snapshot params all restore semantically.
+}
+
+test "non-restorable presentation parameters are rejected" {
+   run Home
+   press "Try invalid native handle parameter"
+   expect validation error InvalidNativeHandleUi // One invalid native-handle example stands in for functions, closures, component instances, and other ephemeral values.
+}
+
+package ui SettledPresentationModelSummary {
+   render Stack [stack] {
+      Text "Navigation is internal; presentation API is user-facing." [body]
+      Text "Only ui is directly presentable; nav values are native containers." [body]
+      Text "UI parameters are restorable, not merely serializable." [body]
+      Text "Entity parameters restore by reference; explicit snapshots preserve captured values." [body]
+      Text "Nav bindings absorb platform differences." [body]
+      Text "Navigation presentation never suspends; asking a dialogue does." [body]
+      Text "Compiler receives resolved, target-valid references only." [body]
+   }
+}
+
+package ui PresentationOpenQuestions {
+   render Stack [stack] {
+      Text "Open: exact platform block syntax." [body]
+      Text "Open: exact overlay dismiss syntax." [body]
+      Text "Open: final presentation result type model." [body]
+      Text "Open: values allowed across suspension points." [body]
+      Text "Open: deleted entity semantics during suspended events." [body]
+      Text "Open: final provider boundary between nav and generic presentation providers." [body]
+      Text "Open: migration/versioning for serialized presentation state." [body]
+   }
+}

@@ -1,0 +1,43 @@
+// Explores default nav forms and the remaining replace/dismiss routing decisions.
+// Present/replace/dismiss are settled as primary presentation operations.
+// Base navs are callable values configured by named arguments; APIs may explicitly accept UI or nav values for static composition.
+// TODO: Decide how each nav definition handles or delegates `replace` and `dismiss`.
+
+use Button, Screen, Stack, Text from @tao/ui
+use @tao/nav as Nav
+
+ui HomeUi {
+   render Screen [screen] {
+      Stack [stack] {
+         Text "Home" [title]
+         Button "Present task" [primary]
+            on press -> { present TaskUi CurrentTask }
+         Button "Replace with settings" [secondary]
+            on press -> { replace SettingsUi } // Navigator defines whether this replaces top route, current tab content, or focused window.
+         Button "Dismiss current" [secondary]
+            on press -> { dismiss } // Dismiss is contextual by default: pop, close, dismiss overlay, or provider-specific no-op.
+         Button "Replace task in workspace" [secondary]
+            on press -> { replace TaskUi CurrentTask in WorkspaceNav } // TODO: Decide whether `replace ... in NavName` is part of the MVP.
+      }
+   }
+}
+
+ui TaskUi Task Task {
+   render Screen [screen] {
+      Text Task.Title [title]
+   }
+}
+
+ui SettingsUi {
+   render Screen [screen] {
+      Text "Settings" [title]
+   }
+}
+
+let SimpleNav = Nav.StackNav Initial HomeUi // Initial names the stack's first UI value explicitly.
+
+let AppStack = Nav.StackNav Initial HomeUi // Stack provider treats present as push/append and dismiss as pop/restore.
+
+let AppTabs = Nav.TabNav Tabs [HomeUi, SettingsUi], Initial HomeUi // Tabs and Initial are ordinary typed parameters.
+
+let WorkspaceNav = Nav.StackNav Initial none // TaskUi is bound to CurrentTask when it is passed to `replace` or `present`.

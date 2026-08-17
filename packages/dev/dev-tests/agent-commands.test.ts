@@ -1,3 +1,4 @@
+import { CLI } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { formatAiUsageReport, summarizeAiUsage } from '../dev-src/commands/ai-usage'
 import { formatArtifactRunId } from '../dev-src/commands/artifacts'
@@ -14,6 +15,37 @@ Describe('dev loop command helpers', () => {
   Test('recognizes the verify dev-loop shortcut key', () => {
     Expect(Commands.isCommandKey('v')).toBe(true)
     Expect(Commands.isCommandKey('p')).toBe(false)
+  })
+})
+
+Describe('dev shell completion', () => {
+  Test('completes dev commands with descriptions', async () => {
+    const result = await CLI.run('bun', {
+      args: ['run', 'packages/dev/dev-src/dev.ts', '__complete', '--current', '2', '--', './dev', 't'],
+    })
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout).toContain('test\tRun package tests in parallel.')
+  })
+
+  Test('completes options for dev subcommands', async () => {
+    const result = await CLI.run('bun', {
+      args: ['run', 'packages/dev/dev-src/dev.ts', '__complete', '--current', '3', '--', './dev', 'test', '--o'],
+    })
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout).toContain('--output\tOutput mode: tui or lines.')
+  })
+
+  Test('prints zsh completion script for ./dev', async () => {
+    const result = await CLI.run('bun', {
+      args: ['run', 'packages/dev/dev-src/dev.ts', 'completion', 'zsh'],
+    })
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout).toContain('#compdef ./dev dev')
+    Expect(result.stdout).toContain('_dev()')
+    Expect(result.stdout).toContain("compdef _dev './dev' 'dev'")
   })
 })
 

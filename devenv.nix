@@ -13,11 +13,43 @@ in
   apple.sdk = null;
 
   enterShell = ''
+    TAO_BIN_DIR="$DEVENV_ROOT/.artifacts/build/bin"
+    TAO_FPATH_DIR="$DEVENV_ROOT/.artifacts/build/fpath"
+
     for bin_dir in "$DEVENV_ROOT/node_modules/.bin" "$DEVENV_ROOT/packages/shared/node_modules/.bin"; do
       if [ -d "$bin_dir" ]; then
         export PATH="$bin_dir:$PATH"
       fi
     done
+
+    export PATH="$TAO_BIN_DIR:$PATH"
+    export FPATH="$TAO_FPATH_DIR:$FPATH"
+
+    TAO_BUILD_STAMP="$DEVENV_ROOT/.artifacts/dev/devenv-build.stamp"
+    TAO_NEEDS_BUILD=false
+
+    for required_path in "$TAO_BIN_DIR/tao" "$TAO_BIN_DIR/dev" "$TAO_FPATH_DIR/_tao" "$TAO_FPATH_DIR/_dev"; do
+      if [ ! -e "$required_path" ]; then
+        TAO_NEEDS_BUILD=true
+      fi
+    done
+
+    if [ ! -e "$TAO_BUILD_STAMP" ]; then
+      TAO_NEEDS_BUILD=true
+    elif [ "$DEVENV_ROOT/Justfile" -nt "$TAO_BUILD_STAMP" ] || [ "$DEVENV_ROOT/bun.lock" -nt "$TAO_BUILD_STAMP" ]; then
+      TAO_NEEDS_BUILD=true
+    elif [ -n "$(find "$DEVENV_ROOT/packages" -path '*/node_modules' -prune -o -path '*/_gen_*' -prune -o \( -name '*.ts' -o -name '*.tsx' -o -name '*.langium' -o -name '*.json' \) -newer "$TAO_BUILD_STAMP" -print -quit)" ]; then
+      TAO_NEEDS_BUILD=true
+    fi
+
+    if [ "$TAO_NEEDS_BUILD" = true ]; then
+      mkdir -p "$DEVENV_ROOT/.artifacts/dev"
+      if (cd "$DEVENV_ROOT" && just setup && just build); then
+        touch "$TAO_BUILD_STAMP"
+      else
+        echo "warning: Tao repo-local setup/build failed; run 'just setup' and 'just build'." >&2
+      fi
+    fi
   '';
 
   languages.javascript = {

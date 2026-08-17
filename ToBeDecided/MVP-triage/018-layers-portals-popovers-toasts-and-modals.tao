@@ -1,0 +1,44 @@
+// decision: layers, portals, popovers, toasts, and modals
+// depends on: 012-render-invocation-blocks-and-elision, 017-layout-controls-overflow-scroll-and-alignment
+// status: open
+
+// option 1: project layer plus portal/popover/toast primitives
+// This gives overlays a declared stacking home.
+project layer CaptureOverlay {
+   position above AppShell
+   dim background 24%
+}
+
+project view OverlayExample {
+   state MenuOpen = false
+
+   render Box [card] {
+      Button "Open menu", .Label "Open popover", [quietAction]
+         on press -> { MenuOpen = true }
+
+      popover MenuOpen, anchor previous, placement bottom right {
+         Stack [card] {
+            Text "Popover actions" [label]
+         }
+      }
+
+      render portal CaptureOverlay {
+         toast "Saved" [frame raised, aligned bottom, margin bottom xl]
+      }
+   }
+}
+
+// option 2: Modal owns all transient overlay behavior
+// This is simpler for MVP, but cannot express portal and toast placement as directly.
+project view ModalOverlayExample {
+   state MenuOpen = false
+
+   Modal MenuOpen, .Label "Actions", [modalFrame] {
+      Text "Popover actions" [label]
+      Button "Close", .Label "Close actions", [quietAction]
+         on press -> { MenuOpen = false }
+   }
+}
+
+// option 3: wait for render and layout decisions before choosing overlay syntax
+// waiting for 012-render-invocation-blocks-and-elision, 017-layout-controls-overflow-scroll-and-alignment

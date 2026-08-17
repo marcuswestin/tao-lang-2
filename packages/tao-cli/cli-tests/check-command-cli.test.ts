@@ -3,6 +3,23 @@ import { Describe, Expect, Test } from '@shared/test'
 import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
 Describe('tao check CLI', () => {
+  Test('completes root commands with descriptions', async () => {
+    const result = await runTaoCliForTest(['__complete', '--current', '2', '--', 'tao', 'f'])
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout).toContain('fix\tApply all Tao source fixes in place')
+    Expect(result.stdout).toContain('fmt\tFormat .tao files in place.')
+  })
+
+  Test('prints zsh completion script', async () => {
+    const result = await runTaoCliForTest(['completion', 'zsh'])
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout).toContain('#compdef tao')
+    Expect(result.stdout).toContain('command "${words[1]}" __complete')
+    Expect(result.stdout).toContain('compdef _tao')
+  })
+
   Test('exits zero when files are canonical', async () => {
     await withTaoFixture({
       'canonical.tao': 'view MainView { }\n',

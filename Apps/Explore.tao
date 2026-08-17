@@ -1,0 +1,133 @@
+app Main {
+   on abort -> {
+      show overlay [anchor top], Context {
+         Row [height medium, bg alert] {
+            Text "Unexpected error: {Context.Error}"
+         }
+      }
+   }
+   // Decided: Global state overlays are only allowed at app/navigation scope.
+   show OfflineBanner as overlay while Network.offline
+}
+
+overlay ExampleCard {
+   render Frame [radius md, shadow sm, pad 16] {
+      Text "Example Card"
+      @@content
+   }
+}
+
+overlay OfflineBanner [anchor top, width fill, pad md] {
+   render Row [height medium, bg alert] {
+      Text "Offline"
+   }
+}
+
+dialogue ConfirmDialog Message text [anchor center, pad md, radius md, bg canvas] {
+   render Col [fill, gap md] {
+      Text Message
+      Row [gap md] {
+         Button "Cancel", -> respond no
+         Button "Confirm", -> respond yes
+      }
+   }
+}
+
+/* Hierarchy of operation states:
+unresolved
+   loading
+      waiting
+         queued
+         retry-backoff
+   in-flight
+      mutating
+         creating
+         updating
+         deleting
+      fetching
+resolved
+   missing
+      empty
+   incomplete
+   server-fail
+      network-fail
+         timeout
+      cancelled
+
+Guarding for loading includes updating, retrying, etc. Guarding for updating does NOT span all of loading. Guarding for loading AND retrying means anything retrying is matched first, then loading that's not retrying (e.g updating).
+*/
+
+
+view ProfileScreen UserID {
+   guard
+      User = query CurrentUser UserID,
+      Prefs = query Preferences where userID is User.ID // will queue until User is
+      | loading -> render Spinner
+      | missing User -> render Text "User not found"
+      | missing Prefs -> render Text "No preferences found"
+      | error -> abort // global UI error display
+
+      // Decided - loading/missing/error etc are specified for a particular item if wanted, or else are for all guarded items.
+      loading -> render ___
+
+      // DECIDE: is missing distinct from empty, unauthorized, and failed?
+      missing User -> render ___
+
+      // DECIDE: exact error binding syntax.
+      error E -> render ___
+
+   render Profile User, Prefs
+}
+
+action SaveProfile User Draft {
+   guard
+      Result = RPC.SaveProfile User.ID Draft with {
+         retry 3, backoff 2s
+         timeout 10s
+         on progress P -> ___
+         on cancelled -> ___
+         on timeout -> ___
+         on retry -> ___
+      }
+      failed E -> ___
+
+   show Toast "Saved" as overlay
+
+   // DECIDE: show vs ask vs wait syntax and result model.
+   Answer = ask ___ as overlay
+}
+
+view SearchBox {
+   render TextField value SearchText
+
+   // DECIDE: local anchored UI category: overlay, popup, adornment, or control-owned UI?
+   show AutocompleteMenu ___ while SearchText is not empty
+}
+
+
+
+/*
+TODO: Incorporate these specs into the example to ensure it demonstrates all possible behaviors, and can be used to creat the spec.
+
+- `show` presents UI without blocking and never receives a result.
+- `ask` presents UI, blocks the current action/flow, and must bind or otherwise handle the returned answer.
+- `answer` is used inside askable presented UI to complete the pending `ask`.
+- `overlay` is presented above normal UI and is show-only unless explicitly marked as answer-capable.
+- `dialog` is answer-capable presented UI and must be invoked with `ask`, not `show`.
+- A non-dialog `overlay` must not use `answer`.
+- A `dialog` should warn or error if it has no reachable `answer`.
+- `ask SomeOverlay` should error if `SomeOverlay` is not answer-capable, with a suggestion to use `show`.
+- `show SomeDialog` should error if `SomeDialog` is answer-capable, with a suggestion to use `ask` and handle the result.
+- Response capability should be explicit in the declaration, not inferred from the presence of `answer`.
+- If response capability changes, existing call sites should fail loudly where `show`/`ask` no longer matches the declaration.
+- `guard` gates the continuation after it until guarded values are usable.
+- A top-level `guard` gates the remaining view/action body.
+- An in-render `guard` gates only the remaining statements in the same render scope.
+- Guard branches match in declaration order and render at most one branch.
+- Use local in-render guards for independently loading regions of UI.
+- `align` means cross-axis child alignment.
+- `justify` should mean main-axis child distribution, equivalent to CSS `justify-content`.
+- `anchor` should mean placement relative to an external surface or container.
+- Bare positional words like `top` should be values, not replacements for `align`, `justify`, or `anchor`.
+
+*/

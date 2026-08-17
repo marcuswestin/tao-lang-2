@@ -1,0 +1,78 @@
+// Demonstrates settled dialogue safety, non-blocking presentation, event execution, stacking, guards, and windows.
+// `present` is always non-blocking and cannot target a dialogue; `ask` is the explicit suspension point for dialogues.
+// Every ask result is currently inferred optional so cancellation, dismissal, or system closure can produce none.
+
+use Button, Screen, Stack, Text from @tao/ui
+use @tao/nav as Nav
+
+enum ConfirmDeleteResult {
+   "confirmed"
+}
+
+ui TaskListUi {
+   render Screen [screen] {
+      Stack [stack] {
+         Button "Ask before delete" [primary]
+            on press -> {
+               let Result = ask ConfirmDeleteUi TaskList.First // Only `ask` can invoke a dialogue and suspend this event thread.
+               when Result is
+                  ConfirmDeleteResult."confirmed" -> delete TaskList.First
+                  none -> log "dismissed" // The optional empty result is inferred at every ask site rather than declared by the dialogue.
+            }
+         Button "Show palette without waiting" [secondary]
+            on press -> {
+               present CommandPaletteUi in OverlayNav // Presentation requests continue immediately.
+               log "presentation requested"
+            }
+         Button "Open document window" [secondary]
+            on press -> {
+               let Opened = present DocumentWindowUi CurrentDocument in WindowNav // TODO: Decide whether `present` exposes immediate acceptance, a restorable presentation reference, or no result.
+               log Opened
+            }
+      }
+   }
+}
+
+dialogue ConfirmDeleteUi Task Task responds ConfirmDeleteResult { // Bare entity types are references; dialogues declare only their successful response type.
+   render Stack [overlay] {
+      Text "Delete task?" [title]
+      Button "Delete" [danger]
+         on press -> { respond "confirmed" } // `respond` is valid only inside a dialogue.
+      Button "Cancel" [secondary]
+         on press -> { respond } // Bare `respond` completes the inferred none case.
+   }
+}
+
+dialogue BlockingMigrationUi responds Done { // All dialogue asks infer Done?, so the declaration itself does not use `?`.
+   render Stack [overlay] {
+      Text "Finishing migration" [title]
+      Button "Close" [primary]
+         on press -> { respond Done } // The dialogue declares Done while every ask site uniformly infers Done?.
+   }
+}
+
+ui CommandPaletteUi {
+   render Stack [overlay] {
+      Text "Command palette" [title]
+   }
+}
+
+ui DocumentWindowUi Doc Document {
+   render Screen [screen] {
+      Text "Document window" [title]
+   }
+}
+
+ui RecoverablePresentationError Error PresentationError {
+   render Stack [overlay] {
+      Text Error.Message [body]
+      Button "Dismiss error" [secondary]
+         on press -> { dismiss } // User-facing guard/error UI must be dismissible or clearable to avoid deadlock.
+   }
+}
+
+let OverlayNav = Nav.OverlayNav Layout "automatic" // Multiple overlay presentations stack; newest appears on top.
+let WindowNav = Nav.WindowNav Initial none // WindowNav receives each bound UI value through `present`.
+let AppNav = Nav.StackNav Initial TaskListUi
+
+// Dialogues are platform-presented by `ask`; callers do not request a modal presentation mode.

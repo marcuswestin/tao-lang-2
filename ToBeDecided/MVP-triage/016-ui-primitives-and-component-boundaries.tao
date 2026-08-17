@@ -1,0 +1,37 @@
+// decision: UI primitive set and component boundary policy
+// depends on: 011-view-screen-layout-declarations, 013-combined-style-layout-specs
+// status: open
+
+// option 1: keep a compact Tao-owned primitive set with explicit metadata
+// Tao controls accessibility and layout props while runtime maps to React Native.
+project view PrimitiveShowcase {
+   render ScrollView [screenScroll] {
+      TextFrame "Read-only frame" [titleFrame]
+      TextMultiline DraftBody, .Label "Body", [textArea]
+      Image HeroImage, .Label "Workspace image", [heroImage]
+      ImageInput SelectedImage, .Label "Choose image", [imageInputFrame]
+      Pressable .Label "Pressable frame", [pressableFrame] {
+         Text "Tap target" [body]
+      }
+      Progress UploadProgress [progressRow]
+      Spinner [loading]
+      Link "Open docs", to "https://tao.local", [quietAction]
+      IconButton "settings", .Label "Settings", [secondaryAction]
+   }
+}
+
+// option 2: reduce primitives and express more through recipes
+// This keeps runtime small, but recipe behavior must cover many expected controls.
+project view RecipePrimitiveShowcase {
+   render FormField kind textMultiline, value DraftBody, label "Body", [textArea]
+   render MediaField kind image, value HeroImage, input SelectedImage, [heroImage]
+   render Action kind icon, icon "settings", label "Settings", [secondaryAction]
+}
+
+// option 3: allow bridge-backed native components as first-class views
+// This is powerful, but bridge typing and platform availability become core concerns.
+use NativeDatePicker from @tao/native
+
+project view NativeComponentShowcase {
+   render NativeDatePicker SelectedDate, .Label "Due date", [textField]
+}

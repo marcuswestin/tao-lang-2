@@ -1,0 +1,12 @@
+// MVP-4 triage index for the decisions archived at Roadmap/Archive/MVP-4-Presentation-Navigation-Decisions.md.
+// The old screen/overlay/window destination model is superseded here by the decided ui/nav presentation model.
+// Each numbered file demonstrates settled behavior and isolates any remaining decision called out inside it.
+
+use @ui as UI // Triage examples use the same package alias shape as MVP-4 app code.
+use @tao/nav as Nav // Navigator providers are implementation mechanics under semantic presentation.
+
+let StillRootNavigation = Nav.StackNav Initial UI.Home // `let` binds the configured result; it does not declare or alias a nav definition.
+
+on app launch -> { // Startup presents semantic UI, not a screen route.
+   present UI.Home in StillRootNavigation // User code says what to show; StackNav decides native mechanics.
+}

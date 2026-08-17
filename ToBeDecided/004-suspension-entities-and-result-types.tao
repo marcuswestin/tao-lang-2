@@ -1,0 +1,63 @@
+// TODO: Decide between snapshots, guarded live references, and ID-only re-query for values crossing `ask` suspension points.
+// The triage options below keep the undecided areas visible without contradicting settled presentation semantics.
+
+ui DeleteAfterConfirm Task Task { // A bare entity type always denotes its reference form.
+   render Stack [stack] {
+      Button "Delete after confirm" [danger]
+         on press -> {
+            let Decision = ask ConfirmDeleteUi Task // `ask`, never `present`, creates the dialogue suspension point.
+            when Decision is
+               "confirmed" -> delete Task
+               none -> log "cancelled"
+         }
+   }
+}
+
+// Option A: snapshot values for event duration.
+ui SnapshotOption Task Task.Data {
+   let Snapshot = snapshot Task // Values used after suspension are immutable remnant data.
+   on press -> {
+      let Decision = ask ConfirmDeleteUi Snapshot.Id // Asking a dialogue is the explicit suspension point for snapshot analysis.
+      when Decision is "confirmed" -> log Snapshot.Title
+   }
+}
+
+// Option B: deleted guard type.
+ui DeletedGuardOption Task Task {
+   on press -> {
+      let Decision = ask ConfirmDeleteUi Task // Live references crossing `ask` remain an open deleted-entity design question.
+      guard Task when
+         Present -> log Task.Title
+         Deleted -> log Task.Snapshot.Title
+         Missing -> present MissingTaskUi
+   }
+}
+
+// Option C: ID-only discipline across suspension.
+ui IdOnlyOption TaskId Task.Id {
+   on press -> {
+      let Decision = ask ConfirmDeleteUi TaskId // IDs remain stable values across an `ask` suspension point.
+      query FreshTask { Title, where ID is TaskId } // Re-query after suspension before using live data.
+      when Decision is "confirmed" -> delete FreshTask
+   }
+}
+
+type PresentationStatus =
+   Presented |
+   Failed PresentationError |
+   FellBack PresentationFallback // TODO: Decide the exact immediate presentation-status type, separate from dialogue responses.
+
+dialogue ConfirmDeleteUi Task Task responds ConfirmDeleteResult { // `ask` accepts dialogues; `present` cannot target them.
+   render Stack [overlay] {
+      Button "Confirm" [danger]
+         on press -> { respond "confirmed" } // `respond` is valid only inside a dialogue.
+      Button "Cancel" [secondary]
+         on press -> { respond } // Bare respond completes the optional none case inferred for every ask.
+   }
+}
+
+ui MissingTaskUi {
+   render Stack [overlay] {
+      Text "Task no longer exists" [body]
+   }
+}

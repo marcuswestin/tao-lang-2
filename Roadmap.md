@@ -91,6 +91,16 @@ Track the clean, stepwise Tao reimplementation. Keep this current as each slice 
 - [ ] Ensure that a project doesn't have multiple project definitions inside it - only in the root directory.
   - [ ] Then ensure that a workspace only looks inside its root folder for packages; and have the ide extension manage multiple workspaces (one for each project folder); and stop requiring a tao project to have a git repo at its root, as long as it is inside a git repo (to allow for multiple tao projects in a single repo)
 - [ ] Implement styling
+  - Consider view style defaults that callers may override:
+    ```tao
+    view Foo [pad 12, bg red] {
+       render Text "Foo"
+    }
+
+    render Foo // red, padded
+    render Foo [pad 0, bg none] // caller clears the default padding/background
+    ```
+  - Decide merge/clearing semantics between declaration defaults and render-site overrides.
 - [ ] Actions
   - [ ] Add `on press` etc
   - [ ] Switch other test apps to use tao testing rather than ts

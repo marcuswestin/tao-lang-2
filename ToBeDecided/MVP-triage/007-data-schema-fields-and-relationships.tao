@@ -1,0 +1,62 @@
+// decision: data schema fields, relationship inference, and defaults
+// depends on: 004-type-declarations-and-enums, 005-typed-constructors-and-literal-inference
+// status: open
+
+// option 1: current shorthand with unique field types and inferred relationships
+// Existing declarations can be referenced by name; plural names infer lists.
+data StillData {
+   type FocusTone is enum {
+      "calm",
+      "clear",
+   }
+
+   Workspaces/Workspace {
+      Title is text indexed,
+      Summary is text,
+      Slug is text unique indexed,
+      Pinned is boolean indexed default false,
+      Ordering is number indexed,
+      Focus is FocusTone indexed default "calm",
+      Notes,
+      Tasks,
+   }
+
+   Notes/Note {
+      Workspace,
+      Title is text indexed,
+      Body is text,
+      Mood is FocusTone indexed default "clear",
+      RelatedTasks is Tasks,
+   }
+}
+
+// option 2: require every field to spell out type and cardinality
+// This is easier for tools to explain, but loses the Tao shorthand benefit.
+data StillData {
+   Workspaces/Workspace {
+      Title is text indexed,
+      Notes is [Note],
+      Tasks is [Task],
+   }
+
+   Notes/Note {
+      Workspace is Workspace,
+      RelatedTasks is [Task],
+   }
+}
+
+// option 3: use collection-owned relationship declarations
+// This keeps entity fields scalar-first, but makes relationships harder to scan locally.
+data StillData {
+   Workspaces/Workspace {
+      Title is text indexed,
+   }
+
+   Notes/Note {
+      Title is text indexed,
+   }
+
+   relationship Workspace has many Notes
+   relationship Workspace has many Tasks
+   relationship Note has many RelatedTasks as Task
+}

@@ -1,0 +1,48 @@
+// decision: view, screen, and layout declaration forms
+// depends on: 001-project-package-and-visibility, 013-combined-style-layout-specs
+// status: open
+
+// option 1: keep project-qualified screen/view/layout declarations
+// This is explicit about app-owned UI declarations and matches MVP-3.
+project screen DashboardScreen {
+   render AppShell "Still", "Today" {
+      DashboardContent
+   }
+}
+
+project view TaskRow Task {
+   render Row [taskCard] {
+      Text Task.Title [body]
+   }
+}
+
+project layout AppShell Title text, Eyebrow text = "Still" {
+   render Screen [screen] {
+      Stack [shell] {
+         Text Eyebrow [quiet]
+         Text Title [display]
+         @@content
+      }
+   }
+}
+
+// option 2: omit `project` from UI declarations inside app packages
+// This is terser, but visibility and package boundary rules become implicit.
+screen DashboardScreen {
+   AppShell "Still", "Today" {
+      DashboardContent
+   }
+}
+
+view TaskRow Task {
+   Row [taskCard] {
+      Text Task.Title [body]
+   }
+}
+
+// option 3: use `component` as the shared primitive for view/layout
+// This unifies reusable UI declarations, but loses the layout/view distinction.
+component AppShell Title text, Eyebrow text = "Still" {
+   slot content
+   render Screen [screen] { @content }
+}

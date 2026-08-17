@@ -1,0 +1,42 @@
+// decision: imports, package requirements, install, and publish semantics
+// depends on: 001-project-package-and-visibility
+// status: open
+
+// option 1: keep current MVP-3 style with bare package use, relative use, requires, publish, and install
+requires @tao/ui >= 1.0
+requires @still/analytics >= 0.4
+
+use Button, Text from @tao/ui
+use StillData from @data
+use RelativeAccent from ./@ui/relative
+
+publish app StillRelease {
+   source StillTriageApp
+   visibility public
+}
+
+project app InstalledStill = install @ro/still "1.0.0" {
+   datasource StillLocalDatasource
+}
+
+// option 2: move external dependencies into a project manifest block
+// This centralizes dependency policy, but makes imports less self-documenting.
+project dependencies {
+   require @tao/ui >= 1.0
+   require @still/analytics >= 0.4
+   install @ro/still "1.0.0" as InstalledStill
+}
+
+use Button, Text from @tao/ui
+use StillData
+use RelativeAccent from ./@ui/relative
+
+// option 3: treat publish/install as package-manager commands only
+// Source keeps only dependencies and exports; CLI owns actual publishing and installation.
+requires @tao/ui >= 1.0
+
+export app StillTriageApp
+export package StillTriageKit
+
+// tao publish app StillTriageApp --public
+// tao install @ro/still@1.0.0 as InstalledStill

@@ -1,4 +1,5 @@
 import * as CLI from './CLI'
+import { Completion } from './Completion'
 import { Assert, Diagnostic, Diagnostics, Errors, Switch, Text, Time } from './core/shared-core'
 import * as FS from './FS'
 import * as HCI from './HCI'
@@ -16,6 +17,7 @@ export type {
 export {
   Assert,
   CLI,
+  Completion,
   Diagnostic,
   Diagnostics,
   Errors,

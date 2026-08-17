@@ -226,7 +226,7 @@ Describe('minimal Tao parser', () => {
       app MyApp { view MainView }
       view MainView {
         render Col [claim 2, content top spread-inset, gap 12, pad 16, margin horizontal 4, width fill] {
-          Text "Label" [width fill, height fill]
+          Text "Label" [width fill, height fill, aligned center, centered]
         }
       }
       layout Col {
@@ -263,6 +263,8 @@ Describe('minimal Tao parser', () => {
     Expect(AST.layoutEntriesOf(child.layoutClause).map(layoutEntryTerms)).toEqual([
       ['width', 'fill'],
       ['height', 'fill'],
+      ['aligned', 'center'],
+      ['centered'],
     ])
   })
 

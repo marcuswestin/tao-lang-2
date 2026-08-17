@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from '@commander-js/extra-typings'
-import { Errors, FS, HCI, Platform } from '@shared'
+import { Completion, Errors, FS, HCI, Platform } from '@shared'
 import { runCompile } from './compile-command'
 import type { InPlace } from './in-place-files'
 import { runCheck, runFix, runFmt } from './source-commands'
@@ -90,6 +90,11 @@ function createCommands(): Command {
     .action(async (path: string) => {
       await runTestCommand(path)
     })
+
+  Completion.register(commands, {
+    commandNames: ['tao'],
+    executableName: 'tao',
+  })
 
   return commands
 }

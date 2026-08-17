@@ -1,6 +1,12 @@
 set quiet
 
 KITCHEN_SINK_APP := justfile_directory() + "/Apps/Kitchen Sink/Kitchen Sink.tao"
+BUILD_BIN_DIR := justfile_directory() + "/.artifacts/build/bin"
+BUILD_FPATH_DIR := justfile_directory() + "/.artifacts/build/fpath"
+TAO_BIN := BUILD_BIN_DIR + "/tao"
+DEV_BIN := BUILD_BIN_DIR + "/dev"
+TAO_COMPLETION_ZSH := BUILD_FPATH_DIR + "/_tao"
+DEV_COMPLETION_ZSH := BUILD_FPATH_DIR + "/_dev"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
 DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
 
@@ -18,6 +24,16 @@ dev app_path="":
 # Install development dependencies
 deps:
     bun install
+
+# Build repo-local executable and shell completion artifacts
+build: _parser-gen
+    mkdir -p "{{ BUILD_BIN_DIR }}" "{{ BUILD_FPATH_DIR }}"
+    rm -f .artifacts/build/tao .artifacts/build/_tao .artifacts/build/_dev
+    bun build --compile --target=bun --outfile="{{ TAO_BIN }}" packages/tao-cli/cli-src/tao-cli.ts
+    printf '%s\n' '#!/bin/zsh' 'exec "{{ justfile_directory() }}/dev" "$@"' > "{{ DEV_BIN }}"
+    chmod +x "{{ DEV_BIN }}"
+    "{{ TAO_BIN }}" completion zsh > "{{ TAO_COMPLETION_ZSH }}"
+    ./dev completion zsh > "{{ DEV_COMPLETION_ZSH }}"
 
 # Run all tests, optionally filtered by test name
 test PATTERN="": _compile-kitchen-sink-app

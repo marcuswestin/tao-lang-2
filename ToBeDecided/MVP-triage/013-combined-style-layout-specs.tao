@@ -1,0 +1,38 @@
+// decision: combined style/layout specs and modifier syntax
+// depends on: 014-design-token-recipe-and-rule-model
+// status: open
+
+// option 1: unified bracketed specs for style and layout
+// This supports `render Screen [screen]` instead of separate layout/style channels.
+project design StillDesign {
+   screen [fill, bg canvas, text ink]
+   taskCard [row, content spaceBetween center, gap md, width fill, pad lg, bg surface, border line, radius 22]
+}
+
+project view UnifiedSpecExample {
+   render Screen [screen] {
+      Row [taskCard] {
+         Text "Task" [body]
+      }
+   }
+}
+
+// option 2: separate layout and style clauses
+// This preserves conceptual separation but makes every render site heavier.
+project view SplitSpecExample {
+   render Screen <fill> [bg canvas, text ink] {
+      Row <row, content spaceBetween center, gap md, width fill> [bg surface, border line, radius 22] {
+         Text "Task" [body]
+      }
+   }
+}
+
+// option 3: inline-only modifiers without named specs
+// This maximizes local clarity but weakens reuse and design diagnostics.
+project view InlineSpecExample {
+   render Screen [fill, bg canvas, text ink] {
+      Row [row, content spaceBetween center, gap md, width fill, pad lg, bg surface, border line, radius 22] {
+         Text "Task" [size 16, weight 450, text ink, line 23]
+      }
+   }
+}

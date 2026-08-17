@@ -1,0 +1,61 @@
+// Demonstrates settled reference validation, isolated injection, unsafe boundaries, and restorable presentation state.
+// Compiler/codegen should receive valid resolved references only; parser/resolver/availability/validator own invalid reference handling.
+
+use Button, Screen, Stack, Text from @tao/ui
+use @tao/nav as Nav
+use injected.FormatTitle from ./injected/format-title.ts // Injected TypeScript is imported explicitly; it does not receive ambient Tao scope.
+
+ui SerializableTaskUi TaskId Task.Id {
+   render Screen [screen] {
+      Stack [stack] {
+         Text FormatTitle(TaskId) [title] // Only explicitly passed values are visible to injected code.
+         Button "Open restored task" [primary]
+            on press -> { present SerializableTaskUi TaskId in AppNav }
+      }
+   }
+}
+
+type SerializableFilter { // Serializable records/lists are valid UI params only when they are also restorable.
+   Query text
+   TaskIds [Task.Id]
+}
+
+ui RestorableTaskUi Task Task, Filter SerializableFilter, Snapshot Task.Snapshot {
+   render Screen [screen] {
+      Stack [stack] {
+         Text Task.Title [title] // Entity references may restore current entity state from identity/cache/provider.
+         Text Filter.Query [body] // Primitive serializable data remains valid as restorable presentation state.
+         Text Snapshot.Title [body] // Explicit snapshots request captured-value restoration semantics.
+      }
+   }
+}
+
+type NativeHandle = native opaque // Non-restorable values cannot be presentation parameters even if an implementation could encode them.
+
+ui InvalidNativeHandleUi Handle NativeHandle { // Validation error: native handles/functions/closures/component instances cannot restore after restart.
+   render Screen [screen] { Text "Invalid" [body] }
+}
+
+unsafe ts DangerousNativeEscape TaskId Task.Id -> text // Unsafe injected code should be visible to Studio and cannot satisfy safety guarantees by default.
+
+ui UnsafePresentationUi TaskId Task.Id {
+   render Stack [overlay] {
+      Text DangerousNativeEscape(TaskId) [body] // Opaque unsafe code cannot prove dismiss/return behavior unless annotated.
+      Button "Dismiss" [secondary]
+         on press -> { dismiss }
+   }
+}
+
+let AppNav = Nav.StackNav Initial none // SerializableTaskUi requires an argument, so the stack receives its first bound UI value through `present`.
+
+state SerializedPresentation = serialize presentation AppNav // Serialized data must be sufficient to reconstruct equivalent semantic presentation state.
+
+on app restore -> {
+   let Restored = deserialize presentation SerializedPresentation // Deserialization validates against current app/schema/platform.
+   when Restored is
+      valid -> present Restored
+      invalid -> present SerializableTaskUi DefaultTaskId in AppNav // Invalid restored state falls back to the default nav/ui.
+}
+
+// Availability validation rejects references to disabled platform declarations before codegen.
+// Runtime diagnostics, tests, and Studio should all be able to inspect presentation fallback metadata.

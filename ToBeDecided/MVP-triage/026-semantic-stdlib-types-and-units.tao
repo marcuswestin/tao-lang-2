@@ -1,0 +1,40 @@
+// decision: semantic standard library types, units, and random constraints
+// depends on: 004-type-declarations-and-enums, 005-typed-constructors-and-literal-inference
+// status: open
+
+// option 1: built-in semantic types with unit-backed declarations
+// This gives validation and formatting first-class domain types.
+type Duration is number with units {
+   ms
+   second = 1000.ms
+   minute = 60.second
+}
+
+type Percent is number with units {
+   percent
+}
+
+type CurrencyCode is enum {
+   "USD",
+   "EUR",
+}
+
+type Money is item {
+   Amount number
+   Currency CurrencyCode
+}
+
+type Email is text matching "email"
+type Url is text matching "url"
+type DeviceId is text opaque
+
+alias RandomDelay = random Duration between 100.ms and 300.ms
+
+// option 2: semantic types live in packages, not language core
+// This reduces core language scope, but makes shared validation package-owned.
+use Duration, Percent, Money, Email, Url from @tao/semantic
+
+alias RandomDelay = Duration 200.ms
+
+// option 3: wait for type declaration shape
+// waiting for 004-type-declarations-and-enums

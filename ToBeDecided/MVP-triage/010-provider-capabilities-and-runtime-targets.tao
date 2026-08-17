@@ -1,0 +1,47 @@
+// decision: provider capabilities, datasource variants, and runtime targets
+// depends on: 007-data-schema-fields-and-relationships, 009-mutations-defaults-transactions-and-links
+// status: open
+
+// option 1: explicit provider capability manifests
+// This keeps provider constraints visible to validator, compiler, and CLI tooling.
+provider capability InstantProviderCapabilities {
+   provider InstantDB
+   supports where scalar, nested, exists, missing, in, like
+   supports order directScalar, nestedDirectScalar
+   supports writes create, update, upsert, merge, delete, link, unlink, transaction
+   supports realtime subscriptions
+   supports offline queue, optimistic updates
+   rejects relationshipDepth > 2
+}
+
+datasource StillInstantDatasource {
+   data StillData
+   provider InstantDB
+   capabilities InstantProviderCapabilities
+   appId env.INSTANT_APP_ID
+   auth CurrentUser
+}
+
+project runtime target ProductionTarget {
+   datasource StillInstantDatasource
+   secrets serverOnly
+}
+
+// option 2: datasource declares concrete capability switches inline
+// This is shorter for one provider, but repeats capability vocabulary across datasources.
+datasource StillInstantDatasource {
+   data StillData
+   provider InstantDB
+   appId env.INSTANT_APP_ID
+   supports realtime, offlineFirst, optimistic, transactions
+   rejects unindexed order, relationshipDepth > 2
+}
+
+// option 3: runtime target owns provider selection
+// This lets one app bind to different providers per environment.
+project runtime target StagingTarget {
+   datasource StillData with provider Memory {
+      seed scenarios
+      reset beforeEach
+   }
+}

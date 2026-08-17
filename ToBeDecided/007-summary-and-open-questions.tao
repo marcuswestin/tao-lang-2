@@ -1,0 +1,29 @@
+// Summarizes the settled presentation direction and the remaining open questions.
+// This file is intentionally a checklist sketch so future edits can promote open items into concrete triage examples.
+
+ui SettledPresentationModelSummary {
+   render Stack [stack] {
+      Text "Navigation is internal; presentation API is user-facing." [body]
+      Text "Only ui is directly presentable; navs are native containers and dialogues are askable." [body]
+      Text "UI parameters must be restorable, not merely serializable." [body]
+      Text "Entity values can be accepted when Tao can restore equivalent semantic state." [body]
+      Text "Navs are named presentation contexts." [body]
+      Text "Platform differences belong in declarations, not call sites." [body]
+      Text "Overlays are dismissible by default and stack by default." [body]
+      Text "Presentation never suspends; asking a dialogue always does." [body] // Statement context no longer changes execution semantics.
+      Text "Every dialogue response is optional at the ask site for now." [body] // A dialogue that responds T makes ask infer T?.
+      Text "Compiler receives resolved, valid references only." [body]
+      Text "Injected TS is isolated behind explicit imported functions." [body]
+      Text "Fallback presentation should show UI and emit diagnostics." [body]
+   }
+}
+
+// TODO: Decide the exact platform/condition block syntax.
+// TODO: Decide the shared nav runtime protocol and auxiliary-context mounting model.
+// TODO: Decide whether nav alone owns overlay/window presentation and the exact ordinary overlay-dismiss behavior.
+// TODO: Decide the exact immediate presentation-status model, separate from dialogue responses.
+// TODO: Decide whether `present` returns nothing, immediate acceptance status, or a restorable presentation reference.
+// TODO: Decide presentation identity and deduplication for repeated window/UI presentations and later focus or targeted dismissal.
+// TODO: Decide which values may cross suspension points and how deleted entities behave afterward.
+// TODO: Decide how each nav definition handles or delegates `replace` and `dismiss`.
+// TODO: Decide presentation-state migration and versioning.

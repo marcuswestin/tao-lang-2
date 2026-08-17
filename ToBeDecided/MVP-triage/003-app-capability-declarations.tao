@@ -1,0 +1,53 @@
+// decision: app capability declaration style
+// depends on: 001-project-package-and-visibility, 002-import-requires-install-and-publish
+// status: open
+
+// option 1: project-level capabilities referenced by the app
+// This matches MVP-3 and keeps each capability independently reusable.
+project app StillTriageApp {
+   view DashboardScreen
+   design StillDesign
+   theme StillTheme
+   datasource StillLocalDatasource
+   navigator StillRootNavigation
+   assets StillAssets
+   permissions StillPermissions
+   strings StillStrings
+   locale StillLocale
+}
+
+// option 2: embed capability config inside the app
+// This is compact for one-app projects, but less reusable across packages.
+project app StillTriageApp {
+   view DashboardScreen
+
+   design {
+      use StillDesign
+   }
+
+   datasource {
+      data StillData
+      provider Memory
+      appId "still-local"
+   }
+
+   permissions {
+      camera optional
+      notifications optional
+   }
+}
+
+// option 3: use a named capability bundle
+// This gives apps one handle while preserving reusable capability parts.
+project capability StillLocalRuntime {
+   design StillDesign
+   theme StillTheme
+   datasource StillLocalDatasource
+   assets StillAssets
+   permissions StillPermissions
+}
+
+project app StillTriageApp {
+   view DashboardScreen
+   capability StillLocalRuntime
+}
