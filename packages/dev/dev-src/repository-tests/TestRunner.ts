@@ -152,7 +152,11 @@ function packageSuites(packageName: string, testFiles: string[], pattern: string
 function bunSuite(name: string, testFiles: string[], pattern: string): TestSuite {
   const args = [
     'test',
-    ...testFiles.map(path => Shared.FS.relativePath(Shared.Repo.resolvePath(), path)),
+    // Bun reads a bare relative path as a filter, walks the whole repository to resolve it, and
+    // leaves a file descriptor open per visited entry. Children spawned by a test then inherit an
+    // exhausted descriptor table and their piped output never arrives. An absolute path is taken
+    // literally, so the walk never happens.
+    ...testFiles,
     '--reporter=dot',
     ...(BUN_SUITE_ARGS.get(name) ?? []),
     ...(pattern ? [`--test-name-pattern=${pattern}`] : []),
