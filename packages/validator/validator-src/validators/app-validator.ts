@@ -15,15 +15,12 @@ const appValidationMessages = {
   rootViewParameters: (appName: string, viewName: string) =>
     `App ${appName} root view ${viewName} must not declare parameters.`,
   nameCount: (name: string, count: number) => `App ${name} must declare exactly one Name, found ${count}.`,
-  navigatorType: (name: string, actual: string) => `App ${name} Navigator expects nav, got ${actual}.`,
   auxiliaryType: (name: string, key: string, actual: string) => `App ${name}@${key} expects nav, got ${actual}.`,
   duplicateAuxiliary: (name: string, key: string) => `App ${name} declares auxiliary navigator @${key} more than once.`,
   auxiliaryKey: (key: string) => `App auxiliary '${key}' must be a single @name key.`,
-  datasourceType: (name: string) => `App ${name} Datasource expects datasource, got another value.`,
-  datasourceCount: (name: string, count: number) => `App ${name} may declare at most one Datasource, found ${count}.`,
   variantProperty: (name: string, property: string) =>
     `App variant ${name} cannot patch unknown property '${property}'.`,
-  variantDuplicate: (name: string, property: string) => `App variant ${name} patches '${property}' more than once.`,
+  missingProperty: (name: string, property: string) => `App ${name} must supply '${property}'.`,
   propertyDuplicate: (name: string, property: string) => `App ${name} supplies '${property}' more than once.`,
   propertyType: (name: string, property: string, expected: string, actual: string) =>
     `App ${name} ${property} expects ${expected}, got ${actual}.`,
@@ -73,13 +70,21 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
       ctx.error(appValidationMessages.appBlock(app.name), statement)
     }
   }
-  validateAppProperties(app.name, properties, app, ctx, true)
+  validateAppProperties(app.name, properties.map(suppliedSlotOfProperty), app, ctx, true)
   validateAppAuxiliaryNavigators(app, ctx)
+}
+
+/** SuppliedSlot names one app slot supplied either as an app property or as a variant patch entry. */
+type SuppliedSlot = {
+  readonly name: string
+  readonly node: AST.Node
+  readonly patched: boolean
+  readonly value?: AST.Expression | AST.ConfigurationValue
 }
 
 function validateAppProperties(
   appName: string,
-  properties: readonly AST.AppProperty[],
+  supplied: readonly SuppliedSlot[],
   owner: AST.Node,
   ctx: ValidationContext,
   requireComplete: boolean,
@@ -87,32 +92,33 @@ function validateAppProperties(
   const contract = AST.primitiveSlots(ctx.workspaceFiles, 'app')
   const contractByName = new Map(contract.map(slot => [slot.name, slot]))
   const seen = new Set<string>()
-  for (const property of properties) {
-    const expected = contractByName.get(property.name)
+  for (const slot of supplied) {
+    const expected = contractByName.get(slot.name)
     if (!expected) {
-      ctx.error(appValidationMessages.variantProperty(appName, property.name), property)
+      ctx.error(appValidationMessages.variantProperty(appName, slot.name), slot.node)
       continue
     }
-    if (seen.has(property.name)) {
-      ctx.error(appValidationMessages.propertyDuplicate(appName, property.name), property)
+    if (seen.has(slot.name)) {
+      ctx.error(appValidationMessages.propertyDuplicate(appName, slot.name), slot.node)
     }
-    seen.add(property.name)
-    if (!property.value) {
-      if (property.patch && !requireComplete) {
+    seen.add(slot.name)
+    if (!slot.value) {
+      if (slot.patched && !requireComplete) {
         continue
       }
       ctx.error(
         appValidationMessages.propertyType(
           appName,
-          property.name,
+          slot.name,
           Type.displayName(Type.ofProperty(expected)),
           'patch',
         ),
-        property,
+        slot.node,
       )
       continue
     }
-    const actual = Type.ofExpression(property.value)
+    // Configuration-only nodes carry no expression type; the owning configuration validator checks those.
+    const actual = AST.isExpression(slot.value) ? Type.ofExpression(slot.value) : { kind: 'unresolved' as const }
     const expectedType = Type.ofProperty(expected)
     if (
       actual.kind !== 'unresolved' && expectedType.kind !== 'unresolved' && !Type.isAssignable(actual, expectedType)
@@ -120,11 +126,11 @@ function validateAppProperties(
       ctx.error(
         appValidationMessages.propertyType(
           appName,
-          property.name,
+          slot.name,
           Type.displayName(expectedType),
           Type.displayName(actual),
         ),
-        property.value,
+        slot.value,
       )
     }
   }
@@ -135,17 +141,19 @@ function validateAppProperties(
     if (seen.has(required.name)) {
       continue
     }
+    const node = supplied[0]?.node ?? owner
     if (required.name === 'Name') {
-      ctx.error(appValidationMessages.nameCount(appName, 0), properties[0] ?? owner)
+      ctx.error(appValidationMessages.nameCount(appName, 0), node)
     } else if (required.name === 'Navigator') {
-      ctx.error(appValidationMessages.appRootCount(appName, 0), properties[0] ?? owner)
+      ctx.error(appValidationMessages.appRootCount(appName, 0), node)
     } else {
-      ctx.error(
-        appValidationMessages.variantProperty(appName, required.name),
-        properties[0] ?? owner,
-      )
+      ctx.error(appValidationMessages.missingProperty(appName, required.name), node)
     }
   }
+}
+
+function suppliedSlotOfProperty(property: AST.AppProperty): SuppliedSlot {
+  return { name: property.name, node: property, patched: property.patch !== undefined, value: property.value }
 }
 
 function validateAppVariant(
@@ -153,21 +161,20 @@ function validateAppVariant(
   refinement: AST.RefinementExpression,
   ctx: ValidationContext,
 ): void {
-  const entries = refinement.patchBlock.entries
-  const properties: AST.AppProperty[] = entries.flatMap(entry => {
+  const supplied = refinement.patchBlock.entries.flatMap<SuppliedSlot>(entry => {
     if (!entry.name) {
       ctx.error(appValidationMessages.variantProperty(variant.name, entry.key ?? ''), entry)
       return []
     }
+    const patched = entry.value !== undefined && AST.isPropertyConfigurationPatch(entry.value)
     return [{
-      $type: 'AppProperty',
       name: entry.name,
-      value: entry.value && !AST.isPropertyConfigurationPatch(entry.value) ? entry.value : undefined,
-      patch: AST.isPropertyConfigurationPatch(entry.value) ? entry.value : undefined,
-      $container: variant,
-    } as unknown as AST.AppProperty]
+      node: entry,
+      patched,
+      value: patched ? undefined : entry.value,
+    }]
   })
-  validateAppProperties(variant.name, properties, variant, ctx, false)
+  validateAppProperties(variant.name, supplied, variant, ctx, false)
 }
 
 function validateAppAuxiliaryNavigators(app: AST.AppDeclaration, ctx: ValidationContext): void {

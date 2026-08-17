@@ -55,6 +55,55 @@ Describe('validator: apps and views', () => {
     Expect(validationErrorMessages(duplicate)).toContain(AppValidator.messages.appRootCount('MyApp', 2))
   })
 
+  Test('rejects unknown, duplicated, and mistyped supplied app slots', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app MyApp {
+        Name "Demo"
+        Name "Demo again"
+        Navigator "not a nav"
+        Theme "unknown slot"
+      }
+      ${stubView('MainView')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.propertyDuplicate('MyApp', 'Name'))
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.variantProperty('MyApp', 'Theme'))
+    Expect(validationErrorMessages(result)).toContain(
+      AppValidator.messages.propertyType('MyApp', 'Navigator', 'Navigator', 'text'),
+    )
+  })
+
+  Test('rejects an app head that is not an app value', async () => {
+    const result = await testValidateCodeWithErrors(`
+      let NotAnApp = "text"
+      app MyApp = NotAnApp
+      ${stubView('MainView')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.headType('MyApp', 'text'))
+  })
+
+  Test('attaches app variant patch diagnostics to the offending entry, not the file start', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app Base {
+        Name "Base"
+        Navigator StackNav { Initial MainView }
+      }
+      app Variant = Base with {
+        Theme "unknown slot"
+      }
+      ${stubView('MainView')}
+    `)
+    const diagnostic = result.diagnostics.find(({ message }) =>
+      message === AppValidator.messages.variantProperty('Variant', 'Theme')
+    )
+
+    Expect(diagnostic?.range).toBeDefined()
+    Expect(diagnostic?.range?.start.line).toBeGreaterThan(0)
+  })
+
   Test(
     'rejects app root view declarations with parameters',
     rejects(
