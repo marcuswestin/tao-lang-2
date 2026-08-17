@@ -5,9 +5,10 @@ import { CLI, Diagnostics, Errors, FS, HCI, Platform, Repo } from '@shared'
 import Workspace from '@workspace'
 import { findTaoFiles } from './tao-files'
 
-/** TaoTestRunResult declares the files selected for one Tao test command run. */
-type TaoTestRunResult = {
-  commandResult?: CLI.CommandResult
+/** CompiledTaoTests declares the files and generated manifest for one Tao test run. */
+type CompiledTaoTests = {
+  manifestPath?: string
+  runtimeRoot?: string
   testPaths: readonly string[]
   validationErrors?: readonly TaoTestValidationError[]
 }
@@ -18,8 +19,7 @@ type TaoTestValidationError = {
   messages: readonly string[]
 }
 
-type RunTestOptions = {
-  stdio?: CLI.CommandStdio
+type CompileTestOptions = {
   testPaths?: readonly string[]
 } & RuntimeTesting.TestCompiler.ValidationOptions
 
@@ -44,9 +44,10 @@ export async function runTestCommand(path: string): Promise<void> {
       writeTaoTestValidationErrors(validationErrors)
       Platform.runtimeProcess.exit(1)
     }
-    HCI.logProcessInfo('test', 'Compiling apps and running Tao tests')
-    const result = await runTest(root, { stdio: 'pipe', testPaths, skipValidation: true })
-    const commandResult = result.commandResult
+    HCI.logProcessInfo('test', 'Compiling apps')
+    const compiled = await compileTaoTests(root, { testPaths, skipValidation: true })
+    HCI.logProcessInfo('test', 'Running Tao tests')
+    const commandResult = await runCompiledTaoTests(compiled, { stdio: 'pipe' })
     if (commandResult !== undefined) {
       HCI.write(commandResult.stdout)
       HCI.write(commandResult.stderr)
@@ -64,8 +65,8 @@ export async function runTestCommand(path: string): Promise<void> {
   }
 }
 
-/** runTest discovers and runs every `.tao` file with Tao test declarations at or under `path`. */
-async function runTest(path = '.', options: RunTestOptions = {}): Promise<TaoTestRunResult> {
+/** compileTaoTests compiles every `.tao` test file at or under `path` into a Jest manifest. */
+async function compileTaoTests(path = '.', options: CompileTestOptions = {}): Promise<CompiledTaoTests> {
   const root = FS.resolvePath(path)
   const testPaths = options.testPaths ?? await findTaoTestFiles(root)
   if (testPaths.length === 0) {
@@ -80,21 +81,34 @@ async function runTest(path = '.', options: RunTestOptions = {}): Promise<TaoTes
   }
 
   const runtimeRoot = RuntimeToolchainPaths.packageRoot
-  const manifestPath = await writeTestManifest(testPaths, {
+  return {
+    manifestPath: await writeTestManifest(testPaths, {
+      runtimeRoot,
+      skipValidation: options.skipValidation,
+    }),
     runtimeRoot,
-    skipValidation: options.skipValidation,
-  })
-  const result = await CLI.run(await testNodePath(), {
+    testPaths,
+  }
+}
+
+/** runCompiledTaoTests runs the Jest harness for one already-compiled Tao test manifest. */
+async function runCompiledTaoTests(
+  compiled: CompiledTaoTests,
+  options: { stdio?: CLI.CommandStdio } = {},
+): Promise<CLI.CommandResult | undefined> {
+  if (compiled.manifestPath === undefined || compiled.runtimeRoot === undefined) {
+    return undefined
+  }
+  return await CLI.run(await testNodePath(), {
     args: [
       'node_modules/jest/bin/jest.js',
       '--config',
       'jest.tao-test.config.cjs',
     ],
-    cwd: runtimeRoot,
-    env: { [RuntimeTesting.TEST_MANIFEST_ENV]: manifestPath },
+    cwd: compiled.runtimeRoot,
+    env: { [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath },
     stdio: options.stdio,
   })
-  return { commandResult: result, testPaths }
 }
 
 async function writeTestManifest(
