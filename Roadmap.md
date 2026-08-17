@@ -16,7 +16,7 @@ Language features are built in tranches through the WordFlower app family: decis
     item fields, `list of T`, nominal enums, `@tao/text`, new UI surfaces, adaptive panes,
     non-blocking `async { ... }`, named frame slots, and the first flat-token design slice.
 - [x] Implement the WordFlower tranche 4 contract into Current
-  - Follow `Roadmap/Implement WordFlower tranche 4/Brief - Implement WordFlower tranche 4.md` and
+  - Follow `Roadmap/Archive/Implement WordFlower tranche 4/Brief - Implement WordFlower tranche 4.md` and
     absorb the complete Next directory slice by slice. InstantDB, remote authorization semantics,
     richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general
     concurrency policy remain in later tiers.
