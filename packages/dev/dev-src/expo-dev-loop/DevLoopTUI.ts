@@ -93,6 +93,12 @@ async function askConfirm(options: ConfirmPromptOptions): Promise<boolean> {
     return await HCI.askConfirm(options)
   }
 
+  // Readline owns the terminal while the prompt is open. Any repaint scheduled before or during it
+  // would erase the question and whatever the user has typed, so drop the pending one and hold the rest.
+  if (activeOutput.renderTimeout !== undefined) {
+    clearTimeout(activeOutput.renderTimeout)
+    activeOutput.renderTimeout = undefined
+  }
   activeOutput.state.prompt = formatConfirmPrompt(options)
   activeOutput.app.rerender(React.createElement(DevLoopOutputDashboard, { state: activeOutput.state }))
   await activeOutput.app.waitUntilRenderFlush()
@@ -107,8 +113,7 @@ async function askConfirm(options: ConfirmPromptOptions): Promise<boolean> {
 }
 
 function formatConfirmPrompt(options: ConfirmPromptOptions): string {
-  const choice = options.defaultValue === true ? 'Y/n' : options.defaultValue === false ? 'y/N' : 'y/n'
-  return `${options.message} ${choice}`
+  return `${options.message}${HCI.confirmChoiceSuffix(options.defaultValue)}`
 }
 
 function startDevLoopOutput(): DevLoopOutputHandle | undefined {
@@ -173,7 +178,9 @@ function devLoopOutputHandler(streamName: string): (stream: 'stderr' | 'stdout',
 
 function printDevLoopControls(): void {
   if (activeDevLoopOutput !== undefined) {
-    activeDevLoopOutput.state.prompt = undefined
+    if (activeDevLoopOutput.state.prompt !== undefined) {
+      return
+    }
     scheduleDevLoopRender()
     return
   }
@@ -314,6 +321,10 @@ function devLoopOutputStream(name: string): DevLoopOutputStream {
 function scheduleDevLoopRender(): void {
   const activeOutput = activeDevLoopOutput
   if (activeOutput === undefined || activeOutput.renderTimeout !== undefined) {
+    return
+  }
+  if (activeOutput.state.prompt !== undefined) {
+    // An open prompt owns the screen; askConfirm repaints once it resolves.
     return
   }
   activeOutput.renderTimeout = setTimeout(() => {

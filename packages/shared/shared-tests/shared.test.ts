@@ -215,6 +215,17 @@ Describe('HCI', () => {
     Expect(choice).toBe('two')
   })
 
+  Test('renders the confirmation hint from the shared suffix in the asked question', async () => {
+    const streams = fakeTerminal('\n')
+
+    await HCI.askConfirm({ message: 'Kill it?', ...streams, defaultValue: false })
+
+    Expect(HCI.confirmChoiceSuffix(false)).toBe(' [y/N]')
+    Expect(HCI.confirmChoiceSuffix(true)).toBe(' [Y/n]')
+    Expect(HCI.confirmChoiceSuffix(undefined)).toBe(' [y/n]')
+    Expect(stripAnsi(streams.outputText())).toContain(`Kill it?${HCI.confirmChoiceSuffix(false)}`)
+  })
+
   Test('uses defaults or rejects in non-interactive mode', async () => {
     await Expect(HCI.askText({ message: 'Name', interactive: false, defaultValue: 'Ro' })).resolves.toBe('Ro')
     await Expect(HCI.askConfirm({ message: 'Continue', interactive: false, defaultValue: false })).resolves.toBe(false)

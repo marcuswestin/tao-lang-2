@@ -231,9 +231,13 @@ function formatTextQuestion(options: TextPromptOptions): string {
   return `${bold(white(`${options.message}${suffix}`))}: `
 }
 
+/** confirmChoiceSuffix renders the yes/no hint so callers echoing a prompt elsewhere cannot drift from it. */
+export function confirmChoiceSuffix(defaultValue: boolean | undefined): string {
+  return defaultValue === true ? ' [Y/n]' : defaultValue === false ? ' [y/N]' : ' [y/n]'
+}
+
 function formatConfirmQuestion(options: ConfirmPromptOptions): string {
-  const suffix = options.defaultValue === true ? ' [Y/n]' : options.defaultValue === false ? ' [y/N]' : ' [y/n]'
-  return `${bold(white(`${options.message}${suffix}`))}: `
+  return `${bold(white(`${options.message}${confirmChoiceSuffix(options.defaultValue)}`))}: `
 }
 
 function formatChoiceQuestion<ValueT extends string>(options: ChoicePromptOptions<ValueT>): string {
