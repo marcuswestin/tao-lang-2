@@ -10,6 +10,7 @@
     ".": "./cli-src/tao-cli.ts"
   },
   "dependencies": {
+    "@bomb.sh/tab": "^0.0.22",
     "@commander-js/extra-typings": "^14.0.0",
     "commander": "^14.0.0",
     "tao-ast-utils": "workspace:*",

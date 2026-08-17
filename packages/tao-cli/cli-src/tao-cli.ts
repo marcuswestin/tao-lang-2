@@ -1,7 +1,10 @@
 #!/usr/bin/env bun
+import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
 import { Errors, FS, HCI, Platform } from '@shared'
+import type { Command as BaseCommand } from 'commander'
 import { runCompile } from './compile-command'
+import { runCompletionInstall, writeCompletionInstallResult } from './completion-command'
 import { runTaoDev } from './dev-command'
 import type { InPlace } from './in-place-files'
 import { runCheck, runFix, runFmt } from './source-commands'
@@ -106,6 +109,25 @@ function createCommands(): Command {
     .action(async (path: string) => {
       await runTestCommand(path)
     })
+
+  commands
+    .command('completion')
+    .description('Manage tao shell completions.')
+    .command('install')
+    .option('--shell <shell>', 'Install for a specific shell instead of the one $SHELL reports.')
+    .description('Add the tao completion hook to your shell startup file.')
+    .action(async (options: { shell?: string }) => {
+      try {
+        writeCompletionInstallResult(await runCompletionInstall({ shell: options.shell }))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
+  // The adapter types against plain Commander, which extra-typings' generic Command does not widen to.
+  tab(commands as unknown as BaseCommand)
 
   return commands
 }
