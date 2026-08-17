@@ -24,6 +24,7 @@ export const ExpoRunner = {
   openStartupTargets: ExpoTargets.openStartupTargets,
   openWeb: ExpoTargets.openWeb,
   portDiagnostics: {
+    formatKillCommand: Ports.formatKillCommand,
     formatListeners: Ports.formatListeners,
     formatLsofListeners: Ports.formatLsofListeners,
   },

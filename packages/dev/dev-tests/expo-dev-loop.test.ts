@@ -62,6 +62,13 @@ Describe('Expo dev-loop port helpers', () => {
     ])).toBe('node pid 1234 (127.0.0.1:8081), expo pid 5678')
   })
 
+  Test('formats the copy-pasteable graceful port-release command', () => {
+    Expect(ExpoRunner.portDiagnostics.formatKillCommand([
+      { command: 'node', name: '127.0.0.1:8081', pid: 1234 },
+      { command: 'expo', pid: 5678 },
+    ])).toBe('kill -TERM 1234 5678')
+  })
+
   Test('uses parsed lsof listeners even when lsof exits nonzero with warnings', () => {
     const listeners = ExpoRunner.portDiagnostics.formatLsofListeners({
       exitCode: 1,

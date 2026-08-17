@@ -1,4 +1,4 @@
-import { CLI, Errors, HCI, Time } from '@shared'
+import { CLI, Errors, Time } from '@shared'
 import { DevLoopTUI } from '../DevLoopTUI'
 
 const RELEASE_TIMEOUT_MS = 5_000
@@ -16,6 +16,7 @@ type LsofListenerResult = Pick<CLI.CommandResult, 'error' | 'exitCode' | 'stderr
 /** Ports groups TCP port inspection and release helpers. */
 export const Ports = {
   ensureFree,
+  formatKillCommand,
   formatListeners,
   formatLsofListeners,
 }
@@ -35,15 +36,15 @@ async function ensureFree(port: number): Promise<boolean> {
   }
 
   DevLoopTUI.logDevLoop('dev', `Port ${port} is already in use by ${formatListeners(listeners)}.`, 'warn')
-  const shouldKill = await HCI.askConfirm({
-    defaultValue: true,
-    message: `Kill ${formatListenerSubject(listeners)} and continue`,
+  const shouldKill = await DevLoopTUI.askConfirm({
+    defaultValue: false,
+    message: 'Kill it?',
   })
   if (!shouldKill) {
     throw new Errors.UserInputError(
-      `Port ${port} is already in use by ${formatListeners(listeners)}. Stop ${
-        formatListenerSubject(listeners)
-      } before starting ./dev.`,
+      `Port ${port} is already in use by ${formatListeners(listeners)}. To kill it, run: ${
+        formatKillCommand(listeners)
+      }`,
     )
   }
 
@@ -74,6 +75,11 @@ function formatLsofListeners(result: LsofListenerResult): Listener[] | undefined
 /** formatListeners formats listening processes for terminal output. */
 function formatListeners(listeners: readonly Listener[]): string {
   return listeners.map(formatListener).join(', ')
+}
+
+/** formatKillCommand returns the copy-pasteable graceful termination command for listeners. */
+function formatKillCommand(listeners: readonly Listener[]): string {
+  return `kill -TERM ${listeners.map(listener => listener.pid).join(' ')}`
 }
 
 function parseLsofListeners(output: string): Listener[] {
