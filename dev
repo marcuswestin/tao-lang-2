@@ -1,6 +1,9 @@
 #!/bin/zsh
 
-# Compatibility wrapper: the Tao CLI owns app discovery and the development loop.
+set -e
+
+# Repository development tooling: package tests and Expo device preparation.
+# This is not the Tao CLI; `./tao dev` runs the app development loop.
 SCRIPT_DIR="${0:A:h}"
 
-exec "$SCRIPT_DIR/tao" dev "$@"
+exec bun run "$SCRIPT_DIR/packages/dev/dev-src/dev.ts" "$@"

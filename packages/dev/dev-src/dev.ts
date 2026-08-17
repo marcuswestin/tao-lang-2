@@ -11,9 +11,9 @@ type TestCommandOptions = {
   output?: string
 }
 
-/** Internal Justfile CLI: run repository tests and low-level Expo device preparation. */
+/** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
-  commands.name('tao-dev-internal')
+  commands.name('dev')
 
   commands
     .command('test')
