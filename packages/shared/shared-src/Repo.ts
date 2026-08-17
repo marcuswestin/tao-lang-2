@@ -60,7 +60,11 @@ export async function filesUnder(inputPath: string, options: FilesUnderOptions =
   const gitSearchRoot = await realPathOrInput(root)
   const gitRoot = tryGetRoot(gitSearchRoot)
   if (gitRoot !== undefined) {
-    return gitFilesUnder(gitRoot, gitSearchRoot, options)
+    const gitFiles = gitFilesUnder(gitRoot, gitSearchRoot, options)
+    const files = gitFiles.length === 0
+      ? await gitFilesystemFilesUnder(gitRoot, gitSearchRoot, options)
+      : gitFiles
+    return files
       .map(path => restoreInputPath(path, gitSearchRoot, root))
   }
   return await filesystemFilesUnder(root, options)
@@ -119,6 +123,25 @@ function gitListFiles(gitRoot: string, pathspecs: readonly string[]): string[] {
     .map(path => FS.resolvePath(path, gitRoot))
     .filter(FS.existsSync)
     .sort()
+}
+
+async function gitFilesystemFilesUnder(gitRoot: string, root: string, options: FilesUnderOptions): Promise<string[]> {
+  const files = await filesystemFilesUnder(root, options)
+  const visibleFiles: string[] = []
+  for (const filePath of files) {
+    if (!await isGitIgnored(gitRoot, filePath)) {
+      visibleFiles.push(filePath)
+    }
+  }
+  return visibleFiles
+}
+
+async function isGitIgnored(gitRoot: string, filePath: string): Promise<boolean> {
+  const result = await CLI.run('git', {
+    args: ['check-ignore', '--quiet', '--', FS.relativePath(gitRoot, filePath)],
+    cwd: gitRoot,
+  })
+  return result.exitCode === 0
 }
 
 async function filesystemFilesUnder(root: string, options: FilesUnderOptions): Promise<string[]> {

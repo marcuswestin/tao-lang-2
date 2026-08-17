@@ -35,8 +35,17 @@ export type TaoTestPressStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestInputStep declares one v0 selector-targeted text input action. */
+export type TaoTestInputStep = {
+  kind: 'input'
+  selector: string
+  source: TaoTestSourceLocation
+  target: string
+  value: string
+}
+
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
-export type TaoTestStep = TaoTestExpectation | TaoTestPressStep
+export type TaoTestStep = TaoTestExpectation | TaoTestPressStep | TaoTestInputStep
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
 export type TaoTestCheck = {
@@ -112,6 +121,7 @@ function compileExpectation(expectation: AST.ExpectTextStep): TaoTestExpectation
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
     ExpectTextStep: compileExpectation,
+    InputTextStep: compileInputTextStep,
     PressTextStep: compilePressTextStep,
   })
 }
@@ -122,6 +132,16 @@ function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
     selector: press.selector,
     text: press.text,
     source: sourceLocation(press),
+  }
+}
+
+function compileInputTextStep(input: AST.InputTextStep): TaoTestInputStep {
+  return {
+    kind: 'input',
+    selector: input.selector,
+    source: sourceLocation(input),
+    target: input.target,
+    value: input.value,
   }
 }
 

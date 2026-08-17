@@ -44,6 +44,390 @@ publish layout WrappingRow {
    ```
 }
 
+publish layout ScrollStack {
+   render inject ```ts
+      return TR.Views.ScrollView(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+      })
+   ```
+}
+
+publish layout RefreshStack {
+   render inject ```ts
+      return TR.Views.ScrollView(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+        nativeProps: {
+          refreshControl: TR.RefreshControl.Control({
+            action: TR.RefreshControl.action(TR.Noop()),
+            title: 'Refresh',
+          }),
+        },
+      })
+   ```
+}
+
+publish layout KeyboardAvoidingStack {
+   render inject ```ts
+      return TR.Views.KeyboardAvoidingView(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+      })
+   ```
+}
+
+publish layout SafeAreaStack {
+   render inject ```ts
+      return TR.Views.SafeAreaView(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+      })
+   ```
+}
+
+publish layout Screen {
+   render inject ```ts
+      return TR.Views.Screen(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+      })
+   ```
+}
+
+publish layout ModalSheet {
+   render inject ```ts
+      return TR.Modal.Root({
+        animation: 'slide',
+        children: TR.Views.View(_ViewProps, {
+          direction: 'column',
+          layout: TR.Layout.create([['content', 'top', 'stretch'], ['hug']]),
+        }),
+        presentation: 'pageSheet',
+        visible: true,
+      })
+   ```
+}
+
+publish layout ThemedStack {
+   render inject ```ts
+      return (
+        <TR.Style.Provider palette={{ accent: '#059669', surface: '#ecfdf5', border: '#34d399' }}>
+          {TR.Views.View(_ViewProps, {
+            direction: 'column',
+            layout: TR.Layout.create([['content', 'top', 'stretch'], ['hug']]),
+          })}
+        </TR.Style.Provider>
+      )
+   ```
+}
+
+publish layout BoundaryLoading {
+   render inject ```ts
+      return TR.Boundary.Loading({
+        children: TR.Views.View(_ViewProps, {
+          direction: 'column',
+          layout: TR.Layout.create([['content', 'top', 'stretch'], ['hug']]),
+        }),
+        fallback: TR.Views.Text({ __tao: _ViewProps.__tao, children: ['Loading boundary content'] }),
+      })
+   ```
+}
+
+publish layout NavigationRoot {
+   render inject ```ts
+      return TR.Navigation.Container({
+        children: TR.Views.View(_ViewProps, {
+          direction: 'column',
+          layout: TR.Layout.create([['content', 'top', 'stretch'], ['hug']]),
+        }),
+      })
+   ```
+}
+
+publish layout FormRoot {
+   render inject ```ts
+      void TR.Form.use({ defaultValues: {} })
+      return TR.Views.View(_ViewProps, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['hug']]),
+      })
+   ```
+}
+
+publish view NativeList Title is text {
+   render inject Title ```ts
+      return TR.NativeList.Flat({
+        data: [Title],
+        keyExtractor: TR.NativeList.indexKey(),
+        renderItem: ({ item }) => TR.Views.Text({ __tao: _ViewProps.__tao, children: [item] }),
+      })
+   ```
+}
+
+publish view SectionList Title is text {
+   render inject Title ```ts
+      return TR.NativeList.Section({
+        keyExtractor: TR.NativeList.indexKey(),
+        renderItem: ({ item }) => TR.Views.Text({ __tao: _ViewProps.__tao, children: [item.title] }),
+        sections: [{ data: [{ title: Title }], title: Title }],
+      })
+   ```
+}
+
+publish view ResourceText Value is text {
+   render inject Value ```ts
+      const resource = TR.Resource.query({
+        initialData: Value,
+        key: ['tao-stdlib-resource-text', Value],
+        load: async () => Value,
+      })
+      return TR.Views.Text({ __tao: _ViewProps.__tao, children: [resource.data ?? Value] })
+   ```
+}
+
+publish view ResourceMutationButton Title is text {
+   render inject Title ```ts
+      const mutation = TR.Resource.mutation({
+        save: async () => Title,
+      })
+      return TR.Views.Pressable(
+        {
+          __tao: _ViewProps.__tao,
+          title: Title,
+          loading: mutation.isLoading,
+          action: TR.Resource.mutationAction(mutation, Title),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view StorageText Value is text {
+   render inject Value ```ts
+      const storage = TR.Storage.textState({ key: `tao-stdlib-storage-text:${Value}`, initialValue: Value })
+      return TR.Views.Text({ __tao: _ViewProps.__tao, children: [storage.value] })
+   ```
+}
+
+publish view StorageSaveButton Title is text {
+   render inject Title ```ts
+      const storage = TR.Storage.textState({ key: `tao-stdlib-storage-button:${Title}`, initialValue: Title })
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Storage.textStateAction(storage, Title) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view ImageStatusText {
+   render inject ```ts
+      const source = TR.Image.remote('https://tao.dev/kitchen-status.png')
+      void source
+      return TR.Views.Text({ __tao: _ViewProps.__tao, children: ['Image bridge ready'] })
+   ```
+}
+
+publish view AsyncActionStatusText {
+   render inject ```ts
+      const action = TR.Async.action(async () => 'Async action ready')
+      return TR.Views.Pressable(
+        {
+          __tao: _ViewProps.__tao,
+          title: 'Run async action',
+          loadingTitle: 'Running async action',
+          loading: action.pending,
+          action,
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view NetworkText {
+   render inject ```ts
+      const network = TR.Network.status()
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Network online: ${String(network.isOnline)}`],
+      })
+   ```
+}
+
+publish view ViewportText {
+   render inject ```ts
+      const viewport = TR.Device.viewport()
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Viewport ${viewport.width}x${viewport.height} ${viewport.orientation}`],
+      })
+   ```
+}
+
+publish view PlatformText {
+   render inject ```ts
+      const platform = TR.Platform.info()
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Platform ${platform.os}`],
+      })
+   ```
+}
+
+publish view PixelRatioText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Pixel ratio ${TR.PixelRatio.get()}`],
+      })
+   ```
+}
+
+publish view I18nText {
+   render inject ```ts
+      const i18n = TR.I18n.info()
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Text direction ${i18n.direction}`],
+      })
+   ```
+}
+
+publish view AppearanceText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Appearance ${TR.Appearance.colorScheme()}`],
+      })
+   ```
+}
+
+publish view AccessibilityPreferencesText {
+   render inject ```ts
+      const preferences = TR.AccessibilityInfo.preferences()
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Screen reader: ${String(preferences.screenReaderEnabled)}`],
+      })
+   ```
+}
+
+publish view NativeColorText {
+   render inject ```ts
+      const color = TR.NativeColor.platform('labelColor')
+      void color
+      return TR.Views.Text({ __tao: _ViewProps.__tao, children: ['Native color value ready'] })
+   ```
+}
+
+publish view StyleSheetText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Hairline width ${TR.StyleSheet.hairlineWidth()}`],
+      })
+   ```
+}
+
+publish view EasingText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Easing quad ${TR.Easing.quad(0.5)}`],
+      })
+   ```
+}
+
+publish view AppStateText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`App state ${TR.AppState.status()}`],
+      })
+   ```
+}
+
+publish view AndroidPermissionText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Android permission ${TR.PermissionsAndroid.permission('CAMERA')}`],
+      })
+   ```
+}
+
+publish view ModalOptionsText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Modal ${TR.Modal.animation('fade')} ${TR.Modal.presentation('pageSheet')}`],
+      })
+   ```
+}
+
+publish view RefreshingText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Refreshing ${String(TR.RefreshControl.refreshing(true))}`],
+      })
+   ```
+}
+
+publish view ToggleValueText {
+   render inject ```ts
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Toggle value ${String(TR.Toggle.value(true))}`],
+      })
+   ```
+}
+
+publish view InputAccessoryText {
+   render inject ```ts
+      const nativeID = TR.InputAccessory.id('tao-stdlib')
+      const props = TR.InputAccessory.textInputProps(nativeID)
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Input accessory ${props.inputAccessoryViewID}`],
+      })
+   ```
+}
+
+publish view PanResponderText {
+   render inject ```ts
+      const responder = TR.PanResponder.create({
+        onMoveShouldSetPanResponder: TR.PanResponder.shouldSet(true),
+      })
+      const handlers = TR.PanResponder.handlers(responder)
+      void handlers
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: ['Pan responder ready'],
+      })
+   ```
+}
+
+publish view AnimatedText {
+   render inject ```ts
+      const value = TR.Animated.value(0)
+      const animation = TR.Animated.timing(value, { toValue: 1, duration: 150 })
+      const action = TR.Animated.action(animation)
+      void action
+      return TR.Views.Text({ __tao: _ViewProps.__tao, children: ['Animated action ready'] })
+   ```
+}
+
+publish view SafeAreaPaddingText {
+   render inject ```ts
+      const padding = TR.SafeArea.edgePadding(TR.SafeArea.insets(), 12)
+      return TR.Views.Text({
+        __tao: _ViewProps.__tao,
+        children: [`Safe area padding ${padding.paddingTop}`],
+      })
+   ```
+}
+
 publish view Text Value is text {
    render inject Value ```ts
       return TR.Views.Text(
@@ -85,6 +469,439 @@ publish view Button Title is text, Action is action {
       return TR.Views.Pressable(
         { __tao: _ViewProps.__tao, title: Title, action: Action },
         { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view DisabledButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, disabled: true },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view LoadingButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, loading: true, loadingTitle: Title },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view StatusBar Title is text {
+   render inject Title ```ts
+      return (
+        <>
+          {TR.StatusBar.Bar({ backgroundColor: '#f8fafc', style: 'dark-content' })}
+          {TR.Views.Text({ __tao: _ViewProps.__tao, children: [Title] })}
+        </>
+      )
+   ```
+}
+
+publish view Spinner Title is text {
+   render inject Title ```ts
+      return TR.Indicator.LabeledSpinner({ __tao: _ViewProps.__tao, title: Title, size: 'small' })
+   ```
+}
+
+publish view LargeSpinner Title is text {
+   render inject Title ```ts
+      return TR.Indicator.LabeledSpinner({ __tao: _ViewProps.__tao, title: Title, size: 'large' })
+   ```
+}
+
+publish view EmptyState Title is text {
+   render inject Title ```ts
+      return TR.Surface.Empty({
+        title: Title,
+      })
+   ```
+}
+
+publish view LoadingState Message is text {
+   render inject Message ```ts
+      return TR.Surface.Loading({
+        message: Message,
+      })
+   ```
+}
+
+publish view ErrorState Title is text {
+   render inject Title ```ts
+      return TR.Surface.Error({
+        title: Title,
+      })
+   ```
+}
+
+publish view InputAccessoryBar Title is text {
+   render inject Title ```ts
+      return TR.InputAccessory.View({
+        nativeID: TR.InputAccessory.id(Title),
+        children: TR.Views.Text({ __tao: _ViewProps.__tao, children: [Title] }),
+      })
+   ```
+}
+
+publish view ToggleSwitch Title is text {
+   render inject Title ```ts
+      return TR.Toggle.LabeledControl({ __tao: _ViewProps.__tao, title: Title, value: true })
+   ```
+}
+
+publish view DisabledToggleSwitch Title is text {
+   render inject Title ```ts
+      return TR.Toggle.LabeledControl({ __tao: _ViewProps.__tao, title: Title, value: false, disabled: true })
+   ```
+}
+
+publish view CopyButton Value is text {
+   render inject Value ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Value, action: TR.Clipboard.copyTextAction(Value) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view FeedbackButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Feedback.selectionAction() },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view AlertButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Alert.messageAction(Title) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view ConfirmButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Alert.confirmAction(Title, Title, TR.NoopAction()) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view KeyboardDismissButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Keyboard.dismissAction() },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view VibrationButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Vibration.vibrateAction(30) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view MediaPickerButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Media.pickImageAction() },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view LocationButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.Location.currentAction() },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view ToastButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.ToastAndroid.showAction(Title, { duration: 'short' }) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view LayoutAnimationButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.LayoutAnimation.presetAction('easeInEaseOut') },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view SecureSaveButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.SecureStore.saveTextAction(Title, Title) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view SecureDeleteButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.SecureStore.deleteTextAction(Title) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view AppExitButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.BackHandler.exitAppAction() },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view DeferredButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Title, action: TR.InteractionManager.deferAction(TR.NoopAction()) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view ActionSheetButton Title is text {
+   render inject Title ```ts
+      return TR.Views.Pressable(
+        {
+          __tao: _ViewProps.__tao,
+          title: Title,
+          action: TR.ActionSheetIOS.chooseAction({
+            cancelButtonIndex: 0,
+            options: ['Cancel', Title, 'More'],
+            title: Title,
+          }),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view LinkButton URL is text {
+   render inject URL ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: URL, action: TR.Linking.openURLAction(URL) },
+        { nativeProps: { accessibilityRole: 'link' } },
+      )
+   ```
+}
+
+publish view ShareButton Message is text {
+   render inject Message ```ts
+      return TR.Views.Pressable(
+        { __tao: _ViewProps.__tao, title: Message, action: TR.Share.textAction(Message) },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+publish view TextInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        { __tao: _ViewProps.__tao, value: Value, onChangeText: TR.Views.textInputAction(OnChange) },
+        { nativeProps: { accessibilityLabel: Value } },
+      )
+   ```
+}
+
+publish view TextArea Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            multiline: true,
+            numberOfLines: 4,
+            textAlignVertical: 'top',
+          },
+        },
+      )
+   ```
+}
+
+publish view PasswordInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            secureTextEntry: true,
+            textContentType: 'password',
+          },
+        },
+      )
+   ```
+}
+
+publish view EmailInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            autoCapitalize: 'none',
+            autoComplete: 'email',
+            keyboardType: 'email-address',
+            textContentType: 'emailAddress',
+          },
+        },
+      )
+   ```
+}
+
+publish view SearchInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            autoCapitalize: 'none',
+            returnKeyType: 'search',
+            textContentType: 'none',
+          },
+        },
+      )
+   ```
+}
+
+publish view PhoneInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            autoComplete: 'tel',
+            keyboardType: 'phone-pad',
+            textContentType: 'telephoneNumber',
+          },
+        },
+      )
+   ```
+}
+
+publish view URLInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            autoCapitalize: 'none',
+            autoComplete: 'url',
+            keyboardType: 'url',
+            textContentType: 'URL',
+          },
+        },
+      )
+   ```
+}
+
+publish view NumericInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            keyboardType: 'numeric',
+            textContentType: 'none',
+          },
+        },
+      )
+   ```
+}
+
+publish view OneTimeCodeInput Value is text, OnChange is action {
+   render inject Value, OnChange ```ts
+      return TR.Views.TextInput(
+        {
+          __tao: _ViewProps.__tao,
+          value: Value,
+          onChangeText: TR.Views.textInputAction(OnChange),
+          placeholder: Value,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Value,
+            autoComplete: 'one-time-code',
+            keyboardType: 'number-pad',
+            textContentType: 'oneTimeCode',
+          },
+        },
+      )
+   ```
+}
+
+publish view Image Source is text {
+   render inject Source ```ts
+      return TR.Views.Image(
+        { __tao: _ViewProps.__tao, source: Source },
+        { nativeProps: { accessibilityRole: 'image' } },
       )
    ```
 }

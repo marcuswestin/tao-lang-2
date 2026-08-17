@@ -12,6 +12,6 @@
     "vscode-languageserver": "~9.0.1"
   },
   "devDependencies": {
-    "langium-cli": "^4.2.0"
+    "langium-cli": "~4.2.1"
   }
 }

@@ -433,6 +433,7 @@ Describe('Tao compiler', () => {
             run MyApp
             expect text "Hello"
             press text "Add"
+            input text "Name" "Grace"
             expect missing text "Loading"
           }
         }
@@ -461,14 +462,24 @@ Describe('Tao compiler', () => {
         Expect(plan.suites[0]?.checks[0]?.run.appName).toBe('MyApp')
         Expect(plan.suites[0]?.checks[0]?.run.appSourcePath).toBe(paths['Main.tao'])
         Expect(
-          plan.suites[0]?.checks[0]?.steps.map(step => ({
-            kind: step.kind,
-            selector: step.selector,
-            text: step.text,
-          })),
+          plan.suites[0]?.checks[0]?.steps.map(step =>
+            step.kind === 'input'
+              ? {
+                kind: step.kind,
+                selector: step.selector,
+                target: step.target,
+                value: step.value,
+              }
+              : {
+                kind: step.kind,
+                selector: step.selector,
+                text: step.text,
+              }
+          ),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },
           { kind: 'press', selector: 'text', text: 'Add' },
+          { kind: 'input', selector: 'text', target: 'Name', value: 'Grace' },
           { kind: 'expect', selector: 'text', text: 'Loading' },
         ])
         Expect(plan.suites[0]?.source.range).toBeDefined()

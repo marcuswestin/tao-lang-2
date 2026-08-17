@@ -1,4 +1,4 @@
-use Button, Number, Stack, Text from @tao/ui
+use AccessibilityPreferencesText, ActionSheetButton, AlertButton, AndroidPermissionText, AnimatedText, AppExitButton, AppStateText, AppearanceText, AsyncActionStatusText, BoundaryLoading, Button, ConfirmButton, CopyButton, DeferredButton, DisabledButton, DisabledToggleSwitch, EasingText, EmailInput, EmptyState, ErrorState, FeedbackButton, FormRoot, I18nText, Image, ImageStatusText, InputAccessoryBar, InputAccessoryText, KeyboardAvoidingStack, KeyboardDismissButton, LargeSpinner, LayoutAnimationButton, LinkButton, LoadingButton, LoadingState, LocationButton, MediaPickerButton, ModalOptionsText, ModalSheet, NativeColorText, NativeList, NavigationRoot, NetworkText, Number, NumericInput, OneTimeCodeInput, PanResponderText, PasswordInput, PhoneInput, PixelRatioText, PlatformText, RefreshStack, RefreshingText, ResourceMutationButton, ResourceText, SafeAreaPaddingText, SafeAreaStack, Screen, ScrollStack, SearchInput, SectionList, SecureDeleteButton, SecureSaveButton, ShareButton, Spinner, Stack, StatusBar, StorageSaveButton, StorageText, StyleSheetText, Text, TextArea, TextInput, ThemedStack, ToastButton, ToggleSwitch, ToggleValueText, URLInput, VibrationButton, ViewportText from @tao/ui
 
 app KitchenSink {
    view MainView
@@ -24,8 +24,15 @@ alias SinkProfileValue = SinkProfile {
 
 view MainView {
    state KitchenCount = 0
+   state KitchenName = "Kitchen input"
    alias LocalText = "Text from a local alias"
    alias OuterGreeting = Greeting
+   action RenameKitchenName Next is text {
+      set KitchenName = Next
+   }
+   action AddKitchenCount {
+      set KitchenCount += 1
+   }
    render Stack [gap 8, pad 12, fill] {
       alias Greeting = "Nested scope greeting"
       Text OuterGreeting { }
@@ -37,8 +44,148 @@ view MainView {
       Text FixedSinkName
       Text SinkProfileValue.SinkName
       TagText SinkProfileValue.SinkTags
+      Image "https://tao.dev/kitchen.png" [id kitchenImage, label "Kitchen image"]
+      ImageStatusText { }
+      IndicatorStatusText { }
+      ResourceStatusText { }
+      ResourceMutationStatusText { }
+      ResourceText "Resource text row" [id kitchenResourceText, label "Kitchen resource text"]
+      ResourceMutationButton "Mutate resource row" [id kitchenResourceMutationButton, label "Kitchen resource mutation button"]
+      StorageText "Stored text row" [id kitchenStorageText, label "Kitchen storage text"]
+      StorageSaveButton "Save stored text" [id kitchenStorageSaveButton, label "Kitchen storage save"]
+      NetworkStatusText { }
+      NetworkText { }
+      NativeColorStatusText { }
+      NativeColorText { }
+      NativeListStatusText { }
+      NativeList "Native list row" [id kitchenNativeList, label "Kitchen native list"]
+      SectionList "Native section row" [id kitchenSectionList, label "Kitchen section list"]
+      RefreshStack [height 80, width fill] {
+         Text "Refresh stack bridge ready"
+      }
+      ScrollStack [height 80, width fill] {
+         Text "Scrollable bridge ready"
+      }
+      KeyboardAvoidingStack [height 80, width fill] {
+         Text "Keyboard avoiding bridge ready"
+      }
+      SafeAreaStack [height 80, width fill] {
+         Text "Safe area stack bridge ready"
+      }
+      Screen [height 80, width fill] {
+         Text "Screen bridge ready"
+      }
+      ModalSheet {
+         Text "Modal sheet bridge ready"
+      }
+      PermissionsAndroidStatusText { }
+      AndroidPermissionText { }
+      AnimatedStatusText { }
+      AnimatedText { }
+      DeviceStatusText { }
+      ViewportText { }
+      EasingStatusText { }
+      EasingText { }
+      PixelRatioStatusText { }
+      PixelRatioText { }
+      PanResponderStatusText { }
+      PanResponderText { }
+      PlatformStatusText { }
+      PlatformText { }
+      I18nStatusText { }
+      I18nText { }
+      InputAccessoryStatusText { }
+      InputAccessoryText { }
+      SafeAreaStatusText { }
+      SafeAreaPaddingText { }
+      StatusBarStatusText { }
+      StatusBar "Kitchen status bar" [id kitchenStatusBar, label "Kitchen status bar"]
+      StyleSheetStatusText { }
+      StyleSheetText { }
+      ModalStatusText { }
+      ModalOptionsText { }
+      RefreshControlStatusText { }
+      RefreshingText { }
+      ToggleStatusText { }
+      ToggleValueText { }
+      BoundaryStatusText [id kitchenBoundaryStatus, label "Kitchen boundary status"] { }
+      BoundaryLoading {
+         Text "Boundary loading bridge ready"
+      }
+      NavigationRoot {
+         Text "Navigation root bridge ready"
+      }
+      SurfaceStatusText { }
+      ThemedStatusText { }
+      ThemedStack {
+         Text "Themed stack bridge ready"
+      }
+      FormRoot {
+         Text "Form root bridge ready"
+      }
+      FormValidationStatusText { }
+      AsyncActionStatusText { }
+      PressableStateStatusText { }
+      ClipboardStatusText { }
+      LinkingStatusText { }
+      FeedbackStatusText { }
+      MediaStatusText { }
+      SecureStoreStatusText { }
+      LocationStatusText { }
+      ShareStatusText { }
+      ActionSheetIOSStatusText { }
+      AlertStatusText { }
+      KeyboardStatusText { }
+      ToastAndroidStatusText { }
+      VibrationStatusText { }
+      InteractionManagerStatusText { }
+      LayoutAnimationStatusText { }
+      AppStateStatusText { }
+      AppStateText { }
+      AppearanceStatusText { }
+      AppearanceText { }
+      AccessibilityInfoStatusText { }
+      AccessibilityPreferencesText { }
+      BackHandlerStatusText { }
+      TextInput KitchenName, RenameKitchenName [id kitchenNameInput, label "Kitchen name"]
+      TextArea KitchenName, RenameKitchenName [id kitchenNotesInput, label "Kitchen notes"]
+      PasswordInput KitchenName, RenameKitchenName [id kitchenPasswordInput, label "Kitchen password"]
+      EmailInput KitchenName, RenameKitchenName [id kitchenEmailInput, label "Kitchen email"]
+      SearchInput KitchenName, RenameKitchenName [id kitchenSearchInput, label "Kitchen search"]
+      PhoneInput KitchenName, RenameKitchenName [id kitchenPhoneInput, label "Kitchen phone"]
+      URLInput KitchenName, RenameKitchenName [id kitchenURLInput, label "Kitchen URL"]
+      NumericInput KitchenName, RenameKitchenName [id kitchenNumericInput, label "Kitchen numeric"]
+      OneTimeCodeInput KitchenName, RenameKitchenName [id kitchenCodeInput, label "Kitchen code"]
+      Text KitchenName
       Number KitchenCount
-      Button "Add kitchen count", action { set KitchenCount += 1 }
+      Button "Add kitchen count", AddKitchenCount [id addKitchenCount, label "Add kitchen count"]
+      DisabledButton "Unavailable kitchen action" [id unavailableKitchenAction, label "Unavailable kitchen action"]
+      LoadingButton "Saving kitchen" [id savingKitchenButton, label "Saving kitchen"]
+      Spinner "Loading kitchen row" [id kitchenSpinner, label "Loading kitchen row"]
+      LargeSpinner "Loading kitchen report" [id kitchenLargeSpinner, label "Loading kitchen report"]
+      EmptyState "No kitchen orders" [id kitchenEmptyState, label "Kitchen empty state"]
+      LoadingState "Loading kitchen state" [id kitchenLoadingState, label "Kitchen loading state"]
+      ErrorState "Kitchen error" [id kitchenErrorState, label "Kitchen error state"]
+      InputAccessoryBar "Kitchen accessory actions" [id kitchenInputAccessoryBar, label "Kitchen accessory actions"]
+      ToggleSwitch "Kitchen toggle" [id kitchenToggleSwitch, label "Kitchen toggle"]
+      DisabledToggleSwitch "Locked kitchen toggle" [id kitchenDisabledToggleSwitch, label "Locked kitchen toggle"]
+      CopyButton "Copy kitchen token" [id kitchenCopyButton, label "Copy kitchen token"]
+      FeedbackButton "Confirm kitchen tap" [id kitchenFeedbackButton, label "Confirm kitchen tap"]
+      AlertButton "Alert kitchen" [id kitchenAlertButton, label "Alert kitchen"]
+      ConfirmButton "Confirm kitchen" [id kitchenConfirmButton, label "Confirm kitchen"]
+      KeyboardDismissButton "Hide kitchen keyboard" [id kitchenKeyboardDismissButton, label "Hide kitchen keyboard"]
+      VibrationButton "Pulse kitchen device" [id kitchenVibrationButton, label "Pulse kitchen device"]
+      MediaPickerButton "Choose kitchen image" [id kitchenMediaPickerButton, label "Choose kitchen image"]
+      LocationButton "Locate kitchen" [id kitchenLocationButton, label "Locate kitchen"]
+      ToastButton "Toast kitchen" [id kitchenToastButton, label "Toast kitchen"]
+      LayoutAnimationButton "Animate kitchen layout" [id kitchenLayoutAnimationButton, label "Animate kitchen layout"]
+      SecureSaveButton "Save kitchen secret action" [id kitchenSecureSaveButton, label "Save kitchen secret action"]
+      SecureDeleteButton "Delete kitchen secret action" [id kitchenSecureDeleteButton, label "Delete kitchen secret action"]
+      AppExitButton "Exit kitchen app" [id kitchenAppExitButton, label "Exit kitchen app"]
+      DeferredButton "Defer kitchen work" [id kitchenDeferredButton, label "Defer kitchen work"]
+      ActionSheetButton "Choose kitchen option" [id kitchenActionSheetButton, label "Choose kitchen option"]
+      LinkButton "https://tao.dev/kitchen" [id kitchenLinkButton, label "Open kitchen URL"]
+      ShareButton "Kitchen share message" [id kitchenShareButton, label "Share kitchen message"]
 }  }
 
 view CountText Count is number {
@@ -50,5 +197,472 @@ view CountText Count is number {
 view TagText Tags is list {
    render inject Tags ```ts
       return <RN.Text>{Tags.join(', ')}</RN.Text>
+   ```
+}
+
+view IndicatorStatusText {
+   render inject ```ts
+      return (
+        <>
+          {TR.Indicator.Spinner({ size: 'small' })}
+          <RN.Text>Indicator bridge ready</RN.Text>
+        </>
+      )
+   ```
+}
+
+view ResourceStatusText {
+   render inject ```ts
+      const resource = TR.Resource.query({
+        key: ['kitchen-sink-resource-status'],
+        initialData: 'Resource bridge ready',
+        load: async () => 'Resource bridge ready',
+      })
+      return <RN.Text>{resource.data}</RN.Text>
+   ```
+}
+
+view ResourceMutationStatusText {
+   render inject ```ts
+      const mutation = TR.Resource.mutation({
+        save: async () => 'Resource mutation saved',
+      })
+      return <RN.Text>Resource mutation {mutation.status}</RN.Text>
+   ```
+}
+
+view NetworkStatusText {
+   render inject ```ts
+      const network = TR.Network.status()
+      void network
+      return <RN.Text>Network bridge ready</RN.Text>
+   ```
+}
+
+view NativeColorStatusText {
+   render inject ```ts
+      const color = TR.NativeColor.platform('labelColor')
+      void color
+      return <RN.Text>Native color bridge ready</RN.Text>
+   ```
+}
+
+view NativeListStatusText {
+   render inject ```ts
+      const key = TR.NativeList.itemKey('id')({ id: 'kitchen' }, 0)
+      void key
+      return <RN.Text>Native list bridge ready</RN.Text>
+   ```
+}
+
+view PermissionsAndroidStatusText {
+   render inject ```ts
+      const permission = TR.PermissionsAndroid.permission('CAMERA')
+      void permission
+      return <RN.Text>Android permissions bridge ready</RN.Text>
+   ```
+}
+
+view AnimatedStatusText {
+   render inject ```ts
+      const value = TR.Animated.value(0)
+      const animation = TR.Animated.timing(value, { toValue: 1, duration: 150 })
+      const action = TR.Animated.action(animation)
+      void action
+      return <RN.Text>Animated bridge ready</RN.Text>
+   ```
+}
+
+view DeviceStatusText {
+   render inject ```ts
+      const viewport = TR.Device.viewport()
+      void viewport
+      return <RN.Text>Device viewport ready</RN.Text>
+   ```
+}
+
+view EasingStatusText {
+   render inject ```ts
+      const eased = TR.Easing.quad(0.5)
+      void eased
+      return <RN.Text>Easing bridge ready</RN.Text>
+   ```
+}
+
+view PixelRatioStatusText {
+   render inject ```ts
+      const ratio = TR.PixelRatio.get()
+      void ratio
+      return <RN.Text>Pixel ratio bridge ready</RN.Text>
+   ```
+}
+
+view PanResponderStatusText {
+   render inject ```ts
+      const responder = TR.PanResponder.create({
+        onMoveShouldSetPanResponder: TR.PanResponder.shouldSet(false),
+      })
+      const handlers = TR.PanResponder.handlers(responder)
+      void handlers
+      return <RN.Text>PanResponder bridge ready</RN.Text>
+   ```
+}
+
+view PlatformStatusText {
+   render inject ```ts
+      const platform = TR.Platform.info()
+      void platform
+      return <RN.Text>Platform bridge ready</RN.Text>
+   ```
+}
+
+view I18nStatusText {
+   render inject ```ts
+      const i18n = TR.I18n.info()
+      void i18n
+      return <RN.Text>I18n bridge ready</RN.Text>
+   ```
+}
+
+view InputAccessoryStatusText {
+   render inject ```ts
+      const nativeID = TR.InputAccessory.id('kitchen')
+      const props = TR.InputAccessory.textInputProps(nativeID)
+      void props
+      return <RN.Text>Input accessory bridge ready</RN.Text>
+   ```
+}
+
+view SafeAreaStatusText {
+   render inject ```ts
+      const insets = TR.SafeArea.insets()
+      const padding = TR.SafeArea.edgePadding(insets, 12)
+      void padding
+      return <RN.Text>Safe area bridge ready</RN.Text>
+   ```
+}
+
+view StatusBarStatusText {
+   render inject ```ts
+      return (
+        <>
+          {TR.StatusBar.Bar({ style: 'dark-content', backgroundColor: '#f8fafc' })}
+          <RN.Text>Status bar bridge ready</RN.Text>
+        </>
+      )
+   ```
+}
+
+view StyleSheetStatusText {
+   render inject ```ts
+      const styles = TR.StyleSheet.create({ text: { padding: TR.StyleSheet.hairlineWidth() } })
+      const flat = TR.StyleSheet.flatten(styles.text)
+      void flat
+      return <RN.Text>StyleSheet bridge ready</RN.Text>
+   ```
+}
+
+view ModalStatusText {
+   render inject ```ts
+      return (
+        <>
+          {TR.Modal.Root({
+            animation: 'fade',
+            visible: false,
+            children: <RN.Text>Hidden kitchen modal</RN.Text>,
+          })}
+          <RN.Text>Modal bridge ready</RN.Text>
+        </>
+      )
+   ```
+}
+
+view RefreshControlStatusText {
+   render inject ```ts
+      const refreshControl = TR.RefreshControl.Control({
+        action: TR.RefreshControl.action(TR.Noop()),
+        title: 'Refresh kitchen',
+      })
+      void refreshControl
+      return <RN.Text>Refresh control bridge ready</RN.Text>
+   ```
+}
+
+view ToggleStatusText {
+   render inject ```ts
+      return (
+        <>
+          {TR.Toggle.Control({ value: true })}
+          <RN.Text>Toggle bridge ready</RN.Text>
+        </>
+      )
+   ```
+}
+
+view BoundaryStatusText {
+   render inject ```ts
+      function Pending() {
+        throw new Promise(() => undefined)
+        return null
+      }
+      return (
+        <TR.Boundary.Loading fallback={<RN.Text>Boundary recovered</RN.Text>}>
+          <Pending />
+        </TR.Boundary.Loading>
+      )
+   ```
+}
+
+view SurfaceStatusText {
+   render inject ```ts
+      return TR.Surface.Empty({
+        title: 'No kitchen alerts',
+        message: 'Default empty surface ready',
+      })
+   ```
+}
+
+view ThemedStatusText {
+   render inject ```ts
+      return (
+        <TR.Style.Provider palette={{ accent: '#059669', surface: '#ecfdf5', border: '#34d399' }}>
+          {TR.Surface.Empty({ title: 'Themed bridge ready' })}
+        </TR.Style.Provider>
+      )
+   ```
+}
+
+view FormValidationStatusText {
+   render inject ```ts
+      const form = TR.Form.use({ defaultValues: { kitchen: '' } })
+      const kitchen = TR.Form.textField(form, 'kitchen', { required: 'Kitchen form required' })
+      const submit = TR.Form.submitAction(form, TR.NoopAction())
+      return (
+        <>
+          {TR.Views.TextInput(
+            {
+              __tao: _ViewProps.__tao,
+              value: kitchen.value,
+              placeholder: 'Kitchen form value',
+              onBlur: TR.Form.textBlurAction(kitchen),
+              onChangeText: TR.Form.textInputAction(kitchen),
+            },
+            { nativeProps: { accessibilityLabel: 'Kitchen form value' } },
+          )}
+          {TR.Views.Pressable({ title: 'Validate kitchen form', action: submit }, {
+            nativeProps: { accessibilityRole: 'button' },
+          })}
+          {kitchen.error ? <RN.Text>{kitchen.error}</RN.Text> : null}
+        </>
+      )
+   ```
+}
+
+view PressableStateStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Save kitchen action',
+          loadingTitle: 'Saving kitchen action',
+          loading: true,
+          action: TR.NoopAction(),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view ClipboardStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Copy kitchen text',
+          action: TR.Clipboard.copyTextAction('Kitchen clipboard text'),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view LinkingStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Open kitchen link',
+          action: TR.Linking.openURLAction('https://tao.dev'),
+        },
+        { nativeProps: { accessibilityRole: 'link' } },
+      )
+   ```
+}
+
+view FeedbackStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Tap kitchen feedback',
+          action: TR.Feedback.selectionAction(),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view MediaStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Pick kitchen image',
+          action: TR.Media.pickImageAction(),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view SecureStoreStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Save kitchen secret',
+          action: TR.SecureStore.saveTextAction('kitchen-secret', 'secret'),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view LocationStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Find kitchen location',
+          action: TR.Location.currentAction(),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view ShareStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Share kitchen text',
+          action: TR.Share.textAction('Kitchen share text'),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view ActionSheetIOSStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Show iOS action sheet',
+          action: TR.ActionSheetIOS.chooseAction({
+            cancelButtonIndex: 0,
+            options: ['Cancel', 'Save'],
+            title: 'Kitchen action',
+          }),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view AlertStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Show kitchen alert',
+          action: TR.Alert.messageAction('Kitchen alert', 'Hello from Tao'),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view KeyboardStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Dismiss kitchen keyboard',
+          action: TR.Keyboard.dismissAction(),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view ToastAndroidStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Show Android toast',
+          action: TR.ToastAndroid.showAction('Kitchen toast', { duration: 'short' }),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view VibrationStatusText {
+   render inject ```ts
+      return TR.Views.Pressable(
+        {
+          title: 'Vibrate kitchen device',
+          action: TR.Vibration.vibrateAction(30),
+        },
+        { nativeProps: { accessibilityRole: 'button' } },
+      )
+   ```
+}
+
+view InteractionManagerStatusText {
+   render inject ```ts
+      const action = TR.InteractionManager.deferAction(TR.NoopAction())
+      void action
+      return <RN.Text>Interaction manager bridge ready</RN.Text>
+   ```
+}
+
+view LayoutAnimationStatusText {
+   render inject ```ts
+      const action = TR.LayoutAnimation.presetAction('easeInEaseOut')
+      void action
+      return <RN.Text>Layout animation bridge ready</RN.Text>
+   ```
+}
+
+view AppStateStatusText {
+   render inject ```ts
+      const status = TR.AppState.status()
+      void status
+      return <RN.Text>App state bridge ready</RN.Text>
+   ```
+}
+
+view AppearanceStatusText {
+   render inject ```ts
+      const scheme = TR.Appearance.colorScheme()
+      void scheme
+      return <RN.Text>Appearance bridge ready</RN.Text>
+   ```
+}
+
+view AccessibilityInfoStatusText {
+   render inject ```ts
+      const preferences = TR.AccessibilityInfo.preferences()
+      void preferences
+      return <RN.Text>Accessibility preferences bridge ready</RN.Text>
+   ```
+}
+
+view BackHandlerStatusText {
+   render inject ```ts
+      TR.BackHandler.onPress(TR.BackHandler.pressAction(() => true))
+      return <RN.Text>Back handler bridge ready</RN.Text>
    ```
 }

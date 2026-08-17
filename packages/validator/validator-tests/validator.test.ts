@@ -1215,10 +1215,40 @@ Describe('Tao validator structural diagnostics', () => {
       }
       view MainView {
         render Col [claim 2, content top stretch, gap 12, pad 16, margin horizontal 4, width fill] {
-          Text "Label" [width fill, height fill]
+          Text "Label" [width fill, height fill, id labelText, label "Label text", role "text"]
         }
       }
     `)
+  })
+
+  Test('rejects malformed accessibility layout clause entries', async () => {
+    const malformedLabel = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      use Text from @tao/ui
+      view MainView {
+        render Text "Label" [label]
+      }
+    `)
+    const unsupportedRole = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      use Text from @tao/ui
+      view MainView {
+        render Text "Label" [role diagonal]
+      }
+    `)
+    const duplicateId = await testValidateCodeWithErrors(`
+      app MyApp { view MainView }
+      use Text from @tao/ui
+      view MainView {
+        render Text "Label" [id first, id second]
+      }
+    `)
+
+    Expect(validationErrorMessages(malformedLabel)).toContain(layoutValidationMessages.malformedEntry('label'))
+    Expect(validationErrorMessages(unsupportedRole)).toContain(
+      layoutValidationMessages.unsupportedTerm('role diagonal', 'diagonal'),
+    )
+    Expect(validationErrorMessages(duplicateId)).toContain(layoutValidationMessages.duplicateEntry('id'))
   })
 
   Test('accepts aligned layout terms without static parent direction analysis', async () => {
@@ -3308,6 +3338,7 @@ Describe('Tao validator structural diagnostics', () => {
           run MyApp
           expect role "Add"
           press role "Add"
+          input role "Name" "Grace"
         }
       }
     `)
@@ -3326,7 +3357,7 @@ Describe('Tao validator structural diagnostics', () => {
     Expect(nonAppRunMessages).not.toContain(testValidationMessages.runTarget('MainView'))
     const selectorMessages = validationErrorMessages(unsupportedSelector)
     Expect(selectorMessages).toContain(testValidationMessages.selector('role'))
-    Expect(selectorMessages.filter(message => message === testValidationMessages.selector('role'))).toHaveLength(2)
+    Expect(selectorMessages.filter(message => message === testValidationMessages.selector('role'))).toHaveLength(3)
   })
 
   Test('validates v0 test statement placement', async () => {

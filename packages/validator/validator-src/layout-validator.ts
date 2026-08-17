@@ -17,6 +17,17 @@ const layoutValidationMessages = {
 } as const
 
 const alignTermValues = ['top', 'bottom', 'left', 'right', 'center', 'baseline'] as const
+const accessibilityRoleValues = [
+  'adjustable',
+  'button',
+  'header',
+  'image',
+  'link',
+  'none',
+  'search',
+  'summary',
+  'text',
+] as const
 const padSideValues = ['top', 'right', 'bottom', 'left', 'horizontal', 'vertical'] as const
 const dimensionTermValues = ['fill'] as const
 const contentTermValues = [
@@ -33,12 +44,16 @@ const contentTermValues = [
 ] as const
 
 type AlignTerm = (typeof alignTermValues)[number]
+type AccessibilityRole = (typeof accessibilityRoleValues)[number]
 type ContentTerm = (typeof contentTermValues)[number]
 type DimensionTerm = (typeof dimensionTermValues)[number]
 type PadSide = (typeof padSideValues)[number]
 type PhysicalPadSide = 'bottom' | 'left' | 'right' | 'top'
 type ContentTermConflictKey = 'center' | 'cross-alignment' | 'horizontal' | 'main-distribution' | 'vertical'
 type LayoutConflictKey =
+  | 'accessibility-id'
+  | 'accessibility-label'
+  | 'accessibility-role'
   | 'compression-pressure'
   | 'content'
   | 'gap'
@@ -94,6 +109,9 @@ function validateLayoutEntry(
   }
 
   Switch(headValue, {
+    id: () => validateAccessibilityText(entry, ctx),
+    label: () => validateAccessibilityText(entry, ctx),
+    role: () => validateAccessibilityRole(entry, ctx),
     claim: () => validateSingleNumber(entry, ctx),
     content: () => validateContent(entry, ctx),
     gap: () => validateSingleNumber(entry, ctx),
@@ -108,6 +126,30 @@ function validateLayoutEntry(
     centered: () => validateBareEntry(entry, ctx),
     aligned: () => validateAligned(entry, ctx),
   })
+}
+
+function validateAccessibilityText(entry: AST.LayoutEntry, ctx: ValidationContext): void {
+  const terms = entry.terms
+  if (terms.length !== 1 || (!AST.isLayoutWord(terms[0]) && !AST.isLayoutStringLiteral(terms[0]))) {
+    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+  }
+}
+
+function validateAccessibilityRole(entry: AST.LayoutEntry, ctx: ValidationContext): void {
+  const terms = entry.terms
+  if (terms.length !== 1) {
+    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    return
+  }
+  const role = terms[0]
+  if (!role) {
+    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    return
+  }
+  const roleValue = AST.isLayoutWord(role) ? accessibilityRoleValue(role) : layoutStringRoleValue(role)
+  if (!roleValue) {
+    ctx.error(layoutValidationMessages.unsupportedTerm(layoutEntryText(entry), layoutTermText(role)), entry)
+  }
 }
 
 function validateContent(
@@ -260,6 +302,9 @@ function layoutEntryConflictItem(entry: AST.LayoutEntry): readonly LayoutConflic
 }
 
 const layoutConflictKeysByHead = {
+  id: ['accessibility-id'],
+  label: ['accessibility-label'],
+  role: ['accessibility-role'],
   aligned: ['self-alignment'],
   centered: ['self-alignment'],
   claim: ['main-size-pressure', 'rigid-weighted-claim'],
@@ -289,6 +334,9 @@ const layoutHeads = [
   'pad',
   'rigid',
   'width',
+  'id',
+  'label',
+  'role',
 ] as const
 
 type LayoutHead = (typeof layoutHeads)[number]
@@ -327,6 +375,20 @@ function layoutWordValue<ValueT extends string>(
 
 function alignTermValue(term: AST.LayoutWord): AlignTerm | undefined {
   return layoutWordValue(term, alignTermValues)
+}
+
+function accessibilityRoleValue(term: AST.LayoutWord): AccessibilityRole | undefined {
+  return layoutWordValue(term, accessibilityRoleValues)
+}
+
+function layoutStringRoleValue(term: AST.LayoutTerm): AccessibilityRole | undefined {
+  if (!AST.isLayoutStringLiteral(term)) {
+    return undefined
+  }
+  const value = ASTUtils.layoutTermValue(term)
+  return typeof value === 'string' && accessibilityRoleValues.includes(value as AccessibilityRole)
+    ? value as AccessibilityRole
+    : undefined
 }
 
 function contentTermValue(term: AST.LayoutWord): ContentTerm | undefined {

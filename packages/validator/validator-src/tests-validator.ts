@@ -9,9 +9,10 @@ export const testValidationMessages = {
   testPlacement: 'Test declarations are only allowed at file level.',
   testBlock: (name: string) => `Only check declarations are allowed in test '${name}'.`,
   checkPlacement: 'Check declarations are only allowed inside test blocks.',
-  checkBlock: (name: string) => `Only run, press, and expect statements are allowed in check '${name}'.`,
+  checkBlock: (name: string) => `Only run, press, input, and expect statements are allowed in check '${name}'.`,
   runPlacement: 'Run steps are only allowed inside check blocks.',
   pressPlacement: 'Press steps are only allowed inside check blocks.',
+  inputPlacement: 'Input steps are only allowed inside check blocks.',
   expectationPlacement: 'Expectations are only allowed inside check blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
@@ -40,6 +41,12 @@ export function validateTests(file: AST.TaoFile, ctx: ValidationContext): void {
       ctx.error(testValidationMessages.pressPlacement, press)
     }
     validateSelector(press, ctx)
+  }
+  for (const input of AST.streamAllContents(file).filter(AST.isInputTextStep)) {
+    if (statementNeedsStepPlacementDiagnostic(input)) {
+      ctx.error(testValidationMessages.inputPlacement, input)
+    }
+    validateSelector(input, ctx)
   }
   for (const expectation of AST.streamAllContents(file).filter(AST.isExpectTextStep)) {
     if (statementNeedsStepPlacementDiagnostic(expectation)) {
@@ -89,6 +96,7 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
   for (const step of check.block.statements.filter(AST.isCheckStep)) {
     Switch.type(step, {
       ExpectTextStep: checkStepOrder,
+      InputTextStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
@@ -96,7 +104,7 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
     })
   }
 
-  function checkStepOrder(step: AST.ExpectTextStep | AST.PressTextStep): void {
+  function checkStepOrder(step: AST.ExpectTextStep | AST.InputTextStep | AST.PressTextStep): void {
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
     }
@@ -112,7 +120,10 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
   }
 }
 
-function validateSelector(step: AST.ExpectTextStep | AST.PressTextStep, ctx: ValidationContext): void {
+function validateSelector(
+  step: AST.ExpectTextStep | AST.InputTextStep | AST.PressTextStep,
+  ctx: ValidationContext,
+): void {
   if (!supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])) {
     ctx.error(testValidationMessages.selector(step.selector), step)
   }

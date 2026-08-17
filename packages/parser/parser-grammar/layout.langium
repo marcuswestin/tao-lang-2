@@ -12,10 +12,13 @@ LayoutEntry:
     head=LayoutTerm terms+=LayoutTerm*;
 
 LayoutTerm:
-    LayoutWord | LayoutNumberLiteral;
+    LayoutWord | LayoutNumberLiteral | LayoutStringLiteral;
 
 LayoutWord:
     value=ID ('-' suffixes+=ID)*;
 
 LayoutNumberLiteral:
     value=NUMBER;
+
+LayoutStringLiteral:
+    value=STRING;

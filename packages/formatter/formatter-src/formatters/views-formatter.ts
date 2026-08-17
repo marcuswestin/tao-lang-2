@@ -36,6 +36,9 @@ export default {
 
   /** LayoutNumberLiteral is a single token with no interior formatting. */
   LayoutNumberLiteral() {},
+
+  /** LayoutStringLiteral is a single token with no interior formatting. */
+  LayoutStringLiteral() {},
 } satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.RenderableDeclaration>): void {

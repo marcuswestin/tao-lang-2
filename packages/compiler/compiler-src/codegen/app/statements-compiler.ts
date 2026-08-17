@@ -13,6 +13,7 @@ export const StatementsCompiler = {
       ActionDeclaration: Compile.ActionDeclaration,
       CheckDeclaration: Compile.CheckDeclaration,
       ExpectTextStep: Compile.ExpectTextStep,
+      InputTextStep: Compile.InputTextStep,
       Injection: Compile.Injection,
       LayoutDeclaration: Compile.LayoutDeclaration,
       PressTextStep: Compile.PressTextStep,

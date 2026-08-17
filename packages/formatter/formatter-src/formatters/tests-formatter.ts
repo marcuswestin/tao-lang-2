@@ -22,6 +22,13 @@ export default {
     f.oneSpaceBetweenProperties('selector', 'text')
   },
 
+  /** InputTextStep formats selector-targeted text input steps. */
+  InputTextStep(f) {
+    f.oneSpaceAfter('input')
+    f.oneSpaceBetweenProperties('selector', 'target')
+    f.oneSpaceBetweenProperties('target', 'value')
+  },
+
   /** ExpectTextStep formats v0 selector-targeted expectations. */
   ExpectTextStep(f) {
     f.oneSpaceAfter('expect', 'missing')

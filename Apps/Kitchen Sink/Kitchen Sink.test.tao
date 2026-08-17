@@ -12,6 +12,172 @@ test "Kitchen Sink" {
       expect text "Fixed Kitchen type"
       expect text "Typed Kitchen"
       expect text "item, list, type"
+      expect text "Image bridge ready"
+      expect text "Indicator bridge ready"
+      expect text "Resource bridge ready"
+      expect text "Resource mutation idle"
+      expect text "Resource text row"
+      expect text "Mutate resource row"
+      expect text "Stored text row"
+      expect text "Save stored text"
+      expect text "Network bridge ready"
+      expect text "Network online: false"
+      expect text "Native color bridge ready"
+      expect text "Native color value ready"
+      expect text "Native list bridge ready"
+      expect text "Native list row"
+      expect text "Native section row"
+      expect text "Refresh stack bridge ready"
+      expect text "Scrollable bridge ready"
+      expect text "Keyboard avoiding bridge ready"
+      expect text "Safe area stack bridge ready"
+      expect text "Screen bridge ready"
+      expect text "Modal sheet bridge ready"
+      expect text "Android permissions bridge ready"
+      expect text "Android permission CAMERA"
+      expect text "Animated bridge ready"
+      expect text "Animated action ready"
+      expect text "Device viewport ready"
+      expect text "Viewport 390x844 portrait"
+      expect text "Easing bridge ready"
+      expect text "Easing quad 0.25"
+      expect text "Pixel ratio bridge ready"
+      expect text "Pixel ratio 1"
+      expect text "PanResponder bridge ready"
+      expect text "Pan responder ready"
+      expect text "Platform bridge ready"
+      expect text "Platform web"
+      expect text "I18n bridge ready"
+      expect text "Text direction ltr"
+      expect text "Input accessory bridge ready"
+      expect text "Input accessory tao-input-accessory-tao-stdlib"
+      expect text "Safe area bridge ready"
+      expect text "Safe area padding 12"
+      expect text "Status bar bridge ready"
+      expect text "Kitchen status bar"
+      expect text "StyleSheet bridge ready"
+      expect text "Hairline width 1"
+      expect text "Modal bridge ready"
+      expect text "Modal fade pageSheet"
+      expect text "Refresh control bridge ready"
+      expect text "Refreshing true"
+      expect text "Toggle bridge ready"
+      expect text "Toggle value true"
+      expect text "Boundary recovered"
+      expect text "Boundary loading bridge ready"
+      expect text "Navigation root bridge ready"
+      expect text "No kitchen alerts"
+      expect text "Default empty surface ready"
+      expect text "Themed bridge ready"
+      expect text "Themed stack bridge ready"
+      expect text "Form root bridge ready"
+      expect text "Run async action"
+      expect text "Saving kitchen action"
+      expect text "Copy kitchen text"
+      expect text "Open kitchen link"
+      expect text "Tap kitchen feedback"
+      expect text "Pick kitchen image"
+      expect text "Save kitchen secret"
+      expect text "Find kitchen location"
+      expect text "Share kitchen text"
+      expect text "Show iOS action sheet"
+      expect text "Show kitchen alert"
+      expect text "Dismiss kitchen keyboard"
+      expect text "Show Android toast"
+      expect text "Vibrate kitchen device"
+      expect text "Interaction manager bridge ready"
+      expect text "Layout animation bridge ready"
+      expect text "App state bridge ready"
+      expect text "App state unknown"
+      expect text "Appearance bridge ready"
+      expect text "Appearance no-preference"
+      expect text "Accessibility preferences bridge ready"
+      expect text "Screen reader: false"
+      expect text "Back handler bridge ready"
+      expect text "Kitchen input"
+      expect text "Unavailable kitchen action"
+      expect text "Saving kitchen"
+      expect text "Loading kitchen row"
+      expect text "Loading kitchen report"
+      expect text "No kitchen orders"
+      expect text "Loading kitchen state"
+      expect text "Kitchen error"
+      expect text "Kitchen accessory actions"
+      expect text "Kitchen toggle"
+      expect text "Locked kitchen toggle"
+      expect text "Copy kitchen token"
+      expect text "Confirm kitchen tap"
+      expect text "Alert kitchen"
+      expect text "Confirm kitchen"
+      expect text "Hide kitchen keyboard"
+      expect text "Pulse kitchen device"
+      expect text "Choose kitchen image"
+      expect text "Locate kitchen"
+      expect text "Toast kitchen"
+      expect text "Animate kitchen layout"
+      expect text "Save kitchen secret action"
+      expect text "Delete kitchen secret action"
+      expect text "Exit kitchen app"
+      expect text "Defer kitchen work"
+      expect text "Choose kitchen option"
+      expect text "https://tao.dev/kitchen"
+      expect text "Kitchen share message"
+   }
+
+   check "updates text input state" {
+      run KitchenSink
+
+      expect text "Kitchen input"
+      input text "Kitchen name" "Edited kitchen"
+      expect text "Edited kitchen"
+   }
+
+   check "updates text area state" {
+      run KitchenSink
+      input text "Kitchen notes" "Edited notes"
+      expect text "Edited notes"
+   }
+
+   check "updates password input state" {
+      run KitchenSink
+      input text "Kitchen password" "Edited secret"
+      expect text "Edited secret"
+   }
+
+   check "updates email input state" {
+      run KitchenSink
+      input text "Kitchen email" "edited@example.com"
+      expect text "edited@example.com"
+   }
+
+   check "updates search input state" {
+      run KitchenSink
+      input text "Kitchen search" "Search query"
+      expect text "Search query"
+   }
+
+   check "updates phone input state" {
+      run KitchenSink
+      input text "Kitchen phone" "5551234567"
+      expect text "5551234567"
+   }
+
+   check "updates URL input state" {
+      run KitchenSink
+      input text "Kitchen URL" "https://example.com"
+      expect text "https://example.com"
+   }
+
+   check "updates numeric input state" {
+      run KitchenSink
+      input text "Kitchen numeric" "42"
+      expect text "42"
+   }
+
+   check "updates one-time code input state" {
+      run KitchenSink
+      input text "Kitchen code" "123456"
+      expect text "123456"
    }
 
    check "renders launch count" {

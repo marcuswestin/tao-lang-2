@@ -16,6 +16,11 @@ export function SafeAreaProvider(props: { children?: React.ReactNode }) {
   )
 }
 
+/** SafeAreaView renders children directly in runtime Jest tests. */
+export function SafeAreaView(props: { children?: React.ReactNode }) {
+  return React.createElement('SafeAreaView', props, props.children)
+}
+
 export function useSafeAreaInsets() {
   return React.useContext(SafeAreaInsetsContext)
 }

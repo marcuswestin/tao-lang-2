@@ -4,6 +4,8 @@ import { DevMenu } from './dev-runtime/TR-dev-menu'
 import type { TaoLayoutProps } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { ResourceProvider } from './TR-resource'
+import { StyleRuntime } from './TR-style'
 
 export type AppShellProps = {
   children?: React.ReactNode
@@ -23,16 +25,7 @@ type SafeAreaContextModule = {
 
 const appFramePadding = 12
 
-const contentStyle = {
-  flexGrow: 1,
-  minHeight: '100%',
-} as const
-
-const rootStyle = {
-  backgroundColor: '#fff',
-  flex: 1,
-} as const
-
+const contentStyle = StyleRuntime.appContentStyle()
 /** AppShell renders the safe default Tao app frame around generated app roots. */
 export const AppShell = AppShellComponent
 
@@ -41,7 +34,11 @@ function AppShellComponent(props: AppShellProps): React.JSX.Element {
   return React.createElement(
     SafeAreaContext.SafeAreaProvider,
     null,
-    React.createElement(AppShellFrame, { ...props, SafeAreaContext }),
+    React.createElement(
+      ResourceProvider,
+      null,
+      React.createElement(AppShellFrame, { ...props, SafeAreaContext }),
+    ),
   )
 }
 
@@ -49,6 +46,8 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
   const RN = requireReactNativeRuntime()
   const platformOS = RN.Platform?.OS ?? 'web'
   const insets = props.SafeAreaContext.useSafeAreaInsets()
+  const palette = StyleRuntime.usePalette()
+  const rootStyle = StyleRuntime.appRootStyle(palette)
   // Subscribing to dev mode re-renders the frame on every change, including layout-bounds toggles.
   const devMode = Dev.useMode()
   const contentPadding = {

@@ -22,6 +22,11 @@ export default {
     return gen.noop()
   },
 
+  /** InputTextStep compiles to no generated app output. */
+  InputTextStep(_input: AST.InputTextStep): Compiled {
+    return gen.noop()
+  },
+
   /** ExpectTextStep compiles to no generated app output. */
   ExpectTextStep(_expectation: AST.ExpectTextStep): Compiled {
     return gen.noop()

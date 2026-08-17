@@ -1,3 +1,4 @@
+import TR from '@runtime/TR'
 import { Switch } from '@shared/core'
 import { fireEvent } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
@@ -16,6 +17,7 @@ export async function runTestFile(file: TestCompiler.File): Promise<void> {
 async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<void> {
   let screen: RuntimeApp.Screen | undefined
   try {
+    installStorageDriver()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
     for (const step of check.steps) {
       runStep(screen, step)
@@ -26,14 +28,51 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
     )
   } finally {
     screen?.unmount()
+    TR.Storage.setDriverForTests()
   }
+}
+
+function installStorageDriver(): void {
+  const values = new Map<string, string>()
+  TR.Storage.setDriverForTests({
+    async getItem(key) {
+      return values.get(key) ?? null
+    },
+    async removeItem(key) {
+      values.delete(key)
+    },
+    async setItem(key, value) {
+      values.set(key, value)
+    },
+  })
 }
 
 function runStep(screen: RuntimeApp.Screen, step: TestCompiler.Step): void {
   return Switch.kind<TestCompiler.Step, void>(step, {
     expect: expectation => assertExpectation(screen, expectation),
+    input: input => inputStep(screen, input),
     press: press => pressStep(screen, press),
   })
+}
+
+function inputStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'input' }>): void {
+  assertTextSelector(step)
+  const matches = screen.queryAllByLabelText(step.target)
+  if (matches.length === 0) {
+    throw new Error(`${formatStep(step)} expected text input label but found none.\n${formatSource(step.source)}`)
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `${formatStep(step)} expected one text input label but found ${matches.length} matches.\n${
+        formatSource(step.source)
+      }`,
+    )
+  }
+  const match = matches[0]
+  if (match === undefined) {
+    throw new Error(`${formatStep(step)} expected one text input label but found none.`)
+  }
+  fireEvent.changeText(match, step.value)
 }
 
 function pressStep(screen: RuntimeApp.Screen, step: Extract<TestCompiler.Step, { kind: 'press' }>): void {
@@ -84,6 +123,7 @@ function formatStep(step: TestCompiler.Step): string {
       expectation.missing
         ? `expect missing ${expectation.selector} "${expectation.text}"`
         : `expect ${expectation.selector} "${expectation.text}"`,
+    input: input => `input ${input.selector} "${input.target}" "${input.value}"`,
     press: press => `press ${press.selector} "${press.text}"`,
   })
 }

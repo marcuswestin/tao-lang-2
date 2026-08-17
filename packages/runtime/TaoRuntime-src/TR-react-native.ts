@@ -2,15 +2,21 @@ import type React from 'react'
 
 /** ReactNativeRuntime declares the RN component set used by Tao runtime rendering. */
 export type ReactNativeRuntime = {
+  ActivityIndicator: React.ComponentType<any>
   Dimensions?: {
     get(name: string): { height?: number; width?: number }
   }
+  Image: React.ComponentType<any>
   KeyboardAvoidingView: React.ComponentType<any>
+  Modal: React.ComponentType<any>
   Platform?: { OS: string }
+  Pressable: React.ComponentType<any>
+  RefreshControl: React.ComponentType<any>
   ScrollView: React.ComponentType<any>
   View: React.ComponentType<any>
   Text: React.ComponentType<any>
-  Pressable: React.ComponentType<any>
+  TextInput: React.ComponentType<any>
+  Switch: React.ComponentType<any>
 }
 
 /** requireReactNativeRuntime returns the React Native module used by Tao runtime rendering. */
