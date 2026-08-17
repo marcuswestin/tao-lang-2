@@ -40,7 +40,7 @@ const viewValidationMessages = {
     'A tagged loop must contain exactly one unconditional direct row-root render; wrap the row in one view or layout.',
 } as const
 
-const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao'])
+const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao', '__taoSlots'])
 
 /** ViewsValidator validates renderable declarations and render blocks. */
 export const ViewsValidator = {
