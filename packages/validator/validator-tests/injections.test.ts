@@ -8,10 +8,10 @@ Describe('validator: injections', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Text("Hello")
       }
-      view Text Value is text {
+      view Text(Value is text) {
         render inject Value, Value "Again" ${tsFence}
           return null
         ${fence}

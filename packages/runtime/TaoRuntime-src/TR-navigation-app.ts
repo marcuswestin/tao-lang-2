@@ -1,4 +1,5 @@
 import React from 'react'
+import type { TaoDesign } from './TR-design'
 import type {
   TaoAppDeclaration,
   TaoAppDefinition,
@@ -25,6 +26,7 @@ type ToastEntry = PresentableEntry & {
 export class RuntimeAppDefinition implements Subscription {
   private auxiliariesValue: Record<string, TaoNavigationValue> | undefined
   private descriptorMounts = new Map<TaoConfiguredNavigation, TaoNavigationValue>()
+  private designValue: TaoDesign | undefined
   private listeners = new Set<() => void>()
   private nextToastEntryId = 1
   private navigatorValue: TaoNavigationValue | undefined
@@ -53,6 +55,11 @@ export class RuntimeAppDefinition implements Subscription {
     return this.auxiliariesValue ??= Object.fromEntries(
       Object.entries(this.definition.auxiliaries()).map(([key, value]) => [key, this.mount(value)]),
     )
+  }
+
+  /** design lazily resolves this mounted app's declaration-local design without a global registry. */
+  get design(): TaoDesign | undefined {
+    return this.designValue ??= this.definition.design?.()
   }
 
   replace(navigator: TaoNavigationInput): void {

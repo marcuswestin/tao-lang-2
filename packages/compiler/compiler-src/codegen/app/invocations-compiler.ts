@@ -30,7 +30,17 @@ export default {
     const renderArguments = Compile.RenderArguments(invocation)
     const taoProps = Compile.RenderTaoProps(render)
     const block = render.block
-    const children = AST.statementsOf(block).filter(statement => !AST.isEventHandler(statement))
+    const slotFills = AST.renderSlotUsesOf(block).filter(
+      (use): use is AST.RenderSlotUse & { render: AST.ViewRender } => use.render !== undefined,
+    )
+    if (block && slotFills.length > 0) {
+      return Compile.RenderWithSlots(view, renderArguments, taoProps, block, slotFills)
+    }
+    const children = AST.statementsOf(block).filter(statement =>
+      !AST.isEventHandler(statement)
+      && !(AST.isTagStatement(statement) && AST.isSlotFillRootTag(statement))
+      && !(AST.isRenderSlotUse(statement) && statement.render)
+    )
     if (children.length === 0) {
       return gen`<${gen.scopeName(view)}${renderArguments}${taoProps} />`
     }
@@ -52,6 +62,37 @@ export default {
       ${gen.join(invocation.eventPairs, Compile.EventHandlerArgument, { separator: '' })}
       ${invocation.implicitChange ? Compile.ImplicitChangeArgument(invocation.implicitChange) : ''}
     `
+  },
+
+  /** RenderWithSlots scopes call-site setup once and separates named fills from unnamed content. */
+  RenderWithSlots(
+    view: AST.RenderableDeclaration,
+    renderArguments: Compiled,
+    taoProps: Compiled,
+    block: AST.Block,
+    slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[],
+  ): Compiled {
+    const setupStatements = block.statements.filter(statement =>
+      AST.isAliasDeclaration(statement) || AST.isEntityQueryDeclaration(statement)
+    )
+    const content = block.statements.filter(AST.isRenderFragment)
+    return gen`
+      <>
+        {TR.BlockScope(_Scope, _Scope => {
+          ${gen.list(setupStatements, Compile.Statement)}
+          return <${gen.scopeName(view)}${renderArguments}${taoProps}${Compile.RenderSlotProps(slotFills)}>
+            ${Compile.RenderBlockFragments(content)}
+          </${gen.scopeName(view)}>
+        })}
+      </>
+    `
+  },
+
+  /** RenderSlotProps compiles opaque named visual fills into private generated component props. */
+  RenderSlotProps(slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[]): Compiled {
+    return gen` __taoSlots={{
+      ${gen.list(slotFills, fill => gen`${gen.jsLiteral(fill.slot.$refText)}: ${Compile.Render(fill.render)},`)}
+    }}`
   },
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */

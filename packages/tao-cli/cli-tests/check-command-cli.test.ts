@@ -4,7 +4,7 @@ import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 Describe('tao check CLI', () => {
   Test('exits zero when files are canonical', async () => {
     await withTaoFixture({
-      'canonical.tao': 'view MainView { }\n',
+      'canonical.tao': 'view MainView() { }\n',
     }, async (rootDir) => {
       const result = await runTaoCliForTest(['check', rootDir])
 
@@ -15,7 +15,7 @@ Describe('tao check CLI', () => {
 
   Test('exits nonzero and reports noncanonical files', async () => {
     await withTaoFixture({
-      'drift.tao': 'view   MainView { }',
+      'drift.tao': 'view   MainView() { }',
     }, async (rootDir) => {
       const result = await runTaoCliForTest(['check', rootDir])
 
@@ -27,7 +27,7 @@ Describe('tao check CLI', () => {
 
   Test('exits nonzero on check errors', async () => {
     await withTaoFixture({
-      'broken.tao': 'view Broken {',
+      'broken.tao': 'view Broken() {',
     }, async (rootDir) => {
       const result = await runTaoCliForTest(['check', rootDir])
 

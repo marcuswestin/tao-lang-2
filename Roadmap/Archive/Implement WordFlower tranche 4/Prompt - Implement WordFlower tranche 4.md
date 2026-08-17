@@ -22,8 +22,9 @@ Read these before planning or editing:
 2. `Apps/WordFlower/README.md` for the tranche process.
 3. `Roadmap/Implement WordFlower tranche 4/Brief - Implement WordFlower tranche 4.md` for seams,
    constraints, and the directory-gate migration.
-4. `Apps/WordFlower/2 - Next/WordFlower.tao-next`, then every sibling contract file, including
-   `@tao-next/Prelude.tao-next` and `@tao-next/text/Text.tao-next`.
+4. `Apps/WordFlower/2 - Next/WordFlower.tao-next`, then every sibling contract file. The absorbed
+   scratch contracts now live at `packages/stdlib/tao/Prelude.tao` and
+   `packages/stdlib/tao/text/Text.tao`.
 5. The active specs and decision records cited by those files, especially
    `Roadmap/Deferred Tao language decisions.md`.
 
@@ -61,11 +62,9 @@ choice that would materially change the authored Tao model. Before asking, inspe
 specifications, validators, and existing runtime seams; present the smallest concrete alternatives
 and a recommendation. Do not stop for routine uncertainty.
 
-The only known pending spelling question is declaration-spike Q11: the eventual syntax for a
-reusable `nav`/`datasource` type's protocol binding after primitive heads become value declarations.
-Current docs preserve the working spelling and flag this explicitly. If it becomes a real parser or
-migration blocker, bring it to Ro with the exact source forms and consequences; otherwise do not let
-it stall independent slices.
+Declaration-spike Q11 was resolved during this tranche: a reusable `nav`/`datasource` type keeps the
+explicit `implement inject nav|provider` protocol-binding clause. This remains distinct from the
+primitive's required `implement` slot and from a visual declaration's `render inject` body.
 
 ## Commits and verification
 

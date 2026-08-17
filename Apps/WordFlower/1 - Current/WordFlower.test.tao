@@ -1,179 +1,7 @@
-// Tranche status: absorbed
-use WordFlower, WordFlowerDrawer, WordFlowerFoundationTest from ./
+use WordFlower, WordFlowerDrawer from ./
 
-test "WordFlower functional MVP" {
-   check "starts empty and keeps invalid creates inert" {
-      run WordFlower
-      expect { // `expect { ... }` groups several assertions into one step
-         text "WordFlower"
-         text "No workspaces yet"
-         text "Starter prompt: Morning pages"
-         text "Try writing for 10 minutes"
-         text "Tagged: daily, warmup"
-         text "Workspace name is required"
-      }
-      expect #workspaceName {
-         placeholder "Home"
-         input value ""
-      }
-      press #addWorkspace // disabled while the draft is empty, so nothing happens
-      expect missing text "A workspace needs a name"
-      submit #workspaceName
-      expect text "A workspace needs a name" // the empty-name guard presents an overlay notice
-      press #dismissNotice
-      expect missing text "A workspace needs a name"
-      expect text "No workspaces yet"
-   }
-
-   check "uses live workspaces and preserves covered screen state" {
-      run WordFlower
-      enter "Home" into #workspaceName
-      submit #workspaceName
-      enter "Unsent workspace" into #workspaceName
-      select #workspaces[1] { // `select` scopes steps to the tagged loop's 1-based row
-         expect text "Home"
-         press #openWorkspace
-      }
-      expect text "Workspace: Home"
-      expect #workspaceTitle input value "Home"
-      enter "" into #workspaceTitle
-      submit #workspaceTitle
-      expect text "Workspace: Home"
-      enter "Renamed workspace" into #workspaceTitle
-      press #saveWorkspace
-      expect {
-         text "Workspace: Renamed workspace"
-         text "No drafts"
-      }
-      back
-      expect {
-         text "WordFlower"
-         text "Renamed workspace"
-      }
-      expect #workspaceName input value "Unsent workspace"
-      expect missing text "Workspace: Renamed workspace"
-   }
-
-   check "edits a related document on its own live destination" {
-      run WordFlower
-      enter "Home" into #workspaceName
-      press #addWorkspace
-      select #workspaces[1] {
-         press #openWorkspace
-      }
-      submit #newDocumentTitle
-      expect text "No drafts"
-      enter "Draft the intro" into #newDocumentTitle
-      submit #newDocumentTitle
-      expect text "Drafts: 1"
-      select #drafts[1] {
-         expect text "Draft the intro"
-         press #edit
-      }
-      expect {
-         text "Document: Draft the intro"
-         text "Workspace: Home"
-         text "Words: 0"
-         text "Saves this session: 0"
-      }
-      expect #editDocumentTitle input value "Draft the intro"
-      enter "" into #editDocumentTitle
-      submit #editDocumentTitle
-      expect text "Saved title: Draft the intro"
-      enter "Polish the intro" into #editDocumentTitle
-      enter "Set the scene with intent" into #editDocumentBody
-      expect text "Words: 5" // the explicit change action keeps the live word count reactive
-      press #saveDocument
-      expect {
-         text "Saved title: Polish the intro"
-         text "Saved body: Set the scene with intent"
-         text "Saves this session: 1"
-      }
-      back
-      select #drafts[1] {
-         expect text "Polish the intro"
-         press #finish
-      }
-      expect {
-         text "Drafts: 0"
-         text "No drafts"
-      }
-      select #finishedDocuments[1] {
-         expect text "Polish the intro"
-         press #deleteFinished
-      }
-      expect text "No finished documents"
-   }
-
-   check "deletes related documents transitively with their workspace" {
-      run WordFlower
-      enter "Temporary" into #workspaceName
-      press #addWorkspace
-      select #workspaces[1] {
-         press #openWorkspace
-      }
-      enter "Related draft" into #newDocumentTitle
-      press #addDocument
-      expect text "Related draft"
-      back
-      select #workspaces[1] {
-         press #deleteWorkspace
-      }
-      expect text "No workspaces yet"
-      enter "Replacement" into #workspaceName
-      press text "Add workspace" // visible-text presses remain alongside #tag selectors
-      select #workspaces[1] {
-         expect text "Replacement"
-         press #openWorkspace
-      }
-      expect {
-         missing text "Related draft"
-         text "No drafts"
-   }  }
-
-   check "renders deterministic loading, failure, and recovery states" {
-      run WordFlower
-      data loading // `data` drives the app's datasource provider state
-      expect {
-         text "Loading workspaces…"
-         missing text "Workspace name is required"
-      }
-      data error "Local storage is unavailable"
-      expect {
-         text "Could not load WordFlower"
-         text "Local storage is unavailable"
-      }
-      data ready
-      expect {
-         text "No workspaces yet"
-         text "Workspace name is required"
-}  }  }
-
-test "WordFlower navigation foundation" {
-   check "native back uses the semantic reducer" {
-      run WordFlowerFoundationTest
-
-      expect text "Foundation home marker"
-      press text "Open deterministic detail"
-      expect text "Foundation detail marker"
-      back
-      expect text "Foundation home marker"
-      expect missing text "Foundation detail marker"
-   }
-
-   check "slot dismissal restores its initial stack" {
-      run WordFlowerFoundationTest
-      press text "Open deterministic slot"
-      expect text "Foundation slot marker"
-      press text "Restore initial stack"
-      expect text "Foundation home marker"
-      expect missing text "Foundation slot marker"
-   }
-}
-
-// Tranche-2 journeys. Selection labels are pressed by visible text; overlays, keyed toasts,
-// dialogues, and paragraph depth all flow through the same #tag vocabulary.
-test "WordFlower selection and document depth" {
+// App-level journeys: selection navigation, variants, and the app shell.
+test "WordFlower app shell" {
    check "activates the workspace tab and opens a document from the chooser" {
       run WordFlower
       enter "Novel" into #workspaceName
@@ -181,61 +9,14 @@ test "WordFlower selection and document depth" {
       expect text "Novel"
       press #activateWorkspaceTab
       expect text "Choose a workspace"
-      expect text "Novel"
+      // A loop row with `on select` is pressable; pressing its content selects the row.
       select #chooseWorkspace[1] {
-         press #choose
+         press text "Novel"
       }
-      expect text "Documents in Novel"
-      expect text "No documents yet"
-   }
-
-   check "asks before closing and saves with a keyed toast" {
-      run WordFlower
-      enter "Novel" into #workspaceName
-      submit #workspaceName
-      select #workspaces[1] {
-         press #openWorkspace
-      }
-      enter "Chapter one" into #newDocumentTitle
-      submit #newDocumentTitle
-      select #drafts[1] {
-         press #edit
-      }
-      expect text "Document: Chapter one"
-      press #closeDocument
-      expect text "Close Chapter one?"
-      press #cancelClose
-      expect text "Document: Chapter one" // cancelling answers none and the editor stays
-      enter "The first line." into #editDocumentBody
-      press #saveDocument
-      // Same-key replacement rather than stacking is asserted in packages/runtime-toolchain/runtime-toolchain-tests/navigation-e2e.jest-test.tsx.
-      expect text "Saved"
-      press #closeDocument
-      press #confirmClose
-      expect missing text "Document: Chapter one"
-   }
-
-   check "adds paragraphs and keeps the live document handle current" {
-      run WordFlower
-      enter "Novel" into #workspaceName
-      submit #workspaceName
-      select #workspaces[1] {
-         press #openWorkspace
-      }
-      enter "Chapter one" into #newDocumentTitle
-      submit #newDocumentTitle
-      select #drafts[1] {
-         press #edit
-      }
-      expect text "Paragraphs: 0"
-      enter "It began at sea." into #newParagraph
-      submit #newParagraph
-      expect text "Paragraphs: 1"
-      expect text "It began at sea."
-      enter "Chapter one, revised" into #editDocumentTitle
-      press #saveDocument
-      expect text "Saved title: Chapter one, revised"
-   }
+      expect {
+         text "Documents in Novel"
+         text "No documents yet"
+   }  }
 
    check "a with-variant reconfigures the same app" {
       run WordFlowerDrawer
@@ -246,4 +27,12 @@ test "WordFlower selection and document depth" {
       press #resetSignedOut
       expect text "Signed out"
    }
-}
+
+   check "reports the injected build stamp" {
+      run WordFlower
+      press text "Settings"
+      expect {
+         text "Writing session"
+         text "10 words"
+         text "Build development"
+}  }  }

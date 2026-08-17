@@ -23,7 +23,7 @@ public type Presentable is ui | nav
 //   restores Initial; selection activates one keyed child without creating new content
 // - occurrence identity is monotonic within one mount; a kind never drives native navigation itself
 // Common conformance is shared, while stack, slot, and selection each add their profile assertions.
-public nav StackNav {
+public type StackNav is nav with {
    Initial ui // the argument-free entry seeded at mount; nav-in-stack entries stay deferred
 
    implement inject nav ```ts
@@ -31,7 +31,7 @@ public nav StackNav {
    ```
 }
 
-public nav SlotNav {
+public type SlotNav is nav with {
    Initial Presentable
 
    implement inject nav ```ts
@@ -39,11 +39,12 @@ public nav SlotNav {
    ```
 }
 
-public nav SelectionNav {
+public type SelectionNav is nav with {
    Initial key
    Display text
    @key {
       Label text
+      Icon text is ""
       Content Presentable
    }
 

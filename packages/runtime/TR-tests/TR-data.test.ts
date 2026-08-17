@@ -269,6 +269,37 @@ Describe('TR.Data provider foundation', () => {
     Expect(rows.map(row => row['Title'])).toEqual(['D', 'C'])
   })
 
+  Test('applies explicit true defaults and entity ordering to unordered queries', () => {
+    const schema = TR.Data.Schema({
+      name: 'OrderedDefaults',
+      entities: {
+        Entry: {
+          collection: 'Entries',
+          defaultOrder: { direction: 'asc', field: 'Position' },
+          fields: {
+            Title: { kind: 'text' },
+            Position: { kind: 'number' },
+            Public: { kind: 'boolean', defaultValue: true },
+          },
+        },
+      },
+    }, TR.DataProvider.Memory())
+    TR.Data.Create(schema, 'Entry', {
+      Title: TR.Value('Later'),
+      Position: TR.Value(20),
+      Public: TR.Value(false),
+    })
+    TR.Data.Create(schema, 'Entry', {
+      Title: TR.Value('Earlier'),
+      Position: TR.Value(10),
+    })
+
+    const rows = schema.query({ entity: 'Entry', filters: [] }) as Array<Record<string, unknown>>
+
+    Expect(rows.map(row => row['Title'])).toEqual(['Earlier', 'Later'])
+    Expect(rows.map(row => row['Public'])).toEqual([true, false])
+  })
+
   Test('persists the versioned id counter and reloads without identifier collisions', async () => {
     const values = new Map<string, string>()
     const storage = mapStorage(values)

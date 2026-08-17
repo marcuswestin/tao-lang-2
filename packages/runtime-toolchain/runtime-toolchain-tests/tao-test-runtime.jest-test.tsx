@@ -21,18 +21,18 @@ Describe('Expo runtime', () => {
       `,
         'Main.tao': `
         app DuplicateTextApp { view MainView }
-        view MainView {
+        view MainView() {
           render Stack(){
             Text("Repeated")
             Text("Repeated")
           }
         }
-        layout Stack {
-          render inject \`\`\`ts
-            return <>{_ViewProps.children}</>
+        layout Stack() {
+          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -63,9 +63,9 @@ Describe('Expo runtime', () => {
       `,
         'Main.tao': `
         app PressTextApp { view MainView }
-        view MainView {
+        view MainView() {
           state Count = 0
-          action AddOne {
+          action AddOne() {
             set Count += 1
           }
           render Stack(){
@@ -73,12 +73,12 @@ Describe('Expo runtime', () => {
             Number(Count)
           }
         }
-        layout Stack {
-          render inject \`\`\`ts
-            return <>{_ViewProps.children}</>
+        layout Stack() {
+          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view NativeButton Title is text, Action is action {
+        view NativeButton(Title is text, Action is action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -87,7 +87,7 @@ Describe('Expo runtime', () => {
             )
           \`\`\`
         }
-        view Number Value is number {
+        view Number(Value is number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -118,10 +118,10 @@ Describe('Expo runtime', () => {
       `,
         'Main.tao': `
         app AsyncActionApp { view MainView }
-        view MainView {
+        view MainView() {
           state Ready = false
           state Count = 0
-          action Advance {
+          action Advance() {
             guard Ready true -> {
               set Count = 10
             }
@@ -132,12 +132,12 @@ Describe('Expo runtime', () => {
             Number(Count)
           }
         }
-        layout Stack {
-          render inject \`\`\`ts
-            return <>{_ViewProps.children}</>
+        layout Stack() {
+          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view NativeButton Title is text, Action is action {
+        view NativeButton(Title is text, Action is action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -146,7 +146,7 @@ Describe('Expo runtime', () => {
             )
           \`\`\`
         }
-        view Number Value is number {
+        view Number(Value is number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -187,9 +187,9 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        ui Home {
+        ui Home() {
           state Status = "Ready"
-          action AskForConfirmation {
+          action AskForConfirmation() {
             let Result = ask Confirm()
             if Result is Confirmed { set Status = "Confirmed" }
           }
@@ -199,8 +199,8 @@ Describe('Expo runtime', () => {
           }
         }
 
-        dialogue Confirm responds ConfirmResult {
-          action ConfirmIt { respond Confirmed }
+        dialogue Confirm() responds ConfirmResult {
+          action ConfirmIt() { respond Confirmed }
           render Col() {
             Text("Question")
             Button("Confirm") { on press ConfirmIt }
@@ -231,11 +231,11 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         app MissingPressApp { view MainView }
 
-        view MainView {
+        view MainView() {
           render Text("Ready")
         }
 
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -270,13 +270,13 @@ Describe('Expo runtime', () => {
       `,
         'Main.tao': `
         app InputApp { view MainView }
-        view MainView {
+        view MainView() {
           state Draft = ""
           state Status = "Waiting"
-          action ChangeDraft Value is text {
+          action ChangeDraft(Value is text) {
             set Draft = Value
           }
-          action Submit {
+          action Submit() {
             set Status = "Saved"
           }
           render Stack(){
@@ -285,12 +285,12 @@ Describe('Expo runtime', () => {
             Text(Status)
           }
         }
-        layout Stack {
-          render inject \`\`\`ts
-            return <>{_ViewProps.children}</>
+        layout Stack() {
+          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view NativeInput Value is text, Change is action(text), Submit is action(), Label is text {
+        view NativeInput(Value is text, Change is action(text), Submit is action(), Label is text) {
           render inject Value, Change, Submit, Label \`\`\`ts
             return (
               <RN.TextInput
@@ -303,7 +303,7 @@ Describe('Expo runtime', () => {
             )
           \`\`\`
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -364,10 +364,10 @@ Describe('Expo runtime', () => {
         app TaggedApp {
           Name "Tagged"
           Navigator StackNav { Initial Main }
-          Datasource Memory
+          Datasource Memory { }
         }
 
-        ui Main {
+        ui Main() {
           state Draft = ""
           state Status = "Waiting"
           state Selection = "Nothing selected"
@@ -408,7 +408,7 @@ Describe('Expo runtime', () => {
       `
         use Col, Text from @tao/ui
         app LoopHierarchyApp { view Main }
-        view Main {
+        view Main() {
           render Col() {
             #taggedRows
             loop ["Tagged"] / Row {
@@ -463,25 +463,25 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        workspace ui Home {
-          action Open { present Detail() }
+        workspace ui Home() {
+          action Open() { present Detail() }
           render Stack(){
             Text("Home")
             Button("Open") { on press Open }
           }
         }
 
-        workspace ui Detail {
+        workspace ui Detail() {
           render Text("Detail")
         }
 
-        layout Stack {
-          render inject \`\`\`ts
-            return <>{_ViewProps.children}</>
+        layout Stack() {
+          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
 
-        view Button Title is text, Press is action() {
+        view Button(Title is text, Press is action()) {
           render inject Title, Press \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Press.invoke()}>
@@ -491,7 +491,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -520,10 +520,10 @@ Describe('Expo runtime', () => {
       `,
         'Main.tao': `
         app BrokenTextApp { view MainView }
-        view MainView {
+        view MainView() {
           render Text("Actual")
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -554,10 +554,10 @@ Describe('Expo runtime', () => {
       `,
         'Main.tao': `
         app BrokenTextApp { view MainView }
-        view MainView {
+        view MainView() {
           render Text("Actual")
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -596,10 +596,10 @@ Describe('Expo runtime', () => {
       `,
         'First.tao': `
         app FirstApp { view MainView }
-        view MainView {
+        view MainView() {
           render Text("First")
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -607,10 +607,10 @@ Describe('Expo runtime', () => {
       `,
         'Second.tao': `
         app SecondApp { view MainView }
-        view MainView {
+        view MainView() {
           render Text("Second")
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`

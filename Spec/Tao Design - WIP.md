@@ -1,15 +1,20 @@
 # Tao Design
 
-Status: intended design for the design _language_. Nothing here is implemented yet. The first
-language slice is settled by `Apps/WordFlower/2 - Next`; compatible layers beyond that slice remain
-future direction here. Tooling, artifacts, and rollout live in
+Status: authoritative for the implemented first design-language slice and intended direction beyond
+it. Compatible layers beyond that slice remain future work. Tooling, artifacts, and rollout live in
 `Roadmap/Add Tao design system MVP/Design tooling and rollout.md`.
 
-Current implementation status: this repo currently has bracketed layout clauses, runtime layout lowering through `TR.Layout`, a default app shell, and stdlib view/layout primitives that receive Tao-owned props. It does not yet implement Tao-authored design declarations, visual spec entries, design tokens, semantic tokens, recipes, `tao design` commands, design diagnostics, screenshot comparison, design lockfiles, or AI-assisted design iteration.
+Current implementation status: Tao-authored `design` declarations provide flat hexadecimal color
+tokens and named clause bundles in ordinary source. An app mounts one declaration through `Design`;
+render specs resolve its bundles and merge layout plus the implemented `bg`, `border`, `fg`, `line`,
+`radius`, `size`, and `weight` visual entries into the existing native root. Static validation owns
+duplicates, reserved names, references, cycles, colors, tags, and uniquely resolvable app design
+selection. Semantic tokens, recipes, `tao design` commands, screenshot comparison, design lockfiles,
+and AI-assisted design iteration remain future work.
 
-## Settled Next Slice
+## Implemented First Slice
 
-Next implements exactly flat tokens and named clause bundles in ordinary `.tao` source. An app
+The first slice implements exactly flat tokens and named clause bundles in ordinary `.tao` source. An app
 selects a design through its `Design` property:
 
 ```tao
@@ -33,11 +38,24 @@ A bundle contains the same clauses a render site may write inline. Bundles and d
 one left-to-right list; the last specification of a given clause wins. After replacement, a
 semantically incompatible resolved clause set is invalid regardless of source order.
 
+The implemented visual heads are `bg <token>`, `border <token>`, `fg <token>`, `line <number>`,
+`radius <number>`, `size <number>`, and `weight <number>`. A border token supplies its color and the
+minimal slice supplies width `1`. Bundle expansion preserves source order; later occurrences replace
+the same semantic clause while unrelated layout and style clauses remain. Resolution uses the
+Design selected by the mounted app occurrence—there is no global design registry—so two mounted
+apps may resolve the same bundle name independently.
+
 The lexer uses one `TagOrHexColor: /#[A-Za-z0-9_]+/` terminal. AST context supplies the meaning: the
 validator requires tags to match `#[A-Za-z_][A-Za-z0-9_]*`, while design color values must be CSS
 hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively. Nested token categories,
 semantic tokens, recipes, patterns, rules, and design tooling remain compatible later work; they are
 not implied by this first slice.
+
+At a render site, names that are not built-in layout or visual heads are bundle references. When the
+enclosing source has one statically selected Design, validation resolves those references and their
+cycles there. A renderable app with no Design cannot use design terms. If several app values can
+mount the same shared visual with different Designs, validation preserves the reference and each
+mounted app resolves it against its own declaration at runtime.
 
 ## Goals
 
@@ -104,7 +122,7 @@ Box() [bg brand.primary]
 
 ## Design System Layers Beyond the First Slice
 
-The broader Tao design direction has five layers. Next implements only the flat-token foundation;
+The broader Tao design direction has five layers. The implemented slice provides only the flat-token foundation;
 the structured forms below remain future work unless a later tranche settles them.
 
 ### Raw Tokens
@@ -369,16 +387,16 @@ review, the phased implementation path, prior art, and the remaining tooling dec
 
 ## Open Questions
 
-- ~~What declaration syntax best defines the first tokens and named specs?~~ **Decided for Next:**
+- ~~What declaration syntax best defines the first tokens and named specs?~~ **Implemented:**
   flat `name value` tokens and `name [clauses]` bundles inside `design Name { ... }`. Nested token
   syntax, recipes, and recipe variants remain open.
 - ~~Does source use `design`, `theme`, or both as public capability names?~~ **Decided: `design`.** The declaration is `design <Name> { ... }` and an app selects it with `Design <Name>`.
 - ~~Should the first design data live in `.tao` source, a `tao.design` file, or both?~~ **Decided: `.tao` source.** Design is an ordinary Tao declaration subject to the same visibility, imports, and validation as the rest of the language; no separate design file format.
 - Which visual treatments can apply to `layout` and `frame` declarations?
-- How do combined specs interact with future slot forms beyond Next's opaque single-fill named slot
+- How do combined specs interact with future slot forms beyond the implemented opaque single-fill named slot
   and intrinsic `@@content`?
 - Which diagnostics are ordinary validator diagnostics, and which belong to `tao design check`?
 - How are app defaults selected before the user has authored a design?
-- Beyond Next's unquoted CSS hexadecimal color literal, which raw value forms should remain useful
+- Beyond the implemented unquoted CSS hexadecimal color literal, which raw value forms should remain useful
   for prototypes without becoming the main style language?
 - What is the first useful cross-platform adaptation axis: color scheme, platform, density, text scale, motion, locale, or pointer/hover capability?

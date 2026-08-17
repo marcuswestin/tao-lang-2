@@ -64,7 +64,7 @@ Describe('validator: workspace structure', () => {
         title: 'rejects prototype-mutating parameters',
         source: `
         app ScopeApp { view MainView }
-        view MainView __proto__ is text { render Fixture() }
+        view MainView(__proto__ is text) { render Fixture() }
         ${stubView('Fixture')}
       `,
       },
@@ -95,6 +95,12 @@ Describe('validator: workspace structure', () => {
         'list',
         'time',
         'action',
+        'design',
+        'visual',
+        'presentable',
+        'view',
+        'layout',
+        'frame',
         'ui',
         'nav',
         'datasource',
@@ -105,6 +111,7 @@ Describe('validator: workspace structure', () => {
         'Name',
         'Navigator',
         'Datasource',
+        'Design',
       ])
     })
   })
@@ -118,11 +125,11 @@ Describe('validator: workspace structure', () => {
     const parserContext = Parser.createContext()
     const uri = Langium.URI.file('/__tao__/Views.tao')
     const documentOne = parserContext.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'public layout Box { }',
+      'public layout Box() { }',
       uri,
     )
     const documentTwo = parserContext.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'public layout Box { }',
+      'public layout Box() { }',
       uri,
     )
     const diagnostics = Validation.collectDiagnostics()
@@ -143,7 +150,7 @@ Describe('validator: workspace structure', () => {
   })
 
   Test('returns parser diagnostics without running structural checks on syntax errors', async () => {
-    const result = await testValidateCodeWithErrors('view Broken { render }')
+    const result = await testValidateCodeWithErrors('view Broken() { render }')
 
     Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
     Expect(Diagnostics.hasSource(result.diagnostics, 'validator')).toBe(false)
@@ -300,7 +307,7 @@ Describe('validator: workspace structure', () => {
           use Greeting from ./
           let Local = Greeting
           ${stubView('Text', 'Value is text')}
-          view MainView { render Text(Local) }
+          view MainView() { render Text(Local) }
         `,
         'Views.tao': `
           // Padding comments keep this declaration at a larger source offset than the
@@ -403,7 +410,7 @@ Describe('validator: workspace structure', () => {
         `,
         'features/@outer/Main.tao': `
           use NestedAlias
-          workspace view MainView { render Text(NestedAlias) }
+          workspace view MainView() { render Text(NestedAlias) }
           ${stubView('Text', 'Value is text')}
         `,
         'features/@outer/@inner/Main.tao': `
@@ -424,7 +431,7 @@ Describe('validator: workspace structure', () => {
           app NestedPackageApp { view MainView }
         `,
         'features/@outer/Main.tao': visibleView('MainView'),
-        'features/@outer/@inner/Broken.tao': 'view Broken {',
+        'features/@outer/@inner/Broken.tao': 'view Broken() {',
       },
       result => {
         Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(false)

@@ -61,6 +61,7 @@ export const testValidationChecks = {
   [AST.SelectStep.$type]: validateSelect,
   [AST.BackTestStep.$type]: validateBackPlacement,
   [AST.DataStatusStep.$type]: validateDataStatusPlacement,
+  [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
 } satisfies NodeValidationChecks
 
@@ -108,6 +109,7 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
       TagEnterStep: checkStepOrder,
       ExpectInputValueStep: checkStepOrder,
       TagInputValueExpectation: checkStepOrder,
+      ExpectCheckboxStateStep: checkStepOrder,
       ExpectTextStep: checkStepOrder,
       ExpectGroupStep: checkStepOrder,
       ExpectScopeStep: checkStepOrder,
@@ -130,6 +132,7 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
       | AST.TagEnterStep
       | AST.ExpectInputValueStep
       | AST.TagInputValueExpectation
+      | AST.ExpectCheckboxStateStep
       | AST.ExpectTextStep
       | AST.ExpectGroupStep
       | AST.ExpectScopeStep

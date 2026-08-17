@@ -13,6 +13,7 @@ import {
   ExpectScreen,
   registerRuntimeE2ELifecycle,
   testCompileApp,
+  testCompileFiles,
 } from './test-compile-app'
 
 function configuredStack(name: string, initial: TR.Presentable): TR.NavigationValue {
@@ -57,10 +58,48 @@ function configuredSelection(definition: {
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  Test('resolves a configured nav declaration imported by its mounted screen', async () => {
+    await testCompileFiles(
+      'App.tao',
+      {
+        'App.tao': `
+          use SlotNav, StackNav from @tao/nav
+          use Home from ./Screen.tao
+
+          workspace nav NestedStack = StackNav { Initial Home }
+
+          app StableTargetApp {
+            Name "Stable target"
+            Navigator SlotNav { Initial NestedStack }
+          }
+        `,
+        'Screen.tao': `
+          use Col, FormButton, Text from @tao/ui
+          use NestedStack from ./
+
+          workspace ui Home() {
+            action Open() { present Detail() in NestedStack }
+            render Col() {
+              Text("Home")
+              FormButton("Open detail") { on press Open }
+            }
+          }
+
+          ui Detail() { render Text("Stable detail") }
+        `,
+      },
+      screen => {
+        fireEvent.press(screen.getByText('Open detail'))
+        ExpectScreen(screen).toHaveText('Stable detail')
+      },
+    )
+  })
+
   Test('dispatches visible and hardware Back through the configured app reducer and cleans up its subscription', () => {
     let handler: (() => boolean) | undefined
     let removes = 0
     const restoreReactNativeRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
       BackHandler: {
         addEventListener(event, nextHandler) {
           Expect(event).toBe('hardwareBackPress')
@@ -72,9 +111,11 @@ Describe('Expo runtime', () => {
           }
         },
       },
+      Image: RN.Image,
       KeyboardAvoidingView: RN.View,
       Pressable: RN.Pressable,
       ScrollView: RN.View,
+      Switch: RN.Switch,
       Text: RN.Text,
       TextInput: RN.TextInput,
       View: RN.View,
@@ -442,17 +483,17 @@ Describe('Expo runtime', () => {
 
         enum ConfirmResult { Confirmed }
 
-        ui Home { render Wrapper()[gap 9] }
+        ui Home() { render Wrapper()[gap 9] }
 
-        view Wrapper {
+        view Wrapper() {
           render Col() {
             Editor()
           }
         }
 
-        view Editor {
+        view Editor() {
           state Status = "Ready"
-          action Open {
+          action Open() {
             let Result = ask Confirm()
             if Result is Confirmed { set Status = "Confirmed" }
           }
@@ -462,8 +503,8 @@ Describe('Expo runtime', () => {
           }
         }
 
-        dialogue Confirm responds ConfirmResult {
-          action ConfirmIt { respond Confirmed }
+        dialogue Confirm() responds ConfirmResult {
+          action ConfirmIt() { respond Confirmed }
           render Col() {
             Text("Nested dialogue")
             Button("Confirm nested dialogue") { on press ConfirmIt }
@@ -595,8 +636,8 @@ Describe('Expo runtime', () => {
         @window SlotNav { Initial WindowRoot }
       }
 
-      workspace ui Home {
-        action Open {
+      workspace ui Home() {
+        action Open() {
           present Notice() in SharedGeneratedApp@window
         }
         render Col() {
@@ -605,11 +646,11 @@ Describe('Expo runtime', () => {
         }
       }
 
-      workspace ui Notice {
+      workspace ui Notice() {
         render Text("${label} notice")
       }
 
-      workspace ui WindowRoot {
+      workspace ui WindowRoot() {
         render Text("${label} window")
       }
     `
@@ -652,10 +693,10 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        ui Home { render Editor() }
+        ui Home() { render Editor() }
 
-        view Editor {
-          action Save {
+        view Editor() {
+          action Save() {
             present SavedToast() as toast (Key: "saved", Duration: 1)
           }
           render Col() {
@@ -663,7 +704,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        ui SavedToast { render Text("Saved") }
+        ui SavedToast() { render Text("Saved") }
       `,
       async screen => {
         jest.useFakeTimers()

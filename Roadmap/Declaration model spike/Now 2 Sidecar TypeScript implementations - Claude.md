@@ -27,9 +27,9 @@ An alternative right-hand side: a path to a sibling `.ts` file instead of an inl
 implement inject nav "./StackNav.ts"
 ```
 
-Keep today's `implement inject nav|provider` vocabulary rather than inventing new keywords
-(`implement is "..."` reads on the declaration-model side and belongs to `Now 1`/the open questions,
-not here) — this slice's whole job is a second RHS form for the clause that already exists.
+Keep today's `implement inject nav|provider` vocabulary rather than inventing new keywords. The
+later Q11 resolution explicitly rejected the historical `implement is "..."` alternative; this
+slice's whole job was a second RHS form for the clause that already exists.
 
 **Compiler:**
 
@@ -57,9 +57,9 @@ not here) — this slice's whole job is a second RHS form for the clause that al
   move anything that ships today.
 - Any protocol-version negotiation between a sidecar and `TR`. Stays single-version and implicit, as it
   is today.
-- Native-backed visual declarations. Next has since settled those on `render inject`, not a `ui`
-  `implement` slot; that work belongs to the active Next tranche rather than this landed sidecar
-  slice.
+- Native-backed visual declarations. WordFlower Tranche 4 subsequently settled those on
+  `render inject`, not a `ui` `implement` slot; that work was absorbed through the tranche rather
+  than this landed sidecar slice.
 
 ## Validation
 

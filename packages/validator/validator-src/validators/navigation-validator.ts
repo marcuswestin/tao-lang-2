@@ -58,9 +58,7 @@ export const navigationValidationChecks = {
       ctx.error(navigationValidationMessages.activationContext, activation)
     }
     const app = activation.app.ref
-    if (app && AST.isAppVariantDeclaration(app)) {
-      ctx.error(navigationValidationMessages.strictTargetDeclaration(app.name), activation)
-    } else if (app) {
+    if (app) {
       for (const contract of selectionKeyContractsForAppFamily(app, file)) {
         if (!contract.keys.has(activation.key)) {
           ctx.error(
@@ -80,9 +78,7 @@ export const navigationValidationChecks = {
       ctx.error(navigationValidationMessages.replaceNavigator(Type.displayName(actual)), replace.navigator)
     }
     const app = replace.app.ref
-    if (app && AST.isAppVariantDeclaration(app)) {
-      ctx.error(navigationValidationMessages.strictTargetDeclaration(app.name), replace)
-    }
+    void app
   },
 } satisfies NodeValidationChecks
 
@@ -100,36 +96,23 @@ function selectionKeyContractsForAppFamily(
   app: AST.AppValueDeclaration,
   file: AST.TaoFile,
 ): SelectionKeyContract[] {
-  const root = AST.appDeclarationOf(app)
-  if (!root) {
-    return []
-  }
-  const variants = file.statements
-    .filter(AST.isAppVariantDeclaration)
-    .filter(variant => AST.appDeclarationOf(variant) === root)
-  return [root, ...variants].flatMap(candidate => {
-    const keys = selectionKeysForApp(candidate)
-    return keys ? [{ app: candidate, keys }] : []
-  })
+  const root = rootAppValue(app)
+  return AST.appValueDeclarationsInFile(file).filter(candidate => rootAppValue(candidate) === root).flatMap(
+    candidate => {
+      const keys = selectionKeysForApp(candidate)
+      return keys ? [{ app: candidate, keys }] : []
+    },
+  )
 }
 
 function selectionKeysForApp(app: AST.AppValueDeclaration): ReadonlySet<string> | undefined {
-  const root = AST.appDeclarationOf(app)
-  if (!root) {
-    return undefined
-  }
-  const navigator = AST.blockStatements(root).find(AST.isAppNavigator)
+  const navigator = effectiveNavigatorProperty(app)
   if (!navigator) {
     return undefined
   }
-  let configuration = configuredAppPropertyConfiguration(navigator.value)
-  for (const variant of appVariantChain(app)) {
-    const patch = variant.value.patchBlock.entries.find(entry => entry.name === 'Navigator')?.value
-    if (AST.isPropertyConfigurationPatch(patch)) {
-      configuration = applyConfigurationPatch(configuration, patch.block)
-    } else if (patch) {
-      configuration = configurationValueConfiguration(patch)
-    }
+  let configuration = configurationValueConfiguration(navigator.value)
+  for (const patch of navigator.patches) {
+    configuration = applyConfigurationPatch(configuration, patch)
   }
   if (!configuration) {
     return undefined
@@ -137,69 +120,155 @@ function selectionKeysForApp(app: AST.AppValueDeclaration): ReadonlySet<string> 
   return AST.configurationKeyOf(configuration.declaration) ? configuration.keys : new Set()
 }
 
-function appVariantChain(
-  app: AST.AppValueDeclaration,
-  seen: Set<AST.AliasDeclaration> = new Set(),
-): AST.AppVariantDeclaration[] {
-  if (!AST.isAppVariantDeclaration(app) || seen.has(app)) {
-    return []
-  }
-  seen.add(app)
-  const base = app.value.target.ref
-  if (!AST.isAppValueDeclaration(base)) {
-    return []
-  }
-  return [...appVariantChain(base, seen), app]
+type EffectiveAppProperty = {
+  patches: AST.ConfigurationBlock[]
+  value: AST.Expression | AST.ConfigurationValue
 }
 
-function configuredAppPropertyConfiguration(
-  value: AST.AppPropertyValue,
-): EffectiveNavigatorConfiguration | undefined {
-  const target = AST.isConfiguredAppPropertyValue(value)
-    ? value.target.ref
-    : AST.inferredAppPropertyDeclaration(value)
-  if (AST.isConfigurableDeclaration(target)) {
-    return configuration(target, value.block)
-  }
-  if (!AST.isAliasDeclaration(target)) {
+function effectiveNavigatorProperty(
+  app: AST.AppValueDeclaration,
+  seen: Set<AST.AppValueDeclaration> = new Set(),
+): EffectiveAppProperty | undefined {
+  if (seen.has(app)) {
     return undefined
   }
-  return applyConfigurationPatch(configuredExpressionConfiguration(target.value), value.block)
+  seen.add(app)
+  if (AST.isAppDeclaration(app) && app.block) {
+    let result: EffectiveAppProperty | undefined
+    for (const property of AST.blockStatements(app).filter(AST.isAppProperty)) {
+      if (property.name !== 'Navigator') {
+        continue
+      }
+      if (property.value) {
+        result = { patches: [], value: property.value }
+      } else if (property.patch && result) {
+        result.patches.push(property.patch.block)
+      }
+    }
+    return result
+  }
+  return app.value ? effectiveNavigatorFromAppExpression(app.value, seen) : undefined
+}
+
+function effectiveNavigatorFromAppExpression(
+  expression: AST.Expression,
+  seen: Set<AST.AppValueDeclaration>,
+): EffectiveAppProperty | undefined {
+  if (AST.isPrimitiveConfigurationConstructor(expression)) {
+    return navigatorFromConfigurationBlock(expression.block)
+  }
+  if (AST.isConfigurationConstructor(expression)) {
+    const declaration = expression.type.ref
+    let result = declaration && AST.isConfigurableDeclaration(declaration)
+      ? defaultNavigatorProperty(declaration)
+      : undefined
+    return navigatorFromConfigurationBlock(expression.block, result)
+  }
+  if (AST.isInferredConfigurationConstructor(expression)) {
+    const owner = expression.$container
+    const declaration = AST.isAliasDeclaration(owner) ? Type.visibleDeclaration(owner, owner.name) : undefined
+    const result = declaration && AST.isConfigurableDeclaration(declaration)
+      ? defaultNavigatorProperty(declaration)
+      : undefined
+    return navigatorFromConfigurationBlock(expression.block, result)
+  }
+  if (!AST.isRefinementExpression(expression) && !AST.isValueReference(expression)) {
+    return undefined
+  }
+  const target = expression.target.ref
+  let result = AST.isConcreteAppValueDeclaration(target)
+    ? effectiveNavigatorProperty(target, seen)
+    : target && AST.isConfigurableDeclaration(target) && AST.configurationPrimitiveOf(target) === 'app'
+    ? defaultNavigatorProperty(target)
+    : undefined
+  return AST.isRefinementExpression(expression)
+    ? navigatorFromConfigurationBlock(expression.patchBlock, result)
+    : result
+}
+
+function defaultNavigatorProperty(
+  declaration: AST.ConfigurableDeclaration,
+): EffectiveAppProperty | undefined {
+  const property = AST.configurationPropertiesOf(declaration).find(candidate => candidate.name === 'Navigator')
+  return property?.value ? { patches: [], value: property.value } : undefined
+}
+
+function navigatorFromConfigurationBlock(
+  block: AST.ConfigurationBlock | undefined,
+  initial?: EffectiveAppProperty,
+): EffectiveAppProperty | undefined {
+  let result = initial
+  for (const entry of block?.entries ?? []) {
+    if (entry.name !== 'Navigator' || !entry.value) {
+      continue
+    }
+    if (AST.isPropertyConfigurationPatch(entry.value)) {
+      result?.patches.push(entry.value.block)
+    } else {
+      result = { patches: [], value: entry.value }
+    }
+  }
+  return result
+}
+
+function rootAppValue(
+  app: AST.AppValueDeclaration,
+  seen: Set<AST.AppValueDeclaration> = new Set(),
+): AST.AppValueDeclaration {
+  if (seen.has(app)) {
+    return app
+  }
+  seen.add(app)
+  const expression = app.value
+  if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
+    const target = expression.target.ref
+    if (AST.isConcreteAppValueDeclaration(target)) {
+      return rootAppValue(target, seen)
+    }
+  }
+  return app
 }
 
 function configuredExpressionConfiguration(
   value: AST.Expression,
   seen: Set<AST.AliasDeclaration> = new Set(),
 ): EffectiveNavigatorConfiguration | undefined {
-  if (AST.isConfigurationConstructor(value) && AST.isConfigurableDeclaration(value.type.ref)) {
+  if (AST.isConfigurationConstructor(value) && value.type.ref && AST.isConfigurableDeclaration(value.type.ref)) {
     return configuration(value.type.ref, value.block)
   }
-  if (!AST.isValueReference(value)) {
+  if (!AST.isRefinementExpression(value) && !AST.isValueReference(value)) {
     return undefined
   }
   const target = value.target.ref
+  if (AST.isNavDeclaration(target)) {
+    return target.value ? configuredExpressionConfiguration(target.value, seen) : undefined
+  }
   if (!AST.isAliasDeclaration(target) || seen.has(target)) {
     return undefined
   }
   seen.add(target)
   const base = configuredExpressionConfiguration(target.value, seen)
-  return AST.isPatchedValueReference(value) ? applyConfigurationPatch(base, value.patchBlock) : base
+  return AST.isRefinementExpression(value) ? applyConfigurationPatch(base, value.patchBlock) : base
 }
 
 function configurationValueConfiguration(
-  value: AST.ConfigurationValue,
+  value: AST.Expression | AST.ConfigurationValue,
 ): EffectiveNavigatorConfiguration | undefined {
-  if (AST.isConfigurationConstructor(value) && AST.isConfigurableDeclaration(value.type.ref)) {
-    return configuration(value.type.ref, value.block)
+  if (AST.isExpression(value)) {
+    return configuredExpressionConfiguration(value)
   }
   if (!AST.isConfigurationReference(value)) {
     return undefined
   }
   const target = value.target.ref
-  if (AST.isConfigurableDeclaration(target)) {
+  if (target && AST.isConfigurableDeclaration(target)) {
     return configuration(target)
   }
-  return AST.isAliasDeclaration(target) ? configuredExpressionConfiguration(target.value) : undefined
+  return AST.isAliasDeclaration(target)
+    ? configuredExpressionConfiguration(target.value)
+    : AST.isNavDeclaration(target) && target.value
+    ? configuredExpressionConfiguration(target.value)
+    : undefined
 }
 
 function configuration(
@@ -303,16 +372,13 @@ function validatePresentationTarget(
     return
   }
   const app = target.app?.ref
-  if (app && AST.isAppVariantDeclaration(app)) {
-    ctx.error(navigationValidationMessages.strictTargetDeclaration(app.name), target)
-    return
-  }
   if (!app || !target.key) {
     return
   }
   const targetKey = target.key.slice(1)
-  const rootApp = AST.appDeclarationOf(app)
+  const rootApp = rootAppValue(app)
   const auxiliary = rootApp
+    && AST.isAppDeclaration(rootApp)
     && AST.blockStatements(rootApp).find(statement =>
       AST.isAppAuxiliaryNavigator(statement) && statement.name.slice(1) === targetKey
     )

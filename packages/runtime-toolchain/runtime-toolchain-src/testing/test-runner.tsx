@@ -46,6 +46,7 @@ async function runStep(
     dataStatus: status => dataStatusStep(status),
     enter: enter => enterStep(screen, enter, resolveScope()),
     expect: expectation => assertExpectation(screen, expectation, resolveScope()),
+    expectCheckboxState: expectation => assertCheckboxState(screen, expectation, resolveScope()),
     expectGroup: expectation => assertExpectationGroup(screen, expectation, resolveScope()),
     expectInputValue: expectation => assertInputValue(screen, expectation, resolveScope()),
     press: press => pressStep(screen, press, resolveScope()),
@@ -135,6 +136,35 @@ function assertInputValue(
   }
 }
 
+function assertCheckboxState(
+  screen: RuntimeApp.Screen,
+  expectation: Extract<TestCompiler.Step, { kind: 'expectCheckboxState' }>,
+  scope?: TestInstance,
+): void {
+  const matches = querySelector(screen, 'tag', expectation.tag, scope).filter(isAccessibleCheckbox)
+  if (matches.length !== 1) {
+    throw new Error(
+      `${formatStep(expectation)} expected one accessible checkbox but found ${matches.length}.\n${
+        formatSource(expectation.source)
+      }`,
+    )
+  }
+  const checked = matches[0]!.props.accessibilityState.checked as boolean
+  if (checked !== expectation.checked) {
+    throw new Error(
+      `${formatStep(expectation)} expected ${expectation.checked ? 'checked' : 'unchecked'} but was ${
+        checked ? 'checked' : 'unchecked'
+      }.\n${formatSource(expectation.source)}`,
+    )
+  }
+}
+
+function isAccessibleCheckbox(node: TestInstance): boolean {
+  return node.props.accessible !== false
+    && node.props.accessibilityRole === 'checkbox'
+    && typeof node.props.accessibilityState?.checked === 'boolean'
+}
+
 function assertExpectationGroup(
   screen: RuntimeApp.Screen,
   step: Extract<TestCompiler.Step, { kind: 'expectGroup' }>,
@@ -209,6 +239,8 @@ function formatStep(step: TestCompiler.Step): string {
       expectation.missing
         ? `expect missing ${expectation.selector} "${expectation.text}"`
         : `expect ${expectation.selector} "${expectation.text}"`,
+    expectCheckboxState: expectation =>
+      `expect checkbox #${expectation.tag} ${expectation.checked ? 'checked' : 'unchecked'}`,
     expectGroup: expectation => expectation.scopeTag ? `expect #${expectation.scopeTag} { … }` : 'expect { … }',
     expectInputValue: expectation =>
       `expect input ${expectation.selector} "${expectation.target}" value "${expectation.value}"`,

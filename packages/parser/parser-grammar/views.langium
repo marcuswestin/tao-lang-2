@@ -8,26 +8,41 @@ import "./visibility"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
-    ViewDeclaration | LayoutDeclaration | UiDeclaration | DialogueDeclaration;
+    ViewDeclaration | LayoutDeclaration | FrameDeclaration | UiDeclaration | DialogueDeclaration;
 
 TagStatement:
-    tag=TAG;
+    tag=TagOrHexColor;
 
 UiDeclaration:
-    visibility=DeclarationVisibility? 'ui' name=ID parameterList=ParameterList? block=Block;
+    visibility=DeclarationVisibility? 'ui' name=ID parameterList=ParameterList block=Block;
 
 DialogueDeclaration:
-    visibility=DeclarationVisibility? 'dialogue' name=ID parameterList=ParameterList?
+    visibility=DeclarationVisibility? 'dialogue' name=ID parameterList=ParameterList
     'responds' response=[EnumDeclaration:ID] block=Block;
 
 ViewDeclaration:
-    visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList? block=Block;
+    visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList block=Block;
 
 LayoutDeclaration:
-    visibility=DeclarationVisibility? 'layout' name=ID parameterList=ParameterList? block=Block;
+    visibility=DeclarationVisibility? 'layout' name=ID parameterList=ParameterList block=Block;
 
-type RenderableDeclaration = ViewDeclaration | LayoutDeclaration;
+FrameDeclaration:
+    visibility=DeclarationVisibility? 'frame' name=ID parameterList=ParameterList block=Block;
+
+type RenderableDeclaration = ViewDeclaration | LayoutDeclaration | FrameDeclaration;
 type VisualDeclaration = RenderableDeclaration | UiDeclaration | DialogueDeclaration;
+
+// Frames own optional, single-fill visual holes. A use without a render value places the slot in
+// the frame implementation; a use with a render value fills that slot at one call site.
+RenderSlotDeclaration:
+    name=USE_IMPORT_PATH '=' 'empty';
+
+RenderSlotUse:
+    slot=[RenderSlotDeclaration:USE_IMPORT_PATH] render=ViewRender?;
+
+// Layouts and frames place their opaque unnamed caller content explicitly in their render tree.
+CallerContentStatement:
+    {infer CallerContentStatement} '@@content';
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
@@ -68,6 +83,9 @@ GuardRenderBranch:
 
 ForStatement:
     'loop' collection=ForCollectionExpression '/' name=ID block=Block;
+
+LoopSelectHandler:
+    'on' 'select' (action=ValueReference | '->' block=ActionBlock);
 
 // A bare item constructor and a following statement block both begin with `Name {`.
 // Collection roots therefore use the unambiguous iterable forms; parenthesize any

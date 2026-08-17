@@ -3,51 +3,45 @@ import { FS, HCI, Platform, Repo } from '@shared'
 const TRANCHE_STATUS_PATTERN = /^\/\/ Tranche status: (open|absorbed)$/gm
 const NORMALIZED_TRANCHE_STATUS = '// Tranche status: <status>'
 
-export type WordFlowerPair = {
+export type WordFlowerDirectory = {
+  currentFiles: readonly SourceFile[]
   currentPath: string
-  currentSource: string
-  label: string
+  nextFiles: readonly SourceFile[]
   nextPath: string
-  nextSource: string
 }
 
 type SourceFile = {
+  bytes?: Uint8Array
   path: string
   source: string
 }
 
-/** wordFlowerPairIssues checks one independent Current/Next WordFlower contract pair. */
-export function wordFlowerPairIssues(pair: WordFlowerPair): string[] {
-  const currentStatuses = trancheStatuses(pair.currentSource)
-  const nextStatuses = trancheStatuses(pair.nextSource)
+/** wordFlowerDirectoryIssues checks the recursive Current/Next WordFlower contract. */
+export function wordFlowerDirectoryIssues(directory: WordFlowerDirectory): string[] {
+  const currentStatuses = directoryTrancheStatuses(directory.currentFiles)
+  const nextStatuses = directoryTrancheStatuses(directory.nextFiles)
   const issues: string[] = []
 
   if (currentStatuses.length !== 1) {
-    issues.push(`${pair.currentPath} must contain exactly one tranche status header.`)
+    issues.push(`${directory.currentPath} must contain exactly one tranche status header across the directory.`)
   } else if (currentStatuses[0] !== 'absorbed') {
-    issues.push(`${pair.currentPath} must remain at tranche status absorbed.`)
+    issues.push(`${directory.currentPath} must remain at tranche status absorbed.`)
   }
   if (nextStatuses.length !== 1) {
-    issues.push(`${pair.nextPath} must contain exactly one tranche status header.`)
+    issues.push(`${directory.nextPath} must contain exactly one tranche status header across the directory.`)
   }
   if (currentStatuses.length !== 1 || nextStatuses.length !== 1) {
     return issues
   }
 
-  const contractsMatch = normalizedTrancheSource(pair.currentSource) === normalizedTrancheSource(pair.nextSource)
+  const contractsMatch = mappedDirectoriesMatch(directory.currentFiles, directory.nextFiles)
   const expectedNextStatus = contractsMatch ? 'absorbed' : 'open'
   if (nextStatuses[0] !== expectedNextStatus) {
     issues.push(
       contractsMatch
-        ? `${pair.nextPath} matches ${pair.currentPath} after normalizing the status header and must be absorbed.`
-        : `${pair.nextPath} diverges from ${pair.currentPath} and must be open.`,
+        ? `${directory.nextPath} matches ${directory.currentPath} after mapping .tao-next files and normalizing the directory status and must be absorbed.`
+        : `${directory.nextPath} diverges from ${directory.currentPath} after mapping .tao-next files and must be open.`,
     )
-  }
-  if (
-    contractsMatch && currentStatuses[0] === 'absorbed' && nextStatuses[0] === 'absorbed'
-    && pair.currentSource !== pair.nextSource
-  ) {
-    issues.push(`${pair.label} must be byte-identical after absorption.`)
   }
   return issues
 }
@@ -84,10 +78,7 @@ export function duplicateDescribeTitleIssues(files: readonly SourceFile[]): stri
 /** repoLintIssues checks repository-wide contracts that do not belong to package behavior suites. */
 export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[]> {
   const issues: string[] = []
-  const pairs = await readWordFlowerPairs(repoRoot)
-  for (const pair of pairs) {
-    issues.push(...wordFlowerPairIssues(pair))
-  }
+  issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
 
   const testAppsPath = FS.resolvePath('Apps/Test Apps', repoRoot)
   const readmePath = FS.resolvePath('README.md', testAppsPath)
@@ -115,30 +106,56 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   return issues
 }
 
-async function readWordFlowerPairs(repoRoot: string): Promise<WordFlowerPair[]> {
-  const definitions = [
-    {
-      label: 'WordFlower app contract',
-      currentPath: 'Apps/WordFlower/1 - Current/WordFlower.tao',
-      nextPath: 'Apps/WordFlower/2 - Next/WordFlower.tao-next',
-    },
-    {
-      label: 'WordFlower test sidecar contract',
-      currentPath: 'Apps/WordFlower/1 - Current/WordFlower.test.tao',
-      nextPath: 'Apps/WordFlower/2 - Next/WordFlower.test.tao-next',
-    },
-  ] as const
-  return Promise.all(definitions.map(async definition => {
-    const currentPath = FS.resolvePath(definition.currentPath, repoRoot)
-    const nextPath = FS.resolvePath(definition.nextPath, repoRoot)
-    return {
-      currentPath: definition.currentPath,
-      currentSource: await FS.readText(currentPath),
-      label: definition.label,
-      nextPath: definition.nextPath,
-      nextSource: await FS.readText(nextPath),
-    }
-  }))
+async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDirectory> {
+  const currentPath = 'Apps/WordFlower/1 - Current'
+  const nextPath = 'Apps/WordFlower/2 - Next'
+  return {
+    currentFiles: await readDirectoryFiles(FS.resolvePath(currentPath, repoRoot)),
+    currentPath,
+    nextFiles: await readDirectoryFiles(FS.resolvePath(nextPath, repoRoot)),
+    nextPath,
+  }
+}
+
+async function readDirectoryFiles(directoryPath: string): Promise<SourceFile[]> {
+  const files: SourceFile[] = []
+  for await (const path of FS.walk(directoryPath, { includeHidden: true })) {
+    const bytes = await FS.readFile(path)
+    files.push({
+      bytes,
+      path: FS.relativePath(directoryPath, path),
+      source: Buffer.from(bytes).toString('utf8'),
+    })
+  }
+  return files.sort((left, right) => left.path.localeCompare(right.path))
+}
+
+function directoryTrancheStatuses(files: readonly SourceFile[]): string[] {
+  return files.flatMap(file => trancheStatuses(file.source))
+}
+
+function mappedDirectoriesMatch(
+  currentFiles: readonly SourceFile[],
+  nextFiles: readonly SourceFile[],
+): boolean {
+  const current = normalizedDirectoryFiles(currentFiles, false)
+  const next = normalizedDirectoryFiles(nextFiles, true)
+  return current.length === next.length && current.every((file, index) => {
+    const nextFile = next[index]!
+    return file.path === nextFile.path && Buffer.from(file.bytes).equals(Buffer.from(nextFile.bytes))
+  })
+}
+
+function normalizedDirectoryFiles(
+  files: readonly SourceFile[],
+  mapNextExtension: boolean,
+): Array<{ bytes: Uint8Array; path: string }> {
+  return files
+    .map(file => ({
+      bytes: normalizedTrancheBytes(file.bytes ?? Buffer.from(file.source, 'utf8')),
+      path: mapNextExtension ? file.path.replace(/\.tao-next$/, '.tao') : file.path,
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path))
 }
 
 function trancheStatuses(source: string): string[] {
@@ -147,6 +164,12 @@ function trancheStatuses(source: string): string[] {
 
 function normalizedTrancheSource(source: string): string {
   return source.replace(TRANCHE_STATUS_PATTERN, NORMALIZED_TRANCHE_STATUS)
+}
+
+/** Preserve every non-status byte, including input that is not valid UTF-8. */
+function normalizedTrancheBytes(bytes: Uint8Array): Uint8Array {
+  const bytePreservingSource = Buffer.from(bytes).toString('latin1')
+  return Buffer.from(normalizedTrancheSource(bytePreservingSource), 'latin1')
 }
 
 if (import.meta.main) {

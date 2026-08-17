@@ -19,7 +19,7 @@ Describe('validator: apps and views', () => {
       `
       app MyApp { view MainView }
       render MainView()
-      view MainView { }
+      view MainView() { }
     `,
       AppValidator.messages.topLevel,
     ),
@@ -31,7 +31,7 @@ Describe('validator: apps and views', () => {
       `
       app MyApp { view MainView }
       state Count = 0
-      view MainView { }
+      view MainView() { }
     `,
       AppValidator.messages.topLevel,
     ),
@@ -40,19 +40,68 @@ Describe('validator: apps and views', () => {
   Test('requires exactly one root view in app blocks', async () => {
     const missing = await testValidateCodeWithErrors(`
       app MyApp { }
-      view MainView { }
+      view MainView() { }
     `)
     const duplicate = await testValidateCodeWithErrors(`
       app MyApp {
         view MainView
         view OtherView
       }
-      view MainView { }
-      view OtherView { }
+      view MainView() { }
+      view OtherView() { }
     `)
 
     Expect(validationErrorMessages(missing)).toContain(AppValidator.messages.appRootCount('MyApp', 0))
     Expect(validationErrorMessages(duplicate)).toContain(AppValidator.messages.appRootCount('MyApp', 2))
+  })
+
+  Test('rejects unknown, duplicated, and mistyped supplied app slots', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app MyApp {
+        Name "Demo"
+        Name "Demo again"
+        Navigator "not a nav"
+        Theme "unknown slot"
+      }
+      ${stubView('MainView')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.propertyDuplicate('MyApp', 'Name'))
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.variantProperty('MyApp', 'Theme'))
+    Expect(validationErrorMessages(result)).toContain(
+      AppValidator.messages.propertyType('MyApp', 'Navigator', 'Navigator', 'text'),
+    )
+  })
+
+  Test('rejects an app head that is not an app value', async () => {
+    const result = await testValidateCodeWithErrors(`
+      let NotAnApp = "text"
+      app MyApp = NotAnApp
+      ${stubView('MainView')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.headType('MyApp', 'text'))
+  })
+
+  Test('attaches app variant patch diagnostics to the offending entry, not the file start', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app Base {
+        Name "Base"
+        Navigator StackNav { Initial MainView }
+      }
+      app Variant = Base with {
+        Theme "unknown slot"
+      }
+      ${stubView('MainView')}
+    `)
+    const diagnostic = result.diagnostics.find(({ message }) =>
+      message === AppValidator.messages.variantProperty('Variant', 'Theme')
+    )
+
+    Expect(diagnostic?.range).toBeDefined()
+    Expect(diagnostic?.range?.start.line).toBeGreaterThan(0)
   })
 
   Test(
@@ -60,7 +109,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView Label is text {
+      view MainView(Label is text) {
         render Text(Label)
       }
       ${stubView('Text', 'Value is text')}
@@ -77,7 +126,7 @@ Describe('validator: apps and views', () => {
         let Greeting = "Hello"
         view MainView
       }
-      view MainView { }
+      view MainView() { }
     `,
       AppValidator.messages.appBlock('MyApp'),
     ),
@@ -88,8 +137,8 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView {
-        view Nested { }
+      view MainView() {
+        view Nested() { }
       }
     `,
       ViewsValidator.messages.viewBody,
@@ -99,10 +148,10 @@ Describe('validator: apps and views', () => {
   Test('rejects state and action declarations in layouts and render blocks', async () => {
     const layoutResult = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Stack()
       }
-      layout Stack {
+      layout Stack() {
         state Count = 0
         render inject ${tsFence}
           return null
@@ -112,9 +161,9 @@ Describe('validator: apps and views', () => {
     const renderBlockResult = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       ${stubView('Text', 'Value is text')}
-      view MainView {
+      view MainView() {
         render Text("hi") {
-          action AddOne { }
+          action AddOne() { }
         }
       }
     `)
@@ -128,7 +177,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         Text("Hello")
       }
       ${stubView('Text', 'Value is text')}
@@ -140,7 +189,7 @@ Describe('validator: apps and views', () => {
   Test('rejects duplicate view parameters', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view Text }
-      view Text Value is text, Value is number { }
+      view Text(Value is text, Value is number) { }
     `)
 
     Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.duplicateParameter('Value'))
@@ -150,22 +199,22 @@ Describe('validator: apps and views', () => {
   Test('rejects generated view prop names as parameter names', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view ChildrenView }
-      view ChildrenView children is text {
+      view ChildrenView(children is text) {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view KeyView key is text {
+      view KeyView(key is text) {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view RefView ref is text {
+      view RefView(ref is text) {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view TaoPropView __tao is text {
+      view TaoPropView(__tao is text) {
         render inject ${tsFence}
           return null
         ${fence}
@@ -181,13 +230,13 @@ Describe('validator: apps and views', () => {
   Test('requires exactly one render statement in view bodies', async () => {
     const missing = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         let Greeting = "Hello"
       }
     `)
     const extra = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Text("Hello")
         render Text("Again")
       }
@@ -203,7 +252,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Text("Hello")
         let Greeting = "Again"
       }
@@ -216,7 +265,7 @@ Describe('validator: apps and views', () => {
   Test('rejects render inject mixed with view body statements', async () => {
     const withRender = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render inject ${tsFence}
           return null
         ${fence}
@@ -225,7 +274,7 @@ Describe('validator: apps and views', () => {
     `)
     const withAlias = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         let Greeting = "Hello"
         render inject ${tsFence}
           return null
@@ -242,14 +291,14 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Container(){
           render inject ${tsFence}
             return null
           ${fence}
         }
       }
-      view Container { }
+      view Container() { }
     `,
       ViewsValidator.messages.renderInjectPlacement,
     ),
@@ -262,7 +311,7 @@ Describe('validator: apps and views', () => {
       app MyApp { view MainView }
       ${stubLayout('Stack')}
       ${stubView('Text', 'Value is text')}
-      view MainView {
+      view MainView() {
         render Stack(){
           Text("First")
           let Later = "Second"
@@ -281,7 +330,7 @@ Describe('validator: apps and views', () => {
       app MyApp { view MainView }
       ${stubLayout('Stack')}
       ${stubView('Text', 'Value is text')}
-      view MainView {
+      view MainView() {
         render Stack(){
           let Local = "First"
           let Local = "Second"
@@ -300,7 +349,7 @@ Describe('validator: apps and views', () => {
       app MyApp { view MainView }
       ${stubLayout('Stack')}
       ${stubView('Text', 'Value is text')}
-      view MainView {
+      view MainView() {
         render Stack(){
           Stack(){
             let Local = "First"
@@ -321,7 +370,7 @@ Describe('validator: apps and views', () => {
       app MyApp { view MainView }
       ${stubLayout('Stack')}
       ${stubView('Text', 'Value is text')}
-      view MainView {
+      view MainView() {
         render Stack(){
           Stack(){
             let Text = "shadow"
@@ -338,7 +387,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app TagApp { view Main }
-      view Main {
+      view Main() {
         render Col() {
           #same
           Text("one")
@@ -346,8 +395,8 @@ Describe('validator: apps and views', () => {
           Text("two")
         }
       }
-      layout Col { render inject ${tsFence} return null ${fence} }
-      view Text Value is text { render inject ${tsFence} return null ${fence} }
+      layout Col() { render inject ${tsFence} return null ${fence} }
+      view Text(Value is text) { render inject ${tsFence} return null ${fence} }
     `,
       ViewsValidator.messages.duplicateTag('#same'),
     ),

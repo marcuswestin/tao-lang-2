@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { referencedConfigurationType } from './configuration-type'
-import { validateConfiguredItemPatch } from './configured-item-validator'
+import { validateConfiguredItemConstruction, validateConfiguredItemPatch } from './configured-item-validator'
 
 export const configuredValueValidationMessages = {
   patchTarget: (name: string) =>
@@ -26,18 +26,42 @@ export const configuredValueValidationMessages = {
 
 export const configuredValueValidationChecks = {
   [AST.ConfiguredValue.$type]: validateConfiguredValue,
-  [AST.ConfiguredAppPropertyValue.$type]: validateAppPropertyValue,
-  [AST.InferredAppPropertyValue.$type]: validateAppPropertyValue,
-  [AST.ValueReference.$type]: (value, ctx) => {
-    if (!AST.isPatchedValueReference(value)) {
-      return
+  [AST.InferredConfigurationConstructor.$type]: (value, ctx) => {
+    const owner = value.$container
+    const inferredName = AST.isAliasDeclaration(owner)
+      ? owner.name
+      : AST.isAppProperty(owner)
+      ? owner.name
+      : undefined
+    const declaration = inferredName ? Type.visibleDeclaration(value, inferredName) : undefined
+    if (declaration && AST.isConfigurableDeclaration(declaration)) {
+      validateConfigurationBlock(value.block, declaration, ctx, { requireConstructorProperties: true })
     }
+  },
+  [AST.PrimitiveConfigurationConstructor.$type]: (value, ctx) => {
+    validateConfiguredItemConstruction(value.block, {
+      properties: AST.primitiveSlots(ctx.workspaceFiles, value.primitive),
+    }, ctx)
+  },
+  [AST.RefinementExpression.$type]: (value, ctx) => {
     const patch = value
     const base = patch.target.ref
-    if (AST.isAppVariantDeclaration(patch.$container)) {
+    if (AST.isConcreteAppValueDeclaration(patch.$container)) {
       return
     }
-    if (!AST.isAliasDeclaration(base)) {
+    if (AST.isTypeDeclaration(base)) {
+      if (AST.isConfigurableDeclaration(base)) {
+        validateConfigurationBlock(patch.patchBlock, base, ctx, { requireConstructorProperties: true })
+      } else {
+        const baseType = Type.ofDefinition(base)
+        const slots = Type.slotsOf(baseType)
+        if (slots) {
+          validateConfiguredItemPatch(patch.patchBlock, slots, ctx)
+        }
+      }
+      return
+    }
+    if (!AST.isAliasDeclaration(base) && !AST.isNavDeclaration(base) && !AST.isDatasourceDeclaration(base)) {
       if (base) {
         ctx.error(configuredValueValidationMessages.patchTarget(patch.target.$refText), patch)
       }
@@ -48,7 +72,7 @@ export const configuredValueValidationChecks = {
       validateConfiguredItemPatch(patch.patchBlock, baseType.item, ctx)
       return
     }
-    const declaration = configuredDeclaration(base.value)
+    const declaration = configuredDeclarationOfValue(base)
     if (!declaration) {
       ctx.error(configuredValueValidationMessages.patchTarget(base.name), patch)
       return
@@ -59,77 +83,13 @@ export const configuredValueValidationChecks = {
 
 /** validateConfiguredValuesFile validates top-level app-variant property patches. */
 export function validateConfiguredValuesFile(file: AST.TaoFile, ctx: ValidationContext): void {
-  for (const variant of file.statements.filter(AST.isAppVariantDeclaration)) {
-    const root = AST.appDeclarationOf(variant)
-    if (!root) {
-      continue
-    }
-    for (const entry of variant.value.patchBlock.entries) {
-      if (!entry.name || !AST.isPropertyConfigurationPatch(entry.value)) {
-        continue
-      }
-      const declaration = appPropertyConfiguredType(root, entry.name)
-      if (declaration) {
-        validateConfigurationBlock(entry.value.block, declaration, ctx, { requireConstructorProperties: false })
-      }
-    }
-  }
-}
-
-function appPropertyConfiguredType(
-  app: AST.AppDeclaration,
-  property: string,
-): AST.ConfigurableDeclaration | undefined {
-  const statement = AST.blockStatements(app).find(candidate =>
-    (property === 'Navigator' && AST.isAppNavigator(candidate))
-    || (property === 'Datasource' && AST.isAppDatasource(candidate))
-  )
-  if (!statement || (!AST.isAppNavigator(statement) && !AST.isAppDatasource(statement))) {
-    return undefined
-  }
-  const target = appPropertyTarget(statement.value)
-  if (AST.isConfigurableDeclaration(target) || AST.isTypeDeclaration(target)) {
-    return AST.isConfigurableDeclaration(target) ? target : undefined
-  }
-  return AST.isAliasDeclaration(target) ? configuredDeclaration(target.value) : undefined
-}
-
-function validateAppPropertyValue(value: AST.AppPropertyValue, ctx: ValidationContext): void {
-  const target = appPropertyTarget(value)
-  const declaration = AST.isConfigurableDeclaration(target)
-    ? target
-    : AST.isAliasDeclaration(target)
-    ? configuredDeclaration(target.value)
-    : undefined
-  if (!declaration) {
-    return
-  }
-  if (AST.isAliasDeclaration(target) && !value.block) {
-    return
-  }
-  if (value.block) {
-    validateConfigurationBlock(value.block, declaration, ctx, {
-      requireConstructorProperties: !AST.isAliasDeclaration(target),
-    })
-    return
-  }
-  for (const property of AST.configurationPropertiesOf(declaration)) {
-    ctx.error(configuredValueValidationMessages.missingConfiguration(declaration.name, property.name), value)
-  }
-  if (AST.configurationKeyOf(declaration)) {
-    ctx.error(configuredValueValidationMessages.missingKeyedItem(declaration.name), value)
-  }
-}
-
-function appPropertyTarget(value: AST.AppPropertyValue): AST.NamedDeclaration | undefined {
-  return AST.isConfiguredAppPropertyValue(value)
-    ? value.target.ref
-    : AST.inferredAppPropertyDeclaration(value)
+  void file
+  void ctx
 }
 
 function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationContext): void {
   const declaration = value.type.ref
-  if (!AST.isConfigurableDeclaration(declaration)) {
+  if (!declaration || !AST.isConfigurableDeclaration(declaration)) {
     return
   }
   if (!value.block) {
@@ -144,10 +104,17 @@ function configuredDeclaration(
   seen: Set<AST.AliasDeclaration> = new Set(),
 ): AST.ConfigurableDeclaration | undefined {
   if (AST.isConfigurationConstructor(value)) {
-    return AST.isConfigurableDeclaration(value.type.ref) ? value.type.ref : undefined
+    const target = value.type.ref
+    return target && AST.isConfigurableDeclaration(target) ? target : undefined
   }
-  if (AST.isValueReference(value)) {
+  if (AST.isRefinementExpression(value) || AST.isValueReference(value)) {
     const base = value.target.ref
+    if (base && AST.isConfigurableDeclaration(base)) {
+      return base
+    }
+    if (AST.isNavDeclaration(base) || AST.isDatasourceDeclaration(base) || AST.isAppDeclaration(base)) {
+      return configuredDeclarationOfValue(base)
+    }
     if (!AST.isAliasDeclaration(base) || seen.has(base)) {
       return undefined
     }
@@ -157,12 +124,19 @@ function configuredDeclaration(
   return undefined
 }
 
+function configuredDeclarationOfValue(value: AST.ValueDeclaration): AST.ConfigurableDeclaration | undefined {
+  if (AST.isNavDeclaration(value) || AST.isDatasourceDeclaration(value) || AST.isAppDeclaration(value)) {
+    return value.value ? configuredDeclaration(value.value) : undefined
+  }
+  return AST.isAliasDeclaration(value) ? configuredDeclaration(value.value) : undefined
+}
+
 type ConfigurationBlockState = {
   readonly entries: Map<string, AST.ConfigurationEntry>
   readonly keyedContract: AST.ConfigurationKeyDeclaration | undefined
   readonly keyedEntries: Map<string, AST.ConfigurationEntry>
-  readonly properties: readonly AST.ConfigurationPropertyDeclaration[]
-  readonly propertiesByName: Map<string, AST.ConfigurationPropertyDeclaration>
+  readonly properties: readonly AST.ConfigurationProperty[]
+  readonly propertiesByName: Map<string, AST.ConfigurationProperty>
   readonly typeName: string
 }
 
@@ -172,7 +146,7 @@ function validateConfigurationBlock(
   ctx: ValidationContext,
   { requireConstructorProperties }: { requireConstructorProperties: boolean },
 ): void {
-  const properties = AST.configurationPropertiesOf(declaration)
+  const properties = effectiveConfigurationProperties(declaration, ctx)
   const state: ConfigurationBlockState = {
     typeName: declaration.name,
     properties,
@@ -182,7 +156,11 @@ function validateConfigurationBlock(
     keyedEntries: new Map(),
   }
   validateConfigurationEntries(block, state, ctx)
-  for (const required of requireConstructorProperties ? state.properties : []) {
+  for (
+    const required of requireConstructorProperties
+      ? state.properties.filter(configurationPropertyRequiresValue)
+      : []
+  ) {
     if (!state.entries.has(required.name)) {
       ctx.error(configuredValueValidationMessages.missingConfiguration(state.typeName, required.name), block)
     }
@@ -279,7 +257,7 @@ function validateKeyedConfigurationItem(
     validateConfiguredProperty(property.value, expected, property, ctx)
   }
   for (const required of declaration.block.properties) {
-    if (!properties.has(required.name)) {
+    if (required.value === undefined && !properties.has(required.name)) {
       ctx.error(configuredValueValidationMessages.keyedItemMissing(typeName, key, required.name), entry)
     }
   }
@@ -287,7 +265,7 @@ function validateKeyedConfigurationItem(
 
 function validateConfiguredProperty(
   value: AST.ConfigurationValue,
-  property: AST.ConfigurationPropertyDeclaration,
+  property: AST.ConfigurationProperty,
   node: AST.Node,
   ctx: ValidationContext,
 ): void {
@@ -309,6 +287,29 @@ function validateConfiguredProperty(
       node,
     )
   }
+}
+
+function configurationPropertyRequiresValue(property: AST.ConfigurationProperty): boolean {
+  return AST.isTypeProperty(property) ? Type.propertyRequiresValue(property) : property.value === undefined
+}
+
+function effectiveConfigurationProperties(
+  declaration: AST.ConfigurableDeclaration,
+  ctx: ValidationContext,
+): AST.ConfigurationProperty[] {
+  const primitive = AST.configurationPrimitiveOf(declaration)
+  const properties: AST.ConfigurationProperty[] = primitive
+    ? AST.primitiveSlots(ctx.workspaceFiles, primitive).filter(property => property.name !== 'implement')
+    : []
+  for (const property of AST.configurationPropertiesOf(declaration)) {
+    const index = properties.findIndex(candidate => candidate.name === property.name)
+    if (index === -1) {
+      properties.push(property)
+    } else {
+      properties[index] = property
+    }
+  }
+  return properties
 }
 
 function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {

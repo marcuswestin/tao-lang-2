@@ -12,7 +12,7 @@
     "composite": false,
     "declaration": false,
     "incremental": false,
-    "jsx": "react",
+    "jsx": "react-jsx",
     "noEmit": true,
     "types": [
       "bun",

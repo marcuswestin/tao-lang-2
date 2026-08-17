@@ -6,9 +6,9 @@ import { statusByFile, withTaoFixture } from './test-cli-files'
 Describe('tao fmt', () => {
   Test('formats .tao files in place across nested directories', async () => {
     await withTaoFixture({
-      'unformatted.tao': 'view   MainView    {   }',
-      'nested/formatted.tao': 'view MainView { }\n',
-      'ignored.txt': 'view   Ignored    {   }',
+      'unformatted.tao': 'view   MainView()    {   }',
+      'nested/formatted.tao': 'view MainView() { }\n',
+      'ignored.txt': 'view   Ignored()    {   }',
     }, async (rootDir) => {
       const results = await runFmt(rootDir)
 
@@ -16,15 +16,15 @@ Describe('tao fmt', () => {
         'unformatted.tao': 'changed',
         'nested/formatted.tao': 'unchanged',
       })
-      Expect(await FS.readText(FS.resolvePath('unformatted.tao', rootDir))).toBe('view MainView { }\n')
-      Expect(await FS.readText(FS.resolvePath('ignored.txt', rootDir))).toBe('view   Ignored    {   }')
+      Expect(await FS.readText(FS.resolvePath('unformatted.tao', rootDir))).toBe('view MainView() { }\n')
+      Expect(await FS.readText(FS.resolvePath('ignored.txt', rootDir))).toBe('view   Ignored()    {   }')
     })
   })
 
   Test('reports syntax errors per file and leaves the file untouched', async () => {
     await withTaoFixture({
-      'broken.tao': 'view Broken {',
-      'valid.tao': 'view   MainView { }',
+      'broken.tao': 'view Broken() {',
+      'valid.tao': 'view   MainView() { }',
     }, async (rootDir) => {
       const results = await runFmt(rootDir)
 
@@ -34,7 +34,7 @@ Describe('tao fmt', () => {
       })
       const broken = results.find(result => result.status === 'error')
       Expect(broken?.error).toContain('Tao source without syntax errors')
-      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe('view Broken {')
+      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe('view Broken() {')
     })
   })
 
@@ -44,31 +44,31 @@ Describe('tao fmt', () => {
 
   Test('formats an explicitly named file that directory walks would skip', async () => {
     await withTaoFixture({
-      '.hidden.tao': 'view   HiddenFile { }',
-      '.hidden-dir/skipped.tao': 'view   Skipped { }',
-      'node_modules/.hidden.tao': 'view   MainView { }',
+      '.hidden.tao': 'view   HiddenFile() { }',
+      '.hidden-dir/skipped.tao': 'view   Skipped() { }',
+      'node_modules/.hidden.tao': 'view   MainView() { }',
     }, async (rootDir) => {
       const path = FS.resolvePath('node_modules/.hidden.tao', rootDir)
 
       Expect((await runFmt(rootDir)).length).toBe(0)
       Expect((await runFmt(path)).map(result => result.status)).toEqual(['changed'])
-      Expect(await FS.readText(FS.resolvePath('.hidden.tao', rootDir))).toBe('view   HiddenFile { }')
+      Expect(await FS.readText(FS.resolvePath('.hidden.tao', rootDir))).toBe('view   HiddenFile() { }')
       Expect(await FS.readText(FS.resolvePath('.hidden-dir/skipped.tao', rootDir))).toBe(
-        'view   Skipped { }',
+        'view   Skipped() { }',
       )
-      Expect(await FS.readText(path)).toBe('view MainView { }\n')
+      Expect(await FS.readText(path)).toBe('view MainView() { }\n')
     })
   })
 
   Test('formats a single file path', async () => {
     await withTaoFixture({
-      'app.tao': 'app   MyApp { view MainView }\nview MainView { }\n',
+      'app.tao': 'app   MyApp { view MainView }\nview MainView() { }\n',
     }, async (rootDir) => {
       const path = FS.resolvePath('app.tao', rootDir)
       const results = await runFmt(path)
 
       Expect(results.map(result => result.status)).toEqual(['changed'])
-      Expect(await FS.readText(path)).toBe('app MyApp {\n   view MainView\n}\n\nview MainView { }\n')
+      Expect(await FS.readText(path)).toBe('app MyApp {\n   view MainView\n}\n\nview MainView() { }\n')
     })
   })
 })

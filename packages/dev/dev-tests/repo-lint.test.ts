@@ -1,44 +1,172 @@
+import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   duplicateDescribeTitleIssues,
   missingTestAppReadmeEntries,
-  wordFlowerPairIssues,
+  repoLintIssues,
+  wordFlowerDirectoryIssues,
 } from '../dev-src/repository-tests/repo-lint'
 
 const absorbed = '// Tranche status: absorbed'
 const open = '// Tranche status: open'
 
 Describe('repo lint contracts', () => {
-  Test('accepts an absorbed byte-identical WordFlower pair', () => {
-    Expect(wordFlowerPairIssues(pair(`${absorbed}\nview Main { }`, `${absorbed}\nview Main { }`))).toEqual([])
+  Test('accepts absorbed byte-identical mapped WordFlower directories', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }`), file('nested/Feature.test.tao', 'test "Feature" { }')],
+      [
+        file('WordFlower.tao-next', `${absorbed}\nview Main { }`),
+        file('nested/Feature.test.tao-next', 'test "Feature" { }'),
+      ],
+    ))).toEqual([])
   })
 
-  Test('accepts an explicitly open divergent WordFlower pair', () => {
-    Expect(wordFlowerPairIssues(pair(`${absorbed}\nview Main { }`, `${open}\nview Main { render New() }`))).toEqual([])
+  Test('accepts explicitly open content divergence', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
+      [file('WordFlower.tao-next', `${open}\nview Main { render New() }`)],
+    ))).toEqual([])
   })
 
-  Test('rejects a stale open marker when the contracts otherwise match', () => {
-    const issues = wordFlowerPairIssues(pair(`${absorbed}\nview Main { }`, `${open}\nview Main { }`))
+  Test('accepts an open directory when a mapped Current file is missing from Next', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
+      [
+        file('WordFlower.tao', `${absorbed}\nview Main { }`),
+        file('Documents.tao', 'view Documents { }'),
+      ],
+      [file('WordFlower.tao-next', `${open}\nview Main { }`)],
+    ))).toEqual([])
+  })
+
+  Test('accepts an open directory when Next has an extra mapped file', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
+      [
+        file('WordFlower.tao-next', `${open}\nview Main { }`),
+        file('Documents.tao-next', 'view Documents { }'),
+      ],
+    ))).toEqual([])
+  })
+
+  Test('keeps Next open while the nested scratch package exists', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
+      [
+        file('WordFlower.tao-next', `${open}\nview Main { }`),
+        file('@tao-next/Prelude.tao-next', 'primitive item'),
+      ],
+    ))).toEqual([])
+  })
+
+  Test('rejects a stale open directory status when every mapped file matches', () => {
+    const issues = wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
+      [file('WordFlower.tao-next', `${open}\nview Main { }`)],
+    ))
 
     Expect(issues).toEqual([
-      'Next.tao-next matches Current.tao after normalizing the status header and must be absorbed.',
+      'Next matches Current after mapping .tao-next files and normalizing the directory status and must be absorbed.',
     ])
   })
 
-  Test('rejects an absorbed marker while the contracts diverge', () => {
-    const issues = wordFlowerPairIssues(
-      pair(`${absorbed}\nview Main { }`, `${absorbed}\nview Main { render New() }`),
-    )
-
-    Expect(issues).toEqual(['Next.tao-next diverges from Current.tao and must be open.'])
-  })
-
-  Test('requires exactly one status header in each WordFlower file', () => {
-    const issues = wordFlowerPairIssues(pair('view Main { }', `${open}\n${open}\nview Main { }`))
+  Test('rejects an absorbed status while mapped content diverges', () => {
+    const issues = wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
+      [file('WordFlower.tao-next', `${absorbed}\nview Main { render New() }`)],
+    ))
 
     Expect(issues).toEqual([
-      'Current.tao must contain exactly one tranche status header.',
-      'Next.tao-next must contain exactly one tranche status header.',
+      'Next diverges from Current after mapping .tao-next files and must be open.',
+    ])
+  })
+
+  Test('rejects an absorbed status while the mapped file set diverges', () => {
+    const issues = wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
+      [
+        file('WordFlower.tao-next', `${absorbed}\nview Main { }`),
+        file('Shared.tao-next', 'let Shared = 1'),
+      ],
+    ))
+
+    Expect(issues).toEqual([
+      'Next diverges from Current after mapping .tao-next files and must be open.',
+    ])
+  })
+
+  Test('requires byte-identical mapped content after status normalization', () => {
+    const issues = wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${absorbed}\nview Main { }\n`)],
+      [file('WordFlower.tao-next', `${absorbed}\nview Main { } \n`)],
+    ))
+
+    Expect(issues).toEqual([
+      'Next diverges from Current after mapping .tao-next files and must be open.',
+    ])
+  })
+
+  Test('compares raw bytes without replacing invalid UTF-8', () => {
+    const issues = wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', absorbed, Buffer.from([...Buffer.from(absorbed), 0x80]))],
+      [file('WordFlower.tao-next', absorbed, Buffer.from([...Buffer.from(absorbed), 0x81]))],
+    ))
+
+    Expect(issues).toEqual([
+      'Next diverges from Current after mapping .tao-next files and must be open.',
+    ])
+  })
+
+  Test('includes hidden files in the repository directory absorption gate', async () => {
+    const root = await FS.mkTmpDir(FS.resolvePath('tao-repo-lint-', FS.tmpdir()))
+    try {
+      await FS.writeText(
+        FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root),
+        absorbed,
+      )
+      await FS.writeText(
+        FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root),
+        absorbed,
+      )
+      await FS.writeFile(
+        FS.resolvePath('Apps/WordFlower/1 - Current/.contract.bin', root),
+        Buffer.from([0x80]),
+      )
+      await FS.writeFile(
+        FS.resolvePath('Apps/WordFlower/2 - Next/.contract.bin', root),
+        Buffer.from([0x81]),
+      )
+      await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+      await FS.mkdir(FS.resolvePath('packages', root))
+
+      Expect(await repoLintIssues(root)).toEqual([
+        'Apps/WordFlower/2 - Next diverges from Apps/WordFlower/1 - Current after mapping .tao-next files and must be open.',
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('requires Current to remain absorbed', () => {
+    const issues = wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', `${open}\nview Main { }`)],
+      [file('WordFlower.tao-next', `${open}\nview Main { render New() }`)],
+    ))
+
+    Expect(issues).toEqual(['Current must remain at tranche status absorbed.'])
+  })
+
+  Test('requires exactly one status header across each WordFlower directory', () => {
+    const issues = wordFlowerDirectoryIssues(directory(
+      [file('WordFlower.tao', 'view Main { }')],
+      [
+        file('WordFlower.tao-next', `${open}\nview Main { }`),
+        file('WordFlower.test.tao-next', `${open}\ntest "Main" { }`),
+      ],
+    ))
+
+    Expect(issues).toEqual([
+      'Current must contain exactly one tranche status header across the directory.',
+      'Next must contain exactly one tranche status header across the directory.',
     ])
   })
 
@@ -74,12 +202,21 @@ Describe('repo lint contracts', () => {
   })
 })
 
-function pair(currentSource: string, nextSource: string) {
+function directory(currentFiles: readonly TestFile[], nextFiles: readonly TestFile[]) {
   return {
-    currentPath: 'Current.tao',
-    currentSource,
-    label: 'app contract',
-    nextPath: 'Next.tao-next',
-    nextSource,
+    currentFiles,
+    currentPath: 'Current',
+    nextFiles,
+    nextPath: 'Next',
   }
+}
+
+type TestFile = {
+  bytes?: Uint8Array
+  path: string
+  source: string
+}
+
+function file(path: string, source: string, bytes?: Uint8Array): TestFile {
+  return { bytes, path, source }
 }

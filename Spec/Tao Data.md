@@ -1,7 +1,6 @@
 # Tao Data
 
-Status: authoritative implemented contract for the current WordFlower tranche, with explicitly
-labelled value-declaration additions settled for `Apps/WordFlower/2 - Next`.
+Status: authoritative implemented contract for the current WordFlower tranche.
 
 Tao's data layer is provider-neutral in source and generated schema metadata. Top-level `data`
 declarations define entity shape, queries and writes operate on live typed values, and each `app`
@@ -82,7 +81,7 @@ app WordFlower {
 }
 
 let WordFlowerDemo = WordFlower with {
-   Datasource Memory
+   Datasource Memory { }
 }
 
 datasource PreviewStore = Local {
@@ -96,12 +95,12 @@ workspace let WordFlowerPreview = WordFlower with {
 }
 ```
 
-`Local { ... }` is construction, and its declaration requires a text `StorageKey`. In the settled
-Next model it is sugar for `Local with { ... }` in value-construction position. `Memory` declares
-no properties, so bare `Datasource Memory` constructs its all-defaulted value. A property-position
+`Local { ... }` is construction, and its declaration requires a text `StorageKey`. It is sugar for
+`Local with { ... }` in value-construction position. `Memory` declares no properties, so
+`Memory { }` constructs its all-defaulted value. A property-position
 `Datasource with { ... }` patch starts from the datasource held by the base app; it does not mutate
 that app or reconstruct by provider name. The same patch rule applies to a configured datasource
-named with `let`. The Next `datasource Name = Assignment` head is a family-constrained value
+named with `let`. The `datasource Name = Assignment` head is a family-constrained value
 declaration equivalent to auto-typed `let`, not a new datasource type; reusable types use
 `type Name is datasource with { ... }`.
 
@@ -119,13 +118,12 @@ restart. Schemas with no bound datasource keep their ordinary query error state 
 
 `Local` and `Memory` are ordinary public Tao declarations in `@tao/data`, not compiler-known names:
 
-The examples below use the currently implemented declaration spelling. Next has settled that a
-`datasource` head declares a value and that a reusable provider type uses
-`type Name is datasource with { ... }`; the exact migration of `implement inject provider` into that
-type block remains declaration-spike Q11.
+Reusable provider types use `type Name is datasource with { ... }`. Their explicit
+`implement inject provider` clause fills primitive `datasource`'s implementation requirement; it is
+a protocol binding, not ordinary Tao data.
 
 ````tao
-public datasource Local {
+public type Local is datasource with {
    StorageKey text
 
    implement inject provider ```ts
@@ -133,14 +131,14 @@ public datasource Local {
    ```
 }
 
-public datasource Memory {
+public type Memory is datasource with {
    implement inject provider ```ts
       return TR.DataProvider.Memory()
    ```
 }
 ````
 
-A `datasource` declaration is top-level rather than nested, has `package`, `workspace`, or `public`
+A reusable `datasource` type is top-level rather than nested, has `package`, `workspace`, or `public`
 visibility, and binds exactly one `implement inject provider`. Its declared properties are the
 complete generic configuration contract: construction and patch validation read their names and
 types from the linked declaration, so copied and third-party datasources receive the same unknown,

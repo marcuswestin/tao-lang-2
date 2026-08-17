@@ -3,6 +3,7 @@ import AliasesCompiler from './app/aliases-compiler'
 import AppCompiler from './app/app-compiler'
 import { ConfigurationCompiler } from './app/configuration-compiler'
 import { DataCompiler } from './app/DataCompiler'
+import { DesignCompiler } from './app/DesignCompiler'
 import { ExpressionsCompiler } from './app/expressions-compiler'
 import FilesCompiler from './app/files-compiler'
 import { FunctionalCoreCompiler } from './app/FunctionalCoreCompiler'
@@ -37,6 +38,7 @@ export const Compile = {
   ...NavigationCompiler,
   ...FunctionalCoreCompiler,
   ...DataCompiler,
+  ...DesignCompiler,
   ...ExpressionsCompiler,
   ...ConfigurationCompiler,
 } as const

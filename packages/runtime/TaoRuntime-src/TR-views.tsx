@@ -1,5 +1,6 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
+import { LayoutControls, type TaoLayoutEntry } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 import RuntimeSwitch from './TR-switch'
@@ -13,6 +14,31 @@ type TaoButtonProps = TaoViewProps & {
   title: string
 }
 
+type TaoCheckboxProps = TaoViewProps & {
+  disabled?: boolean
+  label: string
+  onChange?: (value: boolean) => unknown
+  value: boolean
+}
+
+type TaoImageProps = TaoViewProps & {
+  decorative?: boolean
+  label?: string
+  resizeMode?: 'center' | 'contain' | 'cover' | 'repeat' | 'stretch'
+  source: string
+}
+
+type TaoProgressProps = TaoViewProps & {
+  label?: string
+  value: number
+}
+
+type TaoSpinnerProps = TaoViewProps & {
+  label?: string
+  size?: 'large' | 'small'
+  visible?: boolean
+}
+
 type TaoTextInputProps = TaoViewProps & {
   disabled?: boolean
   id?: string
@@ -23,7 +49,7 @@ type TaoTextInputProps = TaoViewProps & {
   value: string
 }
 
-type TaoPrimitiveKind = 'Pressable' | 'Text' | 'View'
+type TaoPrimitiveKind = 'Image' | 'Pressable' | 'Spinner' | 'Text' | 'View'
 
 type TaoPrimitiveElementProps = {
   readonly kind: TaoPrimitiveKind
@@ -33,6 +59,19 @@ type TaoPrimitiveElementProps = {
   readonly runtimeProps: TaoViewRuntimeProps
   readonly viewProps: TaoViewProps
 }
+
+type MergedTaoViewProps = ReturnType<typeof TaoPropsControls.mergeViewProps>
+
+type TaoLayoutEvent = {
+  nativeEvent?: {
+    layout?: {
+      width?: number
+    }
+  }
+}
+
+const minimumPaneWidth = 320
+const scrollContentLayoutHeads = new Set<TaoLayoutEntry[0]>(['content', 'gap', 'pad'])
 
 /** Views declares runtime-backed primitive Tao stdlib view implementations. */
 export const Views = {
@@ -70,7 +109,268 @@ export const Views = {
   TextInput(props: TaoTextInputProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     return React.createElement(TaoTextInput, { props, runtimeProps })
   },
+
+  Image(props: TaoImageProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    if (props.decorative !== true && !props.label?.trim()) {
+      throw new Error('Informative Image requires a nonempty accessibility label.')
+    }
+    const accessibilityProps = props.decorative === true
+      ? { accessible: false }
+      : {
+        accessibilityLabel: props.label,
+        accessibilityRole: 'image',
+        accessible: true,
+      }
+    return React.createElement(TaoPrimitiveElement, {
+      kind: 'Image',
+      nativePropOverrides: {
+        ...accessibilityProps,
+        resizeMode: props.resizeMode,
+        source: { uri: props.source },
+      },
+      providesParentDirection: false,
+      runtimeProps,
+      viewProps: props,
+    })
+  },
+
+  Checkbox(props: TaoCheckboxProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    return React.createElement(TaoCheckbox, { props, runtimeProps })
+  },
+
+  ScrollView(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    return React.createElement(TaoScrollView, { props, runtimeProps })
+  },
+
+  Panes(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    return React.createElement(TaoPanes, { props, runtimeProps })
+  },
+
+  Spinner(props: TaoSpinnerProps = {}, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    const visible = props.visible !== false
+    return React.createElement(TaoPrimitiveElement, {
+      kind: 'Spinner',
+      nativePropOverrides: {
+        accessibilityLabel: props.label ?? 'Loading',
+        accessibilityRole: 'progressbar',
+        accessibilityState: { busy: visible },
+        animating: visible,
+        hidesWhenStopped: true,
+        size: props.size,
+      },
+      providesParentDirection: false,
+      runtimeProps,
+      viewProps: props,
+    })
+  },
+
+  Progress(props: TaoProgressProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    return React.createElement(TaoProgress, { props, runtimeProps })
+  },
 } as const
+
+function TaoCheckbox({ props, runtimeProps }: {
+  props: TaoCheckboxProps
+  runtimeProps: TaoViewRuntimeProps
+}): React.ReactElement {
+  const runtime = requireReactNativeRuntime()
+  const parentDirection = ParentDirectionContext.use()
+  const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
+  const disabled = props.disabled === true
+  const checkbox = createReactElement(runtime, runtime.Switch, {
+    accessibilityElementsHidden: true,
+    accessible: false,
+    disabled,
+    importantForAccessibility: 'no',
+    pointerEvents: 'none',
+    value: props.value,
+  })
+  const label = createReactElement(runtime, runtime.Text, { accessible: false }, props.label)
+  const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
+  return createReactElement(
+    runtime,
+    runtime.Pressable,
+    {
+      ...wrapperProps,
+      accessibilityLabel: props.label,
+      accessibilityRole: 'checkbox',
+      accessibilityState: { checked: props.value, disabled },
+      disabled,
+      onPress: disabled ? undefined : () => props.onChange?.(!props.value),
+      style: [
+        wrapperProps['style'],
+        { alignItems: 'center', flexDirection: 'row', gap: 8, opacity: disabled ? 0.55 : 1 },
+      ],
+    },
+    React.createElement(React.Fragment, null, checkbox, label),
+  )
+}
+
+function TaoScrollView({ props, runtimeProps }: {
+  props: TaoViewProps
+  runtimeProps: TaoViewRuntimeProps
+}): React.ReactElement {
+  const runtime = requireReactNativeRuntime()
+  const parentDirection = ParentDirectionContext.use()
+  const contentDirection = runtimeProps.direction ?? 'column'
+  const merged = TaoPropsControls.mergeViewProps(
+    props,
+    { ...runtimeProps, direction: contentDirection },
+    parentDirection,
+  )
+  const entries = merged.props?.layout?.entries ?? []
+  const contentEntries = entries.filter(entry => scrollContentLayoutHeads.has(entry[0]))
+  const viewportEntries = entries.filter(entry => !scrollContentLayoutHeads.has(entry[0]))
+  const viewportMerged = mergedWithLayoutEntries(merged, viewportEntries, undefined)
+  const nativeProps = TaoPropsControls.nativePropsWithStyle(viewportMerged)
+  const { contentContainerStyle, style, ...scrollViewProps } = nativeProps
+  const contentLayoutStyle = LayoutControls.resolve({ direction: contentDirection, entries: contentEntries })
+  const mergedContentContainerStyle = [{ flexGrow: 1 }, contentLayoutStyle, contentContainerStyle]
+  const children = ParentDirectionContext.childrenForLayoutParent(
+    merged.children,
+    mergedContentContainerStyle,
+  )
+  return createReactElement(
+    runtime,
+    runtime.ScrollView,
+    {
+      ...scrollViewProps,
+      contentContainerStyle: mergedContentContainerStyle,
+      style: scrollViewportStyle(style),
+    },
+    children,
+  )
+}
+
+function scrollViewportStyle(style: unknown): unknown {
+  const defaultStyle = { alignSelf: 'stretch' }
+  return !style || (typeof style === 'object' && !Array.isArray(style) && Object.keys(style).length === 0)
+    ? defaultStyle
+    : [defaultStyle, style]
+}
+
+function TaoPanes({ props, runtimeProps }: {
+  props: TaoViewProps
+  runtimeProps: TaoViewRuntimeProps
+}): React.ReactElement {
+  const runtime = requireReactNativeRuntime()
+  const parentDirection = ParentDirectionContext.use()
+  const [measuredWidth, setMeasuredWidth] = React.useState<number>()
+  const columnMerged = TaoPropsControls.mergeViewProps(
+    props,
+    { ...runtimeProps, direction: 'column' },
+    parentDirection,
+  )
+  const childCount = directChildCount(columnMerged.children)
+  const gap = layoutGap(columnMerged)
+  const availableChildWidth = childCount > 0
+    ? (measuredWidth ?? 0) - Math.max(0, childCount - 1) * gap
+    : 0
+  const direction = measuredWidth !== undefined
+      && childCount > 0
+      && availableChildWidth / childCount >= minimumPaneWidth
+    ? 'row'
+    : 'column'
+  const merged = direction === 'column'
+    ? columnMerged
+    : TaoPropsControls.mergeViewProps(props, { ...runtimeProps, direction }, parentDirection)
+  const nativeProps = TaoPropsControls.nativePropsWithStyle(merged)
+  const { onLayout, ...viewProps } = nativeProps
+  const children = ParentDirectionContext.childrenForLayoutParent(merged.children, nativeProps['style'])
+
+  return createReactElement(
+    runtime,
+    runtime.View,
+    {
+      ...viewProps,
+      onLayout: (event: TaoLayoutEvent) => {
+        if (typeof onLayout === 'function') {
+          onLayout(event)
+        }
+        const width = event.nativeEvent?.layout?.width
+        if (typeof width === 'number' && Number.isFinite(width) && width >= 0) {
+          setMeasuredWidth(current => current === width ? current : width)
+        }
+      },
+    },
+    children,
+  )
+}
+
+function mergedWithLayoutEntries(
+  merged: MergedTaoViewProps,
+  entries: readonly TaoLayoutEntry[],
+  direction: MergedTaoViewProps['direction'],
+): MergedTaoViewProps {
+  return {
+    ...merged,
+    direction,
+    props: merged.props
+      ? {
+        ...merged.props,
+        layout: entries.length > 0 ? { entries } : undefined,
+      }
+      : undefined,
+  }
+}
+
+function layoutGap(merged: MergedTaoViewProps): number {
+  const gap = merged.props?.layout?.entries.find(entry => entry[0] === 'gap')
+  return gap?.[0] === 'gap' ? gap[1] : 0
+}
+
+function directChildCount(children: React.ReactNode): number {
+  let count = 0
+  React.Children.forEach(children, child => {
+    if (child === null || child === undefined || typeof child === 'boolean') {
+      return
+    }
+    if (React.isValidElement(child) && child.type === React.Fragment) {
+      count += directChildCount((child.props as { children?: React.ReactNode }).children)
+      return
+    }
+    count += 1
+  })
+  return count
+}
+
+function TaoProgress({ props, runtimeProps }: {
+  props: TaoProgressProps
+  runtimeProps: TaoViewRuntimeProps
+}): React.ReactElement {
+  const runtime = requireReactNativeRuntime()
+  const parentDirection = ParentDirectionContext.use()
+  const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
+  const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
+  const value = normalizedProgress(props.value)
+  const fill = createReactElement(runtime, runtime.View, {
+    accessible: false,
+    style: {
+      backgroundColor: '#2f6b4f',
+      height: '100%',
+      width: `${value * 100}%`,
+    },
+  })
+  return createReactElement(
+    runtime,
+    runtime.View,
+    {
+      ...wrapperProps,
+      accessibilityLabel: props.label ?? 'Progress',
+      accessibilityRole: 'progressbar',
+      accessibilityValue: { max: 1, min: 0, now: value },
+      style: [
+        wrapperProps['style'],
+        { backgroundColor: '#d9dfda', borderRadius: 999, height: 8, overflow: 'hidden' },
+      ],
+    },
+    fill,
+  )
+}
+
+function normalizedProgress(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
+}
 
 function TaoTextInput({ props, runtimeProps }: {
   props: TaoTextInputProps
@@ -140,7 +440,9 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
 
 function nativeComponent(runtime: ReactNativeRuntime, kind: TaoPrimitiveKind): React.ElementType {
   return RuntimeSwitch<TaoPrimitiveKind, React.ElementType>(kind, {
+    Image: () => runtime.Image,
     Pressable: () => runtime.Pressable,
+    Spinner: () => runtime.ActivityIndicator,
     Text: () => runtime.Text,
     View: () => runtime.View,
   })

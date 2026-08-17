@@ -43,7 +43,7 @@ export const LayoutRuntime = {
 } as const
 
 function create(entries: readonly TaoLayoutEntry[]): TaoLayout {
-  return { entries }
+  return { entries: LayoutMerge.entries(entries) }
 }
 
 function merge(

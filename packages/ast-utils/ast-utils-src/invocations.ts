@@ -243,7 +243,7 @@ function parameterSupportsEvent(parameter: AST.ParameterDeclaration, event: AST.
       && input !== undefined
       && !input.optional
       && input.type.kind === 'primitive'
-      && input.type.primitive === 'text'
+      && (input.type.primitive === 'text' || input.type.primitive === 'boolean')
       && input.type.nominal === undefined
   }
   return type.parameters.length === 0

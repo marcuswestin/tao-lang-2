@@ -52,6 +52,12 @@ function registerPrimitiveTypes(typir: TaoTypirServices): void {
     .inferenceRule({ filter: AST.isActionExpression })
     .finish()
   typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'design' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'visual' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'presentable' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'view' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'layout' }).finish()
+  typir.factory.Primitives.create({ primitiveName: 'frame' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'ui' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'nav' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'datasource' }).finish()
@@ -83,6 +89,12 @@ function registerAstInferenceRules(typir: TaoTypirServices): void {
     InferredConfigurationConstructor: (node) =>
       TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
         ?? InferenceRuleNotApplicable,
+    PrimitiveConfigurationConstructor: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
+    RefinementExpression: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
+        ?? InferenceRuleNotApplicable,
     CaseTestExpression: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
     WhenExpression: (node) =>
       TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
@@ -93,6 +105,9 @@ function registerAstInferenceRules(typir: TaoTypirServices): void {
     InterpolatedString: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
     MemberAccessExpression: (node) =>
       TypeSystemHelpers.taoType(Type.ofMemberAccess(node), typir)
+        ?? InferenceRuleNotApplicable,
+    TypedInjectionExpression: (node) =>
+      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
         ?? InferenceRuleNotApplicable,
     TypedConstructor: (node) =>
       TypeSystemHelpers.taoType(Type.ofConstructorReference(node.type), typir)
@@ -121,8 +136,10 @@ function inferValueReference(
   }
   return Switch.type(target, {
     ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
-    AliasDeclaration: alias => TypeSystemHelpers.safeInferType(typir, alias.value) ?? InferenceRuleNotApplicable,
-    AppDeclaration: () => InferenceRuleNotApplicable,
+    AliasDeclaration: alias =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(alias), typir) ?? InferenceRuleNotApplicable,
+    AppDeclaration: declaration =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(declaration), typir) ?? InferenceRuleNotApplicable,
     AskStatement: ask =>
       TypeSystemHelpers.taoType(Type.ofValueDeclaration(ask), typir)
         ?? InferenceRuleNotApplicable,
@@ -132,6 +149,12 @@ function inferValueReference(
     EnumCase: enumCase =>
       TypeSystemHelpers.taoType(Type.ofValueDeclaration(enumCase), typir) ?? InferenceRuleNotApplicable,
     ForStatement: () => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
+    DatasourceDeclaration: declaration =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(declaration), typir) ?? InferenceRuleNotApplicable,
+    DesignDeclaration: declaration =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(declaration), typir) ?? InferenceRuleNotApplicable,
+    NavDeclaration: declaration =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(declaration), typir) ?? InferenceRuleNotApplicable,
     ParameterDeclaration: parameter =>
       TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
     StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
@@ -167,6 +190,7 @@ function typirTypeForTypeExpression(
     ActionTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     DerivedTypeExpression: derived => TypeSystemHelpers.taoPrimitiveType(derived.base, typir),
     ItemTypeExpression: () => TypeSystemHelpers.taoPrimitiveType('item', typir),
+    ListTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     NamedTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     PrimitiveTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     UnionTypeExpression: () => undefined,

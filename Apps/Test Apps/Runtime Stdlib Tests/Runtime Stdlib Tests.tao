@@ -1,5 +1,5 @@
 use StackNav from @tao/nav
-use Box, Button, Col, Number, Row, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
+use Box, Button, Col, Image, Number, Progress, Row, Spinner, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
 
 app RuntimeStdlibTests {
    Name "Runtime Stdlib Tests"
@@ -9,11 +9,20 @@ app RuntimeStdlibTests {
 
 let LaunchCount = 3
 
-ui MainView {
-   action Ignore { }
+ui MainView() {
+   action Ignore() { }
    render Stack() {
       Text("Runtime stdlib smoke")
       Number(LaunchCount)
+      Text("Media and status primitives")
+      #informativeImage
+      Image("./images/runtime-stdlib.png", Label: "Runtime stdlib illustration")
+      #decorativeImage
+      Image("./images/divider.png", Decorative: true)
+      #loadingIndicator
+      Spinner()
+      #completionProgress
+      Progress(Value: 2)
       Button("Tap me") {
          on press Ignore
       }

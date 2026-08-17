@@ -19,6 +19,11 @@ type LayoutContext = {
   readonly parentDirection?: TaoLayoutDirection
 }
 
+type LayoutSemanticState = {
+  bareFillAlignment: boolean
+  bareFillGrowth: boolean
+}
+
 /** LayoutResolve lowers Tao layout entries into deterministic React Native style objects. */
 export const LayoutResolve = {
   resolve,
@@ -28,36 +33,52 @@ function resolve(spec: TaoLayoutSpec): TaoResolvedLayoutStyle {
   const style: TaoResolvedLayoutStyle = {}
   const direction = spec.direction
   const context: LayoutContext = { direction, parentDirection: spec.parentDirection }
+  const state: LayoutSemanticState = { bareFillAlignment: false, bareFillGrowth: false }
 
   if (direction) {
     style['flexDirection'] = direction
   }
 
   for (const entry of spec.entries) {
-    applyEntry(style, entry, context)
+    applyEntry(style, entry, context, state)
   }
 
   return style
 }
 
-function applyEntry(style: TaoResolvedLayoutStyle, entry: TaoLayoutEntry, context: LayoutContext): void {
+function applyEntry(
+  style: TaoResolvedLayoutStyle,
+  entry: TaoLayoutEntry,
+  context: LayoutContext,
+  state: LayoutSemanticState,
+): void {
   return RuntimeSwitch<TaoLayoutEntry[0], void>(entry[0], {
-    aligned: () => applyAligned(style, entry as TaoLayoutAlignedEntry),
+    aligned: () => {
+      state.bareFillAlignment = false
+      applyAligned(style, entry as TaoLayoutAlignedEntry)
+    },
     centered: () => {
+      state.bareFillAlignment = false
       style['alignSelf'] = 'center'
     },
-    claim: () => applyClaim(style, entry as TaoLayoutClaimEntry),
+    claim: () => {
+      state.bareFillGrowth = false
+      applyClaim(style, entry as TaoLayoutClaimEntry)
+    },
     compress: () => {
       style['flexShrink'] = 1
     },
     content: () => applyContent(style, entry as TaoLayoutContentEntry, context.direction),
     fill: () => {
+      state.bareFillAlignment = true
+      state.bareFillGrowth = true
       style['alignSelf'] = 'stretch'
       style['flexGrow'] = 1
     },
     gap: () => applyGap(style, entry as TaoLayoutGapEntry),
-    height: () => applyDimension(style, entry as TaoLayoutDimensionEntry, context.parentDirection, 'column'),
+    height: () => applyDimension(style, entry as TaoLayoutDimensionEntry, context.parentDirection, 'column', state),
     hug: () => {
+      state.bareFillGrowth = false
       style['flexGrow'] = 0
     },
     margin: () => applySpacing(style, 'margin', entry as TaoLayoutSpacingEntry),
@@ -65,7 +86,7 @@ function applyEntry(style: TaoResolvedLayoutStyle, entry: TaoLayoutEntry, contex
     rigid: () => {
       style['flexShrink'] = 0
     },
-    width: () => applyDimension(style, entry as TaoLayoutDimensionEntry, context.parentDirection, 'row'),
+    width: () => applyDimension(style, entry as TaoLayoutDimensionEntry, context.parentDirection, 'row', state),
   })
 }
 
@@ -152,9 +173,15 @@ function applyDimension(
   entry: TaoLayoutDimensionEntry,
   parentDirection: TaoLayoutDirection | undefined,
   mainAxisDirection: TaoLayoutDirection,
+  state: LayoutSemanticState,
 ): void {
   const [dimension, term] = entry
+  if (dimension === 'width' && term === 'max') {
+    style['maxWidth'] = entry[2]
+    return
+  }
   if (typeof term === 'number') {
+    replaceBareFillEffect(style, state, parentDirection, mainAxisDirection)
     style[dimension] = term
     return
   }
@@ -166,6 +193,23 @@ function applyDimension(
     if (parentDirection) {
       style['alignSelf'] = 'stretch'
     }
+  }
+}
+
+function replaceBareFillEffect(
+  style: TaoResolvedLayoutStyle,
+  state: LayoutSemanticState,
+  parentDirection: TaoLayoutDirection | undefined,
+  dimensionDirection: TaoLayoutDirection,
+): void {
+  if (parentDirection === dimensionDirection && state.bareFillGrowth) {
+    delete style['flexGrow']
+    state.bareFillGrowth = false
+    return
+  }
+  if (parentDirection && state.bareFillAlignment) {
+    delete style['alignSelf']
+    state.bareFillAlignment = false
   }
 }
 

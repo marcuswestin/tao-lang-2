@@ -6,7 +6,7 @@ Describe('Tao formatter injections', () => {
     'formats injection fence bodies with dprint TypeScript style',
     formats(
       `
-        view MainView {
+        view MainView() {
         render inject ${tsFence}
         const message = "hi";
         return <RN.Text accessibilityLabel='greeting'>{ message }</RN.Text>;
@@ -14,7 +14,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        view MainView {
+        view MainView() {
            render inject ${tsFence}
               const message = 'hi'
               return <RN.Text accessibilityLabel="greeting">{message}</RN.Text>
@@ -28,14 +28,14 @@ Describe('Tao formatter injections', () => {
     'indents injection fence bodies one level below the inject line',
     formats(
       `
-        view CountText Count is number {
+        view CountText(Count is number) {
         render inject Count ${tsFence}
         return <RN.Text>{Count}</RN.Text>
         ${fence}
         }
       `,
       `
-        view CountText Count is number {
+        view CountText(Count is number) {
            render inject Count ${tsFence}
               return <RN.Text>{Count}</RN.Text>
            ${fence}
@@ -48,7 +48,7 @@ Describe('Tao formatter injections', () => {
     'preserves relative indentation and brace lines inside fence bodies',
     formats(
       `
-        view MainView {
+        view MainView() {
         render inject ${tsFence}
         function label() {
             return 'hi'
@@ -58,7 +58,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        view MainView {
+        view MainView() {
            render inject ${tsFence}
               function label() {
                 return 'hi'
@@ -74,7 +74,7 @@ Describe('Tao formatter injections', () => {
     'detects fences with trailing whitespace after the opener and leaves their bodies untouched',
     formats(
       `
-        view MainView {
+        view MainView() {
         render inject ${tsFence}${' '}
         function wrap() {
            if (true) {
@@ -85,7 +85,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        view MainView {
+        view MainView() {
            render inject ${tsFence}
               function wrap() {
                 if (true) {
@@ -102,7 +102,7 @@ Describe('Tao formatter injections', () => {
     'ignores comment lines that mention inject fences',
     formats(
       `
-        view MainView {
+        view MainView() {
         // inject some TS via ${tsFence}
         render inject ${tsFence}
         return null
@@ -110,7 +110,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        view MainView {
+        view MainView() {
            // inject some TS via ${tsFence}
            render inject ${tsFence}
               return null
@@ -124,7 +124,7 @@ Describe('Tao formatter injections', () => {
     'preserves trailing whitespace inside fence bodies',
     formats(
       `
-        view MainView {
+        view MainView() {
         render inject ${tsFence}
         const s = \`abc${'   '}
         def\`
@@ -133,7 +133,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        view MainView {
+        view MainView() {
            render inject ${tsFence}
               const s = \`abc${'   '}
               def\`
@@ -148,14 +148,14 @@ Describe('Tao formatter injections', () => {
     'moves body content sharing the close-fence line onto its own body line',
     formats(
       `
-        view MainView {
+        view MainView() {
         render inject ${tsFence}
         const value = 1
         return value${fence}
         }
       `,
       `
-        view MainView {
+        view MainView() {
            render inject ${tsFence}
               const value = 1
               return value
@@ -169,7 +169,7 @@ Describe('Tao formatter injections', () => {
     'falls back to reindent-only for invalid embedded TypeScript',
     formats(
       `
-        view MainView {
+        view MainView() {
         render inject ${tsFence}
         const =
         return null
@@ -177,7 +177,7 @@ Describe('Tao formatter injections', () => {
         }
       `,
       `
-        view MainView {
+        view MainView() {
            render inject ${tsFence}
               const =
               return null
@@ -192,7 +192,7 @@ Describe('Tao formatter injections', () => {
     formats(
       `
         let UserName = "Ro"
-        view MainView {
+        view MainView() {
         render inject Name    UserName,UserName ${tsFence}
         return <RN.Text>{Name}</RN.Text>
         ${fence}
@@ -201,7 +201,7 @@ Describe('Tao formatter injections', () => {
       `
         let UserName = "Ro"
 
-        view MainView {
+        view MainView() {
            render inject Name UserName, UserName ${tsFence}
               return <RN.Text>{Name}</RN.Text>
            ${fence}

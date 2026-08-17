@@ -11,10 +11,15 @@ test "Functional Core MVP" {
       expect text "Next: 3"
       expect text "Inbox"
       expect text "Today"
+      expect text "Async idle"
+      expect text "Continuation idle"
       expect missing text "Empty"
       press text "Hide count"
       expect text "Hidden"
       expect missing text "Count: 2"
       expect text "Empty"
+      press text "Launch async"
+      expect text "Async launched"
+      expect text "Action continued"
    }
 }

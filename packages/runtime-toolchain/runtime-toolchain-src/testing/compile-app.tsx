@@ -10,13 +10,19 @@ export type { CompiledRuntimeApp, RuntimeScreen } from './RuntimeApp'
 let renderId = 0
 const testRunRootName = TestRunId.create()
 
-/** compileAndRenderApp compiles a Tao app path, renders it, and returns the test screen. */
-export async function compileAndRenderApp(appPath: string): Promise<RuntimeApp.Screen> {
-  return renderCompiledApp(await compileAppForTest(appPath))
+/** compileAndRenderApp compiles a selected Tao app path, renders it, and returns the test screen. */
+export async function compileAndRenderApp(
+  appPath: string,
+  options: { appName?: string } = {},
+): Promise<RuntimeApp.Screen> {
+  return renderCompiledApp(await compileAppForTest(appPath, options))
 }
 
-async function compileAppForTest(appPath: string): Promise<RuntimeApp.Compiled> {
+async function compileAppForTest(
+  appPath: string,
+  options: { appName?: string },
+): Promise<RuntimeApp.Compiled> {
   const runtimePackageRoot = RuntimeToolchainPaths.packageRoot
   const testAppRoot = FS.resolvePath(`_gen_tao-app-test/${testRunRootName}-${++renderId}`, runtimePackageRoot)
-  return await TestCompiler.Worker.compileApp(appPath, { runtimePackageRoot: testAppRoot })
+  return await TestCompiler.Worker.compileApp(appPath, { appName: options.appName, runtimePackageRoot: testAppRoot })
 }

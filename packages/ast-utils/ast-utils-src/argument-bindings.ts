@@ -205,7 +205,7 @@ function bindNamedArguments(state: ArgumentBindingState): void {
     if (
       actual.kind !== 'unresolved'
       && expected.kind !== 'unresolved'
-      && !Type.isCastCompatible(actual, expected)
+      && !Type.isAssignable(actual, expected)
     ) {
       state.diagnostics.push({ kind: 'named-argument-type', argument, parameter })
     }

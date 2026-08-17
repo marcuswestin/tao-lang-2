@@ -20,8 +20,8 @@ are written against the current model.
 Static `SelectionNav` with keyed items, `Initial @key`, `Display`, adaptive drawer display, and
 target-only activation (`present App@key`) ship in Current. Still open here: `SplitNav`, dynamic selection, `key of Items` typing,
 compiler-created selection/split items, keyed and relative path segments beyond app auxiliaries,
-directional delegation, pane reveal, and occurrence-key behavior. Next's `Panes()` is a responsive
-visual layout container, not a navigation kind and not an implicit `SplitNav` decision.
+directional delegation, pane reveal, and occurrence-key behavior. `Panes()` now in Current is a
+responsive visual layout container, not a navigation kind and not an implicit `SplitNav` decision.
 
 ### FOLLOW-NAV-002: Window Auxiliaries And Toast Delivery
 

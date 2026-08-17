@@ -2,18 +2,15 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo currently has `view`, `ui`, and `layout` declarations,
-explicit `render` roots, basic stdlib layout views, render child blocks, runtime-backed `TextInput`
-and `FormButton` controls with labels, placeholders, disabled and submitting state, private `#tag`
-test metadata, control configuration through `on press|change|submit`, direct-state two-way text
-input binding, and the first bracketed layout clauses for `content`, `claim`, `gap`, `pad`, `margin`,
-`width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`. Render arguments are
-always parenthesized, and layout remains a distinct following clause: `render View(args) [layout]
-{ children }` or `View(args) [layout] { children }`. Tags merge into an existing concrete native
-root and do not add a layout node. The repo does not yet implement `frame`, `@@content`, named render
-slots, visual style entries, or the complete merge/lowering contract described here. Their first
-implementable contract is now settled in `Apps/WordFlower/2 - Next`; compatible material beyond
-that contract remains future direction in this document. The old repo
+Current implementation status: this repo has `view`, `ui`, `layout`, and `frame` declarations,
+explicit `render` roots, unnamed `@@content`, optional single-fill named frame slots, runtime-backed
+controls and containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`,
+`gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and
+`centered`. It also implements `width max`, adaptive `Panes`, and the first flat-token design terms
+and named clause bundles. Render arguments are always parenthesized, and a spec remains a distinct
+following clause: `render View(args) [spec] { children }`. Tags, layout, and design style merge into
+an existing concrete native root and add no wrapper node. Compatible material beyond that first
+contract remains future direction in this document. The old repo
 implemented most of this layout contract with older spellings; this document keeps the behavior that
 still fits and uses the current public `view`, `ui`, `content`, and `@@content` names.
 
@@ -23,15 +20,15 @@ Styling and layout remain distinct typed concerns, but Tao combines both in one 
 
 Layout describes how to arrange content on the screen - where it appears, and how it gets sized:
 
-`Row [content spread center, pad 2, rigid] { ... }`
+`Row() [content spread center, pad 2, rigid] { ... }`
 
 Visual entries describe appearance in the same brackets:
 
-`Row [content spread center, background black, border white, radius 2, shadow gray]`
+`Row() [content spread center, background black, border white, radius 2, shadow gray]`
 
 ### UI Kinds
 
-The settled Next core hierarchy separates rendering from presentation. `visual` is the common
+The implemented core hierarchy separates rendering from presentation. `visual` is the common
 rendering root; `presentable` refines `visual`; `ui` and `nav` refine `presentable`; and `view`,
 `layout`, and `frame` refine `visual` without thereby becoming presentable. A `nav` is consequently
 visual in the type hierarchy but is not a render-bearing declaration and cannot be embedded as an
@@ -71,8 +68,8 @@ Hugging containers:
 - `Stack`: hugs its content and lays it out top-to-bottom
 - `Box`: hugs its content and lays it out horizontally
 
-All five ship today as `layout` declarations. The separate `frame` role is not yet implemented, but
-its intrinsic caller-content behavior and `@@content` contract are settled for Next.
+All five ship today as `layout` declarations. The separate `frame` role is implemented for
+intrinsically hugging, rigid containers that place caller content with `@@content`.
 
 UI containers usually do not paint pixels themselves. Instead, they focus on how visible content is arranged and sized.
 
@@ -86,12 +83,19 @@ Shipped today, alongside the containers above: `Text`, `TextFrame`, `TextMultili
 `Button`, `TextInput`, and `FormButton`. `TextInput` and `FormButton` carry the label, placeholder,
 disabled, and submitting properties that forms rely on.
 
-Settled for Next, not yet implemented:
+Also shipped:
 
 - `Image`: displays an image and allows you to size and transform it.
 - `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
 
-Compatible future surfaces beyond Next include:
+`Image(Source, Decorative: false, Label: "")` treats a non-decorative image as informative and
+requires a nonblank accessibility label at runtime; a decorative image may omit it and is hidden
+from accessibility. `Checkbox(Value, Change, Label, Disabled: false)` exposes controlled boolean
+state and suppresses native changes while disabled. `FormButton` accepts an optional system-icon
+name for forward-compatible product configuration; the current primitive deliberately remains a
+label-only button until Tao has an implemented `Icon` surface.
+
+Compatible future surfaces beyond the implemented tranche include:
 
 - `Icon`: a specialized `Image` for icons, including system icons.
 - `Pressable`: a pressable surface. Its exact role classification is part of the broader UI design.
@@ -125,9 +129,9 @@ TextInput(Value: Draft, Label: "Title")
 
 Computed values, aliases, parameters, entity fields, and unlabeled arguments are not writable bindings; they require an explicit `on change`. An explicit change handler replaces the synthesized update. Disabled controls suppress their configured native press/change/submit delivery in the runtime.
 
-Also settled for Next are `ScrollView` (a scrollable container), `Spinner` (a loading indicator),
-and `Progress` (a progress indicator). Rendering a collection remains language-owned through
-`loop`; Next deliberately introduces no stdlib `List` or function-typed row slot.
+`ScrollView` is a scrollable container, `Spinner` is a loading indicator, and `Progress` is a
+progress indicator. Rendering a collection remains language-owned through `loop`; Tao deliberately
+introduces no stdlib `List` or function-typed row slot.
 
 Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces use
 `present X() as overlay`, which layers above the nearest nav or an explicit `in` target. Every nav
@@ -137,7 +141,7 @@ separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
-The first named-slot contract is settled for Next and not yet implemented. A `frame` declares an
+The first named-slot contract is implemented. A `frame` declares an
 optional named content slot with `@name = empty`. A caller may fill it at most once with
 `@name <visual>`. The filled value is opaque visual content and renders exactly where the frame body
 places `@name`; `empty` contributes no node. Parameterized, repeatable, and required slots remain
@@ -186,9 +190,9 @@ frame Card() {
 ### Declaration Properties, Children, And Slots
 
 Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header
-parameters are shorthand for the same public properties. Header parameters ship today and Next
-requires their parentheses, including `()`. The longhand property block remains future work. Named
-render slots and `@@content` are settled for Next but are not yet implemented:
+parameters are shorthand for the same public properties. Header parameters require parentheses,
+including `()`. The longhand property block remains future work. Named render slots and
+`@@content` are implemented:
 
 ```tao
 view Profile(User) {
@@ -268,9 +272,13 @@ To describe how a UI element resizes when necessary, use:
 - `rigid` to resist shrinking
 - `width <positive number>` and `height <positive number>` to set physical dimensions directly
 - `width fill` and `height fill` to fill one physical axis; Tao lowers this at runtime using the actual parent container direction
-- Within one layout clause, bare `fill` cannot appear with `width` or `height`; use physical-axis sizing when per-axis control is needed.
-- `width max N`, settled for Next, caps a readable region without forcing it wider than available
-  space.
+- Bare `fill` contributes two semantic effects: parent-main-axis growth and parent-cross-axis stretch.
+  A later `claim` or `hug` replaces its growth effect, a later `aligned` or `centered` replaces its
+  stretch effect, and a later numeric physical dimension replaces only the effect on that physical
+  axis once the parent direction is known. A later bare `fill` replaces both earlier physical-axis
+  dimensions. `width max N` is a cap rather than a replacement and composes with `fill` in either
+  order.
+- `width max N` caps a readable region without forcing it wider than available space.
 
 To specify how to align a single item in a container, use:
 
@@ -295,7 +303,7 @@ To describe spacing, use:
 
 ### Example: Row of Icons
 
-`Icon` remains a compatible future stdlib surface beyond Next. If it is introduced, a row with three
+`Icon` remains a compatible future stdlib surface. If it is introduced, a row with three
 icons aligned to its right edge and vertically centered would read:
 
 ```tao
@@ -416,7 +424,7 @@ frame LabeledSection(Label is text) {
 }
 ```
 
-Render slots are different from `@@content`. Next settles optional single-fill holes such as
+Render slots are different from `@@content`. Tao implements optional single-fill holes such as
 `@actions`; parameterized forms such as `@row Item` still need their own design.
 
 ## Advanced Layout
@@ -439,7 +447,7 @@ Row() [content baseline left, gap 8] {
 }
 
 TextMultiline(Article.Summary)
-TextMultiline(Article.Summary, Lines 3)
+TextMultiline(Article.Summary, Lines: 3)
 ```
 
 This keeps text pressure visible in the view being rendered. A layout clause should not have to say "this text is multiline" or "this label clips instead of ellipsizing." That is part of the text view's job.
@@ -473,10 +481,11 @@ Future Tao may need more wrapped-line controls, such as how whole rows of wrappe
 
 ### Adaptive Panes
 
-Next adds `Panes()` as fixed stdlib behavior rather than general breakpoint syntax. It lays out its
-children horizontally when the available width after gaps gives every child at least 320 logical
-pixels; otherwise it stacks them in source order. In horizontal mode, `claim N` distributes the
-remaining width proportionally.
+`Panes()` is fixed stdlib behavior rather than general breakpoint syntax. It lays out its
+direct child horizontally when the measured width after gaps gives every direct child at least 320
+logical pixels; otherwise it stacks them in source order. Before its first measurement it uses the
+safe stacked form. In horizontal mode, `claim N` distributes the remaining width proportionally;
+the container does not synthesize competing `flexBasis` values.
 
 ### Overflow, Scroll, And Layers
 
@@ -532,8 +541,10 @@ These are the layout values of Tao's stdlib containers, and the React Native sty
 
 A caller layout clause overlays the render site's defaults. Named clause bundles and direct clauses
 form one left-to-right list. The last specification of a given clause replaces the earlier value;
-unrelated clauses remain. After replacement, the validator rejects a resolved set containing
-semantically incompatible clauses—source order cannot make incompatible categories valid:
+unrelated clauses remain. Bare `fill` is lowered as the two growth and stretch effects described
+above, so a later specialized clause can replace one effect without erasing the other. After
+replacement, the validator rejects a resolved set containing semantically incompatible
+clauses—source order cannot make incompatible categories valid:
 
 ```tao
 Row() [content spread center, compress] {
@@ -557,7 +568,7 @@ Some things are known to belong in or near Tao layout, but still need their own 
 - aspect ratio
 - wrapped-line layout controls
 - empty-container behavior
-- layout merging for future slot forms beyond Next's opaque single-fill slots
+- layout merging for future slot forms beyond the implemented opaque single-fill slots
 - fixed child-count constraints
 
 The main unresolved ownership questions:

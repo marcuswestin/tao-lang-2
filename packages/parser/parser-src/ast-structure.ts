@@ -10,7 +10,6 @@ const resolvedUseTargets = new WeakMap<AST.UseStatement, readonly AST.Declaratio
 export function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
   return AST.isPrimitiveDeclaration(declaration)
       || AST.isTypeDeclaration(declaration)
-      || AST.isConfigurableDeclaration(declaration)
     ? 'type'
     : 'value'
 }
@@ -30,29 +29,6 @@ export function primitiveSlots(
   name: AST.PrimitiveType,
 ): readonly AST.TypeProperty[] {
   return primitiveDeclaration(files, name)?.slots?.properties ?? []
-}
-
-/** inferredAppPropertyDeclaration resolves a bare app slot block from its slot name and primitive role. */
-export function inferredAppPropertyDeclaration(
-  value: AST.InferredAppPropertyValue,
-): AST.ConfigurableDeclaration | undefined {
-  const owner = value.$container
-  if (!AST.isAppNavigator(owner) && !AST.isAppDatasource(owner)) {
-    return undefined
-  }
-  const root = findRoot(value)
-  if (!AST.isTaoFile(root)) {
-    return undefined
-  }
-  const candidates = [
-    ...root.statements.filter(AST.isConfigurableDeclaration),
-    ...root.statements.filter(AST.isUseStatement).flatMap(resolvedImportedDeclarations)
-      .filter(AST.isConfigurableDeclaration),
-  ].filter(declaration => declaration.name === owner.name)
-    .filter(declaration =>
-      AST.isAppNavigator(owner) ? AST.isNavDeclaration(declaration) : AST.isDatasourceDeclaration(declaration)
-    )
-  return candidates.length === 1 ? candidates[0] : undefined
 }
 
 /** declarationKey returns a namespace-qualified key suitable for collision checks. */
@@ -138,7 +114,16 @@ export function ancestorBlocks(node: AST.Node): AST.Block[] {
 /** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
 export function importableValueDeclarationsInFile(
   file: AST.TaoFile,
-): Array<AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration | AST.EnumCase> {
+): Array<
+  | AST.AliasDeclaration
+  | AST.ActionDeclaration
+  | AST.AppDeclaration
+  | AST.NavDeclaration
+  | AST.DatasourceDeclaration
+  | AST.DesignDeclaration
+  | AST.UiDeclaration
+  | AST.EnumCase
+> {
   return [
     ...file.statements.filter(isImportableValueDeclaration),
     ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
@@ -167,6 +152,19 @@ export function forBindingOwnedByBlock(block: AST.Block): AST.ForStatement | und
   return AST.isForStatement(block.$container) ? block.$container : undefined
 }
 
+/** loopSelectHandlers returns the direct row-selection handlers declared by one loop. */
+export function loopSelectHandlers(loop: AST.ForStatement): AST.LoopSelectHandler[] {
+  return loop.block.statements.filter(AST.isLoopSelectHandler)
+}
+
+/** directLoopForSelectHandler returns the loop that directly owns `handler`, if any. */
+export function directLoopForSelectHandler(handler: AST.LoopSelectHandler): AST.ForStatement | undefined {
+  const block = handler.$container
+  return AST.isBlock(block) && AST.isForStatement(block.$container) && block.$container.block === block
+    ? block.$container
+    : undefined
+}
+
 /** attachedTag returns the tag statement immediately preceding a render or loop in its block. */
 export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStatement | undefined {
   const block = node.$container
@@ -176,6 +174,25 @@ export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStateme
   const index = block.statements.indexOf(node)
   const previous = index > 0 ? block.statements[index - 1] : undefined
   return AST.isTagStatement(previous) ? previous : undefined
+}
+
+/** slotFillRootTag returns a leading tag that configures the visual root filling one frame slot. */
+export function slotFillRootTag(render: AST.Render): AST.TagStatement | undefined {
+  const use = render.$container
+  const block = render.block
+  if (!AST.isRenderSlotUse(use) || use.render !== render || !block) {
+    return undefined
+  }
+  const first = block.statements[0]
+  return AST.isTagStatement(first) ? first : undefined
+}
+
+/** isSlotFillRootTag identifies a tag consumed as metadata by its enclosing filled visual. */
+export function isSlotFillRootTag(tag: AST.TagStatement): boolean {
+  const block = tag.$container
+  return AST.isBlock(block)
+    && AST.isViewRender(block.$container)
+    && slotFillRootTag(block.$container) === tag
 }
 
 /** taggedLoopRowRoot returns the sole unconditional direct row-root render required by tagged loops. */
@@ -193,11 +210,12 @@ export function taggedLoopRowRoot(loop: AST.ForStatement): AST.Render | undefine
 /** testTagForRender resolves every tag represented by one concrete render root. */
 export function testTagForRender(render: AST.Render): string | undefined {
   const direct = attachedTag(render)
+  const slotFill = slotFillRootTag(render)
   const block = render.$container
   const loop = AST.isBlock(block) && AST.isForStatement(block.$container) ? block.$container : undefined
   const loopTag = loop ? attachedTag(loop) : undefined
   const rowTag = loop && loopTag && taggedLoopRowRoot(loop) === render ? loopTag : undefined
-  const tags = [rowTag, direct]
+  const tags = [rowTag, direct, slotFill]
     .filter((tag): tag is AST.TagStatement => tag !== undefined)
     .map(tag => tag.tag.slice(1))
   const distinctTags = [...new Set(tags)]
@@ -207,52 +225,170 @@ export function testTagForRender(render: AST.Render): string | undefined {
 /** isImportableValueDeclaration returns true for value declarations that can be imported. */
 export function isImportableValueDeclaration(
   node: AST.Node,
-): node is AST.AliasDeclaration | AST.ActionDeclaration | AST.UiDeclaration {
-  return AST.isAliasDeclaration(node) || AST.isActionDeclaration(node) || AST.isUiDeclaration(node)
+): node is
+  | AST.AliasDeclaration
+  | AST.ActionDeclaration
+  | AST.AppDeclaration
+  | AST.NavDeclaration
+  | AST.DatasourceDeclaration
+  | AST.DesignDeclaration
+  | AST.UiDeclaration
+{
+  return AST.isAliasDeclaration(node)
+    || AST.isActionDeclaration(node)
+    || AST.isAppDeclaration(node)
+    || AST.isNavDeclaration(node)
+    || AST.isDatasourceDeclaration(node)
+    || AST.isDesignDeclaration(node)
+    || AST.isUiDeclaration(node)
 }
 
-/** configurationPropertiesOf returns the ordinary public properties declared by one nav/datasource. */
+/** ConfigurableDeclaration is an ordinary type whose primitive family is app, nav, or datasource. */
+export type ConfigurableDeclaration = AST.TypeDeclaration
+
+/** ConfigurationProperty is one ordinary type slot or one keyed-item property. */
+export type ConfigurationProperty = AST.TypeProperty | AST.ConfigurationPropertyDeclaration
+
+/** isConfigurableDeclaration identifies a reusable primitive-family type contract. */
+export function isConfigurableDeclaration(node: AST.Node): node is ConfigurableDeclaration {
+  return AST.isTypeDeclaration(node) && configurationPrimitiveOf(node) !== undefined
+}
+
+/** configurationPrimitiveOf returns the primitive family preserved by a reusable type. */
+export function configurationPrimitiveOf(
+  declaration: AST.TypeDeclaration,
+  seen: Set<AST.TypeDeclaration> = new Set(),
+): AST.ConfigurationPrimitive | undefined {
+  if (seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  return configurationPrimitiveOfTypeExpression(declaration.type, seen)
+}
+
+/** configurationPropertiesOf returns the effective ordinary slots of one reusable configuration type. */
 export function configurationPropertiesOf(
-  declaration: AST.ConfigurableDeclaration,
-): AST.ConfigurationPropertyDeclaration[] {
-  return declaration.block.entries.filter(AST.isConfigurationPropertyDeclaration)
+  declaration: ConfigurableDeclaration,
+): AST.TypeProperty[] {
+  return effectiveConfigurationProperties(declaration, new Set())
 }
 
 /** configurationKeyOf returns the optional keyed-item contract declared by one nav. */
 export function configurationKeyOf(
-  declaration: AST.ConfigurableDeclaration,
+  declaration: ConfigurableDeclaration,
 ): AST.ConfigurationKeyDeclaration | undefined {
-  return declaration.block.entries.find(AST.isConfigurationKeyDeclaration)
+  return configurationMetadataOf(declaration, 'keys', new Set())
 }
 
 /** configurationImplementationOf returns the declaration's package-scope runtime binding. */
 export function configurationImplementationOf(
-  declaration: AST.ConfigurableDeclaration,
+  declaration: ConfigurableDeclaration,
 ): AST.ConfigurationImplementation | undefined {
-  return declaration.block.entries.find(AST.isConfigurationImplementation)
+  return configurationMetadataOf(declaration, 'implementations', new Set())
 }
 
 /** configurationPropertyIsKey identifies the keyed-item selector role without reserving `key` globally. */
-export function configurationPropertyIsKey(property: AST.ConfigurationPropertyDeclaration): boolean {
-  return AST.isNamedTypeReference(property.type)
+export function configurationPropertyIsKey(property: ConfigurationProperty): boolean {
+  return property.type !== undefined
+    && AST.isNamedTypeReference(property.type)
     && property.type.root === 'key'
     && property.type.members.length === 0
 }
 
-/** PatchedValueReference is a declaration-linked immutable `value with { ... }` expression. */
-export type PatchedValueReference = AST.ValueReference & { patchBlock: AST.ConfigurationBlock }
+function configurationPrimitiveOfTypeExpression(
+  type: AST.TypeExpression,
+  seen: Set<AST.TypeDeclaration>,
+): AST.ConfigurationPrimitive | undefined {
+  const base = AST.isDerivedTypeExpression(type) ? type.base : type
+  if (AST.isPrimitiveTypeReference(base)) {
+    return AST.isConfigurationPrimitive(base.primitive) ? base.primitive : undefined
+  }
+  if (!AST.isNamedTypeReference(base)) {
+    return undefined
+  }
+  const parent = base.members.length === 0 ? visibleTypeDeclaration(base, base.root) : undefined
+  return parent ? configurationPrimitiveOf(parent, seen) : undefined
+}
 
-/** isPatchedValueReference identifies a `with` patch without name-table lookup. */
-export function isPatchedValueReference(node: AST.Node): node is PatchedValueReference {
-  return AST.isValueReference(node) && node.patchBlock !== undefined
+function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
+  const root = findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  return [
+    ...root.statements.filter(AST.isTypeDeclaration),
+    ...root.statements
+      .filter(AST.isUseStatement)
+      .flatMap(resolvedImportedDeclarations)
+      .filter(AST.isTypeDeclaration),
+  ].find(declaration => declaration.name === name)
+}
+
+function effectiveConfigurationProperties(
+  declaration: AST.TypeDeclaration,
+  seen: Set<AST.TypeDeclaration>,
+): AST.TypeProperty[] {
+  if (seen.has(declaration)) {
+    return []
+  }
+  seen.add(declaration)
+  const base = baseTypeDeclarationOf(declaration)
+  const properties = base ? [...effectiveConfigurationProperties(base, seen)] : []
+  for (const property of itemTypeExpressionOf(declaration)?.properties ?? []) {
+    const previous = properties.findIndex(candidate => candidate.name === property.name)
+    if (previous === -1) {
+      properties.push(property)
+    } else {
+      properties[previous] = property
+    }
+  }
+  return properties
+}
+
+function configurationMetadataOf<KeyT extends 'keys' | 'implementations'>(
+  declaration: AST.TypeDeclaration,
+  key: KeyT,
+  seen: Set<AST.TypeDeclaration>,
+): KeyT extends 'keys' ? AST.ConfigurationKeyDeclaration | undefined
+  : AST.ConfigurationImplementation | undefined
+{
+  if (seen.has(declaration)) {
+    return undefined as never
+  }
+  seen.add(declaration)
+  const own = itemTypeExpressionOf(declaration)?.[key][0]
+  if (own) {
+    return own as never
+  }
+  const base = baseTypeDeclarationOf(declaration)
+  return (base ? configurationMetadataOf(base, key, seen) : undefined) as never
+}
+
+function itemTypeExpressionOf(declaration: AST.TypeDeclaration): AST.ItemTypeExpression | undefined {
+  return AST.isDerivedTypeExpression(declaration.type)
+    ? declaration.type.slots
+    : AST.isItemTypeExpression(declaration.type)
+    ? declaration.type
+    : undefined
+}
+
+function baseTypeDeclarationOf(declaration: AST.TypeDeclaration): AST.TypeDeclaration | undefined {
+  const type = declaration.type
+  const base = AST.isDerivedTypeExpression(type) ? type.base : type
+  if (!AST.isNamedTypeReference(base) || base.members.length > 0) {
+    return undefined
+  }
+  return visibleTypeDeclaration(base, base.root)
 }
 
 /** AppVariantDeclaration is an alias whose initializer patches an app declaration identity. */
-export type AppVariantDeclaration = AST.AliasDeclaration & { value: PatchedValueReference }
+export type AppVariantDeclaration = AST.AliasDeclaration & { value: AST.RefinementExpression }
 
 /** isAppVariantDeclaration identifies an immutable `App with { ... }` value declaration. */
 export function isAppVariantDeclaration(node: AST.Node): node is AppVariantDeclaration {
-  return AST.isAliasDeclaration(node) && appDeclarationOf(node) !== undefined
+  return AST.isAliasDeclaration(node)
+    && AST.isRefinementExpression(node.value)
+    && configuredPrimitiveOfValueDeclaration(node.value.target.ref) === 'app'
 }
 
 /** appDeclarationOf resolves an app or chained app variant to its original declaration identity. */
@@ -263,19 +399,75 @@ export function appDeclarationOf(
   if (AST.isAppDeclaration(node)) {
     return node
   }
-  if (!AST.isAliasDeclaration(node) || seen.has(node) || !isPatchedValueReference(node.value)) {
+  if (!AST.isAliasDeclaration(node) || seen.has(node) || !AST.isRefinementExpression(node.value)) {
     return undefined
   }
   seen.add(node)
   const base = node.value.target.ref
-  return AST.isAppValueDeclaration(base) ? appDeclarationOf(base, seen) : undefined
+  return AST.isAppDeclaration(base)
+    ? base
+    : AST.isAliasDeclaration(base) && isConcreteAppValueDeclaration(base)
+    ? appDeclarationOf(base, seen)
+    : undefined
 }
 
-/** appValueDeclarationsInFile returns concrete apps followed by immutable app variants. */
+/** isConcreteAppValueDeclaration identifies every declaration whose inferred value family is app. */
+export function isConcreteAppValueDeclaration(
+  node: AST.Node | undefined,
+): node is AST.AppDeclaration | AST.AliasDeclaration {
+  return AST.isAppDeclaration(node)
+    || (AST.isAliasDeclaration(node) && configuredPrimitiveOfExpression(node.value) === 'app')
+}
+
+/** configuredPrimitiveOfValueDeclaration returns a value head's preserved primitive family. */
+export function configuredPrimitiveOfValueDeclaration(
+  declaration: AST.RefinementBaseDeclaration | undefined,
+  seen: Set<AST.AliasDeclaration> = new Set(),
+): AST.ConfigurationPrimitive | undefined {
+  if (AST.isAppDeclaration(declaration)) {
+    return declaration.value ? configuredPrimitiveOfExpression(declaration.value, seen) : 'app'
+  }
+  if (AST.isNavDeclaration(declaration)) {
+    return declaration.value ? configuredPrimitiveOfExpression(declaration.value, seen) : 'nav'
+  }
+  if (AST.isDatasourceDeclaration(declaration)) {
+    return declaration.value ? configuredPrimitiveOfExpression(declaration.value, seen) : 'datasource'
+  }
+  if (AST.isTypeDeclaration(declaration)) {
+    return configurationPrimitiveOf(declaration)
+  }
+  if (!AST.isAliasDeclaration(declaration) || seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  return configuredPrimitiveOfExpression(declaration.value, seen)
+}
+
+/** configuredPrimitiveOfExpression returns the app/nav/datasource family carried by an expression. */
+export function configuredPrimitiveOfExpression(
+  expression: AST.Expression,
+  seen: Set<AST.AliasDeclaration> = new Set(),
+): AST.ConfigurationPrimitive | undefined {
+  if (AST.isPrimitiveConfigurationConstructor(expression)) {
+    return expression.primitive
+  }
+  if (AST.isConfigurationConstructor(expression)) {
+    return AST.isTypeDeclaration(expression.type.ref)
+      ? configurationPrimitiveOf(expression.type.ref)
+      : undefined
+  }
+  if (AST.isRefinementExpression(expression)) {
+    return configuredPrimitiveOfValueDeclaration(expression.target.ref, seen)
+  }
+  if (AST.isValueReference(expression)) {
+    return configuredPrimitiveOfValueDeclaration(expression.target.ref, seen)
+  }
+  return undefined
+}
+
+/** appValueDeclarationsInFile returns every complete app-headed or app-inferred value declaration. */
 export function appValueDeclarationsInFile(file: AST.TaoFile): AST.AppValueDeclaration[] {
-  return file.statements.flatMap(statement =>
-    AST.isAppDeclaration(statement) || isAppVariantDeclaration(statement) ? [statement] : []
-  )
+  return file.statements.flatMap(statement => isConcreteAppValueDeclaration(statement) ? [statement] : [])
 }
 
 /** enumOwningCase returns the declaration whose runtime identity owns one enum case. */
@@ -283,9 +475,25 @@ export function enumOwningCase(enumCase: AST.EnumCase): AST.EnumDeclaration {
   return enumCase.$container.$container
 }
 
-/** parametersOf returns the parameters declared by a renderable or action declaration. */
+/** parametersOf returns the parameters declared by a parameterized declaration. */
 export function parametersOf(declaration: AST.ParameterizedDeclaration): AST.ParameterDeclaration[] {
   return declaration.parameterList?.parameters ?? []
+}
+
+/** returnStatementsOf returns every function return in source order, including early returns. */
+export function returnStatementsOf(declaration: AST.FunctionDeclaration): AST.ReturnStatement[] {
+  return returnsInFunctionBlock(declaration.block)
+}
+
+/** functionHasFallthroughReturn reports whether every one-sided early-return path has a final fallback. */
+export function functionHasFallthroughReturn(declaration: AST.FunctionDeclaration): boolean {
+  return AST.isReturnStatement(declaration.block.statements.at(-1))
+}
+
+function returnsInFunctionBlock(block: AST.FunctionBlock): AST.ReturnStatement[] {
+  return block.statements.flatMap(statement =>
+    AST.isReturnStatement(statement) ? [statement] : returnsInFunctionBlock(statement.block)
+  )
 }
 
 /** argumentsOf returns the arguments provided by a render or action invocation. */
@@ -293,8 +501,10 @@ export function argumentsOf(node: ArgumentListOwner): AST.Argument[] {
   return node.argumentList?.arguments ?? []
 }
 
-/** injectionArgumentsOf returns the arguments declared by an injection block. */
-export function injectionArgumentsOf(injection: AST.Injection): AST.InjectionArgument[] {
+/** injectionArgumentsOf returns the arguments declared by a statement, render, or typed-value injection. */
+export function injectionArgumentsOf(
+  injection: AST.Injection | AST.TypedInjectionExpression,
+): AST.InjectionArgument[] {
   return injection.argumentList?.arguments ?? []
 }
 
@@ -306,6 +516,37 @@ export function layoutEntriesOf(layoutClause: AST.LayoutClause | undefined): AST
 /** statementsOf returns a block's statements, or an empty list when no block exists. */
 export function statementsOf(block: AST.Block | undefined): AST.Statement[] {
   return block?.statements || []
+}
+
+/** renderSlotDeclarationsOf returns the direct named visual slots owned by one frame. */
+export function renderSlotDeclarationsOf(frame: AST.FrameDeclaration): AST.RenderSlotDeclaration[] {
+  return frame.block.statements.filter(AST.isRenderSlotDeclaration)
+}
+
+/** renderSlotUsesOf returns direct slot placements or fills from one render block. */
+export function renderSlotUsesOf(block: AST.Block | undefined): AST.RenderSlotUse[] {
+  return statementsOf(block).filter(AST.isRenderSlotUse)
+}
+
+/** RenderFragment is one statement that contributes a React child in a render block. */
+export type RenderFragment =
+  | AST.Render
+  | AST.WhenRenderStatement
+  | AST.GuardRenderStatement
+  | AST.IfRenderStatement
+  | AST.ForStatement
+  | AST.CallerContentStatement
+  | AST.RenderSlotUse
+
+/** isRenderFragment identifies rendered statements while excluding named slot fills. */
+export function isRenderFragment(statement: AST.Statement): statement is RenderFragment {
+  return AST.isRender(statement)
+    || AST.isCallerContentStatement(statement)
+    || (AST.isRenderSlotUse(statement) && !statement.render)
+    || AST.isWhenRenderStatement(statement)
+    || AST.isGuardRenderStatement(statement)
+    || AST.isIfRenderStatement(statement)
+    || AST.isForStatement(statement)
 }
 
 /**

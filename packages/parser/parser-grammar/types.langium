@@ -9,7 +9,7 @@ entry TypesGrammarEntrypoint:
     PrimitiveDeclaration | TypeDeclaration | EnumDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference;
 
 PrimitiveDeclaration:
-    'primitive' name=PrimitiveType ('with' slots=ItemTypeExpression)?;
+    'primitive' name=PrimitiveType ('is' base=PrimitiveType)? ('with' slots=ItemTypeExpression)?;
 
 EnumDeclaration:
     visibility=DeclarationVisibility? 'enum' name=ID block=EnumDeclarationBlock;
@@ -33,25 +33,26 @@ UnionTypeExpression:
     members+=TypeReference ('|' members+=TypeReference)+;
 
 ItemTypeExpression:
-    '{' (properties+=TypeProperty (',' properties+=TypeProperty)* ','?)? '}';
+    '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation) ','?)* '}';
 
 TypeProperty:
-    name=TypeSlotName type=TypeReference? ('is' value=Expression)?;
-
-TypeSlotName returns string:
-    ID | 'implement';
+    (((optional?='optional' name=ID | name=ID) type=TypeReference?) | name='implement')
+    ('is' value=Expression)?;
 
 ParameterTypeDeclaration:
     name=ID 'is' type=TypeExpression;
 
 TypeReference:
-    ActionTypeReference | PrimitiveTypeReference | NamedTypeReference;
+    ActionTypeReference | ListTypeReference | PrimitiveTypeReference | NamedTypeReference;
 
 ActionTypeReference:
     'action' '(' (parameterTypes+=TypeReference (',' parameterTypes+=TypeReference)*)? ')';
 
 PrimitiveTypeReference:
-    primitive=PrimitiveType;
+    primitive=NonListPrimitiveType;
+
+ListTypeReference:
+    'list' 'of' elementType=TypeReference;
 
 ConstructablePrimitiveTypeReference:
     primitive=ConstructablePrimitiveType;
@@ -60,7 +61,12 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action' | 'ui' | 'nav' | 'datasource' | 'app';
+    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action' | 'design'
+    | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
+
+NonListPrimitiveType returns string:
+    'text' | 'number' | 'boolean' | 'time' | 'item' | 'action' | 'design'
+    | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

@@ -5,14 +5,24 @@ import { parseCodeWithErrors, testParseCode } from './test-parse'
 Describe('parser: functional core', () => {
   Test('parses expressions, functions, total conditionals, actions, and iteration', async () => {
     const result = await testParseCode(`
-      function HasCount Count is number returns boolean = Count > 0 and not false
-      function Label Count is number returns text = when (Count > 1) {
-        true -> "Count: { Count + 1 }"
-        otherwise -> "Empty"
+      function HasCount(Count is number) returns boolean {
+        return Count > 0 and not false
       }
-      view Main {
+      function Label(Count is number) returns text {
+        return when (Count > 1) {
+          true -> "Count: { Count + 1 }"
+          otherwise -> "Empty"
+        }
+      }
+      function GoalFraction(Count is number) {
+        if Count == 0 {
+          return 0
+        }
+        return Count / 10
+      }
+      view Main() {
         state Ready = false
-        action Flip {
+        action Flip() {
           guard Ready true -> { toggle Ready }
           toggle Ready
         }
@@ -30,16 +40,28 @@ Describe('parser: functional core', () => {
           }
         }
       }
-      layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const hasCount = result.entry.ast.statements.find(statement =>
       AST.isFunctionDeclaration(statement) && statement.name === 'HasCount'
     )
     Expect.Is(hasCount, AST.isFunctionDeclaration)
-    Expect.Is(hasCount.value, AST.isBinaryExpression)
-    Expect(hasCount.value.operator).toBe('and')
+    const hasCountReturn = AST.returnStatementsOf(hasCount)[0]
+    Expect.Is(hasCountReturn, AST.isReturnStatement)
+    Expect.Is(hasCountReturn.value, AST.isBinaryExpression)
+    Expect(hasCountReturn.value.operator).toBe('and')
+
+    const goalFraction = result.entry.ast.statements.find(statement =>
+      AST.isFunctionDeclaration(statement) && statement.name === 'GoalFraction'
+    )
+    Expect.Is(goalFraction, AST.isFunctionDeclaration)
+    Expect(goalFraction.returnType).toBeUndefined()
+    const earlyIf = goalFraction.block.statements[0]
+    Expect.Is(earlyIf, AST.isIfFunctionStatement)
+    Expect.Is(earlyIf.block.statements[0], AST.isReturnStatement)
+    Expect.Is(goalFraction.block.statements[1], AST.isReturnStatement)
 
     const main = result.entry.ast.statements.find(statement =>
       AST.isViewDeclaration(statement) && statement.name === 'Main'
@@ -63,8 +85,8 @@ Describe('parser: functional core', () => {
 
   Test('requires otherwise in value and render subject cases while allowing single-case guards', async () => {
     const value = await parseCodeWithErrors('let Result = when true { true -> "yes" }')
-    const render = await parseCodeWithErrors('view Main { render Stack() { when true { true -> { Text("yes") } } } }')
-    const action = await testParseCode('action Run { guard true true -> { } }')
+    const render = await parseCodeWithErrors('view Main() { render Stack() { when true { true -> { Text("yes") } } } }')
+    const action = await testParseCode('action Run() { guard true true -> { } }')
 
     Expect(value.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
     Expect(render.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
@@ -75,9 +97,9 @@ Describe('parser: functional core', () => {
     const result = await testParseCode(`
       enum ConfirmResult { Confirmed Cancelled }
       data Documents / Document { Final yes / no Draft }
-      view Main Document {
+      view Main(Document) {
         state Result = Confirmed
-        action Close {
+        action Close() {
           if Result is Confirmed { }
         }
         render Stack() {
@@ -91,8 +113,8 @@ Describe('parser: functional core', () => {
           if Document.Final is Draft { Text("Draft") }
         }
       }
-      layout Stack { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text Value is text { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const enumDeclaration = result.entry.ast.statements.find(AST.isEnumDeclaration)
@@ -131,7 +153,7 @@ Describe('parser: functional core', () => {
     Expect(dataCase.declaredCase?.$refText).toBe('Draft')
     Expect(dataCase.declaredCase?.ref?.name).toBe('Final')
 
-    const withElse = await parseCodeWithErrors('action Run { if true { } else { } }')
+    const withElse = await parseCodeWithErrors('action Run() { if true { } else { } }')
     Expect(withElse.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
   })
 
@@ -162,12 +184,12 @@ Describe('parser: functional core', () => {
 
   Test('parses typed parameter defaults across declarations', async () => {
     const result = await testParseCode(`
-      function Label Value is text default "Save" returns text = Value
-      view Main Title is text default "Welcome" {
-        action Submit Message is text default "Saved" { }
+      function Label(Value is text default "Save") returns text { return Value }
+      view Main(Title is text default "Welcome") {
+        action Submit(Message is text default "Saved") { }
         render Card()
       }
-      layout Card Gap is number default 8 { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      layout Card(Gap is number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const label = result.entry.ast.statements.find(statement => AST.isFunctionDeclaration(statement))
@@ -183,5 +205,43 @@ Describe('parser: functional core', () => {
     Expect(AST.parametersOf(main)[0]?.defaultValue?.$type).toBe('StringLiteral')
     Expect(AST.parametersOf(submit)[0]?.defaultValue?.$type).toBe('StringLiteral')
     Expect(AST.parametersOf(card)[0]?.defaultValue?.$type).toBe('NumberLiteral')
+  })
+
+  Test('parses empty parenthesized lists on every parameterized declaration kind', async () => {
+    const result = await testParseCode(`
+      enum Response { Done }
+      view Empty() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      layout Stack() { render Empty() }
+      ui Shell() { render Empty() }
+      dialogue Confirm() responds Response { render Empty() }
+      action Save() { }
+      function Label() { return "Label" }
+    `)
+    const declarations = result.entry.ast.statements.filter(AST.isParameterizedDeclaration)
+    Expect(declarations.map(declaration => declaration.name)).toEqual([
+      'Empty',
+      'Stack',
+      'Shell',
+      'Confirm',
+      'Save',
+      'Label',
+    ])
+    Expect(declarations.every(declaration => AST.parametersOf(declaration).length === 0)).toBe(true)
+  })
+
+  Test('requires parenthesized parameter lists on every parameterized declaration', async () => {
+    const omitted = [
+      'view Main { }',
+      'layout Stack { }',
+      'ui Shell { }',
+      'enum Response { Done } dialogue Confirm responds Response { }',
+      'action Save { }',
+      'function Label { return "Label" }',
+    ]
+
+    for (const source of omitted) {
+      const result = await parseCodeWithErrors(source)
+      Expect(result.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    }
   })
 })

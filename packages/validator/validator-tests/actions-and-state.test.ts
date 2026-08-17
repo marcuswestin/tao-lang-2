@@ -28,7 +28,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'render Button("Shared", SharedAction)',
-        `action SharedAction { }\n${stubView('Button', 'Title is text, Action is action')}`,
+        `action SharedAction() { }\n${stubView('Button', 'Title is text, Action is action')}`,
       ),
     ),
   )
@@ -37,11 +37,11 @@ Describe('validator: actions and state', () => {
     'allows forward action references inside action bodies',
     accepts(actionApp(`
       state Count = 0
-      action AddTwo {
+      action AddTwo() {
         do AddOne()
         do AddOne()
       }
-      action AddOne { set Count += 1 }
+      action AddOne() { set Count += 1 }
     `)),
   )
 
@@ -50,7 +50,7 @@ Describe('validator: actions and state', () => {
     accepts(app(
       `
       let LaterClick = action { do AddOne() }
-      action AddOne { }
+      action AddOne() { }
       render Button("Add", LaterClick)
     `,
       stubView('Button', 'Title is text, Action is action'),
@@ -72,7 +72,7 @@ Describe('validator: actions and state', () => {
       [
         'allows local aliases to reference later file-level actions',
         'let Save = SharedAction',
-        'action SharedAction { }',
+        'action SharedAction() { }',
       ],
     ] as const
   ) {
@@ -83,8 +83,8 @@ Describe('validator: actions and state', () => {
     'allows action arguments through unambiguous nominal lineage',
     accepts(actionApp(
       `
-      action Save Base { }
-      action CallSave { do Save(Leaf "x") }
+      action Save(Base) { }
+      action CallSave() { do Save(Leaf "x") }
     `,
       'type Base is text\ntype Leaf is Base',
     )),
@@ -94,49 +94,49 @@ Describe('validator: actions and state', () => {
     const { title, body, extra = '', messages } of [
       {
         title: 'rejects local aliases that directly reference later local actions',
-        body: 'let LaterClick = AddOne\naction AddOne { }',
+        body: 'let LaterClick = AddOne\naction AddOne() { }',
         messages: [AliasesValidator.messages.aliasUsedBeforeDeclaration('LaterClick', 'AddOne')],
       },
       {
         title: 'rejects arguments passed to untyped action callbacks',
-        body: 'action Call { do action { }(1) }',
+        body: 'action Call() { do action { }(1) }',
         messages: [ActionsValidator.messages.dynamicActionArguments],
       },
       {
         title: 'reports a missing action argument',
-        body: 'action AddStep Step is number { }\naction Call { do AddStep() }',
+        body: 'action AddStep(Step is number) { }\naction Call() { do AddStep() }',
         messages: [ActionsValidator.messages.missingArgument('AddStep', 'Step')],
       },
       {
         title: 'reports an unmatched action argument',
-        body: 'action AddStep Step is number { }\naction Call { do AddStep("one") }',
+        body: 'action AddStep(Step is number) { }\naction Call() { do AddStep("one") }',
         messages: [ActionsValidator.messages.unmatchedArgument('AddStep')],
       },
       {
         title: 'reports duplicate exact action argument types',
-        body: 'action AddStep Step is number { }\naction Call { do AddStep(1, 2) }',
+        body: 'action AddStep(Step is number) { }\naction Call() { do AddStep(1, 2) }',
         messages: [ActionsValidator.messages.duplicateArgumentType('AddStep')],
       },
       {
         title: 'reports arguments ambiguous between same-typed action parameters',
-        body: 'action Save First is number, Second is number { }\naction Call { do Save(1) }',
+        body: 'action Save(First is number, Second is number) { }\naction Call() { do Save(1) }',
         messages: ['Action Save has an argument that matches multiple parameters by type: First, Second.'],
       },
       {
         title: 'reports arguments ambiguous across nominal lineage parameters',
-        body: 'action Save Base, Middle { }\naction Call { do Save(Leaf "x") }',
+        body: 'action Save(Base, Middle) { }\naction Call() { do Save(Leaf "x") }',
         extra: 'type Base is text\ntype Middle is Base\ntype Leaf is Middle',
         messages: ['Action Save has an argument that matches multiple parameters by type: Base, Middle.'],
       },
       {
         title: 'reports nominal action parameters matched by multiple arguments',
-        body: 'action Save Base { }\naction Call { do Save(Name "x", Title "y") }',
+        body: 'action Save(Base) { }\naction Call() { do Save(Name "x", Title "y") }',
         extra: 'type Base is text\ntype Name is Base\ntype Title is Base',
         messages: [ActionsValidator.messages.ambiguousParameter('Save', 'Base')],
       },
       {
         title: 'rejects incompatible values assigned to item-valued state',
-        body: 'state Current = Person { Name "Ada" }\naction Break { set Current = "not a person" }',
+        body: 'state Current = Person { Name "Ada" }\naction Break() { set Current = "not a person" }',
         extra: 'type Name is text\ntype Person is { Name }',
         messages: [StateValidator.messages.setTypeMismatch('Current', 'Person', 'text')],
       },
@@ -148,28 +148,28 @@ Describe('validator: actions and state', () => {
       },
       {
         title: 'rejects action parameters that shadow visible state declarations',
-        body: 'state Count = 0\naction Add Count is number { set Count += Count }',
+        body: 'state Count = 0\naction Add(Count is number) { set Count += Count }',
         messages: [AliasesValidator.messages.duplicateName('Count')],
       },
       {
         title: 'reports action arity through action aliases',
-        body: 'action AddStep Step is number { }\nlet CallAdd = AddStep\naction Missing { do CallAdd() }',
+        body: 'action AddStep(Step is number) { }\nlet CallAdd = AddStep\naction Missing() { do CallAdd() }',
         messages: [ActionsValidator.messages.missingArgument('AddStep', 'Step')],
       },
       {
         title: 'reports declaration-order diagnostics through cyclic action aliases',
-        body: 'action Run { do First() }',
+        body: 'action Run() { do First() }',
         extra: 'let First = Second\nlet Second = First',
         messages: [AliasesValidator.messages.aliasUsedBeforeDeclaration('First', 'Second')],
       },
       {
         title: 'rejects incompatible set values',
-        body: 'state Count = 0\naction BadSet { set Count = "many" }',
+        body: 'state Count = 0\naction BadSet() { set Count = "many" }',
         messages: [StateValidator.messages.setTypeMismatch('Count', 'number', 'text')],
       },
       {
         title: 'rejects compound mutation of non-number state',
-        body: 'state Name = "Ro"\naction BadCompound { set Name += "!" }',
+        body: 'state Name = "Ro"\naction BadCompound() { set Name += "!" }',
         messages: [StateValidator.messages.compoundStateType('Name', '+=', 'stateful text')],
       },
       {
@@ -179,12 +179,12 @@ Describe('validator: actions and state', () => {
       },
       {
         title: 'rejects set targets declared later in the same view',
-        body: 'action AddOne { set Count += 1 }\nstate Count = 0',
+        body: 'action AddOne() { set Count += 1 }\nstate Count = 0',
         messages: [StateValidator.messages.usedBeforeDeclaration('Count')],
       },
       {
         title: 'rejects toggle targets declared later in the same view',
-        body: 'action Flip { toggle Ready }\nstate Ready = false',
+        body: 'action Flip() { toggle Ready }\nstate Ready = false',
         messages: [StateValidator.messages.usedBeforeDeclaration('Ready')],
       },
       {
@@ -208,7 +208,7 @@ Describe('validator: actions and state', () => {
   }
 
   Test('does not classify unresolved named do targets as dynamic actions', async () => {
-    const result = await testValidateCodeWithErrors(actionApp('action CallMissing { do Missing(1) }'))
+    const result = await testValidateCodeWithErrors(actionApp('action CallMissing() { do Missing(1) }'))
     Expect(validationErrorMessages(result)).not.toContain(ActionsValidator.messages.dynamicActionArguments)
   })
 
@@ -217,8 +217,8 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'render Wrapper(action { })',
-        `${textView}\nview Wrapper Callback is action {
-        action CallCallback { do Callback(1) }
+        `${textView}\nview Wrapper(Callback is action) {
+        action CallCallback() { do Callback(1) }
         render Text("Ready")
       }`,
       ),
@@ -249,9 +249,9 @@ Describe('validator: actions and state', () => {
       title,
       rejects(
         app(
-          'action Change Value is text { }\nrender Wrapper(Change)',
-          `${textView}\nview Wrapper Callback is action(text) {
-          action Call { ${call} }
+          'action Change(Value is text) { }\nrender Wrapper(Change)',
+          `${textView}\nview Wrapper(Callback is action(text)) {
+          action Call() { ${call} }
           render Text("Ready")
         }`,
         ),
@@ -270,7 +270,7 @@ Describe('validator: actions and state', () => {
       title,
       rejects(
         app(
-          'action Change Value is number { }\nrender Field(Change: Change, Submit: Change)',
+          'action Change(Value is number) { }\nrender Field(Change: Change, Submit: Change)',
           `${textView}\n${stubView('Field', 'Change is action(text), Submit is action()')}`,
         ),
         invocationMessages.namedArgumentType('Field', parameter, expected, actual),
@@ -281,12 +281,12 @@ Describe('validator: actions and state', () => {
   Test('allows omitted optional computed-callback arguments while reporting other invalid calls', async () => {
     const result = await testValidateCodeWithErrors(actionApp(
       `
-      action First Message { }
-      action Second Message { }
-      action Optional Message default "Saved" { }
+      action First(Message) { }
+      action Second(Message) { }
+      action Optional(Message default "Saved") { }
       let Chosen = when true { true -> First otherwise -> Second }
       let OptionalCallback = when true { true -> Optional otherwise -> Optional }
-      action Call {
+      action Call() {
         do Chosen(1)
         do OptionalCallback()
         do OptionalCallback("Saved", "extra")
@@ -306,9 +306,9 @@ Describe('validator: actions and state', () => {
     rejects(
       actionApp(
         `
-        action Receive Value is text { }
+        action Receive(Value is text) { }
         let Holder = CallbackHolder { Receive }
-        action Call { do Holder.Callback(1) }
+        action Call() { do Holder.Callback(1) }
       `,
         'type CallbackHolder is { Callback action(text) }',
       ),
@@ -319,8 +319,8 @@ Describe('validator: actions and state', () => {
   Test('infers safe action types for compatible when branches regardless of order', async () => {
     const result = await testValidateCodeWithErrors(app(
       `
-      action Short Message { }
-      action Long Message, Count is number default 1 { }
+      action Short(Message) { }
+      action Long(Message, Count is number default 1) { }
       render Stack(){
         Consumer(Callback: when false { true -> Long otherwise -> Short })
         Consumer(Callback: when false { true -> Short otherwise -> Long })
@@ -345,7 +345,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'render Wrapper(Callback: action { })',
-        `${textView}\nview Wrapper Callback is action(text) { render Text("Ready") }`,
+        `${textView}\nview Wrapper(Callback is action(text)) { render Text("Ready") }`,
       ),
       invocationMessages.namedArgumentType('Wrapper', 'Callback', 'action(text)', 'action()'),
     ),

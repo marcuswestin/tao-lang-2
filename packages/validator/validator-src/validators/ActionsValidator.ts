@@ -37,6 +37,7 @@ const actionValidationMessages = {
     `Argument ${position} of action callback expects ${expected}, got ${actual}.`,
   dynamicActionNamedArgument: 'Action callback arguments are positional and cannot use a parameter name.',
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
+  asyncPlacement: '`async` is allowed only inside an action block.',
 }
 
 /** ActionsValidator groups action validation and diagnostics. */
@@ -45,6 +46,11 @@ export const ActionsValidator = {
     [AST.ActionDeclaration.$type]: (action, ctx) => {
       validateDuplicateParameters(action, ctx)
       validateParameterNameConflicts(action, ctx)
+    },
+    [AST.AsyncActionStatement.$type]: (statement, ctx) => {
+      if (!AST.findOwningActionBlock(statement)) {
+        ctx.error(actionValidationMessages.asyncPlacement, statement)
+      }
     },
     [AST.DoStatement.$type]: reportArity,
   } satisfies NodeValidationChecks,

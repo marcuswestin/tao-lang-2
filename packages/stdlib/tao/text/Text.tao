@@ -1,12 +1,6 @@
-// TEXT STDLIB CONTRACT FOR THIS OPEN TRANCHE.
-//
-// Keep this scratch package beside Next while it is unimplemented. During the text-stdlib slice,
-// move this file to `packages/stdlib/tao/text/Text.tao`, make `@tao/text` resolve that package, and
-// delete this scratch copy before closing the tranche.
-
 // Counts Unicode-whitespace-delimited words after trimming leading and trailing whitespace. The
 // empty string and an all-whitespace string both contain zero words.
-workspace function CountWords(Value is text) returns number {
+public function CountWords(Value is text) returns number {
    return inject number Value ```ts
       const trimmed = Value.trim()
       return trimmed === '' ? 0 : trimmed.split(/\s+/u).length
@@ -15,7 +9,7 @@ workspace function CountWords(Value is text) returns number {
 
 // Joins text values in source order, inserting Separator between adjacent values and nowhere else.
 // An empty list returns empty text, and a one-item list returns that item unchanged.
-workspace function Join(Values is list of text, Separator is text) returns text {
+public function Join(Values is list of text, Separator is text) returns text {
    return inject text Values, Separator ```ts
       return Values.join(Separator)
    ```

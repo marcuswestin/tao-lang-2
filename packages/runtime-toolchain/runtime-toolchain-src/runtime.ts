@@ -17,21 +17,25 @@ type GeneratedApp = {
   code: string
 }
 
+const generationQueues = new Map<string, Promise<void>>()
+
 /** generateApp generates the runtime app module from a Tao app file. */
 async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Promise<GeneratedApp> {
   const runtimePackageRoot = opts.runtimePackageRoot ?? defaultRuntimePackageRoot()
   const sourcePath = FS.resolvePath(appPath, opts.cwd)
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', runtimePackageRoot)
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
-  const compiled = await Workspace.compile(sourcePath, { appName: opts.appName })
+  return await serializeGeneration(generatedAppRoot, async () => {
+    const compiled = await Workspace.compile(sourcePath, { appName: opts.appName })
 
-  await writeGeneratedFiles(generatedAppRoot, compiled.files)
+    await writeGeneratedFiles(generatedAppRoot, compiled.files)
 
-  return {
-    sourcePath,
-    outputPath: generatedAppPath,
-    code: compiled.code,
-  }
+    return {
+      sourcePath,
+      outputPath: generatedAppPath,
+      code: compiled.code,
+    }
+  })
 }
 
 /** Runtime exposes Expo runtime app generation functions. */
@@ -51,6 +55,20 @@ async function appNames(appPath: string, opts: { cwd?: string } = {}): Promise<s
 
 function defaultRuntimePackageRoot(): string {
   return RuntimeToolchainPaths.packageRoot
+}
+
+/** serializeGeneration publishes one complete generated module graph at a time per output root. */
+function serializeGeneration<ResultT>(outputRoot: string, generate: () => Promise<ResultT>): Promise<ResultT> {
+  const previous = generationQueues.get(outputRoot) ?? Promise.resolve()
+  const result = previous.then(generate)
+  const completion = result.then(() => undefined, () => undefined)
+  generationQueues.set(outputRoot, completion)
+  void completion.then(() => {
+    if (generationQueues.get(outputRoot) === completion) {
+      generationQueues.delete(outputRoot)
+    }
+  })
+  return result
 }
 
 async function writeGeneratedFiles(

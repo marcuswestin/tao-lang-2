@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
 
-export type ValueReferenceLike = AST.ValueReference | AST.MemberAccessExpression
+export type ValueReferenceLike = AST.ValueReference | AST.RefinementExpression | AST.MemberAccessExpression
 
 /** DeclarationOrder groups source-order and ownership checks for value declarations. */
 export const DeclarationOrder = {
@@ -30,7 +30,10 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     MemberAccessExpression: reference => [reference],
     NoneLiteral: expressionValueReferences,
     NumberLiteral: expressionValueReferences,
+    PrimitiveConfigurationConstructor: expressionValueReferences,
+    RefinementExpression: expressionValueReferences,
     StringLiteral: expressionValueReferences,
+    TypedInjectionExpression: expressionValueReferences,
     TypedConstructor: expressionValueReferences,
     UnaryExpression: expressionValueReferences,
     ValueReference: reference => [reference],
@@ -42,7 +45,7 @@ function expressionValueReferences(value: AST.Expression): ValueReferenceLike[] 
 }
 
 function isValueReferenceLike(node: AST.Node): node is ValueReferenceLike {
-  return AST.isValueReference(node) || AST.isMemberAccessExpression(node)
+  return AST.isValueReference(node) || AST.isRefinementExpression(node) || AST.isMemberAccessExpression(node)
 }
 
 /** isUsedBeforeDeclaration returns true when `use` appears before `declaration` in the same document. */

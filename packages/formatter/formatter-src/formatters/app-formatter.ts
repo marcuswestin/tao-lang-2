@@ -3,21 +3,14 @@ import type { FormatHandlers } from '../formatting'
 export default {
   /** AppDeclaration formats the `app Name` header; the app body is formatted as a Block. */
   AppDeclaration(f) {
-    f.oneSpaceAfter('app')
+    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'app')
+    f.oneSpaceAround('=')
   },
 
   AppBlock(f) {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.statements)
     f.lineSeparatedList(f.node.statements)
-  },
-
-  AppName(f) {
-    f.oneSpaceBeforeProperty('value')
-  },
-
-  AppNavigator(f) {
-    f.oneSpaceBeforeProperty('value')
   },
 
   AppAuxiliaryNavigator(f) {
@@ -29,15 +22,8 @@ export default {
     f.oneSpaceAfter('view')
   },
 
-  /** AppDatasource formats app-owned schema storage bindings. */
-  AppDatasource(f) {
-    f.oneSpaceBeforeProperty('value')
-  },
-
-  /** ConfiguredAppPropertyValue formats a reference or bare app-position constructor. */
-  ConfiguredAppPropertyValue(f) {
-    f.oneSpaceBefore('with')
-    f.oneSpaceAfter('with')
-    f.oneSpaceBeforeProperty('block')
+  /** AppProperty formats any Prelude-owned app supplied slot generically. */
+  AppProperty(f) {
+    f.oneSpaceBeforeProperty('patch', 'value')
   },
 } satisfies Partial<FormatHandlers>

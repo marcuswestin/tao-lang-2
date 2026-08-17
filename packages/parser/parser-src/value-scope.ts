@@ -20,13 +20,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createStateScope(container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
-      if (AST.isPatchedValueReference(context.container)) {
-        return this.createPatchBaseScope(context.container)
-      }
       if (AST.isDataWriteField(context.container.$container)) {
         return this.createDataWriteValueScope(context.container)
       }
       return this.createValueScope(context.container)
+    }
+    if (context.property === 'target' && AST.isRefinementExpression(context.container)) {
+      return this.createPatchBaseScope(context.container)
     }
     if (context.property === 'reference' && AST.isConfigurationEntry(context.container)) {
       return this.createValueScope(context.container)
@@ -44,7 +44,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createConstructorDeclarationScope(context.container)
     }
     const isConfigurationTargetReference = context.property === 'target'
-      && (AST.isConfigurationReference(container) || AST.isConfiguredAppPropertyValue(container))
+      && AST.isConfigurationReference(container)
     if (isConfigurationTargetReference) {
       return this.createConfigurationDeclarationScope(container)
     }
@@ -65,6 +65,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (context.property === 'view' && AST.isRender(context.container)) {
       return this.createViewScope(context.container)
+    }
+    if (context.property === 'slot' && AST.isRenderSlotUse(context.container)) {
+      return this.createRenderSlotScope(context.container)
     }
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
@@ -157,24 +160,27 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     const configurable = (candidate: AST.Node): candidate is AST.Declaration =>
-      AST.isAliasDeclaration(candidate)
-      || AST.isAppDeclaration(candidate)
+      AST.isImportableValueDeclaration(candidate)
       || AST.isConfigurableDeclaration(candidate)
-      || AST.isUiDeclaration(candidate)
     let scope = this.createScopeForNodes(root.statements.filter(configurable))
     scope = this.createScopeForNodes(this.importedDeclarations(node, configurable), scope)
     return scope
   }
 
-  private createPatchBaseScope(node: AST.PatchedValueReference): Langium.Scope {
-    const patchable = (candidate: AST.Node): candidate is AST.AliasDeclaration | AST.AppDeclaration =>
-      AST.isAliasDeclaration(candidate) || AST.isAppDeclaration(candidate)
+  private createPatchBaseScope(node: AST.RefinementExpression): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    let scope = this.createScopeForNodes(root.statements.filter(patchable))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, patchable), scope)
+    const value = (candidate: AST.Node): candidate is AST.Declaration & AST.ValueDeclaration =>
+      AST.isDeclaration(candidate) && AST.isValueDeclaration(candidate)
+    const type = (candidate: AST.Node): candidate is AST.TypeDeclaration => AST.isTypeDeclaration(candidate)
+    // A refinement name resolves the value namespace first, then falls back to the type namespace.
+    // Keeping them as nested scopes also permits same-name peers without creating an ambiguous ref.
+    let scope = this.createScopeForNodes(this.importedDeclarations(node, type))
+    scope = this.createScopeForNodes(root.statements.filter(type), scope)
+    scope = this.createScopeForNodes(this.importedDeclarations(node, value), scope)
+    scope = this.createScopeForNodes(root.statements.filter(value), scope)
     return scope
   }
 
@@ -204,6 +210,32 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   private createViewScope(render: AST.Render): Langium.Scope {
     return this.createDeclarationScope(render, AST.isRenderableDeclaration)
+  }
+
+  private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
+    if (!use.render) {
+      const owner = AST.findOwningView(use)
+      return this.createScopeForNodes(
+        AST.isFrameDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [],
+      )
+    }
+
+    const block = use.$container
+    const invocation = AST.isBlock(block) && AST.isRender(block.$container) ? block.$container : undefined
+    const targetName = invocation?.view?.$refText
+    const root = AST.findRoot(use)
+    if (!targetName || !AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+
+    // Resolve by the invocation's source name without touching its `.ref` while this slot itself
+    // is linking. The ordinary render reference is linked independently by the same visible set.
+    const frames = [
+      ...root.statements.filter(AST.isFrameDeclaration),
+      ...this.importedDeclarations(use, AST.isFrameDeclaration),
+    ]
+    const frame = frames.find(candidate => candidate.name === targetName)
+    return this.createScopeForNodes(frame ? AST.renderSlotDeclarationsOf(frame) : [])
   }
 
   private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {
@@ -313,7 +345,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     scope = this.createScopeForNodes(
       this.importedDeclarations(
         node,
-        candidate => AST.isAppDeclaration(candidate) || AST.isAppVariantDeclaration(candidate),
+        AST.isConcreteAppValueDeclaration,
       ),
       scope,
     )
@@ -400,7 +432,8 @@ function entityDataForWrite(operation: AST.Node | undefined): AST.EntityDataDecl
   if (!AST.isUpdateStatement(operation) || !AST.isValueReference(operation.target)) {
     return undefined
   }
-  return entityDataForValueDeclaration(operation.target.target.ref, operation)
+  const target = operation.target.target.ref
+  return AST.isValueDeclaration(target) ? entityDataForValueDeclaration(target, operation) : undefined
 }
 
 function entityDataForValueDeclaration(
@@ -421,7 +454,8 @@ function booleanFieldForCaseTest(test: AST.CaseTestExpression): AST.EntityDataFi
   if (!AST.isMemberAccessExpression(subject)) {
     return undefined
   }
-  let entity = entityDataForValueDeclaration(subject.target.ref, test)
+  const target = subject.target.ref
+  let entity = AST.isValueDeclaration(target) ? entityDataForValueDeclaration(target, test) : undefined
   for (const [index, member] of subject.members.entries()) {
     const field = entity?.block.entries
       .filter(AST.isEntityDataField)
@@ -460,7 +494,8 @@ function entityDataForCollection(
   if (!AST.isMemberAccessExpression(collection)) {
     return undefined
   }
-  const owner = entityDataForValueDeclaration(collection.target.ref, context)
+  const target = collection.target.ref
+  const owner = AST.isValueDeclaration(target) ? entityDataForValueDeclaration(target, context) : undefined
   const fieldName = collection.members.at(-1)
   if (!owner || !fieldName) {
     return undefined

@@ -8,23 +8,14 @@ Language features are built in tranches through the WordFlower app family: decis
 
 ## Current tranche
 
-- [x] Implement the WordFlower tranche 3 contract into Current
-  - Selection navigation, entity availability guards, dialogues, keyed toasts as a presentation mode, reshaped data fields, the third data level, and self-hosted navs and datasources graduated into `packages/stdlib/tao`.
-- [x] Cut and solidify the WordFlower tranche 4 contract in Next
-  - `2 - Next` is now the complete implementation contract: the declaration/value model, Prelude
-    hierarchy, required declaration parentheses, block-bodied functions, typed injection, optional
-    item fields, `list of T`, nominal enums, `@tao/text`, new UI surfaces, adaptive panes,
-    non-blocking `async { ... }`, named frame slots, and the first flat-token design slice.
-- [ ] Implement the WordFlower tranche 4 contract into Current
-  - Follow `Roadmap/Implement WordFlower tranche 4/Brief - Implement WordFlower tranche 4.md` and
-    absorb the complete Next directory slice by slice. InstantDB, remote authorization semantics,
-    richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general
-    concurrency policy remain in later tiers.
+- [ ] Cut tranche 5 from the gap between Current and MVP
+  - Tranche 4 is absorbed: `1 - Current` and `2 - Next` are byte-identical and both read
+    `Tranche status: absorbed`. InstantDB, remote authorization semantics, richer data test controls,
+    snapshots, SplitNav/windows, semantic design recipes, and general concurrency policy are the
+    largest capabilities still held in the later tiers.
 
 ## Toward v1
 
-- [ ] Add typed TS value injection expressions
-  - `let X = inject text/number …` with a Tao-side declared type and generated TS return checking.
 - [ ] Harden `tao test`
   - Filters, watch and CI output, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
 - [ ] Add the Tao design system MVP
@@ -51,8 +42,6 @@ Product and codebase backlog, unordered.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
 - [ ] Allow only one project definition per project root; scope workspace package lookup to that root, have the IDE extension manage one workspace per project folder, and stop requiring a Git repo at the project root.
 - [ ] Implement styling, and then all of `Spec/Tao Layout and UI.md`.
-- [ ] Allow `TYPE Value` construction in general positions.
-- [ ] Require the element type of lists.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
 - [ ] Remove magical strings.

@@ -1,5 +1,5 @@
 use StackNav from @tao/nav
-use Box, Button, Col, Row, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
+use Box, Button, Col, Panes, Row, ScrollView, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
 
 app LayoutAndAppShell {
    Name "Layout and App Shell"
@@ -10,8 +10,8 @@ app LayoutAndAppShell {
 let PageTitle = "Layout and app shell"
 let BodyCopy = "This screen should sit inside the default Tao app shell."
 
-ui MainView {
-   action Noop { }
+ui MainView() {
+   action Noop() { }
    render Col() [fill, content top stretch, gap 12, pad 16] {
       Text(PageTitle) [width fill]
       TextMultiline(BodyCopy) [width fill]
@@ -40,4 +40,16 @@ ui MainView {
          Text("Keyboard")
          Text("Deterministic")
          Text("Cross-platform")
-}  }  }
+      }
+      #layoutPanes
+      Panes() [gap 16, width fill] {
+         #layoutScroll
+         ScrollView() [claim 2, gap 6, pad 8] {
+            #layoutReadable
+            Col() [width max 720] {
+               Text("Adaptive primary pane")
+         }  }
+         #layoutSecondary
+         Col() [claim 1] {
+            Text("Adaptive secondary pane")
+}  }  }  }

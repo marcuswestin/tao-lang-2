@@ -20,13 +20,16 @@ Describe('Tao injection runtime', () => {
         let UserName = "Ro"
         let Count = 3
 
-        view MainView {
+        view MainView() {
             render Text("Hello")
         }
 
-        view Text Value is text {
+        view Text(Value is text) {
             render inject Value, Name UserName, Count \`\`\`ts
-                return <RN.Text>{Value + " " + Name + " " + Count}</RN.Text>
+                void TR
+                void process.env.NODE_ENV
+                const NativeText = RN.Text
+                return <NativeText>{Value + " " + Name + " " + Count}</NativeText>
             \`\`\`
         }
       `,

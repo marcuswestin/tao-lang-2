@@ -16,8 +16,21 @@ import type {
 
 /** LayoutMerge overlays caller layout entries onto default layout entries by semantic slot. */
 export const LayoutMerge = {
+  entries: resolvedEntries,
   merge,
 } as const
+
+/** resolvedEntries folds one authored list in source order while retaining decomposed `fill` effects. */
+function resolvedEntries(
+  sourceEntries: readonly TaoLayoutEntry[],
+  direction?: TaoLayoutDirection,
+): readonly TaoLayoutEntry[] {
+  const entries: TaoLayoutEntry[] = []
+  for (const entry of sourceEntries) {
+    mergeEntry(entries, entry, direction)
+  }
+  return entries
+}
 
 function merge(
   createLayout: (entries: readonly TaoLayoutEntry[]) => TaoLayout,
@@ -25,10 +38,7 @@ function merge(
   overlay: TaoLayout | undefined,
   spec: TaoLayoutMergeSpec = {},
 ): TaoLayout | undefined {
-  const entries = [...entriesOf(base)]
-  for (const entry of entriesOf(overlay)) {
-    mergeEntry(entries, entry, spec.direction)
-  }
+  const entries = resolvedEntries([...entriesOf(base), ...entriesOf(overlay)], spec.direction)
   return entries.length === 0 ? undefined : createLayout(entries)
 }
 
@@ -42,18 +52,18 @@ function mergeEntry(
   direction: TaoLayoutDirection | undefined,
 ): void {
   return RuntimeSwitch<TaoLayoutEntryHead, void>(overlayEntry[0], {
-    aligned: () => entries.push(overlayEntry),
-    centered: () => entries.push(overlayEntry),
-    claim: () => entries.push(overlayEntry),
-    compress: () => entries.push(overlayEntry),
+    aligned: () => replaceEntries(entries, overlayEntry, ['aligned', 'centered']),
+    centered: () => replaceEntries(entries, overlayEntry, ['aligned', 'centered']),
+    claim: () => replaceEntries(entries, overlayEntry, ['claim', 'hug']),
+    compress: () => replaceEntries(entries, overlayEntry, ['compress', 'rigid']),
     content: () => mergeContentEntry(entries, overlayEntry as TaoLayoutContentEntry, direction),
-    fill: () => entries.push(overlayEntry),
+    fill: () => replaceWithFill(entries, overlayEntry),
     gap: () => replaceEntry(entries, overlayEntry as TaoLayoutEntryOfHead<'gap'>, 'gap'),
     height: () => replaceEntry(entries, overlayEntry as TaoLayoutEntryOfHead<'height'>, 'height'),
-    hug: () => entries.push(overlayEntry),
+    hug: () => replaceEntries(entries, overlayEntry, ['claim', 'hug']),
     margin: () => mergeSpacingEntry(entries, overlayEntry as TaoLayoutSpacingEntry<'margin'>, 'margin'),
     pad: () => mergeSpacingEntry(entries, overlayEntry as TaoLayoutSpacingEntry<'pad'>, 'pad'),
-    rigid: () => entries.push(overlayEntry),
+    rigid: () => replaceEntries(entries, overlayEntry, ['compress', 'rigid']),
     width: () => replaceEntry(entries, overlayEntry as TaoLayoutEntryOfHead<'width'>, 'width'),
   })
 }
@@ -63,12 +73,40 @@ function replaceEntry<HeadT extends TaoLayoutEntryHead>(
   overlayEntry: TaoLayoutEntryOfHead<HeadT>,
   head: HeadT,
 ): void {
-  const existingIndex = entries.findIndex(entry => entry[0] === head)
-  if (existingIndex === -1) {
-    entries.push(overlayEntry)
-    return
+  replaceEntries(entries, overlayEntry, [head])
+}
+
+function replaceEntries(
+  entries: TaoLayoutEntry[],
+  overlayEntry: TaoLayoutEntry,
+  replacedHeads: readonly TaoLayoutEntryHead[],
+): void {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (replacedHeads.includes(entries[index]![0])) {
+      entries.splice(index, 1)
+    }
   }
-  entries.splice(existingIndex, 1, overlayEntry)
+  entries.push(overlayEntry)
+}
+
+function replaceWithFill(entries: TaoLayoutEntry[], overlayEntry: TaoLayoutEntry): void {
+  const replacedHeads: readonly TaoLayoutEntryHead[] = [
+    'aligned',
+    'centered',
+    'claim',
+    'fill',
+    'height',
+    'hug',
+    'width',
+  ]
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]!
+    const isWidthMaximum = entry[0] === 'width' && entry[1] === 'max'
+    if (!isWidthMaximum && replacedHeads.includes(entry[0])) {
+      entries.splice(index, 1)
+    }
+  }
+  entries.push(overlayEntry)
 }
 
 function mergeContentEntry(
@@ -77,7 +115,9 @@ function mergeContentEntry(
   direction: TaoLayoutDirection | undefined,
 ): void {
   if (!direction) {
-    replaceEntry(entries, overlayEntry, 'content')
+    // Direction decides which content terms share a semantic slot. Preserve authored entries until
+    // the consuming container supplies it rather than discarding an unrelated axis prematurely.
+    entries.push(overlayEntry)
     return
   }
   const existingIndex = entries.findIndex(entry => entry[0] === 'content')
@@ -87,7 +127,8 @@ function mergeContentEntry(
   }
 
   const mergedEntry = mergedContentEntryValue(entries[existingIndex]! as TaoLayoutContentEntry, overlayEntry, direction)
-  entries.splice(existingIndex, 1, mergedEntry)
+  entries.splice(existingIndex, 1)
+  entries.push(mergedEntry)
 }
 
 function mergedContentEntryValue(
@@ -152,7 +193,8 @@ function mergeSpacingEntry<HeadT extends 'margin' | 'pad'>(
     ...spacingSides(entries[existingIndex]! as TaoLayoutSpacingEntry<HeadT>),
     ...spacingSides(overlayEntry),
   }
-  entries.splice(existingIndex, 1, spacingEntry(head, sides))
+  entries.splice(existingIndex, 1)
+  entries.push(spacingEntry(head, sides))
 }
 
 function spacingSides(entry: TaoLayoutSpacingEntry): SpacingSides {

@@ -72,7 +72,19 @@ Describe('parser: lexer', () => {
     ])
   })
 
-  for (const character of ['@', '#', '$']) {
+  Test('lexes tags and hexadecimal design colors through one contextual token', () => {
+    const result = testLexCode('#screen #121826 #f6f7f3 #abc_123')
+
+    Expect(tokenNames(result)).toEqual([
+      'TagOrHexColor',
+      'TagOrHexColor',
+      'TagOrHexColor',
+      'TagOrHexColor',
+    ])
+    Expect(tokenImages(result)).toEqual(['#screen', '#121826', '#f6f7f3', '#abc_123'])
+  })
+
+  for (const character of ['@', '$']) {
     Test(`rejects unknown ${character} characters`, rejectsLexer(character, character))
   }
 

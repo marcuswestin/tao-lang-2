@@ -44,6 +44,6 @@ Recorded here so they are not rediscovered as defects:
 
 - **`Datasource datasource is none` in the prelude.** Eight of the ten apps in the repository declare
   no datasource, so an app's `Datasource` slot is optional by necessity, not by preference.
-- **`TypeSlotName: ID | 'implement'`.** A keyword workaround, but a working one. It is a symptom of
-  `Open questions` Q11 rather than an independent problem, and should be revisited with that question
-  rather than before it.
+- **`TypeSlotName: ID | 'implement'`.** A keyword workaround, but a working one. Tranche 4 resolved
+  Q11 by retaining `implement inject nav|provider` as the explicit protocol-binding clause that fills
+  this primitive requirement; it is not an independent cleanup item.

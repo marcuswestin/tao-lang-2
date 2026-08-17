@@ -25,6 +25,8 @@ export const typeValidationMessages = {
   defaultParameterOrder: (name: string) => `Required parameter '${name}' cannot follow a defaulted parameter.`,
   defaultParameterType: (name: string, expected: string, actual: string) =>
     `Default value for parameter '${name}' expects ${expected}, got ${actual}.`,
+  optionalFieldDefault: (name: string) => `Optional item field '${name}' cannot also declare a default value.`,
+  optionalFieldType: (name: string) => `Optional item field '${name}' must declare an explicit type.`,
 } as const
 
 /** typeValidationChecks validates custom type declarations and item/list/custom expression forms. */
@@ -93,6 +95,9 @@ function validateItemType(type: AST.ItemTypeExpression, ctx: ValidationContext):
 }
 
 function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: ValidationContext): void {
+  if (AST.isTypeDeclaration(derived.$container) && AST.isConfigurableDeclaration(derived.$container)) {
+    return
+  }
   const base = Type.ofReference(derived.base)
   if (base.kind === 'unresolved') {
     return
@@ -137,6 +142,14 @@ function slotConstraintType(slot: AST.TypeProperty): ASTUtils.TaoType {
 }
 
 function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext): void {
+  if (property.optional && !property.type) {
+    ctx.error(typeValidationMessages.optionalFieldType(property.name), property)
+    return
+  }
+  if (property.optional && property.value) {
+    ctx.error(typeValidationMessages.optionalFieldDefault(property.name), property.value)
+    return
+  }
   const itemOwner = property.$container.$container
   if (AST.isPrimitiveDeclaration(itemOwner) && property.name === 'implement' && !property.type && !property.value) {
     return
@@ -170,7 +183,7 @@ function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext
 
 function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: ValidationContext): void {
   if (
-    AST.isConfigurationPropertyDeclaration(reference.$container)
+    (AST.isConfigurationPropertyDeclaration(reference.$container) || AST.isTypeProperty(reference.$container))
     && AST.configurationPropertyIsKey(reference.$container)
   ) {
     return
@@ -351,6 +364,7 @@ function typeReferenceReferencesRoot(
   return Switch.type(type, {
     ActionTypeReference: type =>
       type.parameterTypes.some(parameter => typeReferenceReferencesRoot(root, parameter, new Set(seen))),
+    ListTypeReference: type => typeReferenceReferencesRoot(root, type.elementType, new Set(seen)),
     NamedTypeReference: type => {
       const target = Type.definitionOfReference(type)
       if (!target) {
@@ -415,7 +429,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
       return
     }
-    current = Type.ofProperty(property)
+    current = Type.ofPropertyRead(property)
     if (current.kind === 'unresolved') {
       return
     }
@@ -426,8 +440,8 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
 function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtils.TaoType {
   return Switch.typeMaybe<AST.ValueDeclaration | undefined, ASTUtils.TaoType>(declaration, {
     ParameterDeclaration: Type.ofParameter,
-    AliasDeclaration: declaration => Type.ofExpression(declaration.value),
-    AppDeclaration: () => ({ kind: 'unresolved' }),
+    AliasDeclaration: Type.ofValueDeclaration,
+    AppDeclaration: Type.ofValueDeclaration,
     AskStatement: Type.ofValueDeclaration,
     StateDeclaration: declaration => Type.ofExpression(declaration.value),
     ActionDeclaration: Type.ofAction,
@@ -442,6 +456,9 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
       const collection = Type.ofExpression(statement.collection)
       return collection.kind === 'list' ? collection.element ?? { kind: 'unresolved' } : { kind: 'unresolved' }
     },
+    DatasourceDeclaration: Type.ofValueDeclaration,
+    DesignDeclaration: Type.ofValueDeclaration,
+    NavDeclaration: Type.ofValueDeclaration,
     UiDeclaration: () => ({ kind: 'primitive', primitive: 'ui' }),
     undefined: () => ({ kind: 'unresolved' }),
   })

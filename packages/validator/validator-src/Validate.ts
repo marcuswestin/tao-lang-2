@@ -11,6 +11,7 @@ import {
   validateConfiguredValuesFile,
 } from './validators/configured-values-validator'
 import { dataValidationChecks, validateDataFile } from './validators/data-validator'
+import { DesignValidator } from './validators/design-validator'
 import { DialogueValidator } from './validators/dialogue-validator'
 import { ExpressionsValidator } from './validators/expressions-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
@@ -40,6 +41,7 @@ const nodeValidationChecks = NodeValidation.compile(
     InvocationsValidator.checks,
     FunctionalCoreValidator.checks,
     dataValidationChecks,
+    DesignValidator.checks,
     configurationValidationChecks,
     completenessValidationChecks,
     preludeValidationChecks,

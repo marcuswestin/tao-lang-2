@@ -1,7 +1,8 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Assert, Text } from '@shared'
+import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
+import { inlineInjectionBindingName } from './injection-plan'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ConfigurationCompiler = {
@@ -10,12 +11,12 @@ export const ConfigurationCompiler = {
     const implementation = AST.configurationImplementationOf(declaration)
     Assert.defined(implementation, 'validated configurable declaration has one implementation')
     const factory = configurationFactory(declaration, implementation)
-    return AST.isNavDeclaration(declaration)
-      ? gen`${gen.scopeName(declaration)} = TR.Navigation.Declaration(
+    return AST.configurationPrimitiveOf(declaration) === 'nav'
+      ? gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Navigation.Declaration(
           ${gen.jsLiteral(declaration.name)},
           ${factory},
         )`
-      : gen`${gen.scopeName(declaration)} = TR.Data.Declaration(
+      : gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Data.Declaration(
           ${gen.jsLiteral(declaration.name)},
           ${factory},
         )`
@@ -23,7 +24,7 @@ export const ConfigurationCompiler = {
 
   /** ConfigurationDeclarations emits sidecar-facing TypeScript configuration contracts for one Tao file. */
   ConfigurationDeclarations(taoFile: AST.TaoFile): Compiled {
-    const declarations = taoFile.statements.filter(AST.isConfigurableDeclaration)
+    const declarations = taoFile.statements.filter(isRuntimeConfigurableDeclaration)
     const hasProperties = declarations.some(declaration =>
       AST.configurationPropertiesOf(declaration).length > 0
       || (AST.configurationKeyOf(declaration)?.block.properties.length ?? 0) > 0
@@ -38,16 +39,32 @@ export const ConfigurationCompiler = {
   /** ConfigurationTypes emits the same contracts inside the generated runtime module. */
   ConfigurationTypes(taoFile: AST.TaoFile): Compiled {
     return gen.list(
-      taoFile.statements.filter(AST.isConfigurableDeclaration),
+      taoFile.statements.filter(isRuntimeConfigurableDeclaration),
       configurationDeclarationType,
       { newLines: 2 },
     )
   },
 } as const
 
+/** isRuntimeConfigurableDeclaration excludes app contracts, whose identity belongs to app values. */
+export function isRuntimeConfigurableDeclaration(
+  declaration: AST.Node,
+): declaration is AST.ConfigurableDeclaration {
+  if (!AST.isConfigurableDeclaration(declaration)) {
+    return false
+  }
+  const primitive = AST.configurationPrimitiveOf(declaration)
+  return primitive === 'nav' || primitive === 'datasource'
+}
+
 /** configurationSidecarBindingName returns the generated default-import binding for one implementation. */
 export function configurationSidecarBindingName(declaration: AST.ConfigurableDeclaration): string {
   return `__tao_configuration_implementation_${declaration.name}__`
+}
+
+/** configurationRuntimeBindingName separates reusable type identities from same-name Tao values. */
+export function configurationRuntimeBindingName(declaration: AST.ConfigurableDeclaration): string {
+  return `__tao_type_${declaration.name}`
 }
 
 function configurationFactory(
@@ -55,11 +72,8 @@ function configurationFactory(
   implementation: AST.ConfigurationImplementation,
 ): Compiled {
   if (implementation.tsCodeBlock !== undefined) {
-    const code = stripTsFence(implementation.tsCodeBlock)
     return gen`Reflect.apply(
-      function __tao_configuration_implementation__() {
-        ${gen.textLines(code)}
-      },
+      ${gen.Name({ name: inlineInjectionBindingName(implementation) })},
       undefined,
       [],
     )`
@@ -74,7 +88,7 @@ function configurationFactory(
 }
 
 function configurationDeclarationType(declaration: AST.ConfigurableDeclaration): Compiled {
-  if (AST.isNavDeclaration(declaration)) {
+  if (AST.configurationPrimitiveOf(declaration) === 'nav') {
     return normalizedNavConfigurationType(declaration)
   }
   const properties = AST.configurationPropertiesOf(declaration)
@@ -88,7 +102,7 @@ function configurationDeclarationType(declaration: AST.ConfigurableDeclaration):
   }>`
 }
 
-function normalizedNavConfigurationType(declaration: AST.NavDeclaration): Compiled {
+function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration): Compiled {
   const properties = AST.configurationPropertiesOf(declaration)
   const key = AST.configurationKeyOf(declaration)
   if (key !== undefined && hasSelectionConfigurationShape(properties, key)) {
@@ -97,6 +111,7 @@ function normalizedNavConfigurationType(declaration: AST.NavDeclaration): Compil
       readonly initial: string
       readonly items: Readonly<Record<string, Readonly<{
         readonly label: TR.Evaluable
+        readonly icon?: TR.Evaluable
         readonly content: TR.Presentable | TR.NavigationValue
       }>>>
     }>`
@@ -123,21 +138,23 @@ function normalizedNavConfigurationType(declaration: AST.NavDeclaration): Compil
 }
 
 function hasSelectionConfigurationShape(
-  properties: readonly AST.ConfigurationPropertyDeclaration[],
+  properties: readonly AST.ConfigurationProperty[],
   key: AST.ConfigurationKeyDeclaration,
 ): boolean {
   const initial = properties.find(property => property.name === 'Initial')
   const display = properties.find(property => property.name === 'Display')
   const label = key.block.properties.find(property => property.name === 'Label')
+  const icon = key.block.properties.find(property => property.name === 'Icon')
   const content = key.block.properties.find(property => property.name === 'Content')
   return properties.length === 2
-    && key.block.properties.length === 2
+    && (key.block.properties.length === 2 || key.block.properties.length === 3)
     && initial !== undefined
     && AST.configurationPropertyIsKey(initial)
     && display !== undefined
     && isPrimitive(Type.ofConfigurationProperty(display), 'text')
     && label !== undefined
     && isPrimitive(Type.ofConfigurationProperty(label), 'text')
+    && (icon === undefined || isPrimitive(Type.ofConfigurationProperty(icon), 'text'))
     && content !== undefined
     && isPresentableUnion(Type.ofConfigurationProperty(content))
 }
@@ -153,7 +170,7 @@ function isPresentableUnion(type: ASTUtils.TaoType): boolean {
     && type.members.some(member => isPrimitive(member, 'nav'))
 }
 
-function configurationPropertyType(property: AST.ConfigurationPropertyDeclaration): Compiled {
+function configurationPropertyType(property: AST.ConfigurationProperty): Compiled {
   return gen`readonly ${gen.jsLiteral(property.name)}: ${compileRuntimeType(Type.ofConfigurationProperty(property))}`
 }
 
@@ -161,8 +178,4 @@ function configurationKeyType(key: AST.ConfigurationKeyDeclaration): Compiled {
   return gen`readonly [key: \`@\${string}\`]: Readonly<{
     ${gen.list(key.block.properties, configurationPropertyType)}
   }>`
-}
-
-function stripTsFence(code: string): string {
-  return Text.stripIndent(code.replace(/^```ts[ \t]*(?:\r?\n)?/, '').replace(/(?:\r?\n)?```$/, ''))
 }

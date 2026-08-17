@@ -15,7 +15,7 @@ Describe('tao test', () => {
 
         test "Inline" { }
 
-        view MainView { }
+        view MainView() { }
       `),
       'Commented.tao': 'test /* hidden comment */ "Commented" { }\n',
       'nested/Beta.test.tao': 'test "Beta" { }\n',
@@ -88,7 +88,10 @@ Describe('tao test', () => {
       Expect(validationErrors).toEqual([
         {
           path: brokenPath,
-          messages: ['App BrokenApp must declare exactly one Navigator (or transitional root view), found 0.'],
+          messages: [
+            'App BrokenApp must declare exactly one Name, found 0.',
+            'App BrokenApp must declare exactly one Navigator (or transitional root view), found 0.',
+          ],
         },
       ])
     })

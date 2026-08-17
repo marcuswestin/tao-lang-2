@@ -9,6 +9,9 @@ export default {
   /** LayoutDeclaration formats a `layout Name parameters` view header. */
   LayoutDeclaration: ViewDeclaration,
 
+  /** FrameDeclaration formats a `frame Name parameters` view header. */
+  FrameDeclaration: ViewDeclaration,
+
   /** UiDeclaration formats a first-class presentation declaration. */
   UiDeclaration: ViewDeclaration,
 
@@ -36,6 +39,19 @@ export default {
     f.oneSpaceBeforeProperty('layoutClause')
   },
 
+  /** RenderSlotDeclaration formats the optional `@name = empty` frame contract. */
+  RenderSlotDeclaration(f) {
+    f.oneSpaceAround('=')
+  },
+
+  /** RenderSlotUse separates a named slot fill from its visual value. */
+  RenderSlotUse(f) {
+    f.oneSpaceBeforeProperty('render')
+  },
+
+  /** CallerContentStatement is one atomic ambient placeholder. */
+  CallerContentStatement() {},
+
   /** LayoutClause formats bracketed render layout entries. */
   LayoutClause(f) {
     f.commaSpacedList()
@@ -54,6 +70,6 @@ export default {
 } satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.VisualDeclaration>): void {
-  f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'view', 'layout', 'ui', 'dialogue')
-  f.oneSpaceBeforeProperty('parameterList')
+  f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'view', 'layout', 'frame', 'ui', 'dialogue')
+  f.noSpaceBefore('(')
 }

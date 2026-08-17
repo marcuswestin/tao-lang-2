@@ -1,11 +1,9 @@
 # Tao Presentation and Navigation
 
-Status: authoritative implemented contract for the current WordFlower tranche, with explicitly
-labelled declaration-model additions settled for `Apps/WordFlower/2 - Next`.
+Status: authoritative implemented contract for the current WordFlower tranche.
 
 Tao separates embeddable `view` values from first-class `ui` values that may enter an app's
-presentation tree. A configured `nav` is also presentable. Current code represents their closed
-role as `Presentable is ui | nav`. Next replaces that special union with the core hierarchy:
+presentation tree. A configured `nav` is also presentable. The implemented core hierarchy is:
 
 ```tao
 primitive visual
@@ -61,7 +59,7 @@ for genuine app-specific hosts such as windows. Overlays and toasts never requir
 
 An app value and each configured nav descriptor have process-local declaration identity. Universal
 auto-typed `let` remains equivalent and may name any of the descriptors above without changing that
-identity. The Next `nav Name = Assignment` and `app Name = Assignment` heads constrain their value
+identity. The `nav Name = Assignment` and `app Name = Assignment` heads constrain their value
 families without erasing the more precise inferred type; they declare values, not reusable types.
 Reusable derivation uses `type Name is nav|app with { ... }`. `Type { ... }` constructs a value and
 is sugar for `Type with { ... }`, while derivation from an existing value must retain `with`.
@@ -82,17 +80,17 @@ workspace let WordFlowerDrawer = WordFlower with {
 }
 ```
 
-Next requires every app value, including variants, to be declared in the entry file; cross-module
+Every app value, including variants, must be declared in the entry file; cross-module
 variant derivation is unreachable. `run`, imports, and strict app identity accept any complete app
 value uniformly whether its declaration uses a primitive `app` head or inferred `let`.
 
-Strict app targets name a declaration statically and select its running occurrence dynamically.
+Strict app targets name a complete app value statically and select its running occurrence dynamically.
 `present App@key`, `present Ui() in App@key`, and `replace Nav in App` walk the enclosing app chain
-for the nearest occurrence with the named declaration identity. The app position must name the root
-app declaration, never a variant. A variant still receives that declaration's targets because it
-retains its originating identity. No match is a structured runtime error; target resolution never
-mounts or falls back to the named app definition. A strict selection key must exist on the root
-app's SelectionNav and every variant of that root declared in the same file.
+for the nearest occurrence with the named declaration identity. The app position may name either a
+root app or an in-file complete variant; a variant is a static spelling for its originating app
+identity, not a separately targetable declaration. No match is a structured runtime error; target
+resolution never mounts or falls back to the named app definition. A strict selection key must exist
+on the root app's SelectionNav and every variant of that root declared in the same file.
 
 One source module may declare several apps. Generated modules expose a registry local to that module
 and retain the selected app as their default export. `run AppName` selects directly from that module.
@@ -106,14 +104,12 @@ select an app.
 The stdlib navs are ordinary Tao declarations whose public properties are their complete generic
 configuration contract:
 
-The example below is the currently implemented declaration spelling. Next has settled that `nav`
-heads declare values and that reusable types use `type Name is nav with { ... }`; it has not yet
-settled whether the protocol binding in that type block becomes `implement is ...` or retains the
-current `implement inject nav ...` clause. That remaining spelling is tracked as declaration-spike
-Q11 and does not change the current behavior described here.
+Reusable nav types use `type Name is nav with { ... }`. Their explicit protocol-binding clause
+retains `implement inject nav`; it fills primitive `nav`'s implementation requirement but is not an
+ordinary Tao data property.
 
 ````tao
-public nav StackNav {
+public type StackNav is nav with {
    Initial ui
 
    implement inject nav ```ts
@@ -122,7 +118,7 @@ public nav StackNav {
 }
 ````
 
-A `nav` declaration is top-level, has `package`, `workspace`, or `public` visibility, and binds one
+A reusable `nav` type is top-level, has `package`, `workspace`, or `public` visibility, and binds one
 implementation with `implement inject nav`; it is not a render-bearing product declaration. The
 binding is package-level in the sense that it belongs to the declaration rather than an app or an
 inline configuration. The validator reads property names, types, required values, and an optional
@@ -148,8 +144,9 @@ The implemented declarations are:
 - `SlotNav { Initial <ui-or-nav> }` shows one presentable value at a time. Dismissing presented
   content restores its configured initial value.
 - `SelectionNav` requires `Initial @key`, `Display <text>`, and at least one keyed item with `Label`
-  text and `Content` presentable. Selecting another key reveals its mounted item without pushing a
-  content occurrence. Inactive items stay mounted but hidden, preserving their state.
+  text and `Content` presentable. An item may also supply `Icon` text as system-icon metadata.
+  Selecting another key reveals its mounted item without pushing a content occurrence. Inactive
+  items stay mounted but hidden, preserving their state.
 
 The configured `Initial` value is a descriptor, not an invoked rendered element. The general
 declaration-completeness rule requires every supplied slot to be filled before any declaration is
@@ -157,7 +154,8 @@ used as a value. A `StackNav` initial value is a `ui`; a `SlotNav` initial value
 content may be a `ui` or configured `nav`.
 
 Selection keys belong to their configured declaration's namespace. `Initial` must name one of its
-items. The visible controls use each item's `Label`. A target-only activation reveals a root
+items. The visible controls use each item's `Label`; `Icon` is preserved in the descriptor while the
+current native selection control remains label-rendered. A target-only activation reveals a root
 SelectionNav item without presenting new content:
 
 ```tao

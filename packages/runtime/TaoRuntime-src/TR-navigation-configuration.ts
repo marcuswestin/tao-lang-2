@@ -94,6 +94,9 @@ function normalizeConfiguredNavigation(
       .map(([sourceKey, value]) => {
         const key = sourceKey.slice(1)
         const item = value as Record<string, unknown>
+        const icon = item['Icon'] === undefined
+          ? undefined
+          : configuredEvaluable(item['Icon'], configured.declaration.name, `@${key}.Icon`)
         return [key, {
           content: configuredPresentable(
             item['Content'],
@@ -101,6 +104,7 @@ function normalizeConfiguredNavigation(
             `@${key}.Content`,
             registerMount,
           ),
+          ...(icon ? { icon } : {}),
           label: configuredEvaluable(item['Label'], configured.declaration.name, `@${key}.Label`),
         }]
       }),

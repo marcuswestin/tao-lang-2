@@ -14,7 +14,7 @@ TestDeclaration:
 CheckDeclaration:
     'check' name=STRING block=Block;
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | DataStatusStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | DataStatusStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -23,22 +23,25 @@ PressTextStep:
     'press' selector=TestSelector text=STRING;
 
 TagPressStep:
-    'press' tag=TAG;
+    'press' tag=TagOrHexColor;
 
 ExpectTextStep:
     'expect' missing?='missing'? selector=TestSelector text=STRING;
+
+ExpectCheckboxStateStep:
+    'expect' 'checkbox' tag=TagOrHexColor state=('checked' | 'unchecked');
 
 ExpectInputValueStep:
     'expect' 'input' selector=InputTestSelector target=STRING 'value' value=STRING;
 
 TagInputValueExpectation:
-    'expect' tag=TAG 'input' 'value' value=STRING;
+    'expect' tag=TagOrHexColor 'input' 'value' value=STRING;
 
 ExpectGroupStep:
     'expect' block=TestExpectationBlock;
 
 ExpectScopeStep:
-    'expect' tag=TAG block=TestExpectationBlock;
+    'expect' tag=TagOrHexColor block=TestExpectationBlock;
 
 TestExpectationBlock:
     '{' expectations+=TestExpectation* '}';
@@ -51,16 +54,16 @@ EnterTextStep:
     'enter' value=STRING 'into' selector=TestSelector target=STRING;
 
 TagEnterStep:
-    'enter' value=STRING 'into' tag=TAG;
+    'enter' value=STRING 'into' tag=TagOrHexColor;
 
 SubmitInputStep:
     'submit' selector=TestSelector target=STRING;
 
 TagSubmitStep:
-    'submit' tag=TAG;
+    'submit' tag=TagOrHexColor;
 
 SelectStep:
-    'select' tag=TAG '[' index=NUMBER ']' block=Block;
+    'select' tag=TagOrHexColor '[' index=NUMBER ']' block=Block;
 
 BackTestStep:
     {infer BackTestStep} 'back';

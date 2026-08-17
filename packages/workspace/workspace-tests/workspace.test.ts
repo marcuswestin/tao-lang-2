@@ -24,10 +24,10 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         `,
         'Packages/@cards/screens/Main.tao': `
           use Title
-          workspace view MainView {
+          workspace view MainView() {
             render Text(Title)
           }
-          view Text Value is text {
+          view Text(Value is text) {
             render inject Value ${tsFence}
               return null
             ${fence}
@@ -43,7 +43,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(4)
         Expect(parseResult.files.some(file => file.path.endsWith('/tao/Prelude.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
-        Expect(compiled.files.map(file => file.sourcePath).sort()).toEqual([
+        Expect([...new Set(compiled.files.map(file => file.sourcePath))].sort()).toEqual([
           paths['Main.tao']!,
           paths['Packages/@cards/Title.tao']!,
           paths['Packages/@cards/screens/Main.tao']!,
@@ -61,14 +61,14 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           use MainView from @bar
         `,
         'one/@bar/Main.tao': `
-          workspace view MainView {
+          workspace view MainView() {
             render inject ${tsFence}
               return null
             ${fence}
           }
         `,
         'two/@bar/Main.tao': `
-          workspace view MainView {
+          workspace view MainView() {
             render inject ${tsFence}
               return null
             ${fence}
@@ -88,7 +88,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     await withTaoFiles(
       'tao-workspace-shared-',
       {
-        'Main.tao': 'view MainView { }\n',
+        'Main.tao': 'view MainView() { }\n',
       },
       async (_paths, rootDir) => {
         const fresh = await Workspace.open(rootDir)
@@ -105,10 +105,10 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     await withTaoFiles(
       'tao-workspace-lsp-sketches-',
       {
-        'Main.tao': 'view MainView { }\n',
+        'Main.tao': 'view MainView() { }\n',
         'Apps/WordFlower/.tao-archive/Future.tao': 'project app FutureMVP {',
-        'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP { }\n',
-        'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch { }\n',
+        'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP() { }\n',
+        'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch() { }\n',
       },
       async (_paths, rootDir) => {
         const workspace = await LSPWorkspace.open(rootDir)
@@ -150,7 +150,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       {
         'Main.tao': `
           app RootApp { view MainView }
-          view MainView { }
+          view MainView() { }
         `,
       },
       async (paths) => {

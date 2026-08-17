@@ -38,8 +38,8 @@ which matters when you are adding a dozen language features at once.
 The tranche contract is at `Apps/WordFlower/2 - Next/`. Treat the live directory as authoritative;
 do not substitute archived copies or earlier descriptions from this brief.
 
-`Roadmap.md` now records the tranche-cut item as complete and tracks implementation into Current as
-the open work. Keep those statuses aligned as the tranche is absorbed.
+`Roadmap.md` records both the tranche cut and its implementation into Current as complete at the
+absorbed boundary.
 
 ## What the contract changes structurally
 
@@ -52,14 +52,13 @@ Shared.tao-next       shared types, functions, injected views
 Workspaces.tao-next   the workspace area
 Documents.tao-next    the document area
 Foundation.tao-next   the deterministic navigation harness
-Design.tao-next       the minimal design system — implement LAST, see that file
-@tao-next/Prelude.tao-next
-                      the Prelude contract that graduates into packages/stdlib/tao
-@tao-next/text/Text.tao-next
-                      the @tao/text contract that graduates into packages/stdlib/tao/text
+Design.tao-next       the minimal design system — implemented last, see that file
 ```
 
 plus `Foundation`, `Documents`, `Workspaces`, and `WordFlower` test sidecars.
+
+The absorbed scratch contracts graduated to `packages/stdlib/tao/Prelude.tao` and
+`packages/stdlib/tao/text/Text.tao`; their former `@tao-next/` copies are intentionally absent.
 
 This is the first time a WordFlower tier is a directory, and it is the single most disruptive part of
 the tranche, because two mechanical gates assume single files. See "Collisions" below.
@@ -84,11 +83,12 @@ find it before planning the edit.
 A broken gate that silently passes is worse than one that fails. Land the directory-aware version
 before, or with, the first multi-file change.
 
-**2. `Justfile` hardcodes a single app file:**
-`WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"`. Absorption
-turns Current into a directory, so this changes too. Any CI added concurrently is expected to go
-through `just` / `./agent` recipes rather than paths, so updating the recipe should be sufficient —
-verify that assumption rather than trusting it.
+**2. Live implementation result: the `Justfile` entry path remains correct.**
+`WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"` names the
+canonical compile entry, not the absorption unit. `tao compile` intentionally takes an entry file,
+while `tao test` takes the Current directory and discovers all sidecars. The directory migration
+therefore required the repository absorption gate to change, but did not require widening the
+compile recipe to a directory.
 
 ## Reference material worth reading once
 
@@ -108,7 +108,7 @@ against the current runtime; do not import unrelated safe-area, keyboard, or nat
   name in each participating parser, validator, formatter, source-actions, compiler, and runtime file.
   Expected semantic and source-shape diagnostics belong in the validator; codegen assumes validated
   input and uses assertions only for local type contraction.
-- `Roadmap/Code cleanup spike/Report.md` holds the R1–R13 rulebook; it is the live quality bar.
+- `Roadmap/Archive/Code cleanup spike/Report.md` holds the R1–R13 rulebook; it is the live quality bar.
 - `./agent verify` before every commit. The baseline was 14 suites, 782 tests, 9.0s suite wall time at
   `6cfd88be`; re-measure on current `main` before you start, since preceding work will have moved it.
 - Branch `feat/<name>`; never commit from detached HEAD. Fifteen-plus worktrees share this repo and

@@ -3,6 +3,7 @@ import AliasesFormatter from './formatters/aliases-formatter'
 import AppFormatter from './formatters/app-formatter'
 import ConfigurationFormatter from './formatters/configuration-formatter'
 import DataFormatter from './formatters/data-formatter'
+import DesignFormatter from './formatters/design-formatter'
 import ExpressionsFormatter from './formatters/expressions-formatter'
 import FilesFormatter from './formatters/files-formatter'
 import InjectionsFormatter from './formatters/injections-formatter'
@@ -25,6 +26,7 @@ export const Format = {
   ...AppFormatter,
   ...ConfigurationFormatter,
   ...DataFormatter,
+  ...DesignFormatter,
   ...ActionsFormatter,
   ...StateFormatter,
   ...AliasesFormatter,

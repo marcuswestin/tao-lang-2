@@ -10,7 +10,7 @@ import {
 } from '../cli-src/dev-app-selection'
 import { runTaoDev } from '../cli-src/dev-command'
 
-const viewSource = 'view MainView { render inject ```ts return null ``` }'
+const viewSource = 'view MainView() { render inject ```ts return null ``` }'
 
 Describe('Tao dev app discovery and selection', () => {
   Test('discovers every runnable app recursively and groups it by project', async () => {

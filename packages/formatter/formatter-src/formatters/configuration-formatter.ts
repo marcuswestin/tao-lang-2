@@ -5,12 +5,14 @@ export default {
   /** NavDeclaration formats one declaration-owned navigation configuration contract. */
   NavDeclaration(f) {
     f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'nav')
+    f.oneSpaceAround('=')
     f.oneSpaceBeforeProperty('block')
   },
 
   /** DatasourceDeclaration formats one declaration-owned provider configuration contract. */
   DatasourceDeclaration(f) {
     f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'datasource')
+    f.oneSpaceAround('=')
     f.oneSpaceBeforeProperty('block')
   },
 
@@ -26,6 +28,7 @@ export default {
   /** ConfigurationPropertyDeclaration keeps a property name adjacent to its declared Tao type. */
   ConfigurationPropertyDeclaration(f) {
     f.oneSpaceBetweenProperties('name', 'type')
+    f.oneSpaceAround('is')
   },
 
   /** ConfigurationKeyDeclaration formats the shared keyed-item property shape as a nested block. */

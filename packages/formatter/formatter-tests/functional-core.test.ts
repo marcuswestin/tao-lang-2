@@ -5,16 +5,17 @@ Describe('functional core formatter', () => {
   Test(
     'formats functions, total conditionals, toggle, and iteration deterministically',
     formats(
-      `function Label Count is number returns text=when(Count>0){true->"Count: {Count+1}" otherwise->"Empty"}\nview Main{state Ready=false action Flip{guard Ready true->{toggle Ready}toggle Ready}render Stack() {when(Count>0 and not false){true->{Text(Label(Count))}otherwise->{Text("Empty")}}loop["Inbox","Today"]/Name{Text(Name)}}}`,
+      `function Label(Count is number) returns text{return when(Count>0){true->"Count: {Count+1}" otherwise->"Empty"}}\nview Main(){state Ready=false action Flip(){guard Ready true->{toggle Ready}toggle Ready}render Stack() {when(Count>0 and not false){true->{Text(Label(Count))}otherwise->{Text("Empty")}}loop["Inbox","Today"]/Name{Text(Name)}}}`,
       `
-        function Label Count is number returns text = when (Count > 0) {
-           true -> "Count: { Count + 1 }"
-           otherwise -> "Empty"
-        }
+        function Label(Count is number) returns text {
+           return when (Count > 0) {
+              true -> "Count: { Count + 1 }"
+              otherwise -> "Empty"
+        }  }
 
-        view Main {
+        view Main() {
            state Ready = false
-           action Flip {
+           action Flip() {
               guard Ready true -> {
                  toggle Ready
               }
@@ -38,18 +39,19 @@ Describe('functional core formatter', () => {
   Test(
     'indents comments with value, action, and render when branches',
     formats(
-      `function Choice returns text=when true{\n// value preferred\ntrue->"yes"\n// value fallback\notherwise->"no"}\nview Main{state Ready=true action Flip{guard Ready{\n// action preferred\ntrue->{toggle Ready}\n// action fallback\nfalse->{toggle Ready}}}render Stack(){when Ready{\n// render preferred\ntrue->{Text("yes")}\n// render fallback\notherwise->{Text("no")}}}}`,
+      `function Choice() returns text{return when true{\n// value preferred\ntrue->"yes"\n// value fallback\notherwise->"no"}}\nview Main(){state Ready=true action Flip(){guard Ready{\n// action preferred\ntrue->{toggle Ready}\n// action fallback\nfalse->{toggle Ready}}}render Stack(){when Ready{\n// render preferred\ntrue->{Text("yes")}\n// render fallback\notherwise->{Text("no")}}}}`,
       `
-        function Choice returns text = when true {
-           // value preferred
-           true -> "yes"
-           // value fallback
-           otherwise -> "no"
-        }
+        function Choice() returns text {
+           return when true {
+              // value preferred
+              true -> "yes"
+              // value fallback
+              otherwise -> "no"
+        }  }
 
-        view Main {
+        view Main() {
            state Ready = true
-           action Flip {
+           action Flip() {
               guard Ready {
                  // action preferred
                  true -> {
@@ -76,16 +78,18 @@ Describe('functional core formatter', () => {
   Test(
     'formats parameter defaults with a space before default',
     formats(
-      `function Label Value is text default"Save" returns text=Value\nview Main Title is text default"Welcome"{action Submit Message is text default"Saved"{}render Card()}\nlayout Card Gap is number default 8{render inject \`\`\`ts\nreturn null\n\`\`\`}`,
+      `function Label(Value is text default"Save") returns text{return Value}\nview Main(Title is text default"Welcome"){action Submit(Message is text default"Saved"){}render Card()}\nlayout Card(Gap is number default 8){render inject \`\`\`ts\nreturn null\n\`\`\`}`,
       `
-        function Label Value is text default "Save" returns text = Value
+        function Label(Value is text default "Save") returns text {
+           return Value
+        }
 
-        view Main Title is text default "Welcome" {
-           action Submit Message is text default "Saved" { }
+        view Main(Title is text default "Welcome") {
+           action Submit(Message is text default "Saved") { }
            render Card()
         }
 
-        layout Card Gap is number default 8 {
+        layout Card(Gap is number default 8) {
            render inject \`\`\`ts
               return null
            \`\`\`
@@ -97,16 +101,16 @@ Describe('functional core formatter', () => {
   Test(
     'formats enums, general case tests, and one-sided action and render if',
     formats(
-      `enum ConfirmResult{Confirmed Cancelled}\nview Main{state Result=Confirmed action Close{if Result is Confirmed{}}render Stack(){if Result is Cancelled{Text("Cancelled")}}}`,
+      `enum ConfirmResult{Confirmed Cancelled}\nview Main(){state Result=Confirmed action Close(){if Result is Confirmed{}}render Stack(){if Result is Cancelled{Text("Cancelled")}}}`,
       `
         enum ConfirmResult {
            Confirmed
            Cancelled
         }
 
-        view Main {
+        view Main() {
            state Result = Confirmed
-           action Close {
+           action Close() {
               if Result is Confirmed { }
            }
            render Stack() {
@@ -120,9 +124,9 @@ Describe('functional core formatter', () => {
   Test(
     'formats grouped entity availability guards and their error payload',
     formats(
-      `view DocumentScreen Document{render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Message{Text(Message)}}DocumentEditor(Document)}}`,
+      `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Message{Text(Message)}}DocumentEditor(Document)}}`,
       `
-        view DocumentScreen Document {
+        view DocumentScreen(Document) {
            render Stack() {
               guard Document {
                  loading -> {
@@ -146,9 +150,9 @@ Describe('functional core formatter', () => {
   Test(
     'formats positional action callback signatures compactly',
     formats(
-      `view Field Change is action ( text,number ),Submit is action ( ){render Text("Field")}`,
+      `view Field(Change is action ( text,number ),Submit is action ( )){render Text("Field")}`,
       `
-        view Field Change is action(text, number), Submit is action() {
+        view Field(Change is action(text, number), Submit is action()) {
            render Text("Field")
         }
       `,

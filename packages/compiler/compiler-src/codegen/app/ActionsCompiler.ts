@@ -53,6 +53,7 @@ export const ActionsCompiler = {
   /** ActionStatement compiles one statement inside a Tao action body. */
   ActionStatement(statement: AST.ActionStatement): Compiled {
     return Switch.type(statement, {
+      AsyncActionStatement: Compile.AsyncActionStatement,
       CreateStatement: Compile.CreateStatement,
       AskStatement: Compile.AskStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
@@ -73,6 +74,15 @@ export const ActionsCompiler = {
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
     return gen.list(block?.statements ?? [], Compile.ActionStatement)
+  },
+
+  /** AsyncActionStatement launches an isolated action sub-block without delaying its caller. */
+  AsyncActionStatement(statement: AST.AsyncActionStatement): Compiled {
+    return gen`TR.Async(() =>
+      TR.BlockScope(_Scope, async _Scope => {
+        ${Compile.ActionBlockBody(statement.block)}
+      })
+    )`
   },
 
   /** DoStatement compiles Tao action invocation. */

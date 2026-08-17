@@ -20,7 +20,7 @@ Describe('compiler: reusable sessions', () => {
   Test('continues after a queued compilation fails', async () => {
     const session = await Compiler.createSession()
 
-    await Expect(session.compileCode('view Broken { render }')).rejects.toThrow(
+    await Expect(session.compileCode('view Broken() { render }')).rejects.toThrow(
       'Cannot compile Tao source with validation errors',
     )
     Expect((await session.compileCode(appSource('RecoveredApp'))).appNames).toEqual(['RecoveredApp'])
@@ -30,7 +30,7 @@ Describe('compiler: reusable sessions', () => {
 function appSource(appName: string): string {
   return `
     app ${appName} { view MainView }
-    view MainView {
+    view MainView() {
       render inject \`\`\`ts
         return null
       \`\`\`

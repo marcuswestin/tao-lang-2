@@ -56,7 +56,7 @@ function registerTypeValidation(typir: TaoTypirServices): void {
 function reportStateReferenceOrder(state: AST.StateDeclaration, ctx: ValidationContext): void {
   for (const reference of DeclarationOrder.valueReferences(state.value)) {
     const target = reference.target.ref
-    if (isInvalidStateInitializerReferenceOrder(target, state)) {
+    if (AST.isValueDeclaration(target) && isInvalidStateInitializerReferenceOrder(target, state)) {
       ctx.error(stateValidationMessages.usedBeforeDeclaration(valueDeclarationName(target)), reference)
     }
   }

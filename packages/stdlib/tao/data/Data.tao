@@ -11,7 +11,7 @@
 //   empty-load, round-trip, and rejection conformance
 // This full-snapshot boundary is deliberately narrow; incremental change/sync protocols remain a
 // future provider family rather than leaking into the local persistence contract.
-public datasource Local {
+public type Local is datasource with {
    StorageKey text
 
    implement inject provider ```ts
@@ -19,8 +19,8 @@ public datasource Local {
    ```
 }
 
-public datasource Memory {
-   // Memory has no configuration properties, so bare `Datasource Memory` instantiates it.
+public type Memory is datasource with {
+   // Memory has no configuration properties, so `Datasource Memory { }` instantiates it.
    implement inject provider ```ts
       return TR.DataProvider.Memory()
    ```

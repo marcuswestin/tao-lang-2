@@ -12,7 +12,8 @@ export default {
     if (AST.isCheckDeclaration(f.node.$container)) {
       f.separateIndentedLines(
         f.node.statements,
-        (previous, next) => AST.isRunStep(previous) && AST.isExpectTextStep(next) ? 2 : 1,
+        (previous, next) =>
+          AST.isRunStep(previous) && (AST.isExpectTextStep(next) || AST.isExpectCheckboxStateStep(next)) ? 2 : 1,
       )
     }
   },
@@ -20,6 +21,9 @@ export default {
   /** ParameterList formats comma-separated parameter declarations. */
   ParameterList(f) {
     f.commaSpacedList()
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
   },
 
   /** ParameterDeclaration formats either a bare named type or an inline `Name is Type` declaration. */
@@ -81,6 +85,13 @@ export default {
     if (f.node.payload !== undefined) {
       f.oneSpaceAfter('->')
     }
+  },
+
+  /** LoopSelectHandler formats loop-owned inline selection actions without widening ordinary events. */
+  LoopSelectHandler(f) {
+    f.oneSpaceAfter('on')
+    f.oneSpaceBefore('->')
+    f.oneSpaceBeforeProperty('action')
   },
 
   /** ForStatement formats iteration headers. */

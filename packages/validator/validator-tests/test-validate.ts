@@ -1,9 +1,40 @@
 import { Diagnostics, FS, Text } from '@shared'
-import { app, Expect, fence, mkTestDir, stubLayout, stubView, tsFence, withTaoFiles } from '@shared/test'
+import { Expect, fence, mkTestDir, tsFence, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 
-export { app, fence, stubLayout, stubView, tsFence }
+export { fence, tsFence }
+
+/** app wraps a MainView body using the current mandatory declaration parameter-list shape. */
+export function app(body: string, extra = ''): string {
+  return `
+    app MyApp { view MainView }
+    view MainView() { ${body} }
+    ${extra}
+  `
+}
+
+/** stubView returns a no-op view fixture using a parenthesized parameter list. */
+export function stubView(name: string, parameters = ''): string {
+  return `
+    view ${name}(${parameters}) {
+      render inject ${tsFence}
+        return null
+      ${fence}
+    }
+  `
+}
+
+/** stubLayout returns a no-op layout fixture using a parenthesized parameter list. */
+export function stubLayout(name: string, parameters = ''): string {
+  return `
+    layout ${name}(${parameters}) {
+      render inject ${tsFence}
+        return null
+      ${fence}
+    }
+  `
+}
 
 export type ValidatedFiles = Awaited<ReturnType<typeof Workspace.validate>>
 

@@ -1,42 +1,42 @@
-public layout Box {
-   render inject ```ts
-      return TR.Views.View(_ViewProps, {
+public layout Box() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
         layout: TR.Layout.create([['content', 'left', 'center'], ['hug']]),
       })
    ```
 }
 
-public layout Stack {
-   render inject ```ts
-      return TR.Views.View(_ViewProps, {
+public layout Stack() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',
         layout: TR.Layout.create([['content', 'top', 'center'], ['hug']]),
       })
    ```
 }
 
-public layout Col {
-   render inject ```ts
-      return TR.Views.View(_ViewProps, {
+public layout Col() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',
         layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
       })
    ```
 }
 
-public layout Row {
-   render inject ```ts
-      return TR.Views.View(_ViewProps, {
+public layout Row() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
         layout: TR.Layout.create([['content', 'baseline', 'left'], ['fill']]),
       })
    ```
 }
 
-public layout WrappingRow {
-   render inject ```ts
-      return TR.Views.View(_ViewProps, {
+public layout WrappingRow() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
         layout: TR.Layout.create([['content', 'baseline', 'left'], ['compress'], ['hug']]),
         style: { flexWrap: 'wrap' },
@@ -44,56 +44,112 @@ public layout WrappingRow {
    ```
 }
 
-public view Text Value is text {
-   render inject Value ```ts
+public layout Panes() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Panes({ children: Content, layout: Layout, tag: Tag }, {
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+      })
+   ```
+}
+
+public layout ScrollView() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.ScrollView({ children: Content, layout: Layout, tag: Tag }, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
+        nativeProps: { horizontal: false },
+      })
+   ```
+}
+
+public view Image(Source is text, Decorative is boolean default false, Label is text default "") {
+   render inject Source, Decorative, Label, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Image({
+        layout: Layout,
+        tag: Tag,
+        source: Source,
+        decorative: Decorative,
+        label: Label || undefined,
+      })
+   ```
+}
+
+public view Checkbox(Value is boolean, Change is action(boolean), Label is text, Disabled is boolean default false) {
+   render inject Value, Change, Label, Disabled, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Checkbox({
+        layout: Layout,
+        tag: Tag,
+        value: Value,
+        label: Label,
+        disabled: Disabled,
+        onChange: value => Change.invoke(TR.Value(value)),
+      })
+   ```
+}
+
+public view Spinner() {
+   render inject Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Spinner({ layout: Layout, tag: Tag })
+   ```
+}
+
+public view Progress(Value is number) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Progress({ layout: Layout, tag: Tag, value: Value })
+   ```
+}
+
+public view Text(Value is text) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text(
-        { __tao: _ViewProps.__tao, children: [Value] },
+        { children: [Value], layout: Layout, tag: Tag },
         { nativeProps: { numberOfLines: 1, ellipsizeMode: 'tail' } },
       )
    ```
 }
 
-public view TextFrame Value is text {
-   render inject Value ```ts
+public view TextFrame(Value is text) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text(
-        { __tao: _ViewProps.__tao, children: [Value] },
+        { children: [Value], layout: Layout, tag: Tag },
         { nativeProps: { numberOfLines: 1, ellipsizeMode: 'clip' } },
       )
    ```
 }
 
-public view TextMultiline Value is text {
-   render inject Value ```ts
+public view TextMultiline(Value is text) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text(
-        { __tao: _ViewProps.__tao, children: [Value] },
+        { children: [Value], layout: Layout, tag: Tag },
         { nativeProps: {} },
       )
    ```
 }
 
-public view Number Value is number {
-   render inject Value ```ts
+public view Number(Value is number) {
+   render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text(
-        { __tao: _ViewProps.__tao, children: [String(Value)] },
+        { children: [String(Value)], layout: Layout, tag: Tag },
         { nativeProps: { numberOfLines: 1, ellipsizeMode: 'tail' } },
       )
    ```
 }
 
-public view Button Title is text, Press is action() {
-   render inject Title, Press ```ts
+public view Button(Title is text, Press is action()) {
+   render inject Title, Press, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Pressable(
-        { __tao: _ViewProps.__tao, title: Title, action: Press },
+        { title: Title, action: Press, layout: Layout, tag: Tag },
         { nativeProps: { accessibilityRole: 'button' } },
       )
    ```
 }
 
-public view TextInput Value is text, Change is action(text), Submit is action(), Label is text, Placeholder is text default "", Id is text default "", Disabled is boolean default false {
-   render inject Value, Change, Submit, Label, Placeholder, Id, Disabled ```ts
+public view TextInput(Value is text, Change is action(text), Submit is action(), Label is text, Placeholder is text default "", Id is text default "", Disabled is boolean default false) {
+   render inject Value, Change, Submit, Label, Placeholder, Id, Disabled, Layout @@layout, Tag @@tag ```ts
       return TR.Views.TextInput(
         {
-          __tao: _ViewProps.__tao,
+          layout: Layout,
+          tag: Tag,
           value: Value,
           label: Label,
           placeholder: Placeholder,
@@ -106,12 +162,13 @@ public view TextInput Value is text, Change is action(text), Submit is action(),
    ```
 }
 
-public view FormButton Title is text, Press is action(), Id is text default "", Disabled is boolean default false, Submitting is boolean default false {
-   render inject Title, Press, Id, Disabled, Submitting ```ts
+public view FormButton(Title is text, Press is action(), Id is text default "", Disabled is boolean default false, Submitting is boolean default false) {
+   render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
       const effectiveDisabled = Disabled || Submitting
       return TR.Views.Pressable(
         {
-          __tao: _ViewProps.__tao,
+          layout: Layout,
+          tag: Tag,
           title: Submitting ? 'Saving…' : Title,
           action: Press,
           disabled: effectiveDisabled,

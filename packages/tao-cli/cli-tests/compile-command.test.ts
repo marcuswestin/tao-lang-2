@@ -6,7 +6,7 @@ import { runCompile } from '../cli-src/compile-command'
 const source = `
   app First { view MainView }
   app Second { view MainView }
-  view MainView { render inject \`\`\`ts return null \`\`\` }
+  view MainView() { render inject \`\`\`ts return null \`\`\` }
 `
 
 Describe('tao compile app selection', () => {

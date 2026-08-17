@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { FS } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { completenessValidationMessages } from './completeness-validator'
 
 /** configurationValidationMessages declares self-hosted construct diagnostics. */
 export const configurationValidationMessages = {
@@ -20,19 +21,37 @@ export const configurationValidationMessages = {
   keyProperty: (name: string) =>
     `Key type is only valid for a property of a keyed nav declaration; '${name}' is invalid.`,
   propertyType: (name: string) => `Configuration property '${name}' has an unresolved type.`,
+  propertyDefaultType: (name: string, expected: string, actual: string) =>
+    `Default value for configuration property '${name}' expects ${expected}, got ${actual}.`,
+  valueHeadType: (name: string, expected: string, actual: string) =>
+    `${expected} head ${name} expects ${expected}, got ${actual}.`,
 } as const
 
 /** configurationValidationChecks validates public declaration contracts and implementation binding. */
 export const configurationValidationChecks = {
-  [AST.ConfigurableDeclaration.$type]: validateDeclaration,
+  [AST.TypeDeclaration.$type]: (declaration, ctx) => {
+    if (AST.isConfigurableDeclaration(declaration)) {
+      validateDeclaration(declaration, ctx)
+    }
+  },
+  [AST.NavDeclaration.$type]: (declaration, ctx) => validatePrimitiveValue(declaration, 'nav', ctx),
+  [AST.DatasourceDeclaration.$type]: (declaration, ctx) => validatePrimitiveValue(declaration, 'datasource', ctx),
 } satisfies NodeValidationChecks
 
 function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
-  const kind = AST.isNavDeclaration(declaration) ? 'Nav' : 'Datasource'
+  const primitive = AST.configurationPrimitiveOf(declaration)
+  if (primitive === 'app') {
+    validateConfigurationProperties(declaration, ctx)
+    return
+  }
+  if (primitive !== 'nav' && primitive !== 'datasource') {
+    return
+  }
+  const kind = primitive === 'nav' ? 'Nav' : 'Datasource'
   if (!AST.isTaoFile(declaration.$container)) {
     ctx.error(configurationValidationMessages.topLevel(kind), declaration)
   }
-  if (!declaration.visibility || declaration.visibility === 'file') {
+  if (!declaration.visibility) {
     ctx.error(configurationValidationMessages.visible(kind), declaration)
   }
 
@@ -43,28 +62,29 @@ function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: Vali
 
 function validateConfigurationProperties(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const seen = new Set<string>()
-  for (const property of AST.configurationPropertiesOf(declaration)) {
+  for (const property of ownTypeSlots(declaration)?.properties ?? []) {
     if (seen.has(property.name)) {
       ctx.error(configurationValidationMessages.duplicateProperty(property.name), property)
     }
     seen.add(property.name)
     if (Type.ofConfigurationProperty(property).kind === 'unresolved') {
-      ctx.error(configurationValidationMessages.propertyType(property.name), property.type)
+      ctx.error(configurationValidationMessages.propertyType(property.name), property.type ?? property)
     }
+    validateConfigurationPropertyDefault(property, ctx)
     if (AST.configurationPropertyIsKey(property) && !AST.configurationKeyOf(declaration)) {
-      ctx.error(configurationValidationMessages.keyProperty(property.name), property.type)
+      ctx.error(configurationValidationMessages.keyProperty(property.name), property.type ?? property)
     }
   }
 }
 
 function validateConfigurationKeyDeclarations(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
-  const keys = declaration.block.entries.filter(AST.isConfigurationKeyDeclaration)
+  const keys = ownTypeSlots(declaration)?.keys ?? []
   if (keys.length > 1) {
     for (const key of keys.slice(1)) {
       ctx.error(configurationValidationMessages.duplicateKey, key)
     }
   }
-  if (AST.isDatasourceDeclaration(declaration)) {
+  if (AST.configurationPrimitiveOf(declaration) === 'datasource') {
     for (const key of keys) {
       ctx.error(configurationValidationMessages.datasourceKey, key)
     }
@@ -82,30 +102,85 @@ function validateConfigurationKeyDeclarations(declaration: AST.ConfigurableDecla
       if (Type.ofConfigurationProperty(property).kind === 'unresolved') {
         ctx.error(configurationValidationMessages.propertyType(property.name), property.type)
       }
+      validateConfigurationPropertyDefault(property, ctx)
     }
   }
 }
 
 function validateConfigurationImplementations(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
-  const implementations = declaration.block.entries.filter(AST.isConfigurationImplementation)
-  const primitive = AST.isNavDeclaration(declaration) ? 'nav' : 'datasource'
-  const implementationSlot = AST.primitiveSlots(ctx.workspaceFiles, primitive)
-    .find(property => property.name === 'implement')
-  if (implementationSlot && Type.propertyRequiresValue(implementationSlot) && implementations.length === 0) {
-    ctx.error(configurationValidationMessages.missingImplementation(declaration.name), declaration)
-  }
+  const implementations = ownTypeSlots(declaration)?.implementations ?? []
   if (implementations.length > 1) {
     for (const implementation of implementations.slice(1)) {
       ctx.error(configurationValidationMessages.duplicateImplementation, implementation)
     }
   }
-  const expectedProtocol = AST.isNavDeclaration(declaration) ? 'nav' : 'provider'
+  if (!AST.configurationImplementationOf(declaration)) {
+    ctx.error(configurationValidationMessages.missingImplementation(declaration.name), declaration)
+  }
+  const expectedProtocol = AST.configurationPrimitiveOf(declaration) === 'nav' ? 'nav' : 'provider'
   for (const implementation of implementations) {
     if (implementation.protocol !== expectedProtocol) {
       ctx.error(configurationValidationMessages.protocol(declaration.name, expectedProtocol), implementation)
     }
     validateSidecarImplementation(implementation, ctx)
   }
+}
+
+function validatePrimitiveValue(
+  declaration: AST.NavDeclaration | AST.DatasourceDeclaration,
+  primitive: 'nav' | 'datasource',
+  ctx: ValidationContext,
+): void {
+  if (declaration.value) {
+    const actual = Type.ofExpression(declaration.value)
+    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive })) {
+      ctx.error(
+        configurationValidationMessages.valueHeadType(declaration.name, primitive, Type.displayName(actual)),
+        declaration.value,
+      )
+    }
+    return
+  }
+  if (declaration.block) {
+    const required = AST.primitiveSlots(ctx.workspaceFiles, primitive)
+      .filter(Type.propertyRequiresValue)
+      .map(property => property.name)
+    if (required.length > 0) {
+      ctx.error(completenessValidationMessages.incomplete(declaration.name, required), declaration.block)
+    }
+  }
+}
+
+function validateConfigurationPropertyDefault(
+  property: AST.ConfigurationProperty,
+  ctx: ValidationContext,
+): void {
+  if (!property.value || !property.type) {
+    return
+  }
+  const expected = Type.ofReference(property.type)
+  const actual = Type.ofExpression(property.value)
+  const absent = actual.kind === 'primitive' && actual.primitive === 'none'
+  if (
+    !absent && expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)
+  ) {
+    ctx.error(
+      configurationValidationMessages.propertyDefaultType(
+        property.name,
+        Type.displayName(expected),
+        Type.displayName(actual),
+      ),
+      property.value,
+    )
+  }
+}
+
+function ownTypeSlots(declaration: AST.TypeDeclaration): AST.ItemTypeExpression | undefined {
+  return AST.isDerivedTypeExpression(declaration.type)
+    ? declaration.type.slots
+    : AST.isItemTypeExpression(declaration.type)
+    ? declaration.type
+    : undefined
 }
 
 function validateSidecarImplementation(

@@ -3,7 +3,7 @@ import { configurationValidationMessages } from '../validator-src/validators/con
 import { validationErrorMessages, withValidatedFiles } from './test-validate'
 
 const sidecarDeclaration = (path: string) => `
-  public nav SidecarNav {
+  public type SidecarNav is nav with {
     implement inject nav "${path}"
   }
 `

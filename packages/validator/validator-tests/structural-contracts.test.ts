@@ -1,6 +1,7 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Test } from '@shared/test'
 import { completenessValidationMessages } from '../validator-src/validators/completeness-validator'
 import { configurationValidationMessages } from '../validator-src/validators/configuration-validator'
+import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
 import { configuredValueValidationMessages } from '../validator-src/validators/configured-values-validator'
 import { dataValidationMessages } from '../validator-src/validators/data-validator'
 import { DialogueValidator } from '../validator-src/validators/dialogue-validator'
@@ -14,20 +15,37 @@ import {
   rejects,
   stubLayout,
   stubView,
-  testValidateCodeWithErrors,
   tsFence,
-  validationErrorMessages,
 } from './test-validate'
 
 Describe('validator: declaration contracts', () => {
   Test(
+    'accepts complete navigation references in every primitive app value spelling',
+    accepts(primitiveAppValueSpellings()),
+  )
+
+  Test(
+    'rejects non-navigation references in primitive app values',
+    rejects(
+      `
+        let NotNavigation = "not navigation"
+        workspace let BadApp = app {
+          Name "Bad"
+          Navigator NotNavigation
+        }
+      `,
+      configuredItemValidationMessages.constructorShape('Navigator', 'nav'),
+    ),
+  )
+
+  Test(
     'infers bare app slot blocks from the slot name and primitive role',
     accepts(`
-      public nav Navigator {
+      public type Navigator is nav with {
         Initial ui
         ${implementation('nav', 'return TR.NavKind.Stack()')}
       }
-      public datasource Datasource {
+      public type Datasource is datasource with {
         StorageKey text
         ${implementation('provider', 'return TR.DataProvider.Local()')}
       }
@@ -36,7 +54,7 @@ Describe('validator: declaration contracts', () => {
         Navigator { Initial Home }
         Datasource { StorageKey "demo" }
       }
-      ui Home { render Empty() }
+      ui Home() { render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -46,10 +64,10 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         app Demo { Name "Demo" Navigator { Initial Home } }
-        ui Home { render Empty() }
+        ui Home() { render Empty() }
         ${stubView('Empty')}
       `,
-      "App Demo Navigator bare block requires exactly one visible nav declaration named 'Navigator'.",
+      configuredItemValidationMessages.inferredConstructorContext,
     ),
   )
 
@@ -59,10 +77,22 @@ Describe('validator: declaration contracts', () => {
       `
         use StackNav from @tao/nav
         app Demo { Name "Demo" Navigator StackNav { Initial Detail } }
-        ui Detail Label is text { render Empty() }
+        ui Detail(Label is text) { render Empty() }
         ${stubView('Empty')}
       `,
       completenessValidationMessages.incomplete('Detail', ['Label']),
+    ),
+  )
+
+  Test(
+    'rejects direct primitive values that leave their implementation slot unfilled',
+    rejects(
+      `
+        nav EmptyNavigation { }
+        datasource EmptyDatasource { }
+      `,
+      completenessValidationMessages.incomplete('EmptyNavigation', ['implement']),
+      completenessValidationMessages.incomplete('EmptyDatasource', ['implement']),
     ),
   )
 
@@ -71,7 +101,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         use StackNav from @tao/nav
-        app Demo { Name "Demo" Navigator StackNav }
+        app Demo { Name "Demo" Navigator StackNav { } }
       `,
       configuredValueValidationMessages.missingConfiguration('StackNav', 'Initial'),
     ),
@@ -81,7 +111,7 @@ Describe('validator: declaration contracts', () => {
     'accepts arbitrary self-hosted declaration contracts without shipped-name tables',
     accepts(`
       public type Presentable is ui | nav
-      public nav Carousel {
+      public type Carousel is nav with {
         Initial key
         Display text
         @key {
@@ -90,11 +120,11 @@ Describe('validator: declaration contracts', () => {
         }
         ${implementation('nav', 'return TR.NavKind.Selection()')}
       }
-      public datasource SnapshotStore {
+      public type SnapshotStore is datasource with {
         StorageKey text
         ${implementation('provider', 'return TR.DataProvider.Local()')}
       }
-      ui Home { render Empty() }
+      ui Home() { render Empty() }
       let Main = Carousel {
         Initial @home
         Display "tabs"
@@ -179,8 +209,8 @@ Describe('validator: declaration contracts', () => {
       let NavigationAlias = BaseNavigation
       let PatchedNavigation = NavigationAlias with { Initial Other }
       app Demo { Name "Demo" Navigator PatchedNavigation }
-      ui Home { render Empty() }
-      ui Other { render Empty() }
+      ui Home() { render Empty() }
+      ui Other() { render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -193,7 +223,7 @@ Describe('validator: declaration contracts', () => {
       let Plain = 5
       let Patched = Plain with { X: 1 }
       app Demo { Name "Demo" Navigator StackNav { Initial Home } }
-      ui Home { render Empty() }
+      ui Home() { render Empty() }
       ${stubView('Empty')}
     `,
       navigationValidationMessages.patchTarget('Plain'),
@@ -203,57 +233,59 @@ Describe('validator: declaration contracts', () => {
   const declarationCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'non-public navigation declarations',
-      `nav HiddenNav { ${implementation('nav')} }`,
+      `type HiddenNav is nav with { ${implementation('nav')} }`,
       configurationValidationMessages.visible('Nav'),
     ],
     [
       'duplicate ordinary declaration properties',
-      `public nav Duplicate { Initial key Initial text ${implementation('nav')} }`,
+      `public type Duplicate is nav with { Initial key Initial text ${implementation('nav')} }`,
       configurationValidationMessages.duplicateProperty('Initial'),
     ],
     [
       'duplicate keyed item properties',
-      `public nav Duplicate { @key { Label key Label text } ${implementation('nav')} }`,
+      `public type Duplicate is nav with { @key { Label key Label text } ${implementation('nav')} }`,
       configurationValidationMessages.duplicateProperty('Label'),
     ],
     [
       'duplicate keyed item blocks',
-      `public nav Duplicate { @key { Label text } @key { Content ui } ${implementation('nav')} }`,
+      `public type Duplicate is nav with { @key { Label text } @key { Content ui } ${implementation('nav')} }`,
       configurationValidationMessages.duplicateKey,
     ],
     [
       'duplicate implementation blocks',
-      `public nav Duplicate { ${implementation('provider')} ${implementation('nav')} }`,
+      `public type Duplicate is nav with { ${implementation('provider')} ${implementation('nav')} }`,
       configurationValidationMessages.duplicateImplementation,
     ],
     [
       'navigation declarations with non-navigation implementations',
-      `public nav WrongProtocol { ${implementation('provider')} }`,
+      `public type WrongProtocol is nav with { ${implementation('provider')} }`,
       configurationValidationMessages.protocol('WrongProtocol', 'nav'),
     ],
     [
       'keyed datasource declarations',
-      `public datasource KeyedStore { @key { Label text } ${implementation('provider')} }`,
+      `public type KeyedStore is datasource with { @key { Label text } ${implementation('provider')} }`,
       configurationValidationMessages.datasourceKey,
     ],
     [
       'datasource declarations with non-provider implementations',
-      `public datasource WrongProtocol { ${implementation('nav')} }`,
+      `public type WrongProtocol is datasource with { ${implementation('nav')} }`,
       configurationValidationMessages.protocol('WrongProtocol', 'provider'),
     ],
     [
       'nested navigation declarations',
-      `view Owner { public nav NestedNav { ${implementation('nav')} } render Empty() } ${stubView('Empty')}`,
+      `view Owner() { public type NestedNav is nav with { ${implementation('nav')} } render Empty() } ${
+        stubView('Empty')
+      }`,
       configurationValidationMessages.topLevel('Nav'),
     ],
     [
       'declarations without implementation blocks',
-      'public datasource MissingImplementation { StorageKey text }',
+      'public type MissingImplementation is datasource with { StorageKey text }',
       configurationValidationMessages.missingImplementation('MissingImplementation'),
     ],
     [
       'key-typed keyed item properties',
-      `public nav KeyedProperty { @key { Label key } ${implementation('nav')} }`,
+      `public type KeyedProperty is nav with { @key { Label key } ${implementation('nav')} }`,
       configurationValidationMessages.keyProperty('Label'),
     ],
   ]
@@ -286,11 +318,11 @@ Describe('validator: declaration contracts', () => {
       `
       use StackNav from @tao/nav
       app OverlayApp { Name "Overlay" Navigator StackNav { Initial Home } }
-      ui Home {
-        action Open { present Detail() as overlay in Detail }
+      ui Home() {
+        action Open() { present Detail() as overlay in Detail }
         render Empty()
       }
-      ui Detail { render Empty() }
+      ui Detail() { render Empty() }
       ${stubView('Empty')}
     `,
       navigationValidationMessages.presentationTarget('ui'),
@@ -335,8 +367,8 @@ Describe('validator: declaration contracts', () => {
         @workspace { Label "Workspace" Content Home }
       }
       app SelectionApp { Name "Selection" Navigator MainNavigation }
-      view Home {
-        action Activate { present SelectionApp@workspace }
+      view Home() {
+        action Activate() { present SelectionApp@workspace }
         render Empty()
       }
       ${stubView('Empty')}
@@ -352,9 +384,9 @@ Describe('validator: declaration contracts', () => {
       use StackNav from @tao/nav
       let SignedOutNav = StackNav { Initial SignedOut }
       app ReplaceApp { Name "Replace" Navigator StackNav { Initial Home } }
-      action Reset { replace SignedOutNav in ReplaceApp }
-      ui Home { render Empty() }
-      ui SignedOut { render Empty() }
+      action Reset() { replace SignedOutNav in ReplaceApp }
+      ui Home() { render Empty() }
+      ui SignedOut() { render Empty() }
       ${stubView('Empty')}
     `,
       navigationValidationMessages.replaceContext,
@@ -416,8 +448,9 @@ Describe('validator: declaration contracts', () => {
     )
   }
 
-  Test('reports every strict target that names an app variant', async () => {
-    const invalid = await testValidateCodeWithErrors(`
+  Test(
+    'accepts every strict target that names a complete app value',
+    accepts(`
       use SelectionNav, SlotNav, StackNav from @tao/nav
       let ResetNav = StackNav { Initial Home }
       app StrictApp {
@@ -430,19 +463,16 @@ Describe('validator: declaration contracts', () => {
         @window SlotNav { Initial Detail }
       }
       let StrictVariant = StrictApp with { Name "Strict variant" }
-      ui Home {
-        action Activate { present StrictVariant@workspace }
-        action Open { present Detail() in StrictVariant@window }
-        action Reset { replace ResetNav in StrictVariant }
+      ui Home() {
+        action Activate() { present StrictVariant@workspace }
+        action Open() { present Detail() in StrictVariant@window }
+        action Reset() { replace ResetNav in StrictVariant }
         render Empty()
       }
-      ui Detail { render Empty() }
+      ui Detail() { render Empty() }
       ${stubView('Empty')}
-    `)
-
-    const message = navigationValidationMessages.strictTargetDeclaration('StrictVariant')
-    Expect(validationErrorMessages(invalid).filter(candidate => candidate === message)).toHaveLength(3)
-  })
+    `),
+  )
 
   const selectionNavCases: ReadonlyArray<readonly [name: string, configuration: string, message: string]> = [
     [
@@ -604,13 +634,13 @@ function implementation(protocol: 'nav' | 'provider', body = 'return null'): str
 function carouselApp(configuration: string): string {
   return `
     public type Presentable is ui | nav
-    public nav Carousel {
+    public type Carousel is nav with {
       Initial key
       Display text
       @key { Label text Content Presentable }
       ${implementation('nav')}
     }
-    ui Home { render Empty() }
+    ui Home() { render Empty() }
     let Navigation = Carousel { ${configuration} }
     app Demo { Name "Demo" Navigator Navigation }
     ${stubView('Empty')}
@@ -621,8 +651,8 @@ function dialogueApp(action: string): string {
   return `
     enum ConfirmResult { Confirmed }
     app Demo { view Editor }
-    view Editor { action Broken { ${action} } render Empty() }
-    dialogue ConfirmClose Title is text responds ConfirmResult { render Empty() }
+    view Editor() { action Broken() { ${action} } render Empty() }
+    dialogue ConfirmClose(Title is text) responds ConfirmResult { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -632,8 +662,8 @@ function toastApp(statement: string): string {
     use StackNav from @tao/nav
     let Target = StackNav { Initial Home }
     app ToastApp { Name "Toast" Navigator Target }
-    ui Home { action Present { ${statement} } render Empty() }
-    ui Saved { render Empty() }
+    ui Home() { action Present() { ${statement} } render Empty() }
+    ui Saved() { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -649,9 +679,9 @@ function selectionVariantApp(variants: string, selection: string): string {
     }
     app SelectionApp { Name "Selection" Navigator MainNavigation }
     ${variants}
-    ui Home { action Activate { present SelectionApp@${selection} } render Empty() }
-    ui Settings { render Empty() }
-    ui Other { render Empty() }
+    ui Home() { action Activate() { present SelectionApp@${selection} } render Empty() }
+    ui Settings() { render Empty() }
+    ui Other() { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -661,7 +691,7 @@ function selectionNavApp(configuration: string): string {
     use SelectionNav from @tao/nav
     let Navigation = SelectionNav { ${configuration} }
     app SelectionApp { Name "Selection" Navigator Navigation }
-    ui Home { render Empty() }
+    ui Home() { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -701,4 +731,38 @@ function parameterDefaultsApp(parameters: string): string {
 
 function unresolvedValue(name: string): string {
   return `Could not resolve reference to ValueDeclaration named '${name}'.`
+}
+
+function primitiveAppValueSpellings(): string {
+  return `
+    public type TestStack is nav with {
+      Initial ui
+      ${implementation('nav', 'return TR.NavKind.Stack()')}
+    }
+    workspace type CompleteTestStack is TestStack with { Initial is Home }
+    workspace nav HeadNavigation = CompleteTestStack { }
+    workspace nav HeadWithNavigation = CompleteTestStack with { }
+    workspace let LetNavigation = CompleteTestStack { }
+    workspace let LetWithNavigation = CompleteTestStack with { }
+
+    app HeadApp {
+      Name "Head"
+      Navigator HeadNavigation
+    }
+    app HeadWithApp = app with {
+      Name "Head with"
+      Navigator HeadWithNavigation
+    }
+    workspace let LetApp = app {
+      Name "Let"
+      Navigator LetNavigation
+    }
+    workspace let LetWithApp = app with {
+      Name "Let with"
+      Navigator LetWithNavigation
+    }
+
+    ui Home() { render Empty() }
+    ${stubView('Empty')}
+  `
 }

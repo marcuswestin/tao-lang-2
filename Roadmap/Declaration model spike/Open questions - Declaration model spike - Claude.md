@@ -1,7 +1,7 @@
 # Open Questions - Declaration Model Spike
 
-Live decision record. Q1–Q6 are now resolved by `Apps/WordFlower/2 - Next`; later entries remain open
-unless explicitly marked otherwise. The settled base is also recorded in
+Live decision record. Q1–Q6 and Q11 are resolved by the absorbed WordFlower contracts; later entries
+remain open unless explicitly marked otherwise. The settled base is also recorded in
 `Implementation - Declaration model spike - Claude.md`.
 
 Each entry states the question, the options, what it blocks, and a recommendation where there is one.
@@ -72,8 +72,8 @@ structural type in the language, so the vocabulary exists.
 **Resolved by `Apps/WordFlower/2 - Next`:** no visual declaration uses an `implement` alternative.
 Tao-authored visuals use `render`; TypeScript-backed visuals use `render inject`, whose returned
 element is the declaration's root and receives no compiler wrapper. `implement` remains the protocol
-binding concept for non-render-bearing `nav` and `datasource` families. Whether those declarations
-eventually spell that binding as a filled slot or retain `implement inject nav|provider` is Q11.
+binding concept for non-render-bearing `nav` and `datasource` families. Q11 now retains the explicit
+`implement inject nav|provider` protocol-binding clause inside their reusable type blocks.
 
 The exploration below is retained as background.
 
@@ -164,14 +164,21 @@ to remove.
 **Blocks:** nothing. Revisit only if a user ever needs to declare a derived slot.
 **Recommendation:** leave it hardcoded and see whether the need appears.
 
-## Q11 — Two spellings of `implement`
+## Q11 — Two spellings of `implement` — Resolved
+
+**Resolved by WordFlower Tranche 4:** keep `implement inject nav|provider` as the explicit
+protocol-binding clause inside `type T is nav|datasource with { ... }`. It fills primitive
+`nav`/`datasource`'s `implement` requirement, but the fence or sidecar path is not an ordinary Tao
+data value. Visual declarations use `render inject`, so the contextual split stays narrow and
+unambiguous. This preserves the established inline and sidecar forms without inventing a string-like
+Tao value for executable protocol behavior.
 
 Surfaced by combining the two build slices, not by either alone. Both landed as briefed, and together
 they leave `implement` meaning two things in two places:
 
 ```tao
-primitive nav with { implement }                       // a declared slot, in a type block
-nav StackNav { implement inject nav "./StackNav.ts" }  // a keyword clause, in a configuration block
+primitive nav with { implement }                                    // a required protocol slot
+type StackNav is nav with { implement inject nav "./StackNav.ts" }  // its explicit binding clause
 ```
 
 `Now 1` made `implement` a `TypeProperty` slot name (via `TypeSlotName: ID | 'implement'`, itself a
@@ -180,11 +187,9 @@ vocabulary rather than inventing new syntax. Neither decision was wrong in isola
 exactly the surface redundancy this whole direction set out to remove, and merging the branch makes
 it the status quo.
 
-Options: fold the configuration clause into the slot form (`implement is "./StackNav.ts"`), keep both
-and document the split by context, or move the slot form to a different word.
+The considered options were to fold the clause into a data-slot form (`implement is
+"./StackNav.ts"`), keep and document the contextual split, or rename the primitive slot. The
+implemented choice is the contextual split described above.
 
-**Blocks:** nothing today; both forms work and are tested. Blocks coherence once `ui` gains an
-`implement` slot, since that will need one of the two spellings and will make the split permanent.
-**Recommendation:** fold into the slot form. Q1–Q3 have now settled that visual declarations use
-`render inject`, so this remaining choice affects the non-render-bearing `nav` and `datasource`
-families rather than needing to generalize across `ui`.
+**Blocks:** nothing. Revisit only if a future non-render-bearing protocol family cannot use the same
+explicit binding clause cleanly.

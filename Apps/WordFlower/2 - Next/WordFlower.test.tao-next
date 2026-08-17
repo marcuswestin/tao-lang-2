@@ -1,8 +1,6 @@
-// Tranche status: open
 use WordFlower, WordFlowerDrawer from ./
 
 // App-level journeys: selection navigation, variants, and the app shell.
-
 test "WordFlower app shell" {
    check "activates the workspace tab and opens a document from the chooser" {
       run WordFlower
@@ -18,8 +16,7 @@ test "WordFlower app shell" {
       expect {
          text "Documents in Novel"
          text "No documents yet"
-      }
-   }
+   }  }
 
    check "a with-variant reconfigures the same app" {
       run WordFlowerDrawer
@@ -38,6 +35,4 @@ test "WordFlower app shell" {
          text "Writing session"
          text "10 words"
          text "Build development"
-      }
-   }
-}
+}  }  }

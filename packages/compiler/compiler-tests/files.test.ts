@@ -10,18 +10,21 @@ Describe('compiler: files and packages', () => {
   Test('compiles source strings into a generated app file', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Text("Hello")
       }
-      view Text Value is text {
+      view Text(Value is text) {
         render inject Value ${tsFence}
           return null
         ${fence}
       }
     `)
 
-    Expect(compiled.files).toHaveLength(1)
+    Expect(compiled.files).toHaveLength(2)
     Expect(compiled.files[0]?.relativePath).toBe('App.tsx')
+    Expect(compiled.files[1]?.relativePath).toBe('App.injection-1.tsx')
+    Expect(compiled.files[0]?.code).toContain("import __tao_injection_1__ from './App.injection-1'")
+    Expect(compiled.files[1]?.code).toContain('export default function(Value: string)')
   })
 
   Test('compiles copied nav and datasource declarations through exported identity bindings', async () => {
@@ -30,41 +33,68 @@ Describe('compiler: files and packages', () => {
       {
         'Main.tao': `
           use CustomStack, SnapshotStore from @custom
+          workspace type LocalStack is CustomStack with { Initial is Home }
+          let LocalNav = LocalStack { }
           let MainNav = CustomStack { Initial Home }
           app Demo {
             Name "Demo"
-            Navigator MainNav
+            Navigator CustomStack
             Datasource SnapshotStore { StorageKey "demo" }
           }
-          ui Home { render inject ${tsFence} return null ${fence} }
+          ui Home() { render inject ${tsFence} return null ${fence} }
         `,
         'Packages/@custom/Constructs.tao': `
-          public nav CustomStack {
+          public type CustomStack is nav with {
             Initial ui
             implement inject nav ${tsFence}
               return TR.NavKind.Stack()
             ${fence}
           }
-          public datasource SnapshotStore {
+          public nav CustomStack = CustomStack { Initial PackageHome }
+          public type SnapshotStore is datasource with {
             StorageKey text
             implement inject provider ${tsFence}
               return TR.DataProvider.Local()
             ${fence}
           }
+          ui PackageHome() { render inject ${tsFence} return null ${fence} }
         `,
       },
-      async compiled => {
+      async (compiled, files) => {
         const packageCode = compiled['Packages/@custom/Constructs.tao'].code
         const appCode = compiled['Main.tao'].code
+        const appInjections = files.filter(file =>
+          file.sourcePath === compiled['Main.tao'].sourcePath
+          && file.relativePath.includes('.injection-')
+        )
+        const packageInjections = files.filter(file =>
+          file.sourcePath === compiled['Packages/@custom/Constructs.tao'].sourcePath
+          && file.relativePath.includes('.injection-')
+        )
 
-        Expect(packageCode).toContain('_Scope.CustomStack = TR.Navigation.Declaration(')
-        Expect(packageCode).toContain('return TR.NavKind.Stack()')
-        Expect(packageCode).toContain('_Scope.SnapshotStore = TR.Data.Declaration(')
-        Expect(packageCode).toContain('return TR.DataProvider.Local()')
+        Expect(packageCode).toContain('_Scope.__tao_type_CustomStack = TR.Navigation.Declaration(')
+        Expect(packageCode).toContain('_Scope.CustomStack = TR.Alias(TR.Navigation.Configure(')
+        Expect(packageInjections.some(file => file.code.includes('return TR.NavKind.Stack()'))).toBe(true)
+        Expect(packageCode).toContain('_Scope.__tao_type_SnapshotStore = TR.Data.Declaration(')
+        Expect(packageInjections.some(file => file.code.includes('return TR.DataProvider.Local()'))).toBe(true)
+        Expect(packageCode).toContain(
+          'export const __tao_type_CustomStack = _Scope.__tao_type_CustomStack',
+        )
         Expect(packageCode).toContain('export const CustomStack = _Scope.CustomStack')
-        Expect(packageCode).toContain('export const SnapshotStore = _Scope.SnapshotStore')
-        Expect(appCode).toContain('TR.Navigation.Configure(_Scope.CustomStack, {')
-        Expect(appCode).toContain('TR.Data.Configure(_Scope.SnapshotStore, {')
+        Expect(packageCode).toContain(
+          'export const __tao_type_SnapshotStore = _Scope.__tao_type_SnapshotStore',
+        )
+        Expect(appCode).toContain(
+          'import { __tao_type_CustomStack, __tao_type_SnapshotStore, CustomStack }',
+        )
+        Expect(appCode).toContain("TR.Use(_Scope, '__tao_type_CustomStack', () => __tao_type_CustomStack)")
+        Expect(appCode).toContain("TR.Use(_Scope, 'CustomStack', () => CustomStack)")
+        Expect(appCode).toContain("import __tao_injection_1__ from './App.injection-1'")
+        Expect(appCode).toContain("import __tao_injection_2__ from './App.injection-2'")
+        Expect(appInjections).toHaveLength(2)
+        Expect(appInjections.some(file => file.code.includes('return TR.NavKind.Stack()'))).toBe(true)
+        Expect(appCode).toContain('TR.Navigation.Configure(_Scope.__tao_type_CustomStack, {')
+        Expect(appCode).toContain('TR.Data.Configure(_Scope.__tao_type_SnapshotStore, {')
       },
     )
   })
@@ -88,21 +118,21 @@ Describe('compiler: files and packages', () => {
             Navigator SidecarStack { Initial Home }
             Datasource InlineStore { StorageKey "demo" }
           }
-          ui Home { render inject ${tsFence} return null ${fence} }
+          ui Home() { render inject ${tsFence} return null ${fence} }
         `,
         'Constructs.tao': `
           public type Presentable is ui | nav
-          public nav SidecarStack {
+          public type SidecarStack is nav with {
             Initial ui
             implement inject nav "./SidecarStack.ts"
           }
-          public nav InlineSlot {
+          public type InlineSlot is nav with {
             Initial Presentable
             implement inject nav ${tsFence}
               return TR.NavKind.Slot()
             ${fence}
           }
-          public nav InlineSelection {
+          public type InlineSelection is nav with {
             Initial key
             Display text
             @key { Label text Content Presentable }
@@ -110,13 +140,13 @@ Describe('compiler: files and packages', () => {
               return TR.NavKind.Selection()
             ${fence}
           }
-          public nav InlineCustom {
+          public type InlineCustom is nav with {
             Query text
             implement inject nav ${tsFence}
               return TR.NavKind.Stack()
             ${fence}
           }
-          public datasource InlineStore {
+          public type InlineStore is datasource with {
             StorageKey text
             implement inject provider ${tsFence}
               return TR.DataProvider.Memory()
@@ -130,6 +160,9 @@ Describe('compiler: files and packages', () => {
         const module = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.tsx')
         const declarations = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.d.ts')
         const sidecar = requireRelativeCompiledFile(compiled.files, 'modules/SidecarStack.ts')
+        const inlineBoundaries = compiled.files.filter(file =>
+          file.relativePath.startsWith('modules/Constructs.tao.injection-')
+        )
 
         Expect(module.code).toContain(
           "import __tao_configuration_implementation_SidecarStack__ from './SidecarStack'",
@@ -138,8 +171,8 @@ Describe('compiler: files and packages', () => {
           'TR.Navigation.Declaration( "SidecarStack", Reflect.apply( '
             + '__tao_configuration_implementation_SidecarStack__, undefined, [], ), )',
         )
-        Expect(module.code).toContain('function __tao_configuration_implementation__()')
-        Expect(module.code).toContain('return TR.DataProvider.Memory()')
+        Expect(inlineBoundaries).toHaveLength(4)
+        Expect(inlineBoundaries.some(file => file.code.includes('return TR.DataProvider.Memory()'))).toBe(true)
         Expect(sidecar.sourcePath).toBe(paths['SidecarStack.ts'])
         Expect(sidecar.code).toBe(sidecarCode)
         Expect(declarations.code).toContain("import type TR from '@runtime/TR'")
@@ -158,7 +191,8 @@ Describe('compiler: files and packages', () => {
           'export type InlineSelectionConfig = Readonly<{ '
             + 'readonly display: TR.Evaluable readonly initial: string '
             + 'readonly items: Readonly<Record<string, Readonly<{ '
-            + 'readonly label: TR.Evaluable readonly content: TR.Presentable | TR.NavigationValue }>>> }>',
+            + 'readonly label: TR.Evaluable readonly icon?: TR.Evaluable '
+            + 'readonly content: TR.Presentable | TR.NavigationValue }>>> }>',
         )
         Expect(declarationText).toContain(
           'export type InlineCustomConfig = Readonly<Record<string, unknown>>',
@@ -177,12 +211,12 @@ Describe('compiler: files and packages', () => {
         'Main.tao': `
         app MultiFile { view MainView }
         use Text from ./
-        view MainView {
+        view MainView() {
           render Text("Hello from imports")
         }
       `,
         'Views.tao': `
-        workspace view Text Value is text {
+        workspace view Text(Value is text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -203,17 +237,19 @@ Describe('compiler: files and packages', () => {
         'Main.tao': `
         use DocumentLabel from ./Labels.tao
         app MultiFile { view MainView }
-        view MainView {
+        view MainView() {
           render Text(DocumentLabel("Draft"))
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
         'Labels.tao': `
-        workspace function DocumentLabel Title is text returns text = "Document: { Title }"
+        workspace function DocumentLabel(Title is text) returns text {
+          return "Document: { Title }"
+        }
       `,
       },
       compiled => {
@@ -226,6 +262,42 @@ Describe('compiler: files and packages', () => {
     )
   })
 
+  Test('compiles a supporting file that imports an entry app for a strict target', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use ResetNav from ./Support.tao
+          app Root {
+            Name "Root"
+            Navigator ResetNav
+          }
+        `,
+        'Support.tao': `
+          use StackNav from @tao/nav
+          use Root from ./
+          workspace nav ResetNav = StackNav { Initial Home }
+          ui Home() {
+            action Reset() { replace ResetNav in Root }
+            render Empty()
+          }
+          view Empty() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      compiled => {
+        const entryCode = compiled['Main.tao'].code
+        const supportCode = compiled['Support.tao'].code
+
+        Expect(entryCode).toContain('_Scope.Root = _TaoAppDefinition_Root')
+        Expect(entryCode).toContain('export const Root = _Scope.Root')
+        Expect(supportCode).toContain('import { Root }')
+        Expect(supportCode).toContain("TR.Use(_Scope, 'Root', () => Root)")
+        Expect(supportCode).toContain('TR.Navigation.Replace(')
+        Expect(supportCode).toContain('_Scope.Root')
+      },
+    )
+  })
+
   Test('does not compile sidecar test files from app directory imports', async () => {
     await withTaoFiles(
       'tao-compiler-sidecar-',
@@ -233,12 +305,12 @@ Describe('compiler: files and packages', () => {
         'Main.tao': `
         app MyApp { view MainView }
         use Text from ./
-        view MainView {
+        view MainView() {
           render Text("Hello")
         }
       `,
         'Views.tao': `
-        workspace view Text Value is text {
+        workspace view Text(Value is text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -272,10 +344,10 @@ Describe('compiler: files and packages', () => {
         use MainView from @bar/views
       `,
         'lib/nested/@bar/views/Main.tao': `
-        workspace view MainView {
+        workspace view MainView() {
           render Text("Package import")
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -304,10 +376,10 @@ Describe('compiler: files and packages', () => {
       `,
         'feature/@foo/forms/Main.tao': `
         use PackageTitle
-        workspace view MainView {
+        workspace view MainView() {
           render Text(PackageTitle)
         }
-        view Text Value is text {
+        view Text(Value is text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -332,10 +404,10 @@ Describe('compiler: files and packages', () => {
         app TypeImportApp { view MainView }
         use Name from ./Types.tao
         let Name = Name "Ada"
-        view MainView {
+        view MainView() {
           render TextValue(Name)
         }
-        view TextValue Value is text {
+        view TextValue(Value is text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -359,23 +431,23 @@ Describe('compiler: files and packages', () => {
         'Main.tao': `
         app CircularApp { view MainView }
         use AView from ./
-        view MainView {
+        view MainView() {
           render AView()
         }
       `,
         'A.tao': `
         use BView from ./
         workspace let SharedTitle = "Cycle"
-        workspace view AView {
+        workspace view AView() {
           render BView()
         }
       `,
         'B.tao': `
         use SharedTitle from ./
-        workspace view BView {
+        workspace view BView() {
           render Leaf(SharedTitle)
         }
-        view Leaf Value is text {
+        view Leaf(Value is text) {
           render inject Value ${tsFence}
             return null
           ${fence}
@@ -392,7 +464,7 @@ Describe('compiler: files and packages', () => {
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      workspace view ${name} Value is text {
+      workspace view ${name}(Value is text) {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -405,21 +477,24 @@ Describe('compiler: files and packages', () => {
         app CollisionApp { view MainView }
         use AText from ../liba
         use BText from ../libb
-        view MainView {
+        view MainView() {
           render AText("Hello")
         }
       `,
         'liba/Views.tao': sharedViewSource('AText'),
         'libb/Views.tao': sharedViewSource('BText'),
       },
-      compiled => {
-        const files = Object.values(compiled)
-        const relativePaths = files.map(file => file.relativePath)
+      (compiled, allFiles) => {
+        const sourceModules = Object.values(compiled)
+        const relativePaths = allFiles.map(file => file.relativePath)
 
-        Expect(files).toHaveLength(3)
+        Expect(sourceModules).toHaveLength(3)
+        Expect(allFiles).toHaveLength(5)
         Expect(new Set(relativePaths).size).toBe(relativePaths.length)
         Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.tsx')
+        Expect(relativePaths).toContain('modules/external/Views.tao.injection-1.tsx')
+        Expect(relativePaths).toContain('modules/external/Views.tao-2.injection-1.tsx')
       },
     )
   })
@@ -435,10 +510,10 @@ Describe('compiler: files and packages', () => {
             Name "Collision"
             Navigator AStack { Initial Home }
           }
-          ui Home { render inject ${tsFence} return null ${fence} }
+          ui Home() { render inject ${tsFence} return null ${fence} }
         `,
         'liba/Views.tao': `
-          public nav AStack {
+          public type AStack is nav with {
             Initial ui
             implement inject nav "./Implementation.ts"
           }
@@ -451,7 +526,7 @@ Describe('compiler: files and packages', () => {
           }
         `,
         'libb/Views.tao': `
-          public nav BStack {
+          public type BStack is nav with {
             Initial ui
             implement inject nav "./Implementation.ts"
           }
@@ -481,7 +556,7 @@ Describe('compiler: files and packages', () => {
 
   Test('rejects entry files without an app declaration', async () => {
     await Expect(TestCompiler.compileCode(`
-      view MainView {
+      view MainView() {
         render inject ${tsFence}
           return null
         ${fence}
@@ -493,7 +568,7 @@ Describe('compiler: files and packages', () => {
     const source = `
       app First { view MainView }
       app Second { view MainView }
-      view MainView { render inject ${tsFence} return null ${fence} }
+      view MainView() { render inject ${tsFence} return null ${fence} }
     `
     await Expect(TestCompiler.compileCode(source)).rejects.toThrow('multiple apps without a selection')
 
@@ -508,10 +583,10 @@ Describe('compiler: files and packages', () => {
   Test('strips test declarations from generated app code', async () => {
     const compiled = await TestCompiler.compileCode(`
       app MyApp { view MainView }
-      view MainView {
+      view MainView() {
         render Text("Hello")
       }
-      view Text Value is text {
+      view Text(Value is text) {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -538,7 +613,7 @@ async function withCompiledFiles<
 >(
   entryFile: EntryFile,
   files: Files,
-  testFunction: (compiled: CompiledFiles<Files>) => Promise<void> | void,
+  testFunction: (compiled: CompiledFiles<Files>, files: readonly CompiledFile[]) => Promise<void> | void,
 ): Promise<void> {
   await withTaoFiles('tao-compiler-', files, async paths => {
     const result = await Workspace.compile(paths[entryFile])
@@ -547,7 +622,7 @@ async function withCompiledFiles<
       compiled[relativePath] = requireCompiledFile(result.files, paths[relativePath])
     }
 
-    await testFunction(compiled)
+    await testFunction(compiled, result.files)
   })
 }
 

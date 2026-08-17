@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { configurationRuntimeBindingName } from './configuration-compiler'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
 
@@ -21,7 +22,10 @@ export const ExpressionsCompiler = {
       InferredConfigurationConstructor: Compile.InferredConfiguration,
       NumberLiteral: Compile.NumberLiteral,
       NoneLiteral: Compile.NoneLiteral,
+      PrimitiveConfigurationConstructor: Compile.PrimitiveConfigurationConstructor,
+      RefinementExpression: Compile.RefinementExpression,
       StringLiteral: Compile.StringLiteral,
+      TypedInjectionExpression: Compile.TypedInjectionExpression,
       ListLiteral: Compile.ListLiteral,
       MemberAccessExpression: Compile.MemberAccessExpression,
       TypedConstructor: Compile.TypedConstructor,
@@ -34,6 +38,14 @@ export const ExpressionsCompiler = {
   ConfiguredValue(value: AST.ConfiguredValue): Compiled {
     const declaration = resolveRef(value.type)
     const resolvedType = Type.ofConfiguredValue(value)
+    if (AST.isConfigurableDeclaration(declaration)) {
+      Assert.defined(value.block, 'validated configurable type constructor has a block')
+      const config = compileConfiguredTypeObject(declaration, value.block)
+      const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+      return AST.configurationPrimitiveOf(declaration) === 'nav'
+        ? gen`TR.Navigation.Configure(${runtimeDeclaration}, ${config})`
+        : gen`TR.Data.Configure(${runtimeDeclaration}, ${config})`
+    }
     if (AST.isTypeDeclaration(declaration) || AST.isParameterizedDeclaration(declaration)) {
       if (value.value) {
         return Compile.Expression(value.value)
@@ -43,15 +55,46 @@ export const ExpressionsCompiler = {
       }
       return compileConfiguredItem(value, resolvedType.item)
     }
-    Assert.defined(value.block, 'validated configurable declaration constructor has a block')
-    const config = compileConfigurationObject(value.block)
-    return AST.isNavDeclaration(declaration)
-      ? gen`TR.Navigation.Configure(${gen.scopeName(declaration)}, ${config})`
-      : gen`TR.Data.Configure(${gen.scopeName(declaration)}, ${config})`
+    return Assert.never(declaration as never, 'validated constructor declaration has a lowering')
+  },
+
+  /** PrimitiveConfigurationConstructor lowers direct primitive values after slot validation. */
+  PrimitiveConfigurationConstructor(value: AST.PrimitiveConfigurationConstructor): Compiled {
+    return gen`TR.Value(${compileConfigurationObject(value.block)})`
+  },
+
+  /** RefinementExpression constructs from a type or immutably derives from a value. */
+  RefinementExpression(value: AST.RefinementExpression): Compiled {
+    const base = resolveRef(value.target)
+    if (AST.isTypeDeclaration(base)) {
+      const constructor = {
+        $type: 'ConfigurationConstructor',
+        type: value.target,
+        members: [],
+        block: value.patchBlock,
+        $container: value.$container,
+      } as unknown as AST.ConfigurationConstructor
+      return Compile.ConfiguredValue(constructor)
+    }
+    Assert.is(base, AST.isValueDeclaration, 'validated value refinement resolves a value declaration')
+    return compileConfiguredPatch(value)
   },
 
   /** InferredConfiguration lowers a bare block through its same-name declaration type. */
   InferredConfiguration(value: AST.InferredConfigurationConstructor): Compiled {
+    const declaration = inferredConfigurationDeclaration(value)
+    if (declaration) {
+      const configured = compileConfiguredTypeObject(declaration, value.block)
+      const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+      const primitive = AST.configurationPrimitiveOf(declaration)
+      if (primitive === 'nav') {
+        return gen`TR.Navigation.Configure(${runtimeDeclaration}, ${configured})`
+      }
+      if (primitive === 'datasource') {
+        return gen`TR.Data.Configure(${runtimeDeclaration}, ${configured})`
+      }
+      return Assert.never(primitive as never, 'app inference is compiled by the owning app value')
+    }
     const resolvedType = Type.ofInferredConfiguration(value)
     if (resolvedType.kind !== 'item') {
       return Assert.never(resolvedType as never, 'validated inferred configuration resolves an item type')
@@ -74,8 +117,11 @@ export const ExpressionsCompiler = {
   },
 
   /** ConfigurationPatchObject lowers property replacements and keyed additions without mutating the base. */
-  ConfigurationPatchObject(block: AST.ConfigurationBlock): Compiled {
-    return compileConfigurationPatchObject(block)
+  ConfigurationPatchObject(
+    block: AST.ConfigurationBlock,
+    declaration?: AST.ConfigurableDeclaration,
+  ): Compiled {
+    return compileConfigurationPatchObject(block, declaration)
   },
 
   /** BooleanLiteral compiles a Tao boolean literal into a Tao value. */
@@ -209,7 +255,7 @@ export const ExpressionsCompiler = {
 
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
   ValueReference(reference: AST.ValueReference): Compiled {
-    if (AST.isPatchedValueReference(reference)) {
+    if (AST.isRefinementExpression(reference)) {
       return compileConfiguredPatch(reference)
     }
     const target = resolveRef(reference.target)
@@ -227,10 +273,13 @@ export const ExpressionsCompiler = {
       AppDeclaration: app => gen`${gen.Name({ name: `_TaoAppDefinition_${app.name}` })}`,
       AskStatement: ask => gen`${gen.scopeName(ask)}.evaluate()`,
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
+      DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
       EnumCase: enumCase => gen`${gen.scopeName(AST.enumOwningCase(enumCase))}.${gen.Name(enumCase)}`,
       ForStatement: statement => gen`${gen.scopeName(statement)}.evaluate()`,
+      DatasourceDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
+      NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
       UiDeclaration: ui => Compile.UiValue(ui),
@@ -330,7 +379,10 @@ function compileConfiguredItemBlock(
     pairs.push({ expected, compiled: Compile.Expression(expected.value) })
     remaining.delete(expected)
   }
-  Assert(remaining.size === 0, 'validated configured item constructor binds every field')
+  Assert(
+    [...remaining].every(property => !Type.propertyRequiresValue(property)),
+    'validated configured item constructor binds every required field',
+  )
   pairs.sort((left, right) => itemType.properties.indexOf(left.expected) - itemType.properties.indexOf(right.expected))
   return gen`TR.Value({
     ${gen.list(pairs, pair => gen`[${gen.nameLiteral(pair.expected)}]: ${pair.compiled}.jsValue,`)}
@@ -380,45 +432,90 @@ function compileConfiguredItemEntry(
 function compileConfigurationReference(value: AST.ConfigurationReference): Compiled {
   const target = resolveRef(value.target)
   if (AST.isConfigurableDeclaration(target)) {
-    return AST.isNavDeclaration(target)
-      ? gen`TR.Navigation.Configure(${gen.scopeName(target)}, {})`
-      : gen`TR.Data.Configure(${gen.scopeName(target)}, {})`
+    const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(target) })
+    return AST.configurationPrimitiveOf(target) === 'nav'
+      ? gen`TR.Navigation.Configure(${runtimeDeclaration}, {})`
+      : AST.configurationPrimitiveOf(target) === 'datasource'
+      ? gen`TR.Data.Configure(${runtimeDeclaration}, {})`
+      : gen`TR.Value({})`
   }
   if (AST.isUiDeclaration(target)) {
     return Compile.UiValue(target)
   }
-  if (AST.isAliasDeclaration(target)) {
+  if (
+    AST.isAliasDeclaration(target)
+    || AST.isNavDeclaration(target)
+    || AST.isDatasourceDeclaration(target)
+  ) {
     return Compile.ValueDeclarationReference(target)
   }
   return Assert.never(target as never, 'validated configuration reference targets a configurable declaration')
 }
 
 function compileConfigurationObject(block: AST.ConfigurationBlock): Compiled {
+  return compileConfigurationObjectWithDefaults(block, [])
+}
+
+/** compileConfigurationObjectWithDefaults renders a block whose keyed items, not the block itself, fill the key defaults. */
+function compileConfigurationObjectWithDefaults(
+  block: AST.ConfigurationBlock,
+  keyedDefaults: readonly AST.ConfigurationProperty[],
+): Compiled {
   return gen`{
+    ${compileConfigurationEntries(block, keyedDefaults)}
+  }`
+}
+
+/** compileKeyedItemObject renders one keyed item and fills every key default it does not supply. */
+function compileKeyedItemObject(
+  block: AST.ConfigurationBlock,
+  keyedDefaults: readonly AST.ConfigurationProperty[],
+): Compiled {
+  return gen`{
+    ${compileConfigurationEntries(block, keyedDefaults)}
     ${
-    gen.list(block.entries, entry => {
-      if (entry.key && entry.block) {
-        return gen`${gen.jsLiteral(entry.key)}: ${compileConfigurationObject(entry.block)},`
-      }
-      Assert.defined(entry.name, 'validated configuration entry has a property name')
-      Assert.defined(entry.value, 'validated configuration property has a value')
-      Assert(!AST.isPropertyConfigurationPatch(entry.value), 'configuration property patch is compiled by its owner')
-      return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`
-    })
+    gen.list(
+      keyedDefaults.filter(property =>
+        property.value !== undefined && !block.entries.some(entry => entry.name === property.name)
+      ),
+      property => {
+        Assert.defined(property.value, 'defaulted configuration property has a value')
+        return gen`${gen.jsLiteral(property.name)}: ${Compile.Expression(property.value)},`
+      },
+    )
   }
   }`
 }
 
-function compileConfiguredPatch(value: AST.PatchedValueReference): Compiled {
+function compileConfigurationEntries(
+  block: AST.ConfigurationBlock,
+  keyedDefaults: readonly AST.ConfigurationProperty[],
+): Compiled {
+  return gen.list(block.entries, entry => {
+    if (entry.key && entry.block) {
+      return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
+    }
+    Assert.defined(entry.name, 'validated configuration entry has a property name')
+    Assert.defined(entry.value, 'validated configuration property has a value')
+    Assert(!AST.isPropertyConfigurationPatch(entry.value), 'configuration property patch is compiled by its owner')
+    return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`
+  })
+}
+
+function compileConfiguredPatch(value: AST.RefinementExpression): Compiled {
   const base = resolveRef(value.target)
-  Assert.is(base, AST.isAliasDeclaration, 'generic configured patches currently target configured value aliases')
-  const patch = compileConfigurationPatchObject(value.patchBlock)
+  Assert.is(base, AST.isValueDeclaration, 'validated refinement target is a value')
+  const patch = compileConfigurationPatchObject(value.patchBlock, configuredDeclarationOfValue(base))
   const type = Type.ofValueDeclaration(base)
   if (type.kind === 'primitive' && type.primitive === 'nav') {
     return gen`TR.Navigation.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
   }
+  if (type.kind === 'primitive' && type.primitive === 'datasource') {
+    return gen`TR.Data.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
+  }
   if (type.kind === 'item') {
     if (type.item) {
+      Assert.is(base, AST.isAliasDeclaration, 'item refinements target immutable let values')
       return compileItemPatch(value, base, type.item)
     }
     return gen`TR.Data.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
@@ -426,8 +523,33 @@ function compileConfiguredPatch(value: AST.PatchedValueReference): Compiled {
   return Assert.never(type as never, 'validated configured patch targets nav, datasource, or app')
 }
 
+function compileConfiguredTypeObject(
+  declaration: AST.ConfigurableDeclaration,
+  block: AST.ConfigurationBlock,
+): Compiled {
+  const keyedDefaults = AST.configurationKeyOf(declaration)?.block.properties ?? []
+  const configured = compileConfigurationObjectWithDefaults(block, keyedDefaults)
+  const filled = AST.configurationPropertiesOf(declaration)
+    .filter(Type.propertyIsFilled)
+  const defaults = AST.configurationPropertiesOf(declaration)
+    .filter(Type.propertyHasDefault)
+    .filter(property => !block.entries.some(entry => entry.name === property.name))
+  if (filled.length === 0 && defaults.length === 0) {
+    return configured
+  }
+  return gen`{
+    ...${configured},
+    ${
+    gen.list([...filled, ...defaults], property => {
+      Assert.defined(property.value, 'filled/defaulted configuration slot has a value')
+      return gen`${gen.jsLiteral(property.name)}: ${Compile.Expression(property.value)},`
+    })
+  }
+  }`
+}
+
 function compileItemPatch(
-  value: AST.PatchedValueReference,
+  value: AST.RefinementExpression,
   base: AST.AliasDeclaration,
   itemType: ASTUtils.ItemShape,
 ): Compiled {
@@ -465,12 +587,16 @@ function compileItemPatch(
   })`
 }
 
-function compileConfigurationPatchObject(block: AST.ConfigurationBlock): Compiled {
+function compileConfigurationPatchObject(
+  block: AST.ConfigurationBlock,
+  declaration?: AST.ConfigurableDeclaration,
+): Compiled {
+  const keyedDefaults = declaration ? AST.configurationKeyOf(declaration)?.block.properties ?? [] : []
   return gen`{
     ${
     gen.list(block.entries, entry => {
       if (entry.key && entry.block) {
-        return gen`${gen.jsLiteral(entry.key)}: ${compileConfigurationObject(entry.block)},`
+        return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
       }
       Assert.defined(entry.name, 'validated patch entry has a property name')
       Assert.defined(entry.value, 'validated patch entry has a property value')
@@ -478,4 +604,53 @@ function compileConfigurationPatchObject(block: AST.ConfigurationBlock): Compile
     })
   }
   }`
+}
+
+function inferredConfigurationDeclaration(
+  value: AST.InferredConfigurationConstructor,
+): AST.ConfigurableDeclaration | undefined {
+  const owner = value.$container
+  const name = AST.isAliasDeclaration(owner)
+    ? owner.name
+    : AST.isAppProperty(owner)
+    ? owner.name
+    : undefined
+  const declaration = name ? Type.visibleDeclaration(value, name) : undefined
+  return declaration && AST.isConfigurableDeclaration(declaration) ? declaration : undefined
+}
+
+function configuredDeclarationOfValue(
+  declaration: AST.ValueDeclaration,
+  seen: Set<AST.ValueDeclaration> = new Set(),
+): AST.ConfigurableDeclaration | undefined {
+  if (seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  const expression = AST.isAppDeclaration(declaration)
+      || AST.isNavDeclaration(declaration)
+      || AST.isDatasourceDeclaration(declaration)
+    ? declaration.value
+    : AST.isAliasDeclaration(declaration)
+    ? declaration.value
+    : undefined
+  if (!expression) {
+    return undefined
+  }
+  const constructorDeclaration = AST.isConfigurationConstructor(expression) ? expression.type.ref : undefined
+  if (constructorDeclaration && AST.isConfigurableDeclaration(constructorDeclaration)) {
+    return constructorDeclaration
+  }
+  if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
+    const target = expression.target.ref
+    if (target && AST.isConfigurableDeclaration(target)) {
+      return target
+    }
+    return AST.isValueDeclaration(target) ? configuredDeclarationOfValue(target, seen) : undefined
+  }
+  if (AST.isInferredConfigurationConstructor(expression) && AST.isAliasDeclaration(declaration)) {
+    const inferred = Type.visibleDeclaration(declaration, declaration.name)
+    return inferred && AST.isConfigurableDeclaration(inferred) ? inferred : undefined
+  }
+  return undefined
 }

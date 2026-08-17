@@ -19,17 +19,23 @@ export default {
     f.oneSpaceBeforeProperty('block', 'value')
   },
 
+  /** PrimitiveConfigurationConstructor formats primitive construction/refinement blocks. */
+  PrimitiveConfigurationConstructor(f) {
+    f.oneSpaceAround('with')
+    f.oneSpaceBeforeProperty('block')
+  },
+
   /** InferredConfigurationConstructor formats a context-typed bare value block. */
   InferredConfigurationConstructor() {},
 
-  /** InferredAppPropertyValue formats a slot-typed bare app property block. */
-  InferredAppPropertyValue() {},
-
-  /** ValueReference formats an optional immutable `with` patch. */
-  ValueReference(f) {
+  /** RefinementExpression formats one immutable `with` refinement. */
+  RefinementExpression(f) {
     f.oneSpaceAround('with')
     f.oneSpaceBeforeProperty('patchBlock')
   },
+
+  /** ValueReference preserves a single value-namespace identifier. */
+  ValueReference() {},
 
   /** ConfigurationBlock places each named slot on its own indented line. */
   ConfigurationBlock(f) {
@@ -63,12 +69,27 @@ export default {
     f.oneSpaceBetweenProperties('type', 'value')
   },
 
-  /** FunctionDeclaration formats a pure expression-bodied function. */
+  /** FunctionDeclaration formats a parenthesized pure function header and block body. */
   FunctionDeclaration(f) {
     f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'function', 'returns')
     f.oneSpaceBefore('returns')
-    f.oneSpaceBeforeProperty('parameterList')
-    f.oneSpaceAround('=')
+    f.noSpaceBefore('(')
+  },
+
+  /** FunctionBlock formats return-oriented function control flow. */
+  FunctionBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.statements)
+  },
+
+  /** ReturnStatement separates the returned expression from its keyword. */
+  ReturnStatement(f) {
+    f.oneSpaceAfter('return')
+  },
+
+  /** IfFunctionStatement separates its condition from a nested early-return block. */
+  IfFunctionStatement(f) {
+    f.oneSpaceAfter('if')
   },
 
   /** FunctionCallExpression keeps call parentheses tight and arguments comma-spaced. */

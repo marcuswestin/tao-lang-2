@@ -3,6 +3,7 @@
   "patterns": [
     { "include": "#ts-fenced-block" },
     { "include": "#string-template" },
+    { "include": "#tag-or-hex-color" },
     { "include": "#number" },
     { "include": "#property-access" },
     { "include": "#render-name" },
@@ -89,6 +90,10 @@
     "number": {
       "name": "constant.numeric.tao-lang",
       "match": "\\b[0-9]+\\b"
+    },
+    "tag-or-hex-color": {
+      "name": "constant.other.tag-or-hex-color.tao-lang",
+      "match": "#[A-Za-z0-9_]+"
     },
     "render-name": {
       "match": "^\\s*([A-Z][A-Za-z0-9_]*)",

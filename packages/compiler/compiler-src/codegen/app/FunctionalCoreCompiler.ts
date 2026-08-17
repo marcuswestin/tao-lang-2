@@ -1,6 +1,6 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
+import { Assert, Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -18,17 +18,42 @@ export const FunctionalCoreCompiler = {
     }])`
   },
 
-  /** FunctionDeclaration compiles an expression-bodied Tao pure function. */
+  /** FunctionDeclaration compiles a return-oriented Tao pure function block. */
   FunctionDeclaration(fn: AST.FunctionDeclaration): Compiled {
     const parameters = AST.parametersOf(fn).map((parameter, index) => ({ index, parameter }))
     return gen`
       ${gen.scopeName(fn)} = TR.Function((${gen.join(parameters, Compile.FunctionRuntimeParameter)}) => {
         return TR.BlockScope(_Scope, _Scope => {
           ${gen.list(parameters, Compile.FunctionParameterBinding)}
-          return ${Compile.Expression(fn.value)}
+          ${Compile.FunctionBlockBody(fn.block)}
         })
       })
     `
+  },
+
+  /** FunctionBlockBody compiles source-ordered returns and one-sided early-return branches. */
+  FunctionBlockBody(block: AST.FunctionBlock): Compiled {
+    return gen.list(block.statements, Compile.FunctionStatement)
+  },
+
+  /** FunctionStatement compiles one statement inside a pure function block. */
+  FunctionStatement(statement: AST.FunctionStatement): Compiled {
+    return Switch.type(statement, {
+      IfFunctionStatement: Compile.IfFunctionStatement,
+      ReturnStatement: Compile.ReturnStatement,
+    })
+  },
+
+  /** ReturnStatement returns one runtime-wrapped Tao value from the function callback. */
+  ReturnStatement(statement: AST.ReturnStatement): Compiled {
+    return gen`return ${Compile.Expression(statement.value)}`
+  },
+
+  /** IfFunctionStatement preserves native callback return behavior for early exits. */
+  IfFunctionStatement(statement: AST.IfFunctionStatement): Compiled {
+    return gen`if (${Compile.Expression(statement.condition)}.evaluate().jsValue === true) {
+      ${Compile.FunctionBlockBody(statement.block)}
+    }`
   },
 
   /** FunctionRuntimeParameter emits one runtime-wrapped function parameter. */
@@ -49,18 +74,15 @@ export const FunctionalCoreCompiler = {
 
   /** RenderFragmentStatement compiles one child render/control-flow fragment. */
   RenderFragmentStatement(
-    statement:
-      | AST.Render
-      | AST.WhenRenderStatement
-      | AST.GuardRenderStatement
-      | AST.IfRenderStatement
-      | AST.ForStatement,
+    statement: AST.RenderFragment,
   ): Compiled {
     return Switch.type(statement, {
       ForStatement: Compile.ForStatement,
       GuardRenderStatement: statement => Compile.GuardRenderStatement(statement, []),
       IfRenderStatement: Compile.IfRenderStatement,
       WhenRenderStatement: Compile.WhenRenderStatement,
+      CallerContentStatement: Compile.CallerContentStatement,
+      RenderSlotUse: Compile.RenderSlotUse,
       RenderStatement: Compile.Render,
       ViewRender: Compile.Render,
     })
@@ -100,9 +122,7 @@ export const FunctionalCoreCompiler = {
   /** GuardRenderStatement preserves preceding siblings and owns only the remainder of its block. */
   GuardRenderStatement(
     statement: AST.GuardRenderStatement,
-    remaining: readonly (
-      AST.Render | AST.WhenRenderStatement | AST.GuardRenderStatement | AST.IfRenderStatement | AST.ForStatement
-    )[],
+    remaining: readonly AST.RenderFragment[],
   ): Compiled {
     return gen`
       {TR.GuardRender(${Compile.Expression(statement.subject)}, [
@@ -124,14 +144,33 @@ export const FunctionalCoreCompiler = {
 
   /** ForStatement compiles repeated rendering with an iteration-local Tao value binding. */
   ForStatement(statement: AST.ForStatement): Compiled {
+    const selectHandler = AST.loopSelectHandlers(statement)[0]
     return gen`
       {TR.ForEach(${Compile.Expression(statement.collection)}, ${functionRuntimeParameterName(0)} =>
         TR.BlockScope(_Scope, _Scope => {
           ${gen.scopeName(statement)} = ${functionRuntimeParameterName(0)}
           ${Compile.RenderBlockBody(statement.block)}
         })
-      )}
+      ${selectHandler ? gen`, ${Compile.LoopSelectHandlerCallback(selectHandler)}` : ''})}
     `
+  },
+
+  /** LoopSelectHandler emits no standalone content; its owning loop compiles it as row behavior. */
+  LoopSelectHandler(): Compiled {
+    return gen.noop()
+  },
+
+  /** LoopSelectHandlerCallback binds the selected row before running its validated inline action. */
+  LoopSelectHandlerCallback(handler: AST.LoopSelectHandler): Compiled {
+    const loop = AST.directLoopForSelectHandler(handler)
+    const block = handler.block
+    Assert.defined(loop, 'validated loop select handler is a direct loop child')
+    Assert.defined(block, 'validated loop select handler has an inline action block')
+    return gen`${functionRuntimeParameterName(0)} =>
+      TR.BlockScope(_Scope, async _Scope => {
+        ${gen.scopeName(loop)} = ${functionRuntimeParameterName(0)}
+        ${Compile.ActionBlockBody(block)}
+      })`
   },
 } as const
 

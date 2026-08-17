@@ -8,16 +8,15 @@ export const fence = '```'
 export function app(body: string, extra = ''): string {
   return `
     app MyApp { view MainView }
-    view MainView { ${body} }
+    view MainView() { ${body} }
     ${extra}
   `
 }
 
 /** stubView returns a renderable Tao view fixture with an injected no-op implementation. */
 export function stubView(name: string, parameters = ''): string {
-  const declaration = parameters.length === 0 ? name : `${name} ${parameters}`
   return `
-    view ${declaration} {
+    view ${name}(${parameters}) {
       render inject ${tsFence}
         return null
       ${fence}
@@ -27,9 +26,8 @@ export function stubView(name: string, parameters = ''): string {
 
 /** stubLayout returns a renderable Tao layout fixture with an injected no-op implementation. */
 export function stubLayout(name: string, parameters = ''): string {
-  const declaration = parameters.length === 0 ? name : `${name} ${parameters}`
   return `
-    layout ${declaration} {
+    layout ${name}(${parameters}) {
       render inject ${tsFence}
         return null
       ${fence}

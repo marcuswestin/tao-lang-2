@@ -21,6 +21,10 @@ spellings. The live contracts are `Apps/WordFlower/` and `Spec/`.
 - Add forms and inputs MVP: TextInput, labels, local form state, validation display, submit/change flow, and accessible feedback.
 - Add loading, empty, and error-state MVP: mutually exclusive query `loading` / `error -> Message` / ready-empty / ready-nonempty cases and app-visible provider failures.
 - Absorb the 2026-08 WordFlower tranche into Current, then cut the following tranche.
+- Implement the WordFlower tranche 3 contract into Current: selection navigation, entity availability guards, dialogues, keyed toasts as a presentation mode, reshaped data fields, the third data level, and self-hosted navs and datasources graduated into `packages/stdlib/tao`.
+- Cut and solidify the WordFlower tranche 4 contract in Next: the declaration/value model, Prelude hierarchy, required declaration parentheses, block-bodied functions, typed injection, optional item fields, `list of T`, nominal enums, `@tao/text`, new UI surfaces, adaptive panes, non-blocking `async { ... }`, named frame slots, and the first flat-token design slice.
+- Implement the WordFlower tranche 4 contract into Current, absorbing the complete Next directory slice by slice. Record: `Roadmap/Archive/Implement WordFlower tranche 4/`. InstantDB, remote authorization semantics, richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general concurrency policy remain in later tiers.
+- Add typed TS value injection expressions: `let X is T = inject T …` with Tao-side typing and generated TypeScript return checking, delivered by tranche 4.
 
 ## Delivered from Ro's stack
 
@@ -42,6 +46,8 @@ spellings. The live contracts are `Apps/WordFlower/` and `Spec/`.
 - Wire the formatter into the IDE language server and add repo-wide `tao fmt`/`fix`/`check`.
 - Add LSP source actions: organize use statements, unused-import warnings with quick fixes, `Tao:` command-palette entries, and move-render-last.
 - Add layout clauses and the default app-shell UI baseline.
+- Allow `TYPE Value` construction in general positions.
+- Require the element type of lists with `list of T`.
 
 ## Minimal port: the first executable app
 

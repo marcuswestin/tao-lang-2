@@ -44,10 +44,11 @@ its type reference. Grammar: `TypeProperty` gets a form where only a type is pre
 
 ### 3. `is` as default-and-fill marker inside a type block
 
-`Header ui is none` declares with a default; `implement is <expr>` fills. Build the grammar generically
-for any RHS expression — do not couple this to what `implement`'s RHS resolves to. Sidecar file paths
-for `implement` are `Now 2`'s concern, not this slice's; the inline `TS_CODE_BLOCK` form
-(`configuration.langium:31-35`) keeps working unchanged here.
+`Header ui is none` declares with a default. This historical slice proposed `implement is <expr>`
+for the protocol slot, but WordFlower Tranche 4 superseded that one spelling: reusable `nav` and
+`datasource` types fill the slot with `implement inject nav|provider`. The original grammar work was
+generic about ordinary default and fill expressions. Sidecar file paths for the protocol binding were
+`Now 2`'s concern; its inline `TS_CODE_BLOCK` form remained supported.
 
 ### 4. Type/value namespace separation
 
@@ -77,21 +78,19 @@ of keeping two statements of the same constraint.
 ### 9. The prelude
 
 `primitive` declarations as real, parsed, validated `.tao` — not prose. This slice introduced the
-initial roots. The subsequent Next contract replaces the Prelude with the complete hierarchy in
-`Apps/WordFlower/2 - Next/@tao-next/Prelude.tao-next`: `visual`, `presentable`, `view`, `layout`,
-`frame`, `ui`, `nav`, `datasource`, `app`, and `design`, alongside the scalar roots. `layout` and
-`frame` accept content intrinsically; they do not declare `Children` or `Layout` slots. During that
-implementation slice the Next Prelude moves into `packages/stdlib/tao/Prelude.tao`, then the scratch
-copy is deleted. The validator should ultimately read primitive contracts from the Prelude rather
-than a hardcoded list.
+initial roots. WordFlower Tranche 4 replaced them with the complete hierarchy now at
+`packages/stdlib/tao/Prelude.tao`: `visual`, `presentable`, `view`, `layout`, `frame`, `ui`, `nav`,
+`datasource`, `app`, and `design`, alongside the scalar roots. `layout` and `frame` accept content
+intrinsically; they do not declare `Children` or `Layout` slots. The former Next scratch copy was
+deleted at absorption, and validators read primitive contracts from the Prelude.
 
 ## Deliberately excluded
 
-These were deliberately excluded from this landed slice, but are no longer all open. Next settles
-the visual/presentable hierarchy, `render inject`, intrinsic caller content, and primitive value
-heads for `app`, `nav`, and `datasource` alongside universal `let`. It deliberately introduces no
-stdlib `List`; collection rendering stays language-owned through `loop`. Sidecar `.ts` imports were
-`Now 2`.
+These were deliberately excluded from this landed slice, but are no longer all open. WordFlower
+Tranche 4 subsequently settled the visual/presentable hierarchy, `render inject`, intrinsic caller
+content, and primitive value heads for `app`, `nav`, and `datasource` alongside universal `let`. It
+introduced no stdlib `List`; collection rendering stays language-owned through `loop`. Sidecar `.ts`
+imports were `Now 2`.
 
 ## Validation
 
