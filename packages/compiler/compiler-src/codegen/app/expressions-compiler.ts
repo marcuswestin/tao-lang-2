@@ -170,6 +170,15 @@ export const ExpressionsCompiler = {
 
   /** WhenExpression evaluates one subject and selects one lazy value case. */
   WhenExpression(expression: AST.WhenExpression): Compiled {
+    // The compact form is the two-outcome sibling of the block form, so it lowers to the same case
+    // switch: the positive case is `true`, and an omitted negative outcome is absence.
+    if (expression.positive) {
+      const negative = expression.negative
+      return gen`TR.WhenCase(${Compile.Expression(expression.subject)}, [
+        ['true', () => ${Compile.Expression(expression.positive)}],
+      ], () => ${negative ? Compile.Expression(negative) : gen`TR.Value(null)`})`
+    }
+    Assert.defined(expression.otherwise, 'validated block-form when has an otherwise branch')
     return gen`TR.WhenCase(${Compile.Expression(expression.subject)}, [
       ${
       gen.list(

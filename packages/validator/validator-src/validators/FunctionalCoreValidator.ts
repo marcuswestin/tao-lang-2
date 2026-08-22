@@ -11,6 +11,9 @@ const messages = {
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   conditionalBranch: '`when` branches must produce compatible value types.',
+  compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
+  compactWhenLabel: (label: string, expected: string) =>
+    `'${label}' is not this subject's no-pole label; use '${expected}'.`,
   duplicateCase: (name: string) => `Case '${name}' is declared more than once for this subject.`,
   emptySubject: '`is empty` accepts text, list, or query values.',
   enumPlacement: 'Enums must be declared at file level.',
@@ -53,10 +56,8 @@ export const FunctionalCoreValidator = {
     [AST.CaseTestExpression.$type]: validateCaseTestExpression,
     [AST.WhenExpression.$type]: (expression, ctx) => {
       validateSubjectCases(expression.subject, expression.branches, ctx)
-      validateCompatibleBranches(
-        [...expression.branches.map(branch => branch.value), expression.otherwise.value],
-        ctx,
-      )
+      validateCompatibleBranches(AST.whenExpressionOutcomes(expression).values, ctx)
+      validateCompactWhen(expression, ctx)
     },
     [AST.StringInterpolation.$type]: (interpolation, ctx) => {
       const type = Type.ofExpression(interpolation.expression)
@@ -151,6 +152,39 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
  * A dimensional mismatch is about families, so the message names the family rather than the nominal
  * type a parameter or declaration happens to carry.
  */
+/**
+ * The compact form is the two-outcome sibling of the block form, so its subject is a yes/no value
+ * and the mandatory label before the second branch is `not` or the subject's own no-pole alias.
+ */
+function validateCompactWhen(expression: AST.WhenExpression, ctx: ValidationContext): void {
+  if (!expression.positive) {
+    return
+  }
+  const subject = Type.ofExpression(expression.subject)
+  if (subject.kind !== 'unresolved' && !isPrimitive(subject, 'boolean')) {
+    ctx.error(messages.compactWhenSubject, expression)
+    return
+  }
+  const label = expression.negativeLabel
+  if (label === undefined || label === 'not') {
+    return
+  }
+  const alias = negativePoleAlias(expression.subject)
+  if (label !== alias) {
+    ctx.error(messages.compactWhenLabel(label, alias ?? 'not'), expression)
+  }
+}
+
+/** negativePoleAlias returns the name a yes/no type gives its no pole, when it declares one. */
+function negativePoleAlias(subject: AST.Expression): string | undefined {
+  const field = AST.isMemberAccessExpression(subject) ? Type.dataFieldOfMemberAccess(subject) : undefined
+  if (field?.negativeName) {
+    return field.negativeName
+  }
+  const declaration = AST.isValueReference(subject) ? subject.target.ref : undefined
+  return AST.isEntityDataField(declaration) ? declaration.negativeName : undefined
+}
+
 function dimensionName(type: ASTUtils.TaoType): string {
   return type.kind === 'primitive' && (Type.unitFamilyOf(type) || type.primitive === 'time')
     ? type.primitive

@@ -10,12 +10,15 @@ const MINUTES_PER_HOUR = 60
 
 type IntervalListener = () => void
 
+/** TaoActionValue is the invokable shape a Tao action member holds. */
+type TaoActionValue = { invoke: () => void }
+
 /** TaoTicker is the reactive value `@tao/time`'s `Interval` returns. */
 export type TaoTicker = {
   readonly Value: number
   readonly Running: boolean
-  readonly Start: () => void
-  readonly Stop: () => void
+  readonly Start: TaoActionValue
+  readonly Stop: TaoActionValue
   /** subscribe re-renders a holder on every tick and owns the timer for as long as it is held. */
   subscribe: (listener: IntervalListener) => () => void
 }
@@ -188,7 +191,10 @@ export const Clock = new RuntimeClock()
  * An interval is created once by its holder and ticks only while something holds it, which is what
  * makes it start when the view mounts and stop when that view unmounts.
  */
-export function createTicker(everyNanoseconds: number): TaoTicker {
+export function createTicker(
+  everyNanoseconds: number,
+  asAction: (body: () => void) => TaoActionValue,
+): TaoTicker {
   const intervalMs = Math.max(1, Math.round(everyNanoseconds / NANOSECONDS_PER_MILLISECOND))
   const listeners = new Set<IntervalListener>()
   let running = true
@@ -220,7 +226,7 @@ export function createTicker(everyNanoseconds: number): TaoTicker {
     get Running() {
       return running
     },
-    Start() {
+    Start: asAction(() => {
       if (running) {
         return
       }
@@ -228,15 +234,15 @@ export function createTicker(everyNanoseconds: number): TaoTicker {
       valueMs = Clock.now()
       startTimer()
       notify()
-    },
-    Stop() {
+    }),
+    Stop: asAction(() => {
       if (!running) {
         return
       }
       running = false
       stopTimer()
       notify()
-    },
+    }),
     subscribe(listener) {
       listeners.add(listener)
       startTimer()

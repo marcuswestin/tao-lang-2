@@ -895,8 +895,9 @@ class TypeResolutionContext {
   }
 
   private whenExpressionType(expression: AST.WhenExpression): TaoType {
-    const values = [...expression.branches.map(branch => branch.value), expression.otherwise.value]
-    return Type.commonType(values.map(value => this.ofExpression(value))) ?? unresolvedType()
+    const outcomes = AST.whenExpressionOutcomes(expression)
+    const types = outcomes.values.map(value => this.ofExpression(value))
+    return Type.commonType(outcomes.total ? types : [...types, primitiveType('none')]) ?? unresolvedType()
   }
 
   private listLiteralType(list: AST.ListLiteral): TaoType {

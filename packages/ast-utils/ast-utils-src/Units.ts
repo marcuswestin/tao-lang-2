@@ -1,3 +1,5 @@
+import { AST } from '@parser'
+
 /**
  * Unit values (Decisions §2). A unit family has a canonical base and fixed ratios, so `.unit` on a
  * number constructs a value of that family and `.unit` on a value of it reads the value back as a
@@ -102,4 +104,26 @@ function ratiosWithAliases(
     }
   }
   return ratios
+}
+
+/**
+ * literalDurationOf folds a literal duration expression to its base unit. A `advance`-style step
+ * needs a constant, so only literals and sums of them fold; anything else has no compile-time value.
+ */
+export function literalDurationOf(expression: AST.Expression): number | undefined {
+  if (AST.isPostfixMemberAccess(expression) && AST.isNumberLiteral(expression.receiver)) {
+    const family = Units.familyOf(expression.member)
+    const ratio = family && Units.ratioToBase(family, expression.member)
+    return ratio === undefined || family !== 'duration' ? undefined : expression.receiver.value * ratio
+  }
+  if (AST.isBinaryExpression(expression) && (expression.operator === '+' || expression.operator === '-')) {
+    const left = literalDurationOf(expression.left)
+    const right = literalDurationOf(expression.right)
+    return left === undefined || right === undefined
+      ? undefined
+      : expression.operator === '+'
+      ? left + right
+      : left - right
+  }
+  return undefined
 }

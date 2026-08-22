@@ -23,8 +23,8 @@ data Workspaces / Workspace {
 data Documents / Document {
    Title text
    Body text (default "")
-   Final yes / no Draft
-   Public yes / no Private (default Public)
+   Final yes / Draft no
+   Public yes / Private no (default Public)
    CreatedAt time (default now)
    Workspace (relation Workspace)
    Paragraphs (owned)
@@ -47,9 +47,9 @@ The bare `now` value is valid only as a `time` default; generated schema metadat
 clock default and the runtime samples it separately for every create. It is not evaluated while
 parsing or compiling, and the text literal `"now"` remains ordinary text.
 
-A case-named boolean has the form `Name yes / no [NoAlias] [(default Case)]`. Its positive case is
-the field name. With no alias, the `no` side is unnamed; otherwise the alias is its case name, as in
-`Final yes / no Draft`. The `no` side is the default unless a declared case is selected by
+A case-named boolean has the form `Name yes / [NoAlias] no [(default Case)]`. Its positive case is
+the field name. With no alias, the `no` side is unnamed; otherwise the alias precedes `no` and is
+its case name, as in `Final yes / Draft no`. The `no` side is the default unless a declared case is selected by
 `(default Case)`. `Pinned` and `Public` above demonstrate the unaliased and explicit-default forms.
 They exercise declaration syntax and do not require product journeys. Writes, `is <Case>` tests,
 and boolean query filters use named declared cases rather than raw spelling conventions.

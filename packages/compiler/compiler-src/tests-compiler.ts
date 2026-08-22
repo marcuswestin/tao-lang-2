@@ -1,3 +1,4 @@
+import { ASTUtils, Units } from '@ast-utils'
 import { AST, type ParseResult } from '@parser'
 import { Assert, type DiagnosticRange, Diagnostics, Switch } from '@shared'
 import type { ValidationResult } from '@validator'
@@ -87,6 +88,13 @@ type TaoTestBackStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestAdvanceStep moves the held clock forward by a duration in milliseconds. */
+type TaoTestAdvanceStep = {
+  kind: 'advance'
+  milliseconds: number
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestSelectStep scopes nested operations to one 1-based tagged loop row. */
 type TaoTestSelectStep = {
   kind: 'select'
@@ -98,6 +106,7 @@ type TaoTestSelectStep = {
 
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
 type TaoTestStep =
+  | TaoTestAdvanceStep
   | TaoTestBackStep
   | TaoTestEnterStep
   | TaoTestExpectation
@@ -191,6 +200,7 @@ function compileInputValueExpectation(expectation: AST.ExpectInputValueStep): Ta
 
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
+    AdvanceStep: compileAdvanceStep,
     BackTestStep: compileBackTestStep,
     EnterTextStep: compileEnterTextStep,
     ExpectCheckboxStateStep: step => ({
@@ -237,6 +247,12 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
 
 function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {
   return { kind: 'back', source: sourceLocation(step) }
+}
+
+function compileAdvanceStep(step: AST.AdvanceStep): TaoTestAdvanceStep {
+  const nanoseconds = ASTUtils.literalDurationOf(step.duration)
+  Assert.defined(nanoseconds, 'validated advance step names a literal duration')
+  return { kind: 'advance', milliseconds: Units.baseToMilliseconds(nanoseconds), source: sourceLocation(step) }
 }
 
 function compileExpectationGroup(

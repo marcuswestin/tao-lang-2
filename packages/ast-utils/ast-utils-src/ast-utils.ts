@@ -12,7 +12,7 @@ import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
 import { Type } from './Type'
-import { Units } from './Units'
+import { literalDurationOf, Units } from './Units'
 
 export { Packages, Type, Units }
 
@@ -21,6 +21,7 @@ export const ASTUtils = {
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,
+  literalDurationOf,
   referencedNames,
   resolveActionInvocation,
   resolveArgumentBindings,

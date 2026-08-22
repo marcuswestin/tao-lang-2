@@ -34,6 +34,8 @@ without erasing compatible coverage:
 - Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
   dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
   feature, and package tests own the diagnostics.
+- Ticking Clock covers `@tao/time`: a held ticker, live derivation over it, `Stop`/`Start`/`Running`,
+  and the `advance` step that drives the clock a check holds.
 - All `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declarations use a
   parenthesized parameter list, including `()`.
 
@@ -108,6 +110,14 @@ Exercise unit values (Decisions §2) through the one family the language registe
 **Belongs here:** `.unit` on a number and on a unit value; canonical units and their long singular and plural aliases; equality after normalization; dimensional arithmetic — duration ± duration, duration × number, duration ÷ duration; the `.Clock` reading and its boundaries at an hour and at zero.
 
 **Does not belong here:** the ticking clock and live derivation, which WordFlower's focused writing session owns; unit diagnostics, which are package tests; families beyond `duration`, which are not registered until a feature forces one.
+
+## Ticking Clock
+
+Exercise the ticking clock (Decisions §9) and the deterministic clock a check holds.
+
+**Belongs here:** `Interval(Every)` held as view-local state; `Tick.Value` as a live reading; `let` derivations that recompute per tick; `do Tick.Stop()` and `do Tick.Start()`; `Tick.Running`; `advance <duration>` moving the clock and firing due ticks in order; the compact `when Subject Yes / not No` form.
+
+**Does not belong here:** unit construction and conversion, which Unit Values owns; the product shape of a writing session, which WordFlower owns; toast expiry, which WordFlower's documents journey proves.
 
 ## Type System Tests
 

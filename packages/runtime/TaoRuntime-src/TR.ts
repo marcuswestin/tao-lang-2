@@ -302,7 +302,7 @@ class TR {
 
   /** Interval constructs the reactive ticker behind `@tao/time`. */
   static Interval(everyNanoseconds: number): TaoTicker {
-    return createTicker(everyNanoseconds)
+    return createTicker(everyNanoseconds, body => new RuntimeActionValue(body))
   }
 
   /** Clock exposes the runtime clock a check holds, advances, and releases. */

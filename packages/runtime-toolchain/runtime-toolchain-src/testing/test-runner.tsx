@@ -22,6 +22,8 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   try {
     TR.Data.beginTest()
     TR.Navigation.beginTest()
+    // Every check starts from the same instant and moves only when the journey says so.
+    TR.Clock.beginTest()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
     for (const step of check.steps) {
       await runStep(screen, step)
@@ -32,6 +34,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
     )
   } finally {
     screen?.unmount()
+    TR.Clock.endTest()
     TR.Data.endTest()
   }
 }
@@ -42,6 +45,7 @@ async function runStep(
   resolveScope: ScopeResolver = () => undefined,
 ): Promise<void> {
   await Switch.kind<TestCompiler.Step, void | Promise<void>>(step, {
+    advance: advance => advanceStep(advance),
     back: back => backStep(back),
     enter: enter => enterStep(screen, enter, resolveScope()),
     expect: expectation => assertExpectation(screen, expectation, resolveScope()),
@@ -51,6 +55,13 @@ async function runStep(
     press: press => pressStep(screen, press, resolveScope()),
     select: select => selectStep(screen, select, resolveScope),
     submit: submit => submitStep(screen, submit, resolveScope()),
+  })
+}
+
+/** advance moves the held clock, firing every ticker and timer that falls due, in order. */
+async function advanceStep(step: Extract<TestCompiler.Step, { kind: 'advance' }>): Promise<void> {
+  await act(async () => {
+    TR.Clock.advance(step.milliseconds)
   })
 }
 
@@ -222,6 +233,7 @@ function selectedRow(
 
 function formatStep(step: TestCompiler.Step): string {
   return Switch.kind<TestCompiler.Step, string>(step, {
+    advance: advance => `advance ${advance.milliseconds}ms`,
     back: () => 'back',
     enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
     expect: expectation =>

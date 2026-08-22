@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type NodeValidationCheck, type NodeValidationChecks } from '../node-validation'
@@ -8,6 +9,8 @@ const supportedInputSelectors = ['label', 'placeholder'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
+  advanceDuration: '`advance` takes a literal duration, so a check reads as a fixed amount of time.',
+  advanceNegative: '`advance` cannot move the clock backwards.',
   testPlacement: 'Test declarations are only allowed at file level or inside another test.',
   testBlock: (name: string) => `Only nested tests are allowed in test '${name}'.`,
   checkBlock: (name: string) =>
@@ -19,6 +22,7 @@ export const testValidationMessages = {
   submitPlacement: 'Submit steps are only allowed inside test blocks.',
   expectationPlacement: 'Expectations are only allowed inside test blocks.',
   backPlacement: 'Back steps are only allowed inside test blocks.',
+  advancePlacement: 'Advance steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
   inputSelector: (selector: string) =>
@@ -38,6 +42,7 @@ const validateInputExpectationPlacement = validateStepPlacement(testValidationMe
 const validateSubmitPlacement = validateStepPlacement(testValidationMessages.submitPlacement)
 const validateExpectationPlacement = validateStepPlacement(testValidationMessages.expectationPlacement)
 const validateBackPlacement = validateStepPlacement(testValidationMessages.backPlacement)
+const validateAdvancePlacement = validateStepPlacement(testValidationMessages.advancePlacement)
 
 /** testValidationChecks validates v0 Tao test declarations and steps. */
 export const testValidationChecks = {
@@ -55,9 +60,25 @@ export const testValidationChecks = {
   [AST.TagSubmitStep.$type]: validateSubmitPlacement,
   [AST.SelectStep.$type]: validateSelect,
   [AST.BackTestStep.$type]: validateBackPlacement,
+  [AST.AdvanceStep.$type]: [validateAdvancePlacement, validateAdvanceDuration],
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
 } satisfies NodeValidationChecks
+
+/**
+ * The clock a check holds moves by a stated amount, so `advance` folds its duration at compile time
+ * rather than evaluating a runtime value that a journey could not read back.
+ */
+function validateAdvanceDuration(step: AST.AdvanceStep, ctx: ValidationContext): void {
+  const nanoseconds = ASTUtils.literalDurationOf(step.duration)
+  if (nanoseconds === undefined) {
+    ctx.error(testValidationMessages.advanceDuration, step)
+    return
+  }
+  if (nanoseconds < 0) {
+    ctx.error(testValidationMessages.advanceNegative, step)
+  }
+}
 
 // A test is either a group of nested tests or a leaf journey of steps, never a mix.
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
@@ -111,6 +132,7 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       RunStep: () => {
         hasRun = true
       },
+      AdvanceStep: checkStepOrder,
       SubmitInputStep: checkStepOrder,
       TagSubmitStep: checkStepOrder,
       SelectStep: checkStepOrder,
@@ -133,7 +155,8 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.SubmitInputStep
       | AST.TagSubmitStep
       | AST.SelectStep
-      | AST.BackTestStep,
+      | AST.BackTestStep
+      | AST.AdvanceStep,
   ): void {
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
