@@ -106,9 +106,6 @@ function registerAstInferenceRules(typir: TaoTypirServices): void {
     MemberAccessExpression: (node) =>
       TypeSystemHelpers.taoType(Type.ofMemberAccess(node), typir)
         ?? InferenceRuleNotApplicable,
-    TypedInjectionExpression: (node) =>
-      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
-        ?? InferenceRuleNotApplicable,
     TypedConstructor: (node) =>
       TypeSystemHelpers.taoType(Type.ofConstructorReference(node.type), typir)
         ?? InferenceRuleNotApplicable,

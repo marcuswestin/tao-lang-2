@@ -826,6 +826,8 @@ class TypeResolutionContext {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
       NowExpression: () => primitiveType('time'),
+      // A bridged value has no Tao expression to read a type from; its declaration states one.
+      FromExpression: () => unresolvedType(),
       PostfixMemberAccess: access => this.postfixMemberAccessType(access),
       BooleanLiteral: () => primitiveType('boolean'),
       CaseTestExpression: () => primitiveType('boolean'),
@@ -848,7 +850,6 @@ class TypeResolutionContext {
       NoneLiteral: () => primitiveType('none'),
       NumberLiteral: () => primitiveType('number'),
       StringLiteral: () => primitiveType('text'),
-      TypedInjectionExpression: injection => this.ofReference(injection.type),
       TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
       UnaryExpression: unary => this.unaryExpressionType(unary),
       ValueReference: reference => this.ofValueDeclaration(reference.target.ref),

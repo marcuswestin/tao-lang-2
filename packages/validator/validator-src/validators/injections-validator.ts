@@ -13,11 +13,10 @@ export const injectionValidationMessages = {
 /** injectionValidationChecks validates inject argument declarations. */
 export const injectionValidationChecks = {
   [AST.Injection.$type]: reportDuplicateArguments,
-  [AST.TypedInjectionExpression.$type]: reportDuplicateArguments,
 } satisfies NodeValidationChecks
 
 function reportDuplicateArguments(
-  injection: AST.Injection | AST.TypedInjectionExpression,
+  injection: AST.Injection,
   ctx: ValidationContext,
 ): void {
   const seen = new Set<string>()
@@ -33,7 +32,7 @@ function reportDuplicateArguments(
 }
 
 function validateAmbientChannels(
-  injection: AST.Injection | AST.TypedInjectionExpression,
+  injection: AST.Injection,
   ctx: ValidationContext,
 ): void {
   const render = injection.$container

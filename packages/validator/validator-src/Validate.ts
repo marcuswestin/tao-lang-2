@@ -4,6 +4,7 @@ import type { ValidationContext } from './validation'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
+import { bridgeValidationChecks } from './validators/bridge-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
 import { configurationValidationChecks } from './validators/configuration-validator'
 import {
@@ -49,6 +50,7 @@ const nodeValidationChecks = NodeValidation.compile(
     DialogueValidator.checks,
     navigationValidationChecks,
     unitsValidationChecks,
+    bridgeValidationChecks,
     configuredValueValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
 )

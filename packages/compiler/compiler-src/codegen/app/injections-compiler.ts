@@ -14,21 +14,12 @@ export const InjectionsCompiler = {
     return CompileRawInjection(injection)
   },
 
-  /** TypedInjectionExpression wraps a declared TypeScript result as a Tao runtime value. */
-  TypedInjectionExpression(injection: AST.TypedInjectionExpression): Compiled {
-    return gen`TR.Value(${CompileRawInjection(injection)})`
-  },
-
   /** InjectionBoundary emits authored TypeScript in a module with only the public ambient bindings. */
   InjectionBoundary(injection: InlineInjection): Compiled {
     const argumentList = AST.isConfigurationImplementation(injection)
       ? []
       : AST.injectionArgumentsOf(injection)
     const parameters = gen.join(argumentList, CompileInjectionParameter)
-    const resultType = AST.isTypedInjectionExpression(injection)
-      ? CompileTaoJsType(Type.ofReference(injection.type))
-      : undefined
-    const returnAnnotation = resultType ? gen`: ${resultType}` : gen.noop()
     const code = stripTsFence(injection.tsCodeBlock)
 
     return gen`
@@ -38,14 +29,14 @@ export const InjectionsCompiler = {
       void TR
       void RN
 
-      export default function(${parameters})${returnAnnotation} {
+      export default function(${parameters}) {
         ${gen.textLines(code)}
       }
     `
   },
 } as const
 
-function CompileRawInjection(injection: AST.Injection | AST.TypedInjectionExpression): Compiled {
+function CompileRawInjection(injection: AST.Injection): Compiled {
   const argumentList = AST.injectionArgumentsOf(injection)
   const values = gen.join(argumentList, CompileInjectionValue)
   const binding = { name: inlineInjectionBindingName(injection) }

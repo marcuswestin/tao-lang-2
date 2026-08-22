@@ -270,6 +270,7 @@ function diagnosticsForDocuments(documents: readonly AST.Document[]): Diagnostic
     ...document.parseResult.parserErrors.map(error => parserDiagnostic(error, document)),
     ...document.references
       .filter(reference => reference.error !== undefined)
+      .filter(reference => !bridgesToATypeScriptExport(reference))
       .map(reference => referenceDiagnostic(reference, document)),
   ]))
 }
@@ -292,6 +293,21 @@ function parserDiagnostic(error: ParserError, document?: AST.Document): Diagnost
     severity: 'error',
     source: 'parser',
   }
+}
+
+/**
+ * A name to the left of `from` names a TypeScript export (Decisions §15), so it is not expected to
+ * resolve in Tao scope and an unresolved reference there is not a linking error.
+ */
+function bridgesToATypeScriptExport(reference: AST.Document['references'][number]): boolean {
+  let node: AST.Node | undefined = reference.error?.info.container
+  while (node) {
+    if (AST.isFromExpression(node)) {
+      return true
+    }
+    node = node.$container
+  }
+  return false
 }
 
 function referenceDiagnostic(reference: AST.Document['references'][number], document: AST.Document): Diagnostic {

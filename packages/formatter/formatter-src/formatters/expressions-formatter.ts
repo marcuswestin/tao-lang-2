@@ -172,6 +172,11 @@ export default {
     f.oneSpaceAfter(':')
   },
 
+  /** FromExpression keeps one space around `from`, matching a `use` line's provenance clause. */
+  FromExpression(f) {
+    f.oneSpaceAround('from')
+  },
+
   /** MemberAccessExpression has no whitespace around member dots. */
   MemberAccessExpression() {},
 

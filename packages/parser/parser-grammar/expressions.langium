@@ -37,7 +37,13 @@ IfFunctionStatement:
     'if' condition=Expression block=FunctionBlock;
 
 Expression:
-    OrExpression;
+    FromExpression;
+
+// `<expression> from <path>` (Decisions §15) binds loosest, taking the whole expression to its left,
+// so a bridged call reads the way a local one would. The names in that expression resolve to the
+// module's named exports rather than to Tao declarations.
+FromExpression infers Expression:
+    OrExpression ({infer FromExpression.expression=current} 'from' path=USE_IMPORT_PATH)?;
 
 OrExpression infers Expression:
     AndExpression ({infer BinaryExpression.left=current} operator='or' right=AndExpression)*;
@@ -68,7 +74,7 @@ PostfixExpression infers Expression:
     PrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | NowExpression | ActionExpression | TypedInjectionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
+    '(' Expression ')' | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
 
 // A bare configuration block instantiates a declared type. `with` is reserved for copying and
 // patching an existing configured value.

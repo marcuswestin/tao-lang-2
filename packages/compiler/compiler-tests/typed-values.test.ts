@@ -12,13 +12,11 @@ Describe('compiler: typed values', () => {
     Expect(code.match(/TR\.Call\(_Scope\.Join, _Scope\.Tags\.evaluate\(\), TR\.Value\(", "\)\)/g)).toHaveLength(2)
   })
 
-  Test('wraps typed injection results and omits absent item fields?', async () => {
+  Test('wraps bridged results and omits absent item fields?', async () => {
     const compiled = await Compiler.compileCode(`
       type Profile is { Name text, Subtitle text? }
       function Join(Values list of text, Separator text) returns text {
-        return inject text Values, Separator \`\`\`ts
-          return Values.join(Separator)
-        \`\`\`
+        return Join(Values, Separator) from ./Join.ts
       }
       app TypedValues { view Main }
       view Main() {
@@ -34,11 +32,10 @@ Describe('compiler: typed values', () => {
     `)
 
     const code = compiled.files[0]?.code ?? ''
-    const typedBoundary = compiled.files.find(file => file.relativePath === 'App.injection-1.tsx')
-    Expect(typedBoundary?.code).toContain(
-      'export default function(Values: Array<string>, Separator: string): string',
+    Expect(code).toContain("import { Join as __tao_bridge_1__ } from './Join'")
+    Expect(code).toContain(
+      'TR.Value(__tao_bridge_1__(_Scope.Values.evaluate().jsValue, _Scope.Separator.evaluate().jsValue))',
     )
-    Expect(code).toContain('TR.Value(Reflect.apply(')
     Expect(code).toContain('["Name"]: TR.Value("Ada").jsValue')
     Expect(code).not.toContain('["Subtitle"]')
   })
@@ -63,9 +60,7 @@ function promptTagsApp(): string {
     }
 
     function Join(Values list of text, Separator text) returns text {
-      return inject text Values, Separator \`\`\`ts
-        return Values.join(Separator)
-      \`\`\`
+      return Join(Values, Separator) from ./Join.ts
     }
 
     app TypedTags { view Main }

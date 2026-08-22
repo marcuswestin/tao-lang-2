@@ -513,7 +513,7 @@ export function argumentsOf(node: ArgumentListOwner): AST.Argument[] {
 
 /** injectionArgumentsOf returns the arguments declared by a statement, render, or typed-value injection. */
 export function injectionArgumentsOf(
-  injection: AST.Injection | AST.TypedInjectionExpression,
+  injection: AST.Injection,
 ): AST.InjectionArgument[] {
   return injection.argumentList?.arguments ?? []
 }

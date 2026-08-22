@@ -4,6 +4,7 @@ import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { configurationRuntimeBindingName } from './configuration-compiler'
+import { bridgeBindingName } from './injection-plan'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
 
@@ -14,6 +15,7 @@ export const ExpressionsCompiler = {
       ActionExpression: Compile.ActionExpression,
       BinaryExpression: Compile.BinaryExpression,
       NowExpression: () => gen`TR.Value(TR.now())`,
+      FromExpression: Compile.FromExpression,
       PostfixMemberAccess: Compile.PostfixMemberAccess,
       BooleanLiteral: Compile.BooleanLiteral,
       CaseTestExpression: Compile.CaseTestExpression,
@@ -27,7 +29,6 @@ export const ExpressionsCompiler = {
       PrimitiveConfigurationConstructor: Compile.PrimitiveConfigurationConstructor,
       RefinementExpression: Compile.RefinementExpression,
       StringLiteral: Compile.StringLiteral,
-      TypedInjectionExpression: Compile.TypedInjectionExpression,
       ListLiteral: Compile.ListLiteral,
       MemberAccessExpression: Compile.MemberAccessExpression,
       TypedConstructor: Compile.TypedConstructor,
@@ -257,6 +258,21 @@ export const ExpressionsCompiler = {
     const target = resolveRef(reference.target)
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
+  },
+
+  /**
+   * FromExpression calls the sidecar's named export with plain JavaScript arguments and wraps the
+   * result as a Tao value, which is the whole bridge (Decisions §15).
+   */
+  FromExpression(bridge: AST.FromExpression): Compiled {
+    const call = bridge.expression
+    const values = AST.isFunctionCallExpression(call)
+      ? (call.argumentList?.arguments ?? []).map(argument => gen`${Compile.Expression(argument.value)}.jsValue`)
+      : undefined
+    const binding = gen.Name({ name: bridgeBindingName(bridge) })
+    return values
+      ? gen`TR.Value(${binding}(${gen.join(values, value => value)}))`
+      : gen`TR.Value(${binding})`
   },
 
   /** PostfixMemberAccess compiles a member read on any expression, including unit accessors. */
