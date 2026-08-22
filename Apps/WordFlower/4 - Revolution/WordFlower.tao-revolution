@@ -3,7 +3,7 @@ use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, 
 use CountWords, Join from @tao/text
 use Checkbox, Col, FormButton, Icon, Image, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
-use every from @tao/time
+use every, Interval from @tao/time
 
 // @tao/nav and @tao/data are self-hosted: public types carry their own identity rather than relying
 // on name tables. Generic property validation reads their config shape, and package-scope
@@ -270,6 +270,9 @@ let Tagline = "A quiet place for words that matter."
 let ParagraphGoal = 10
 
 let SessionGoal is number = 10
+
+// The focused writing session's length, in minutes.
+let SessionMinutes is number = 25
 
 type PromptTitle is text
 
@@ -730,7 +733,7 @@ view DocumentEditor(Document) {
       }
       set SaveCount += 1
       // A keyed toast replaces the same key instead of stacking. Duration is a number of seconds.
-      present SavedToast() as toast (Key: "document-saved", Duration: 3)
+      present SavedToast() as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
       guard ParagraphText empty
@@ -761,6 +764,8 @@ view DocumentEditor(Document) {
          on submit SaveDocument
       }
       WordCount(BodyDraft)
+      #focusSession
+      FocusSession()
       #markFinal
       Checkbox(Value: Document.Final is Final, Label: "Final") {
          on change SetFinished
@@ -843,6 +848,57 @@ ui DocumentSnapshot(Snapshot Document.Snapshot) {
       }
    }
 }
+
+// A focused writing session: pick a length, write until the clock runs out, pause and resume, or
+// stop early. The clock is a library value; `Left` is an ordinary derivation that recomputes as it
+// ticks. The session length comes from the person's preference rather than a fixed pair of buttons.
+file view FocusSession() {
+   state Tick = Interval(1.s)
+   state EndsAt = now
+   state Focusing = false
+   let Left = EndsAt - Tick.Value
+   action Start(Length duration) {
+      set EndsAt = now + Length
+      set Focusing = true
+      do Tick.Start()
+   }
+   action Pause() {
+      do Tick.Stop()
+   }
+   action Resume() {
+      set EndsAt = now + Left
+      do Tick.Start()
+   }
+   action Finish() {
+      set Focusing = false
+   }
+   render Col() [gap 6] {
+      when Focusing {
+         true -> {
+            Text(when Left > 0 Left.Clock / not "Time's up") [title]
+            when Tick.Running {
+               true -> {
+                  #pauseFocus
+                  FormButton("Pause") {
+                     on press Pause
+                  }
+               }
+               otherwise -> {
+                  #resumeFocus
+                  FormButton("Resume") {
+                     on press Resume
+               }  }
+            }
+            #stopFocus
+            FormButton("Stop") {
+               on press Finish
+            }
+         }
+         otherwise -> {
+            #startFocus
+            FormButton("Focus for { SessionMinutes } min") {
+               on press -> { do Start(SessionMinutes.min) }
+}  }  }  }  }
 
 ui SavedToast() {
    render Text("Saved")
@@ -1102,10 +1158,8 @@ migrate presentation 2 -> 3 {
 // `unsafe ts` declares a typed native boundary as a declaration, rather than inlining TS in a render.
 unsafe ts FormatNativeTitle Document -> text
 
-// `inject` also produces typed values outside render position.
-let BuildStamp = inject text ```ts
-   return process.env['TAO_BUILD'] ?? 'development'
-```
+// `<expression> from <path>` reaches TypeScript from any expression position.
+let BuildStamp is text = BuildStamp() from ./Shell.ts
 
 // Scenarios name the states a design is reviewed and checked against.
 scenario ReadingView.empty {

@@ -1,5 +1,12 @@
 # Brief - Focused writing tranche
 
+**Closed.** Implemented and absorbed; this brief and the prompt beside it are the record. What the
+tranche actually settled is in `Apps/WordFlower/1 - Current/WordFlower.tao`'s directory header, and
+the contract it implements is `Roadmap/Tao Revolution/Decisions.md` §2, §8, §9, §15, and §16. Two
+things landed differently from the plan below: the stdlib service import became
+`use Interval from @tao/time` rather than a lowercase package binding, which amended Decisions §9 and
+§11, and value-position `inject <type>` retired with the arrival of expression-position `from`.
+
 Implementation brief: findings and constraints, not a plan. Devise the plan yourself, and re-verify
 every grammar and repository seam against the live checkout — the grammar facts below were read from
 `packages/parser/parser-grammar/` on the day the tranche was cut.

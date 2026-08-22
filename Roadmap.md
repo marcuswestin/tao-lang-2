@@ -36,13 +36,8 @@ tests written in Tao, green in Current, for every construct introduced.
 
 - [x] Cut and implement the dialect-migration tranche (Process step 1)
   - Closed. `Roadmap/Archive/Dialect migration tranche/` holds the brief and prompt.
-- [ ] Implement the focused writing tranche
-  - The first tranche from the Current ↔ MVP gap: unit values (§2), `@tao/time` (§9),
-    expression-position `from` (§15), and a test clock (§16), forced by a focused writing session in
-    WordFlower. **Cut, on `feat/focused-writing-tranche`:** `2 - Next` is open with the contract;
-    the brief and the implementation prompt are in `Roadmap/Focused writing tranche/`. Steps 2–4
-    below were deliberately deferred behind it — the feature is already named in MVP scope and the
-    tranche's reconcile pass folds it into both later tiers.
+- [x] Implement the focused writing tranche
+  - Closed. `Roadmap/Archive/Focused writing tranche/` holds the brief and prompt.
 - [ ] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
   - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
     as sibling references.

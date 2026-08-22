@@ -7,21 +7,21 @@ remains in `3 - MVP` and `4 - Revolution`, and unresolved questions live in
 
 ## Implemented value and control-flow contract
 
-The current value core supports `text`, `number`, `boolean`, `none`, homogeneous lists, nominal
-custom values and items, configured `ui`/`nav`/`datasource` values, and schema-specific live entity
-types. `time` is a distinct data-field type whose current producing form is data-only `(default now)`;
-the runtime applies `now` separately for every created row. Text, lists, and queries support
+The current value core supports `text`, `number`, `boolean`, `none`, `duration`, homogeneous lists,
+nominal custom values and items, configured `ui`/`nav`/`datasource` values, and schema-specific live
+entity types. `time` is a distinct type; `now` is an ordinary expression that reads the runtime
+clock, and `(default now)` on a data field applies it separately for every created row. Text, lists, and queries support
 `Value is empty`; lists and queries retain `.Count`. `Value is <Case>` is the general boolean case
 test for case-set values, boolean data fields, and built-in subject cases. Public `.Empty`, `.Loading`,
 and `.Error` members are retired. Every entity handle exposes stable text `.Id`, including after its
 row becomes missing; application code may retain that identity without gaining access to raw rows.
 
 The executable language includes precedence-aware arithmetic, comparison, equality, and boolean
-expressions; pure functions; immutable `let`; reactive `state`; named and inline actions; `set`,
+expressions; unit values and dimensional arithmetic; pure functions; immutable `let`; reactive `state`; named and inline actions; `set`,
 compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
 `loop`; first-class `view`, `layout`, `frame`, `ui`, `dialogue`, and configured `nav` values; the
 primitive `visual`/`presentable` role hierarchy; top-level data/query/write forms; declaration-owned
-configuration; dialogue `ask`/`respond`; and typed injection.
+configuration; dialogue `ask`/`respond`; and the expression-position TypeScript boundary.
 
 `match`, heterogeneous lists, richer collection transforms, and general concurrency policy remain
 future work. Optional item fields and non-blocking `async { ... }` are implemented as described
@@ -260,6 +260,69 @@ the declared related entity type, never arbitrary text. Strict `update` and `del
 live handle. Runtime entity identity supplies row keys, while the handle's stable `.Id` is public Tao
 surface; raw provider rows and ID-based test selectors remain private.
 
+## Unit values
+
+A unit family has a canonical base and fixed ratios, so one accessor mechanism builds, converts, and
+reads its values. `.unit` on a number constructs a value of that unit's family, and `.unit` on a
+value of the family reads it back as a number in that unit; the two round-trip.
+
+```tao
+let Wait = 220.ms                 // number → duration
+Wait.s                            // duration → number: 0.22
+```
+
+`duration` is the one family the language registers today, because it is the only one a real feature
+forces. Its base is the nanosecond, and its units are `ms`, `s`, `min`, `h`, `d`, and `wk`, each with
+long singular and plural aliases (`1.second`, `30.seconds`). There is no bare `m` duration unit:
+minutes are `min`. Months and years are not durations, since neither has a fixed length.
+
+Equality normalizes, so `60.s == 1.min`. Arithmetic is dimensional analysis:
+
+| Operands           | Operator | Result   |
+| ------------------ | -------- | -------- |
+| duration, duration | `+` `-`  | duration |
+| duration, number   | `*`      | duration |
+| duration, duration | `/`      | number   |
+| time, time         | `-`      | duration |
+| time, duration     | `+` `-`  | time     |
+
+Every other pairing is a diagnostic, including a unit value with a bare number, which is what makes
+`Wait + 1` an error rather than a silent nanosecond. Comparison against the bare literal `0` is the
+one exception, because zero carries no unit: `Left > 0` is how a countdown asks whether time remains.
+
+A family may expose named readings alongside its units. `duration` has one: `.Clock` renders whole
+seconds as `m:ss` under an hour and `h:mm:ss` from an hour up, and `0:00` for zero or less. Reading a
+unit or a reading the family does not have is a diagnostic, so `Wait.meters` does not compile.
+
+A duration lowers to a plain number of its base unit, which is why same-family arithmetic needs no
+runtime support and only the accessors and the calendar pairs convert.
+
+## The TypeScript boundary
+
+`<expression> from <path>` is how a value reaches TypeScript. It binds loosest, taking the whole
+expression to its left, so a bridged call reads the way a local one would:
+
+```tao
+public
+function CountWords(Value text) returns number {
+   return CountWords(Value) from ./Text.ts
+}
+
+let BuildStamp is text = BuildStamp() from ./Shell.ts
+```
+
+The expression is a name or a call to one, and that head name resolves to a **named export** of the
+path rather than to a Tao declaration — there are no default exports, in either direction, which is
+what lets one sidecar back several bindings. Arguments are ordinary Tao expressions, evaluated on the
+Tao side and passed as plain JavaScript values; the result is wrapped as a Tao value.
+
+Tao owns the type. A bridged value therefore needs a declared one — a `returns` clause, or a
+`let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
+compiler copies the named sidecar beside its generated module and imports the export from there.
+
+`render inject` remains the separate authoring mode for a visual whose implementation Tao does not
+own. Value-position `inject <type>` and its inline `ts` fence are retired.
+
 ## Declaration-owned configuration
 
 Apps, `nav`, and `datasource` values use a declaration-owned configured-value model.
@@ -313,8 +376,9 @@ complete about its own boundaries.
   alongside the header parameter form. Sketched in `4 - Revolution`; LANG-019.
 - **Collection and text operators.** `has`, list subtraction, text repetition, heterogeneous list
   element unions, and richer transforms. LANG-006 and LANG-026.
-- **Units and semantic types.** Duration and measure literals beyond the tranche's `N.seconds`, and
-  member conversions such as a duration read in minutes. LANG-026.
+- **Unit families beyond duration.** `distance`, `mass`, and the contextual `size` family, whose
+  units resolve at render rather than at compile time. The mechanism is implemented; each further
+  family is a row in the table, added when a real feature forces it. LANG-026.
 - **Automation and lifecycle events.** Declared events and time, app, and network hooks, which
   would extend the `on` vocabulary beyond control events. LANG-020.
 - **Concurrency.** A fork form plus the concurrency policy that must accompany it —

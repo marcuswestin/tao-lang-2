@@ -8,12 +8,23 @@ workspace package index, and public self-hosted `nav` and `datasource` declarati
 `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
-The implemented package surface includes `@tao/text`, exporting injected
-`CountWords(Value text)` and `Join(Values list of text, Separator text)`, and requires
-parentheses on every visual, dialogue, action, and function declaration parameter list.
+The implemented package surface includes `@tao/text` and `@tao/time`, and requires parentheses on
+every visual, dialogue, action, and function declaration parameter list.
+
+`@tao/text` exports `CountWords(Value text)` and `Join(Values list of text, Separator text)`.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
 all-whitespace text. `Join` preserves source order, inserts the separator only between adjacent
 values, returns empty text for an empty list, and returns a one-item list's value unchanged.
+
+`@tao/time` exports the `Ticker` type and `Interval(Every duration)`. A ticker is a reactive library
+value: `Value` is the time as of its latest tick, `Running` whether it ticks, and `Start()` and
+`Stop()` control it. It ticks for as long as the view holding it is mounted, and an ordinary `let`
+over `Value` recomputes on every tick. There is no clock declaration, no live binding, and no `every`
+clause: a ticking clock is a library value, not a language construct.
+
+Both packages are ordinary Tao declarations bound to TypeScript sidecars through the same
+expression-position `from` a third-party package would use, which is the whole mechanism — no
+compiler-known names are involved.
 
 ## Creating a Tao Project
 

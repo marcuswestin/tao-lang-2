@@ -133,7 +133,8 @@ Executable steps run in source order:
   hardware Back;
 - `expect` and `expect missing` inspect the current rendered tree;
 - grouped and tag-scoped expectations run as one plan step;
-- `select #tag[N] { ... }` supplies a dynamically re-resolved row scope.
+- `select #tag[N] { ... }` supplies a dynamically re-resolved row scope;
+- `advance <duration>` moves the held clock, described below.
 
 Checkboxes have a control-specific assertion for their two-state surface:
 
@@ -157,25 +158,39 @@ inert. Covered stack and selection content likewise stays mounted, so a later as
 its preserved local state.
 
 A toast is app-level and transient. Different keys coexist, while presenting the same key replaces
-the prior occurrence and restarts its numeric-seconds duration. Toasts do not consume Back or plain
-dismissal. Tests may assert their immediate rendered state and keyed replacement; deterministic
-expiry testing remains deferred until the runner has an explicit clock or wait contract.
+the prior occurrence and restarts its duration. Toasts do not consume Back or plain dismissal. Tests
+assert their rendered state, their keyed replacement, and — since the runner holds the clock — their
+expiry.
 
-The launched app's active datasource can be driven without naming its catalog:
+## The clock a check holds
+
+Every check starts from a fresh clock held at a fixed instant, and it moves only when the journey
+says so:
 
 ```tao
-data loading
-data error "Local storage is unavailable"
-data ready
+advance 1.s
+advance 90.s
+advance 1.min
 ```
 
-Memory is the shipped `@tao/data` declaration bound through the published `TR.DataProvider`
-full-snapshot protocol. Its provider implementation passes the same `TR.testProvider` empty-load,
-round-trip, key/instance-boundary, ordering, and rejection conformance used by other providers.
+`advance` takes a literal duration, folded at compile time, so a step reads as a fixed amount of
+time rather than as a value a journey cannot see. It moves the clock forward and fires every
+callback that falls due, in time order, which is what makes a journey over several tickers see the
+same sequence a real clock would produce. Advancing backwards is a diagnostic.
+
+The clock owns every repeating and delayed callback in the runtime: `@tao/time`'s tickers, toast
+expiry, and `now`. A held clock therefore makes a ticking display, a countdown, and a transient
+notice all deterministic, and releases at the end of the check.
+
 Before every check, the runner installs a fresh Memory instance and prevents the app's configured
-Local binding from replacing it, so these steps do not read or mutate durable data.
-Catalog-qualified status syntax is retired; any future multi-datasource test model must introduce
-an explicit new targeting contract rather than reviving schema-qualified steps.
+provider from replacing it, so no step reads or mutates durable data. Memory is the shipped
+`@tao/data` declaration bound through the published `TR.DataProvider` full-snapshot protocol; its
+implementation passes the same `TR.testProvider` empty-load, round-trip, key/instance-boundary,
+ordering, and rejection conformance used by other providers.
+
+Driving a provider into `loading`, `error`, or `ready` from a test step is retired (Decisions §16).
+The states those steps reached return through the world controls — network, sync, and datasource
+fault injection — which have not landed yet.
 
 ## Compiler/runtime boundary
 
