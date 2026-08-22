@@ -2,7 +2,120 @@ use WordFlowerNavigator from @nav
 use Local from @tao/data
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: open
+// Tranche status: absorbed
+//
+// SURFACES AND DECLARATIONS. This tranche gives WordFlower the UI primitives, adaptive layout,
+// declaration model, and minimal design system used by the code in this directory.
+//
+// The contract is now a DIRECTORY. Every mapped source and test file here is part of it:
+//
+//   WordFlower       this entry file — project, apps, navigation, local datasource, variants, shell
+//   Design           the minimal design system — implemented last, see that file
+//   @ui/             the workspace, document, and focus-session areas
+//   @nav/            the navigation values and the deterministic harness navigator
+//   @data/           the data catalog
+//   *.test           the behavior journeys, each beside what it exercises
+//
+// Declarations carry the narrowest visibility that works. A file-private declaration carries no
+// marker; `folder` reaches the rest of this directory with no `use` line, which is why the sibling
+// import lists are gone. Entities, apps, and case sets still resolve through their own paths, so
+// those keep an explicit `use`. `ui` and `nav` are separate folders, so what they publish across a
+// boundary is `workspace` and is imported by path.
+//
+// Each tranche's scratch contracts graduate before its boundary: the Prelude and `@tao/text` to
+// `packages/stdlib/@tao` and
+// `packages/stdlib/@tao/text`, and this tranche's `duration` primitive and `@tao/time` to the
+// Prelude and `packages/stdlib/@tao/time`. Their `@tao-next/` copies are intentionally absent at
+// this absorbed boundary.
+//
+// The absorption gates must compare `1 - Current` and `2 - Next` as whole directories: the same
+// file set, with every file byte-identical to its counterpart when the tranche closes. Implementing
+// directory gating was part of this tranche. The repeated sidecar markers were bootstrap input and
+// were removed when the directory contract gained one status.
+//
+// This tranche decides:
+// - Stdlib surfaces: `ScrollView`, `Image`, `Checkbox`, `Spinner`, and `Progress`. Selectable
+//   collection rendering stays language-owned: `loop Plural / Singular { ... }` scopes its template
+//   block and optional `on select` to the row, so no stdlib `List` or function-typed row slot is
+//   introduced
+// - Text stdlib: `@tao/text` exports the injected functions `CountWords(Value is text)` and
+//   `Join(Values is list of text, Separator is text)` with the exact behavior specified by
+//   `packages/stdlib/tao/text/Text.tao`
+// - Adaptive layout: `Panes()` lays its children side by side when, after gaps, each child can
+//   receive at least 320 logical pixels; otherwise it stacks them in source order. In horizontal
+//   mode, `claim` distributes remaining width proportionally. `width max <n>` bounds a readable
+//   column. This adaptation is fixed stdlib container behavior, not language breakpoint syntax
+// - `async { }` runs its block without delaying the statements after it; failures surface as
+//   provider error state
+// - Primitive value heads make the common product declaration explicit: `nav N = StackNav { ... }`,
+//   `datasource S = Local { ... }`, and `app X = Y with { ... }` declare values, while the rarer
+//   reusable type form is `type T is nav|datasource|app with { ... }`. A direct `nav N { ... }`
+//   instantiates primitive `nav`; it fills only members `nav` already declares. It never declares a
+//   new nav type or adds members, and it is usable only when those fills plus primitive defaults make
+//   the value complete. `let` remains the universal auto-typed immutable binding for local,
+//   supporting, computed, and copied values; a primitive head constrains the value family without
+//   widening away the more precise inferred type
+// - `with` is THE core refinement operation underlying type derivation, type instantiation, and
+//   value derivation. It may be omitted only for construction from a base resolved as a type:
+//   `Type { <fills> }` is sugar for `Type with { <fills> }`. Derivation from an existing value must
+//   keep it visible as `Value with { <delta> }`; `Value { ... }` is not legal. If type and value
+//   namespaces both contain a name, bare `Name { ... }` resolves the type namespace and constructs
+//   a value. In a value expression, `Name with { ... }` resolves the value namespace first and the
+//   type namespace only when no value exists; after `type T is`, the base resolves only the type
+//   namespace. The delta always narrows or fills and never reopens a filled member. A value may fill
+//   or override declared data/configuration properties but may never introduce a member
+//   No `required` keyword is introduced: a supplied property without a default remains required
+// - Every app value is declared in the entry file, which keeps cross-module variant derivation
+//   unreachable. `run`, imports, and strict app identity accept any complete app value uniformly,
+//   whether a primitive head or an inferred `let` declared it; no AST-kind union leaks into semantics
+// - A render site composes named clause bundles and direct clauses in one list, and the last
+//   specification of a given clause wins: `[screen, claim 2, width max 720]` reads left to right.
+//   After same-clause replacement, validation rejects a resolved clause set whose remaining clauses
+//   are semantically incompatible; source order never makes incompatible clause categories valid
+// - Rendering and presentability are orthogonal core roles. `visual` is their common rendering
+//   root; `presentable` refines it, and `ui` and `nav` refine `presentable`. `view`, `layout`, and
+//   `frame` refine `visual` without becoming presentable. Content acceptance belongs intrinsically
+//   to the declaration kind, not to a property or slot: `view` is a leaf, while `layout` and `frame`
+//   accept caller content and place it with `@@content`. A TypeScript-backed container therefore
+//   declares itself a `layout`. A layout clause is ambient on every visual occurrence, so nothing
+//   declares it and no user name collides with it. `packages/stdlib/tao/Prelude.tao` pins this
+//   hierarchy
+// - A frame declares an optional named content slot with `@name = empty`. The name is in the frame's
+//   slot namespace, `empty` contributes no rendered node, and a caller fills it at most once with
+//   `@name <visual>`. A filled slot is opaque visual content placed exactly where `@name` occurs in
+//   the frame render body; `Card` and its `@actions` call site exercise the complete contract
+// - An injection has no compiler-prefixed names. `TR`, `RN`, and `process` are always in scope in
+//   injected TypeScript; the inject list explicitly names every additional Tao-provided binding.
+//   Each entry is `<Name> <value>` over any expression, and a bare name binds a property under its
+//   own name:
+//   `render inject Total, Suffix " words", Content @@content, Layout @@layout, Tag @@tag`.
+//   This retires the implicit `_ViewProps` bag and is implemented across Tao, stdlib included. The
+//   ambient channels are exactly `@@content`, `@@layout` — which carries the parent
+//   direction the occurrence lays out against — and `@@tag`; navigation, dialogue, app, and caller
+//   inheritance stay private and never reach a hand-written implementation
+// - The value of `render inject` is the view's root element and Tao wraps nothing around it, which
+//   is already the emitted behavior. Applying `Layout` and `Tag`, and rendering `Content` exactly
+//   once, are the implementation's responsibility and are not checked
+// - Every `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declaration has a
+//   parenthesized parameter list, including `()` when empty, mirroring its call sites:
+//   `view WordCountLabel(Value text)`, `action SaveDocument()`, `ui Settings()`. Omitting the list
+//   is invalid. A `function` has a block body and hands its result back with `return`, so early
+//   returns are available; `returns <type>` is optional and inferred when omitted
+// - `let X is Type = value` ascribes a binding: `is` narrows, `=` binds. It keeps aligned `let`
+//   columns and preserves `Name is Type` order rather than inverting to type-first
+// - List types always name their element type as `list of T`; bare `list` is invalid in type
+//   declarations and parameter ascriptions
+// - `type Name is one of Cases` declares a nominal type in the ordinary type system, and each case is a
+//   value of that type. One-case enums are valid; `ConfirmResult` deliberately uses `none` for
+//   dismissal rather than declaring a second case
+// - `optional <Name> <type>` declares an item field that may be absent
+// - `expect checkbox <selector> checked|unchecked` joins the test vocabulary, since a two-state
+//   control cannot be asserted through visible text
+// - Minimal design: flat tokens plus named clause bundles applied at render sites, and an app
+//   `Design` property. The lexer replaces `TAG` with one shared terminal,
+//   `TagOrHexColor: /#[A-Za-z0-9_]+/`. AST context distinguishes tag and design-token positions.
+//   The validator requires tags to match `#[A-Za-z_][A-Za-z0-9_]*` and design color values to match
+//   CSS hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively
 //
 // FOCUSED WRITING. This tranche gives WordFlower a focused writing session — pick a length, write
 // until the clock runs out, pause and resume, or stop early — and with it the first capability cut
@@ -10,22 +123,12 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // through the expression-position TypeScript boundary (§15) and proved under a controllable test
 // clock (§16).
 //
-// The contract is a DIRECTORY. Every mapped source and test file here is part of it:
-//
-//   WordFlower       this entry file — project, apps, navigation, local datasource, variants, shell
-//   @data/           the data catalog
-//   @nav/            the navigation values and the deterministic harness navigator
-//   @ui/             the shell, workspace, document, and focus-session areas
-//   @tao-next/       the scratch stdlib contract for this tranche — the `duration` family and
-//                    `@tao/time` — which graduates to `packages/stdlib/@tao` at absorption
-//   *.test           the behavior journeys, each beside what it exercises
-//
 // Earlier tranches' decisions are recorded in `Spec/` and `Roadmap/Tao Revolution/Decisions.md`;
 // this header lists only what this tranche decides:
 // - Unit values (§2): `.unit` on a number constructs a typed value and `.unit` on a typed value
 //   reads it back as a number in that unit, so `10.min`, `1.s`, and `220.ms` construct durations
-//   and `Wait.s` reads one. A value belongs to one family with a canonical base and fixed ratios. The
-//   mechanism is generic; `duration` — `ms`, `s`, `min`, `h`, `d`, `wk`, with §2's long singular
+//   and `Wait.s` reads one. A value belongs to one family with a canonical base and fixed ratios.
+//   The mechanism is generic; `duration` — `ms`, `s`, `min`, `h`, `d`, `wk`, with §2's long singular
 //   and plural aliases — is the only family this tranche registers. Equality normalizes
 //   (`60.s == 1.min`); a cross-family read is a compile error; arithmetic is dimensional: duration
 //   ± duration → duration, duration × number → duration, duration ÷ duration → number, and anything
