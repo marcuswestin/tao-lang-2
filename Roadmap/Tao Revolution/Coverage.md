@@ -10,7 +10,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 
 | Capability (Decisions §)                         | Forcing app · feature                                       | Tier     | Test status             |
 | ------------------------------------------------ | ----------------------------------------------------------- | -------- | ----------------------- |
-| Types, typed slots, unit values (§2)             | WordFlower · everywhere                                     | MVP      | pending dialect tranche |
+| Types, typed slots, unit values (§2)             | WordFlower · everywhere; units: focused-writing mode        | MVP      | partially in Current    |
 | Entities, relations, yes/no poles (§2)           | WordFlower · workspaces, documents, paragraphs              | MVP      | partially in Current    |
 | validate / required / refuse (§2)                | WordFlower · document and workspace rules                   | MVP      | partially in Current    |
 | Preferences incl. device scope (§2)              | WordFlower · editor preferences                             | MVP      | pending                 |
@@ -27,8 +27,8 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Intents, commands, surfaces (§8)                 | WordFlower · editor commands, palette                       | MVP      | pending                 |
 | Assistant projection (§8)                        | WordFlower · assistant block                                | Post-MVP | —                       |
 | Undo derivation (§8)                             | WordFlower · document edits                                 | Post-MVP | —                       |
-| Conditionals, ternary, check/guard (§8)          | WordFlower · everywhere                                     | MVP      | pending dialect tranche |
-| Ticking clock — @tao/time (§9)                   | **WordFlower · focused-writing mode** (X-minute free write) | **MVP**  | pending                 |
+| Conditionals, ternary, check/guard (§8)          | WordFlower · everywhere; ternary: focused-writing mode      | MVP      | partially in Current    |
+| Ticking clock — @tao/time (§9)                   | **WordFlower · focused-writing mode** (X-minute free write) | **MVP**  | open — focused tranche  |
 | Layout, render, clause lists (§9)                | WordFlower · all screens                                    | MVP      | in Current              |
 | Conditional styling incl. states (§9)            | WordFlower · editor chrome                                  | MVP      | pending                 |
 | Grid over loop, cell min (§9)                    | Skillet · recipe cards                                      | Post-MVP | —                       |
@@ -52,8 +52,9 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Occurrence queries (§17)                         | Hearth · routines in Today/Week                             | Post-MVP | —                       |
 | Nearness, distance, places (§17)                 | Hearth · Around                                             | Post-MVP | —                       |
 
-Rows marked _partially in Current_ have existing behavior tests that will be respelled by the
-dialect tranche; _pending_ means the capability is decided but not yet implemented or tested.
+Rows marked _partially in Current_ have behavior tests for part of the capability; _pending_ means
+the capability is decided but not yet implemented or tested; _open_ names the tranche implementing
+it (`Roadmap/Focused writing tranche/`).
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP
     check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this

@@ -1,0 +1,59 @@
+use WordFlower from ./
+
+test "WordFlower focused writing" {
+   test "runs a session down under a controlled clock" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Morning pages" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      expect text "Focused writing"
+      press #focusFive
+      expect text "5:00"
+      advance 1.s
+      expect text "4:59"
+      advance 59.s
+      expect text "4:00"
+      press #pauseFocus
+      advance 1.min
+      expect text "4:00" // paused: the tick is stopped, so the reading is frozen
+      press #resumeFocus
+      advance 1.min
+      expect text "3:00" // resumed: the paused minute was not lost
+      advance 3.min
+      expect {
+         text "Time's up"
+         missing text "0:00"
+      }
+      press #endFocus
+      expect {
+         text "Focused writing"
+         missing text "Time's up"
+   }  }
+   test "stops a session early" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Morning pages" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      press #focusTwentyFive
+      expect text "25:00"
+      advance 90.s
+      expect text "23:30"
+      press #stopFocus
+      expect {
+         text "Focused writing"
+         missing text "23:30"
+}  }  }

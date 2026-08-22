@@ -35,7 +35,10 @@ test "WordFlower documents" {
          text "Saved body: Set the scene with intent"
          text "Saves this session: 1"
          text "Saved" // the keyed toast
-   }  }
+      }
+      advance 3.s
+      expect missing text "Saved" // its duration has elapsed
+   }
    test "marks a document final through the checkbox" {
       run WordFlower
       enter "Home" into #workspaceName
