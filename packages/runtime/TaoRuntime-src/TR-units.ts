@@ -95,8 +95,8 @@ class RuntimeClock {
 
   /** beginTest holds the clock at a fixed instant so every check starts from the same time. */
   beginTest(startMs = TEST_EPOCH_MS): void {
+    this.endTest()
     this.virtualNowMs = startMs
-    this.scheduled = new Map()
   }
 
   /** endTest releases the clock back to the platform and drops anything still scheduled. */
@@ -134,7 +134,8 @@ class RuntimeClock {
       }
       this.virtualNowMs = next.dueMs
       if (next.repeating) {
-        next.dueMs += next.intervalMs
+        // A non-advancing repeat would spin here rather than reaching the target.
+        next.dueMs += Math.max(1, next.intervalMs)
       } else {
         this.scheduled.delete(next.id)
       }

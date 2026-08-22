@@ -45,6 +45,14 @@ Describe('validator: the TypeScript bridge', () => {
   )
 
   Test(
+    'still resolves the arguments of a bridged call, which are ordinary Tao values',
+    rejects(
+      bridgeApp('function Words(Value text) returns number { return CountWords(Missing) from ./Text.ts }'),
+      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+    ),
+  )
+
+  Test(
     'rejects a path that is not a TypeScript sidecar',
     rejects(
       bridgeApp('function Words(Value text) returns number { return CountWords(Value) from @tao/text }'),

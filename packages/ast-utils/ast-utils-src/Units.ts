@@ -58,29 +58,14 @@ export const Units = {
     return families[family][unit]
   },
 
-  /** unitsOf lists every unit name a family accepts, canonical spellings first. */
-  unitsOf(family: UnitFamily): readonly string[] {
-    return Object.keys(families[family])
-  },
-
   /** readingOf returns the named non-numeric reading a family exposes, if it has one. */
   readingOf(family: UnitFamily, member: string): UnitReading | undefined {
     return readings[family].find(reading => reading === member)
   },
 
-  /** membersOf lists every member a value of the family answers to. */
-  membersOf(family: UnitFamily): readonly string[] {
-    return [...Units.unitsOf(family), ...readings[family]]
-  },
-
   /** baseToMilliseconds converts a duration in its base unit to whole and fractional milliseconds. */
   baseToMilliseconds(nanoseconds: number): number {
     return nanoseconds / NANOSECONDS_PER_MILLISECOND
-  },
-
-  /** millisecondsToBase converts milliseconds to the duration family's base unit. */
-  millisecondsToBase(milliseconds: number): number {
-    return milliseconds * NANOSECONDS_PER_MILLISECOND
   },
 } as const
 
