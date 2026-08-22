@@ -1,8 +1,9 @@
-workspace view ProjectWidget() {
+workspace
+view ProjectWidget() {
    render Text("Project view works")
 }
 
-view Text(Value is text) {
+view Text(Value text) {
    render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [Value], layout: Layout, tag: Tag })
    ```

@@ -1,0 +1,99 @@
+// The vocabulary every screen uses: the open trip, the safety net, frames, the stop card, sign-in, and
+// the one question.
+
+// -- Live handles ------------------------------------------------------------------------------------------
+let MyTrip = Me.CurrentTrip
+
+// -- The safety net -----------------------------------------------------------------------------------------
+guard default {
+   loading -> Spinner(Label: "Opening Wayfare…")
+   missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone", Body: "Someone on the trip may have removed it.")
+   unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask the trip's owner to invite you back.")
+   rejected -> Problem { Text(Problem) [caption, danger] }
+   error -> Message { Text(Message) [body] }
+   failed -> Problem { present Notice(Problem) as toast (Key: "failed") }
+}
+
+// -- Frames --------------------------------------------------------------------------------------------------
+frame Section(Title text) {
+   @actions = empty
+   render Col [gap sm] {
+      Row [content spread center, gap sm] {
+         Text(Title) [sectionTitle]
+         Row [content right center, gap xs] { @actions }
+      }
+      Col [gap xs] { @@content }
+}  }
+
+frame EmptyState(Icon icon, Title text, Body text) {
+   render Col [pattern EmptyState] {
+      Icon(Icon) [@icon]
+      Text(Title) [@title]
+      Text(Body) [@body]
+      Col [@action] { @@content }
+}  }
+
+// -- Views ------------------------------------------------------------------------------------------------------
+type Tone is one of Neutral, Good, Warning
+
+view Status(Message text, Tone Tone (default Neutral), Announce yes / no (default no)) {
+   let Symbol = when Tone { Neutral -> "circle"; Good -> "checkmark.circle"; Warning -> "exclamationmark.triangle" }
+   render Row [content left center, gap sm, announce when Announce] {
+      Icon(Symbol) [muted, ink good when Tone is Good, ink danger when Tone is Warning]
+      Text(Message) [caption]
+}  }
+
+view OfflineNotice() {
+   render if Connection is Offline { Status("Offline — your changes are safe on this device", Tone: Warning, Announce: yes) }
+}
+
+view SyncBadge() {
+   render when Sync {
+      Current -> Status("Up to date", Tone: Good)
+      Syncing -> Status("Saving for everyone…")
+      Error -> Message { Status(Message, Tone: Warning) }
+}  }
+
+// A stop, wherever it is listed: the day plan, Today, search. Pins on the map follow the same order.
+view StopCard(Stop) {
+   render Row [pattern Line] {
+      Col [kindMark(Stop.Kind), @leading, decorative]
+      Col [@content, gap xxs] {
+         Text("{ Stop.Position }. { Stop.Title }", Lines: 1) [body, strike when Stop is Visited]
+         Row [gap xs] {
+            Text(if Stop.Starts is none then "Flexible" else Stop.Starts.Time) [caption]
+            Text(Stop.Duration) [caption]
+            if Stop.Place is not none { Text(Stop.Place.Name, Lines: 1) [caption] }
+      }  }
+      Text(Stop.Kind) [chip, @trailing]
+      if Stop.Attachments is not empty { Icon("paperclip", Label: "Has attachments") [muted, @trailing] }
+}  }
+
+// -- Sign in ---------------------------------------------------------------------------------------------------
+view SignInPanel() {
+   state Email = ""
+   action SendLink() runs single {
+      stop if Email is empty
+      when sign in with email Email {
+         done -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
+   }  }
+   render Col [card, gap sm] {
+      #email
+      TextInput(Value: Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit SendLink }
+      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press SendLink }
+}  }
+
+// -- The one question -----------------------------------------------------------------------------------------
+dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
+   render Col(Label: Question) [card, width max 480, gap md] {
+      Text(Question) [sectionTitle]
+      Text(Body) [body]
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> respond no }
+         #confirm
+         Button(Verb) [destructive] { on press -> respond yes }
+}  }  }
+
+ui Notice(Message text) {
+   render Text(Message) [toast]
+}

@@ -1,4 +1,4 @@
-import { Packages } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
@@ -39,6 +39,7 @@ type DataCatalogPlan = {
 
 type PlannedSidecar = {
   declaration: AST.ConfigurableDeclaration
+  exportName: string
   sourcePath: string
   relativePath: string
 }
@@ -229,11 +230,14 @@ function planOutputPaths(
       )
     const sidecarPathBySourcePath = new Map<string, string>()
     const sidecars = declarations.flatMap(declaration => {
-      const sidecarPath = AST.configurationImplementationOf(declaration)?.sidecarPath
-      if (sidecarPath === undefined) {
+      const implementation = AST.configurationImplementationOf(declaration)
+      const sidecarPath = implementation?.path
+      if (implementation === undefined || sidecarPath === undefined) {
         return []
       }
-      const sourcePath = FS.resolvePath(sidecarPath, FS.dirname(file.path))
+      // A derived declaration reuses its base's implementation, which an imported file may own,
+      // so the sidecar resolves against the file that declares it rather than this one.
+      const sourcePath = FS.resolvePath(sidecarPath, FS.dirname(AST.getDocument(implementation).uri.path))
       let relativePath = sidecarPathBySourcePath.get(sourcePath)
       if (relativePath === undefined) {
         relativePath = reserveOutputPath(
@@ -242,7 +246,7 @@ function planOutputPaths(
         )
         sidecarPathBySourcePath.set(sourcePath, relativePath)
       }
-      return [{ declaration, sourcePath, relativePath }]
+      return [{ declaration, exportName: implementation.exportName, sourcePath, relativePath }]
     })
     bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars })
   }
@@ -272,7 +276,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       `import ${injection.binding} from '${relativeImportPath(planned.modulePath, injection.relativePath)}'`
     ),
     ...planned.sidecars.map(sidecar =>
-      `import ${configurationSidecarBindingName(sidecar.declaration)} from '${
+      `import { ${sidecar.exportName} as ${configurationSidecarBindingName(sidecar.declaration)} } from '${
         relativeImportPath(planned.modulePath, sidecar.relativePath)
       }'`
     ),
@@ -327,6 +331,11 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   }))
   const copiedSidecars = new Map<string, CompiledFile>()
   for (const sidecar of planned.sidecars) {
+    // A synthetic in-memory source has no directory to copy from. Real compiles still assert,
+    // which is what catches a missing sidecar before emitting an import of it.
+    if (!FS.existsSync(FS.dirname(sidecar.sourcePath))) {
+      continue
+    }
     Assert(FS.existsSync(sidecar.sourcePath), 'validated configuration sidecar exists', {
       sourcePath: sidecar.sourcePath,
     })
@@ -420,6 +429,33 @@ function resolveImports(
   const bySource = new Map<string, Set<string>>()
   const scopeBindings = new Map<string, string>()
   const sourcePaths = new Set(sourceByPath.keys())
+  // A `folder` declaration is in scope without a `use` statement, so the generated module still
+  // has to import it by name from the sibling file that declares it.
+  const currentDirectory = FS.dirname(filePath)
+  // Only what this file actually names: importing every folder-visible sibling declaration would
+  // make each file in the folder import every other one, dead bindings and cycles included.
+  const referencedNames = ASTUtils.referencedNames(file)
+  for (const candidate of sourceByPath.values()) {
+    if (candidate.path === filePath || FS.dirname(candidate.path) !== currentDirectory) {
+      continue
+    }
+    for (const declaration of candidate.ast.statements) {
+      if (
+        !declarationEmitsRuntimeBinding(declaration)
+        || Packages.visibilityOf(declaration) !== 'folder'
+        || !referencedNames.has(declaration.name)
+      ) {
+        continue
+      }
+      const binding = isRuntimeConfigurableDeclaration(declaration)
+        ? configurationRuntimeBindingName(declaration)
+        : declaration.name
+      const names = bySource.get(candidate.path) ?? new Set<string>()
+      names.add(binding)
+      bySource.set(candidate.path, names)
+      scopeBindings.set(binding, binding)
+    }
+  }
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
     const resolution = Packages.resolve(packagesContext, {
       importPath: useStatement.importPath,
@@ -549,8 +585,12 @@ function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {
   return AST.isAppDeclaration(declaration) || Packages.visibilityOf(declaration) !== undefined
 }
 
+// Most type declarations are erased, but a case set carries runtime case identities and a
+// configurable type carries a declaration identity, so both cross file boundaries as bindings.
 function declarationEmitsRuntimeBinding(node: AST.Node): node is AST.Declaration {
   return AST.isDeclaration(node)
     && AST.isEmittingRuntimeBinding(node)
-    && (!AST.isTypeDeclaration(node) || isRuntimeConfigurableDeclaration(node))
+    && (!AST.isTypeDeclaration(node)
+      || AST.isCaseSetTypeExpression(node.type)
+      || isRuntimeConfigurableDeclaration(node))
 }

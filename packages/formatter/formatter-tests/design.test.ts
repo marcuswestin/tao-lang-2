@@ -7,7 +7,8 @@ Describe('formatter: minimal design', () => {
     formats(
       'workspace   design   Theme{paper   #fff alpha #abcd overlayColor #121826cc screen[fill,content top stretch,pad 16,bg paper] title[size 28,weight 700,fg paper]}',
       `
-        workspace design Theme {
+        workspace
+        design Theme {
            paper #fff
            alpha #abcd
            overlayColor #121826cc

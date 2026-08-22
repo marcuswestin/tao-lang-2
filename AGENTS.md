@@ -16,10 +16,13 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Other agents and Ro may change this worktree concurrently. Preserve changes you did not make and adapt around them.
 - Do not stage, unstage, reset, stash, or otherwise change the Git index unless Ro explicitly asks in the current request.
 - Before committing in a worktree, create or switch to a named `feat/<name>` branch; never commit from detached HEAD. This applies to instruction and one-off commits as well as project work.
+- A feature branch lands on `main` as a **squash** commit that keeps Git's `Squashed commit of the following:` appendix; `main` never takes a fast-forward or a merge commit. Read the `git-workflow` skill before any merge — `main`'s linear history is the product of squashing and does not imply fast-forwarding.
 
 ## Guidance
 
-- `Apps/WordFlower/README.md` owns the language implementation process. Language work proceeds in tranches: decisions are settled in `2 - Next`, implemented into `1 - Current` slice by slice, and `3 - MVP` and `4 - Revolution` are reconciled once when the tranche is absorbed. Current never leads; it follows Next.
+- `Roadmap/Tao Revolution/` owns the language target and program: `Decisions.md` is the decided language, `Process.md` the sequence toward MVP and Revolution, `Coverage.md` the capability-to-test map. Where older documents disagree with `Decisions.md`, the decisions win.
+- `Apps/WordFlower/README.md` owns the tranche mechanics. Language work proceeds in tranches: decisions are settled in `2 - Next`, implemented into `1 - Current` slice by slice with behavior tests written in Tao. Current never leads; it follows Next.
+- `Apps/Tao Future/README.md` owns the post-MVP demo apps (Skillet, Hearth, Wayfare): tier-less specs whose files graduate from `.tao-revolution` to `.tao` as tranches land. Do not edit them outside consolidation or a decision amendment.
 - Read `packages/AGENTS.md` before editing `packages/`.
 - Read `Apps/Test Apps/AGENTS.md` before editing test apps.
 - Read active roadmap documents for planned work. `Roadmap/Archive/` is frozen; do not update archived documents unless Ro explicitly asks. Other `Roadmap/` documents remain live.

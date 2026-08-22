@@ -1,7 +1,7 @@
 import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import Formatter from '../formatter-src/formatter'
-import { fence, formats, tsFence } from './test-format'
+import { formats } from './test-format'
 
 const wordFlowerCurrentPath = Repo.resolvePath('Apps/WordFlower/1 - Current')
 
@@ -26,9 +26,10 @@ Describe('Tao formatter declaration parameters and functions', () => {
   Test(
     'formats mandatory parameter lists, block returns, and early returns',
     formats(
-      `public function GoalFraction ( Count is number )returns number{if Count==0{return 0}\nreturn Count/10}\nview Main ( ){action Save ( ){ }render Empty()}`,
+      `public function GoalFraction ( Count number )returns number{if Count==0{return 0}\nreturn Count/10}\nview Main ( ){action Save ( ){ }render Empty()}`,
       `
-        public function GoalFraction(Count is number) returns number {
+        public
+        function GoalFraction(Count number) returns number {
            if Count == 0 {
               return 0
            }
@@ -46,27 +47,33 @@ Describe('Tao formatter declaration parameters and functions', () => {
 
 Describe('Tao formatter data declarations', () => {
   Test(
-    'formats reshaped fields, relation modifiers, boolean cases, and bare now defaults',
+    'formats reshaped fields, traits, boolean cases, and bare now defaults',
     formats(
       `
         data Workspaces/Workspace{
         Name text
         CreatedAt time(default now)
         Pinned yes / no
-        Documents(relation Documents,auto-delete)}
-        data Documents/Document{Final yes / no       Draft(default Draft) Workspace(relation Workspace)}
+        Documents(owned,ordered)
+        index CreatedAt
+        order by CreatedAt desc}
+        data Documents/Document{Final yes /       Draft no(default Draft) Workspace Author(relation   Accounts)}
       `,
       `
         data Workspaces / Workspace {
            Name text
            CreatedAt time (default now)
            Pinned yes / no
-           Documents (relation Documents, auto-delete)
+           Documents (owned, ordered)
+
+           index CreatedAt
+           order by CreatedAt desc
         }
 
         data Documents / Document {
-           Final yes / no Draft (default Draft)
-           Workspace (relation Workspace)
+           Final yes / Draft no (default Draft)
+           Workspace
+           Author (relation Accounts)
         }
       `,
     ),
@@ -77,24 +84,24 @@ Describe('Tao formatter configurable declarations', () => {
   Test(
     'formats declaration-owned nav and datasource contracts with injected implementations',
     formats(
-      `public type CustomNav is nav with{Initial ui @key{Label text Content Presentable}implement inject nav ${tsFence}\nreturn TR.NavKind.Stack()\n${fence}}\npublic type CustomData is datasource with{StorageKey text implement inject provider "./CustomData.ts"}`,
+      `public type CustomNav is nav with{Initial ui @key{Label text Content Presentable}nav CustomNavKind from ./CustomNav.ts}\npublic type CustomData is datasource with{StorageKey text provider CustomData from ./CustomData.ts}`,
       `
-        public type CustomNav is nav with {
+        public
+        type CustomNav is nav with {
            Initial ui
            @key {
               Label text
               Content Presentable
            }
 
-           implement inject nav ${tsFence}
-              return TR.NavKind.Stack()
-           ${fence}
+           nav CustomNavKind from ./CustomNav.ts
         }
 
-        public type CustomData is datasource with {
+        public
+        type CustomData is datasource with {
            StorageKey text
 
-           implement inject provider "./CustomData.ts"
+           provider CustomData from ./CustomData.ts
         }
       `,
     ),
@@ -169,6 +176,47 @@ Describe('Tao formatter top-level statements', () => {
         let Count = 3
 
         view MainView() { }
+      `,
+    ),
+  )
+
+  Test(
+    'breaks a let group before a declaration that states its visibility',
+    formats(
+      `
+        let Greeting = "Hello"
+        workspace
+        let Count = 3
+        let Trailing = 4
+      `,
+      `
+        let Greeting = "Hello"
+
+        workspace
+        let Count = 3
+        let Trailing = 4
+      `,
+    ),
+  )
+
+  Test(
+    'separates a tagged element from the run above it, but not from its block opening',
+    formats(
+      `view Main(){render Col(){#first
+Text("leading")
+Text("plain")
+#named
+Text("tagged")}}`,
+      `
+        view Main() {
+           render Col() {
+              #first
+              Text("leading")
+              Text("plain")
+
+              #named
+              Text("tagged")
+        }  }
       `,
     ),
   )
@@ -284,16 +332,16 @@ Describe('Tao formatter tests', () => {
   Test(
     'formats v0 Tao test declarations',
     formats(
-      `use WordFlower from ./\ntest   "WordFlower"{check "renders"{run   WordFlower\nexpect   text "Hello"\npress   text "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
+      `use WordFlower from ./\ntest   "WordFlower"{test "renders"{run   WordFlower\nexpect   text "Hello"\npress   "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
       `
         use WordFlower from ./
 
         test "WordFlower" {
-           check "renders" {
+           test "renders" {
               run WordFlower
 
               expect text "Hello"
-              press text "Add"
+              press "Add"
               expect input placeholder "Title" value "Draft"
               back
               expect missing label "Loading"
@@ -306,10 +354,10 @@ Describe('Tao formatter tests', () => {
   Test(
     'keeps test closing braces separate after trailing step comments',
     formats(
-      `test "Smoke"{check "renders"{run MyApp\nexpect text "Hello"\n// last step note\n}}`,
+      `test "Smoke"{test "renders"{run MyApp\nexpect text "Hello"\n// last step note\n}}`,
       `
         test "Smoke" {
-           check "renders" {
+           test "renders" {
               run MyApp
 
               expect text "Hello"
@@ -356,9 +404,7 @@ Describe('Tao formatter views and blocks', () => {
       `
         view MainView() {
            render Input(Value: Draft) {
-              on change -> Entered {
-                 set Draft = Entered
-              }
+              on change -> Entered { set Draft = Entered }
               on submit Submit
         }  }
       `,
@@ -470,9 +516,10 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'normalizes view parameter spacing',
     formats(
-      `public view CountText(Count is number, Label is text) { render Text(Label) }`,
+      `public view CountText(Count number, Label text) { render Text(Label) }`,
       `
-        public view CountText(Count is number, Label is text) {
+        public
+        view CountText(Count number, Label text) {
            render Text(Label)
         }
       `,
@@ -482,14 +529,14 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'normalizes view invocation argument spacing',
     formats(
-      `view MainView() { render Stack() { CountText(3,"label") } }\nview CountText(Count is number, Label is text) { render Text(Label) }`,
+      `view MainView() { render Stack() { CountText(3,"label") } }\nview CountText(Count number, Label text) { render Text(Label) }`,
       `
         view MainView() {
            render Stack() {
               CountText(3, "label")
         }  }
 
-        view CountText(Count is number, Label is text) {
+        view CountText(Count number, Label text) {
            render Text(Label)
         }
       `,
@@ -499,14 +546,14 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'normalizes named invocation and input-test step spacing',
     formats(
-      `view MainView(){render Field(Value: "Draft",Disabled: false)}\ntest "Form"{check "entry"{run MyApp enter "Hello"  into label  "Title" submit placeholder  "Title"}}`,
+      `view MainView(){render Field(Value: "Draft",Disabled: false)}\ntest "Form"{test "entry"{run MyApp enter "Hello"  into label  "Title" submit placeholder  "Title"}}`,
       `
         view MainView() {
            render Field(Value: "Draft", Disabled: false)
         }
 
         test "Form" {
-           check "entry" {
+           test "entry" {
               run MyApp
               enter "Hello" into label "Title"
               submit placeholder "Title"
@@ -518,11 +565,11 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'formats state declarations and action bodies',
     formats(
-      `view MainView(){state Count=0 action AddStep(Step is number){set Count+=Step} action AddFive(){do AddStep(5)} render Stack() {Button("Reset",action{set Count=0}) Button("Inline",->{set Count+=1})}}`,
+      `view MainView(){state Count=0 action AddStep(Step number){set Count+=Step} action AddFive(){do AddStep(5)} render Stack() {Button("Reset",action{set Count=0}) Button("Inline",->{set Count+=1})}}`,
       `
         view MainView() {
            state Count = 0
-           action AddStep(Step is number) {
+           action AddStep(Step number) {
               set Count += Step
            }
            action AddFive() {
@@ -539,9 +586,9 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'formats dialogue declarations, asks, and explicit or bare responses',
     formats(
-      `dialogue Confirm(Title is text) responds ConfirmResult{action Close(){respond Confirmed} action Cancel(){respond} render Empty()} view Editor(){action Close(){let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,
+      `dialogue Confirm(Title text) responds ConfirmResult{action Close(){respond Confirmed} action Cancel(){respond} render Empty()} view Editor(){action Close(){let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,
       `
-        dialogue Confirm(Title is text) responds ConfirmResult {
+        dialogue Confirm(Title text) responds ConfirmResult {
            action Close() {
               respond Confirmed
            }
@@ -643,7 +690,8 @@ Describe('Tao formatter immutable bindings', () => {
     formats(
       `public let   Greeting="Hello"\nlet   Legacy="Hello"\nview MainView() { }`,
       `
-        public let Greeting = "Hello"
+        public
+        let Greeting = "Hello"
         let Legacy = "Hello"
 
         view MainView() { }

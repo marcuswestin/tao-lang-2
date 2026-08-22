@@ -4,4 +4,4 @@ entry VisibilityGrammarEntrypoint:
     value=DeclarationVisibility;
 
 DeclarationVisibility returns string:
-    'file' | 'package' | 'workspace' | 'public';
+    'file' | 'folder' | 'package' | 'workspace' | 'public';

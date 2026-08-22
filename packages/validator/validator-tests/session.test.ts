@@ -42,7 +42,7 @@ function nominalApp(
     app ${appName} { view MainView }
     type Name is ${nominalBase}
     view MainView() { render ${renderedView}(Name ${value}) }
-    view ${renderedView}(Value is ${renderedType}) {
+    view ${renderedView}(Value ${renderedType}) {
       render inject Value \`\`\`ts
         return null
       \`\`\`

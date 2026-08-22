@@ -2,7 +2,6 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
-import { inlineInjectionBindingName } from './injection-plan'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ConfigurationCompiler = {
@@ -57,7 +56,7 @@ export function isRuntimeConfigurableDeclaration(
   return primitive === 'nav' || primitive === 'datasource'
 }
 
-/** configurationSidecarBindingName returns the generated default-import binding for one implementation. */
+/** configurationSidecarBindingName returns the local alias for one sidecar's named export. */
 export function configurationSidecarBindingName(declaration: AST.ConfigurableDeclaration): string {
   return `__tao_configuration_implementation_${declaration.name}__`
 }
@@ -71,15 +70,7 @@ function configurationFactory(
   declaration: AST.ConfigurableDeclaration,
   implementation: AST.ConfigurationImplementation,
 ): Compiled {
-  if (implementation.tsCodeBlock !== undefined) {
-    return gen`Reflect.apply(
-      ${gen.Name({ name: inlineInjectionBindingName(implementation) })},
-      undefined,
-      [],
-    )`
-  }
-
-  Assert.defined(implementation.sidecarPath, 'validated configuration implementation has one source')
+  Assert.defined(implementation.path, 'validated configuration implementation names a module')
   return gen`Reflect.apply(
     ${gen.Name({ name: configurationSidecarBindingName(declaration) })},
     undefined,
@@ -131,7 +122,7 @@ function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration
     }
   }
 
-  // A custom inline implementation may declare a future profile shape that the compiler does not
+  // A custom sidecar implementation may declare a future profile shape that the compiler does not
   // normalize today. Keep those declarations compilable while making a sidecar prove its own
   // concrete protocol/configuration join in TypeScript.
   return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<Record<string, unknown>>`

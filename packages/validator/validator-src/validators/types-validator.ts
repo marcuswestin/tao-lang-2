@@ -353,6 +353,9 @@ function typeExpressionReferencesRoot(
     return typeReferenceReferencesRoot(root, type.base, new Set(seen))
       || type.slots.properties.some(property => typeDefinitionReferencesRoot(root, property, new Set(seen)))
   }
+  if (AST.isCaseSetTypeExpression(type) || AST.isYesNoTypeExpression(type)) {
+    return false
+  }
   return typeReferenceReferencesRoot(root, type, seen)
 }
 
@@ -447,7 +450,7 @@ function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtil
     ActionDeclaration: Type.ofAction,
     CasePayload: () => ({ kind: 'primitive', primitive: 'text' }),
     EntityDataField: field => field.negativeName ? { kind: 'primitive', primitive: 'boolean' } : { kind: 'unresolved' },
-    EnumCase: enumCase => ({ kind: 'enum', declaration: AST.enumOwningCase(enumCase) }),
+    CaseSetCase: caseSetCase => ({ kind: 'enum', declaration: AST.caseSetOwningCase(caseSetCase) }),
     EntityQueryDeclaration: declaration => {
       const entity = Type.queryEntity(declaration)
       return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }

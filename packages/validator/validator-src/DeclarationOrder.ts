@@ -20,6 +20,8 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
   return Switch.type(value, {
     ActionExpression: expressionValueReferences,
     BinaryExpression: expressionValueReferences,
+    NowExpression: expressionValueReferences,
+    PostfixMemberAccess: expressionValueReferences,
     BooleanLiteral: expressionValueReferences,
     CaseTestExpression: expressionValueReferences,
     WhenExpression: expressionValueReferences,

@@ -166,8 +166,9 @@ function compileEntityDataField(
   owner: AST.EntityDataDeclaration,
   field: AST.EntityDataField,
 ): Compiled {
+  const traits = field.traits?.traits ?? []
   const indexed = owner.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === field.name)
-  const defaultModifier = field.modifiers.find(modifier => modifier.defaultValue || modifier.defaultCase)
+  const defaultModifier = traits.find(trait => trait.defaultValue || trait.defaultCase)
   if (field.primitive || field.boolean) {
     const kind = field.boolean ? 'boolean' : field.primitive!
     return gen`[${gen.jsLiteral(field.name)}]: {
@@ -216,13 +217,13 @@ function storedRelationCascades(
       return false
     }
     const related = Type.dataFieldRelationEntity(candidate)
-    return related === owner && candidate.modifiers.some(modifier => modifier.autoDelete)
+    return related === owner && (candidate.traits?.traits ?? []).some(trait => trait.owned)
   })
 }
 
 function compileEntityFieldDefault(
   field: AST.EntityDataField,
-  modifier: AST.EntityDataFieldModifier | undefined,
+  modifier: AST.Trait | undefined,
 ): Compiled {
   if (!modifier) {
     return field.boolean ? gen`defaultValue: false,` : gen.noop()

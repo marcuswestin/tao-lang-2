@@ -3,7 +3,8 @@ import type { FormatHandlers } from '../formatting'
 export default {
   /** AppDeclaration formats the `app Name` header; the app body is formatted as a Block. */
   AppDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'app')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('app')
     f.oneSpaceAround('=')
   },
 

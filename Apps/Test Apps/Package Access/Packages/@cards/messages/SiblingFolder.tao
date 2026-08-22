@@ -1,1 +1,2 @@
-package let SiblingFolderTitle = "Package sibling folder works"
+package
+let SiblingFolderTitle = "Package sibling folder works"

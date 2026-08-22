@@ -278,7 +278,11 @@ export const NavigationControls = {
   },
 
   /** Replace swaps the matching enclosing app occurrence's root navigator. */
-  Replace(taoProps: TaoProps | undefined, navigator: TaoNavigationInput, target: RuntimeAppDefinition): void {
+  Replace(
+    taoProps: TaoProps | undefined,
+    navigator: TaoNavigationInput,
+    target?: RuntimeAppDefinition,
+  ): void {
     resolveStrictAppTarget(taoProps, target, 'replace').replace(navigator)
   },
 
@@ -302,7 +306,7 @@ export const NavigationControls = {
   },
 
   /** Activate reveals one keyed item on the matching enclosing app occurrence. */
-  Activate(taoProps: TaoProps | undefined, target: RuntimeAppDefinition, key: string): void {
+  Activate(taoProps: TaoProps | undefined, target: RuntimeAppDefinition | undefined, key: string): void {
     const app = resolveStrictAppTarget(taoProps, target, 'activate')
     if (!app.navigator.activate(key)) {
       throw new Error(`App ${app.definition.name} has no selection item '@${key}'.`)
@@ -336,18 +340,25 @@ export type TaoRuntimeApp = RuntimeAppDefinition
 
 function resolveStrictAppTarget(
   taoProps: TaoProps | undefined,
-  target: RuntimeAppDefinition,
+  target: RuntimeAppDefinition | undefined,
   operation: 'activate' | 'replace' | 'target',
 ): RuntimeAppDefinition {
-  const app = TaoPropsControls.appInChain(
-    taoProps,
-    candidate => candidate.declaration.identity === target.declaration.identity,
-  )
+  // Without a named target the nearest enclosing app is the address. Naming one narrows the walk
+  // to that declaration, which is the assertion the name buys.
+  const app = target === undefined
+    ? TaoPropsControls.appInChain(taoProps)
+    : TaoPropsControls.appInChain(
+      taoProps,
+      candidate => candidate.declaration.identity === target.declaration.identity,
+    )
   if (app) {
     return app
   }
+  const named = target?.declaration.name
   throw new UnexpectedBehaviorError(
-    `Cannot ${operation} app '${target.declaration.name}': no enclosing instance matches its declaration.`,
-    { details: { appDeclaration: target.declaration.name, operation } },
+    named === undefined
+      ? `Cannot ${operation}: no enclosing app instance.`
+      : `Cannot ${operation} app '${named}': no enclosing instance matches its declaration.`,
+    { details: { appDeclaration: named, operation } },
   )
 }

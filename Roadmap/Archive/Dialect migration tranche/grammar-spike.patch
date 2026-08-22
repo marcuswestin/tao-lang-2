@@ -1,0 +1,174 @@
+diff --git a/packages/parser/parser-grammar/blocks.langium b/packages/parser/parser-grammar/blocks.langium
+index ee8eb45a..1edd392f 100644
+--- a/packages/parser/parser-grammar/blocks.langium
++++ b/packages/parser/parser-grammar/blocks.langium
+@@ -51,5 +51,7 @@ Block:
+ ParameterList:
+     '(' (parameters+=ParameterDeclaration (',' parameters+=ParameterDeclaration)*)? ')';
+ 
++// SPIKE: trailing traits alongside the shipped `default` clause, additive for the spike.
+ ParameterDeclaration:
+-    (inlineType=ParameterTypeDeclaration | type=NamedTypeReference) ('default' defaultValue=Expression)?;
++    (inlineType=ParameterTypeDeclaration | type=NamedTypeReference optional?='?'?)
++    (traits=TraitList | 'default' defaultValue=Expression)?;
+diff --git a/packages/parser/parser-grammar/data.langium b/packages/parser/parser-grammar/data.langium
+index a4f20fd5..05404509 100644
+--- a/packages/parser/parser-grammar/data.langium
++++ b/packages/parser/parser-grammar/data.langium
+@@ -14,7 +14,7 @@ EntityDataDeclarationBlock:
+     '{' entries+=(EntityDataField | DataIndex | DataDefaultOrder)* '}';
+ 
+ EntityDataField:
+-    name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' 'no' negativeName=BOOLEAN_NO_ALIAS?)?
++    name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' negativeName=ID? 'no')?
+     ('(' modifiers+=EntityDataFieldModifier (',' modifiers+=EntityDataFieldModifier)* ')')?;
+ 
+ EntityDataFieldModifier:
+@@ -34,10 +34,6 @@ DataPrimitiveType returns string:
+ NowExpression:
+     {infer NowExpression} 'now';
+ 
+-// Kept distinct from ID so the token builder can require the optional no-case alias to be
+-// on the same source line as `yes / no`; otherwise the next field name is indistinguishable.
+-terminal BOOLEAN_NO_ALIAS: /\x00/;
+-
+ EntityQueryDeclaration:
+     'query' (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?;
+ 
+diff --git a/packages/parser/parser-grammar/expressions.langium b/packages/parser/parser-grammar/expressions.langium
+index 01deb69f..f0c1563b 100644
+--- a/packages/parser/parser-grammar/expressions.langium
++++ b/packages/parser/parser-grammar/expressions.langium
+@@ -19,9 +19,10 @@ Argument:
+ ArgumentValue infers Expression:
+     Expression;
+ 
++// SPIKE: `returns` accepts a full type expression so `returns item { ... } { body }` parses.
+ FunctionDeclaration:
+     visibility=DeclarationVisibility? 'function' name=ID parameterList=ParameterList
+-    ('returns' returnType=TypeReference)? block=FunctionBlock;
++    ('returns' returnType=TypeExpression)? block=FunctionBlock;
+ 
+ FunctionBlock:
+     '{' statements+=FunctionStatement* '}';
+@@ -35,8 +36,12 @@ ReturnStatement:
+ IfFunctionStatement:
+     'if' condition=Expression block=FunctionBlock;
+ 
++// SPIKE: `from` binds loosest, taking the whole expression to its left.
+ Expression:
+-    OrExpression;
++    FromExpression;
++
++FromExpression infers Expression:
++    OrExpression ({infer FromExpression.value=current} 'from' path=USE_IMPORT_PATH)?;
+ 
+ OrExpression infers Expression:
+     AndExpression ({infer BinaryExpression.left=current} operator='or' right=AndExpression)*;
+@@ -59,8 +64,12 @@ AdditionExpression infers Expression:
+ MultiplicationExpression infers Expression:
+     UnaryExpression ({infer BinaryExpression.left=current} operator=('*' | '/') right=UnaryExpression)*;
+ 
++// SPIKE: postfix `.member` on any primary carries unit accessors (`1.ms`, `(1.cm).meters`).
+ UnaryExpression infers Expression:
+-    ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PrimaryExpression;
++    ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PostfixExpression;
++
++PostfixExpression infers Expression:
++    PrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+ 
+ PrimaryExpression infers Expression:
+     '(' Expression ')' | WhenExpression | ActionExpression | TypedInjectionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
+diff --git a/packages/parser/parser-grammar/terminals.langium b/packages/parser/parser-grammar/terminals.langium
+index 3f9d883f..f38398c5 100644
+--- a/packages/parser/parser-grammar/terminals.langium
++++ b/packages/parser/parser-grammar/terminals.langium
+@@ -10,7 +10,8 @@ terminal STRING_TEXT: /([^"\\{]|\\.)+/;
+ terminal STRING_END: /\x22/;
+ terminal INTERPOLATION_START: /\{/;
+ terminal STRING: /"([^"\\{]|\\.)*"/;
+-terminal NUMBER returns number: /[0-9]+/;
++// SPIKE: decimals, so `1.5` lexes as one number while `1.ms` stays NUMBER '.' ID.
++terminal NUMBER returns number: /[0-9]+(\.[0-9]+)?/;
+ terminal ID: /[_a-zA-Z][\w_]*/;
+ terminal USE_IMPORT_PATH: /(@[a-zA-Z0-9._\-]+(\/[a-zA-Z0-9._\-]+)*)|(\.\/[a-zA-Z0-9._\-@\/]*)|(\.\.(\/[a-zA-Z0-9._\-@]+)*\/?)|([a-zA-Z.][a-zA-Z0-9._\-]*\/[a-zA-Z0-9._\-@\/]*)/;
+ terminal TagOrHexColor: /#[A-Za-z0-9_]+/;
+diff --git a/packages/parser/parser-grammar/types.langium b/packages/parser/parser-grammar/types.langium
+index 71a0f8db..555fd138 100644
+--- a/packages/parser/parser-grammar/types.langium
++++ b/packages/parser/parser-grammar/types.langium
+@@ -24,7 +24,7 @@ TypeDeclaration:
+     visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;
+ 
+ TypeExpression:
+-    DerivedTypeExpression | UnionTypeExpression | ItemTypeExpression | TypeReference;
++    DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
+ 
+ DerivedTypeExpression:
+     base=TypeReference 'with' slots=ItemTypeExpression;
+@@ -32,15 +32,36 @@ DerivedTypeExpression:
+ UnionTypeExpression:
+     members+=TypeReference ('|' members+=TypeReference)+;
+ 
++// SPIKE: decided dialect closed case sets, replacing `enum Name { Cases }`.
++CaseSetTypeExpression:
++    'one' 'of' cases+=CaseSetCase (',' cases+=CaseSetCase)*;
++
++CaseSetCase:
++    name=ID | literal=STRING;
++
++// SPIKE: alias moved before `no`, so the keyword terminates it and no contextual token is needed.
++YesNoTypeExpression:
++    'yes' '/' negativeName=ID? 'no';
++
++// SPIKE: decided dialect writes the structural record type as `item { ... }`.
+ ItemTypeExpression:
+-    '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation) ','?)* '}';
++    'item'? '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation) ','?)* '}';
+ 
++// SPIKE: postfix `?` carries optionality; the trailing list carries every other trait.
+ TypeProperty:
+-    (((optional?='optional' name=ID | name=ID) type=TypeReference?) | name='implement')
++    ((name=ID type=TypeReference? optional?='?'? traits=TraitList?) | name='implement')
+     ('is' value=Expression)?;
+ 
++// SPIKE: shared trailing trait list for fields, item fields, and parameters.
++TraitList:
++    '(' traits+=Trait (',' traits+=Trait)* ')';
++
++Trait:
++    'default' value=Expression | name=ID value=Expression? ;
++
++// SPIKE: juxtaposition replaces `Name is Type` in parameter lists.
+ ParameterTypeDeclaration:
+-    name=ID 'is' type=TypeExpression;
++    name=ID type=TypeExpression optional?='?'?;
+ 
+ TypeReference:
+     ActionTypeReference | ListTypeReference | PrimitiveTypeReference | NamedTypeReference;
+diff --git a/packages/parser/parser-src/tao-token-builder.ts b/packages/parser/parser-src/tao-token-builder.ts
+index 630c9bd2..bf97a3ca 100644
+--- a/packages/parser/parser-src/tao-token-builder.ts
++++ b/packages/parser/parser-src/tao-token-builder.ts
+@@ -30,7 +30,6 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
+     const stringText = requiredToken(byName, 'STRING_TEXT')
+     const stringEnd = requiredToken(byName, 'STRING_END')
+     const interpolationStart = requiredToken(byName, 'INTERPOLATION_START')
+-    const booleanNoAlias = requiredToken(byName, 'BOOLEAN_NO_ALIAS')
+     const openBrace = requiredToken(byName, '{')
+     const closeBrace = requiredToken(byName, '}')
+ 
+@@ -40,13 +39,6 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
+     interpolatedStart.PUSH_MODE = stringMode
+     stringEnd.POP_MODE = true
+     interpolationStart.PUSH_MODE = expressionMode
+-    booleanNoAlias.PATTERN = matchBooleanNoAlias
+-    booleanNoAlias.LINE_BREAKS = false
+-    booleanNoAlias.START_CHARS_HINT = identifierStarts
+-    tokens.splice(tokens.indexOf(booleanNoAlias), 1)
+-    // The optional no-case alias may itself be an otherwise reserved word (`Name`, for example),
+-    // so its contextual token must win before both keywords and the ordinary identifier token.
+-    tokens.unshift(booleanNoAlias)
+     // Pushing the expression mode for every ordinary brace makes nested action/item/block
+     // expressions balance naturally. The final interpolation brace then returns to string mode.
+     openBrace.PUSH_MODE = expressionMode

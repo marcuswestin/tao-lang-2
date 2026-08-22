@@ -46,7 +46,7 @@ Describe('parser: minimal design declarations', () => {
   Test('keeps digit-leading contextual tokens parseable in tag syntax for semantic validation', async () => {
     const parsed = await testParseCode(`
       test "tag shape" {
-        check "digit tag" {
+        test "digit tag" {
           press #123abc
         }
       }

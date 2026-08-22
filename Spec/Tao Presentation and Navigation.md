@@ -104,30 +104,30 @@ select an app.
 The stdlib navs are ordinary Tao declarations whose public properties are their complete generic
 configuration contract:
 
-Reusable nav types use `type Name is nav with { ... }`. Their explicit protocol-binding clause
-retains `implement inject nav`; it fills primitive `nav`'s implementation requirement but is not an
+Reusable nav types use `type Name is nav with { ... }`. Their explicit protocol-binding clause is
+`nav <Export> from <path>`; it fills primitive `nav`'s implementation requirement but is not an
 ordinary Tao data property.
 
-````tao
-public type StackNav is nav with {
+```tao
+public
+type StackNav is nav with {
    Initial ui
 
-   implement inject nav ```ts
-      return TR.NavKind.Stack()
-   ```
+   nav StackNavKind from ./NavKinds.ts
 }
-````
+```
 
-A reusable `nav` type is top-level, has `package`, `workspace`, or `public` visibility, and binds one
-implementation with `implement inject nav`; it is not a render-bearing product declaration. The
+A reusable `nav` type is top-level, declares its visibility, and binds one implementation with
+`nav <Export> from <path>`; it is not a render-bearing product declaration. The
 binding is package-level in the sense that it belongs to the declaration rather than an app or an
 inline configuration. The validator reads property names, types, required values, and an optional
 `@key` item contract from the linked declaration. Copied or third-party nav declarations therefore
 receive the same validation and compilation without compiler name cases.
 
-The implementation may remain an inline `ts` fence or name a sibling TypeScript sidecar, for
-example `implement inject nav "./StackNav.ts"`. A sidecar default-exports a zero-argument factory;
-the compiler copies and imports it into generated output and evaluates it once for the declaration.
+The implementation always names a sibling TypeScript sidecar, for example
+`nav StackNavKind from ./NavKinds.ts`; the inline fence is retired. The sidecar exports the named
+zero-argument factory — a named export, never a default — and the compiler copies and imports it
+into generated output and evaluates it once for the declaration.
 The resulting value implements the published `TR.NavKind` protocol. Its immutable descriptor keeps
 the Tao declaration identity and normalized configuration. Each mount creates independent state.
 The protocol owns `configure`, `mount`, `render`, `present`, `dismiss`, `back`, `reset`,
@@ -210,7 +210,7 @@ incorrectly typed arguments are diagnostics, and source order never disambiguate
 
 ## Dialogue, dismissal, and replacement
 
-A dialogue declares the enum it can answer:
+A dialogue declares the case set it can answer:
 
 ```tao
 dialogue ConfirmClose(Document) responds ConfirmResult {
@@ -225,7 +225,7 @@ action CloseDocument() {
 ```
 
 `ask` creates an independent stacked occurrence above the nearest nav and suspends only its calling
-action until that occurrence answers. `respond Case` supplies the declared enum case. Bare `respond`,
+action until that occurrence answers. `respond Case` supplies the declared case. Bare `respond`,
 Back, or plain dismissal answers `none`. Removal completes before the suspended continuation resumes.
 
 Outside a dialogue, `dismiss` delegates to the nearest enclosing nav. It removes the top overlay,

@@ -70,7 +70,7 @@ function validateExplicitReturnType(
   returns: readonly AST.ReturnStatement[],
   ctx: ValidationContext,
 ): void {
-  const expected = Type.ofReference(fn.returnType!)
+  const expected = Type.ofTypeExpression(fn.returnType!)
   if (expected.kind === 'unresolved') {
     return
   }

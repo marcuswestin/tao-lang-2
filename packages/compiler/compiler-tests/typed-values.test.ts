@@ -12,10 +12,10 @@ Describe('compiler: typed values', () => {
     Expect(code.match(/TR\.Call\(_Scope\.Join, _Scope\.Tags\.evaluate\(\), TR\.Value\(", "\)\)/g)).toHaveLength(2)
   })
 
-  Test('wraps typed injection results and omits absent optional item fields', async () => {
+  Test('wraps typed injection results and omits absent item fields?', async () => {
     const compiled = await Compiler.compileCode(`
-      type Profile is { Name text, optional Subtitle text }
-      function Join(Values is list of text, Separator is text) returns text {
+      type Profile is { Name text, Subtitle text? }
+      function Join(Values list of text, Separator text) returns text {
         return inject text Values, Separator \`\`\`ts
           return Values.join(Separator)
         \`\`\`
@@ -26,7 +26,7 @@ Describe('compiler: typed values', () => {
         let Joined = Join(["Ada", "Grace"], " + ")
         render Native(Joined)
       }
-      view Native(Value is text) {
+      view Native(Value text) {
         render inject Value \`\`\`ts
           return null
         \`\`\`
@@ -62,7 +62,7 @@ function promptTagsApp(): string {
       StarterTags
     }
 
-    function Join(Values is list of text, Separator is text) returns text {
+    function Join(Values list of text, Separator text) returns text {
       return inject text Values, Separator \`\`\`ts
         return Values.join(Separator)
       \`\`\`
@@ -70,12 +70,12 @@ function promptTagsApp(): string {
 
     app TypedTags { view Main }
     view Main() { render TagSummary(StarterPrompt.PromptTags) }
-    view TagSummary(Tags is PromptTags) {
+    view TagSummary(Tags PromptTags) {
       let Positional = Join(Tags, Separator: ", ")
       let Labeled = Join(Values: Tags, Separator: ", ")
       render Text("{ Positional } / { Labeled }")
     }
-    view Text(Value is text) {
+    view Text(Value text) {
       render inject Value \`\`\`ts return null \`\`\`
     }
   `

@@ -1,0 +1,238 @@
+// Getting in, Today, who lives here, and settings.
+
+ui Loading() {
+   render Col [screen, content center center] { Spinner(Label: "Opening Hearth…") }
+}
+
+ui Welcome() {
+   render ScrollView [screen] {
+      Col [page, width max 560, content center center] {
+         Icon("flame") [size 48, ink accent, decorative]
+         Text("Hearth") [pageTitle]
+         Text("A shared place for the life you tend together.") [body, muted]
+         when Me {
+            loading -> Status("Opening Hearth…")
+            signed out -> SignInPanel
+            error -> Message { Status(Message, Tone: Warning) }
+            otherwise -> HomePicker
+}  }  }  }
+
+file view SignInPanel() {
+   state Email = ""
+   action SendLink() runs single {
+      stop if Email is empty
+      when sign in with email Email {
+         done -> present Notice("Check your inbox — the link signs you in on this device.") as toast (Key: "sign-in")
+   }  }
+   render Col [card, gap sm] {
+      #email
+      TextInput(Value: Email, Label: "Email", Placeholder: "you@example.com", Keyboard: email) { on submit SendLink }
+      Button("Email me a sign-in link", Disabled: Email is empty, Busy: SendLink running) [primary] { on press SendLink }
+}  }
+
+// A person with two homes picks one; a person with none makes one. Choosing is a write to a preference.
+file view HomePicker() {
+   query MyMemberships from Me.Memberships { order by JoinedAt }
+   render Col [gap lg] {
+      guard MyMemberships
+      if MyMemberships is not empty {
+         Text("Choose a home") [sectionTitle]
+         List(MyMemberships as Membership) {
+            Row [pattern Line, surface, pad md] {
+               Col [accentMark(Membership.Home.Accent), @leading, decorative]
+               Col [@content, gap xxs] {
+                  Text(Membership.Home.Name) [sectionTitle]
+                  Text(Membership.Role) [caption]
+               }
+               Icon("chevron.right") [muted, @trailing]
+            }
+            on select -> update Me { CurrentHome: Membership.Home }
+      }  }
+      StartHomePanel
+}  }
+
+file view StartHomePanel() {
+   draft New = Home for new
+   action Create() runs single {
+      stop if New.Incomplete
+      when CreateHome(New.Name) {
+         done -> discard New // the root follows `MyHome`; nothing to navigate
+         rejected -> Problem { invalidate New with Problem }
+   }  }
+   render Col [card, gap md] {
+      Text("Make a home") [sectionTitle]
+      Text("One calm place for everything your household tends.") [body, muted]
+      #homeName
+      TextInput(Value: New.Name, Label: "Home name", Focus: initial) { on submit Create }
+      Problems(New)
+      #createHome
+      Button("Create home", Disabled: New.Incomplete, Busy: Create running) [primary] { on press Create }
+}  }
+
+ui JoinHome(Code secret) {
+   Title "Join home"
+   let Invited = InvitedHome by Code
+   state Refusal = ""
+   action Join() runs single {
+      when JoinWithInvite(Code) {
+         done -> dismiss // the root follows the account; the home appears behind the sheet
+         rejected -> Problem { set Refusal = Problem }
+   }  }
+   render Col [gap lg, pad lg, width max 520] {
+      guard Me signed out -> {
+         Text("Sign in first — this invitation will be waiting.") [body]
+         SignInPanel
+      }
+      guard Invited // loading and missing fall to `guard default`; an expired invitation is refused with a sentence on Join
+      Text("You're invited to { Invited.Name }") [title]
+      Text("You'll see its lists, add to them, and take care of things together.") [body, muted]
+      if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }
+      #join
+      Button("Join { Invited.Name }", Busy: Join running) [primary] { on press Join }
+      Button("Not now") [quiet] { on press -> dismiss }
+}  }
+
+// -- Today ---------------------------------------------------------------------------------------------------
+
+ui TodayScreen() {
+   Title "Today at { MyHome.Name }"
+   Toolbar { AddSomething [primary] }
+   query DueToday from MyHome.Lists.Items {
+      where is Open
+      where Due < end of today in MyHome.TimeZone or (Due is none and CreatedAt during today in MyHome.TimeZone)
+      order by Due
+   }
+   query Mine from MyHome.Lists.Items {
+      where is Open and Assignee is Me and Due is none
+      order by CreatedAt desc
+      limit 5
+   }
+   render ScrollView [screen] {
+      Col [page] {
+         Text(today.Long) [muted] // a date prints in the reader's language
+         OfflineNotice
+         guard DueToday
+         Section("Due today") {
+            if DueToday is empty {
+               EmptyState(Icon: "sun.max", Title: "Nothing due today", Body: "The day has room to breathe.") {
+                  AddSomething [secondary]
+            }  }
+            #todayItems
+            List(DueToday as Item) { HearthItemRow(Item); on select -> open ItemLink(Item) }
+         }
+         if Mine is not empty { // a query read before its guard is empty while unavailable
+            Section("Yours, whenever") {
+               List(Mine as Item) { HearthItemRow(Item); on select -> open ItemLink(Item) }
+}  }  }  }  }
+
+// -- People -----------------------------------------------------------------------------------------------------
+
+ui PeopleScreen() {
+   Title "People"
+   Toolbar { InviteSomeone }
+   query Members from MyHome.Memberships { order by JoinedAt }
+
+   command InviteSomeone {
+      Label "Invite someone"
+      Icon "person.badge.plus"
+      Key "cmd+i"
+      Available when can create Invite in MyHome.Invites
+      runs single
+      does {
+         let Invite = ask InviteSheet(MyHome)
+         stop if Invite is none
+         share JoinLink(Invite.Code)
+         present Notice("Invite link ready — it works once, for seven days") as toast (Key: "invite")
+   }  }
+
+   render ScrollView [screen] {
+      Col [page, width max 760] {
+         OfflineNotice
+         Section("Who lives here") {
+            @actions InviteSomeone
+            guard Members
+            loop Members as Member {
+               Row [pattern Line] {
+                  Image(Member.Person.Photo, Description: Member.Person.Name) [size 32, radius pill, @leading]
+                  Col [@content, gap xxs] {
+                     Text(Member.Person.Name) [body]
+                     Text(Member.Role) [caption]
+                  }
+                  if can change Member.Role { Choice(Value: Member.Role, Label: "Role for { Member.Person.Name }") [@trailing] }
+                  if Member.Person is Me { Text("You") [chip, @trailing] }
+                  if can delete Member and Member.Person is not Me {
+                     Button(Icon: "minus.circle", Label: "Remove { Member.Person.Name }") [quiet, @trailing] {
+                        on press -> if ask Confirm("Remove { Member.Person.Name }?", Body: "They will lose access to this home.", Verb: "Remove") { delete Member }
+}  }  }  }  }  }  }  }
+
+file dialogue InviteSheet(Home) responds Invite {
+   draft New = Invite for new { Home, Role: Adult }
+   let Grantable = Role.Cases where can create Invite in Home.Invites { Role } // only an owner may mint an owner
+   action Send() runs single {
+      when InviteToHome(Home, New.Role, New.Email) {
+         done -> Invite { respond Invite }
+         rejected -> Problem { invalidate New with Problem }
+   }  }
+   render Col [card, width max 480, gap md] {
+      Text("Invite someone") [sectionTitle]
+      #inviteEmail
+      TextInput(Value: New.Email, Label: "Email (optional — leave blank for a link anyone may use once)", Keyboard: email)
+      Choice(Value: New.Role, Label: "Role", Options: Grantable)
+      Problems(New)
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> respond }
+         #sendInvite
+         Button("Create invite link", Busy: Send running) [primary] { on press Send }
+}  }  }
+
+// -- Settings ------------------------------------------------------------------------------------------------------
+
+ui SettingsScreen() {
+   Title "Settings"
+
+   command Leave {
+      Label "Leave this home"
+      Icon "rectangle.portrait.and.arrow.right"
+      runs single
+      does {
+         stop unless ask Confirm("Leave { MyHome.Name }?", Body: "You will lose access to its lists.", Verb: "Leave")
+         do LeaveHome(MyMembership) // a last owner is refused with the home's own sentence
+   }  }
+   command DeleteAccount {
+      Label "Delete my account"
+      Icon "person.crop.circle.badge.xmark"
+      Intent destructive
+      runs single
+      does {
+         stop unless ask Confirm("Delete your account?", Body: "Your homes stay with the people in them. This cannot be undone.", Verb: "Delete account")
+         do DeleteMyAccount()
+   }  }
+
+   render ScrollView [screen] {
+      Col [page, width max 720] {
+         Section("This home") {
+            if can change MyHome {
+               #homeName
+               TextInput(Value: MyHome.Name, Label: "Home name")
+               Choice(Value: MyHome.Accent, Label: "Accent")
+               Choice(Value: MyHome.TimeZone, Label: "Time zone")
+               Problems(MyHome)
+         }  }
+         Section("Reminders") {
+            Text("A quiet reminder shortly before something is due, for whoever is taking care of it — never during quiet hours.") [caption]
+            PermissionRow(notifications, Label: "Upcoming items")
+         }
+         Section("Around") {
+            PermissionRow(location, Label: "Errands near you")
+         }
+         Section("You") {
+            Choice(Value: Me.Language, Label: "Language", Options: project.languages)
+            Toggle(Value: Me.KeepOffline, Label: "Keep this home on my device")
+            Text(Me.Email) [caption]
+            #switchHome
+            Button("Switch home", Icon: "house") [quiet] { on press -> update Me { CurrentHome: none } } // the root re-reads `MyHome`
+            #leave
+            Leave [quiet]
+            Button("Sign out") [quiet] { on press -> sign out }
+            DeleteAccount [quiet]
+}  }  }  }

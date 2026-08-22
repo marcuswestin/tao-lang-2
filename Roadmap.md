@@ -3,8 +3,11 @@
 Open work only. Completed work is recorded under `Roadmap/Archive/`.
 
 Language features are built in tranches through the WordFlower app family: decisions are settled in
-`Apps/WordFlower/2 - Next`, implemented into `1 - Current` slice by slice, then `3 - MVP` and
-`4 - Revolution` are reconciled once. `Apps/WordFlower/README.md` owns that process.
+`Apps/WordFlower/2 - Next` and implemented into `1 - Current` slice by slice.
+`Apps/WordFlower/README.md` owns the tranche mechanics. The language target and the program that
+reaches it — first MVP, then Revolution — are owned by `Roadmap/Tao Revolution/`: `Decisions.md`
+(what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
+app feature and Tao test proves each capability).
 
 ## Documentation cleanup
 
@@ -23,16 +26,49 @@ neither blocks a tranche.
     dispositions, but it predates the tranche 4 documentation edits, so re-verify each finding
     against the current files before acting on it.
 
-## Current tranche
+## The Tao Revolution program
 
-- [ ] Cut tranche 5 from the gap between Current and MVP
-  - Tranche 4 is absorbed: `1 - Current` and `2 - Next` are byte-identical and both read
-    `Tranche status: absorbed`. InstantDB, remote authorization semantics, richer data test controls,
-    snapshots, SplitNav/windows, semantic design recipes, and general concurrency policy are the
-    largest capabilities still held in the later tiers.
+The language target is fully decided (`Roadmap/Tao Revolution/Decisions.md`); the steps below are
+`Process.md`'s sequence as open work, in order. The dialect tranche is absorbed (`1 - Current` and
+`2 - Next` are byte-identical, both `Tranche status: absorbed`), so everything written anywhere is
+now written once, in the final dialect. Each step lands per the tranche definition of done: behavior
+tests written in Tao, green in Current, for every construct introduced.
+
+- [x] Cut and implement the dialect-migration tranche (Process step 1)
+  - Closed. `Roadmap/Archive/Dialect migration tranche/` holds the brief and prompt.
+- [ ] Cut and implement the focused writing tranche
+  - The first tranche from the Current ↔ MVP gap: unit values (§2) and `@tao/time` (§9), forced by
+    a focused writing mode in WordFlower. **Ready to start:** the brief names the slices and the
+    three questions to settle first — `Roadmap/Focused writing tranche/`.
+- [ ] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
+  - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
+    as sibling references.
+- [ ] Consolidate the `Apps/Tao Future/` apps to the decided dialect (Process step 3)
+  - The three demos are design D's dialect today; align them to `Decisions.md` and complete
+    `Coverage.md`'s rows during the port.
+- [ ] Re-derive `3 - MVP` by omission (Process step 4)
+  - Same spellings as Revolution, fewer capabilities. Includes the focused-writing mode (the
+    `@tao/time` forcing feature); excludes automations; settles the authority-cluster scope
+    question recorded in `Process.md`.
+- [ ] Cut tranches from the Current ↔ MVP gap until Current ≡ MVP (Process step 5)
+  - One tranche at a time per the definition of done; then expand to the Tao Future apps
+    (Skillet first) and continue toward Revolution the same way. The previously noted gap
+    capabilities — InstantDB, remote authorization semantics, richer data test controls, snapshots,
+    SplitNav/windows, semantic design recipes, concurrency policy — are now scoped by
+    `Coverage.md`'s tier column.
 
 ## Toward v1
 
+- [ ] Implement a drag-and-drop example app
+  - Drag and drop stress-tests more UI assumptions at once than anything else: gesture ownership
+    (loop vs cell vs scroll container), drag previews, declarable drop targets (including
+    non-collection targets like a trash zone), cross-container moves against `(ordered)` store
+    positions and `on move`, edge auto-scroll, and a drop as an authorized write (`can change`
+    interposing). Build it over a Skillet-style grocery list (reorder within an aisle, drag across
+    aisles, drag to "bought"), bridging RN Gesture Handler + Reanimated the way the card grid
+    bridges FlashList. Deliberately an example app to implement, not a design decision to settle
+    up front — findings feed back through the tranche process. Context:
+    `Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 intents).
 - [ ] Harden `tao test`
   - Filters, watch and CI output, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
 - [ ] Add the Tao design system MVP

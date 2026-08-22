@@ -22,7 +22,7 @@ Describe('validator: frame content and render injection channels', () => {
       view Label() {
         render inject Layout @@layout, Tag @@tag ${tsFence} return null ${fence}
       }
-      view Button(Press is action()) {
+      view Button(Press action()) {
         render inject Press, Layout @@layout, Tag @@tag ${tsFence} return null ${fence}
       }
       view Main() {

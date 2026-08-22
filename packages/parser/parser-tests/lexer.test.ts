@@ -56,15 +56,17 @@ Describe('parser: lexer', () => {
     Expect(tokenImages(result)).toEqual(['```ts\nconst x = 1\n```'])
   })
 
-  Test('lexes a reserved word as a contextual boolean no-case alias', () => {
-    const result = testLexCode('Enabled yes / no Name (default Enabled)')
+  // The alias precedes `no`, so the keyword terminates it and it lexes as an ordinary identifier.
+  // The contextual BOOLEAN_NO_ALIAS token this once required is deleted.
+  Test('lexes a boolean no-case alias as an ordinary identifier', () => {
+    const result = testLexCode('Enabled yes / Name no (default Enabled)')
 
     Expect(tokenNames(result)).toEqual([
       'ID',
       'yes',
       '/',
+      'ID',
       'no',
-      'BOOLEAN_NO_ALIAS',
       '(',
       'default',
       'ID',

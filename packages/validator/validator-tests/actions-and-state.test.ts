@@ -15,7 +15,7 @@ import {
 } from './test-validate'
 
 const invocationMessages = InvocationsValidator.messages
-const textView = stubView('Text', 'Value is text')
+const textView = stubView('Text', 'Value text')
 const stackLayout = stubLayout('Stack')
 
 function actionApp(body: string, extra = ''): string {
@@ -28,7 +28,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'render Button("Shared", SharedAction)',
-        `action SharedAction() { }\n${stubView('Button', 'Title is text, Action is action')}`,
+        `action SharedAction() { }\n${stubView('Button', 'Title text, Action action')}`,
       ),
     ),
   )
@@ -53,7 +53,7 @@ Describe('validator: actions and state', () => {
       action AddOne() { }
       render Button("Add", LaterClick)
     `,
-      stubView('Button', 'Title is text, Action is action'),
+      stubView('Button', 'Title text, Action action'),
     )),
   )
 
@@ -104,22 +104,22 @@ Describe('validator: actions and state', () => {
       },
       {
         title: 'reports a missing action argument',
-        body: 'action AddStep(Step is number) { }\naction Call() { do AddStep() }',
+        body: 'action AddStep(Step number) { }\naction Call() { do AddStep() }',
         messages: [ActionsValidator.messages.missingArgument('AddStep', 'Step')],
       },
       {
         title: 'reports an unmatched action argument',
-        body: 'action AddStep(Step is number) { }\naction Call() { do AddStep("one") }',
+        body: 'action AddStep(Step number) { }\naction Call() { do AddStep("one") }',
         messages: [ActionsValidator.messages.unmatchedArgument('AddStep')],
       },
       {
         title: 'reports duplicate exact action argument types',
-        body: 'action AddStep(Step is number) { }\naction Call() { do AddStep(1, 2) }',
+        body: 'action AddStep(Step number) { }\naction Call() { do AddStep(1, 2) }',
         messages: [ActionsValidator.messages.duplicateArgumentType('AddStep')],
       },
       {
         title: 'reports arguments ambiguous between same-typed action parameters',
-        body: 'action Save(First is number, Second is number) { }\naction Call() { do Save(1) }',
+        body: 'action Save(First number, Second number) { }\naction Call() { do Save(1) }',
         messages: ['Action Save has an argument that matches multiple parameters by type: First, Second.'],
       },
       {
@@ -148,12 +148,12 @@ Describe('validator: actions and state', () => {
       },
       {
         title: 'rejects action parameters that shadow visible state declarations',
-        body: 'state Count = 0\naction Add(Count is number) { set Count += Count }',
+        body: 'state Count = 0\naction Add(Count number) { set Count += Count }',
         messages: [AliasesValidator.messages.duplicateName('Count')],
       },
       {
         title: 'reports action arity through action aliases',
-        body: 'action AddStep(Step is number) { }\nlet CallAdd = AddStep\naction Missing() { do CallAdd() }',
+        body: 'action AddStep(Step number) { }\nlet CallAdd = AddStep\naction Missing() { do CallAdd() }',
         messages: [ActionsValidator.messages.missingArgument('AddStep', 'Step')],
       },
       {
@@ -217,7 +217,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'render Wrapper(action { })',
-        `${textView}\nview Wrapper(Callback is action) {
+        `${textView}\nview Wrapper(Callback action) {
         action CallCallback() { do Callback(1) }
         render Text("Ready")
       }`,
@@ -249,8 +249,8 @@ Describe('validator: actions and state', () => {
       title,
       rejects(
         app(
-          'action Change(Value is text) { }\nrender Wrapper(Change)',
-          `${textView}\nview Wrapper(Callback is action(text)) {
+          'action Change(Value text) { }\nrender Wrapper(Change)',
+          `${textView}\nview Wrapper(Callback action(text)) {
           action Call() { ${call} }
           render Text("Ready")
         }`,
@@ -270,8 +270,8 @@ Describe('validator: actions and state', () => {
       title,
       rejects(
         app(
-          'action Change(Value is number) { }\nrender Field(Change: Change, Submit: Change)',
-          `${textView}\n${stubView('Field', 'Change is action(text), Submit is action()')}`,
+          'action Change(Value number) { }\nrender Field(Change: Change, Submit: Change)',
+          `${textView}\n${stubView('Field', 'Change action(text), Submit action()')}`,
         ),
         invocationMessages.namedArgumentType('Field', parameter, expected, actual),
       ),
@@ -306,7 +306,7 @@ Describe('validator: actions and state', () => {
     rejects(
       actionApp(
         `
-        action Receive(Value is text) { }
+        action Receive(Value text) { }
         let Holder = CallbackHolder { Receive }
         action Call() { do Holder.Callback(1) }
       `,
@@ -320,13 +320,13 @@ Describe('validator: actions and state', () => {
     const result = await testValidateCodeWithErrors(app(
       `
       action Short(Message) { }
-      action Long(Message, Count is number default 1) { }
+      action Long(Message, Count number default 1) { }
       render Stack(){
         Consumer(Callback: when false { true -> Long otherwise -> Short })
         Consumer(Callback: when false { true -> Short otherwise -> Long })
       }
     `,
-      `type Message is text\n${stackLayout}\n${stubView('Consumer', 'Callback is action(text, number)')}`,
+      `type Message is text\n${stackLayout}\n${stubView('Consumer', 'Callback action(text, number)')}`,
     ))
 
     const messages = validationErrorMessages(result)
@@ -345,7 +345,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'render Wrapper(Callback: action { })',
-        `${textView}\nview Wrapper(Callback is action(text)) { render Text("Ready") }`,
+        `${textView}\nview Wrapper(Callback action(text)) { render Text("Ready") }`,
       ),
       invocationMessages.namedArgumentType('Wrapper', 'Callback', 'action(text)', 'action()'),
     ),

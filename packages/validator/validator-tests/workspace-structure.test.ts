@@ -10,6 +10,7 @@ import { projectValidationMessages } from '../validator-src/validators/project-v
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
 import { useValidationMessages, validateVisibleDeclarations } from '../validator-src/validators/use-validator'
 import {
+  accepts,
   app,
   rejects,
   stubView,
@@ -50,7 +51,7 @@ function testSuite(body: string, includeApp = true): string {
 }
 
 function testCheck(name: string, body: string, includeApp = true): string {
-  return testSuite(`check "${name}" { ${body} }`, includeApp)
+  return testSuite(`test "${name}" { ${body} }`, includeApp)
 }
 
 Describe('validator: workspace structure', () => {
@@ -64,7 +65,7 @@ Describe('validator: workspace structure', () => {
         title: 'rejects prototype-mutating parameters',
         source: `
         app ScopeApp { view MainView }
-        view MainView(__proto__ is text) { render Fixture() }
+        view MainView(__proto__ text) { render Fixture() }
         ${stubView('Fixture')}
       `,
       },
@@ -84,7 +85,7 @@ Describe('validator: workspace structure', () => {
 
   Test('auto-loads the parsed Tao prelude and exposes its primitive slot contracts', async () => {
     await withValidationParse(stubApp(), ({ result }) => {
-      const prelude = result.files.find(file => file.path.endsWith('/tao/Prelude.tao'))
+      const prelude = result.files.find(file => file.path.endsWith('/@tao/Prelude.tao'))
       Expect(prelude).toBeDefined()
       const primitives = prelude?.ast.statements.filter(AST.isPrimitiveDeclaration) ?? []
       Expect(primitives.map(declaration => declaration.name)).toEqual([
@@ -159,9 +160,9 @@ Describe('validator: workspace structure', () => {
   for (
     const checkCase of [
       {
-        title: 'rejects test suites without checks',
+        title: 'rejects a leaf test with no run step',
         source: testSuite('', false),
-        message: testValidationMessages.missingCheck('Smoke'),
+        message: testValidationMessages.missingRun('Smoke'),
       },
       {
         title: 'rejects duplicate run statements in one check',
@@ -212,11 +213,6 @@ Describe('validator: workspace structure', () => {
   for (
     const placementCase of [
       {
-        title: 'rejects checks at top level',
-        source: `${stubApp()}\ncheck "orphan" { run MyApp }`,
-        messages: [testValidationMessages.checkPlacement],
-      },
-      {
         title: 'rejects expectations at top level',
         source: 'expect text "Hello"',
         messages: [testValidationMessages.expectationPlacement],
@@ -232,22 +228,19 @@ Describe('validator: workspace structure', () => {
         messages: [testValidationMessages.checkBlock('renders')],
       },
       {
-        title: 'rejects nested test declarations',
-        source: 'test "Outer" { test "Inner" { } }',
-        messages: [testValidationMessages.testPlacement, testValidationMessages.testBlock('Outer')],
+        title: 'rejects mixing nested tests with steps in one block',
+        source: 'test "Outer" { test "Inner" { run MyApp } back }',
+        messages: [testValidationMessages.testBlock('Outer')],
       },
     ]
   ) {
     Test(placementCase.title, rejects(placementCase.source, ...placementCase.messages))
   }
 
-  Test('reports a run in a test block without a cascading run-placement diagnostic', async () => {
-    const result = await testValidateCodeWithErrors(testSuite('run MyApp'))
-    const messages = validationErrorMessages(result)
-
-    Expect(messages).toContain(testValidationMessages.testBlock('Smoke'))
-    Expect(messages).not.toContain(testValidationMessages.runPlacement)
-  })
+  Test(
+    'accepts nested tests, which are the decided grouping form',
+    accepts(`${stubApp()}\ntest "Smoke" { test "renders" { run MyApp\nexpect text "Hello" } }`),
+  )
 
   Test(
     'rejects app declarations outside the entry file',
@@ -291,8 +284,8 @@ Describe('validator: workspace structure', () => {
           use Text from ./views
           ${app('render Text("Hello")')}
         `,
-        'views/Views.tao': visibleView('Text', 'Value is text'),
-        'views/MoreViews.tao': visibleView('Text', 'Value is text'),
+        'views/Views.tao': visibleView('Text', 'Value text'),
+        'views/MoreViews.tao': visibleView('Text', 'Value text'),
       },
       useValidationMessages.ambiguousImport('Text', './views'),
     ),
@@ -306,7 +299,7 @@ Describe('validator: workspace structure', () => {
           app MyApp { view MainView }
           use Greeting from ./
           let Local = Greeting
-          ${stubView('Text', 'Value is text')}
+          ${stubView('Text', 'Value text')}
           view MainView() { render Text(Local) }
         `,
         'Views.tao': `
@@ -411,7 +404,7 @@ Describe('validator: workspace structure', () => {
         'features/@outer/Main.tao': `
           use NestedAlias
           workspace view MainView() { render Text(NestedAlias) }
-          ${stubView('Text', 'Value is text')}
+          ${stubView('Text', 'Value text')}
         `,
         'features/@outer/@inner/Main.tao': `
           package let NestedAlias = "Nested"

@@ -6,6 +6,28 @@ import { TestCompiler } from './test-compile'
 const tsFence = '```ts'
 const fence = '```'
 
+/** navSidecar writes the TypeScript half of one `nav <Export> from ./<Export>.ts` implementation. */
+function navSidecar(exportName: string): string {
+  return [
+    "import TR from '@runtime/TR'",
+    '',
+    `export function ${exportName}() {`,
+    '  return TR.NavKind.Stack()',
+    '}',
+  ].join('\n')
+}
+
+/** providerSidecar writes the TypeScript half of one `provider <Export> from ./<Export>.ts`. */
+function providerSidecar(exportName: string): string {
+  return [
+    "import TR from '@runtime/TR'",
+    '',
+    `export function ${exportName}() {`,
+    '  return TR.DataProvider.Local()',
+    '}',
+  ].join('\n')
+}
+
 Describe('compiler: files and packages', () => {
   Test('compiles source strings into a generated app file', async () => {
     const compiled = await Compiler.compileCode(`
@@ -13,7 +35,7 @@ Describe('compiler: files and packages', () => {
       view MainView() {
         render Text("Hello")
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -46,19 +68,17 @@ Describe('compiler: files and packages', () => {
         'Packages/@custom/Constructs.tao': `
           public type CustomStack is nav with {
             Initial ui
-            implement inject nav ${tsFence}
-              return TR.NavKind.Stack()
-            ${fence}
+            nav TestNavImpl from ./TestNavImpl.ts
           }
           public nav CustomStack = CustomStack { Initial PackageHome }
           public type SnapshotStore is datasource with {
             StorageKey text
-            implement inject provider ${tsFence}
-              return TR.DataProvider.Local()
-            ${fence}
+            provider TestProviderImpl from ./TestProviderImpl.ts
           }
           ui PackageHome() { render inject ${tsFence} return null ${fence} }
         `,
+        'Packages/@custom/TestNavImpl.ts': navSidecar('TestNavImpl'),
+        'Packages/@custom/TestProviderImpl.ts': providerSidecar('TestProviderImpl'),
       },
       async (compiled, files) => {
         const packageCode = compiled['Packages/@custom/Constructs.tao'].code
@@ -74,9 +94,14 @@ Describe('compiler: files and packages', () => {
 
         Expect(packageCode).toContain('_Scope.__tao_type_CustomStack = TR.Navigation.Declaration(')
         Expect(packageCode).toContain('_Scope.CustomStack = TR.Alias(TR.Navigation.Configure(')
-        Expect(packageInjections.some(file => file.code.includes('return TR.NavKind.Stack()'))).toBe(true)
+        Expect(packageCode).toContain(
+          "import { TestNavImpl as __tao_configuration_implementation_CustomStack__ } from './TestNavImpl'",
+        )
         Expect(packageCode).toContain('_Scope.__tao_type_SnapshotStore = TR.Data.Declaration(')
-        Expect(packageInjections.some(file => file.code.includes('return TR.DataProvider.Local()'))).toBe(true)
+        Expect(packageCode).toContain(
+          'import { TestProviderImpl as __tao_configuration_implementation_SnapshotStore__ } '
+            + "from './TestProviderImpl'",
+        )
         Expect(packageCode).toContain(
           'export const __tao_type_CustomStack = _Scope.__tao_type_CustomStack',
         )
@@ -90,9 +115,15 @@ Describe('compiler: files and packages', () => {
         Expect(appCode).toContain("TR.Use(_Scope, '__tao_type_CustomStack', () => __tao_type_CustomStack)")
         Expect(appCode).toContain("TR.Use(_Scope, 'CustomStack', () => CustomStack)")
         Expect(appCode).toContain("import __tao_injection_1__ from './App.injection-1'")
-        Expect(appCode).toContain("import __tao_injection_2__ from './App.injection-2'")
-        Expect(appInjections).toHaveLength(2)
-        Expect(appInjections.some(file => file.code.includes('return TR.NavKind.Stack()'))).toBe(true)
+        // Only the `ui Home` fence is an injection now: a derived declaration reuses its base's
+        // sidecar, which the app imports by name rather than re-emitting as a boundary file.
+        Expect(appInjections).toHaveLength(1)
+        Expect(packageInjections).toHaveLength(1)
+        Expect(appCode).toContain(
+          "import { TestNavImpl as __tao_configuration_implementation_LocalStack__ } from './TestNavImpl'",
+        )
+        Expect(sidecarCopy(files, 'TestNavImpl.ts').code).toContain('return TR.NavKind.Stack()')
+        Expect(sidecarCopy(files, 'TestProviderImpl.ts').code).toContain('return TR.DataProvider.Local()')
         Expect(appCode).toContain('TR.Navigation.Configure(_Scope.__tao_type_CustomStack, {')
         Expect(appCode).toContain('TR.Data.Configure(_Scope.__tao_type_SnapshotStore, {')
       },
@@ -104,19 +135,41 @@ Describe('compiler: files and packages', () => {
       "import TR from '@runtime/TR'",
       "import type { SidecarStackConfig } from './Constructs.tao'",
       '',
-      "export default function createSidecarStack(): TR.NavKind<'stack', SidecarStackConfig> {",
+      "export function SidecarStack(): TR.NavKind<'stack', SidecarStackConfig> {",
       '  return TR.NavKind.Stack()',
+      '}',
+    ].join('\n')
+    const navKindsCode = [
+      "import TR from '@runtime/TR'",
+      '',
+      'export function SlotNav() {',
+      '  return TR.NavKind.Slot()',
+      '}',
+      '',
+      'export function SelectionNav() {',
+      '  return TR.NavKind.Selection()',
+      '}',
+      '',
+      'export function CustomNav() {',
+      '  return TR.NavKind.Stack()',
+      '}',
+    ].join('\n')
+    const providersCode = [
+      "import TR from '@runtime/TR'",
+      '',
+      'export function MemoryProvider() {',
+      '  return TR.DataProvider.Memory()',
       '}',
     ].join('\n')
     await withTaoFiles(
       'tao-compiler-configuration-sidecar-',
       {
         'Main.tao': `
-          use SidecarStack, InlineStore from ./Constructs.tao
+          use SidecarStack, SidecarStore from ./Constructs.tao
           app Demo {
             Name "Demo"
             Navigator SidecarStack { Initial Home }
-            Datasource InlineStore { StorageKey "demo" }
+            Datasource SidecarStore { StorageKey "demo" }
           }
           ui Home() { render inject ${tsFence} return null ${fence} }
         `,
@@ -124,55 +177,60 @@ Describe('compiler: files and packages', () => {
           public type Presentable is ui | nav
           public type SidecarStack is nav with {
             Initial ui
-            implement inject nav "./SidecarStack.ts"
+            nav SidecarStack from ./SidecarStack.ts
           }
-          public type InlineSlot is nav with {
+          public type SidecarSlot is nav with {
             Initial Presentable
-            implement inject nav ${tsFence}
-              return TR.NavKind.Slot()
-            ${fence}
+            nav SlotNav from ./NavKinds.ts
           }
-          public type InlineSelection is nav with {
+          public type SidecarSelection is nav with {
             Initial key
             Display text
             @key { Label text Content Presentable }
-            implement inject nav ${tsFence}
-              return TR.NavKind.Selection()
-            ${fence}
+            nav SelectionNav from ./NavKinds.ts
           }
-          public type InlineCustom is nav with {
+          public type SidecarCustom is nav with {
             Query text
-            implement inject nav ${tsFence}
-              return TR.NavKind.Stack()
-            ${fence}
+            nav CustomNav from ./NavKinds.ts
           }
-          public type InlineStore is datasource with {
+          public type SidecarStore is datasource with {
             StorageKey text
-            implement inject provider ${tsFence}
-              return TR.DataProvider.Memory()
-            ${fence}
+            provider MemoryProvider from ./Providers.ts
           }
         `,
         'SidecarStack.ts': sidecarCode,
+        'NavKinds.ts': navKindsCode,
+        'Providers.ts': providersCode,
       },
       async paths => {
         const compiled = await Workspace.compile(paths['Main.tao'])
         const module = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.tsx')
         const declarations = requireRelativeCompiledFile(compiled.files, 'modules/Constructs.tao.d.ts')
         const sidecar = requireRelativeCompiledFile(compiled.files, 'modules/SidecarStack.ts')
-        const inlineBoundaries = compiled.files.filter(file =>
-          file.relativePath.startsWith('modules/Constructs.tao.injection-')
-        )
+        const providers = requireRelativeCompiledFile(compiled.files, 'modules/Providers.ts')
+        const sharedNavKinds = compiled.files.filter(file => file.relativePath === 'modules/NavKinds.ts')
 
         Expect(module.code).toContain(
-          "import __tao_configuration_implementation_SidecarStack__ from './SidecarStack'",
+          "import { SidecarStack as __tao_configuration_implementation_SidecarStack__ } from './SidecarStack'",
         )
         Expect(module.code.replace(/\s+/g, ' ')).toContain(
           'TR.Navigation.Declaration( "SidecarStack", Reflect.apply( '
             + '__tao_configuration_implementation_SidecarStack__, undefined, [], ), )',
         )
-        Expect(inlineBoundaries).toHaveLength(4)
-        Expect(inlineBoundaries.some(file => file.code.includes('return TR.DataProvider.Memory()'))).toBe(true)
+        // Three declarations name three exports of one file, so the file is copied once and
+        // imported three times under distinct local aliases.
+        Expect(sharedNavKinds).toHaveLength(1)
+        for (
+          const [declaration, exportName] of [['SidecarSlot', 'SlotNav'], ['SidecarSelection', 'SelectionNav'], [
+            'SidecarCustom',
+            'CustomNav',
+          ]]
+        ) {
+          Expect(module.code).toContain(
+            `import { ${exportName} as __tao_configuration_implementation_${declaration}__ } from './NavKinds'`,
+          )
+        }
+        Expect(providers.code).toContain('return TR.DataProvider.Memory()')
         Expect(sidecar.sourcePath).toBe(paths['SidecarStack.ts'])
         Expect(sidecar.code).toBe(sidecarCode)
         Expect(declarations.code).toContain("import type TR from '@runtime/TR'")
@@ -181,21 +239,21 @@ Describe('compiler: files and packages', () => {
           'export type SidecarStackConfig = Readonly<{ readonly initial: TR.Presentable }>',
         )
         Expect(declarationText).toContain(
-          'export type InlineStoreConfig = Readonly<{ readonly "StorageKey": TR.Value<string> }>',
+          'export type SidecarStoreConfig = Readonly<{ readonly "StorageKey": TR.Value<string> }>',
         )
         Expect(declarationText).toContain(
-          'export type InlineSlotConfig = Readonly<{ '
+          'export type SidecarSlotConfig = Readonly<{ '
             + 'readonly initial: TR.Presentable | TR.NavigationValue }>',
         )
         Expect(declarationText).toContain(
-          'export type InlineSelectionConfig = Readonly<{ '
+          'export type SidecarSelectionConfig = Readonly<{ '
             + 'readonly display: TR.Evaluable readonly initial: string '
             + 'readonly items: Readonly<Record<string, Readonly<{ '
             + 'readonly label: TR.Evaluable readonly icon?: TR.Evaluable '
             + 'readonly content: TR.Presentable | TR.NavigationValue }>>> }>',
         )
         Expect(declarationText).toContain(
-          'export type InlineCustomConfig = Readonly<Record<string, unknown>>',
+          'export type SidecarCustomConfig = Readonly<Record<string, unknown>>',
         )
         Expect(module.code.replace(/\s+/g, ' ')).toContain(
           'export type SidecarStackConfig = Readonly<{ readonly initial: TR.Presentable }>',
@@ -216,7 +274,7 @@ Describe('compiler: files and packages', () => {
         }
       `,
         'Views.tao': `
-        workspace view Text(Value is text) {
+        workspace view Text(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -240,14 +298,14 @@ Describe('compiler: files and packages', () => {
         view MainView() {
           render Text(DocumentLabel("Draft"))
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
         }
       `,
         'Labels.tao': `
-        workspace function DocumentLabel(Title is text) returns text {
+        workspace function DocumentLabel(Title text) returns text {
           return "Document: { Title }"
         }
       `,
@@ -310,7 +368,7 @@ Describe('compiler: files and packages', () => {
         }
       `,
         'Views.tao': `
-        workspace view Text(Value is text) {
+        workspace view Text(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -318,7 +376,7 @@ Describe('compiler: files and packages', () => {
       `,
         'Main.test.tao': `
         test "Sidecar" {
-          check "intentionally incomplete" {
+          test "intentionally incomplete" {
             expect text "This file should not compile"
           }
         }
@@ -347,7 +405,7 @@ Describe('compiler: files and packages', () => {
         workspace view MainView() {
           render Text("Package import")
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -379,7 +437,7 @@ Describe('compiler: files and packages', () => {
         workspace view MainView() {
           render Text(PackageTitle)
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -407,7 +465,7 @@ Describe('compiler: files and packages', () => {
         view MainView() {
           render TextValue(Name)
         }
-        view TextValue(Value is text) {
+        view TextValue(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -447,7 +505,7 @@ Describe('compiler: files and packages', () => {
         workspace view BView() {
           render Leaf(SharedTitle)
         }
-        view Leaf(Value is text) {
+        view Leaf(Value text) {
           render inject Value ${tsFence}
             return null
           ${fence}
@@ -464,7 +522,7 @@ Describe('compiler: files and packages', () => {
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      workspace view ${name}(Value is text) {
+      workspace view ${name}(Value text) {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -515,26 +573,26 @@ Describe('compiler: files and packages', () => {
         'liba/Views.tao': `
           public type AStack is nav with {
             Initial ui
-            implement inject nav "./Implementation.ts"
+            nav Implementation from ./Implementation.ts
           }
         `,
         'liba/Implementation.ts': `
           import TR from '@runtime/TR'
           import type { AStackConfig } from './Views.tao'
-          export default function createA(): TR.NavKind<'stack', AStackConfig> {
+          export function Implementation(): TR.NavKind<'stack', AStackConfig> {
             return TR.NavKind.Stack()
           }
         `,
         'libb/Views.tao': `
           public type BStack is nav with {
             Initial ui
-            implement inject nav "./Implementation.ts"
+            nav Implementation from ./Implementation.ts
           }
         `,
         'libb/Implementation.ts': `
           import TR from '@runtime/TR'
           import type { BStackConfig } from './Views.tao'
-          export default function createB(): TR.NavKind<'stack', BStackConfig> {
+          export function Implementation(): TR.NavKind<'stack', BStackConfig> {
             return TR.NavKind.Stack()
           }
         `,
@@ -586,14 +644,14 @@ Describe('compiler: files and packages', () => {
       view MainView() {
         render Text("Hello")
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject Value ${tsFence}
           return null
         ${fence}
       }
 
       test "Smoke" {
-        check "renders" {
+        test "renders" {
           run MyApp
           expect text "Should not compile"
         }
@@ -628,6 +686,13 @@ async function withCompiledFiles<
 
 function requireCompiledFile(files: readonly CompiledFile[], sourcePath: string): CompiledFile {
   const file = files.find(compiledFile => compiledFile.sourcePath === sourcePath)
+  Expect(file).toBeDefined()
+  return file!
+}
+
+/** sidecarCopy finds the one copy of a named TypeScript sidecar in a compiled output set. */
+function sidecarCopy(files: readonly CompiledFile[], fileName: string): CompiledFile {
+  const file = files.find(compiledFile => compiledFile.relativePath.endsWith(`/${fileName}`))
   Expect(file).toBeDefined()
   return file!
 }

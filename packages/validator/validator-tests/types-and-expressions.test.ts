@@ -38,7 +38,7 @@ Describe('validator: types and expressions', () => {
     await withValidationParse(
       app(
         'state Count = 3 let DisplayCount = Count render Text("hi")',
-        `let SaveAction = action { } ${stubView('Text', 'Value is text')}`,
+        `let SaveAction = action { } ${stubView('Text', 'Value text')}`,
       ),
       ({ result, workspace }) => {
         const actionAlias = result.entry.ast.statements.find(statement =>
@@ -68,7 +68,7 @@ Describe('validator: types and expressions', () => {
         type Person is text
         let LocalPerson = Person "Ada"
         view MainView() { render Text(LocalPerson) }
-        ${stubView('Text', 'Value is text')}
+        ${stubView('Text', 'Value text')}
       `,
       'Other.tao': `
         type Person is text
@@ -136,7 +136,7 @@ Describe('validator: types and expressions', () => {
         let Renamed = Admin with { Name "Grace", Access 2 }
       `,
       'render Text(Renamed.Name)',
-      stubView('Text', 'Value is text'),
+      stubView('Text', 'Value text'),
     )),
   )
 
@@ -168,7 +168,7 @@ Describe('validator: types and expressions', () => {
   const ambiguousBindingCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'arguments matching multiple same-typed parameters',
-      app('render Pair("Ada")', stubView('Pair', 'First is text, Second is text')),
+      app('render Pair("Ada")', stubView('Pair', 'First text, Second text')),
       'Render of Pair has an argument that matches multiple parameters by type: First, Second.',
     ],
     [
@@ -253,7 +253,7 @@ Describe('validator: types and expressions', () => {
       typeApp(
         'type Name is text let DisplayName = Name "Ada"',
         'render Text(DisplayName.First)',
-        stubView('Text', 'Value is text'),
+        stubView('Text', 'Value text'),
       ),
       typeValidationMessages.memberNotItem('First'),
     ],
@@ -262,7 +262,7 @@ Describe('validator: types and expressions', () => {
       typeApp(
         'type Name is text type Person is { Name } let DemoPerson = Person { Name "Ada" }',
         'render Text(DemoPerson.Missing)',
-        stubView('Text', 'Value is text'),
+        stubView('Text', 'Value text'),
       ),
       typeValidationMessages.unknownMember('Person', 'Missing'),
     ],
@@ -291,13 +291,13 @@ Describe('validator: types and expressions', () => {
     ],
     [
       'member access on unresolved values',
-      app('render Text(Missing.First)', stubView('Text', 'Value is text')),
+      app('render Text(Missing.First)', stubView('Text', 'Value text')),
       "Could not resolve reference to ValueDeclaration named 'Missing'.",
       [typeValidationMessages.memberNotItem('First')],
     ],
     [
       'unresolved invocation arguments',
-      app('render Text(Missing)', stubView('Text', 'Value is text')),
+      app('render Text(Missing)', stubView('Text', 'Value text')),
       "Could not resolve reference to ValueDeclaration named 'Missing'.",
       [
         invocationValidationMessages.unmatchedArgument('Text'),
@@ -353,7 +353,7 @@ Describe('validator: types and expressions', () => {
         let Ada = FullNamePerson { Name: "Ada", FamilyName }
       `,
       'render Stack() { Text(OuterName) Text(Ada.Name) Text(Ada.LastName) }',
-      `${stubLayout('Stack')}${stubView('Text', 'Value is text')}`,
+      `${stubLayout('Stack')}${stubView('Text', 'Value text')}`,
     )),
   )
 
@@ -363,7 +363,7 @@ Describe('validator: types and expressions', () => {
       typeApp(
         'type Age is number let OuterAge = Age 42',
         'render Card(Card.Details { OuterAge })',
-        stubView('Card', 'Details is { Age number }'),
+        stubView('Card', 'Details { Age number }'),
       ),
       typeValidationMessages.unmatchedProperty,
       typeValidationMessages.missingProperty('Age'),
@@ -395,14 +395,14 @@ Describe('validator: types and expressions', () => {
   const scopedCycleCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'direct parameter types',
-      app('render Empty()', `${stubView('Empty')}${stubView('Cycle', 'Self is Cycle.Self')}`),
+      app('render Empty()', `${stubView('Empty')}${stubView('Cycle', 'Self Cycle.Self')}`),
       typeValidationMessages.cyclicType('Cycle.Self'),
     ],
     [
       'parameter item property types',
       app(
         'render Empty()',
-        `${stubView('Empty')}${stubView('Card', 'Details is { Age Card.Details.Age }')}`,
+        `${stubView('Empty')}${stubView('Card', 'Details { Age Card.Details.Age }')}`,
       ),
       typeValidationMessages.cyclicType('Card.Details'),
     ],
@@ -428,7 +428,7 @@ Describe('validator: types and expressions', () => {
   Test(
     'reports type diagnostics alongside structural invocation errors',
     rejects(
-      app('render Tile(42, "extra")', stubView('Tile', 'Title is text')),
+      app('render Tile(42, "extra")', stubView('Tile', 'Title text')),
       invocationValidationMessages.unmatchedArgument('Tile'),
     ),
   )
@@ -437,8 +437,8 @@ Describe('validator: types and expressions', () => {
     const message = "Could not resolve reference to ValueDeclaration named 'Secret'."
     const result = await testValidateCodeWithErrors(`
       app MyApp { view Target }
-      ${stubView('Text', 'Value is text')}
-      ${stubView('Source', 'Secret is text')}
+      ${stubView('Text', 'Value text')}
+      ${stubView('Source', 'Secret text')}
       view Target() { render Text(Secret) }
     `)
 
@@ -542,6 +542,6 @@ function caseScopeApp(body: string, declarations = ''): string {
       render Col() { ${body} }
     }
     ${stubLayout('Col')}
-    ${stubView('Text', 'Value is text')}
+    ${stubView('Text', 'Value text')}
   `
 }

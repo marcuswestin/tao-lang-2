@@ -1,7 +1,7 @@
 use WordFlower from ./
 
 test "WordFlower documents" {
-   check "edits a document on its own live destination" {
+   test "edits a document on its own live destination" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -36,8 +36,7 @@ test "WordFlower documents" {
          text "Saves this session: 1"
          text "Saved" // the keyed toast
    }  }
-
-   check "marks a document final through the checkbox" {
+   test "marks a document final through the checkbox" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -65,8 +64,7 @@ test "WordFlower documents" {
          expect text "Chapter one"
       }
    }
-
-   check "adds paragraphs and clears the input from the asynchronous action" {
+   test "adds paragraphs and clears the input from the asynchronous action" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -86,8 +84,7 @@ test "WordFlower documents" {
          text "Paragraphs: 1"
          text "It began at sea."
    }  }
-
-   check "asks before closing" {
+   test "asks before closing" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -108,8 +105,7 @@ test "WordFlower documents" {
       press #confirmClose
       expect missing text "Document: Chapter one"
    }
-
-   check "reports a missing document behind the availability guard" {
+   test "reports a missing document behind the availability guard" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -120,20 +116,20 @@ test "WordFlower documents" {
       submit #newDocumentTitle
       // Keep the document mounted in the Workspace tab while deleting it from the independently
       // preserved Home tab. Returning to Workspace exercises the live handle's missing state.
-      press text "Workspace"
+      press "Workspace"
       select #chooseWorkspace[1] {
-         press text "Home"
+         press "Home"
       }
       select #workspaceDocuments[1] {
-         press text "Chapter one"
+         press "Chapter one"
       }
       expect text "Document: Chapter one"
-      press text "Home"
+      press "Home"
       select #drafts[1] {
          press #delete
       }
       expect text "No drafts"
-      press text "Workspace"
+      press "Workspace"
       expect {
          text "Document Document-2 no longer exists."
          missing text "Document: Chapter one"

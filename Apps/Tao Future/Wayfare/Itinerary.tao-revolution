@@ -1,0 +1,239 @@
+// The planning workspace: one day's stops, the stop editor, its conflict conversation, and Today.
+//
+// This file is where the rule about where inputs bind earns its keep. A day's title writes through,
+// because it stands on its own. A stop is edited through a draft, because its fields travel together and
+// because the person beside you may be editing the same stop — which is why drafts carry a `conflict`
+// outcome at all.
+
+ui NoStopSelected() {
+   render EmptyState(Icon: "signpost.right", Title: "Pick a stop", Body: "Its details open here, beside the day.")
+}
+
+// -- One day ---------------------------------------------------------------------------------------------------
+
+ui DayPlan(Day) {
+   Title if Day.Title is empty then Day.Date.Long else Day.Title
+   Toolbar { AddStop [primary] }
+   query DayStops from Day.Stops { }
+
+   command AddStop {
+      Label "Add a stop"
+      Icon "plus"
+      Key "cmd+n"
+      Available when can create Stop in Day.Stops
+      runs single
+      does {
+         let Stop = ask NewStopSheet(Day)
+         stop if Stop is none
+         reveal StopDetails(Stop) in @details
+   }  }
+
+   render ScrollView [screen] {
+      guard Day
+      Col [page, width max 900] {
+         if Day.Title is not empty { Text(Day.Date.Long) [caption] }
+         // The day's name and date stand on their own, so they write through — no draft, no save; the
+         // entity's `validate` keeps the date inside the trip.
+         if can change Day {
+            Row [gap md] {
+               TextInput(Value: Day.Title, Label: "A name for the day") [claim 2]
+               DateInput(Value: Day.Date, Label: "Date") [claim 1]
+         }  }
+         OfflineNotice
+
+         guard DayStops
+         if DayStops is empty {
+            EmptyState(Icon: "signpost.right", Title: "Shape the day", Body: "Add the first stop; drag to put the day in order.") { AddStop [primary] }
+         }
+
+         // The list and the map side by side on a wide screen, one column on a phone. The pins follow
+         // the collection's order, so the route reads like the day.
+         Panes [gap lg] {
+            Col [claim 2] {
+               #stops
+               List(DayStops, Reorderable: can change Day) {
+                  StopCard(Stop)
+                  on select -> reveal StopDetails(Stop) in @details
+            }  }
+            if DayStops has any where Place is not none {
+               Map(DayStops, Place: Stop.Place, Label: "The day on the map") [height min 320, radius lg] {
+                  pin label "{ Stop.Position }. { Stop.Title }"
+                  route
+}  }  }  }  }  }
+
+// Creating: a draft, because the row does not exist yet. It commits once, so an abandoned stop never
+// syncs to the whole trip.
+file dialogue NewStopSheet(Day) responds Stop {
+   draft New = Stop for new { Day, Kind: Visit }
+   action Add() runs single { when save New { saved -> Stop { respond Stop } } }
+   render Col [card, width max 520, gap md] {
+      Text("New stop") [sectionTitle]
+      #newStopTitle
+      TextInput(Value: New.Title, Label: "Stop", Placeholder: "Fushimi Inari", Focus: initial) { on submit Add }
+      Row [gap md] {
+         Choice(Value: New.Kind, Label: "Kind") [claim 1]
+         TimeInput(Value: New.Starts, Label: "Starts") [claim 1]
+      }
+      Problems(New)
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> respond }
+         #addStop
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+}  }  }
+
+// -- One stop ---------------------------------------------------------------------------------------------------
+//
+// The editor works on a draft of the row, not the row: `Mine` starts as the stop, keeps what you type,
+// and lands as one write when you save. A draft is durable — it belongs to the row and the account, not
+// the screen — so walking away loses nothing and there is no discard-changes dialogue. If a co-traveler
+// changed the stop meanwhile, `save` answers `conflict` and the choice is a person's, field by field.
+
+ui StopDetails(Stop) {
+   Title Stop.Title
+   Toolbar { SaveStop [primary], ToggleVisited, DeleteStop }
+   draft Mine = Stop from Stop
+   presence Others on Stop
+   query Attached from Stop.Attachments { }
+
+   command SaveStop {
+      Label "Save"
+      Icon "checkmark"
+      Key "cmd+s"
+      Enabled when Mine changed // shown, but not pressable, until something changed
+      runs single
+      does {
+         when save Mine {
+            saved -> present Notice("Saved") as toast (Key: "stop")
+            // Offline is not failure: the draft commits locally and syncs when the connection returns.
+            queued -> present Notice("Saved on this device — it syncs when you're back online") as toast (Key: "stop")
+            conflict -> present ResolveStopConflict(Mine) as sheet
+   }  }  }
+   command ToggleVisited {
+      // Visited is a fact about the road, not part of the edit: it stands on its own, so it writes through
+      // the row directly and never waits on the draft.
+      Label if Stop is Visited then "Mark as planned" else "Mark as visited"
+      Icon "checkmark.circle"
+      Available when can change Stop
+      does { toggle Stop.Visited }
+   }
+   command DeleteStop {
+      Label "Delete stop"
+      Icon "trash"
+      Intent destructive
+      Available when can delete Stop
+      runs single
+      does {
+         stop unless ask Confirm("Delete { Stop.Title }?", Body: "It leaves the day for everyone.", Verb: "Delete")
+         delete Stop
+         dismiss
+   }  }
+   action Attach(Chosen file) runs parallel {
+      create Attachment in Stop.Attachments { File: Chosen, AddedBy: Me }
+   }
+
+   render ScrollView [screen] {
+      guard Stop
+      Col [page, width max 680] {
+         Text("{ Stop.Day.Date.Long } · Stop { Stop.Position } of { Stop.Day.Stops.Count }") [caption]
+         loop Others where Other is not Me { Status("{ Other.Name } is editing this stop", Announce: yes) }
+         if Mine changed { Status("Unsaved changes") }
+
+         Col [card, gap lg] {
+            #stopTitle
+            TextInput(Value: Mine.Title, Label: "Stop")
+            Row [gap md] {
+               Choice(Value: Mine.Kind, Label: "Kind") [claim 1]
+               #stopStarts
+               TimeInput(Value: Mine.Starts, Label: "Starts") [claim 1]
+               DurationInput(Value: Mine.Duration, Label: "How long") [claim 1]
+            }
+            PlaceInput(Value: Mine.Place, Label: "Place")
+            TextInput(Value: Mine.Notes, Label: "Notes", Lines: 4)
+            TextInput(Value: Mine.Reservation, Label: "Reservation or confirmation number")
+            Problems(Mine)
+         }
+
+         Section("Attachments") {
+            @actions FileInput(Label: "Add a file", Kinds: image, pdf) [quiet] { on change -> Chosen { do Attach(Chosen) } }
+            guard Attached
+            if Attached is empty { Text("Tickets, screenshots, a menu — anything for this stop.") [caption] }
+            loop Attached as Attachment {
+               Row [pattern Line] {
+                  Icon(if Attachment.File.Kind is image then "photo" else "doc") [@leading]
+                  Text(Attachment.File.Name, Lines: 1) [body, @content]
+                  Text(Attachment.AddedBy.Name) [caption, @trailing]
+                  Button(Icon: "arrow.down.circle", Label: "Open { Attachment.File.Name }") [quiet, @trailing] { on press -> open Attachment.File }
+                  if can delete Attachment { Button(Icon: "minus.circle", Label: "Remove { Attachment.File.Name }") [quiet, @trailing] { on press -> delete Attachment } }
+}  }  }  }  }  }
+
+// The conflict conversation. `ConflictComparison` is generated from the entity, like PublicationPreview:
+// one row per field where the draft and the row now disagree — my value beside theirs, with a control that
+// takes theirs into the draft field by field. It reads the row live, so a third edit mid-decision updates
+// the comparison in place; saving again runs the same outcomes.
+file ui ResolveStopConflict(Mine draft of Stop) {
+   Title "Someone else changed this stop"
+   action Resolve() runs single {
+      when save Mine {
+         saved -> { dismiss; present Notice("Saved") as toast (Key: "stop") }
+         conflict -> { } // the comparison below is already showing the newer edit
+   }  }
+   render Col [card, width max 620, gap md] {
+      Text("Their changes are on the right, for the fields you both touched. Take theirs field by field, or keep yours and save again.") [body, muted]
+      #comparison
+      ConflictComparison(Mine)
+      Problems(Mine)
+      Row [content right center, gap sm] {
+         #discardMine
+         Button("Discard mine") [secondary] { on press -> { discard Mine; dismiss } } // the draft re-reads the row
+         #keepMine
+         Button("Keep mine", Busy: Resolve running) [primary] { on press Resolve }
+}  }  }
+
+// -- Today ------------------------------------------------------------------------------------------------------
+
+ui TodayScreen() {
+   Title "Today"
+   render ScrollView [screen] {
+      guard Me signed out -> { Text("Sign in to see today's plan.") [body]; SignInPanel }
+      when MyTrip {
+         loading -> Status("Opening Wayfare…")
+         none -> EmptyState(Icon: "sun.max", Title: "No trip open", Body: "Open a trip and Today follows it.")
+         otherwise -> TodayForTrip(MyTrip)
+}  }  }
+
+file view TodayForTrip(Trip) {
+   // Today in the trip's own zone: a traveler whose phone is still on home time sees the day they are
+   // standing in.
+   let TodayPlan = exactly one Trip.Days where Date is today in Trip.HomeZone
+   query TodayStops from TodayPlan.Stops { }
+
+   render Col [page, width max 900] {
+      // Named cases override the safety net with a way forward; everything else still falls to it.
+      guard Trip { missing -> LostTrip; unauthorized -> LostTrip }
+      Text(Trip.Name) [caption]
+      OfflineNotice
+      guard TodayPlan missing -> {
+         EmptyState(Icon: "sun.max", Title: "Nothing planned today", Body: "Enjoy the day, or open the trip and add one.") {
+            Button("Open { Trip.Name }") [secondary] { on press -> open TripLink(Trip) }
+      }  }
+      Text(if TodayPlan.Title is empty then TodayPlan.Date.Long else TodayPlan.Title) [title]
+      Panes [gap lg] {
+         Col [claim 2] {
+            guard TodayStops
+            if TodayStops is empty { Text("Nothing planned today.") [muted] }
+            #todayStops
+            List(TodayStops) {
+               StopCard(Stop)
+               on select -> open StopLink(Stop)
+         }  }
+         if TodayStops has any where Place is not none {
+            Map(TodayStops, Place: Stop.Place, Label: "Today's map") [height min 280, radius lg] {
+               pin label "{ Stop.Position }. { Stop.Title }"
+               route
+               me
+}  }  }  }  }
+
+file view LostTrip() {
+   render EmptyState(Icon: "sun.max", Title: "That trip is no longer yours", Body: "Pick another one from your trips.") {
+      Button("Choose another trip") [primary] { on press -> update Me { CurrentTrip: none } } // the tab re-reads `MyTrip`
+}  }

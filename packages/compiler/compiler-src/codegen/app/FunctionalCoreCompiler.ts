@@ -11,10 +11,10 @@ type FunctionParameter = {
 
 /** FunctionalCoreCompiler compiles pure functions and render control flow. */
 export const FunctionalCoreCompiler = {
-  /** EnumDeclaration creates declaration-owned runtime case identities. */
-  EnumDeclaration(declaration: AST.EnumDeclaration): Compiled {
+  /** CaseSetDeclaration creates declaration-owned runtime case identities. */
+  CaseSetDeclaration(declaration: AST.TypeDeclaration): Compiled {
     return gen`${gen.scopeName(declaration)} = TR.Enum([${
-      gen.join(declaration.block.cases, enumCase => gen`${gen.nameLiteral(enumCase)}`)
+      gen.join(AST.caseSetCasesOf(declaration), caseSetCase => gen`${gen.jsLiteral(AST.caseSetCaseName(caseSetCase))}`)
     }])`
   },
 

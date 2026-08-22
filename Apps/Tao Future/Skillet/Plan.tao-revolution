@@ -1,0 +1,156 @@
+// The week: what's for dinner, on which day, and how it gets cooked and shopped.
+
+phrase WeekTitle(Day date) = "Week of { Day.Short }"
+
+ui WeekPlan() {
+   Title WeekTitle(WeekStart)
+   Toolbar { AddMeal [primary], ShopThisWeek, ThisWeek }
+   state WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
+   query Meals from MyKitchen.Meals {
+      // A timezone-qualified range, so a household in another zone sees its own week.
+      where Day during WeekStart .. WeekStart + 6 days // Day is a date, so no zone qualifies it
+      order by Day, Course
+   }
+
+   command AddMeal {
+      Label "Add a meal"
+      Icon "plus"
+      Key "cmd+n"
+      Available when can create Meal in MyKitchen.Meals
+      does { present PlanMeal() as sheet }
+   }
+   command ThisWeek {
+      Label "This week"
+      Icon "calendar"
+      does { set WeekStart = StartOfWeek(today in MyKitchen.TimeZone) }
+   }
+   command ShopThisWeek {
+      Label "Shop the week"
+      Icon "basket"
+      Available when can create Grocery in MyKitchen.Groceries
+      // `runs single` is why a double press cannot duplicate a week of groceries; the transaction is
+      // idempotent per meal as well.
+      runs single
+      does {
+         when ShopTheWeek(MyKitchen, WeekStart, WeekStart + 7 days) {
+            done -> present Notice("Added the week to your list") as toast (Key: "shop")
+   }  }  }
+
+   render ScrollView [screen] {
+      Col [page] {
+         OfflineNotice
+         Row [content spread center] {
+            Button(Icon: "chevron.left", Label: "Previous week") [quiet] { on press -> set WeekStart = WeekStart - 7 days }
+            Text(WeekTitle(WeekStart)) [title]
+            Button(Icon: "chevron.right", Label: "Next week") [quiet] { on press -> set WeekStart = WeekStart + 7 days }
+         }
+
+         guard Meals
+         if Meals is empty {
+            EmptyState(Icon: "calendar", Title: "Nothing planned yet", Body: "Add a meal to any day, then shop the whole week at once.") {
+               AddMeal [primary]
+         }  }
+
+         // One card per day; the grid fits as many across as the room allows.
+         // The grid's row is named `Date`, not `Day`: inside `where`, bare names are the row's fields, and
+         // a Meal has a `Day`.
+         Grid(WeekOf(WeekStart) as Date) [cell min 150, gap sm] {
+            Col(Label: Date.Long) [card, gap sm] {
+               Row [content spread center] {
+                  Text(if Date is today in MyKitchen.TimeZone then "Today" else Date.Weekday) [sectionTitle]
+                  Text(Date.Short) [caption]
+               }
+               loop Meals where Meal.Day is Date { MealRow(Meal) }
+               if can create Meal in MyKitchen.Meals {
+                  Button(Icon: "plus", Label: "Plan { Date.Weekday }") [quiet] { on press -> present PlanMeal(Day: Date) as sheet }
+}  }  }  }  }  }
+
+file view MealRow(Meal) {
+   command Cook { Label "Cook"; Icon "flame"; does { open CookMealLink(Meal.Recipe, Meal) } }
+   command AddToList {
+      Label "Add to shopping list"
+      Icon "basket"
+      runs single
+      does {
+         // The transaction is idempotent per meal, so this cannot double the list either.
+         when AddMealToList(Meal) {
+            done -> present Notice("Added { Meal.Recipe.Title } to your list") as toast (Key: "shop")
+   }  }  }
+   command Change { Label "Change"; Icon "pencil"; does { present MealScreen(Meal) as sheet } }
+   command ToggleCooked {
+      Label if Meal is Cooked then "Mark as planned" else "Mark as cooked"
+      Icon "checkmark"
+      does { toggle Meal.Cooked }
+   }
+   command Remove {
+      Label "Remove from plan"
+      Icon "trash"
+      Intent destructive
+      Available when can delete Meal
+      does { delete Meal }
+   }
+   // A menu anchors beside what opened it where there is room, and is an action sheet on a phone.
+   menu Actions { Cook, AddToList, Change, ToggleCooked, separator, Remove }
+
+   render Row [pattern Line] {
+      on press -> present Actions as menu
+      Icon(if Meal is Cooked then "checkmark.circle" else "circle") [@leading, ink good when Meal is Cooked, muted when Meal is Planned]
+      Col [@content, gap xxs] {
+         Text(Meal.Recipe.Title, Lines: 1) [body]
+         Text("{ Meal.Course } · { Meal.Servings } servings") [caption]
+}  }  }
+
+// Planning a meal from either direction: from a day, or from a recipe. No row yet, so a draft.
+ui PlanMeal(Recipe (optional), Day date (optional)) {
+   Title "Add a meal"
+   draft New = Meal for new {
+      Household: MyKitchen
+      Recipe
+      Day: if Day is none then today in MyKitchen.TimeZone else Day
+      Course: Dinner
+      Servings: if Recipe is none then 4 else Recipe.Servings
+   }
+   query Recipes from MyKitchen.Recipes { }
+
+   action Add() runs single {
+      // The entity's `unique Household, Day, Course` is what rejects a second dinner on one day; an
+      // unhandled rejection of `save` invalidates the draft, so the sentence appears in Problems(New).
+      when save New {
+         saved -> dismiss
+   }  }
+
+   render Col [gap lg, pad lg, width max 560] {
+      if Recipe is none {
+         guard Recipes
+         if Recipes is empty { EmptyState(Icon: "book", Title: "No recipes yet", Body: "Add a recipe first, then plan it.") }
+         #pickRecipe
+         List(Recipes as Option, Selected: New.Recipe) [height 260] { Text(Option.Title) [body] } // `as Option`: the ui's own `Recipe` stays visible
+      } else {
+         Text(Recipe.Title) [sectionTitle]
+      }
+      Choice(Value: New.Day, Label: "Day", Options: WeekOf(New.Day))
+      Choice(Value: New.Course, Label: "Course")
+      #mealServings
+      NumberInput(Value: New.Servings, Label: "Serves", Min: 1)
+      DurationInput(Value: New.Remind, Label: "Remind me before")
+      Problems(New)
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> dismiss }
+         #addMeal
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+}  }  }
+
+// Changing a planned meal: the row exists, so every input writes through.
+ui MealScreen(Meal) {
+   Title Meal.Recipe.Title
+   Toolbar { Done [primary] }
+   command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
+   render Col [gap lg, pad lg, width max 560] {
+      guard Meal
+      Text(Meal.Recipe.Title) [sectionTitle]
+      Choice(Value: Meal.Day, Label: "Day", Options: WeekOf(Meal.Day))
+      Choice(Value: Meal.Course, Label: "Course")
+      NumberInput(Value: Meal.Servings, Label: "Serves", Min: 1)
+      DurationInput(Value: Meal.Remind, Label: "Remind me before")
+      Problems(Meal)
+}  }

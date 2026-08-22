@@ -1,13 +1,14 @@
-import { AST, Langium } from '@parser'
-import type { FormatHandlers } from '../formatting'
+import { AST } from '@parser'
+import { collapsesToOneLine, type FormatHandlers } from '../formatting'
 
 export const ActionsFormatter = {
   /** ActionBlock formats action bodies with one indented statement per line. */
   ActionBlock(f) {
     f.oneSpaceBefore('{')
-    const canUseSingleLineActionBody = AST.isActionExpression(f.node.$container)
-      && f.node.statements.length === 1
-      && !hasInteriorComments(f.node)
+    // The inline `-> { … }` shapes collapse; a named action, `async`, and control-flow bodies keep
+    // their own lines. A comment inside would swallow the closing braces, so it holds the block open.
+    const canUseSingleLineActionBody = isInlineActionBody(f.node.$container)
+      && collapsesToOneLine(f.node, f.node.statements)
     if (canUseSingleLineActionBody) {
       f.singleLineBraceBlock(f.node.statements[0]!)
       return
@@ -17,7 +18,8 @@ export const ActionsFormatter = {
 
   /** ActionDeclaration formats a named action header and body. */
   ActionDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'action')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('action')
     f.noSpaceBefore('(')
   },
 
@@ -83,12 +85,8 @@ export const ActionsFormatter = {
   },
 } satisfies Partial<FormatHandlers>
 
-function hasInteriorComments(block: AST.ActionBlock): boolean {
-  const cst = block.$cstNode
-  if (cst === undefined) {
-    return false
-  }
-  return Langium.CstUtils.flattenCst(cst.root).toArray().some(node =>
-    node.hidden && node.offset >= cst.offset && node.end <= cst.end
-  )
+function isInlineActionBody(container: AST.Node): boolean {
+  return AST.isActionExpression(container)
+    || AST.isEventHandler(container)
+    || AST.isLoopSelectHandler(container)
 }

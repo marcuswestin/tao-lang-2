@@ -1,1 +1,2 @@
-package let CardTitle = "Package access works"
+package
+let CardTitle = "Package access works"

@@ -28,14 +28,14 @@ Describe('Tao formatter injections', () => {
     'indents injection fence bodies one level below the inject line',
     formats(
       `
-        view CountText(Count is number) {
+        view CountText(Count number) {
         render inject Count ${tsFence}
         return <RN.Text>{Count}</RN.Text>
         ${fence}
         }
       `,
       `
-        view CountText(Count is number) {
+        view CountText(Count number) {
            render inject Count ${tsFence}
               return <RN.Text>{Count}</RN.Text>
            ${fence}

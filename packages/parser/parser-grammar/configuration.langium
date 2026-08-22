@@ -29,9 +29,9 @@ ConfigurationKeyDeclaration:
 ConfigurationPropertyBlock:
     '{' properties+=ConfigurationPropertyDeclaration* '}';
 
+// The primitive's implementation is an ordinary named import: `provider Local from ./Local.ts`.
 ConfigurationImplementation:
-    'implement' 'inject' protocol=ConfigurationImplementationProtocol
-    (tsCodeBlock=TS_CODE_BLOCK | sidecarPath=STRING);
+    protocol=ConfigurationImplementationProtocol exportName=ID 'from' path=USE_IMPORT_PATH;
 
 ConfigurationImplementationProtocol returns string:
     'nav' | 'provider';

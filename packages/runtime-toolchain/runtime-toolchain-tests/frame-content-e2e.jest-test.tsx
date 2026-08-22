@@ -16,7 +16,7 @@ Describe('frame content runtime', () => {
           }
         }
 
-        frame Card(Title is text) {
+        frame Card(Title text) {
           @actions = empty
 
           render Col() [gap 8, pad 12] {
@@ -30,7 +30,7 @@ Describe('frame content runtime', () => {
           }
         }
 
-        view WordBadge(Total is number) {
+        view WordBadge(Total number) {
           render inject Total, Suffix " words", Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.Text({ children: [\`${'${Total}${Suffix}'}\`], layout: Layout, tag: Tag })
           \`\`\`

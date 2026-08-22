@@ -2,24 +2,13 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 
 /** InlineInjection is authored TypeScript that the compiler emits as an isolated module. */
-export type InlineInjection =
-  | AST.ConfigurationImplementation
-  | AST.Injection
-  | AST.TypedInjectionExpression
+export type InlineInjection = AST.Injection | AST.TypedInjectionExpression
 
 let activeBindings: ReadonlyMap<InlineInjection, string> | undefined
 
 /** inlineInjectionsOf returns every inline implementation emitted by one generated source module. */
 export function inlineInjectionsOf(file: AST.TaoFile): InlineInjection[] {
   const injections = AST.streamAllContents(file).filter(isInlineInjection)
-  for (const declaration of file.statements.filter(AST.isConfigurableDeclaration)) {
-    const implementation = AST.configurationImplementationOf(declaration)
-    if (implementation?.tsCodeBlock !== undefined && !injections.includes(implementation)) {
-      // Derived configuration declarations reuse the base declaration's implementation. Emit a
-      // local isolated helper even when that implementation AST is owned by an imported file.
-      injections.push(implementation)
-    }
-  }
   return injections
 }
 
@@ -53,5 +42,4 @@ export function withInlineInjectionBindings<ResultT>(
 function isInlineInjection(node: AST.Node): node is InlineInjection {
   return AST.isInjection(node)
     || AST.isTypedInjectionExpression(node)
-    || (AST.isConfigurationImplementation(node) && node.tsCodeBlock !== undefined)
 }

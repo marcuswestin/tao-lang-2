@@ -13,6 +13,8 @@ export const ExpressionsCompiler = {
     return Switch.type(expression, {
       ActionExpression: Compile.ActionExpression,
       BinaryExpression: Compile.BinaryExpression,
+      NowExpression: () => gen`TR.Value(TR.now())`,
+      PostfixMemberAccess: Compile.PostfixMemberAccess,
       BooleanLiteral: Compile.BooleanLiteral,
       CaseTestExpression: Compile.CaseTestExpression,
       ConfigurationConstructor: Compile.ConfiguredValue,
@@ -253,6 +255,11 @@ export const ExpressionsCompiler = {
     return gen`TR.Member(${root}, [${gen.join(reference.members, member => gen`${gen.jsLiteral(member)}`)}])`
   },
 
+  /** PostfixMemberAccess compiles a member read on any expression, including unit accessors. */
+  PostfixMemberAccess(access: AST.PostfixMemberAccess): Compiled {
+    return gen`TR.Member(${Compile.Expression(access.receiver)}, [${gen.jsLiteral(access.member)}])`
+  },
+
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
   ValueReference(reference: AST.ValueReference): Compiled {
     if (AST.isRefinementExpression(reference)) {
@@ -276,7 +283,10 @@ export const ExpressionsCompiler = {
       DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
-      EnumCase: enumCase => gen`${gen.scopeName(AST.enumOwningCase(enumCase))}.${gen.Name(enumCase)}`,
+      CaseSetCase: caseSetCase =>
+        gen`${gen.scopeName(AST.caseSetOwningCase(caseSetCase))}.${
+          gen.Name({ name: AST.caseSetCaseName(caseSetCase) })
+        }`,
       ForStatement: statement => gen`${gen.scopeName(statement)}.evaluate()`,
       DatasourceDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,

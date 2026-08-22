@@ -183,7 +183,7 @@ function bindBooleanCaseDataWriteFields(
 
 function hasDataFieldDefault(field: DataFieldDefinition): boolean {
   return field.boolean
-    || field.modifiers.some(modifier => modifier.defaultValue !== undefined || modifier.defaultCase !== undefined)
+    || (field.traits?.traits ?? []).some(trait => trait.defaultValue !== undefined || trait.defaultCase !== undefined)
 }
 
 function bindNamedDataWriteFields(

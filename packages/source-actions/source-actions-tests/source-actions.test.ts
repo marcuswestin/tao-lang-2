@@ -430,7 +430,7 @@ Describe('removeUnusedImports', () => {
         use MyApp from ./
 
         test "Smoke" {
-          check "renders" {
+          test "renders" {
             run MyApp
             expect text "Hello"
           }
@@ -454,7 +454,7 @@ Describe('removeUnusedImports', () => {
           use MyApp from ./
 
           test "Smoke" {
-             check "renders" {
+             test "renders" {
                 run MyApp
 
                 expect text "Hello"
@@ -520,9 +520,7 @@ Describe('removeUnusedImports', () => {
         public type Navigator is nav with {
           Initial ui
 
-          implement inject nav \`\`\`ts
-            return TR.NavKind.Stack()
-          \`\`\`
+          nav TestNavKind from ./TestNav.ts
         }
       `,
       },
@@ -614,7 +612,7 @@ Describe('moveRendersLast', () => {
 
   Test('moves render statements to the end of ui and dialogue bodies', async () => {
     const document = await parseDocument(`
-      enum Answer { Confirmed }
+      type Answer is one of Confirmed
       ui Home() {
          render Text(Greeting)
          let Greeting = "Home"
@@ -627,9 +625,7 @@ Describe('moveRendersLast', () => {
 
     Expect(await SourceActions.moveRendersLast(document)).toBe(`${
       Text.stripIndent(`
-      enum Answer {
-         Confirmed
-      }
+      type Answer is one of Confirmed
 
       ui Home() {
          let Greeting = "Home"
@@ -757,7 +753,7 @@ Describe('fixSource', () => {
     try {
       await FS.writeText(
         FS.resolvePath('Local.tao', tmpDir),
-        'public view LocalText(Value is text) { }\n',
+        'public view LocalText(Value text) { }\n',
       )
       const document = await parseRawDocumentAt(
         `${

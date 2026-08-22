@@ -2,7 +2,7 @@ use WordFlower, WordFlowerDrawer from ./
 
 // App-level journeys: selection navigation, variants, and the app shell.
 test "WordFlower app shell" {
-   check "activates the workspace tab and opens a document from the chooser" {
+   test "activates the workspace tab and opens a document from the chooser" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
@@ -11,26 +11,24 @@ test "WordFlower app shell" {
       expect text "Choose a workspace"
       // A loop row with `on select` is pressable; pressing its content selects the row.
       select #chooseWorkspace[1] {
-         press text "Novel"
+         press "Novel"
       }
       expect {
          text "Documents in Novel"
          text "No documents yet"
    }  }
-
-   check "a with-variant reconfigures the same app" {
+   test "a with-variant reconfigures the same app" {
       run WordFlowerDrawer
       press #activateWorkspaceTab
       expect text "Choose a workspace"
-      press text "Settings"
+      press "Settings"
       expect text "Settings"
       press #resetSignedOut
       expect text "Signed out"
    }
-
-   check "reports the injected build stamp" {
+   test "reports the injected build stamp" {
       run WordFlower
-      press text "Settings"
+      press "Settings"
       expect {
          text "Writing session"
          text "10 words"

@@ -11,11 +11,9 @@ import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
   accepts,
   app,
-  fence,
   rejects,
   stubLayout,
   stubView,
-  tsFence,
 } from './test-validate'
 
 Describe('validator: declaration contracts', () => {
@@ -43,11 +41,11 @@ Describe('validator: declaration contracts', () => {
     accepts(`
       public type Navigator is nav with {
         Initial ui
-        ${implementation('nav', 'return TR.NavKind.Stack()')}
+        ${implementation('nav')}
       }
       public type Datasource is datasource with {
         StorageKey text
-        ${implementation('provider', 'return TR.DataProvider.Local()')}
+        ${implementation('provider')}
       }
       app Demo {
         Name "Demo"
@@ -77,7 +75,7 @@ Describe('validator: declaration contracts', () => {
       `
         use StackNav from @tao/nav
         app Demo { Name "Demo" Navigator StackNav { Initial Detail } }
-        ui Detail(Label is text) { render Empty() }
+        ui Detail(Label text) { render Empty() }
         ${stubView('Empty')}
       `,
       completenessValidationMessages.incomplete('Detail', ['Label']),
@@ -118,11 +116,11 @@ Describe('validator: declaration contracts', () => {
           Label text
           Content Presentable
         }
-        ${implementation('nav', 'return TR.NavKind.Selection()')}
+        ${implementation('nav')}
       }
       public type SnapshotStore is datasource with {
         StorageKey text
-        ${implementation('provider', 'return TR.DataProvider.Local()')}
+        ${implementation('provider')}
       }
       ui Home() { render Empty() }
       let Main = Carousel {
@@ -230,12 +228,20 @@ Describe('validator: declaration contracts', () => {
     ),
   )
 
+  // A configurable declaration used only where it is declared needs no marker, the same as any
+  // other declaration. It still emits its runtime identity inside its own module.
+  Test(
+    'accepts a file-private navigation declaration',
+    accepts(`
+      type HiddenNav is nav with { ${implementation('nav')} }
+      let Hidden = HiddenNav { }
+      app Demo { Name "Demo" Navigator Hidden }
+      ui Home() { render Empty() }
+      ${stubView('Empty')}
+    `),
+  )
+
   const declarationCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
-    [
-      'non-public navigation declarations',
-      `type HiddenNav is nav with { ${implementation('nav')} }`,
-      configurationValidationMessages.visible('Nav'),
-    ],
     [
       'duplicate ordinary declaration properties',
       `public type Duplicate is nav with { Initial key Initial text ${implementation('nav')} }`,
@@ -539,28 +545,28 @@ Describe('validator: declaration contracts', () => {
   const dataFieldCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'boolean cases that collide with field names',
-      'data Parents / Parent { Name text Enabled yes / no Name }',
+      'data Parents / Parent { Name text Enabled yes / Name no }',
       dataValidationMessages.duplicateBooleanCase('Parent', 'Name'),
     ],
     [
       'boolean defaults that do not name a case',
-      'data Parents / Parent { Enabled yes / no Disabled (default true) }',
+      'data Parents / Parent { Enabled yes / Disabled no (default true) }',
       dataValidationMessages.booleanDefaultCase('Enabled'),
     ],
     [
-      'relation modifiers on non-relation fields',
-      'data Parents / Parent { Enabled yes / no Disabled (relation Parents) }',
-      dataValidationMessages.relationModifier('Enabled'),
+      'owned on a primitive or boolean field',
+      'data Parents / Parent { Enabled yes / Disabled no (owned) }',
+      dataValidationMessages.autoDeleteOwner('Enabled'),
     ],
     [
-      'auto-delete on owner-side singular relations',
-      'data Parents / Parent { Child (auto-delete) } data Children / Child { Parent }',
-      dataValidationMessages.autoDeleteOwner('Child'),
+      'a field that is both optional and defaulted',
+      'data Parents / Parent { Title text? (default "x") }',
+      "Field 'Title' is optional, so it cannot also declare a default.",
     ],
     [
       'ambiguous owner-side cascade relations',
       `
-        data Parents / Parent { Children (auto-delete) }
+        data Parents / Parent { Children (owned) }
         data Children / Child { Parent OtherParent (relation Parent) }
       `,
       dataValidationMessages.ambiguousInverseRelation('Parent.Children', 'Child'),
@@ -607,16 +613,16 @@ Describe('validator: declaration contracts', () => {
 
   Test(
     'accepts parameter defaults that reference preceding parameters',
-    accepts(parameterDefaultsApp('First is text default "first", Second is text default First')),
+    accepts(parameterDefaultsApp('First text default "first", Second text default First')),
   )
 
   const defaultScopeCases: ReadonlyArray<readonly [name: string, parameters: string, reference: string]> = [
     [
       'later parameters',
-      'Third is text default Fourth, Fourth is text default "fourth"',
+      'Third text default Fourth, Fourth text default "fourth"',
       'Fourth',
     ],
-    ['the parameter itself', 'Self is text default Self', 'Self'],
+    ['the parameter itself', 'Self text default Self', 'Self'],
   ]
 
   for (const [name, parameters, reference] of defaultScopeCases) {
@@ -627,8 +633,8 @@ Describe('validator: declaration contracts', () => {
   }
 })
 
-function implementation(protocol: 'nav' | 'provider', body = 'return null'): string {
-  return `implement inject ${protocol} ${tsFence} ${body} ${fence}`
+function implementation(protocol: 'nav' | 'provider'): string {
+  return `${protocol} TestImplementation from ./TestImplementation.ts`
 }
 
 function carouselApp(configuration: string): string {
@@ -649,10 +655,10 @@ function carouselApp(configuration: string): string {
 
 function dialogueApp(action: string): string {
   return `
-    enum ConfirmResult { Confirmed }
+    type ConfirmResult is one of Confirmed
     app Demo { view Editor }
     view Editor() { action Broken() { ${action} } render Empty() }
-    dialogue ConfirmClose(Title is text) responds ConfirmResult { render Empty() }
+    dialogue ConfirmClose(Title text) responds ConfirmResult { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -699,14 +705,14 @@ function selectionNavApp(configuration: string): string {
 function queryApp(body: string, declarations = ''): string {
   return `
     ${declarations}
-    ${app(`render Col() { ${body} }`, `${stubLayout('Col')}${stubView('Text', 'Value is text')}`)}
+    ${app(`render Col() { ${body} }`, `${stubLayout('Col')}${stubView('Text', 'Value text')}`)}
   `
 }
 
 function taggedLoopApp(body: string): string {
   return app(
     `render Col() { ${body} }`,
-    `${stubLayout('Col')}${stubView('Text', 'Value is text')}`,
+    `${stubLayout('Col')}${stubView('Text', 'Value text')}`,
   )
 }
 
@@ -716,7 +722,7 @@ function collectionApp(body: string): string {
     ${
     app(
       `query Items { } render Stack() { ${body} }`,
-      `${stubLayout('Stack')}${stubView('Text', 'Value is text')}`,
+      `${stubLayout('Stack')}${stubView('Text', 'Value text')}`,
     )
   }
   `
@@ -737,7 +743,7 @@ function primitiveAppValueSpellings(): string {
   return `
     public type TestStack is nav with {
       Initial ui
-      ${implementation('nav', 'return TR.NavKind.Stack()')}
+      ${implementation('nav')}
     }
     workspace type CompleteTestStack is TestStack with { Initial is Home }
     workspace nav HeadNavigation = CompleteTestStack { }

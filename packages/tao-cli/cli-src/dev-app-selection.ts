@@ -149,6 +149,9 @@ async function withRawChoiceInput<Result>(
         setCustomInputRawMode(input, { enabled: false })
       }
     }
+    // Pair the resume above: a still-flowing stdin keeps the process alive after the selector
+    // returns, so quitting would hang with the terminal back in echoing cooked mode.
+    input.pause()
   }
 }
 

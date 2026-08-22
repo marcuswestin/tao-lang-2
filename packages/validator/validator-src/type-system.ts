@@ -146,8 +146,8 @@ function inferValueReference(
     CasePayload: () => TypeSystemHelpers.taoPrimitiveType('text', typir) ?? InferenceRuleNotApplicable,
     EntityDataField: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir) ?? InferenceRuleNotApplicable,
     EntityQueryDeclaration: () => InferenceRuleNotApplicable,
-    EnumCase: enumCase =>
-      TypeSystemHelpers.taoType(Type.ofValueDeclaration(enumCase), typir) ?? InferenceRuleNotApplicable,
+    CaseSetCase: caseSetCase =>
+      TypeSystemHelpers.taoType(Type.ofValueDeclaration(caseSetCase), typir) ?? InferenceRuleNotApplicable,
     ForStatement: () => TypeSystemHelpers.taoType(Type.ofExpression(node), typir) ?? InferenceRuleNotApplicable,
     DatasourceDeclaration: declaration =>
       TypeSystemHelpers.taoType(Type.ofValueDeclaration(declaration), typir) ?? InferenceRuleNotApplicable,
@@ -189,7 +189,9 @@ function typirTypeForTypeExpression(
   return Switch.type(type, {
     ActionTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     DerivedTypeExpression: derived => TypeSystemHelpers.taoPrimitiveType(derived.base, typir),
+    CaseSetTypeExpression: () => undefined,
     ItemTypeExpression: () => TypeSystemHelpers.taoPrimitiveType('item', typir),
+    YesNoTypeExpression: () => TypeSystemHelpers.taoPrimitiveType('boolean', typir),
     ListTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     NamedTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),
     PrimitiveTypeReference: reference => TypeSystemHelpers.taoPrimitiveType(reference, typir),

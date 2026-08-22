@@ -4,6 +4,14 @@ WordFlower is the canonical Tao application: a workspace/document writing app th
 
 This folder also defines **the implementation process** for Tao language work. All feature development flows through the four numbered versions below.
 
+This README owns the **tranche mechanics** only — the four versions and their validation. The
+program-level process (the sequence toward MVP and Revolution, the coverage matrix, and the role of
+the `Apps/Tao Future/` demo apps, which carry no tiers and instead graduate files as capabilities
+land) is owned by `Roadmap/Tao Revolution/Process.md`. The decided language itself is
+`Roadmap/Tao Revolution/Decisions.md`. Two rules from there bind work here: **MVP is a subset of
+Revolution by omission, never by respelling**, and **a capability exists only if a real feature in
+one of the four apps forces it**.
+
 ## The four versions
 
 ```text

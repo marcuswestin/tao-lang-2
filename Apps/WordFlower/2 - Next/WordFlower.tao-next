@@ -1,7 +1,6 @@
+use WordFlowerNavigator from @nav
 use Local from @tao/data
-use SelectionNav, SlotNav, StackNav from @tao/nav
-use Col, FormButton, Text from @tao/ui
-use BuildStamp, Card, FoundationNavigator, FoundationStack, FoundationStackLet, FoundationStackLetWith, FoundationStackWith, Scroller, SessionGoal, Toolbar, WordBadge, WordFlowerDesign, WorkspaceChooser, WorkspaceList from ./
+use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
 // Tranche status: absorbed
 //
@@ -12,15 +11,19 @@ use BuildStamp, Card, FoundationNavigator, FoundationStack, FoundationStackLet, 
 //
 //   WordFlower       this entry file — project, apps, navigation, local datasource, variants, shell
 //   Data             the data catalog
-//   Shared           shared types, functions, and injected views
-//   Workspaces       the workspace area
-//   Documents        the document area
-//   Foundation       the deterministic navigation harness
 //   Design           the minimal design system — implemented last, see that file
-//   *.test           the Foundation, Documents, Workspaces, and WordFlower behavior journeys
+//   ui/              the workspace and document areas, with their behavior journeys
+//   nav/             the deterministic navigation harness, with its behavior journey
+//   *.test           the behavior journeys, each beside what it exercises
 //
-// The tranche's scratch Prelude and `@tao/text` contracts graduated to `packages/stdlib/tao` and
-// `packages/stdlib/tao/text` respectively; their `@tao-next/` copies are intentionally absent at
+// Declarations carry the narrowest visibility that works. A file-private declaration carries no
+// marker; `folder` reaches the rest of this directory with no `use` line, which is why the sibling
+// import lists are gone. Entities, apps, and case sets still resolve through their own paths, so
+// those keep an explicit `use`. `ui` and `nav` are separate folders, so what they publish across a
+// boundary is `workspace` and is imported by path.
+//
+// The tranche's scratch Prelude and `@tao/text` contracts graduated to `packages/stdlib/@tao` and
+// `packages/stdlib/@tao/text` respectively; their `@tao-next/` copies are intentionally absent at
 // this absorbed boundary.
 //
 // The absorption gates must compare `1 - Current` and `2 - Next` as whole directories: the same
@@ -93,14 +96,14 @@ use BuildStamp, Card, FoundationNavigator, FoundationStack, FoundationStackLet, 
 //   once, are the implementation's responsibility and are not checked
 // - Every `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declaration has a
 //   parenthesized parameter list, including `()` when empty, mirroring its call sites:
-//   `view WordCountLabel(Value is text)`, `action SaveDocument()`, `ui Settings()`. Omitting the list
+//   `view WordCountLabel(Value text)`, `action SaveDocument()`, `ui Settings()`. Omitting the list
 //   is invalid. A `function` has a block body and hands its result back with `return`, so early
 //   returns are available; `returns <type>` is optional and inferred when omitted
 // - `let X is Type = value` ascribes a binding: `is` narrows, `=` binds. It keeps aligned `let`
 //   columns and preserves `Name is Type` order rather than inverting to type-first
 // - List types always name their element type as `list of T`; bare `list` is invalid in type
 //   declarations and parameter ascriptions
-// - `enum Name { Cases }` declares a nominal type in the ordinary type system, and each case is a
+// - `type Name is one of Cases` declares a nominal type in the ordinary type system, and each case is a
 //   value of that type. One-case enums are valid; `ConfirmResult` deliberately uses `none` for
 //   dismissal rather than declaring a second case
 // - `inject <type>` produces a typed value outside render position
@@ -133,64 +136,24 @@ app WordFlowerDrawer = WordFlower with {
       Display "drawer"
 }  }
 
-app WordFlowerFoundationTest {
-   Name "WordFlower Navigation Foundation Test"
-   Navigator FoundationNavigator
+app WordFlowerNavHarness {
+   Name "WordFlower Navigation Harness"
+   Navigator HarnessNavigator
    // An app without data omits `Datasource` entirely
 }
 
 // These four apps cross the two independent declaration sugars. Each is a complete app value with
 // the same mounted behavior: primitive head versus inferred `let`, and canonical construction versus
 // explicit `with`. The Foundation test sidecar runs all four, so every spelling must compile and work.
-app WordFlowerDeclarationHead {
+app WordFlowerStackByNav {
    Name "WordFlower Declaration Head"
-   Navigator FoundationStack
+   Navigator StackByNav
 }
 
-app WordFlowerDeclarationHeadWith = app with {
+app WordFlowerStackByNavWith = app with {
    Name "WordFlower Declaration Head With"
-   Navigator FoundationStackWith
+   Navigator StackByNavWith
 }
-
-// A configured nav declaration is a nav value: an immutable descriptor, not a mounted occurrence
-// or exposed runtime state. `StackNav` is its inferred concrete type; the `nav` head checks the
-// primitive family without erasing that more precise type.
-nav HomeStack = StackNav {
-   Initial WorkspaceList
-}
-
-workspace nav WorkspaceNav = SlotNav {
-   Initial WorkspaceChooser
-}
-
-nav SettingsStack = StackNav {
-   Initial Settings
-}
-
-nav SignedOutNav = StackNav {
-   Initial SignedOut
-}
-
-// Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
-// target-key namespace. The `Icon` property contains a system-icon name; it is not an Icon view.
-nav WordFlowerNavigator = SelectionNav {
-   Initial @home
-   Display "automatic"
-   @home {
-      Label "Home"
-      Icon "house"
-      Content HomeStack
-   }
-   @workspace {
-      Label "Workspace"
-      Icon "folder"
-      Content WorkspaceNav
-   }
-   @settings {
-      Label "Settings"
-      Icon "gear"
-      Content SettingsStack
-}  }
 
 // A configured datasource is a named value like any other. The bare constructor block is the
 // canonical surface spelling for the same refinement operation that explicit `with` exposes;
@@ -199,31 +162,14 @@ datasource DeviceStore = Local {
    StorageKey "WordFlowerData"
 }
 
-workspace let WordFlowerDeclarationLet = app {
+folder
+let WordFlowerStackByLet = app {
    Name "WordFlower Declaration Let"
-   Navigator FoundationStackLet
+   Navigator StackByLet
 }
-workspace let WordFlowerDeclarationLetWith = app with {
+
+folder
+let WordFlowerStackByLetWith = app with {
    Name "WordFlower Declaration Let With"
-   Navigator FoundationStackLetWith
+   Navigator StackByLetWith
 }
-
-workspace ui Settings() {
-   render Scroller() [screen] {
-      Col() [width max 720, centered, gap 10] {
-         Toolbar() {
-            Text("Settings") [title]
-         }
-         Card(Title: "Writing session") {
-            WordBadge(SessionGoal)
-            Text("Build { BuildStamp }") [body] // a typed injected value, not a render
-            @actions FormButton("Reset to signed out") {
-               #resetSignedOut
-               on press -> {
-                  replace SignedOutNav in WordFlower
-}  }  }  }  }  }
-
-workspace ui SignedOut() {
-   render Col() [screen, centered] {
-      Text("Signed out") [title]
-}  }

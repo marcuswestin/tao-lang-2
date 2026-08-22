@@ -11,24 +11,25 @@ export default {
 
   /** TypeDeclaration formats `type Name is ...` declarations. */
   TypeDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'type')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('type')
     f.oneSpaceAround('is')
   },
 
-  /** EnumDeclaration formats its declaration keyword and case block. */
-  EnumDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'enum')
-    f.oneSpaceBeforeProperty('block')
+  /** CaseSetTypeExpression formats `one of A, B, C`. */
+  CaseSetTypeExpression(f) {
+    f.oneSpaceAfter('one', 'of')
+    f.commaSpacedList()
   },
 
-  /** EnumDeclarationBlock places each case on its own indented line. */
-  EnumDeclarationBlock(f) {
-    f.indentedBraceBlock(f.node.cases)
-    f.lineSeparatedList(f.node.cases)
-  },
+  /** CaseSetCase preserves its declaration name or text literal. */
+  CaseSetCase() {},
 
-  /** EnumCase preserves its declaration name. */
-  EnumCase() {},
+  /** YesNoTypeExpression formats `yes / Alias no`. */
+  YesNoTypeExpression(f) {
+    f.oneSpaceAround('/')
+    f.oneSpaceBefore('no')
+  },
 
   /** ItemTypeExpression formats item type property blocks. */
   ItemTypeExpression(f) {

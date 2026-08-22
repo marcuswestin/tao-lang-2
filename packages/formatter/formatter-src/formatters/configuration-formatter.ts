@@ -4,14 +4,16 @@ import type { FormatHandlers } from '../formatting'
 export default {
   /** NavDeclaration formats one declaration-owned navigation configuration contract. */
   NavDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'nav')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('nav')
     f.oneSpaceAround('=')
     f.oneSpaceBeforeProperty('block')
   },
 
   /** DatasourceDeclaration formats one declaration-owned provider configuration contract. */
   DatasourceDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'datasource')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('datasource')
     f.oneSpaceAround('=')
     f.oneSpaceBeforeProperty('block')
   },
@@ -42,9 +44,9 @@ export default {
     f.lineSeparatedList(f.node.properties)
   },
 
-  /** ConfigurationImplementation formats inline and sidecar package-scope protocol bindings. */
+  /** ConfigurationImplementation formats `provider Name from ./Module.ts`. */
   ConfigurationImplementation(f) {
-    f.oneSpaceAfter('implement', 'inject', 'nav', 'provider')
-    f.oneSpaceBeforeProperty('tsCodeBlock', 'sidecarPath')
+    f.oneSpaceAfter('nav', 'provider', 'from')
+    f.oneSpaceBeforeProperty('path')
   },
 } satisfies Partial<FormatHandlers>

@@ -1,7 +1,7 @@
 use FormsInteractionMVP from ./
 
 test "Forms and Interaction MVP" {
-   check "enters and submits text" {
+   test "enters and submits text" {
       run FormsInteractionMVP
 
       expect text "Title is required"
@@ -24,8 +24,7 @@ test "Forms and Interaction MVP" {
       press #save
       expect text "Submissions: 1"
    }
-
-   check "presses an enabled form button" {
+   test "presses an enabled form button" {
       run FormsInteractionMVP
       enter "Ship release" into #taskTitle
       press #save
@@ -33,8 +32,7 @@ test "Forms and Interaction MVP" {
       expect text "Saving…"
       expect text "Submissions: 1"
    }
-
-   check "uses explicit named and inline change handlers instead of automatic binding" {
+   test "uses explicit named and inline change handlers instead of automatic binding" {
       run FormsInteractionMVP
       enter "Alpha" into #namedChange
       expect #namedChange input value "Named: Alpha"
@@ -43,8 +41,7 @@ test "Forms and Interaction MVP" {
       expect #inlineChange input value "Inline: Beta"
       expect text "Inline value: Inline: Beta"
    }
-
-   check "toggles an accessible checkbox through on change" {
+   test "toggles an accessible checkbox through on change" {
       run FormsInteractionMVP
 
       expect checkbox #completed unchecked

@@ -41,7 +41,7 @@ Describe('parser: diagnostics', () => {
 
   Test(
     'parses top-level renders for later validator checks',
-    parses('render Text("hello") { } view Text(Value is text) { }', result => {
+    parses('render Text("hello") { } view Text(Value text) { }', result => {
       Expect(result.entry.ast.statements).toHaveLength(2)
     }),
   )
@@ -51,10 +51,10 @@ Describe('parser: diagnostics', () => {
     parses(
       `
         app MyApp { view MyView }
-        view MyView(Count is number) {
+        view MyView(Count number) {
           render Text(Count) { }
         }
-        view Text(Value is text) { }
+        view Text(Value text) { }
       `,
       result => {
         Expect(result.entry.ast.statements).toHaveLength(3)
@@ -62,12 +62,13 @@ Describe('parser: diagnostics', () => {
     ),
   )
 
-  Test('reports parser errors for old name-first parameter syntax', rejectsParser('view Text(Value text) { }'))
+  // Parameter types are juxtaposed; the retired `Name is Type` form is a parser error.
+  Test('reports parser errors for the retired is-typed parameter syntax', rejectsParser('view Text(Value is text) { }'))
 
   Test('reports linker diagnostics for values outside their owning view', async () => {
     const parseResult = await parseCodeWithErrors(`
-      view Text(Value is text) { }
-      view Source(Secret is text) {
+      view Text(Value text) { }
+      view Source(Secret text) {
         let Local = Secret
       }
       view Target() {

@@ -65,10 +65,6 @@ simulate-state:
 scenarios:
     {{ TAO }} scenarios "{{ APP }}"
 
-# Check rendered output against approved design artifacts. LANG-028
-design-check:
-    {{ TAO }} design check "{{ APP }}"
-
 ## Debugging
 ###########
 

@@ -69,8 +69,11 @@ function usePlatformBack(target: { back(): boolean }): void {
 }
 
 const toastLayerStyle = {
+  alignItems: 'center',
   bottom: 0,
   left: 0,
+  paddingBottom: 24,
+  paddingHorizontal: 16,
   position: 'absolute',
   right: 0,
   zIndex: 2,

@@ -18,13 +18,16 @@ export class RawKeyInput {
     return this.active
   }
 
-  /** stop disables raw stdin key handling. */
+  /** stop disables raw stdin key handling and releases stdin so the process can exit. */
   stop(): void {
     this.detach()
     if (this.active) {
       Platform.setStdinRawMode(false)
       this.active = false
     }
+    // A resumed stdin keeps the event loop alive, so the CLI would hang after the loop returns —
+    // in cooked mode by then, which is what echoes the keys typed after `q`.
+    Platform.runtimeProcess.stdin.pause()
   }
 
   private attach(): void {

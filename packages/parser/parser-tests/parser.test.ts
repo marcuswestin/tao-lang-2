@@ -19,7 +19,7 @@ Describe('parser: core language syntax', () => {
           return <>{Content}</>
         \`\`\`
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -51,7 +51,7 @@ Describe('parser: core language syntax', () => {
           on submit Submit
         }
       }
-      view Input(Value is text, Change is action(text), Submit is action()) {
+      view Input(Value text, Change action(text), Submit action()) {
         render inject \`\`\`ts return null \`\`\`
       }
     `)
@@ -87,7 +87,7 @@ Describe('parser: core language syntax', () => {
           return null
         \`\`\`
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -149,9 +149,9 @@ Describe('parser: core language syntax', () => {
       let Greeting = "Hello"
       let LaunchCount = 3
 
-      view Text(Value is text) { }
-      view StatTile(Label is text, Count is number) { }
-      view MainView(Label is text) {
+      view Text(Value text) { }
+      view StatTile(Label text, Count number) { }
+      view MainView(Label text) {
         let LocalLabel = Label
         render Text(LocalLabel) { }
         render StatTile(Greeting, LaunchCount) { }
@@ -207,12 +207,12 @@ Describe('parser: core language syntax', () => {
     const parseResult = await testParseCode(`
       app CounterApp { view MainView }
 
-      view Button(Title is text, Action is action) { }
+      view Button(Title text, Action action) { }
 
       view MainView() {
         state Count = 0
 
-        action AddStep(Step is number) {
+        action AddStep(Step number) {
           set Count += Step
         }
 
@@ -260,7 +260,7 @@ Describe('parser: core language syntax', () => {
 
   Test('parses explicit positional action callback signatures', async () => {
     const parseResult = await testParseCode(`
-      view Field(Change is action(text), Submit is action()) { }
+      view Field(Change action(text), Submit action()) { }
     `)
 
     const field = parseResult.entry.ast.statements[0]
@@ -286,11 +286,11 @@ Describe('parser: core language syntax', () => {
       }
 
       test "Smoke" {
-        check "renders text" {
+        test "renders text" {
           run MyApp
 
           expect text "Hello"
-          press text "Add"
+          press "Add"
           enter "Draft" into label "Title"
           submit placeholder "Title"
           expect missing text "Loading"
@@ -304,7 +304,7 @@ Describe('parser: core language syntax', () => {
     Expect.Is(test, AST.isTestDeclaration)
     Expect(test.name).toBe('Smoke')
     const [check] = test.block.statements
-    Expect.Is(check, AST.isCheckDeclaration)
+    Expect.Is(check, AST.isTestDeclaration)
     Expect(check.name).toBe('renders text')
     const [run, expectedText, pressText, enterText, submitInput, missingText, inputValue, back] = check.block.statements
     Expect.Is(run, AST.isRunStep)
@@ -314,7 +314,7 @@ Describe('parser: core language syntax', () => {
     Expect(expectedText.text).toBe('Hello')
     Expect(expectedText.missing).toBe(false)
     Expect.Is(pressText, AST.isPressTextStep)
-    Expect(pressText.selector).toBe('text')
+    Expect(pressText.selector).toBeUndefined()
     Expect(pressText.text).toBe('Add')
     Expect.Is(enterText, AST.isEnterTextStep)
     Expect(enterText.value).toBe('Draft')
@@ -356,10 +356,10 @@ Describe('parser: core language syntax', () => {
       layout Col() { render inject \`\`\`ts return null \`\`\` }
       view Input() { render inject \`\`\`ts return null \`\`\` }
       view Button() { render inject \`\`\`ts return null \`\`\` }
-      view Text(Value is text) { render inject \`\`\`ts return null \`\`\` }
+      view Text(Value text) { render inject \`\`\`ts return null \`\`\` }
 
       test "Tagged interactions" {
-        check "uses structured selectors" {
+        test "uses structured selectors" {
           run TaggedApp
           expect {
             text "First"
@@ -376,9 +376,6 @@ Describe('parser: core language syntax', () => {
             expect text "Second"
             press #choose
           }
-          data loading
-          data error "Offline"
-          data ready
         }
       }
     `)
@@ -392,8 +389,10 @@ Describe('parser: core language syntax', () => {
       Expect(AST.attachedTag(loop)?.tag).toBe('#rows')
       Expect(AST.testTagForRender(AST.taggedLoopRowRoot(loop)!)).toBe('rows')
 
-      const check = AST.streamAllContents(parseResult.entry.ast).find(AST.isCheckDeclaration)
-      Expect.Is(check, AST.isCheckDeclaration)
+      const check = AST.streamAllContents(parseResult.entry.ast)
+        .filter(AST.isTestDeclaration)
+        .find(candidate => candidate.block.statements.some(AST.isSelectStep))
+      Expect.Is(check, AST.isTestDeclaration)
       Expect(check.block.statements.some(AST.isExpectGroupStep)).toBe(true)
       Expect(check.block.statements.some(AST.isExpectScopeStep)).toBe(true)
       const select = check.block.statements.find(AST.isSelectStep)
@@ -401,16 +400,13 @@ Describe('parser: core language syntax', () => {
       Expect(select.tag).toBe('#rows')
       Expect(select.index).toBe(2)
       Expect(select.block.statements.some(AST.isTagPressStep)).toBe(true)
-      const statuses = check.block.statements.filter(AST.isDataStatusStep)
-      Expect(statuses).toHaveLength(3)
-      Expect(statuses.map(status => status.status ?? 'error')).toEqual(['loading', 'error', 'ready'])
     },
   )
 
   Test('parses named invocation arguments', async () => {
     const parseResult = await testParseCode(`
-      view Field(Value is text, Change is action, Disabled is boolean) { }
-      view MainView(Draft is text, ChangeDraft is action) {
+      view Field(Value text, Change action, Disabled boolean) { }
+      view MainView(Draft text, ChangeDraft action) {
         render Field(Disabled: false, Change: ChangeDraft, Value: Draft)
       }
     `)
@@ -434,16 +430,16 @@ Describe('parser: core language syntax', () => {
         Name text
         CreatedAt time (default now)
         Pinned yes / no
-        Documents (relation Documents, auto-delete)
+        Documents (owned)
         index CreatedAt
         order by CreatedAt desc
       }
       data Documents / Document {
         Title text
-        Final yes / no Draft
-        Public yes / no Private (default Public)
-        Workspace (relation Workspace)
-        Paragraphs (auto-delete)
+        Final yes / Draft no
+        Public yes / Private no (default Public)
+        Workspace
+        Paragraphs (owned)
       }
       data Paragraphs / Paragraph {
         Text text
@@ -463,7 +459,7 @@ Describe('parser: core language syntax', () => {
         }
       }
       layout Col() { render inject \`\`\`ts return null \`\`\` }
-      view Text(Value is text) { render inject \`\`\`ts return null \`\`\` }
+      view Text(Value text) { render inject \`\`\`ts return null \`\`\` }
     `)
 
     Expect(parseResult.diagnostics).toEqual([])
@@ -477,9 +473,10 @@ Describe('parser: core language syntax', () => {
     Expect(workspaceFields.map(field => field.name)).toEqual(['Name', 'CreatedAt', 'Pinned', 'Documents'])
     Expect(workspaceFields[2]?.boolean).toBe(true)
     Expect(workspaceFields[2]?.negativeName).toBeUndefined()
-    Expect(workspaceFields[3]?.modifiers.map(modifier => modifier.relationName ?? modifier.autoDelete))
-      .toEqual(['Documents', true])
-    Expect(entities[0]?.block.entries.some(AST.isDataIndex)).toBe(true)
+    Expect((workspaceFields[3]?.traits?.traits ?? []).some(trait => trait.owned)).toBe(true)
+    Expect(
+      entities[0]?.block.entries.filter(AST.isDataIndex).map(index => index.fieldName),
+    ).toEqual(['CreatedAt'])
     Expect(entities[0]?.block.entries.some(AST.isDataDefaultOrder)).toBe(true)
     const workspaceParameter = AST.parametersOf(
       parseResult.entry.ast.statements.find(AST.isViewDeclaration)!,
@@ -503,11 +500,11 @@ Describe('parser: core language syntax', () => {
     const parseResult = await testParseCode(`
       public type StackNav is nav with {
         Initial ui
-        implement inject nav \`\`\`ts return TR.NavKind.Stack() \`\`\`
+        nav TestNavKind from ./TestNav.ts
       }
       public type Local is datasource with {
         StorageKey text
-        implement inject provider \`\`\`ts return TR.DataProvider.Local() \`\`\`
+        provider TestProvider from ./TestProvider.ts
       }
       app Notes {
         Name "Notes"
@@ -549,7 +546,7 @@ Describe('parser: core language syntax', () => {
     Expect(toast.mode.toast.duration.value).toBe(3)
     const activation = AST.streamAllContents(home).find(AST.isSelectionActivateStatement)
     Expect.Is(activation, AST.isSelectionActivateStatement)
-    Expect(activation.app.ref).toBe(app)
+    Expect(activation.app?.ref).toBe(app)
     Expect(activation.key).toBe('@home')
   })
 
@@ -557,11 +554,11 @@ Describe('parser: core language syntax', () => {
     const parseResult = await testParseCode(`
       public type StackNav is nav with {
         Initial ui
-        implement inject nav \`\`\`ts return TR.NavKind.Stack() \`\`\`
+        nav TestNavKind from ./TestNav.ts
       }
       public type SlotNav is nav with {
         Initial ui
-        implement inject nav \`\`\`ts return TR.NavKind.Slot() \`\`\`
+        nav TestNavKind from ./TestNav.ts
       }
       app SharedGeneratedApp {
         Name "Shared"
@@ -652,13 +649,11 @@ Describe('parser: core language syntax', () => {
           Label text
           Content ui
         }
-        implement inject nav \`\`\`ts
-          return TR.NavKind.Stack()
-        \`\`\`
+        nav TestNavKind from ./TestNav.ts
       }
       public type CustomData is datasource with {
         StorageKey text
-        implement inject provider "./CustomData.ts"
+        provider CustomData from ./CustomData.ts
       }
       ui Home() { }
       let Main = CustomNav {
@@ -701,15 +696,14 @@ Describe('parser: core language syntax', () => {
     Expect(keyed.name).toBe('@key')
     Expect(keyed.block.properties.map(property => property.name)).toEqual(['Label', 'Content'])
     Expect(navImplementation.protocol).toBe('nav')
-    Expect(navImplementation.tsCodeBlock).toContain('TR.NavKind.Stack()')
+    Expect(navImplementation.exportName).toBe('TestNavKind')
     const [storageKey] = datasource.type.slots.properties
     const [providerImplementation] = datasource.type.slots.implementations
     Expect.Is(storageKey, AST.isTypeProperty)
     Expect.Is(providerImplementation, AST.isConfigurationImplementation)
     Expect(storageKey.name).toBe('StorageKey')
     Expect(providerImplementation.protocol).toBe('provider')
-    Expect(providerImplementation.tsCodeBlock).toBeUndefined()
-    Expect(providerImplementation.sidecarPath).toBe('./CustomData.ts')
+    Expect(providerImplementation.path).toBe('./CustomData.ts')
 
     Expect.Is(main.value, AST.isConfigurationConstructor)
     Expect.Is(store.value, AST.isConfigurationConstructor)
@@ -773,9 +767,7 @@ Describe('parser: core language syntax', () => {
 
   Test('parses dialogue asks and explicit or absent responses as occurrence-owned action statements', async () => {
     const parseResult = await testParseSyntax(`
-      enum ConfirmResult {
-        Confirmed
-      }
+      type ConfirmResult is one of Confirmed
       view Editor() {
         action Close() {
           let Result = ask ConfirmClose("Draft")
@@ -783,7 +775,7 @@ Describe('parser: core language syntax', () => {
         }
         render inject \`\`\`ts return null \`\`\`
       }
-      dialogue ConfirmClose(Title is text) responds ConfirmResult {
+      dialogue ConfirmClose(Title text) responds ConfirmResult {
         action Confirm() { respond Confirmed }
         action Cancel() { respond }
         render inject \`\`\`ts return null \`\`\`

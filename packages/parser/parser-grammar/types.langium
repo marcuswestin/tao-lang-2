@@ -6,25 +6,16 @@ import "./terminals"
 
 entry TypesGrammarEntrypoint:
     // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
-    PrimitiveDeclaration | TypeDeclaration | EnumDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference;
+    PrimitiveDeclaration | TypeDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference | TraitList;
 
 PrimitiveDeclaration:
     'primitive' name=PrimitiveType ('is' base=PrimitiveType)? ('with' slots=ItemTypeExpression)?;
-
-EnumDeclaration:
-    visibility=DeclarationVisibility? 'enum' name=ID block=EnumDeclarationBlock;
-
-EnumDeclarationBlock:
-    '{' cases+=EnumCase+ '}';
-
-EnumCase:
-    name=ID;
 
 TypeDeclaration:
     visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;
 
 TypeExpression:
-    DerivedTypeExpression | UnionTypeExpression | ItemTypeExpression | TypeReference;
+    DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
 
 DerivedTypeExpression:
     base=TypeReference 'with' slots=ItemTypeExpression;
@@ -32,15 +23,44 @@ DerivedTypeExpression:
 UnionTypeExpression:
     members+=TypeReference ('|' members+=TypeReference)+;
 
+// A closed case set. Replaces the nominal `enum Name { Cases }`.
+CaseSetTypeExpression:
+    'one' 'of' cases+=CaseSetCase (',' cases+=CaseSetCase)*;
+
+CaseSetCase:
+    name=ID | literal=STRING;
+
+// The alias precedes `no`, so the keyword terminates it and no contextual lexer token is needed.
+YesNoTypeExpression:
+    'yes' '/' negativeName=ID? 'no';
+
+// The structural record type. No `item` keyword: `item { ... }` constructs a value.
 ItemTypeExpression:
     '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation) ','?)* '}';
 
+// A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:
-    (((optional?='optional' name=ID | name=ID) type=TypeReference?) | name='implement')
+    ((name=ID type=TypeReference? optional?='?'?) | name='implement')
     ('is' value=Expression)?;
 
+// The closed trailing trait list, carried by `data` declaration fields only.
+TraitList:
+    '(' traits+=Trait (',' traits+=Trait)* ')';
+
+Trait:
+    'default' (defaultValue=(StringLiteral | NumberLiteral | BooleanLiteral | NowExpression) | defaultCase=ID)
+    | 'relation' relationName=ID
+    | 'required' sentence=STRING
+    | touchOnChange?='touch' 'on' 'change'
+    | owned?='owned'
+    | ordered?='ordered'
+    | unique?='unique'
+    | search?='search'
+    | device?='device';
+
+// Juxtaposition replaces `Name is Type`; a postfix `?` marks optionality.
 ParameterTypeDeclaration:
-    name=ID 'is' type=TypeExpression;
+    name=ID type=TypeExpression optional?='?'?;
 
 TypeReference:
     ActionTypeReference | ListTypeReference | PrimitiveTypeReference | NamedTypeReference;

@@ -30,7 +30,6 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
     const stringText = requiredToken(byName, 'STRING_TEXT')
     const stringEnd = requiredToken(byName, 'STRING_END')
     const interpolationStart = requiredToken(byName, 'INTERPOLATION_START')
-    const booleanNoAlias = requiredToken(byName, 'BOOLEAN_NO_ALIAS')
     const openBrace = requiredToken(byName, '{')
     const closeBrace = requiredToken(byName, '}')
 
@@ -40,13 +39,6 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
     interpolatedStart.PUSH_MODE = stringMode
     stringEnd.POP_MODE = true
     interpolationStart.PUSH_MODE = expressionMode
-    booleanNoAlias.PATTERN = matchBooleanNoAlias
-    booleanNoAlias.LINE_BREAKS = false
-    booleanNoAlias.START_CHARS_HINT = identifierStarts
-    tokens.splice(tokens.indexOf(booleanNoAlias), 1)
-    // The optional no-case alias may itself be an otherwise reserved word (`Name`, for example),
-    // so its contextual token must win before both keywords and the ordinary identifier token.
-    tokens.unshift(booleanNoAlias)
     // Pushing the expression mode for every ordinary brace makes nested action/item/block
     // expressions balance naturally. The final interpolation brace then returns to string mode.
     openBrace.PUSH_MODE = expressionMode
@@ -89,23 +81,6 @@ function requiredToken(tokens: ReadonlyMap<string, MutableTokenType>, name: stri
 }
 
 const quotePattern = /"/y
-const identifierPattern = /[_a-zA-Z][\w_]*/y
-const identifierStarts = [
-  '_',
-  ...'abcdefghijklmnopqrstuvwxyz',
-  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-]
-
-/** Matches an optional boolean no-case alias only on the same line as `yes / no`. */
-function matchBooleanNoAlias(text: string, offset: number): RegExpExecArray | null {
-  const lineStart = Math.max(text.lastIndexOf('\n', offset - 1), text.lastIndexOf('\r', offset - 1)) + 1
-  if (!/\byes\s*\/\s*no[ \t]+$/.test(text.slice(lineStart, offset))) {
-    return null
-  }
-  identifierPattern.lastIndex = offset
-  return identifierPattern.exec(text)
-}
-
 /** Matches an opening quote only when its string contains an unescaped interpolation brace. */
 function matchInterpolatedStringStart(text: string, offset: number): RegExpExecArray | null {
   if (text[offset] !== '"' || !containsInterpolation(text, offset + 1)) {

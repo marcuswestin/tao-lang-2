@@ -53,7 +53,7 @@ Describe('Tao package discovery', () => {
     try {
       const projectRoot = FS.resolvePath('project', root)
       const stdlibRoot = FS.resolvePath('stdlib', root)
-      const viewsPath = FS.resolvePath('tao/ui/Views.tao', stdlibRoot)
+      const viewsPath = FS.resolvePath('@tao/ui/Views.tao', stdlibRoot)
       await FS.writeText(FS.resolvePath('Main.tao', projectRoot), '')
       await FS.writeText(viewsPath, '')
 
@@ -63,7 +63,7 @@ Describe('Tao package discovery', () => {
         importPath: '@tao/ui',
       })
 
-      Expect(resolution.targetPath).toBe(FS.resolvePath('tao/ui', stdlibRoot))
+      Expect(resolution.targetPath).toBe(FS.resolvePath('@tao/ui', stdlibRoot))
       Expect(await Packages.candidateFilePaths(resolution)).toEqual([viewsPath])
     } finally {
       await FS.remove(root)

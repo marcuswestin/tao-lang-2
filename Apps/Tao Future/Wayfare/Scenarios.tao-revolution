@@ -1,0 +1,46 @@
+// The states this app is reviewed, screenshotted, and audited in.
+
+scenario Library.signedOut { fixture Nobody; run Wayfare; at @trips; device phone }
+scenario Library.laptop { fixture KyotoPlan; run Wayfare; at @trips; device laptop 1440 x 900; pointer precise; keyboard present }
+scenario Workspace.threePanes { fixture KyotoPlan; run Wayfare at StopLink(Inari); device laptop 1440 x 900 }
+scenario Workspace.tabletTwoPanes { fixture KyotoPlan; run Wayfare at StopLink(Inari); device tablet landscape }
+scenario Workspace.phoneStack { fixture KyotoPlan; run Wayfare at StopLink(Inari); device phone }
+scenario Stop.conflict {
+   fixture KyotoPlan
+   prepare {
+      draft Mine = Stop from Inari { Title: "Fushimi Inari at dawn" } // Alex's unsaved draft, seeded
+      collaborator Maya { update Inari { Title: "Fushimi Inari early" } }
+   }
+   run Wayfare at StopLink(Inari)
+   device tablet landscape
+}
+scenario Day.mapDark { fixture KyotoPlan; run Wayfare at DayLink(Monday); device tablet landscape; appearance dark }
+scenario Today.inTokyo {
+   fixture KyotoPlan
+   clock 2027-04-12 08:00 Asia/Tokyo
+   run Wayfare
+   at @today
+   device phone
+   location 34.9671, 135.7727
+}
+scenario Today.spanishLargeText {
+   fixture KyotoPlan
+   prepare { update Me { Language: "es" } }
+   clock 2027-04-12 08:00 Asia/Tokyo
+   run Wayfare
+   at @today
+   device phone
+   textScale 200%
+}
+scenario Documents.private { fixture KyotoPlan; run Wayfare; at @documents; device phone }
+scenario Documents.asViewer { fixture KyotoPlan; signed in as Rowan; run Wayfare; at @documents; device phone }
+scenario Shared.public { fixture KyotoPlan; prepare { do ShareTrip(Kyoto) }; signed out; run Wayfare at SharedTripLink(publish Kyoto as SharedTrip); device phone }
+scenario Recovery.removedStop { fixture KyotoPlan; run Wayfare at StopLink(Inari); prepare { delete Inari }; device phone }
+scenario Offline.reducedMotionHighContrast { fixture KyotoPlan; run Wayfare at DayLink(Monday); device tablet landscape; network offline; contrast high; motion reduced }
+
+// Every rule in WayfareDesign's `rules { }` is checked in every scenario; these are the check-only requirements.
+design check WayfareDesign across all scenarios {
+   require no clipped text at 200%
+   require no horizontal scroll except maps
+   require meaning survives without colour or motion
+}

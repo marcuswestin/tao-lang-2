@@ -23,17 +23,17 @@ Describe('validator: typed values', () => {
     accepts(promptTagsApp()),
   )
 
-  Test('accepts typed list parameters, typed injections, alias ascriptions, and omitted optional fields', async () => {
+  Test('accepts typed list parameters, typed injections, alias ascriptions, and omitted fields?', async () => {
     await withValidationParse(
       `
-        type Profile is { Name text, optional Subtitle text }
+        type Profile is { Name text, Subtitle text? }
         app TypedValues { view Main }
         view Main() {
           let Basic is Profile = Profile { Name: "Ada" }
           let MaybeSubtitle = Basic.Subtitle
           render Empty()
         }
-        function Join(Values is list of text, Separator is text) returns text {
+        function Join(Values list of text, Separator text) returns text {
           return inject text Values, Separator ${tsFence}
             return Values.join(Separator)
           ${fence}
@@ -70,7 +70,7 @@ Describe('validator: typed values', () => {
       `
         type Counts is list of number
         let Counts = Counts [1, 2]
-        function Consume(Values is list of text) returns text { return "unused" }
+        function Consume(Values list of text) returns text { return "unused" }
         app TypedLists { view Main }
         view Main() {
           let Broken = Consume(Values: Counts)
@@ -83,17 +83,17 @@ Describe('validator: typed values', () => {
   )
 
   Test(
-    'requires optional fields to have an explicit type',
+    'requires fields to? have an explicit type',
     rejects(
-      app('', 'type Missing is { optional Label }'),
+      app('', 'type Missing is { Label? }'),
       typeValidationMessages.optionalFieldType('Label'),
     ),
   )
 
   Test(
-    'keeps optional fields distinct from defaulted fields',
+    'keeps fields distinct? from defaulted fields',
     rejects(
-      app('', 'type Defaulted is { optional Label text is "fallback" }'),
+      app('', 'type Defaulted is { Label text? is "fallback" }'),
       typeValidationMessages.optionalFieldDefault('Label'),
     ),
   )
@@ -104,7 +104,7 @@ Describe('validator: typed values', () => {
       app(
         '',
         `
-          function Size(Value is text) returns number {
+          function Size(Value text) returns number {
             return inject number Value, Value 1 ${tsFence}
               return Value.length
             ${fence}
@@ -119,7 +119,7 @@ Describe('validator: typed values', () => {
     'accepts nested list type references',
     accepts(app(
       'render Empty()',
-      `function Flatten(Values is list of list of text) returns list of text { return [] } ${stubView('Empty')}`,
+      `function Flatten(Values list of list of text) returns list of text { return [] } ${stubView('Empty')}`,
     )),
   )
 
@@ -150,7 +150,7 @@ function promptTagsApp(): string {
       StarterTags
     }
 
-    function Join(Values is list of text, Separator is text) returns text {
+    function Join(Values list of text, Separator text) returns text {
       return inject text Values, Separator ${tsFence}
         return Values.join(Separator)
       ${fence}
@@ -158,11 +158,11 @@ function promptTagsApp(): string {
 
     app TypedTags { view Main }
     view Main() { render TagSummary(StarterPrompt.PromptTags) }
-    view TagSummary(Tags is PromptTags) {
+    view TagSummary(Tags PromptTags) {
       let Positional = Join(Tags, Separator: ", ")
       let Labeled = Join(Values: Tags, Separator: ", ")
       render Text("{ Positional } / { Labeled }")
     }
-    ${stubView('Text', 'Value is text')}
+    ${stubView('Text', 'Value text')}
   `
 }

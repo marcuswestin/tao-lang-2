@@ -11,7 +11,7 @@ Describe('validator: injections', () => {
       view MainView() {
         render Text("Hello")
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject Value, Value "Again" ${tsFence}
           return null
         ${fence}

@@ -1,0 +1,93 @@
+// The shopping list. Lines arrive from the plan and from typing; the same ingredient across a week is
+// one line you tick once.
+
+ui ShoppingList() {
+   Title "Shop"
+   Toolbar { ClearTheBought }
+   state NewItem = ""
+
+   // `group by` folds rows that agree on the named fields into one line, and `sum` totals a field. A
+   // folded line stands for the rows it folds: reading Name or Unit reads what they share, reading
+   // Amount reads the total, and ticking it ticks every row inside. `Line.Sources` is there when a
+   // screen wants the rows themselves.
+   query Lines from MyKitchen.Groceries {
+      where is Needed
+      group by Name, Unit, Aisle, Store
+      sum Amount
+      order by Aisle, Name
+   }
+   query Bought from MyKitchen.Groceries {
+      where is Bought
+      group by Name, Unit, Aisle, Store
+      sum Amount
+      order by Name
+   }
+   action AddItem() runs single {
+      stop if NewItem is empty
+      create Grocery in MyKitchen.Groceries { Name: NewItem }
+      set NewItem = ""
+   }
+
+   command ClearTheBought {
+      Label "Clear bought"
+      Icon "trash"
+      Available when Bought has any where can delete Grocery // hidden for a guest
+      Enabled when Bought is not empty // shown, but not pressable, when there is nothing to clear
+      runs single
+      does { delete MyKitchen.Groceries where is Bought } // one bulk write; no transaction needed
+   }
+
+   render ScrollView [screen] {
+      Col [page, width max 900] {
+         OfflineNotice
+         #newItem
+         TextInput(Value: NewItem, Label: "Add an item", Placeholder: "Olive oil") { on submit AddItem }
+
+         guard Lines
+         if Lines is empty {
+            EmptyState(Icon: "basket", Title: "Nothing to buy", Body: "Plan a meal and add it to the list, or type an item above.")
+         }
+
+         // The list and the map side by side on a wide screen, one column on a phone. The map is over the
+         // same rows as the list, which is the ordered alternative the design's rules require.
+         Panes [gap lg] {
+            #lines
+            Col [claim 2, gap lg] {
+               // Grouped by aisle so the walk through the shop is in order.
+               loop Lines by Aisle as Group {
+                  Section(Group.Key) {
+                     @actions Col [aisleMark(Group.Key), size 14, decorative]
+                     List(Group.Rows as Line) { GroceryRow(Line) }
+               }  }
+
+               if Bought is not empty {
+                  Section("Bought") {
+                     List(Bought as Line) { GroceryRow(Line) }
+            }  }  }
+
+            if Lines has any where Store is not none {
+               Map(Lines, Place: Line.Store, Label: "Where to buy these") [height min 320, radius lg] {
+                  pin label Line.Store.Name
+                  me
+}  }  }  }  }  }
+
+// One line of the list — a folded row, which stands for its sources: it exposes the fields the fold
+// agrees on (the grouped fields, `where`-fixed fields, sums), and a write through it reaches every
+// source row. `Bought` is bound to the row, so ticking writes through.
+file view GroceryRow(Grocery) {
+   action HaveIt() runs single {
+      when KeepInPantry(Grocery) {
+         done -> present Notice("{ Grocery.Name } is in the pantry") as toast (Key: "pantry")
+   }  }
+   render Row [pattern Line] {
+      #tick
+      Checkbox(Value: Grocery.Bought, Label: Grocery.Name) [@leading]
+      Col [@content, gap xxs] {
+         Text(Grocery.Name) [body, strike when Grocery is Bought]
+         // Bound to the row, so on a folded line this sets the shop for every row it stands for.
+         if NearbyStores is not empty {
+            Choice(Value: Grocery.Store, Options: NearbyStores, Placeholder: "Any shop", Label: "Where to buy { Grocery.Name }") [caption]
+      }  }
+      Measure(Grocery.Amount, Grocery.Unit) [@trailing]
+      Button(Icon: "cabinet", Label: "Already have { Grocery.Name }") [quiet, @trailing] { on press HaveIt }
+}  }

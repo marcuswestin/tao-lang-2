@@ -481,7 +481,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        enum ConfirmResult { Confirmed }
+        type ConfirmResult is one of Confirmed
 
         ui Home() { render Wrapper()[gap 9] }
 

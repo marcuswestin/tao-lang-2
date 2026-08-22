@@ -20,11 +20,13 @@ ToastPresentationOptions:
 NavigationTarget:
     value=ValueReference | app=[AppValueDeclaration:ID] key=USE_IMPORT_PATH;
 
+// Naming the app is an assertion, not the address: the runtime resolves the enclosing app either
+// way. Omitting it targets the nearest enclosing app, which is what lets a screen live in a package.
 SelectionActivateStatement:
-    'present' app=[AppValueDeclaration:ID] key=USE_IMPORT_PATH;
+    'present' app=[AppValueDeclaration:ID]? key=USE_IMPORT_PATH;
 
 DismissStatement:
     {infer DismissStatement} 'dismiss';
 
 ReplaceStatement:
-    'replace' navigator=ValueReference 'in' app=[AppValueDeclaration:ID];
+    'replace' navigator=ValueReference ('in' (ambientApp?='app' | app=[AppValueDeclaration:ID]))?;

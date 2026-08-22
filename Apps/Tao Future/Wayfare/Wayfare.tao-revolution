@@ -1,0 +1,170 @@
+// Wayfare — plan days and stops together on a laptop, carry the same live plan on a phone, keep working
+// when the network disappears.
+//
+// This file holds the project, the capabilities, the navigation, the app, and settings.
+
+project {
+   id "wayfare"
+   name "Wayfare"
+   remote none
+   license MIT
+
+   targets phone, tablet, laptop
+   languages "en-US", "es"
+}
+
+// -- Capabilities ---------------------------------------------------------------------------------------
+
+datasource Caravan = Cloud {
+   AppId "wayfare"
+   Writes optimistic
+   // Field-wise latest is the policy for what writes through — a day's title, a visited mark. The stop
+   // editor's composed edit goes through a draft, whose `conflict` outcome is the keep-mine conversation;
+   // the two never overlap.
+   Conflicts fieldwise latest
+   Deletes tombstones for 30 days
+   Offline {
+      Enabled Me.KeepTripsOffline
+      Keep Trip where Me in TripFolk of Trip // a kept trip carries its days, stops, notes, documents…
+      MapTiles around Trip.Days.Stops.Place within 8 km // …and the map around its places
+   }
+}
+
+datasource OnDevice = Local { StorageKey "wayfare" }
+
+files TripFiles = Files { Kinds image, pdf; Limit 25 megabytes each; Offline readable and writable }
+
+notifications Departures = Notifications { }
+
+permissions WayfarePermissions {
+   notifications optional because "Say when a stop is about to start."
+   location while using because "Show today's stops on the map around you."
+}
+
+// -- Navigation -----------------------------------------------------------------------------------------
+//
+// The workspace is a three-pane split — the library with the open trip's overview over it, one day's
+// plan, one stop's details — that a laptop shows side by side, a tablet shows two of and walks to the
+// third, and a phone walks as a stack in `Compact`'s authored order, reversing it on Back. Nothing here
+// names a device. `CollapsePriority 1` collapses first: on a tablet the trip pane folds away and the day
+// and its stop stay side by side.
+
+nav TripWorkspace = SplitNav {
+   Compact { Progression @trip -> @day -> @details, Back reverse }
+   @trip { Content StackNav { Initial TripLibrary }, Width 360, CollapsePriority 1 }
+   @day { Content SlotNav { Initial NoTripOpen }, Width min 400, CollapsePriority 3 }
+   @details { Content SlotNav { Initial NoStopSelected }, Width min 380, CollapsePriority 2 }
+}
+
+nav WayfareNavigator = SelectionNav {
+   Initial @trips
+   Display "automatic"
+   Commands { NewTrip }
+   @trips { Label "Trips", Icon "map", Content TripWorkspace }
+   @today { Label "Today", Icon "sun.max", Content StackNav { Initial TodayScreen } }
+   @documents { Label "Documents", Icon "doc.text", Content StackNav { Initial DocumentsScreen } }
+   @settings { Label "Settings", Icon "gearshape", Content StackNav { Initial SettingsScreen } }
+}
+
+// -- App ------------------------------------------------------------------------------------------------
+
+app Wayfare {
+   Name "Wayfare"
+   Design WayfareDesign
+   Datasource Caravan
+   Files TripFiles
+   Notifications Departures
+   Places
+   Permissions WayfarePermissions
+   // Trips are browsable signed out (the library shows the sign-in panel); a link into a private trip waits
+   // for the account. So the root is one navigator, and `Me` is guarded where it matters.
+   Navigator WayfareNavigator
+   Language Me.Language
+   Restore automatic { Exclude sheets, menus, toasts }
+
+   // The overview lives in the trip pane, a stack over the library: `reveal` into a stack pushes what is
+   // not there and pops back to what is. The day and the stop each have a slot of their own.
+   link TripLink "/trips/{Trip}" -> {
+      reveal TripOverview(Trip) in @trip
+      focus @trip
+   }
+   link DayLink "/days/{Day}" -> {
+      reveal TripOverview(Day.Trip) in @trip
+      reveal DayPlan(Day) in @day
+      focus @day
+   }
+   link StopLink "/stops/{Stop}" -> {
+      reveal TripOverview(Stop.Day.Trip) in @trip
+      reveal DayPlan(Stop.Day) in @day
+      reveal StopDetails(Stop) in @details
+      focus when container { narrow -> @details; otherwise -> @day } // on a laptop, keep arranging the day
+   }
+   link JoinLink(Code secret) "/join/{Code}" -> {
+      present JoinTrip(Code) as sheet
+   }
+   public link SharedTripLink "/shared/{SharedTrip}" -> {
+      present SharedTripScreen(SharedTrip) as root
+   }
+}
+
+app WayfareOnDevice = Wayfare with {
+   Name "Wayfare (on device)"
+   Datasource OnDevice
+   Notifications simulated
+   Places simulated
+}
+
+app WayfarePreview = Wayfare with {
+   Name "Wayfare Preview"
+   Datasource Memory
+   Seed KyotoPlan
+   Accounts simulated (signed in as "Alex")
+   Notifications simulated
+   Places simulated
+   Restore fresh
+}
+
+// -- Settings ------------------------------------------------------------------------------------------
+
+ui SettingsScreen() {
+   Title "Settings"
+
+   command DeleteAccount {
+      Label "Delete my account"
+      Icon "person.crop.circle.badge.xmark"
+      Intent destructive
+      Available when Me is signed in
+      runs single
+      does {
+         stop unless ask Confirm("Delete your account?", Body: "Trips stay with the people on them; your private documents go with you. This cannot be undone.", Verb: "Delete account")
+         do DeleteMyAccount() // a sole owner is refused with the trip's own sentence
+   }  }
+
+   render ScrollView [screen] {
+      Col [page, width max 720] {
+         Section("Account") {
+            when Me {
+               loading -> Status("Opening Wayfare…")
+               signed out -> {
+                  Text("Sign in to sync trips with your other devices and the people you travel with.") [body]
+                  SignInPanel
+               }
+               error -> Message { Status(Message, Tone: Warning) }
+               otherwise -> {
+                  Text(Me.Name) [body]
+                  Text(Me.Email) [caption]
+                  Choice(Value: Me.Language, Label: "Language", Options: project.languages)
+                  Button("Sign out") [quiet] { on press -> sign out }
+                  DeleteAccount [quiet]
+         }  }  }
+         Section("Travel") {
+            Toggle(Value: Me.KeepTripsOffline, Label: "Keep trips available offline")
+            Text("Kept trips include the itinerary, private notes, documents, and the map around saved places.") [caption]
+            PermissionRow(notifications, Label: "Stop reminders")
+            PermissionRow(location, Label: "Today's map")
+         }
+         Section("Sync") {
+            OfflineNotice
+            SyncBadge
+            Button("Sync now", Busy: Sync is Syncing) [quiet] { on press -> sync now }
+}  }  }  }

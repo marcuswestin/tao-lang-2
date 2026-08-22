@@ -71,7 +71,8 @@ export default {
 
   /** FunctionDeclaration formats a parenthesized pure function header and block body. */
   FunctionDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'function', 'returns')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('function', 'returns')
     f.oneSpaceBefore('returns')
     f.noSpaceBefore('(')
   },
@@ -173,6 +174,9 @@ export default {
 
   /** MemberAccessExpression has no whitespace around member dots. */
   MemberAccessExpression() {},
+
+  /** PostfixMemberAccess has no whitespace around its dot, so `220.ms` stays tight. */
+  PostfixMemberAccess() {},
 
   /** StringLiteral is a single token with no interior formatting. */
   StringLiteral() {},

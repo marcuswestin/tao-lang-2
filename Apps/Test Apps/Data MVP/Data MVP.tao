@@ -10,18 +10,22 @@ app DataMVPApp {
    Datasource Memory { }
 }
 
-workspace data Workspaces / Workspace {
+workspace
+data Workspaces / Workspace {
    Name text
    CreatedAt time (default now)
-   Tasks (auto-delete)
+   Tasks (owned)
+
    index CreatedAt
    order by Name
 }
 
-workspace data Tasks / Task {
+workspace
+data Tasks / Task {
    Title text
-   Done yes / no Open
+   Done yes / Open no
    Workspace
+
    order by Title
 }
 
@@ -44,33 +48,32 @@ ui MainView() {
    render Col() [gap 10, pad 16] {
       Text("Data MVP")
       guard Workspaces {
-         loading -> {
-            Text("Loading local data…")
-         }
-         error -> Message {
-            Text(Message)
-      }  }
+         loading -> { Text("Loading local data…") }
+         error -> Message { Text(Message) }
+      }
+
       #workspaceName
       TextInput(Value: WorkspaceDraft, Label: "Workspace name") {
          on submit AddWorkspace
       }
+
       #addWorkspace
       FormButton("Add workspace") {
          on press AddWorkspace
       }
+
       #taskTitle
       TextInput(Value: TaskDraft, Label: "Task title") {
          on submit -> { }
       }
       when Workspaces {
-         empty -> {
-            Text("No workspaces yet")
-         }
+         empty -> { Text("No workspaces yet") }
          otherwise -> {
             #workspaces
             loop Workspaces / Workspace {
                Col() {
                   Text(Workspace.Name)
+
                   #addTask
                   FormButton("Add task") {
                      on press -> {
@@ -80,43 +83,41 @@ ui MainView() {
                         }
                         set TaskDraft = ""
                   }  }
+
                   #deleteWorkspace
                   FormButton("Delete workspace") {
-                     on press -> {
-                        delete Workspace
-      }  }  }  }  }  }
+                     on press -> { delete Workspace }
+      }  }  }  }  }
       when OpenTasks {
-         empty -> {
-            Text("No open tasks")
-         }
+         empty -> { Text("No open tasks") }
          otherwise -> {
             #openTasks
             loop OpenTasks / Task {
                Col() {
                   Text(Task.Title)
+
                   #renameTask
                   FormButton("Rename task") {
-                     on press -> {
-                        update Task {
-                           Title: "Updated task"
-                  }  }  }
+                     on press -> { update Task {
+                        Title: "Updated task"
+                     } }
+                  }
+
                   #completeTask
                   FormButton("Complete task") {
-                     on press -> {
-                        update Task {
-                           Done
-      }  }  }  }  }  }  }
+                     on press -> { update Task {
+                        Done
+                     } }
+      }  }  }  }  }
       when CompletedTasks {
-         empty -> {
-            Text("No completed tasks")
-         }
+         empty -> { Text("No completed tasks") }
          otherwise -> {
             #completedTasks
             loop CompletedTasks / Task {
                Col() {
                   Text(Task.Title)
+
                   #deleteTask
                   FormButton("Delete task") {
-                     on press -> {
-                        delete Task
-}  }  }  }  }  }  }  }
+                     on press -> { delete Task }
+}  }  }  }  }  }  }

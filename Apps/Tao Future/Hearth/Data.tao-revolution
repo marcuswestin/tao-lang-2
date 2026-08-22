@@ -1,0 +1,117 @@
+// What Hearth stores.
+//
+// This file is the shape of the data and nothing else. Who may read and write it is in
+// Access.tao-revolution; what a multi-row write means is in Rules.tao-revolution.
+//
+//   validate   an invariant, checked by the store on every write path, rejecting with its sentence.
+//   required   completeness — never blocks a write; derives `Row.Incomplete` and `Row.Problems`, which is
+//              what lets a chore be captured half-formed from the hallway and finished from the sofa.
+
+type Role is one of Owner, Adult, YoungPerson
+type ListKind is one of Chores, Shopping, Plans
+type Accent is one of Moss, Clay, Sky, Plum
+type Unit is one of "piece", "g", "kg", "ml", "l", "pack"
+
+data Accounts / Account with {
+   Memberships
+
+   preference CurrentHome Home (optional)
+   preference KeepOffline yes / no (default yes)
+   preference Language text (default device.language)
+   preference AroundRadius distance (default 8 km, device)
+}
+
+data Homes / Home {
+   Name text (required "Name your home")
+   TimeZone timezone (default device.timeZone)
+   Accent (default Moss)
+   Memberships (owned)
+   Invites (owned)
+   Lists (owned, ordered)
+   CreatedAt time (default now)
+
+   // A cross-row invariant. The store refuses the write that would empty this, which is what stops the
+   // last owner from leaving and orphaning every list the home owns.
+   validate at least one Memberships where Role is Owner "A home needs an owner. Make someone else an owner first."
+}
+
+data Memberships / Membership {
+   Home
+   Person Account
+   Role (default Adult)
+   JoinedAt time (default now)
+
+   unique Home, Person
+}
+
+// An invitation is a row with a secret, not a link to a home id: it works once, expires, and may be
+// bound to the person it was meant for.
+data Invites / Invite {
+   Home
+   Code secret (default new secret)
+   Role (default Adult)
+   Email text (optional)
+   Used yes / Unused no
+   InvitedBy Account
+   ExpiresAt time (default now + 7 days)
+
+   unique Code
+}
+
+data HearthLists / HearthList {
+   Home
+   Name text (required "Name this list")
+   Kind ListKind (default Chores)
+   Color Accent (default Moss)
+   Shared yes / Private no
+   ShareCode secret (default new secret)
+   Items (owned, ordered) // the store keeps positions; rows move, they never renumber
+   CreatedAt time (default now)
+}
+
+data HearthItems / HearthItem {
+   HearthList // the list this item is on
+   Title text (required "Say what needs doing")
+   Note text (default "")
+   Due time (optional)
+   Assignee Account (optional)
+   Quantity number (optional) // shopping lists fold on Title and Unit and sum this
+   Unit (optional)
+   Place Place (optional) // an errand: Around shows it on the map, nearest first
+   Complete yes / Open no
+   CreatedBy Account
+   CreatedAt time (default now)
+   CompletedBy Account (optional)
+   CompletedAt time (optional)
+   Comments (owned)
+   Photos (owned)
+
+   index Assignee
+   index Due
+   search Title, Note
+
+   // Who finished it and when they did are one fact: neither syncs without the other.
+   together CompletedBy, CompletedAt
+   together Quantity, Unit
+
+   validate Quantity is none or Quantity > 0 "A quantity has to be more than nothing"
+}
+
+data Comments / Comment {
+   Item HearthItem
+   Author Account
+   Body text (required "Say something")
+   CreatedAt time (default now)
+
+   order by CreatedAt
+}
+
+data Photos / Photo {
+   Item HearthItem
+   Image image
+   Caption text (default "")
+   AddedBy Account
+   AddedAt time (default now)
+
+   order by AddedAt
+}

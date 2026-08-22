@@ -1,0 +1,58 @@
+// The week: plans laid out by day, dragged between days.
+
+phrase WeekTitle(Day date) = "Week of { Day.Short }"
+
+ui WeekScreen() {
+   Title WeekTitle(WeekStart)
+   Toolbar { AddSomething [primary], ThisWeek }
+   state WeekStart = StartOfWeek(today in MyHome.TimeZone)
+   query Planned from MyHome.Lists.Items {
+      where is Open
+      where Due during WeekStart .. WeekStart + 6 days in MyHome.TimeZone
+      order by Due
+   }
+   query Undated from MyHome.Lists.Items {
+      where is Open and Due is none and HearthList.Kind is Plans
+      order by CreatedAt desc
+   }
+
+   command ThisWeek {
+      Label "This week"
+      Icon "calendar"
+      does { set WeekStart = StartOfWeek(today in MyHome.TimeZone) }
+   }
+
+   render ScrollView [screen] {
+      Col [page, width max 1400] {
+         OfflineNotice
+         Row [content spread center] {
+            Button(Icon: "chevron.left", Label: "Previous week") [quiet] { on press -> set WeekStart = WeekStart - 7 days }
+            Text(WeekTitle(WeekStart)) [title]
+            Button(Icon: "chevron.right", Label: "Next week") [quiet] { on press -> set WeekStart = WeekStart + 7 days }
+         }
+         guard Planned
+
+         // Generated days make empty dates first-class drop targets. Seven columns when they fit, one
+         // readable column otherwise; the data and the interaction are unchanged. Dropping an item on a day
+         // moves its due date, keeping its time of day.
+         #week
+         Grid(WeekOf(WeekStart) as Day) [columns 1 when narrow, 7 when wide, cell min 180, gap sm] {
+            Col(Label: Day.Long) [card, height min 220] {
+               Text(if Day is today in MyHome.TimeZone then "Today" else Day.Weekday) [label]
+               Text(Day.Short) [caption]
+               List(Planned[Due during Day] as Item, Label: Day.Weekday, Accepts: HearthItem) {
+                  HearthItemRow(Item)
+                  on select -> open ItemLink(Item)
+                  on drop -> Dropped {
+                     let TimeOfDay = if Dropped.Due is none then 09:00 else Dropped.Due.Time // keep the hour, move the day
+                     update Dropped { Due: Day at TimeOfDay in MyHome.TimeZone }
+         }  }  }  }
+
+         if Undated is not empty {
+            Section("Plans without a day yet") {
+               Text("Drag one onto a day, or open it and pick a time.") [caption]
+               List(Undated as Item, Label: "Without a day", Accepts: HearthItem) {
+                  HearthItemRow(Item)
+                  on select -> open ItemLink(Item)
+                  on drop -> Dropped { update Dropped { Due: none } }
+}  }  }  }  }  }

@@ -1,1 +1,2 @@
-package let ChildFolderTitle = "Package child folder works"
+package
+let ChildFolderTitle = "Package child folder works"

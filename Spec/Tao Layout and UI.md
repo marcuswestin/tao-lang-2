@@ -47,7 +47,7 @@ Presentation adds separate declaration roles without changing these visual roles
 - `ui` is presentable content whose visual body follows the same render rules as a `view`.
 - `dialogue` is response-demanding content whose body follows the same render rules.
 - `nav` is a package-configured presentation kind and binds its runtime behavior through
-  `implement inject nav`; it is not a render-bearing visual declaration. A configured nav may be
+  `nav <Export> from <path>`; it is not a render-bearing visual declaration. A configured nav may be
   mounted only as an app navigator, a genuine app auxiliary, or content of another nav. Rendering a
   nav inside a `view` or `ui` is a validation error.
 
@@ -120,7 +120,7 @@ FormButton("Save") {
 
 `on press` and `on submit` satisfy `action()` slots. `on change` satisfies `action(text)` and an inline handler may name that text payload after `->`. A named action reference must have the same callback contract. Configuring the same event twice, combining an event with an ordinary argument for the same slot, or using an event on a view without the standard slot is an error.
 
-For a text control with `Value is text, Change is action(text)`, omitting `on change` synthesizes the usual two-way update only when the explicitly labeled `Value:` expression directly references writable text `state`:
+For a text control with `Value is text, Change action(text)`, omitting `on change` synthesizes the usual two-way update only when the explicitly labeled `Value:` expression directly references writable text `state`:
 
 ```tao
 state Draft = ""
@@ -150,7 +150,7 @@ future work.
 ```tao
 use Col, FormButton, Row, Text from @tao/ui
 
-frame Card(Title is text) {
+frame Card(Title text) {
    @actions = empty
 
    render Col() [gap 8, pad 12] {
@@ -413,7 +413,7 @@ ToolbarArea() [gap 8] {
 If the declaration has fixed siblings and caller content, put `@@content` inside an explicit inner host when caller layout should affect only caller content:
 
 ```tao
-frame LabeledSection(Label is text) {
+frame LabeledSection(Label text) {
    render Stack() [gap 12, pad 16] {
       Text(Label)
 

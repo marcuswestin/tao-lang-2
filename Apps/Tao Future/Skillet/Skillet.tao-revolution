@@ -1,0 +1,140 @@
+// Skillet — plan the week, cook the meal, shop the list, together.
+//
+// This file holds the project, the capabilities, the navigation, and the app. Everything else in the
+// folder is visible here without imports: a folder is the vocabulary boundary, and the Tao Prelude
+// (`Col`, `Text`, `Cloud`, `SelectionNav`, `now`, `Place` …) is ambient.
+
+project {
+   id "skillet"
+   name "Skillet"
+   remote none
+   license MIT
+
+   targets phone, tablet, laptop
+   languages "en-US", "es", "es-MX" // the first is the source language; Words.tao-revolution translates
+}
+
+// -- Capabilities ---------------------------------------------------------------------------------------
+//
+// A capability is a value the app selects, so a variant can swap it for a simulated one and a check
+// can drive it. Permissions state why they are asked for; the runtime asks on first use.
+
+datasource Kitchen = Cloud {
+   AppId "skillet"
+   Writes optimistic
+   Conflicts fieldwise latest // write-through's honest policy: independent fields, last write wins
+   Deletes tombstones for 30 days
+   Offline {
+      Enabled Me.KeepOffline
+      Keep Household where Me in Family of Household // a kept kitchen carries its recipes, plan, list, and photos
+   }
+}
+
+datasource OnDevice = Local { StorageKey "skillet" }
+
+files Photos = Files { Kinds image; Limit 20 megabytes each; Offline readable and writable }
+
+notifications Alerts = Notifications { QuietHours 22:00 .. 07:00 } // a timer still rings; a meal reminder waits
+
+permissions SkilletPermissions {
+   notifications optional because "Tell you when a timer finishes."
+   location while using because "Show which shop is nearest when you build a list."
+}
+
+// -- Navigation -----------------------------------------------------------------------------------------
+//
+// SelectionNav is tabs when narrow and a sidebar otherwise. SplitNav shows its panes side by side when
+// they fit and otherwise walks `Compact`'s progression as a stack, reversing it on Back. Nothing here
+// names a device.
+
+nav LoadingNav = StackNav { Initial Loading }
+nav WelcomeNav = StackNav { Initial Welcome }
+
+nav RecipeWorkspace = SplitNav {
+   Compact { Progression @list -> @detail, Back reverse }
+   @list { Content StackNav { Initial RecipeLibrary }, Width 420, CollapsePriority 1 } // 1 collapses first: a tablet shows the recipe
+   @detail { Content SlotNav { Initial NoRecipeSelected }, Width min 460, CollapsePriority 2 }
+}
+
+nav SkilletNavigator = SelectionNav {
+   Initial @plan
+   Display "automatic"
+   // Commands mounted on the navigator work from every tab. Mounted on a screen, they work while it is
+   // focused. That is the whole shortcut story.
+   Commands { NewRecipe, ImportRecipe, FindAnything }
+   @plan { Label "Plan", Icon "calendar", Content StackNav { Initial WeekPlan } }
+   @recipes { Label "Recipes", Icon "book", Content RecipeWorkspace }
+   @shop { Label "Shop", Icon "basket", Content StackNav { Initial ShoppingList } }
+   @kitchen { Label "Kitchen", Icon "house", Content StackNav { Initial KitchenScreen } }
+}
+
+// -- App ------------------------------------------------------------------------------------------------
+
+app Skillet {
+   Name "Skillet"
+   Design SkilletDesign
+   Datasource Kitchen
+   Files Photos
+   Notifications Alerts
+   Places
+   Permissions SkilletPermissions
+
+   // The root is live and follows the account: welcome until you belong to a kitchen, then the kitchen.
+   // Starting one, accepting an invitation, and leaving are ordinary writes — no screen replaces the
+   // root, and no feature screen re-checks the gate.
+   Navigator when MyKitchen {
+      loading -> LoadingNav // never a flash of "Start your kitchen" for a returning cook
+      none -> WelcomeNav
+      otherwise -> SkilletNavigator
+   }
+   Language Me.Language // which `words` the app renders in; the device language until signed in
+
+   // What comes back after a relaunch: the navigator, its selections, and open windows. Sheets, menus,
+   // and toasts do not. An incoming link always wins over restoration.
+   Restore automatic { Exclude sheets, menus, toasts }
+
+   // A link is product intent, a stable path, and its mounting policy in one declaration. `reveal`
+   // focuses an equal mount rather than stacking a second occurrence, so opening the same recipe from
+   // two places lands in one place. A link whose target is not mounted yet waits and runs when it is,
+   // so a shared link opens after signing in. `{Recipe}` declares an entity parameter; other parameters
+   // are written out.
+   link RecipeLink "/recipes/{Recipe}" -> {
+      reveal RecipeScreen(Recipe) in @detail // revealing into a slot also selects the tab that holds it
+      focus @detail
+   }
+   link MealLink "/meals/{Meal}" -> {
+      reveal MealScreen(Meal) in @plan
+   }
+   link CookLink "/cook/{Recipe}" -> {
+      present CookScreen(Recipe) as window (Key: Recipe) // the key means one window per recipe
+   }
+   link CookMealLink "/cook/{Recipe}/{Meal}" -> {
+      present CookScreen(Recipe, Meal: Meal) as window (Key: Recipe) // scaled to the meal; marks it cooked
+   }
+   link JoinLink(Code secret) "/join/{Code}" -> {
+      present JoinKitchen(Code) as sheet
+   }
+   public link SharedRecipeLink "/shared/{SharedRecipe}" -> {
+      present SharedRecipeScreen(SharedRecipe) as root
+   }
+}
+
+// The same app on the device store, for `just dev-on-device` and for checks that never reach an
+// account. A variant leaves Skillet unchanged: links and targets still name `Skillet`.
+app SkilletOnDevice = Skillet with {
+   Name "Skillet (on device)"
+   Datasource OnDevice
+   Notifications simulated
+   Places simulated
+}
+
+// A preview: an in-memory store, a signed-in demo account, nothing restored.
+app SkilletPreview = Skillet with {
+   Name "Skillet Preview"
+   Datasource Memory
+   Seed HomeKitchen // the test fixture, so the preview has a kitchen to show
+   Accounts simulated (signed in as "Ro")
+   Notifications simulated
+   Places simulated
+   Restore fresh
+}

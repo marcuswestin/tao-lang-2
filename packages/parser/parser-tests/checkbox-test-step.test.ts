@@ -11,7 +11,7 @@ Describe('parser: checkbox test expectations', () => {
       }
 
       test "Checkbox state" {
-        check "exposes both states" {
+        test "exposes both states" {
           run CheckboxApp
           expect checkbox #markFinal checked
           expect checkbox #marketingOptIn unchecked
@@ -19,8 +19,10 @@ Describe('parser: checkbox test expectations', () => {
       }
     `)
 
-    const check = AST.streamAllContents(result.entry.ast).find(AST.isCheckDeclaration)
-    Expect.Is(check, AST.isCheckDeclaration)
+    const check = AST.streamAllContents(result.entry.ast)
+      .filter(AST.isTestDeclaration)
+      .find(candidate => candidate.block.statements.some(AST.isRunStep))
+    Expect.Is(check, AST.isTestDeclaration)
     const expectations = check.block.statements.filter(AST.isExpectCheckboxStateStep)
     Expect(expectations.map(expectation => ({ tag: expectation.tag, state: expectation.state }))).toEqual([
       { tag: '#markFinal', state: 'checked' },
@@ -32,7 +34,7 @@ Describe('parser: checkbox test expectations', () => {
     'does not accept an unrepresented checkbox text selector',
     rejectsParser(`
       test "Checkbox state" {
-        check "requires a tag" {
+        test "requires a tag" {
           run CheckboxApp
           expect checkbox "Final" checked
         }

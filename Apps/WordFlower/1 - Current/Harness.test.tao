@@ -1,0 +1,48 @@
+use WordFlowerNavHarness, WordFlowerStackByLet, WordFlowerStackByLetWith, WordFlowerStackByNav, WordFlowerStackByNavWith from ./
+
+test "WordFlower navigation foundation" {
+   test "native back uses the semantic reducer" {
+      run WordFlowerNavHarness
+
+      expect text "Harness home marker"
+      press "Open deterministic detail"
+      expect text "Harness detail marker"
+      back
+      expect text "Harness home marker"
+      expect missing text "Harness detail marker"
+   }
+   test "slot dismissal restores its initial stack" {
+      run WordFlowerNavHarness
+      press "Open deterministic slot"
+      expect text "Harness slot marker"
+      press "Restore initial stack"
+      expect text "Harness home marker"
+      expect missing text "Harness slot marker"
+   }
+}
+
+// All four checks must mount the same complete app/nav behavior. Together they prove that primitive
+// value heads and inferred `let` bindings are equivalent, and that an explicit constructor `with`
+// is equivalent to its canonical omission.
+test "WordFlower declaration refinement forms" {
+   test "a primitive head with canonical construction works" {
+      run WordFlowerStackByNav
+
+      expect text "Harness home marker"
+   }
+   test "a primitive head with explicit refinement works" {
+      run WordFlowerStackByNavWith
+
+      expect text "Harness home marker"
+   }
+   test "an inferred let with canonical construction works" {
+      run WordFlowerStackByLet
+
+      expect text "Harness home marker"
+   }
+   test "an inferred let with explicit refinement works" {
+      run WordFlowerStackByLetWith
+
+      expect text "Harness home marker"
+   }
+}

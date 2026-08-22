@@ -1,0 +1,36 @@
+// The data catalog used by the app's Local datasource.
+workspace
+data Workspaces / Workspace { // the plural collection, then the singular entity it stores
+   Name text
+   // Modifiers take values: `now` is a runtime default sampled separately for each create.
+   CreatedAt time (default now)
+   Pinned yes / no // without an explicit default, a yes/no field defaults to no
+   Documents (owned) // deleting this owner also deletes its Documents
+
+   index CreatedAt
+   order by CreatedAt
+}
+
+workspace
+data Documents / Document {
+   Title text
+   Body text (default "")
+   Final yes / Draft no // an optional no-case alias name
+   Public yes / Private no (default Public) // an explicit default may select either case
+   CreatedAt time (default now)
+   Workspace
+   Paragraphs (owned)
+
+   index CreatedAt
+   order by CreatedAt
+}
+
+workspace
+data Paragraphs / Paragraph {
+   Text text
+   Ordering number
+   Document
+
+   index Ordering
+   order by Ordering
+}

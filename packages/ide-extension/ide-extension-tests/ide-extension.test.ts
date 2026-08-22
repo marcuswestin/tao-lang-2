@@ -30,8 +30,13 @@ Describe('Tao IDE extension smoke', () => {
     Expect(JSON.stringify(merged)).toContain('meta.template.expression.tao-lang')
     Expect(JSON.stringify(merged)).toContain('constant.character.escape.tao-lang')
     Expect(JSON.stringify(merged)).toContain('constant.numeric.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('constant.other.tag-or-hex-color.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('#[A-Za-z0-9_]+')
+    Expect(JSON.stringify(merged)).toContain('constant.other.tag.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('constant.other.color.tao-lang')
+    // A keyed name, a declared name, and a referenced type each carry their own scope so a theme
+    // can tell `@home`, `WordFlowerNavigator`, and `SelectionNav` apart.
+    Expect(JSON.stringify(merged)).toContain('entity.other.attribute-name.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('entity.name.function.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('entity.name.type.tao-lang')
     Expect(mergeTaoTextMateGrammar(merged, overlayGrammar)).toEqual(merged)
   })
 
@@ -58,10 +63,10 @@ Describe('Tao IDE extension smoke', () => {
       app Demo {
         render Greeting()
       }
-      view Counter(Count is number) {
+      view Counter(Count number) {
         render Text(Count)
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -86,7 +91,7 @@ Describe('Tao IDE extension smoke', () => {
       view MainView() {
         render Text(First)
       }
-      view Text(Value is text) { }
+      view Text(Value text) { }
     `)
 
     Expect(diagnostics).toContain(

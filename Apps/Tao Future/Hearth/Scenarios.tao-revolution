@@ -1,0 +1,43 @@
+// The states this app is reviewed, screenshotted, and audited in.
+
+scenario Today.phone { fixture PineStreet; run Hearth; at @today; device phone }
+scenario Today.spanishLargeText {
+   fixture PineStreet
+   prepare { update Me { Language: "es" } }
+   run Hearth
+   at @today
+   device phone
+   textScale 200%
+}
+scenario Lists.laptopSplit { fixture PineStreet; run Hearth at ListLink(PlansList); device laptop 1440 x 900; pointer precise; keyboard present }
+scenario Lists.emptyHome {
+   fixture NewPerson
+   run Hearth
+   prepare { do CreateHome("Foxglove House") }
+   at @lists
+   device tablet
+}
+scenario Item.window { fixture PineStreet; run Hearth at ItemLink(Plants); device laptop 1440 x 900 }
+scenario Item.darkOffline { fixture PineStreet; run Hearth at ItemLink(Plants); device phone; appearance dark; network offline }
+scenario Shopping.folded { fixture PineStreet; run Hearth at ListLink(ShoppingList); device phone }
+scenario Week.wide { fixture PineStreet; run Hearth; at @week; device laptop 1440 x 900 }
+scenario Week.narrow { fixture PineStreet; run Hearth; at @week; device phone }
+scenario Around.granted { fixture PineStreet; run Hearth; at @around; device tablet landscape; location granted }
+scenario Around.denied { fixture PineStreet; run Hearth; at @around; device phone; location denied }
+scenario People.youngPerson {
+   fixture PineStreet
+   prepare { update SamMember { Role: YoungPerson } }
+   signed in as Sam
+   run Hearth
+   at @people
+   device phone
+}
+scenario Recovery.removedList { fixture PineStreet; run Hearth at ListLink(PlansList); prepare { delete PlansList }; device phone }
+scenario Item.reducedMotionHighContrast { fixture PineStreet; run Hearth at ItemLink(Plants); device tablet landscape; contrast high; motion reduced }
+
+// Every rule in HearthDesign's `rules { }` is checked in every scenario; these are the check-only requirements.
+design check HearthDesign across all scenarios {
+   require no clipped text at 200%
+   require no horizontal scroll except maps
+   require meaning survives without colour or motion
+}

@@ -8,27 +8,24 @@ const supportedInputSelectors = ['label', 'placeholder'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
-  testPlacement: 'Test declarations are only allowed at file level.',
-  testBlock: (name: string) => `Only check declarations are allowed in test '${name}'.`,
-  checkPlacement: 'Check declarations are only allowed inside test blocks.',
+  testPlacement: 'Test declarations are only allowed at file level or inside another test.',
+  testBlock: (name: string) => `Only nested tests are allowed in test '${name}'.`,
   checkBlock: (name: string) =>
-    `Only run, press, enter, submit, back, data, and expect statements are allowed in check '${name}'.`,
-  runPlacement: 'Run steps are only allowed inside check blocks.',
-  pressPlacement: 'Press steps are only allowed inside check blocks.',
-  enterPlacement: 'Enter steps are only allowed inside check blocks.',
-  inputExpectationPlacement: 'Input expectations are only allowed inside check blocks.',
-  submitPlacement: 'Submit steps are only allowed inside check blocks.',
-  dataStatusPlacement: 'Data status steps are only allowed inside check blocks.',
-  expectationPlacement: 'Expectations are only allowed inside check blocks.',
-  backPlacement: 'Back steps are only allowed inside check blocks.',
+    `Only run, press, enter, submit, back, and expect statements are allowed in test '${name}'.`,
+  runPlacement: 'Run steps are only allowed inside test blocks.',
+  pressPlacement: 'Press steps are only allowed inside test blocks.',
+  enterPlacement: 'Enter steps are only allowed inside test blocks.',
+  inputExpectationPlacement: 'Input expectations are only allowed inside test blocks.',
+  submitPlacement: 'Submit steps are only allowed inside test blocks.',
+  expectationPlacement: 'Expectations are only allowed inside test blocks.',
+  backPlacement: 'Back steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
   inputSelector: (selector: string) =>
     `Unsupported input test selector '${selector}'. Supported selectors: ${supportedInputSelectors.join(', ')}.`,
-  missingCheck: (name: string) => `Test '${name}' must declare at least one check.`,
-  missingRun: (name: string) => `Check '${name}' must start exactly one app with run.`,
-  duplicateRun: (name: string) => `Check '${name}' must not declare more than one run step.`,
-  expectationBeforeRun: 'Check steps must come after the run step.',
+  missingRun: (name: string) => `Test '${name}' must start exactly one app with run.`,
+  duplicateRun: (name: string) => `Test '${name}' must not declare more than one run step.`,
+  expectationBeforeRun: 'Test steps must come after the run step.',
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
   selectIndex: 'Tagged loop row selection uses a 1-based index greater than zero.',
   selectBlock: 'A select block may contain test steps but cannot start another app.',
@@ -39,14 +36,12 @@ const validatePressPlacement = validateStepPlacement(testValidationMessages.pres
 const validateEnterPlacement = validateStepPlacement(testValidationMessages.enterPlacement)
 const validateInputExpectationPlacement = validateStepPlacement(testValidationMessages.inputExpectationPlacement)
 const validateSubmitPlacement = validateStepPlacement(testValidationMessages.submitPlacement)
-const validateDataStatusPlacement = validateStepPlacement(testValidationMessages.dataStatusPlacement)
 const validateExpectationPlacement = validateStepPlacement(testValidationMessages.expectationPlacement)
 const validateBackPlacement = validateStepPlacement(testValidationMessages.backPlacement)
 
 /** testValidationChecks validates v0 Tao test declarations and steps. */
 export const testValidationChecks = {
   [AST.TestDeclaration.$type]: validateTest,
-  [AST.CheckDeclaration.$type]: validateCheck,
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
@@ -60,30 +55,29 @@ export const testValidationChecks = {
   [AST.TagSubmitStep.$type]: validateSubmitPlacement,
   [AST.SelectStep.$type]: validateSelect,
   [AST.BackTestStep.$type]: validateBackPlacement,
-  [AST.DataStatusStep.$type]: validateDataStatusPlacement,
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
 } satisfies NodeValidationChecks
 
+// A test is either a group of nested tests or a leaf journey of steps, never a mix.
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
-  if (!AST.isTaoFile(test.$container)) {
+  const owner = test.$container
+  if (!AST.isTaoFile(owner) && !AST.isTestDeclaration(blockOwner(test))) {
     ctx.error(testValidationMessages.testPlacement, test)
   }
-  const checks = test.block.statements.filter(AST.isCheckDeclaration)
-  if (checks.length === 0) {
-    ctx.error(testValidationMessages.missingCheck(test.name), test)
-  }
-  for (const statement of test.block.statements) {
-    if (!AST.isCheckDeclaration(statement)) {
-      ctx.error(testValidationMessages.testBlock(test.name), statement)
+  const nested = test.block.statements.filter(AST.isTestDeclaration)
+  if (nested.length > 0) {
+    for (const statement of test.block.statements) {
+      if (!AST.isTestDeclaration(statement)) {
+        ctx.error(testValidationMessages.testBlock(test.name), statement)
+      }
     }
+    return
   }
+  validateLeafTest(test, ctx)
 }
 
-function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): void {
-  if (!AST.isTestDeclaration(blockOwner(check))) {
-    ctx.error(testValidationMessages.checkPlacement, check)
-  }
+function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): void {
   for (const statement of check.block.statements) {
     if (!AST.isCheckStep(statement)) {
       ctx.error(testValidationMessages.checkBlock(check.name), statement)
@@ -104,7 +98,6 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
   let hasRun = false
   for (const step of check.block.statements.filter(AST.isCheckStep)) {
     Switch.type(step, {
-      DataStatusStep: checkStepOrder,
       EnterTextStep: checkStepOrder,
       TagEnterStep: checkStepOrder,
       ExpectInputValueStep: checkStepOrder,
@@ -127,7 +120,6 @@ function validateCheck(check: AST.CheckDeclaration, ctx: ValidationContext): voi
 
   function checkStepOrder(
     step:
-      | AST.DataStatusStep
       | AST.EnterTextStep
       | AST.TagEnterStep
       | AST.ExpectInputValueStep
@@ -176,6 +168,9 @@ function validateSelector(
   step: AST.EnterTextStep | AST.ExpectTextStep | AST.PressTextStep | AST.SubmitInputStep,
   ctx: ValidationContext,
 ): void {
+  if (step.selector === undefined) {
+    return
+  }
   if (!supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])) {
     ctx.error(testValidationMessages.selector(step.selector), step)
   }
@@ -202,5 +197,5 @@ function blockOwner(node: AST.Node): AST.Node | undefined {
 
 function statementNeedsStepPlacementDiagnostic(statement: AST.CheckStep): boolean {
   const owner = blockOwner(statement)
-  return !AST.isCheckDeclaration(owner) && !AST.isTestDeclaration(owner) && !AST.isSelectStep(owner)
+  return !AST.isTestDeclaration(owner) && !AST.isSelectStep(owner)
 }

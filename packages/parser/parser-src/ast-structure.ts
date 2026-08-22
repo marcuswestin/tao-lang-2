@@ -122,11 +122,11 @@ export function importableValueDeclarationsInFile(
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
   | AST.UiDeclaration
-  | AST.EnumCase
+  | AST.CaseSetCase
 > {
   return [
     ...file.statements.filter(isImportableValueDeclaration),
-    ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
+    ...file.statements.filter(AST.isTypeDeclaration).flatMap(caseSetCasesOf),
   ]
 }
 
@@ -470,9 +470,19 @@ export function appValueDeclarationsInFile(file: AST.TaoFile): AST.AppValueDecla
   return file.statements.flatMap(statement => isConcreteAppValueDeclaration(statement) ? [statement] : [])
 }
 
-/** enumOwningCase returns the declaration whose runtime identity owns one enum case. */
-export function enumOwningCase(enumCase: AST.EnumCase): AST.EnumDeclaration {
-  return enumCase.$container.$container
+/** caseSetCasesOf returns the cases a type declaration introduces, when it heads a closed case set. */
+export function caseSetCasesOf(declaration: AST.TypeDeclaration): AST.CaseSetCase[] {
+  return AST.isCaseSetTypeExpression(declaration.type) ? declaration.type.cases : []
+}
+
+/** caseSetCaseName returns a case's source-facing name, whether written bare or as a text literal. */
+export function caseSetCaseName(caseSetCase: AST.CaseSetCase): string {
+  return caseSetCase.name ?? (caseSetCase.literal ?? '').replace(/^"|"$/g, '')
+}
+
+/** caseSetOwningCase returns the type declaration whose runtime identity owns one case. */
+export function caseSetOwningCase(caseSetCase: AST.CaseSetCase): AST.TypeDeclaration {
+  return caseSetCase.$container.$container as AST.TypeDeclaration
 }
 
 /** parametersOf returns the parameters declared by a parameterized declaration. */

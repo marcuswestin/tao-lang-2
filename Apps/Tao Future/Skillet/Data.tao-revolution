@@ -1,0 +1,181 @@
+// What Skillet stores.
+//
+// This file is the shape of the data and nothing else. Who may read and write it is next door in
+// Access.tao-revolution; what a multi-row write means is in Rules.tao-revolution. Splitting the three is
+// what makes the security story reviewable.
+//
+// Two words carry correctness here, and they are not the same word:
+//
+//   validate   an invariant. The store checks it on every path — a write-through keystroke, a committed
+//              draft, a transaction, an import — and rejects the write with the sentence beside it. It is
+//              checked when a write commits — a bare write on its own, a transaction as a whole — so a
+//              cross-row invariant is satisfiable only inside a transaction. It is almost always a range or
+//              a relationship, never "not blank".
+//   required   completeness. It never blocks a write. It derives `Row.Incomplete` and `Row.Problems`,
+//              which an editor shows and `save` checks. This is what lets a row be built one field at a
+//              time and still know it is not finished.
+
+type Course is one of Breakfast, Lunch, Dinner, Snack
+type Unit is one of "g", "kg", "ml", "l", "cup", "tbsp", "tsp", "piece"
+type Role is one of Owner, Cook, Guest
+type Aisle is one of Produce, Bakery, Dairy, Pantry, Frozen, Household // which part of the shop something comes from
+
+// The Prelude's account has a Name, an Email, and a Photo. Skillet adds what it needs to know.
+data Accounts / Account with {
+   Memberships
+   Timers // the timers this account started; the household owns them
+
+   // Preferences are durable and personal: they follow the account, not the household. A `(device)`
+   // preference stays on the device it was set on.
+   preference Units is one of Metric, Imperial (default Metric)
+   preference KeepOffline yes / no (default yes)
+   preference Language text (default device.language)
+   preference Appearance is one of System, Light, Dark (default System, device)
+}
+
+data Households / Household {
+   Name text (required "Name your kitchen")
+   TimeZone timezone (default device.timeZone)
+   Memberships (owned)
+   Invites (owned)
+   Recipes (owned)
+   Meals (owned)
+   Groceries (owned)
+   Pantry (owned)
+   Timers (owned)
+
+   // A cross-row invariant. The store refuses the write that would empty this, which is what stops the
+   // last owner from leaving and orphaning everything the household owns.
+   validate at least one Memberships where Role is Owner "A kitchen needs an owner. Make someone else an owner first."
+}
+
+data Memberships / Membership {
+   Household
+   Person Account
+   Role (default Cook)
+   JoinedAt time (default now)
+
+   unique Household, Person
+}
+
+// An invitation is a row with a secret, not a link to a household id. It works once, expires, and may
+// be bound to the person it was meant for.
+data Invites / Invite {
+   Household
+   Code secret (default new secret)
+   Role (default Cook)
+   Email text (optional) // when set, only this address may accept
+   Used yes / Unused no
+   InvitedBy Account
+   ExpiresAt time (default now + 7 days)
+
+   unique Code
+}
+
+data Recipes / Recipe {
+   Household
+   Title text (required "Name this recipe")
+   Photo image (optional)
+   Course (default Dinner)
+   Servings number (default 4)
+   Duration duration (optional)
+   Favorite yes / no
+   Notes text (default "")
+   Source text (optional)
+   Shared yes / Private no
+   ShareCode secret (default new secret) // rotating this kills every link already handed out
+   Ingredients (owned, ordered)
+   Steps (owned, ordered)
+   Meals
+   ChangedAt time (default now, touch on change)
+
+   index Title
+   search Title, Notes
+   order by Title
+
+   validate Servings >= 1 "A recipe serves at least one"
+   validate Duration is none or Duration > 0 "A time has to be longer than nothing"
+}
+
+data Ingredients / Ingredient {
+   Recipe
+   Name text (required "Name this ingredient")
+   Amount number (optional)
+   Unit (optional)
+   Aisle (default Pantry)
+
+   // An amount and its unit are one fact. `together` makes the store apply them as a single write, so a
+   // half-typed "400" never syncs without its "g".
+   together Amount, Unit
+
+   validate Amount is none or Amount > 0 "An amount has to be more than nothing"
+}
+
+data Steps / Step {
+   Recipe
+   Text text (required "Say what to do")
+   Timer duration (optional)
+
+   validate Timer is none or Timer > 0 "A timer has to be longer than nothing"
+}
+
+data Meals / Meal {
+   Household
+   Recipe
+   Day date
+   Course (default Dinner)
+   Servings number (default 4)
+   Cooked yes / Planned no
+   Remind duration (optional) // "thaw it 12 hours before" — see Rules.tao-revolution
+   Groceries // the lines this meal put on the list; a Grocery's `Meal` is the reverse
+
+   index Day
+   order by Day
+   unique Household, Day, Course
+
+   validate Servings >= 1 "A meal serves at least one"
+}
+
+data Groceries / Grocery {
+   Household
+   Name text (required "Name the item")
+   Amount number (optional)
+   Unit (optional)
+   Aisle (default Pantry)
+   Store Place (optional) // where to buy it, so the list can send you there
+   Bought yes / Needed no
+   Meal (optional) // set when the line came from the plan; if that meal goes, this becomes none
+   CreatedAt time (default now)
+
+   together Amount, Unit
+   order by CreatedAt
+}
+
+// What the kitchen already has. `ShopTheWeek` reads it, so the list is what you actually need.
+data Pantry / PantryItem {
+   Household
+   Name text (required "Name the item")
+   Aisle (default Pantry)
+   PlentyUntil date (optional)
+
+   unique Household, Name
+}
+
+// A running timer is a row, not screen state. That is what lets it survive the window closing, notify
+// the cook who started it, and be cancelled by the automation that owns its schedule.
+data Timers / Timer {
+   Household
+   Step
+   StartedBy Account
+   EndsAt time
+   Running yes / Stopped no
+
+   index EndsAt
+   order by EndsAt
+}
+
+// -- Places -----------------------------------------------------------------------------------------------
+
+// `Place` comes with the Prelude: a name, a coordinate, an address. A grocery line points at one, the
+// shopping list groups by it, and `Map` draws them. Nothing here stores a coordinate by hand.
+let NearbyStores = places near Here within 5 km where Kind is "grocery" // a Prelude search over the platform's places

@@ -14,7 +14,7 @@ Tests may be inline in ordinary `.tao` files or live in `.test.tao` sidecars:
 use WordFlower from ./
 
 test "WordFlower" {
-   check "starts empty" {
+   test "starts empty" {
       run WordFlower
       expect text "No workspaces yet"
    }

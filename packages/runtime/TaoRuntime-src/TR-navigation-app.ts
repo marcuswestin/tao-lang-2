@@ -15,6 +15,7 @@ import {
   mountConfiguredNavigation,
 } from './TR-navigation-configuration'
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
+import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
 type ToastEntry = PresentableEntry & {
@@ -97,10 +98,13 @@ export class RuntimeAppDefinition implements Subscription {
   }
 
   renderToasts(taoProps?: TaoProps): React.ReactNode {
+    const runtime = requireReactNativeRuntime()
     return [...this.toastEntries.values()].map(entry =>
+      // A toast is transient, so it carries its own surface rather than relying on the app's
+      // background: bare text over arbitrary content is not reliably legible.
       React.createElement(
-        React.Fragment,
-        { key: entry.instanceId },
+        runtime.View,
+        { key: entry.instanceId, style: toastSurfaceStyle },
         entry.presentable.render(entry.arguments, { ...taoProps, app: this }),
       )
     )
@@ -154,3 +158,18 @@ export class RuntimeAppDefinition implements Subscription {
     this.emit()
   }
 }
+
+const toastSurfaceStyle = {
+  alignSelf: 'center',
+  backgroundColor: '#121826',
+  borderRadius: 10,
+  elevation: 6,
+  marginTop: 8,
+  maxWidth: 480,
+  paddingHorizontal: 16,
+  paddingVertical: 12,
+  shadowColor: '#000000',
+  shadowOffset: { height: 4, width: 0 },
+  shadowOpacity: 0.3,
+  shadowRadius: 12,
+} as const

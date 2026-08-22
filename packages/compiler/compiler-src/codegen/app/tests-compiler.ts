@@ -7,11 +7,6 @@ export default {
     return gen.noop()
   },
 
-  /** CheckDeclaration compiles to no generated app output. */
-  CheckDeclaration(_check: AST.CheckDeclaration): Compiled {
-    return gen.noop()
-  },
-
   /** RunStep compiles to no generated app output. */
   RunStep(_run: AST.RunStep): Compiled {
     return gen.noop()
@@ -50,11 +45,6 @@ export default {
   },
 
   SelectStep(): Compiled {
-    return gen.noop()
-  },
-
-  /** DataStatusStep compiles to no generated app output. */
-  DataStatusStep(_status: AST.DataStatusStep): Compiled {
     return gen.noop()
   },
 

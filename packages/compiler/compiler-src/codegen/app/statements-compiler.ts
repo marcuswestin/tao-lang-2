@@ -13,12 +13,9 @@ export const StatementsCompiler = {
       ActionDeclaration: Compile.ActionDeclaration,
       AsyncActionStatement: Compile.AsyncActionStatement,
       BackTestStep: Compile.BackTestStep,
-      CheckDeclaration: Compile.CheckDeclaration,
       EntityDataDeclaration: Compile.EntityDataDeclaration,
       EntityQueryDeclaration: Compile.EntityQueryDeclaration,
-      EnumDeclaration: Compile.EnumDeclaration,
       FrameDeclaration: Compile.FrameDeclaration,
-      DataStatusStep: Compile.DataStatusStep,
       DatasourceDeclaration: Compile.PrimitiveValueDeclaration,
       DesignDeclaration: Compile.DesignDeclaration,
       DialogueDeclaration: Compile.DialogueDeclaration,
@@ -63,8 +60,11 @@ export const StatementsCompiler = {
     })
   },
 
-  /** TypeDeclaration emits no runtime code; Tao named types are compile-time only. */
+  /** TypeDeclaration emits runtime code only for case sets and configurable types. */
   TypeDeclaration(declaration: AST.TypeDeclaration): Compiled {
+    if (AST.isCaseSetTypeExpression(declaration.type)) {
+      return Compile.CaseSetDeclaration(declaration)
+    }
     return isRuntimeConfigurableDeclaration(declaration)
       ? Compile.ConfigurableDeclaration(declaration)
       : gen.noop()

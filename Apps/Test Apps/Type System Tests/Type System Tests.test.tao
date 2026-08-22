@@ -1,7 +1,7 @@
 use TypeSystemTests from ./
 
 test "Type System Tests" {
-   check "renders typed values through views" {
+   test "renders typed values through views" {
       run TypeSystemTests
 
       expect text "Open: 1"

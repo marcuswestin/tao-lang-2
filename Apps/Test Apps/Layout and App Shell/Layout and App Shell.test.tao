@@ -1,14 +1,14 @@
 use LayoutAndAppShell from ./
 
 test "Layout and App Shell" {
-   check "renders layout and app shell smoke content" {
+   test "renders layout and app shell smoke content" {
       run LayoutAndAppShell
 
       expect text "Layout and app shell"
       expect text "This screen should sit inside the default Tao app shell."
       expect text "Safe default app frame"
       expect text "Primary action"
-      press text "Primary action"
+      press "Primary action"
       expect text "Deterministic"
       expect text "Adaptive primary pane"
       expect text "Adaptive secondary pane"

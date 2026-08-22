@@ -1,0 +1,125 @@
+// Writes that have to land together, and work the provider owns.
+//
+// A `transaction` commits once. Every write inside it lands or none does, the access rules still apply
+// to each, and `refuse when … "…"` ends it with a sentence a person can read. `for Me` names the caller.
+// `returns` yields a value: callers write `let X = StartKitchen(Name)` for the result, `do ClearBought()`
+// when there is none, and `when StartKitchen(Name) { done -> … rejected -> … error -> … }` to handle
+// outcomes.
+
+transaction StartKitchen(Name text) for Me returns Household {
+   let Household = create Household { Name, TimeZone: device.timeZone }
+   create Membership in Household.Memberships { Person: Me, Owner }
+   create Recipe in Household.Recipes { Title: "Weeknight pasta", Course: Dinner }
+   return Household
+}
+
+transaction InviteToKitchen(Household, Role, Email text (optional)) for Me returns Invite {
+   refuse when cannot create Invite in Household.Invites { Role } "Only a cook can invite someone."
+   return create Invite { Household, Role, Email, InvitedBy: Me }
+}
+
+transaction JoinWithInvite(Secret secret) for Me returns Household {
+   let Invite = exactly one Invites where Code is Secret // in a `where`, bare names are the row's fields
+   refuse when Invite is missing "This invitation is no longer available."
+   refuse when Invite is Used "This invitation has already been used."
+   refuse when Invite.ExpiresAt < now "This invitation has expired."
+   refuse when Invite.Email is not none and Invite.Email is not Me.Email "This invitation was sent to someone else."
+   refuse when Me.Memberships is not empty "You are already in a kitchen."
+
+   create Membership { Household: Invite.Household, Person: Me, Role: Invite.Role }
+   update Invite { Used }
+   return Invite.Household
+}
+
+// Deleting an account is a transaction like any other, ending in `delete Me`. The household invariant
+// still holds, so a sole owner is stopped with the same sentence the kitchen screen shows.
+transaction DeleteMyAccount() for Me {
+   delete Me.Memberships
+   update Timers where StartedBy is Me { Stopped }
+   delete Me
+}
+
+// Scaled, pantry-aware, and idempotent per meal: running it twice does not double the list.
+transaction AddMealToList(Meal) for Me {
+   refuse when Meal.Groceries is not empty "That meal is already on the list."
+   let Scale = Meal.Servings / Meal.Recipe.Servings
+   let Stocked = Meal.Household.Pantry[PlentyUntil > today].Name
+   loop Meal.Recipe.Ingredients where Name not in Stocked {
+      create Grocery in Meal.Household.Groceries {
+         Name: Ingredient.Name
+         Amount: Ingredient.Amount * Scale
+         Unit: Ingredient.Unit
+         Aisle: Ingredient.Aisle
+         Meal
+}  }  }
+
+// A `refuse` inside a nested transaction call refuses the outer one too — all or nothing — so this
+// skips meals already on the list instead of asking AddMealToList to refuse them.
+transaction ShopTheWeek(Household, From date, Until date) for Me {
+   loop Household.Meals where Day >= From and Day < Until and is Planned and Groceries is empty {
+      do AddMealToList(Meal)
+}  }
+
+// "We already have it" moves the line to the pantry, so next week's list leaves it out.
+transaction KeepInPantry(Grocery) for Me {
+   create PantryItem in Grocery.Household.Pantry {
+      Name: Grocery.Name
+      Aisle: Grocery.Aisle
+      PlentyUntil: today + 30 days
+   }
+   delete Grocery
+}
+
+transaction SaveImportedRecipe(Household, Imported RecipeDraft) for Me returns Recipe {
+   let Recipe = create Recipe in Household.Recipes {
+      Title: Imported.Title
+      Servings: Imported.Servings
+      Source: Imported.Source
+   }
+   loop Imported.Ingredients as Line { create Ingredient in Recipe.Ingredients { Name: Line } }
+   loop Imported.Steps as Line { create Step in Recipe.Steps { Text: Line } }
+   return Recipe
+}
+
+transaction StartSharing(Recipe) for Me returns SharedRecipe {
+   update Recipe { Shared }
+   return publish Recipe as SharedRecipe
+}
+
+transaction StopSharing(Recipe) for Me {
+   // Rotating the code is the revocation. Flipping `Shared` alone would let an old link work again the
+   // moment the recipe was re-shared.
+   update Recipe { Private, ShareCode: new secret }
+}
+
+// -- Automations ----------------------------------------------------------------------------------------------
+//
+// Work the provider owns, not a timer tied to a mounted screen. An automation keeps running when the
+// window closes, is deduplicated by its `once per` key, and knows whose devices to reach.
+
+automation TimerFinished for Timer {
+   schedule at Timer.EndsAt
+   while Timer is Running
+   once per Timer.EndsAt // the key is the row and the named field: one alert per timer per end time
+   to Timer.StartedBy
+   notify urgent { // a timer rings through quiet hours; the meal reminder below waits for morning
+      Title Timer.Step.Recipe.Title
+      Body "Timer done — { Timer.Step.Text }"
+   }
+   opens CookLink(Timer.Step.Recipe)
+}
+
+automation MealReminder for Meal {
+   schedule when Meal.Remind {
+      none -> never
+      otherwise -> at (start of Meal.Day in Meal.Household.TimeZone) - Meal.Remind
+   }
+   while Meal is Planned
+   once per Meal.Day
+   to Cooks of Meal.Household
+   notify {
+      Title Meal.Recipe.Title
+      Body "{ Meal.Recipe.Title } is on the plan for { Meal.Day.Weekday }"
+   }
+   opens MealLink(Meal)
+}

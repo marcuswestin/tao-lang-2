@@ -14,14 +14,10 @@ EntityDataDeclarationBlock:
     '{' entries+=(EntityDataField | DataIndex | DataDefaultOrder)* '}';
 
 EntityDataField:
-    name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' 'no' negativeName=BOOLEAN_NO_ALIAS?)?
-    ('(' modifiers+=EntityDataFieldModifier (',' modifiers+=EntityDataFieldModifier)* ')')?;
+    name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' negativeName=ID? 'no')?
+    optional?='?'? traits=TraitList?;
 
-EntityDataFieldModifier:
-    'default' (defaultValue=(StringLiteral | NumberLiteral | BooleanLiteral | NowExpression) | defaultCase=ID)
-    | 'relation' relationName=ID
-    | autoDelete?='auto-delete';
-
+// Storage facts about the whole entity trail its fields, rather than riding one field's traits.
 DataIndex:
     'index' fieldName=ID;
 
@@ -30,13 +26,6 @@ DataDefaultOrder:
 
 DataPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time';
-
-NowExpression:
-    {infer NowExpression} 'now';
-
-// Kept distinct from ID so the token builder can require the optional no-case alias to be
-// on the same source line as `yes / no`; otherwise the next field name is indistinguishable.
-terminal BOOLEAN_NO_ALIAS: /\x00/;
 
 EntityQueryDeclaration:
     'query' (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?;

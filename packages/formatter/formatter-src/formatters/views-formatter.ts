@@ -70,6 +70,7 @@ export default {
 } satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.VisualDeclaration>): void {
-  f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'view', 'layout', 'frame', 'ui', 'dialogue')
+  f.visibilityOnOwnLine()
+  f.oneSpaceAfter('view', 'layout', 'frame', 'ui', 'dialogue')
   f.noSpaceBefore('(')
 }

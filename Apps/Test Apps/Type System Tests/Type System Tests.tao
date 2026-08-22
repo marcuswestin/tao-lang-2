@@ -87,7 +87,7 @@ layout Stack() {
    ```
 }
 
-view Tile(Title is text, Count is number) {
+view Tile(Title text, Count number) {
    render inject Title, Count, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [`${Title}: ${Count}`], layout: Layout, tag: Tag })
    ```
@@ -101,37 +101,37 @@ view ProfileCard(Person) {
       TagList(Person.Tags)
 }  }
 
-view MemberLine(RoleTitle is Job.Title, Name) {
+view MemberLine(RoleTitle Job.Title, Name) {
    render Stack() {
       TextValue(Name)
       TextValue(RoleTitle)
 }  }
 
-view SummaryLine(Label is text, Count) {
+view SummaryLine(Label text, Count) {
    render inject Label, Count, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [`${Label}: ${Count}`], layout: Layout, tag: Tag })
    ```
 }
 
-view TextValue(Value is text) {
+view TextValue(Value text) {
    render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [Value], layout: Layout, tag: Tag })
    ```
 }
 
-view NumberValue(Value is number) {
+view NumberValue(Value number) {
    render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [String(Value)], layout: Layout, tag: Tag })
    ```
 }
 
-view TagList(Values is list of text) {
+view TagList(Values list of text) {
    render inject Values, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [Values.join(', ')], layout: Layout, tag: Tag })
    ```
 }
 
-view TeamList(People is list of Person) {
+view TeamList(People list of Person) {
    render inject People, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [`${People.length} team member(s)`], layout: Layout, tag: Tag })
    ```

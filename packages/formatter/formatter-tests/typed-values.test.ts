@@ -3,24 +3,24 @@ import { fence, formats, tsFence } from './test-format'
 
 Describe('Tao formatter typed values', () => {
   Test(
-    'formats ascriptions, typed lists, optional fields, and typed injections',
+    'formats ascriptions, typed lists, fields?, and typed injections',
     formats(
       `
-        type Profile is{optional Subtitle text,Name text}
+        type Profile is{Subtitle text?,Name text}
         let Names is list of text=["Ada","Grace"]
-        function Count(Value is text)returns number{return inject number Value ${tsFence}
+        function Count(Value text)returns number{return inject number Value ${tsFence}
         return Value.length
         ${fence}}
       `,
       `
         type Profile is {
-           optional Subtitle text,
+           Subtitle text?,
            Name text
         }
 
         let Names is list of text = ["Ada", "Grace"]
 
-        function Count(Value is text) returns number {
+        function Count(Value text) returns number {
            return inject number Value ${tsFence}
               return Value.length
            ${fence}

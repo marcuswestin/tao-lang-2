@@ -83,7 +83,7 @@ function taoType(type: ASTUtils.TaoType, typir: TaoTypirServices): TypirType | u
   })
 }
 
-function enumTypeName(declaration: AST.EnumDeclaration): string {
+function enumTypeName(declaration: AST.TypeDeclaration): string {
   try {
     return `${AST.getDocument(declaration).uri.path}#${declaration.name}`
   } catch {

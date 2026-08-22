@@ -84,5 +84,5 @@ function validateSlots(
 }
 
 function preludePath(ctx: ValidationContext): string {
-  return FS.resolvePath('tao/Prelude.tao', ctx.packagesContext.stdlibRoot)
+  return FS.resolvePath('@tao/Prelude.tao', ctx.packagesContext.stdlibRoot)
 }

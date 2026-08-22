@@ -29,9 +29,7 @@ export const InjectionsCompiler = {
       ? CompileTaoJsType(Type.ofReference(injection.type))
       : undefined
     const returnAnnotation = resultType ? gen`: ${resultType}` : gen.noop()
-    const tsCodeBlock = injection.tsCodeBlock
-    Assert.defined(tsCodeBlock, 'inline injection has authored TypeScript')
-    const code = stripTsFence(tsCodeBlock)
+    const code = stripTsFence(injection.tsCodeBlock)
 
     return gen`
       import TR from '@runtime/TR'

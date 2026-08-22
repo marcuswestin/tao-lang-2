@@ -109,10 +109,10 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      view MainView(Label is text) {
+      view MainView(Label text) {
         render Text(Label)
       }
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
     `,
       AppValidator.messages.rootViewParameters('MyApp', 'MainView'),
     ),
@@ -160,7 +160,7 @@ Describe('validator: apps and views', () => {
     `)
     const renderBlockResult = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
       view MainView() {
         render Text("hi") {
           action AddOne() { }
@@ -180,7 +180,7 @@ Describe('validator: apps and views', () => {
       view MainView() {
         Text("Hello")
       }
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
     `,
       ViewsValidator.messages.viewBody,
     ),
@@ -189,7 +189,7 @@ Describe('validator: apps and views', () => {
   Test('rejects duplicate view parameters', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view Text }
-      view Text(Value is text, Value is number) { }
+      view Text(Value text, Value number) { }
     `)
 
     Expect(validationErrorMessages(result)).toContain(ViewsValidator.messages.duplicateParameter('Value'))
@@ -199,22 +199,22 @@ Describe('validator: apps and views', () => {
   Test('rejects generated view prop names as parameter names', async () => {
     const result = await testValidateCodeWithErrors(`
       app MyApp { view ChildrenView }
-      view ChildrenView(children is text) {
+      view ChildrenView(children text) {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view KeyView(key is text) {
+      view KeyView(key text) {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view RefView(ref is text) {
+      view RefView(ref text) {
         render inject ${tsFence}
           return null
         ${fence}
       }
-      view TaoPropView(__tao is text) {
+      view TaoPropView(__tao text) {
         render inject ${tsFence}
           return null
         ${fence}
@@ -240,7 +240,7 @@ Describe('validator: apps and views', () => {
         render Text("Hello")
         render Text("Again")
       }
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
     `)
 
     Expect(validationErrorMessages(missing)).toContain(ViewsValidator.messages.renderCount('MainView'))
@@ -256,7 +256,7 @@ Describe('validator: apps and views', () => {
         render Text("Hello")
         let Greeting = "Again"
       }
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
     `,
       ViewsValidator.messages.renderLast,
     ),
@@ -310,7 +310,7 @@ Describe('validator: apps and views', () => {
       `
       app MyApp { view MainView }
       ${stubLayout('Stack')}
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
           Text("First")
@@ -329,7 +329,7 @@ Describe('validator: apps and views', () => {
       `
       app MyApp { view MainView }
       ${stubLayout('Stack')}
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
           let Local = "First"
@@ -348,7 +348,7 @@ Describe('validator: apps and views', () => {
       `
       app MyApp { view MainView }
       ${stubLayout('Stack')}
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
           Stack(){
@@ -369,7 +369,7 @@ Describe('validator: apps and views', () => {
       `
       app MyApp { view MainView }
       ${stubLayout('Stack')}
-      ${stubView('Text', 'Value is text')}
+      ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
           Stack(){
@@ -396,7 +396,7 @@ Describe('validator: apps and views', () => {
         }
       }
       layout Col() { render inject ${tsFence} return null ${fence} }
-      view Text(Value is text) { render inject ${tsFence} return null ${fence} }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
     `,
       ViewsValidator.messages.duplicateTag('#same'),
     ),

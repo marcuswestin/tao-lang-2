@@ -5,16 +5,16 @@ Describe('compiler: functional core', () => {
   Test('compiles pure functions and total control flow through validated Tao', async () => {
     const compiled = await Compiler.compileCode(`
       app FunctionalApp { view Main }
-      function HasCount(Count is number) returns boolean {
+      function HasCount(Count number) returns boolean {
         return Count > 0
       }
-      function Label(Count is number) returns text {
+      function Label(Count number) returns text {
         return when (Count > 0) {
           true -> "Count: { Count }"
           otherwise -> "Empty"
         }
       }
-      function GoalFraction(Count is number) {
+      function GoalFraction(Count number) {
         if Count == 0 { return 0 }
         return Count / 10
       }
@@ -39,7 +39,7 @@ Describe('compiler: functional core', () => {
         }
       }
       layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     Expect(compiled.files).toHaveLength(3)
@@ -53,13 +53,13 @@ Describe('compiler: functional core', () => {
   Test('lowers typed defaults in view, layout, action, and function callee scopes', async () => {
     const compiled = await Compiler.compileCode(`
       app DefaultsApp { view Main }
-      function Label(Value is text default "Save") returns text { return Value }
+      function Label(Value text default "Save") returns text { return Value }
       view Main() {
-        action Submit(Message is text default "Saved") { }
+        action Submit(Message text default "Saved") { }
         render Card(){ Greeting() }
       }
-      layout Card(Gap is number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Greeting(Title is text default "Welcome") { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      layout Card(Gap number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Greeting(Title text default "Welcome") { render inject \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const code = compiled.files[0]?.code ?? ''
@@ -72,8 +72,8 @@ Describe('compiler: functional core', () => {
   Test('lowers enum identity case tests and one-sided action and render if', async () => {
     const compiled = await Compiler.compileCode(`
       app CaseApp { view Main }
-      enum ConfirmResult { Confirmed Cancelled }
-      data Documents / Document { Final yes / no Draft }
+      type ConfirmResult is one of Confirmed, Cancelled
+      data Documents / Document { Final yes / Draft no }
       view Main() {
         state Result = Confirmed
         state Ready = true
@@ -96,7 +96,7 @@ Describe('compiler: functional core', () => {
         }
       }
       layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const code = compiled.files[0]?.code ?? ''
@@ -126,7 +126,7 @@ Describe('compiler: functional core', () => {
         }
         render Text("Ready")
       }
-      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const code = compiled.files[0]?.code ?? ''

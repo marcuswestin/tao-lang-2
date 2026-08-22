@@ -12,7 +12,7 @@ type NamedValueDeclaration =
   | AST.ForStatement
   | AST.AskStatement
   | AST.CasePayload
-  | AST.EnumCase
+  | AST.CaseSetCase
 type NamedFileValueDeclaration =
   | AST.ActionDeclaration
   | AST.AliasDeclaration
@@ -20,7 +20,6 @@ type NamedFileValueDeclaration =
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.FunctionDeclaration
-  | AST.EnumDeclaration
   | AST.VisualDeclaration
 type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
 type NamedDeclaration = NamedValueDeclaration | NamedTypeDeclaration
@@ -50,8 +49,7 @@ export const AliasesValidator = {
     [AST.FunctionDeclaration.$type]: reportReservedRuntimeName,
     [AST.ParameterDeclaration.$type]: reportReservedRuntimeName,
     [AST.EntityQueryDeclaration.$type]: reportReservedRuntimeName,
-    [AST.EnumCase.$type]: reportReservedRuntimeName,
-    [AST.EnumDeclaration.$type]: reportReservedRuntimeName,
+    [AST.CaseSetCase.$type]: reportReservedRuntimeName,
     [AST.VisualDeclaration.$type]: [reportReservedRuntimeName, validateVisualDeclaration],
     [AST.StateDeclaration.$type]: reportReservedRuntimeName,
     [AST.TypeDeclaration.$type]: reportReservedRuntimeName,
@@ -66,7 +64,7 @@ export const AliasesValidator = {
 function validateFile(file: AST.TaoFile, ctx: ValidationContext): void {
   const fileValueDeclarations: NamedValueDeclaration[] = [
     ...file.statements.filter(isFileValueDeclaration),
-    ...file.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
+    ...file.statements.filter(AST.isTypeDeclaration).flatMap(AST.caseSetCasesOf),
   ]
   const fileTypeDeclarations = file.statements
     .filter(AST.isDeclaration)
@@ -264,6 +262,5 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isFunctionDeclaration(node)
-    || AST.isEnumDeclaration(node)
     || AST.isVisualDeclaration(node)
 }

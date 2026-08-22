@@ -7,7 +7,7 @@ use every from @tao/time
 
 // @tao/nav and @tao/data are self-hosted: public types carry their own identity rather than relying
 // on name tables. Generic property validation reads their config shape, and package-scope
-// `implement inject` binds them to the published TR.NavKind and TR.DataProvider protocols. Ordinary
+// A `nav`/`provider` sidecar binds them to the published TR.NavKind and TR.DataProvider protocols. Ordinary
 // configured navs and datasources use primitive value heads that preserve their precise types.
 // Configured `with` patches may add direct keyed entries when the declaration owns a keyed contract.
 // A strict `App@key` target may name a complete root or in-file variant. Variants retain their root
@@ -281,7 +281,7 @@ type WritingPrompt is {
    PromptTitle,
    PromptMinutes,
    PromptTags,
-   optional PromptSubtitle text
+   PromptSubtitle text?
 }
 
 let StarterTags = PromptTags ["daily", "warmup"]
@@ -293,21 +293,15 @@ let StarterPrompt = WritingPrompt {
 }
 
 // One-case enums are nominal types; a dismissed dialogue answers `none`.
-enum ConfirmResult {
-   Confirmed
-}
+type ConfirmResult is one of Confirmed
 
-// Enums may also carry string-valued cases.
-enum ExportFormat {
-   "markdown"
-   "html"
-   "pdf"
-}
+// A case set may carry text-literal cases, spelled as the literal a person types.
+type ExportFormat is one of "markdown", "html", "pdf"
 
 // A closed union is matched exhaustively; `match` also overloads declarations by argument shape.
 type Measure is text | number
 
-function MeasureLabel(Value is Measure) returns text {
+function MeasureLabel(Value Measure) returns text {
    return match Value
       when text -> Value
       when number -> "{ Value } words"
@@ -320,7 +314,7 @@ data Workspaces / Workspace {
    Name text
    CreatedAt time (default now) // the runtime applies the deferred `now` value for each create
    Pinned yes / no // demonstrative; not yet used by the app
-   Documents (relation Documents, auto-delete)
+   Documents (relation Documents, owned)
 
    index CreatedAt
    order by CreatedAt
@@ -329,11 +323,11 @@ data Workspaces / Workspace {
 data Documents / Document {
    Title text
    Body text (default "")
-   Final yes / no Draft
-   Public yes / no Private (default Public) // demonstrative; not yet used by the app
+   Final yes / Draft no
+   Public yes / Private no (default Public) // demonstrative; not yet used by the app
    CreatedAt time (default now)
    Workspace (relation Workspace)
-   Paragraphs (auto-delete)
+   Paragraphs (owned)
 
    index CreatedAt
    order by CreatedAt
@@ -349,18 +343,18 @@ data Paragraphs / Paragraph {
    order by Ordering
 }
 
-function DocumentLabel(Title is text) returns text {
+function DocumentLabel(Title text) returns text {
    return "Document: { Title }"
 }
 
-function GoalFraction(Count is number) {
+function GoalFraction(Count number) {
    if Count == 0 {
       return 0
    }
    return Count / ParagraphGoal
 }
 
-frame Card(Title is text) {
+frame Card(Title text) {
    @actions = empty
 
    render Col() [gap 8, pad 12, panel] {
@@ -384,17 +378,17 @@ layout Scroller() {
    ```
 }
 
-view WordBadge(Total is number) {
+view WordBadge(Total number) {
    render inject Total, Suffix " words", Layout @@layout, Tag @@tag ```ts
       return TR.Views.Text({ children: [`${Total}${Suffix}`], layout: Layout, tag: Tag })
    ```
 }
 
-view WordCount(Value is text) {
+view WordCount(Value text) {
    render Text("Words: { CountWords(Value) }") [body]
 }
 
-view TagSummary(Tags is PromptTags) {
+view TagSummary(Tags PromptTags) {
    render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
 }
 
@@ -484,7 +478,8 @@ ui WorkspaceNameNotice() {
    }
 }
 
-workspace ui WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
+workspace
+ui WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    let SectionLabel = "Drafts"
@@ -621,7 +616,7 @@ ui WorkspaceChooser() {
 }
 
 // Product code composes a nav value with an ordinary function. Primitive `nav` heads declare
-// configured values; reusable package contracts use `type T is nav with` and `implement inject nav`.
+// configured values; reusable package contracts use `type T is nav with` and `nav <Export> from ./<File>.ts`.
 function WorkspaceSplit(Workspace) returns nav {
    return SplitNav {
       Axis "horizontal"
@@ -658,7 +653,8 @@ ui EmptyInspector() {
    render Text("Select a paragraph")
 }
 
-workspace ui FileTree(Workspace) {
+workspace
+ui FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap 6, pad 10] {
       Text(Workspace.Name)
@@ -699,7 +695,8 @@ workspace ui FileTree(Workspace) {
 }
 
 // The pane-level entry guards entity availability; the editor below assumes an available document.
-workspace ui DocumentScreen(Document) {
+workspace
+ui DocumentScreen(Document) {
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -712,18 +709,18 @@ workspace ui DocumentScreen(Document) {
 }
 
 // `view` stays embeddable content; DocumentEditor only appears inside another render tree.
-workspace view DocumentEditor(Document) {
+workspace
+view DocumentEditor(Document) {
    state TitleDraft = Document.Title
    state BodyDraft = Document.Body
    state ParagraphText = ""
    state SaveCount = 0
    query Paragraphs from Document.Paragraphs { }
-   action SetBodyDraft(Value is text) {
+   action SetBodyDraft(Value text) {
       set BodyDraft = Value
    }
-   action SetFinished(Value is boolean) {
-      if Value { update Document { Final } }
-      if not Value { update Document { Draft } }
+   action SetFinished(Value boolean) {
+      update Document { Final: Value }
    }
    action SaveDocument() {
       guard TitleDraft empty
@@ -836,7 +833,7 @@ ui DocumentInfo(Document) {
    }
 }
 
-ui DocumentSnapshot(Snapshot is Document.Snapshot) {
+ui DocumentSnapshot(Snapshot Document.Snapshot) {
    render Col() [gap 6, pad 10] {
       Text("Captured version")
       Text(Snapshot.Title)
@@ -889,15 +886,21 @@ ui SignedOut() {
 
 // Deterministic navigation-foundation harness: only StackNav and SlotNav, with no Design or
 // Datasource capability, so navigation foundations stay executable independently of them.
-workspace type FoundationHomeStack is StackNav with {
+workspace
+type FoundationHomeStack is StackNav with {
    Initial is FoundationHome
 }
 
-workspace nav FoundationStack = FoundationHomeStack {}
-workspace nav FoundationStackWith = FoundationHomeStack with {}
-workspace let FoundationStackLet = FoundationHomeStack {}
-workspace let FoundationStackLetWith = FoundationHomeStack with {}
-workspace nav FoundationNavigator = SlotNav { Initial FoundationStack }
+workspace
+nav FoundationStack = FoundationHomeStack {}
+workspace
+nav FoundationStackWith = FoundationHomeStack with {}
+workspace
+let FoundationStackLet = FoundationHomeStack {}
+workspace
+let FoundationStackLetWith = FoundationHomeStack with {}
+workspace
+nav FoundationNavigator = SlotNav { Initial FoundationStack }
 
 app WordFlowerFoundationTest {
    Name "WordFlower Navigation Foundation Test"
@@ -914,12 +917,14 @@ app WordFlowerDeclarationHeadWith = app with {
    Navigator FoundationStackWith
 }
 
-workspace let WordFlowerDeclarationLet = app {
+workspace
+let WordFlowerDeclarationLet = app {
    Name "WordFlower Declaration Let"
    Navigator FoundationStackLet
 }
 
-workspace let WordFlowerDeclarationLetWith = app with {
+workspace
+let WordFlowerDeclarationLetWith = app with {
    Name "WordFlower Declaration Let With"
    Navigator FoundationStackLetWith
 }
@@ -960,7 +965,8 @@ ui FoundationSlot() {
 
 // A `frame` wraps caller content. `@@content` places the unnamed children the caller passed, and a
 // named slot declares its own default so callers may omit it.
-public frame DocumentCard(Title is text) {
+public
+frame DocumentCard(Title text) {
    @actions = empty
 
    render Col() [gap sm, pad md, bg bg.canvas, border subtle, radius md] {
@@ -976,10 +982,11 @@ public frame DocumentCard(Title is text) {
 
 // Declaration properties may be written as a longhand block, with `optional` and `default`
 // properties that call sites omit.
-package view ParagraphLine() {
+package
+view ParagraphLine() {
    Paragraph Paragraph
    Label text
-   optional Subtitle text
+   Subtitle text?
    Density number default 1
 
    render Col() [gap xs] {
@@ -990,10 +997,11 @@ package view ParagraphLine() {
 // A reading surface: scrolling content, multiline text, collection selection, and progress.
 // TODO: windowing or virtualization for very large loop-owned collections remains Revolution work;
 // its syntax is deliberately unnamed until it can extend the settled language-owned `loop` surface.
-workspace ui ReadingView(Document) {
+workspace
+ui ReadingView(Document) {
    state Focused/Unfocused // case-valued state shorthand needs no initializer
    query Paragraphs from Document.Paragraphs { Text } // queries may select the fields they read
-   action SetReadingFinished(Value is boolean) {
+   action SetReadingFinished(Value boolean) {
       if Value {
          update Document {
             Final
@@ -1027,7 +1035,8 @@ workspace ui ReadingView(Document) {
 // Unit literals below are Revolution-only and remain deferred beyond the current tranche; toast
 // Duration above intentionally takes a plain number of seconds.
 // A publishing flow: string-valued enum arguments, and a presentation that answers with a result.
-workspace ui ExportPanel(Document) {
+workspace
+ui ExportPanel(Document) {
    state Format = ExportFormat."markdown"
    state Countdown 30.seconds // typed state initialized without `=`
 
@@ -1051,16 +1060,17 @@ workspace ui ExportPanel(Document) {
    }
 }
 
-ui ExportProgress(Document, Format is ExportFormat) {
+ui ExportProgress(Document, Format ExportFormat) {
    render Text("Exporting { Document.Title } as { Format }…")
 }
 
-ui ExportFailure(Message is text) {
+ui ExportFailure(Message text) {
    render Text("Export failed: { Message }")
 }
 
 // Automation: time, and app lifecycle. Autosave runs on a schedule rather than on every keystroke.
-workspace ui AutosaveController(Document) {
+workspace
+ui AutosaveController(Document) {
    state SecondsSinceSave = 0
 
    on every 1.second -> {

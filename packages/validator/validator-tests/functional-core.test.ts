@@ -13,7 +13,7 @@ import {
   testValidateCodeWithErrors,
 } from './test-validate'
 
-const runtimeViews = `${stubLayout('Stack')}${stubView('Text', 'Value is text')}`
+const runtimeViews = `${stubLayout('Stack')}${stubView('Text', 'Value text')}`
 
 function functionalApp(body: string, declarations = ''): string {
   return `${declarations}\n${app(body, runtimeViews)}`
@@ -25,7 +25,7 @@ Describe('validator: functional core', () => {
     rejects(
       functionalApp(
         'render Text("Ready")',
-        'function Wrong(Value is number) returns boolean { return Value + 1 }',
+        'function Wrong(Value number) returns boolean { return Value + 1 }',
       ),
       FunctionalCoreValidator.messages.functionReturn('Wrong', 'boolean', 'number'),
     ),
@@ -36,7 +36,7 @@ Describe('validator: functional core', () => {
     rejects(
       functionalApp(
         'render Text("Ready")',
-        'function Timestamp(At is time) returns text { return "{ At }" }',
+        'function Timestamp(At time) returns text { return "{ At }" }',
       ),
       FunctionalCoreValidator.messages.interpolationPart,
     ),
@@ -76,7 +76,7 @@ Describe('validator: functional core', () => {
   Test(
     'rejects duplicate enum cases',
     rejects(
-      'enum ConfirmResult { Confirmed Confirmed }',
+      'type ConfirmResult is one of Confirmed, Confirmed',
       FunctionalCoreValidator.messages.duplicateEnumCase('ConfirmResult', 'Confirmed'),
     ),
   )
@@ -102,7 +102,7 @@ Describe('validator: functional core', () => {
     rejects(
       functionalApp(
         'state Result = Other action Close() { if Result is Confirmed { } } render Text("Ready")',
-        'enum ConfirmResult { Confirmed } enum OtherResult { Other }',
+        'type ConfirmResult is one of Confirmed type OtherResult is one of Other',
       ),
       FunctionalCoreValidator.messages.invalidCase('Confirmed', 'OtherResult'),
     ),
@@ -112,8 +112,8 @@ Describe('validator: functional core', () => {
     'rejects boolean cases from another data field',
     rejects(
       `
-        data Documents / Document { Final yes / no Draft }
-        data Accounts / Account { Active yes / no Inactive }
+        data Documents / Document { Final yes / Draft no }
+        data Accounts / Account { Active yes / Inactive no }
         view Main(Document) {
           action Close() { if Document.Final is Inactive { } }
           render Text("Ready")
@@ -128,7 +128,7 @@ Describe('validator: functional core', () => {
     'rejects empty guards for entity subjects',
     rejects(
       `
-        data Documents / Document { Final yes / no Draft }
+        data Documents / Document { Final yes / Draft no }
         view Main(Document) {
           render Stack(){ guard Document { empty -> { Text("Wrong") } } }
         }
@@ -142,7 +142,7 @@ Describe('validator: functional core', () => {
     'rejects payloads on payload-free entity cases',
     rejects(
       `
-        data Documents / Document { Final yes / no Draft }
+        data Documents / Document { Final yes / Draft no }
         view Main(Document) {
           render Stack(){ guard Document { missing -> Message { Text(Message) } } }
         }
@@ -201,7 +201,7 @@ Describe('validator: functional core', () => {
   Test(
     'rejects required parameters after optional parameters',
     rejects(
-      'function Wrong(First is text default "one", Last is text) returns text { return First }',
+      'function Wrong(First text default "one", Last text) returns text { return First }',
       typeValidationMessages.defaultParameterOrder('Last'),
     ),
   )
@@ -209,7 +209,7 @@ Describe('validator: functional core', () => {
   Test(
     'rejects parameter defaults with incompatible types',
     rejects(
-      `${stubView('Main', 'Title is text default 1')}`,
+      `${stubView('Main', 'Title text default 1')}`,
       typeValidationMessages.defaultParameterType('Title', 'Main.Title', 'number'),
     ),
   )
@@ -219,7 +219,7 @@ Describe('validator: functional core', () => {
     rejects(
       functionalApp(
         'render Text(Label())',
-        'function Label(Prefix is text, Value is text default "Save") returns text { return "{ Prefix }{ Value }" }',
+        'function Label(Prefix text, Value text default "Save") returns text { return "{ Prefix }{ Value }" }',
       ),
       FunctionalCoreValidator.messages.functionMissingArgument('Label', 'Prefix'),
     ),
@@ -230,7 +230,7 @@ Describe('validator: functional core', () => {
     rejects(
       functionalApp(
         'render Text(Label("A", "B", "C"))',
-        'function Label(Prefix is text, Value is text default "Save") returns text { return "{ Prefix }{ Value }" }',
+        'function Label(Prefix text, Value text default "Save") returns text { return "{ Prefix }{ Value }" }',
       ),
       FunctionalCoreValidator.messages.functionDuplicateArgumentType('Label'),
     ),
@@ -238,7 +238,7 @@ Describe('validator: functional core', () => {
 
   Test('infers one return type across early and fallthrough returns', async () => {
     const result = await testValidateCode(`
-      function GoalFraction(Count is number) {
+      function GoalFraction(Count number) {
         if Count == 0 { return 0 }
         return Count / 10
       }
@@ -254,7 +254,7 @@ Describe('validator: functional core', () => {
   Test(
     'rejects incompatible inferred return values',
     rejects(
-      `function Mixed(Flag is boolean) { if Flag { return 1 } return "none" }`,
+      `function Mixed(Flag boolean) { if Flag { return 1 } return "none" }`,
       FunctionalCoreValidator.messages.functionReturnInference('Mixed', 'number', 'text'),
     ),
   )
@@ -262,7 +262,7 @@ Describe('validator: functional core', () => {
   Test(
     'rejects functions without a fallthrough return',
     rejects(
-      `function Partial(Flag is boolean) { if Flag { return 1 } }`,
+      `function Partial(Flag boolean) { if Flag { return 1 } }`,
       FunctionalCoreValidator.messages.functionMissingReturn('Partial'),
     ),
   )

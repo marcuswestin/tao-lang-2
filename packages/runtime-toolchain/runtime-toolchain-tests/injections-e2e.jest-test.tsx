@@ -24,7 +24,7 @@ Describe('Tao injection runtime', () => {
             render Text("Hello")
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
             render inject Value, Name UserName, Count \`\`\`ts
                 void TR
                 void process.env.NODE_ENV

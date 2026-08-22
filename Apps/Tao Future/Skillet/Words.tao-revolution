@@ -1,0 +1,94 @@
+// Every language Skillet speaks besides its source language.
+//
+// The copy itself lives where it is used: a literal in a copy position IS the source-language words, and
+// a `phrase` names copy that has holes or plural forms. This file only translates. A key is the literal or
+// the phrase name, so it is stable across files, and `tao words check` reports every literal and phrase
+// a language has not translated. A language may inherit another and override what differs.
+//
+// Measurement systems are not languages: `Mass` and `Volume` (Shared.tao-revolution) carry metric and
+// imperial forms chosen by `Me.Units`. An American cooking in Spanish still wants cups.
+
+words "es" {
+   // -- App and navigation
+   "Skillet"                                            "Skillet"
+   "Plan the week, cook the meal, shop the list — together."  "Planea la semana, cocina la comida, compra la lista — juntos."
+   "Plan"                                               "Plan"
+   "Recipes"                                            "Recetas"
+   "Shop"                                               "Compra"
+   "Kitchen"                                            "Cocina"
+   "Opening Skillet…"                                   "Abriendo Skillet…"
+   "This is gone"                                       "Esto ya no está"
+   "You don't have access to this"                      "No tienes acceso a esto"
+   "Offline — your changes are safe on this device"     "Sin conexión — tus cambios están a salvo en este dispositivo"
+
+   // -- Getting in
+   "Start your kitchen"                                 "Empieza tu cocina"
+   "Kitchen name"                                       "Nombre de la cocina"
+   "Create kitchen"                                     "Crear cocina"
+   "Email me a sign-in link"                            "Envíame un enlace para entrar"
+   "You're invited to { Invited.Name }"                 "Te invitan a { Invited.Name }"
+   "Join { Invited.Name }"                              "Unirme a { Invited.Name }"
+   "Who cooks here"                                     "Quién cocina aquí"
+   "Invite someone"                                     "Invitar a alguien"
+   "Leave kitchen"                                      "Salir de la cocina"
+
+   // -- Recipes
+   "New recipe"                                         "Nueva receta"
+   "Import from a link"                                 "Importar desde un enlace"
+   "What are you making?"                               "¿Qué vas a hacer?"
+   "Serves"                                             "Para"
+   "Total time"                                         "Tiempo total"
+   "Ingredients"                                        "Ingredientes"
+   "Steps"                                              "Pasos"
+   "Notes"                                              "Notas"
+   "No recipes yet"                                     "Aún no hay recetas"
+   "Delete recipe"                                      "Borrar receta"
+   "Delete { Recipe.Title }?"                           "¿Borrar { Recipe.Title }?"
+   "Share recipe"                                       "Compartir receta"
+   "Stop sharing"                                       "Dejar de compartir"
+   "Shared from Skillet"                                "Compartido desde Skillet"
+
+   // -- Plan
+   WeekTitle(Day)                                       "Semana del { Day.Short }"
+   "Add a meal"                                         "Añadir una comida"
+   "Shop the week"                                      "Comprar la semana"
+   "Nothing planned yet"                                "Aún no hay nada planeado"
+   "Remind me before"                                   "Recuérdamelo antes"
+
+   // -- Shop
+   "Add an item"                                        "Añadir algo"
+   "Nothing to buy"                                     "Nada que comprar"
+   "Bought"                                             "Comprado"
+   "Clear bought"                                       "Quitar lo comprado"
+   "Where to buy { Grocery.Name }"                     "Dónde comprar { Grocery.Name }"
+
+   // -- Cook
+   "Step { Step.Position } of { Recipe.Steps.Count }"  "Paso { Step.Position } de { Recipe.Steps.Count }"
+   "Start { Step.Timer } timer"                        "Iniciar temporizador de { Step.Timer }"
+   "Done cooking"                                       "Listo"
+   "Timer done — { Timer.Step.Text }"                   "Temporizador listo — { Timer.Step.Text }"
+
+   // -- Cases print as copy, so they translate like any literal
+   Breakfast "Desayuno"; Lunch "Comida"; Dinner "Cena"; Snack "Tentempié"
+   Owner "Propietario"; Cook "Cocinero"; Guest "Invitado"
+   Produce "Frutas y verduras"; Bakery "Panadería"; Dairy "Lácteos"; Pantry "Despensa"; Frozen "Congelados"; Aisle.Household "Hogar" // qualified: `Household` is also the entity
+
+   // -- Common
+   "Add"                                                "Añadir"
+   "Cancel"                                             "Cancelar"
+   "Delete"                                             "Borrar"
+   "Done"                                               "Listo"
+   "Close"                                              "Cerrar"
+   "Edit"                                               "Editar"
+   "You"                                                "Tú"
+
+   // -- Measurement (same forms; the words differ)
+   Mass(Amount)                                         metric "{ Amount } g" / imperial "{ Amount in ounces } oz"
+   Volume(Amount)                                       metric "{ Amount } ml" / imperial "{ Amount in cups } tazas"
+}
+
+// A same-language variant inherits and overrides only what differs.
+words "es-MX" inherits "es" {
+   "Shop"                                               "Súper"
+   "Add an item"                                        "Agregar algo"
+}

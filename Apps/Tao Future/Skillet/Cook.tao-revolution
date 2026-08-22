@@ -1,0 +1,91 @@
+// Cooking. Presented `as window`, so on a laptop it floats beside the plan and on a phone or tablet it
+// takes the screen. One step at a time, big enough to read from across the counter, with the recipe's
+// own timers running.
+
+ui CookScreen(Recipe, Meal (optional)) {
+   Title "Cooking { Recipe.Title }"
+   Toolbar { Close }
+   state StepNumber = 1
+   let Scale = if Meal is none then 1 else Meal.Servings / Recipe.Servings
+
+   // Timers are rows, so they are already running when this screen opens and keep running when it
+   // closes. Their notification belongs to an automation, not to this screen.
+   query MyTimers from Me.Timers {
+      where Step.Recipe is Recipe and is Running
+      order by EndsAt
+   }
+   presence Others on Recipe
+
+   action Next() { if StepNumber < Recipe.Steps.Count { set StepNumber = StepNumber + 1 } }
+   action Previous() { if StepNumber > 1 { set StepNumber = StepNumber - 1 } }
+   // Raw keys with no visible affordance stay `on key`; anything a person can also press for is a
+   // command with a `Key`.
+   on key "right" Next
+   on key "left" Previous
+
+   // A window needs its own close, because a full-screen presentation has no frame to supply one.
+   command Close { Label "Close"; Icon "xmark"; Key "escape"; does { dismiss } }
+   command Finish {
+      Label "Done cooking"
+      Icon "checkmark"
+      runs single
+      does {
+         if Meal is not none { update Meal { Cooked } }
+         // Stopping every timer this recipe left running is the automation's cue to cancel its
+         // notification; nothing here schedules or cancels an alert by hand.
+         update MyTimers { Stopped }
+         dismiss
+   }  }
+
+   render Panes [screen, gap xl] {
+      guard Recipe // first, so both panes may read it
+      Col [claim 2, gap lg] {
+         if Recipe.Steps is empty {
+            EmptyState(Icon: "list.bullet", Title: "No steps yet", Body: "Add steps to this recipe, then cook it.")
+         } else {
+            Progress(Value: StepNumber / Recipe.Steps.Count, Label: "Cooking progress")
+            loop Others where Other is not Me { Status("{ Other.Name } is cooking this too") }
+            loop MyTimers as Timer { TimerBar(Timer) }
+
+            // Pages shows one at a time: swipe on a touch screen, arrow keys or the buttons anywhere.
+            // `Page:` is a position, two-way like `Value:`, so swiping keeps StepNumber true.
+            Pages(Recipe.Steps, Page: StepNumber) {
+               Col [gap md, content center center] {
+                  Text("Step { Step.Position } of { Recipe.Steps.Count }") [caption]
+                  Text(Step.Text) [pageTitle, center]
+                  if Step.Timer is not none { StartTimerFor(Step) }
+            }  }
+
+            Row [content spread center] {
+               Button("Back", Icon: "chevron.left", Disabled: StepNumber is 1) [quiet] { on press Previous }
+               if StepNumber is Recipe.Steps.Count { Finish [primary] }
+               else { Button("Next", Icon: "chevron.right") [primary] { on press Next } }
+      }  }  }
+
+      Section("Ingredients") [width 300] {
+         loop Recipe.Ingredients { IngredientLine(Ingredient, Scale) }
+}  }  }
+
+file view StartTimerFor(Step) {
+   // `runs single per Step` keys the guard to the step, so two taps on one step start one timer while
+   // two different steps may each start their own.
+   action Start() runs single per Step {
+      create Timer in Step.Recipe.Household.Timers { Step, StartedBy: Me, EndsAt: now + Step.Timer, Running }
+      announce "Timer started for { Step.Text }" // for a screen reader; nothing visual needs saying
+   }
+   render Col {
+      #startTimer
+      Button("Start { Step.Timer } timer", Icon: "timer", Busy: Start running) { on press Start }
+}  }
+
+// A running timer, counting down. `now every second` ticks; the row outlives the view.
+file view TimerBar(Timer) {
+   let Now = now every second
+   action Stop() runs single { update Timer { Stopped } }
+
+   let Left = Timer.EndsAt - Now
+   render Row [card, content spread center] {
+      Text(Timer.Step.Text, Lines: 1) [label, claim 1]
+      Text(if Left > 0 then Left.Clock else "Done") [pageTitle, ink good when Left <= 0] // `.Clock`: "19:59"
+      Button("Stop", Label: "Stop the { Timer.Step.Text } timer") [quiet] { on press Stop }
+}  }

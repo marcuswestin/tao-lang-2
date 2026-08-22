@@ -10,7 +10,8 @@ terminal STRING_TEXT: /([^"\\{]|\\.)+/;
 terminal STRING_END: /\x22/;
 terminal INTERPOLATION_START: /\{/;
 terminal STRING: /"([^"\\{]|\\.)*"/;
-terminal NUMBER returns number: /[0-9]+/;
+// Decimals, so `1.5` lexes as one number while `1.ms` stays NUMBER '.' ID.
+terminal NUMBER returns number: /[0-9]+(\.[0-9]+)?/;
 terminal ID: /[_a-zA-Z][\w_]*/;
 terminal USE_IMPORT_PATH: /(@[a-zA-Z0-9._\-]+(\/[a-zA-Z0-9._\-]+)*)|(\.\/[a-zA-Z0-9._\-@\/]*)|(\.\.(\/[a-zA-Z0-9._\-@]+)*\/?)|([a-zA-Z.][a-zA-Z0-9._\-]*\/[a-zA-Z0-9._\-@\/]*)/;
 terminal TagOrHexColor: /#[A-Za-z0-9_]+/;

@@ -1,14 +1,14 @@
 use RuntimeStdlibTests from ./
 
 test "Runtime Stdlib Tests" {
-   check "renders stdlib primitives and accepts a button press" {
+   test "renders stdlib primitives and accepts a button press" {
       run RuntimeStdlibTests
 
       expect text "Runtime stdlib smoke"
       expect text "3"
       expect text "Media and status primitives"
       expect text "Tap me"
-      press text "Tap me"
+      press "Tap me"
       expect text "Label"
       expect text "Wrapped"
    }

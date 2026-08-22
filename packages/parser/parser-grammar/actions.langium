@@ -31,7 +31,7 @@ AskStatement:
     'let' name=ID '=' 'ask' dialogue=[DialogueDeclaration:ID] '(' argumentList=ArgumentList? ')';
 
 RespondStatement:
-    'respond' case=[EnumCase:ID]?;
+    'respond' case=[CaseSetCase:ID]?;
 
 ToggleStatement:
     'toggle' target=[StateDeclaration:ID];

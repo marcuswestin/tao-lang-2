@@ -1,1 +1,2 @@
-workspace let ProjectNotice = "Project let works"
+workspace
+let ProjectNotice = "Project let works"

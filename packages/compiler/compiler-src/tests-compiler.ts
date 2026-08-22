@@ -81,14 +81,6 @@ type TaoTestSubmitStep = {
   source: TaoTestSourceLocation
 }
 
-/** TaoTestDataStatusStep declares a deterministic provider state transition. */
-type TaoTestDataStatusStep = {
-  kind: 'dataStatus'
-  status: 'error' | 'loading' | 'ready'
-  message: string
-  source: TaoTestSourceLocation
-}
-
 /** TaoTestBackStep dispatches the active stack's platform-equivalent back operation. */
 type TaoTestBackStep = {
   kind: 'back'
@@ -107,7 +99,6 @@ type TaoTestSelectStep = {
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
 type TaoTestStep =
   | TaoTestBackStep
-  | TaoTestDataStatusStep
   | TaoTestEnterStep
   | TaoTestExpectation
   | TaoTestCheckboxStateExpectation
@@ -152,11 +143,11 @@ function compileSuite(suite: AST.TestDeclaration): TaoTestSuite {
   return {
     name: suite.name,
     source: sourceLocation(suite),
-    checks: suite.block.statements.filter(AST.isCheckDeclaration).map(compileCheck),
+    checks: suite.block.statements.filter(AST.isTestDeclaration).map(compileCheck),
   }
 }
 
-function compileCheck(check: AST.CheckDeclaration): TaoTestCheck {
+function compileCheck(check: AST.TestDeclaration): TaoTestCheck {
   const run = check.block.statements.find(AST.isRunStep)
   Assert.defined(run, 'validated check has one run step', { checkName: check.name })
   const steps = check.block.statements.filter(AST.isCheckStep).filter(isRunnableTestStep).map(compileStep)
@@ -201,7 +192,6 @@ function compileInputValueExpectation(expectation: AST.ExpectInputValueStep): Ta
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
     BackTestStep: compileBackTestStep,
-    DataStatusStep: compileDataStatusStep,
     EnterTextStep: compileEnterTextStep,
     ExpectCheckboxStateStep: step => ({
       checked: step.state === 'checked',
@@ -249,15 +239,6 @@ function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {
   return { kind: 'back', source: sourceLocation(step) }
 }
 
-function compileDataStatusStep(step: AST.DataStatusStep): TaoTestDataStatusStep {
-  return {
-    kind: 'dataStatus',
-    status: step.status || 'error',
-    message: step.message || '',
-    source: sourceLocation(step),
-  }
-}
-
 function compileExpectationGroup(
   step: AST.ExpectGroupStep | AST.ExpectScopeStep,
   scopeTag: string | undefined,
@@ -296,7 +277,7 @@ function tagName(tag: string): string {
 function compileEnterTextStep(enter: AST.EnterTextStep): TaoTestEnterStep {
   return {
     kind: 'enter',
-    selector: enter.selector,
+    selector: enter.selector ?? 'text',
     target: enter.target,
     value: enter.value,
     source: sourceLocation(enter),
@@ -306,7 +287,7 @@ function compileEnterTextStep(enter: AST.EnterTextStep): TaoTestEnterStep {
 function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
   return {
     kind: 'press',
-    selector: press.selector,
+    selector: press.selector ?? 'text',
     text: press.text,
     source: sourceLocation(press),
   }
@@ -315,7 +296,7 @@ function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
 function compileSubmitInputStep(submit: AST.SubmitInputStep): TaoTestSubmitStep {
   return {
     kind: 'submit',
-    selector: submit.selector,
+    selector: submit.selector ?? 'text',
     target: submit.target,
     source: sourceLocation(submit),
   }

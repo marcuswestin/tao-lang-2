@@ -1,0 +1,327 @@
+// Lists, their items, the shopping fold, one item, and sharing.
+
+phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"
+
+ui HearthListIndex() {
+   Title "Lists"
+   Toolbar { NewList [primary] }
+   query Lists from MyHome.Lists { }
+
+   command NewList {
+      Label "New list"
+      Icon "plus"
+      Key "cmd+shift+n"
+      Available when can create HearthList in MyHome.Lists
+      runs single
+      does {
+         let HearthList = ask NewListSheet(MyHome)
+         stop if HearthList is none
+         open ListLink(HearthList)
+   }  }
+
+   render ScrollView [screen] {
+      Col [page] {
+         OfflineNotice
+         guard Lists
+         if Lists is empty {
+            EmptyState(Icon: "checklist", Title: "No lists yet", Body: "Make a list for what your home is tending.") {
+               NewList [primary]
+         }  }
+         // Draggable because the collection is `(ordered)`; the store keeps the positions.
+         #lists
+         List(Lists, Reorderable: can change MyHome) {
+            Row [pattern Line] {
+               // The palette keyed by the case type: one design line, not a product-code branch.
+               Col [accentMark(HearthList.Color), @leading, decorative]
+               Col [@content, gap xxs] {
+                  Text(HearthList.Name) [body]
+                  Text("{ HearthList.Kind } · { ItemCount(HearthList.Items.Count) }") [caption]
+               }
+               if HearthList is Shared { Icon("link", Label: "Shared") [muted, @trailing] }
+               Icon("chevron.right") [muted, @trailing]
+            }
+            on select -> open ListLink(HearthList)
+}  }  }  }
+
+ui HearthListWelcome() {
+   render EmptyState(Icon: "sidebar.left", Title: "Choose a list", Body: "Your lists stay here while their details open beside them, or on the next screen.")
+}
+
+file dialogue NewListSheet(Home) responds HearthList {
+   draft New = HearthList for new { Home, Kind: Chores, Color: Home.Accent }
+   action Add() runs single {
+      when save New { saved -> HearthList { respond HearthList } }
+   }
+   render Col [card, width max 520, gap md] {
+      Text("New list") [sectionTitle]
+      #listName
+      TextInput(Value: New.Name, Label: "List name", Focus: initial) { on submit Add }
+      Choice(Value: New.Kind, Label: "Kind")
+      Choice(Value: New.Color, Label: "Color")
+      Problems(New)
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> respond }
+         #addList
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+}  }  }
+
+// -- One list -----------------------------------------------------------------------------------------------
+
+ui HearthListScreen(HearthList) {
+   Title HearthList.Name
+   Toolbar { Rename, ShareThis, DeleteThis }
+   Search Find
+   state NewTitle = ""
+   state ShowFinished = no
+   query OpenItems from HearthList.Items {
+      where is Open
+      search Find in Title, Note
+   }
+   query FinishedItems from HearthList.Items {
+      where is Complete
+      search Find in Title, Note
+      order by CompletedAt desc
+   }
+   // A shopping list folds equal lines: "Eggs, piece" from two people is one row whose Quantity is the
+   // total, and ticking it completes every row inside.
+   query Needed from HearthList.Items {
+      where is Open
+      group by Title, Unit
+      sum Quantity
+      order by Title
+   }
+
+   // The title is known and the row can be finished later — `required` is completeness, not a blocked
+   // write — so quick capture from the list head is one create, no draft.
+   action AddItem() runs single {
+      stop if NewTitle is empty
+      create HearthItem in HearthList.Items { Title: NewTitle, CreatedBy: Me }
+      set NewTitle = ""
+      if HearthList.Kind is not Shopping { open ItemLink(Item) }
+   }
+
+   command Rename {
+      Label "Rename"
+      Icon "pencil"
+      Available when can change HearthList
+      does { present RenameList(HearthList) as sheet }
+   }
+   command ShareThis {
+      Label if HearthList is Shared then "Manage link" else "Share list"
+      Icon "square.and.arrow.up"
+      Available when can change HearthList
+      does { present ShareListSheet(HearthList) as sheet }
+   }
+   command DeleteThis {
+      Label "Delete list"
+      Icon "trash"
+      Intent destructive
+      Available when can delete HearthList
+      runs single
+      does {
+         stop unless ask Confirm("Delete { HearthList.Name }?", Body: "Its items, notes, and photos will be removed for everyone.", Verb: "Delete")
+         delete HearthList
+         dismiss
+   }  }
+
+   // A view declared inside the screen sees its queries: the shopping fold and the finished items.
+   view ShoppingContent() {
+      render Col [gap lg] {
+         Section("Needed") {
+            guard Needed
+            if Needed is empty { EmptyState(Icon: "basket", Title: "Nothing to buy", Body: "Add an item above; equal items from everyone fold into one line.") }
+            #needed
+            List(Needed as Line) {
+               Row [pattern Line] {
+                  #tick
+                  // The fold stands for its rows, so `SetDone` stamps who and when on every source.
+                  Checkbox(Value: Line.Complete, Label: MarkDone(Line.Title)) [@leading] { on change -> Done { do SetDone(Line, Done) } }
+                  Text(Line.Title) [body, @content]
+                  if Line.Quantity is not none { Text("{ Line.Quantity } { Line.Unit }") [caption, @trailing] }
+                  if Line.Sources.Count > 1 { Text("from { Line.Sources.Count }") [caption, @trailing] }
+         }  }  }
+         if FinishedItems is not empty {
+            Section("Bought") {
+               // A bulk write is one write: it takes only the rows I may delete, and is refused whole otherwise.
+               @actions Button("Clear", Icon: "trash") [quiet] { on press -> delete HearthList.Items where is Complete and can delete HearthItem }
+               List(FinishedItems as Item) { HearthItemRow(Item); on select -> open ItemLink(Item) }
+}  }  }  }  }
+
+   render ScrollView [screen] {
+      guard HearthList
+      Col [page] {
+         Row [content left center, gap sm] {
+            Col [accentMark(HearthList.Color), decorative]
+            Col [gap xxs, claim 1] {
+               Text(HearthList.Name) [pageTitle]
+               Text("Shared with { HearthList.Home.Memberships.Count } people at home") [caption]
+         }  }
+
+         if can create HearthItem in HearthList.Items {
+            Row [surface, pad xs, gap xs] {
+               #newItem
+               TextInput(Value: NewTitle, Label: "What needs doing?", Placeholder: "Add something") [claim 1] { on submit AddItem }
+               #addItem
+               Button("Add", Icon: "plus", Disabled: NewTitle is empty, Busy: AddItem running) [primary] { on press AddItem }
+         }  }
+
+         when HearthList.Kind {
+            Shopping -> ShoppingContent
+            otherwise -> {
+               guard OpenItems
+               if OpenItems is empty { EmptyState(Icon: "checkmark.circle", Title: "This list is clear", Body: "Add the next thing when you are ready.") }
+               #openItems
+               List(OpenItems, Reorderable: can change HearthList) { HearthItemRow(HearthItem); on select -> open ItemLink(HearthItem) }
+               Toggle(Value: ShowFinished, Label: "Show finished") [caption]
+               if ShowFinished {
+                  guard FinishedItems
+                  if FinishedItems is empty { Text("Nothing finished yet.") [muted] }
+                  List(FinishedItems as Item) { HearthItemRow(Item); on select -> open ItemLink(Item) }
+   }  }  }  }  }  }
+
+// Renaming needs no draft: the row exists and each field stands on its own.
+file ui RenameList(HearthList) {
+   Title "Rename list"
+   Toolbar { Done [primary] }
+   command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
+   render Col [card, width max 480, gap md] {
+      TextInput(Value: HearthList.Name, Label: "List name")
+      Choice(Value: HearthList.Color, Label: "Color")
+      Problems(HearthList)
+}  }
+
+// -- One item ------------------------------------------------------------------------------------------------
+
+ui HearthItemScreen(Item) {
+   Title Item.Title
+   Toolbar { OpenSeparately, DeleteItem }
+   presence Lookers on Item
+   query ItemComments from Item.Comments { }
+   query ItemPhotos from Item.Photos { }
+   state NewComment = ""
+
+   action AddComment() runs queued {
+      stop if NewComment is empty
+      create Comment in Item.Comments { Author: Me, Body: NewComment }
+      set NewComment = ""
+   }
+   action AddPhoto(Picture image) runs parallel {
+      create Photo in Item.Photos { Image: Picture, AddedBy: Me }
+   }
+
+   command OpenSeparately {
+      Label "Open separately"
+      Icon "rectangle.on.rectangle"
+      // A window on a laptop; where there are no windows, a full-screen sheet. The key means opening the
+      // same item twice focuses the one window instead of stacking a second.
+      does { present HearthItemScreen(Item) as window (Key: Item) }
+   }
+   command DeleteItem {
+      Label "Delete"
+      Icon "trash"
+      Intent destructive
+      Available when can delete Item
+      runs single
+      does {
+         stop unless ask Confirm("Delete { Item.Title }?", Body: "Its notes and photos go with it.", Verb: "Delete")
+         delete Item
+         dismiss
+   }  }
+
+   render ScrollView [screen] {
+      guard Item
+      Col [page] {
+         Text(Item.HearthList.Name) [caption]
+         loop Lookers where Looker is not Me { Status("{ Looker.Name } is looking at this too") }
+
+         Panes [gap lg] {
+            Col [gap md, claim 2] {
+               Section("Details") {
+                  Col [card] {
+                     // The row exists and each field stands on its own, so every input writes through as
+                     // you type — a keystroke is a write; `together` and `validate` on the entity still
+                     // hold; the honest concurrent policy is the datasource's field-wise latest. There is
+                     // no save button to forget.
+                     #itemTitle
+                     TextInput(Value: Item.Title, Label: "What needs doing?")
+                     TextInput(Value: Item.Note, Label: "Notes", Lines: 4)
+                     DateTimeInput(Value: Item.Due, Label: "When")
+                     Choice(Value: Item.Assignee, Options: Item.HearthList.Home.Memberships.Person, Placeholder: "Nobody yet", Label: "Who")
+                     if Item.HearthList.Kind is Shopping {
+                        Row [gap md] {
+                           NumberInput(Value: Item.Quantity, Label: "Quantity") [claim 1]
+                           Choice(Value: Item.Unit, Label: "Unit") [claim 1]
+                     }  }
+                     PlaceInput(Value: Item.Place, Label: "Place")
+                     Problems(Item)
+               }  }
+               Section("Photos") {
+                  guard ItemPhotos
+                  Grid(ItemPhotos) [cell min 120, gap sm] {
+                     Image(Photo.Image, Description: if Photo.Caption is empty then Item.Title else Photo.Caption) [height 120, fit cover, radius sm]
+                  }
+                  ImageInput(Label: "Add a photo", Sources: camera, library) { on change -> Picture { do AddPhoto(Picture) } }
+            }  }
+
+            Col [gap md] {
+               Section("Conversation") {
+                  guard ItemComments
+                  if ItemComments is empty { Text("No notes yet.") [muted] }
+                  loop ItemComments {
+                     Col [card, gap xs] {
+                        Row [content left center, gap xs] {
+                           Image(Comment.Author.Photo, Description: Comment.Author.Name) [size 28, radius pill]
+                           Text(Comment.Author.Name) [caption]
+                           Text(Comment.CreatedAt.Relative) [caption, claim 1, align right]
+                        }
+                        Text(Comment.Body) [body]
+                  }  }
+                  Row [surface, pad xs, gap xs] {
+                     #newComment
+                     TextInput(Value: NewComment, Label: "Add a note") [claim 1] { on submit AddComment }
+                     #addComment
+                     Button("Add", Icon: "arrow.up", Disabled: NewComment is empty) [primary] { on press AddComment }
+}  }  }  }  }  }  }
+
+// -- Sharing --------------------------------------------------------------------------------------------------
+
+file ui ShareListSheet(HearthList) {
+   Title "Share list"
+   action Start() runs single {
+      when ShareList(HearthList) {
+         done -> Published { share SharedListLink(Published); dismiss }
+   }  }
+   action Revoke() runs single { do StopSharingList(HearthList); dismiss }
+   render Col [gap lg, pad lg, width max 620] {
+      when HearthList.Shared {
+         Private -> {
+            Text("Anyone with the link sees the open items, their quantities, and their places. Notes, who is doing what, comments, and photos stay home.") [body]
+            PublicationPreview(HearthList, As: SharedList)
+            Row [content right center, gap sm] {
+               Button("Cancel") [quiet] { on press -> dismiss }
+               #createLink
+               Button("Create read-only link", Busy: Start running) [primary] { on press Start }
+         }  }
+         Shared -> {
+            Status("Anyone with the link can see this list", Tone: Good)
+            PublicationPreview(HearthList, As: SharedList)
+            Row [content right center, gap sm] {
+               Button("Close") [quiet] { on press -> dismiss }
+               #revokeLink
+               Button("Stop sharing", Busy: Revoke running) [destructive] { on press Revoke }
+               Button("Share link") [primary] { on press -> share SharedListLink(publish HearthList as SharedList) }
+}  }  }  }  }
+
+public ui SharedListScreen(SharedList) {
+   Title SharedList.Name
+   render ScrollView [screen] {
+      guard SharedList
+      Col [page, width max 720] {
+         Text(SharedList.Name) [pageTitle]
+         Text("Shared read-only from Hearth") [caption]
+         List(SharedList.Items as Item) {
+            Row [pattern Line] {
+               Text(Item.Title) [body, @content]
+               if Item.Quantity is not none { Text("{ Item.Quantity } { Item.Unit }") [caption, @trailing] }
+               if Item.Place is not none { Text(Item.Place.Name) [caption, @trailing] }
+}  }  }  }  }

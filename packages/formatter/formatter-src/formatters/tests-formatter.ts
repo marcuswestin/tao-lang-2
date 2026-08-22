@@ -6,11 +6,6 @@ export default {
     f.oneSpaceAfter('test')
   },
 
-  /** CheckDeclaration formats a runnable v0 check. */
-  CheckDeclaration(f) {
-    f.oneSpaceAfter('check')
-  },
-
   /** RunStep formats `run AppName`. */
   RunStep(f) {
     f.oneSpaceAfter('run')

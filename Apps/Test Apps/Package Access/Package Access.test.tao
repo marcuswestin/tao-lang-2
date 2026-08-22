@@ -1,7 +1,7 @@
 use PackageAccess from ./
 
 test "Package Access" {
-   check "renders local package imports" {
+   test "renders local package imports" {
       run PackageAccess
 
       expect text "Package access works"

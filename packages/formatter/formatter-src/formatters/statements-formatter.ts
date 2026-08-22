@@ -1,15 +1,30 @@
 import { AST } from '@parser'
-import { findInjectionFenceCloseIndex, type FormatHandlers, isInjectionFenceOpenLine } from '../formatting'
+import {
+  collapsesToOneLine,
+  findInjectionFenceCloseIndex,
+  type FormatHandlers,
+  isInjectionFenceOpenLine,
+} from '../formatting'
 
 export default {
   /** Block formats `{ }` bodies with one indented statement per line. */
   Block(f) {
     f.oneSpaceBefore('{')
+    // A conditional branch reads as one line when its body is a single statement that fits.
+    if (isConditionalBranch(f.node.$container) && collapsesToOneLine(f.node, f.node.statements)) {
+      f.singleLineBraceBlock(f.node.statements[0]!)
+      return
+    }
     f.indentedBraceBlock(f.node.statements)
+    // A tag names the element below it, so it reads as that element's opening line rather than as
+    // one more statement in the run above it.
+    if (!AST.isTestDeclaration(f.node.$container)) {
+      f.separateIndentedLines(f.node.statements, (_previous, next) => AST.isTagStatement(next) ? 2 : 1)
+    }
     if (AST.isTestDeclaration(f.node.$container)) {
       f.separateIndentedLines(f.node.statements, () => 2)
     }
-    if (AST.isCheckDeclaration(f.node.$container)) {
+    if (AST.isTestDeclaration(f.node.$container)) {
       f.separateIndentedLines(
         f.node.statements,
         (previous, next) =>
@@ -228,4 +243,11 @@ function scanBlockCommentLine(
     index++
   }
   return { enteredBlockComment, inBlockComment: inside }
+}
+
+function isConditionalBranch(container: AST.Node | undefined): boolean {
+  return container !== undefined
+    && (AST.isGuardRenderBranch(container)
+      || AST.isWhenRenderBranch(container)
+      || AST.isWhenRenderOtherwise(container))
 }

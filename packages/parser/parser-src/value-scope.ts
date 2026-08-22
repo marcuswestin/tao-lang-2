@@ -101,7 +101,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       this.importedDeclarations(reference, AST.isImportableValueDeclaration),
       scope,
     )
-    scope = this.createScopeForNodes(this.importedEnumCases(reference), scope)
+    scope = this.createScopeForNodes(this.importedCaseSetCases(reference), scope)
 
     const owningView = AST.findOwningView(reference)
     if (owningView) {
@@ -195,7 +195,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   private createResponseCaseScope(node: AST.RespondStatement): Langium.Scope {
     const dialogue = AST.findOwningView(node)
     const response = AST.isDialogueDeclaration(dialogue) ? dialogue.response.ref : undefined
-    return this.createScopeForNodes(response?.block.cases ?? [])
+    return this.createScopeForNodes(response ? AST.caseSetCasesOf(response) : [])
   }
 
   private createStateScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
@@ -306,16 +306,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    const enumCases = [
-      ...root.statements.filter(AST.isEnumDeclaration).flatMap(declaration => declaration.block.cases),
-      ...this.importedEnumCases(test),
+    const caseSetCases = [
+      ...root.statements.filter(AST.isTypeDeclaration).flatMap(AST.caseSetCasesOf),
+      ...this.importedCaseSetCases(test),
     ]
     const exactField = booleanFieldForCaseTest(test)
     const fields = visibleEntityDataDeclarations(test).flatMap(entity =>
       entity.block.entries.filter(AST.isEntityDataField).filter(field => field.boolean)
     )
     let scope = this.createScope(fields.flatMap(field => this.booleanFieldCaseDescriptions(field)))
-    scope = this.createScopeForNodes(enumCases, scope)
+    scope = this.createScopeForNodes(caseSetCases, scope)
     if (exactField) {
       scope = this.createScope(this.booleanFieldCaseDescriptions(exactField), scope)
     }
@@ -356,7 +356,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
   }
 
-  private importedEnumCases(node: AST.Node): AST.EnumCase[] {
+  private importedCaseSetCases(node: AST.Node): AST.CaseSetCase[] {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return []
@@ -365,8 +365,8 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       .filter(AST.isUseStatement)
       .flatMap(useStatement =>
         AST.resolvedImportedDeclarations(useStatement)
-          .filter(AST.isEnumDeclaration)
-          .flatMap(declaration => declaration.block.cases)
+          .filter(AST.isTypeDeclaration)
+          .flatMap(AST.caseSetCasesOf)
       )
   }
 
@@ -399,11 +399,37 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const document = AST.getDocument(node)
     const currentPath = document.uri.path
 
-    const declarations: DeclarationT[] = []
+    const declarations: DeclarationT[] = [...this.folderDeclarations(currentPath, isDeclaration)]
     for (const useStatement of root.statements.filter(AST.isUseStatement)) {
       const importedNames = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
       for (const statement of this.collectTargetDeclarations(useStatement, currentPath)) {
         if (AST.isDeclaration(statement) && isDeclaration(statement) && importedNames.has(statement.name)) {
+          declarations.push(statement)
+        }
+      }
+    }
+    return declarations
+  }
+
+  // A `folder` declaration joins its siblings' scopes with no `use` statement naming it. This sits
+  // inside importedDeclarations so every scope layer picks it up in its own namespace.
+  private folderDeclarations<DeclarationT extends AST.Declaration>(
+    currentPath: string,
+    isDeclaration: (node: AST.Node) => node is DeclarationT,
+  ): DeclarationT[] {
+    const currentDirectory = currentPath.slice(0, currentPath.lastIndexOf('/'))
+    const declarations: DeclarationT[] = []
+    for (const document of this.coreServices.shared.workspace.LangiumDocuments.all) {
+      const path = document.uri.path
+      if (path === currentPath || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
+        continue
+      }
+      const file = document.parseResult.value
+      if (!AST.isTaoFile(file)) {
+        continue
+      }
+      for (const statement of file.statements) {
+        if (isDeclaration(statement) && declaredVisibility(statement) === 'folder') {
           declarations.push(statement)
         }
       }
@@ -478,7 +504,7 @@ function relationEntityForField(
   if (field.primitive || field.boolean) {
     return undefined
   }
-  const relationName = field.modifiers.find(modifier => modifier.relationName)?.relationName ?? field.name
+  const relationName = field.name
   return visibleEntityDataDeclarations(context).find(entity =>
     entity.singularName === relationName || entity.name === relationName
   )
@@ -617,4 +643,9 @@ function preferredConstructorDeclarations(
     ...candidates.filter(candidate => candidate.name !== rootName),
     ...preferred,
   ]
+}
+
+/** declaredVisibility reads a declaration's visibility marker without depending on @ast-utils. */
+function declaredVisibility(declaration: AST.Node): string | undefined {
+  return 'visibility' in declaration ? (declaration as { visibility?: string }).visibility : undefined
 }

@@ -15,7 +15,7 @@ Describe('compiler: async actions', () => {
         }
         render Text("Ready")
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject Value \`\`\`ts
           return null
         \`\`\`

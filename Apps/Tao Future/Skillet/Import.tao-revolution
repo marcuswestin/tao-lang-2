@@ -1,0 +1,52 @@
+// Importing a recipe from a web page — the one thing here Tao does not own.
+//
+// Tao declares the contract and emits `FetchRecipeAction` from it; TypeScript implements it in the
+// sidecar, and the compiler checks the join both ways. Rejecting is a returned value, not an exception,
+// so the caller sees it as an ordinary outcome case. The sidecar holds no authority: it returns a value,
+// and one transaction commits it.
+
+type RecipeDraft is {
+   Title text
+   Servings number
+   Ingredients list of text
+   Steps list of text
+   Source text
+}
+
+action FetchRecipe(Link text) returns RecipeDraft = inject "./FetchRecipe.ts"
+
+// App-wide, mounted on the navigator.
+command ImportRecipe {
+   Label "Import from a link"
+   Icon "link"
+   Key "cmd+shift+n"
+   Available when can create Recipe in MyKitchen.Recipes
+   does { present ImportSheet() as sheet }
+}
+
+file ui ImportSheet() {
+   Title "Import from a link"
+   state Link = ""
+
+   // `runs single`: a second press while the first fetch is in flight is ignored, not queued. Dismissing
+   // the sheet cancels a fetch in flight. Each `let` may be refused: the sidecar's `reject("…")` and the
+   // transaction's rejection both end the action and surface through `guard default`'s `failed`.
+   action Import() runs single {
+      stop if Link is empty
+      let Imported = FetchRecipe(Link)
+      // One transaction: the recipe, its ingredients, and its steps land together or not at all.
+      let Recipe = SaveImportedRecipe(MyKitchen, Imported)
+      dismiss
+      open RecipeLink(Recipe)
+   }
+
+   render Col [card, width max 560, gap md] {
+      Text("Paste a link to a recipe on the web.") [body, muted]
+      #importLink
+      TextInput(Value: Link, Label: "Link", Placeholder: "https://…", Keyboard: url, Focus: initial) { on submit Import }
+      if Import running { Status("Reading the page…", Announce: yes) }
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> dismiss }
+         #import
+         Button("Import", Disabled: Link is empty, Busy: Import running) [primary] { on press Import }
+}  }  }

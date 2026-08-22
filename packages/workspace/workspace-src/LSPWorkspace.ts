@@ -40,11 +40,20 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
     Langium.startLanguageServer(this.services.shared)
   }
 
+  // Langium resolves references only against loaded documents, so the stdlib is loaded next to the
+  // workspace rather than assumed to be inside it. It only sits inside the workspace root when Tao
+  // itself is the open project; a packaged extension carries the stdlib in its own directory.
   private async loadWorkspaceDocuments(): Promise<void> {
+    for (const root of [this.root, this.project.packagesContext.stdlibRoot]) {
+      await this.loadDocumentsUnder(root)
+    }
+  }
+
+  private async loadDocumentsUnder(root: string): Promise<void> {
     const documents = this.services.shared.workspace.LangiumDocuments
     const factory = this.services.shared.workspace.LangiumDocumentFactory
     for (
-      const path of await Repo.filesUnder(this.root, {
+      const path of await Repo.filesUnder(root, {
         excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
         extensions: ['.tao'],
       })

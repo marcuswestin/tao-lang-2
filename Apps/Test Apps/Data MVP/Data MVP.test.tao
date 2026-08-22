@@ -1,7 +1,7 @@
 use DataMVPApp from ./
 
 test "Data MVP" {
-   check "runs reactive related CRUD with filtering and ordering" {
+   test "runs reactive related CRUD with filtering and ordering" {
       run DataMVPApp
 
       expect text "No workspaces yet"
@@ -21,18 +21,7 @@ test "Data MVP" {
       press #deleteTask
       expect text "No completed tasks"
    }
-
-   check "renders deterministic loading and provider failure states" {
-      run DataMVPApp
-      data loading
-      expect text "Loading local data…"
-      data error "Storage unavailable"
-      expect text "Storage unavailable"
-      data ready
-      expect text "No workspaces yet"
-   }
-
-   check "cascades relationship rows when a workspace is deleted" {
+   test "cascades relationship rows when a workspace is deleted" {
       run DataMVPApp
       enter "Work" into #workspaceName
       press #addWorkspace

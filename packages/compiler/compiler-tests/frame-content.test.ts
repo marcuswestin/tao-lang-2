@@ -20,7 +20,7 @@ Describe('compiler: frame content and render injection channels', () => {
         ${fence}
       }
       view Label() { render inject ${tsFence} return null ${fence} }
-      view Button(Press is action()) { render inject Press ${tsFence} return null ${fence} }
+      view Button(Press action()) { render inject Press ${tsFence} return null ${fence} }
       view Main() {
         render Card() [claim 2] {
           Label()

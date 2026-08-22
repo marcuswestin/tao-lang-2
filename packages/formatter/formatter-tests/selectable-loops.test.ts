@@ -12,9 +12,8 @@ Describe('formatter: selectable loops', () => {
            render Stack() {
               loop ["One"] / Row {
                  Text(Row)
-                 on select -> {
-                    set Selected = Row
-        }  }  }  }
+                 on select -> { set Selected = Row }
+        }  }  }
       `,
     ),
   )

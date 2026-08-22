@@ -27,7 +27,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           workspace view MainView() {
             render Text(Title)
           }
-          view Text(Value is text) {
+          view Text(Value text) {
             render inject Value ${tsFence}
               return null
             ${fence}
@@ -41,7 +41,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const compiled = await workspace.compile(paths['Main.tao']!)
 
         Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(4)
-        Expect(parseResult.files.some(file => file.path.endsWith('/tao/Prelude.tao'))).toBe(true)
+        Expect(parseResult.files.some(file => file.path.endsWith('/@tao/Prelude.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
         Expect([...new Set(compiled.files.map(file => file.sourcePath))].sort()).toEqual([
           paths['Main.tao']!,
@@ -115,11 +115,31 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const loadedPaths = Array.from(workspace.services.shared.workspace.LangiumDocuments.all)
           .map(document => document.uri.fsPath)
 
-        Expect(loadedPaths).toEqual([
+        Expect(loadedPaths.filter(path => path.startsWith(rootDir))).toEqual([
           FS.resolvePath('Apps/WordFlower/1 - Current/Valid.tao', rootDir),
           FS.resolvePath('Main.tao', rootDir),
           FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
         ])
+      },
+    )
+  })
+
+  // The IDE links references only against loaded documents, so a stdlib the workspace root does not
+  // happen to contain leaves every `@tao/…` import unresolved. Developing on Tao itself hides this,
+  // because there the stdlib sits inside the open repository; a packaged extension carries it in the
+  // extension directory instead.
+  Test('preloads stdlib documents from outside the workspace root', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-stdlib-',
+      { 'Main.tao': 'view MainView() { }\n' },
+      async (_paths, rootDir) => {
+        const workspace = await LSPWorkspace.open(rootDir)
+        const loadedPaths = Array.from(workspace.services.shared.workspace.LangiumDocuments.all)
+          .map(document => document.uri.fsPath)
+        const stdlibPath = loadedPaths.find(path => path.endsWith('@tao/nav/Navigation.tao'))
+
+        Expect(stdlibPath).toBeDefined()
+        Expect(stdlibPath!.startsWith(rootDir)).toBe(false)
       },
     )
   })
@@ -134,7 +154,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const workspace = await Workspace.open(rootDir)
 
         await Expect(workspace.compileTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
-          "Test 'Empty' must declare at least one check.",
+          "Test 'Empty' must start exactly one app with run.",
         )
         const plan = await workspace.compileTestPlan(paths['Main.test.tao']!, { skipValidation: true })
 

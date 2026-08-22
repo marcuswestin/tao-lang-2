@@ -240,8 +240,17 @@ function isInsidePackage(filePath: string, ctx: ValidationContext): boolean {
   return false
 }
 
+// A test sidecar runs an app declared elsewhere in the project. That file is its own directory's
+// entry when the tests sit beside it, and an ancestor's once the sources are grouped into folders,
+// so reachability is what this allows rather than an exact directory match.
 function isTestCompanionAppFile(filePath: string, ctx: ValidationContext): boolean {
-  return Packages.isTestSourcePath(ctx.entryFilePath) && FS.dirname(filePath) === FS.dirname(ctx.entryFilePath)
+  if (!Packages.isTestSourcePath(ctx.entryFilePath)) {
+    return false
+  }
+  const testDirectory = FS.dirname(ctx.entryFilePath)
+  const appDirectory = FS.dirname(filePath)
+  const relative = FS.relativePath(appDirectory, testDirectory)
+  return relative === '' || !relative.startsWith('..')
 }
 
 function pathIsWithin(path: string, directoryPath: string): boolean {

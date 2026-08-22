@@ -1,0 +1,277 @@
+// The library, one recipe, its editor, and sharing.
+
+// App-wide: mounted on the navigator, so ⌘N works from every tab. It closes over app-wide handles only.
+command NewRecipe {
+   Label "New recipe"
+   Icon "plus"
+   Key "cmd+n"
+   Available when can create Recipe in MyKitchen.Recipes
+   runs single
+   does {
+      // No row yet, so a draft. It commits once, so an abandoned "New recipe" never syncs to the whole
+      // kitchen.
+      let Recipe = ask NewRecipeSheet(MyKitchen)
+      stop if Recipe is none
+      open RecipeLink(Recipe)
+}  }
+
+ui RecipeLibrary() {
+   Title "Recipes"
+   Search Query
+   Toolbar { NewRecipe [primary], ImportRecipe }
+   state OnlyFavorites = no
+   query Recipes from MyKitchen.Recipes {
+      search Query in Title, Notes, Ingredients.Name
+      where is Favorite or OnlyFavorites is no
+      order by Favorite desc, Title
+   }
+
+   render ScrollView [screen] {
+      Col [page] {
+         OfflineNotice
+         Toggle(Value: OnlyFavorites, Label: "Favorites only") [caption]
+         guard Recipes
+         if Recipes is empty {
+            if Query is empty {
+               EmptyState(Icon: "book", Title: "No recipes yet", Body: "Write one down, or import one from a link.") {
+                  NewRecipe [primary]
+               }
+            } else {
+               Text("Nothing matches “{ Query }”.") [body, muted]
+            }
+         }
+         Grid(Recipes) [cell min 220, gap md] {
+            RecipeCard(Recipe)
+            on select -> open RecipeLink(Recipe)
+}  }  }  }
+
+file view RecipeCard(Recipe) {
+   render Col [card, pad none, gap none, clip] {
+      Image(Recipe.Photo, Description: Recipe.Title) [height 140, fit cover]
+      Col [pad md, gap xxs] {
+         Text(Recipe.Title, Lines: 2) [sectionTitle]
+         Row [content left center, gap xs] {
+            Text(Recipe.Course) [chip]
+            if Recipe is Favorite { Icon("heart.fill", Label: "Favorite") [ink accent] }
+            if Recipe is Shared { Icon("link", Label: "Shared") [muted] }
+}  }  }  }
+
+ui NoRecipeSelected() {
+   render EmptyState(Icon: "book", Title: "Pick a recipe", Body: "Your library stays here while a recipe opens beside it, or on the next screen.")
+}
+
+ui RecipeScreen(Recipe) {
+   Title Recipe.Title
+   Toolbar { Cook [primary], Plan, Share, Delete }
+   // Who else has this open. Two cooks in one kitchen is the ordinary case, not an edge case.
+   presence Others on Recipe
+
+   command Cook {
+      Label "Cook"
+      Icon "flame"
+      Key "cmd+r"
+      Enabled when Recipe.Steps is not empty // shown, but not pressable, until there is something to cook
+      does { open CookLink(Recipe) }
+   }
+   command Plan {
+      Label "Plan"
+      Icon "calendar.badge.plus"
+      does { present PlanMeal(Recipe: Recipe) as sheet }
+   }
+   command Favorite {
+      Label if Recipe is Favorite then "Remove from favorites" else "Favorite"
+      Icon if Recipe is Favorite then "heart.fill" else "heart"
+      Available when can change Recipe
+      does { toggle Recipe.Favorite }
+   }
+   command Edit {
+      Label "Edit"
+      Icon "pencil"
+      Key "cmd+e"
+      Available when can change Recipe
+      does { present RecipeEditor(Recipe) as sheet }
+   }
+   command Share {
+      Label if Recipe is Shared then "Manage link" else "Share recipe"
+      Icon "square.and.arrow.up"
+      Available when can change Recipe
+      does { present ShareRecipe(Recipe) as sheet }
+   }
+   command Delete {
+      Label "Delete recipe"
+      Icon "trash"
+      Intent destructive
+      Available when can delete Recipe
+      runs single
+      does {
+         stop unless ask Confirm("Delete { Recipe.Title }?", Body: "This removes it for everyone who cooks here.", Verb: "Delete")
+         delete Recipe
+         dismiss
+   }  }
+
+   render ScrollView [screen] {
+      guard Recipe // loading, missing, unauthorized, and rejected all fall to `guard default`
+      Col [page, width max 900] {
+         Image(Recipe.Photo, Description: Recipe.Title) [height 260, radius lg, fit cover]
+
+         Row [content left center, gap xs] {
+            Text("{ Recipe.Servings } servings") [chip]
+            if Recipe.Duration is not none { Text(Recipe.Duration) [chip] }
+            Text(Recipe.Course) [chip]
+            Favorite [quiet]
+         }
+         loop first 3 of Others where Other is not Me {
+            Status("{ Other.Name } is looking at this too")
+         }
+
+         Panes [gap xl] {
+            Section("Ingredients") {
+               loop Recipe.Ingredients { IngredientLine(Ingredient) }
+            }
+            Section("Steps") [claim 2] {
+               loop Recipe.Steps {
+                  Row [gap md, content left top] {
+                     Text(Step.Position) [label, muted, width 24]
+                     Col [gap xxs, claim 1] {
+                        Text(Step.Text) [body]
+                        if Step.Timer is not none { Text("Timer: { Step.Timer }") [caption] }
+         }  }  }  }  }
+
+         if Recipe.Notes is not empty { Section("Notes") { Text(Recipe.Notes) [body] } }
+         Edit // hidden on its own when `can change Recipe` is no
+         if Recipe.Source is not none {
+            Button("View the original", Icon: "globe") [quiet] { on press -> open Recipe.Source }
+}  }  }  }
+
+// Creating: a draft, because the row does not exist yet.
+file dialogue NewRecipeSheet(Household) responds Recipe {
+   draft New = Recipe for new { Household, Course: Dinner, Servings: 4 }
+   action Add() runs single {
+      when save New {
+         saved -> Recipe { respond Recipe } // a rejection invalidates New on its own
+   }  }
+   render Col [card, width max 560, gap md] {
+      Text("New recipe") [sectionTitle]
+      #newTitle
+      TextInput(Value: New.Title, Label: "What are you making?", Focus: initial) { on submit Add }
+      Row [gap md] {
+         NumberInput(Value: New.Servings, Label: "Serves", Min: 1) [claim 1]
+         Choice(Value: New.Course, Label: "Course") [claim 1]
+      }
+      Problems(New)
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> respond }
+         #addRecipe
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+}  }  }
+
+// Editing: the row exists and its fields stand on their own, so every input writes through. There is no
+// save button, no dirty state, and nothing to discard.
+file ui RecipeEditor(Recipe) {
+   Title "Edit recipe"
+   Toolbar { Done [primary] }
+   command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
+
+   render ScrollView [pad lg] {
+      Col [width max 720, gap lg] {
+         Row [gap md, content left top] {
+            ImageInput(Value: Recipe.Photo, Label: "Photo", Sources: camera, library) [width 96, height 96, radius md]
+            Col [gap sm, claim 1] {
+               #title
+               TextInput(Value: Recipe.Title, Label: "What are you making?")
+               Choice(Value: Recipe.Course, Label: "Course")
+         }  }
+         Row [gap md] {
+            NumberInput(Value: Recipe.Servings, Label: "Serves", Min: 1)
+            DurationInput(Value: Recipe.Duration, Label: "Total time")
+         }
+         Problems(Recipe)
+
+         Section("Ingredients") {
+            @actions Button("Add", Icon: "plus") [quiet] { on press -> create Ingredient in Recipe.Ingredients { Name: "" } }
+            // Draggable because the collection is `(ordered)`; the store keeps the positions.
+            List(Recipe.Ingredients, Reorderable: yes) {
+               Row [gap sm, content left center, wrap] {
+                  // `together Amount, Unit` on the entity means these two land as one write.
+                  NumberInput(Value: Ingredient.Amount, Label: "Amount") [width 90]
+                  Choice(Value: Ingredient.Unit, Label: "Unit") [width 100]
+                  TextInput(Value: Ingredient.Name, Label: "Ingredient") [claim 1]
+                  Choice(Value: Ingredient.Aisle, Label: "Aisle") [width 130]
+                  Button(Icon: "minus.circle", Label: "Remove { Ingredient.Name }") [quiet] { on press -> delete Ingredient }
+         }  }  }
+
+         Section("Steps") {
+            @actions Button("Add", Icon: "plus") [quiet] { on press -> create Step in Recipe.Steps { Text: "" } }
+            List(Recipe.Steps, Reorderable: yes) {
+               Row [gap sm, content left top, wrap] {
+                  Text("{ Step.Position }.") [label, muted, width 24]
+                  TextInput(Value: Step.Text, Label: "Step", Lines: 3) [claim 1]
+                  DurationInput(Value: Step.Timer, Label: "Timer") [width 120]
+                  Button(Icon: "minus.circle", Label: "Remove step { Step.Position }") [quiet] { on press -> delete Step }
+         }  }  }
+
+         Section("Notes") { TextInput(Value: Recipe.Notes, Label: "Notes", Lines: 4) }
+}  }  }
+
+// -- Sharing --------------------------------------------------------------------------------------------------
+
+file ui ShareRecipe(Recipe) {
+   Title "Share recipe"
+   action Start() runs single {
+      when StartSharing(Recipe) { done -> SharedRecipe { share SharedRecipeLink(SharedRecipe); dismiss } }
+   }
+   action Revoke() runs single {
+      do StopSharing(Recipe)
+      dismiss
+   }
+   render Col [gap lg, pad lg, width max 620] {
+      when Recipe.Shared {
+         Private -> {
+            Text("Anyone with the link can see the ingredients and steps. Your notes and the page you imported it from stay private.") [body]
+            // Generated from the projection in Access.tao-revolution, so it cannot drift from what
+            // actually crosses the boundary.
+            PublicationPreview(Recipe, As: SharedRecipe)
+            Row [content right center, gap sm] {
+               Button("Cancel") [quiet] { on press -> dismiss }
+               #createLink
+               Button("Create link", Busy: Start running) [primary] { on press Start }
+         }  }
+         Shared -> {
+            Status("Anyone with the link can see this recipe", Tone: Good)
+            PublicationPreview(Recipe, As: SharedRecipe)
+            Text("Stopping means the link you already sent stops working.") [body]
+            Row [content right center, gap sm] {
+               Button("Close") [quiet] { on press -> dismiss }
+               #revokeLink
+               Button("Stop sharing", Busy: Revoke running) [destructive] { on press Revoke }
+               Button("Share link") [primary] { on press -> share SharedRecipeLink(publish Recipe as SharedRecipe) }
+}  }  }  }  }
+
+// The public face of a recipe. `SharedRecipe` is a different, read-only type: the private fields are
+// not absent by convention, they are not in the type.
+public ui SharedRecipeScreen(SharedRecipe) {
+   Title SharedRecipe.Title
+   render ScrollView [screen] {
+      guard SharedRecipe
+      Col [page, width max 720] {
+         Image(SharedRecipe.Photo, Description: SharedRecipe.Title) [height 240, radius lg, fit cover]
+         Row [content left center, gap xs] {
+            Text("{ SharedRecipe.Servings } servings") [chip]
+            if SharedRecipe.Duration is not none { Text(SharedRecipe.Duration) [chip] }
+         }
+         // A projected ingredient has only Name, Amount, and Unit — it is not an `Ingredient`, so the
+         // kitchen's `IngredientLine` (which reads Aisle) does not apply here.
+         Section("Ingredients") {
+            loop SharedRecipe.Ingredients {
+               Row [pattern Line] {
+                  Measure(Ingredient.Amount, Ingredient.Unit) [@leading]
+                  Text(Ingredient.Name) [body, @content]
+         }  }  }
+         Section("Steps") {
+            loop SharedRecipe.Steps {
+               Row [gap md, content left top] {
+                  Text(Step.Position) [label, muted, width 24]
+                  Text(Step.Text) [body, claim 1]
+         }  }  }
+         Text("Shared from Skillet") [caption, center]
+}  }  }

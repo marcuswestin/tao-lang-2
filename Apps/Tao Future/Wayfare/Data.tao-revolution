@@ -1,0 +1,110 @@
+// What Wayfare stores. Shape only; access is in Access.tao-revolution, multi-row writes in Rules.tao-revolution.
+//
+//   validate   an invariant, checked when a write commits — a draft's fields take anything meanwhile and
+//              show the sentence in Problems. `Ends >= Begins` used to live in a `Disabled:` expression, so
+//              a person was told "you cannot press this" rather than why.
+//   required   completeness; derives `Row.Incomplete` and `Row.Problems`, which is what lets a stop be
+//              sketched between trains and finished at the hotel.
+
+type Role is one of Owner, Editor, Viewer
+type StopKind is one of Visit, Meal, Stay, Travel
+type DocumentKind is one of Ticket, Booking, Identity, Insurance, Other
+
+data Accounts / Account with {
+   Seats Members // the Member rows that name this account: a reverse relation may take its own name, typed by the collection
+
+   preference CurrentTrip Trip (optional)
+   preference KeepTripsOffline yes / no (default yes)
+   preference Language text (default device.language)
+}
+
+data Trips / Trip {
+   Name text (required "Name this trip")
+   Summary text (default "")
+   Begins date
+   Ends date
+   HomeZone timezone (default device.timeZone)
+   Cover image (optional)
+   Shared yes / Private no
+   ShareCode secret (default new secret) // rotating this kills every link already handed out
+   Days (owned)
+   Members (owned)
+   Documents (owned)
+   ChangedAt time (default now, touch on change)
+
+   index Begins
+   search Name, Summary
+   order by Begins desc
+
+   validate Ends >= Begins "A trip cannot end before it starts"
+   validate at least one Members where Role is Owner and is Joined "A trip needs an owner"
+}
+
+data Days / Day {
+   Trip
+   Date date
+   Title text (default "")
+   Stops (owned, ordered) // the store keeps the order; `Position` is derived from it and never stored by hand
+
+   order by Date
+   unique Trip, Date
+
+   validate Date >= Trip.Begins and Date <= Trip.Ends "This day falls outside the trip"
+}
+
+data Stops / Stop {
+   Day
+   Title text (required "Name this stop")
+   Kind StopKind (default Visit)
+   Place Place (optional)
+   Starts timeofday (optional) // a wall-clock time; `time` would be an instant
+   Duration duration (default 1 hour)
+   Notes text (default "")
+   Reservation text (optional) // a confirmation number, a booking reference
+   Visited yes / Planned no
+   Attachments (owned)
+
+   search Title, Notes
+   validate Duration > 0 "A stop takes longer than nothing"
+}
+
+data Attachments / Attachment {
+   Stop
+   File file
+   Caption text (default "")
+   AddedBy Account
+   AddedAt time (default now)
+
+   order by AddedAt
+}
+
+// A seat on the trip. The row is minted by an invitation and claimed by the person it names: `Person`
+// stays absent until they join. The invite code is one-use by construction — claiming sets `Joined`, and
+// a joined seat cannot be claimed again.
+data Members / Member {
+   Trip
+   Person Account (optional)
+   Email text (required "Who is this seat for?")
+   Name text (optional)
+   Role (default Viewer)
+   Joined yes / Invited no
+   InviteCode secret (default new secret)
+   InvitedAt time (default now)
+
+   unique Trip, Email // "already on the trip" is a store fact, not a UI guess
+   unique InviteCode
+}
+
+// Travel documents. A document may be private to one traveler — a passport scan — and then only that
+// person can read it; the access rule says so, and nothing else needs to.
+data Documents / Document {
+   Trip
+   Kind DocumentKind (default Other)
+   Title text (required "Name this document")
+   File file (required "Choose a file")
+   PrivateTo Account (optional)
+   AddedBy Account
+   AddedAt time (default now)
+
+   order by AddedAt
+}

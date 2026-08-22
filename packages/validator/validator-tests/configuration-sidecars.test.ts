@@ -2,16 +2,20 @@ import { Describe, Expect, Test } from '@shared/test'
 import { configurationValidationMessages } from '../validator-src/validators/configuration-validator'
 import { validationErrorMessages, withValidatedFiles } from './test-validate'
 
-const sidecarDeclaration = (path: string) => `
+const sidecarDeclaration = (path: string, exportName = 'SidecarNav') => `
   public type SidecarNav is nav with {
-    implement inject nav "${path}"
+    nav ${exportName} from ${path}
   }
 `
 
-async function validateSidecar(path: string, sidecarFiles: Record<string, string> = {}): Promise<string[]> {
+async function validateSidecar(
+  path: string,
+  sidecarFiles: Record<string, string> = {},
+  exportName = 'SidecarNav',
+): Promise<string[]> {
   let errors: string[] = []
   await withValidatedFiles('Main.tao', {
-    'Main.tao': sidecarDeclaration(path),
+    'Main.tao': sidecarDeclaration(path, exportName),
     ...sidecarFiles,
   }, result => {
     errors = validationErrorMessages(result)
@@ -20,20 +24,24 @@ async function validateSidecar(path: string, sidecarFiles: Record<string, string
 }
 
 Describe('validator: configuration implementation sidecars', () => {
-  Test('accepts an existing sibling TypeScript sidecar with a default export', async () => {
+  Test('accepts an existing sibling TypeScript sidecar exporting the named implementation', async () => {
     const errors = await validateSidecar('./SidecarNav.ts', {
-      'SidecarNav.ts': 'export default function SidecarNav() {}',
+      'SidecarNav.ts': 'export function SidecarNav() {}',
     })
 
     Expect(errors).toEqual([])
   })
 
-  Test('accepts a default export list', async () => {
-    const errors = await validateSidecar('./SidecarNav.ts', {
-      'SidecarNav.ts': 'const SidecarNav = () => undefined\nexport { SidecarNav as default }',
+  Test('accepts a const declaration and a renaming export list', async () => {
+    const constErrors = await validateSidecar('./SidecarNav.ts', {
+      'SidecarNav.ts': 'export const SidecarNav = () => undefined',
+    })
+    const listErrors = await validateSidecar('./SidecarNav.ts', {
+      'SidecarNav.ts': 'const Kind = () => undefined\nexport { Kind as SidecarNav }',
     })
 
-    Expect(errors).toEqual([])
+    Expect(constErrors).toEqual([])
+    Expect(listErrors).toEqual([])
   })
 
   Test('rejects a missing sibling sidecar', async () => {
@@ -42,19 +50,19 @@ Describe('validator: configuration implementation sidecars', () => {
     Expect(errors).toContain(configurationValidationMessages.sidecarMissing('./Missing.ts'))
   })
 
-  Test('rejects absolute, non-runtime-TypeScript, and nested sidecars', async () => {
-    const absoluteErrors = await validateSidecar('/tmp/SidecarNav.ts')
+  // An absolute path is no longer expressible: the path is a bare path token, not a quoted
+  // string, and its terminal matches only package, relative, and sibling forms.
+  Test('rejects non-runtime-TypeScript and nested sidecars', async () => {
     const javascriptErrors = await validateSidecar('./SidecarNav.js', {
-      'SidecarNav.js': 'export default function SidecarNav() {}',
+      'SidecarNav.js': 'export function SidecarNav() {}',
     })
     const declarationErrors = await validateSidecar('./SidecarNav.d.ts', {
-      'SidecarNav.d.ts': 'export default function SidecarNav(): void',
+      'SidecarNav.d.ts': 'export function SidecarNav(): void',
     })
     const nestedErrors = await validateSidecar('./implementations/SidecarNav.ts', {
-      'implementations/SidecarNav.ts': 'export default function SidecarNav() {}',
+      'implementations/SidecarNav.ts': 'export function SidecarNav() {}',
     })
 
-    Expect(absoluteErrors).toContain(configurationValidationMessages.sidecarLocation('/tmp/SidecarNav.ts'))
     Expect(javascriptErrors).toContain(configurationValidationMessages.sidecarLocation('./SidecarNav.js'))
     Expect(declarationErrors).toContain(
       configurationValidationMessages.sidecarLocation('./SidecarNav.d.ts'),
@@ -64,34 +72,48 @@ Describe('validator: configuration implementation sidecars', () => {
     )
   })
 
-  Test('rejects a sidecar without a default export', async () => {
+  Test('rejects a sidecar that exports a different name', async () => {
     const errors = await validateSidecar('./SidecarNav.ts', {
-      'SidecarNav.ts': 'export function SidecarNav() {}',
+      'SidecarNav.ts': 'export function SomethingElse() {}',
     })
 
-    Expect(errors).toContain(configurationValidationMessages.sidecarDefaultExport('./SidecarNav.ts'))
+    Expect(errors).toContain(
+      configurationValidationMessages.sidecarNamedExport('./SidecarNav.ts', 'SidecarNav'),
+    )
   })
 
-  Test('does not mistake a commented default export for an implementation', async () => {
+  Test('rejects a default export, which the boundary no longer accepts', async () => {
     const errors = await validateSidecar('./SidecarNav.ts', {
-      'SidecarNav.ts': '/*\nexport default function SidecarNav() {}\n*/\nexport const Name = "SidecarNav"',
+      'SidecarNav.ts': 'export default function SidecarNav() {}',
     })
 
-    Expect(errors).toContain(configurationValidationMessages.sidecarDefaultExport('./SidecarNav.ts'))
+    Expect(errors).toContain(
+      configurationValidationMessages.sidecarNamedExport('./SidecarNav.ts', 'SidecarNav'),
+    )
   })
 
-  Test('does not mistake strings or type-only and redirected exports for a runtime default', async () => {
+  Test('does not mistake a commented export for an implementation', async () => {
+    const errors = await validateSidecar('./SidecarNav.ts', {
+      'SidecarNav.ts': '/*\nexport function SidecarNav() {}\n*/\nexport const Name = "SidecarNav"',
+    })
+
+    Expect(errors).toContain(
+      configurationValidationMessages.sidecarNamedExport('./SidecarNav.ts', 'SidecarNav'),
+    )
+  })
+
+  Test('does not mistake strings or type-only exports for a runtime implementation', async () => {
     const invalidSources = [
-      'const Source = "export default function Fake() {}"\nexport const Name = Source',
-      'interface Factory {}\nexport type { Factory as default }',
-      'export default interface Factory {}',
-      "export { default as Named } from './Factory'",
-      "export { Factory as default } from './Factory'",
+      'const Source = "export function SidecarNav() {}"\nexport const Name = Source',
+      'interface SidecarNav {}\nexport type { SidecarNav }',
+      'export type SidecarNav = () => void',
     ]
 
     for (const source of invalidSources) {
       const errors = await validateSidecar('./SidecarNav.ts', { 'SidecarNav.ts': source })
-      Expect(errors).toContain(configurationValidationMessages.sidecarDefaultExport('./SidecarNav.ts'))
+      Expect(errors).toContain(
+        configurationValidationMessages.sidecarNamedExport('./SidecarNav.ts', 'SidecarNav'),
+      )
     }
   })
 })

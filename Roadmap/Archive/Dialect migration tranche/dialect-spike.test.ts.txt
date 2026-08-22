@@ -1,0 +1,95 @@
+import { Describe, Test } from '@shared/test'
+import { parses, testParseSyntax } from './test-parse'
+
+/** parsesSyntax asks only the grammar question, leaving name resolution to the tranche. */
+function parsesSyntax(source: string): () => Promise<void> {
+  return async () => {
+    await testParseSyntax(source)
+  }
+}
+
+// Spike probes for the dialect migration tranche (Roadmap/Dialect migration tranche/).
+// Each test is one grammar question from the brief, asked empirically rather than by reading.
+// These are throwaway probes: the tranche replaces them with real behavior tests.
+Describe('parser spike: decided dialect', () => {
+  Test(
+    'juxtaposed parameter types beside bare inferred names',
+    parses(`
+      action FetchRecipe(Link text) { }
+      view Status(Message text, Tone Tone) { }
+      view Card(Recipe) { }
+      view Both(Recipe, Message text) { }
+    `),
+  )
+
+  Test(
+    'trailing traits on parameters and fields',
+    parses(`
+      view CookScreen(Recipe, Meal (optional)) { }
+      type Recipe is item {
+        Title text (optional),
+      }
+    `),
+  )
+
+  Test(
+    'the action-type trait ambiguity: action (optional) as a parameter',
+    parses(`
+      view Card(Recipe, Press action (optional)) { }
+    `),
+  )
+
+  Test(
+    'inline item return type immediately before a body brace',
+    parses(`
+      function Fetch(Link text) returns item { Foo text, Bar text } {
+        return Link
+      }
+    `),
+  )
+
+  // Syntax only: names arriving through `from` are not local declarations, so linking them is a
+  // scope-provider question the tranche must answer, not a grammar question.
+  Test(
+    'from as a lowest-precedence expression, beside the other from sites',
+    parsesSyntax(`
+      use Thing from @tao/time
+      let Defaults = DefaultConfig from ./Config.ts
+      function Fetch(Link text) returns text {
+        return FetchRecipe(Link) from ./FetchRecipe.ts
+      }
+    `),
+  )
+
+  Test(
+    'unit accessors on numbers beside decimal literals',
+    parses(`
+      let Wait = 220.ms
+      let Ratio = 1.5
+      let Big = 1.5.s
+      let Back = Wait.s
+    `),
+  )
+
+  Test(
+    'one of and yes / no as type expressions',
+    parses(`
+      type Course is one of Breakfast, Lunch, Dinner
+      type Unit is one of "g", "kg"
+      type Testing is yes / Production no
+      type Plain is yes / no
+    `),
+  )
+
+  // Optionality as a postfix `?` rather than a trait, so `Press action?` needs no parenthesis.
+  Test(
+    'postfix ? optionality on parameters and fields',
+    parses(`
+      view Card(Recipe, Press action?, Meal?) { }
+      type Recipe is item {
+        Photo text?,
+        Title text,
+      }
+    `),
+  )
+})

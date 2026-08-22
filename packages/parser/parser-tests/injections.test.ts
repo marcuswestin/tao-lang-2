@@ -24,7 +24,7 @@ Describe('parser: injections', () => {
   Test('parses inject arguments', async () => {
     const parseResult = await testParseCode(`
       let UserName = "Ro"
-      view Native(Value is text) {
+      view Native(Value text) {
         render inject Value, Name UserName, Count 3, Greeting "Hello" \`\`\`ts
           return null
         \`\`\`

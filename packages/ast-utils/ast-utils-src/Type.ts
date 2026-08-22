@@ -33,7 +33,7 @@ export type TaoType =
   | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
   | { kind: 'item'; item?: ItemShape; nominal?: AST.TypeDefinition }
   | { kind: 'entity'; entity: DataEntityDefinition }
-  | { kind: 'enum'; declaration: AST.EnumDeclaration }
+  | { kind: 'enum'; declaration: AST.TypeDeclaration }
   | { kind: 'union'; members: readonly TaoType[] }
   | { kind: 'unresolved' }
 
@@ -72,7 +72,10 @@ export class Type {
 
   /** declarationName returns the source-facing name of a named declaration. */
   static declarationName(declaration: AST.NamedDeclaration): string {
-    return AST.isParameterDeclaration(declaration) ? Type.parameterName(declaration) : declaration.name
+    if (AST.isParameterDeclaration(declaration)) {
+      return Type.parameterName(declaration)
+    }
+    return declaration.name ?? (AST.isCaseSetCase(declaration) ? declaration.literal ?? '' : '')
   }
 
   /** referenceName returns the source-facing name of a Tao type reference. */
@@ -134,6 +137,11 @@ export class Type {
   /** ofReference resolves a type reference to the Tao type it denotes. */
   static ofReference(type: AST.TypeReference): TaoType {
     return new TypeResolutionContext().ofReference(type)
+  }
+
+  /** ofTypeExpression resolves any type expression, including inline item and case-set types. */
+  static ofTypeExpression(type: AST.TypeExpression): TaoType {
+    return new TypeResolutionContext().ofTypeExpression(type)
   }
 
   /** ofDefinition resolves a type definition to the Tao type it denotes. */
@@ -428,9 +436,10 @@ export class Type {
     return entity.block.entries.filter(AST.isEntityDataField)
   }
 
-  /** dataFieldRelationName returns the explicit relation target or the field-name inference key. */
+  /** dataFieldRelationName returns the explicit relation target, or the field name when it is
+   * the same as the entity it references. */
   static dataFieldRelationName(field: DataFieldDefinition): string {
-    return field.modifiers.find(modifier => modifier.relationName)?.relationName ?? field.name
+    return field.traits?.traits.find(trait => trait.relationName)?.relationName ?? field.name
   }
 
   /** dataFieldRelationEntity resolves a stored or inverse relationship target. */
@@ -739,6 +748,8 @@ class TypeResolutionContext {
     return Switch.type(expression, {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
+      NowExpression: () => primitiveType('time'),
+      PostfixMemberAccess: () => unresolvedType(),
       BooleanLiteral: () => primitiveType('boolean'),
       CaseTestExpression: () => primitiveType('boolean'),
       ConfigurationConstructor: value => Type.ofConfiguredValue(value),
@@ -811,7 +822,7 @@ class TypeResolutionContext {
       CasePayload: () => primitiveType('text'),
       EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
       EntityQueryDeclaration: query => this.queryDeclarationType(query),
-      EnumCase: enumCase => ({ kind: 'enum', declaration: AST.enumOwningCase(enumCase) }),
+      CaseSetCase: caseSetCase => ({ kind: 'enum', declaration: AST.caseSetOwningCase(caseSetCase) }),
       ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
       DatasourceDeclaration: declaration =>
@@ -835,7 +846,7 @@ class TypeResolutionContext {
 
   ofFunctionReturn(declaration: AST.FunctionDeclaration): TaoType {
     if (declaration.returnType) {
-      return this.ofReference(declaration.returnType)
+      return this.ofTypeExpression(declaration.returnType)
     }
     if (this.seenFunctions.has(declaration)) {
       return unresolvedType()
@@ -938,8 +949,8 @@ class TypeResolutionContext {
     this.seenTypeDefinitions.add(definition)
     try {
       return Switch.type(definition, {
-        ParameterTypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
-        TypeDeclaration: declaration => withNominal(this.ofExpressionType(declaration.type), declaration),
+        ParameterTypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
+        TypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
         TypeProperty: property => this.typePropertyType(property),
       })
     } finally {
@@ -966,12 +977,14 @@ class TypeResolutionContext {
     return this.seenTypeDefinitions.has(definition)
   }
 
-  private ofExpressionType(type: AST.TypeExpression): TaoType {
+  ofTypeExpression(type: AST.TypeExpression): TaoType {
     return Switch.type(type, {
       ActionTypeReference: reference => this.ofReference(reference),
       DerivedTypeExpression: derived => this.derivedType(derived),
+      CaseSetTypeExpression: caseSet => ({ kind: 'enum', declaration: caseSet.$container as AST.TypeDeclaration }),
       ItemTypeExpression: item => ({ kind: 'item', item }),
       ListTypeReference: reference => this.ofReference(reference),
+      YesNoTypeExpression: () => primitiveType('boolean'),
       NamedTypeReference: reference => this.ofReference(reference),
       PrimitiveTypeReference: reference => this.ofReference(reference),
       UnionTypeExpression: union => ({

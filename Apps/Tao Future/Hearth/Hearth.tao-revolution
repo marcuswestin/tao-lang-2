@@ -1,0 +1,125 @@
+// Hearth — a calm, private place for the people who share a home to remember what matters: chores,
+// shopping, small plans, errands, and who is taking care of what.
+//
+// This file holds the project, the capabilities, the navigation, and the app. Everything else in the
+// folder is visible here without imports.
+
+project {
+   id "hearth"
+   name "Hearth"
+   remote none
+   license MIT
+
+   targets phone, tablet, laptop
+   languages "en-US", "es"
+}
+
+// -- Capabilities ---------------------------------------------------------------------------------------
+
+datasource HomeCloud = Cloud {
+   AppId "hearth"
+   Writes optimistic
+   Conflicts fieldwise latest // write-through's honest policy: independent fields, last write wins
+   Deletes tombstones for 30 days
+   Offline {
+      Enabled Me.KeepOffline
+      Keep Home where Me in Family of Home // a kept home carries its lists, photos, and the map around its places
+   }
+}
+
+datasource OnDevice = Local { StorageKey "hearth" }
+
+files HomePhotos = Files { Kinds image; Limit 10 megabytes each; Offline readable and writable }
+
+notifications Reminders = Notifications { QuietHours 21:00 .. 08:00 }
+
+permissions HearthPermissions {
+   notifications optional because "Remind whoever is taking care of something before it is due."
+   location while using because "Show the errands near you, in the order you would walk them."
+}
+
+// -- Navigation -----------------------------------------------------------------------------------------
+
+nav LoadingNav = StackNav { Initial Loading }
+nav WelcomeNav = StackNav { Initial Welcome }
+
+nav ListsWorkspace = SplitNav {
+   Compact { Progression @list -> @detail, Back reverse }
+   @list { Content StackNav { Initial HearthListIndex }, Width 360, CollapsePriority 1 } // 1 collapses first
+   @detail { Content SlotNav { Initial HearthListWelcome }, Width min 420, CollapsePriority 2 }
+}
+
+nav HomeNavigator = SelectionNav {
+   Initial @today
+   Display "automatic"
+   Commands { AddSomething, FindAnything }
+   @today { Label "Today", Icon "sun.max", Content StackNav { Initial TodayScreen } }
+   @lists { Label "Lists", Icon "checklist", Content ListsWorkspace }
+   @week { Label "Week", Icon "calendar", Content StackNav { Initial WeekScreen } }
+   @around { Label "Around", Icon "map", Content StackNav { Initial AroundScreen } }
+   @people { Label "People", Icon "person.2", Content StackNav { Initial PeopleScreen } }
+   @settings { Label "Settings", Icon "gearshape", Content StackNav { Initial SettingsScreen } }
+}
+
+// -- App ------------------------------------------------------------------------------------------------
+
+app Hearth {
+   Name "Hearth"
+   Design HearthDesign
+   Datasource HomeCloud
+   Files HomePhotos
+   Notifications Reminders
+   Places
+   Permissions HearthPermissions
+
+   // The root follows the account and its open home. A person may belong to more than one home — a kid
+   // with two houses is the ordinary case — so the open home is a preference on the account, and making
+   // one, accepting an invitation, switching, and leaving are ordinary writes to `Me.CurrentHome`.
+   Navigator when MyHome {
+      loading -> LoadingNav
+      none -> WelcomeNav
+      missing -> WelcomeNav // the home was deleted under me
+      unauthorized -> WelcomeNav // an owner removed me; the picker shows my other homes
+      otherwise -> HomeNavigator
+   }
+   Language Me.Language
+
+   Restore automatic { Exclude sheets, menus, toasts }
+
+   // `reveal` focuses an equal mount rather than stacking a second occurrence, so opening the same item
+   // from Today, a list, a reminder, and the week lands in one place: the detail pane, beside the list
+   // index. A link body may write before it mounts: a reminder for my other home switches homes first.
+   link ItemLink "/items/{Item}" -> {
+      update Me { CurrentHome: Item.HearthList.Home }
+      reveal HearthItemScreen(Item) in @detail
+      focus @detail
+   }
+   link ListLink "/lists/{HearthList}" -> {
+      update Me { CurrentHome: HearthList.Home }
+      reveal HearthListScreen(HearthList) in @detail
+      focus @detail
+   }
+   link JoinLink(Code secret) "/join/{Code}" -> {
+      present JoinHome(Code) as sheet
+   }
+   public link SharedListLink "/shared/{SharedList}" -> {
+      present SharedListScreen(SharedList) as root
+   }
+}
+
+app HearthOnDevice = Hearth with {
+   Name "Hearth (on device)"
+   Datasource OnDevice
+   Notifications simulated
+   Places simulated
+}
+
+app HearthPreview = Hearth with {
+   Name "Hearth Preview"
+   Datasource Memory
+   Seed PineStreet
+   Accounts simulated (signed in as "Ro")
+   Notifications simulated
+   Places simulated
+   Restore fresh
+}

@@ -63,7 +63,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton(Title is text, Action is action()) {
+        view NativeButton(Title text, Action action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -73,7 +73,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Number(Value is number) {
+        view Number(Value number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -95,13 +95,13 @@ Describe('Expo runtime', () => {
           view MainView
         }
 
-        function Greeting(Name is text default "world") returns text {
+        function Greeting(Name text default "world") returns text {
           return "Hello, { Name }"
         }
 
         view MainView() {
           state Result = ""
-          action Save(Message is text default "Saved") {
+          action Save(Message text default "Saved") {
             set Result = Message
           }
           render Stack(){
@@ -112,11 +112,11 @@ Describe('Expo runtime', () => {
           }
         }
 
-        view GreetingView(Title is text default "Welcome") {
+        view GreetingView(Title text default "Welcome") {
           render Text(Title)
         }
 
-        layout Stack(Gap is number default 8) {
+        layout Stack(Gap number default 8) {
           render inject Gap, Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({
               children: <><RN.Text>{\`Gap \${Gap}\`}</RN.Text>{Content}</>,
@@ -126,7 +126,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton(Title is text, Action is action()) {
+        view NativeButton(Title text, Action action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -136,7 +136,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -163,11 +163,11 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        workspace ui Home(Title is text default "Welcome home") {
+        workspace ui Home(Title text default "Welcome home") {
           render Text(Title)
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -188,7 +188,7 @@ Describe('Expo runtime', () => {
 
         view MainView() {
           state Count = 0
-          action AddTagged(Step is number, Label is text) {
+          action AddTagged(Step number, Label text) {
             set Count += Step
           }
           action RunAddTagged() {
@@ -206,7 +206,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton(Title is text, Action is action()) {
+        view NativeButton(Title text, Action action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -216,7 +216,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Number(Value is number) {
+        view Number(Value number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -246,7 +246,7 @@ Describe('Expo runtime', () => {
             render Button("Imported action", Save)
           }
 
-          view Button(Title is text, Action is action()) {
+          view Button(Title text, Action action()) {
             render inject Title, Action \`\`\`ts
               return <RN.Text>{Title}</RN.Text>
             \`\`\`
@@ -309,7 +309,7 @@ Describe('Expo runtime', () => {
 
         type Profile is {
           Name text,
-          optional Subtitle text,
+          Subtitle text?,
         }
 
         let Basic = Profile { Name: "Ada" }
@@ -330,7 +330,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -372,7 +372,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Button(Title is text, Action is action()) {
+        view Button(Title text, Action action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -382,7 +382,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -406,7 +406,7 @@ Describe('Expo runtime', () => {
 
         view MainView() {
           state Count = 0
-          action AddStep(_Scope is number) {
+          action AddStep(_Scope number) {
             set Count += _Scope
           }
           action AddOne() {
@@ -424,7 +424,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view NativeButton(Title is text, Action is action()) {
+        view NativeButton(Title text, Action action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -434,7 +434,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Number(Value is number) {
+        view Number(Value number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -482,7 +482,7 @@ Describe('Expo runtime', () => {
               render Text(ImportedTitle)
           }
 
-          view Text(Value is text) {
+          view Text(Value text) {
               render inject Value \`\`\`ts
                   return <RN.Text>{Value}</RN.Text>
               \`\`\`
@@ -509,7 +509,7 @@ Describe('Expo runtime', () => {
             render Text(Greeting) { }
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`
@@ -545,7 +545,7 @@ Describe('Expo runtime', () => {
             \`\`\`
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`

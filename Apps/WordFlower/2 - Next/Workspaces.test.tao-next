@@ -1,7 +1,7 @@
 use WordFlower from ./
 
 test "WordFlower workspaces" {
-   check "starts empty and keeps invalid creates inert" {
+   test "starts empty and keeps invalid creates inert" {
       run WordFlower
       expect { // `expect { ... }` groups several assertions into one step
          text "WordFlower"
@@ -23,8 +23,7 @@ test "WordFlower workspaces" {
       expect missing text "A workspace needs a name"
       expect text "No workspaces yet"
    }
-
-   check "uses live workspaces and preserves covered screen state" {
+   test "uses live workspaces and preserves covered screen state" {
       run WordFlower
       enter "Home" into #workspaceName
       submit #workspaceName
@@ -52,8 +51,7 @@ test "WordFlower workspaces" {
       expect #workspaceName input value "Unsent workspace"
       expect missing text "Workspace: Renamed workspace"
    }
-
-   check "shows drafts and finished documents in both panes" {
+   test "shows drafts and finished documents in both panes" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -99,8 +97,7 @@ test "WordFlower workspaces" {
       }
       expect text "No finished documents"
    }
-
-   check "deletes related documents transitively with their workspace" {
+   test "deletes related documents transitively with their workspace" {
       run WordFlower
       enter "Temporary" into #workspaceName
       press #addWorkspace
@@ -116,7 +113,7 @@ test "WordFlower workspaces" {
       }
       expect text "No workspaces yet"
       enter "Replacement" into #workspaceName
-      press text "Add workspace" // visible-text presses remain alongside #tag selectors
+      press "Add workspace" // visible-text presses remain alongside #tag selectors
       select #workspaces[1] {
          expect text "Replacement"
          press #openWorkspace

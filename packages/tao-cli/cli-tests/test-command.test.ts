@@ -73,7 +73,7 @@ Describe('tao test', () => {
         use BrokenApp from ./
 
         test "Smoke" {
-           check "renders" {
+           test "renders" {
               run BrokenApp
               expect text "Hello"
            }

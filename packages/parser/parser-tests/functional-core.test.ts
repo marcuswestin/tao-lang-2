@@ -5,16 +5,16 @@ import { parseCodeWithErrors, testParseCode } from './test-parse'
 Describe('parser: functional core', () => {
   Test('parses expressions, functions, total conditionals, actions, and iteration', async () => {
     const result = await testParseCode(`
-      function HasCount(Count is number) returns boolean {
+      function HasCount(Count number) returns boolean {
         return Count > 0 and not false
       }
-      function Label(Count is number) returns text {
+      function Label(Count number) returns text {
         return when (Count > 1) {
           true -> "Count: { Count + 1 }"
           otherwise -> "Empty"
         }
       }
-      function GoalFraction(Count is number) {
+      function GoalFraction(Count number) {
         if Count == 0 {
           return 0
         }
@@ -41,7 +41,7 @@ Describe('parser: functional core', () => {
         }
       }
       layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const hasCount = result.entry.ast.statements.find(statement =>
@@ -95,8 +95,8 @@ Describe('parser: functional core', () => {
 
   Test('parses declaration-linked case tests, enums, and one-sided action and render if', async () => {
     const result = await testParseCode(`
-      enum ConfirmResult { Confirmed Cancelled }
-      data Documents / Document { Final yes / no Draft }
+      type ConfirmResult is one of Confirmed, Cancelled
+      data Documents / Document { Final yes / Draft no }
       view Main(Document) {
         state Result = Confirmed
         action Close() {
@@ -114,20 +114,22 @@ Describe('parser: functional core', () => {
         }
       }
       layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      view Text(Value is text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    const enumDeclaration = result.entry.ast.statements.find(AST.isEnumDeclaration)
+    const enumDeclaration = result.entry.ast.statements
+      .filter(AST.isTypeDeclaration)
+      .find(declaration => AST.isCaseSetTypeExpression(declaration.type))
     const main = result.entry.ast.statements.find(statement =>
       AST.isViewDeclaration(statement) && statement.name === 'Main'
     )
-    Expect.Is(enumDeclaration, AST.isEnumDeclaration)
+    Expect.Is(enumDeclaration, AST.isTypeDeclaration)
     Expect.Is(main, AST.isViewDeclaration)
     const close = AST.blockStatementOf(main, { find: AST.isActionDeclaration })
     const actionIf = close.block.statements.find(AST.isIfActionStatement)
     Expect.Is(actionIf, AST.isIfActionStatement)
     Expect.Is(actionIf.condition, AST.isCaseTestExpression)
-    Expect(actionIf.condition.declaredCase?.ref).toBe(enumDeclaration.block.cases[0])
+    Expect(actionIf.condition.declaredCase?.ref).toBe(AST.caseSetCasesOf(enumDeclaration)[0])
 
     const render = AST.blockStatementOf(main, { find: AST.isRenderStatement })
     Expect.Is(render, AST.isRenderStatement)
@@ -184,12 +186,12 @@ Describe('parser: functional core', () => {
 
   Test('parses typed parameter defaults across declarations', async () => {
     const result = await testParseCode(`
-      function Label(Value is text default "Save") returns text { return Value }
-      view Main(Title is text default "Welcome") {
-        action Submit(Message is text default "Saved") { }
+      function Label(Value text default "Save") returns text { return Value }
+      view Main(Title text default "Welcome") {
+        action Submit(Message text default "Saved") { }
         render Card()
       }
-      layout Card(Gap is number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      layout Card(Gap number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const label = result.entry.ast.statements.find(statement => AST.isFunctionDeclaration(statement))
@@ -209,7 +211,7 @@ Describe('parser: functional core', () => {
 
   Test('parses empty parenthesized lists on every parameterized declaration kind', async () => {
     const result = await testParseCode(`
-      enum Response { Done }
+      type Response is one of Done
       view Empty() { render inject \`\`\`ts\nreturn null\n\`\`\` }
       layout Stack() { render Empty() }
       ui Shell() { render Empty() }
@@ -234,7 +236,7 @@ Describe('parser: functional core', () => {
       'view Main { }',
       'layout Stack { }',
       'ui Shell { }',
-      'enum Response { Done } dialogue Confirm responds Response { }',
+      'type Response is one of Done dialogue Confirm responds Response { }',
       'action Save { }',
       'function Label { return "Label" }',
     ]

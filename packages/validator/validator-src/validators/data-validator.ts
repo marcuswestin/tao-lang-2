@@ -31,6 +31,7 @@ export const dataValidationMessages = {
   querySource: 'A query source must be a top-level plural or a plural relationship.',
   unknownCollection: (data: string, name: string) => `Data '${data}' has no collection named '${name}'.`,
   unknownEntity: (data: string, name: string) => `Data '${data}' has no entity named '${name}'.`,
+  duplicateIndex: (name: string) => `Index '${name}' is declared more than once.`,
   unknownField: (entity: string, name: string) => `Entity '${entity}' has no field named '${name}'.`,
   duplicateOrder: 'A query may declare only one order clause.',
   relationOrder: (name: string) => `Relationship field '${name}' cannot be used for ordering.`,
@@ -74,18 +75,18 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   )
   validateBooleanCaseNames(entity, fields, ctx)
   const indexes = entity.block.entries.filter(AST.isDataIndex)
-  reportDuplicates(indexes, index => index.fieldName, name => `Index '${name}' is declared more than once.`, ctx)
+  reportDuplicates(indexes, index => index.fieldName, dataValidationMessages.duplicateIndex, ctx)
+  for (const index of indexes) {
+    if (!fields.some(field => field.name === index.fieldName)) {
+      ctx.error(dataValidationMessages.unknownField(entity.singularName, index.fieldName), index)
+    }
+  }
   const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
   for (const duplicate of orders.slice(1)) {
     ctx.error(dataValidationMessages.duplicateOrder, duplicate)
   }
   for (const field of fields) {
     validateEntityField(entity, field, ctx)
-  }
-  for (const index of indexes) {
-    if (!fields.some(field => field.name === index.fieldName)) {
-      ctx.error(dataValidationMessages.unknownField(entity.singularName, index.fieldName), index)
-    }
   }
   for (const order of orders) {
     const field = fields.find(candidate => candidate.name === order.fieldName)
@@ -97,12 +98,6 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   }
 }
 
-type EntityFieldModifierGroups = {
-  readonly autoDeletes: readonly AST.EntityDataFieldModifier[]
-  readonly defaults: readonly AST.EntityDataFieldModifier[]
-  readonly relations: readonly AST.EntityDataFieldModifier[]
-}
-
 function validateEntityField(
   entity: AST.EntityDataDeclaration,
   field: AST.EntityDataField,
@@ -111,29 +106,24 @@ function validateEntityField(
   if (field.name === 'Id') {
     ctx.error(dataValidationMessages.reservedField(entity.singularName, field.name), field)
   }
-  const modifiers: EntityFieldModifierGroups = {
-    relations: field.modifiers.filter(modifier => modifier.relationName),
-    defaults: field.modifiers.filter(modifier => modifier.defaultValue || modifier.defaultCase),
-    autoDeletes: field.modifiers.filter(modifier => modifier.autoDelete),
-  }
-  for (const duplicate of modifiers.relations.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'relation'), duplicate)
-  }
-  for (const duplicate of modifiers.defaults.slice(1)) {
+  const traits = field.traits?.traits ?? []
+  const defaults = traits.filter(trait => trait.defaultValue || trait.defaultCase)
+  for (const duplicate of defaults.slice(1)) {
     ctx.error(dataValidationMessages.duplicateModifier(field.name, 'default'), duplicate)
   }
-  for (const duplicate of modifiers.autoDeletes.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'auto-delete'), duplicate)
+  if (field.optional && defaults.length > 0) {
+    ctx.error(`Field '${field.name}' is optional, so it cannot also declare a default.`, field)
+  }
+  const owned = traits.filter(trait => trait.owned)
+  for (const duplicate of owned.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'owned'), duplicate)
   }
   if (field.primitive || field.boolean) {
-    for (const modifier of modifiers.relations) {
-      ctx.error(dataValidationMessages.relationModifier(field.name), modifier)
-    }
-    for (const modifier of modifiers.autoDeletes) {
-      ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
+    for (const trait of owned) {
+      ctx.error(dataValidationMessages.autoDeleteOwner(field.name), trait)
     }
   } else {
-    validateRelationshipDataField(entity, field, modifiers, ctx)
+    validateRelationshipDataField(entity, field, defaults, ctx)
   }
   validateEntityFieldDefault(field, ctx)
 }
@@ -141,7 +131,7 @@ function validateEntityField(
 function validateRelationshipDataField(
   entity: AST.EntityDataDeclaration,
   field: AST.EntityDataField,
-  modifiers: EntityFieldModifierGroups,
+  defaults: readonly AST.Trait[],
   ctx: ValidationContext,
 ): void {
   const relationName = Type.dataFieldRelationName(field)
@@ -150,13 +140,8 @@ function validateRelationshipDataField(
   if (!relation) {
     ctx.error(dataValidationMessages.unknownRelation(entity.singularName, relationName), field)
   }
-  for (const modifier of modifiers.defaults) {
+  for (const modifier of defaults) {
     ctx.error(dataValidationMessages.relationDefault(field.name), modifier)
-  }
-  if (!inverse) {
-    for (const modifier of modifiers.autoDeletes) {
-      ctx.error(dataValidationMessages.autoDeleteOwner(field.name), modifier)
-    }
   }
   if (relation && inverse) {
     validateInverseRelationship(entity, field, relation, ctx)
@@ -263,7 +248,7 @@ function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: Va
 }
 
 function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationContext): void {
-  const defaults = field.modifiers.filter(modifier => modifier.defaultValue || modifier.defaultCase)
+  const defaults = (field.traits?.traits ?? []).filter(trait => trait.defaultValue || trait.defaultCase)
   const modifier = defaults[0]
   if (!modifier) {
     return

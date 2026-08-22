@@ -13,7 +13,7 @@ Describe('Expo runtime', () => {
         use DuplicateTextApp from ./
 
         test "Duplicate text" {
-          check "matches at least one text node" {
+          test "matches at least one text node" {
             run DuplicateTextApp
             expect text "Repeated"
           }
@@ -32,7 +32,7 @@ Describe('Expo runtime', () => {
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -53,7 +53,7 @@ Describe('Expo runtime', () => {
         use PressTextApp from ./
 
         test "Press text" {
-          check "updates rendered state" {
+          test "updates rendered state" {
             run PressTextApp
             expect text "0"
             press text "Add"
@@ -78,7 +78,7 @@ Describe('Expo runtime', () => {
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view NativeButton(Title is text, Action is action()) {
+        view NativeButton(Title text, Action action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -87,7 +87,7 @@ Describe('Expo runtime', () => {
             )
           \`\`\`
         }
-        view Number(Value is number) {
+        view Number(Value number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -108,7 +108,7 @@ Describe('Expo runtime', () => {
         use AsyncActionApp from ./
 
         test "Async action" {
-          check "observes state after guard fallthrough" {
+          test "observes state after guard fallthrough" {
             run AsyncActionApp
             expect text "0"
             press text "Advance"
@@ -137,7 +137,7 @@ Describe('Expo runtime', () => {
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view NativeButton(Title is text, Action is action()) {
+        view NativeButton(Title text, Action action()) {
           render inject Title, Action \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
@@ -146,7 +146,7 @@ Describe('Expo runtime', () => {
             )
           \`\`\`
         }
-        view Number(Value is number) {
+        view Number(Value number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -167,7 +167,7 @@ Describe('Expo runtime', () => {
         use DialogueTestApp from ./
 
         test "Dialogue" {
-          check "answers a suspended ask" {
+          test "answers a suspended ask" {
             run DialogueTestApp
             press text "Ask"
             expect text "Question"
@@ -180,7 +180,7 @@ Describe('Expo runtime', () => {
         use StackNav from @tao/nav
         use Button, Col, Text from @tao/ui
 
-        enum ConfirmResult { Confirmed }
+        type ConfirmResult is one of Confirmed
 
         app DialogueTestApp {
           Name "Dialogue test"
@@ -222,7 +222,7 @@ Describe('Expo runtime', () => {
         use MissingPressApp from ./
 
         test "Press failure" {
-          check "reports the selector" {
+          test "reports the selector" {
             run MissingPressApp
             press text "Missing button"
           }
@@ -235,7 +235,7 @@ Describe('Expo runtime', () => {
           render Text("Ready")
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -258,7 +258,7 @@ Describe('Expo runtime', () => {
         use InputApp from ./
 
         test "Input" {
-          check "changes and submits" {
+          test "changes and submits" {
             run InputApp
             enter "Plan launch" into placeholder "Task title"
             expect text "Plan launch"
@@ -273,7 +273,7 @@ Describe('Expo runtime', () => {
         view MainView() {
           state Draft = ""
           state Status = "Waiting"
-          action ChangeDraft(Value is text) {
+          action ChangeDraft(Value text) {
             set Draft = Value
           }
           action Submit() {
@@ -290,7 +290,7 @@ Describe('Expo runtime', () => {
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
         }
-        view NativeInput(Value is text, Change is action(text), Submit is action(), Label is text) {
+        view NativeInput(Value text, Change action(text), Submit action(), Label text) {
           render inject Value, Change, Submit, Label \`\`\`ts
             return (
               <RN.TextInput
@@ -303,7 +303,7 @@ Describe('Expo runtime', () => {
             )
           \`\`\`
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -316,7 +316,7 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('runs grouped and tag-scoped expectations, interactions, selected rows, and bare data status', async () => {
+  Test('runs grouped and tag-scoped expectations, interactions, selected rows', async () => {
     await withTaoFiles(
       'tao-runtime-structured-test-plan-',
       {
@@ -324,7 +324,7 @@ Describe('Expo runtime', () => {
         use TaggedApp from ./
 
         test "Structured selectors" {
-          check "scopes every operation" {
+          test "scopes every operation" {
             run TaggedApp
             expect {
               text "First"
@@ -344,12 +344,6 @@ Describe('Expo runtime', () => {
               press #choose
             }
             expect text "Selected Second"
-            data loading
-            expect {
-              text "Loading"
-              missing text "First"
-            }
-            data ready
             expect text "First"
           }
         }
@@ -444,7 +438,7 @@ Describe('Expo runtime', () => {
         use NavigationApp from ./
 
         test "Navigation" {
-          check "returns to the active stack root" {
+          test "returns to the active stack root" {
             run NavigationApp
             expect text "Home"
             press text "Open"
@@ -481,7 +475,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Button(Title is text, Press is action()) {
+        view Button(Title text, Press action()) {
           render inject Title, Press \`\`\`ts
             return (
               <RN.Pressable accessibilityRole="button" onPress={() => Press.invoke()}>
@@ -491,7 +485,7 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -512,7 +506,7 @@ Describe('Expo runtime', () => {
         use BrokenTextApp from ./
 
         test "Broken text" {
-          check "misses expected text" {
+          test "misses expected text" {
             run BrokenTextApp
             expect text "Expected"
           }
@@ -523,7 +517,7 @@ Describe('Expo runtime', () => {
         view MainView() {
           render Text("Actual")
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -546,7 +540,7 @@ Describe('Expo runtime', () => {
         use BrokenTextApp from ./
 
         test "Broken missing text" {
-          check "still renders unexpected text" {
+          test "still renders unexpected text" {
             run BrokenTextApp
             expect missing text "Actual"
           }
@@ -557,7 +551,7 @@ Describe('Expo runtime', () => {
         view MainView() {
           render Text("Actual")
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -580,14 +574,14 @@ Describe('Expo runtime', () => {
         use FirstApp, SecondApp from ./
 
         test "First isolated suite" {
-          check "first app" {
+          test "first app" {
             run FirstApp
             expect text "First"
           }
         }
 
         test "Second isolated suite" {
-          check "second app" {
+          test "second app" {
             run SecondApp
             expect missing text "First"
             expect text "Second"
@@ -599,7 +593,7 @@ Describe('Expo runtime', () => {
         view MainView() {
           render Text("First")
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -610,7 +604,7 @@ Describe('Expo runtime', () => {
         view MainView() {
           render Text("Second")
         }
-        view Text(Value is text) {
+        view Text(Value text) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`

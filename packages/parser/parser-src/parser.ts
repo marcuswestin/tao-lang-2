@@ -1,4 +1,4 @@
-import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics } from '@shared'
+import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS } from '@shared'
 import { Langium } from './langium-exports'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
@@ -367,6 +367,13 @@ async function loadReferencedDocuments(
     return []
   }
   const referencedDocuments: AST.Document[] = []
+  // A sibling may carry `folder` declarations this file reaches without naming them in a `use`,
+  // so the whole folder is loaded rather than only what the imports point at.
+  for (const siblingPath of await siblingTaoFilePaths(document.uri.path)) {
+    if (!loadedDocuments.has(siblingPath)) {
+      referencedDocuments.push(await documentFromFilePath(context, siblingPath))
+    }
+  }
   for (const useStatement of ast.statements.filter(AST.isUseStatement)) {
     const candidatePaths = await context.packages.candidateFilePaths(useStatement, {
       fromFilePath: document.uri.path,
@@ -378,6 +385,28 @@ async function loadReferencedDocuments(
     }
   }
   return referencedDocuments
+}
+
+// Only a sibling that actually declares something `folder`-visible is pulled in, so a project that
+// does not use the marker keeps exactly the document set its `use` statements describe.
+const folderDeclarationPattern = /^[ \t]*folder[ \t\r\n]/m
+
+async function siblingTaoFilePaths(filePath: string): Promise<string[]> {
+  const directory = FS.dirname(filePath)
+  if (!await FS.isDirectory(directory)) {
+    return []
+  }
+  const candidates = (await FS.listDir(directory))
+    .filter(name => FS.extname(name) === '.tao' && !name.endsWith('.test.tao'))
+    .map(name => FS.resolvePath(name, directory))
+    .filter(path => path !== filePath)
+  const paths: string[] = []
+  for (const path of candidates) {
+    if (folderDeclarationPattern.test(await FS.readText(path))) {
+      paths.push(path)
+    }
+  }
+  return paths
 }
 
 async function documentFromFilePath(context: ParserContext, filePath: string): Promise<AST.Document> {

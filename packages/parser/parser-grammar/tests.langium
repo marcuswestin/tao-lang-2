@@ -11,16 +11,13 @@ entry TestsGrammarEntrypoint:
 TestDeclaration:
     'test' name=STRING block=Block;
 
-CheckDeclaration:
-    'check' name=STRING block=Block;
-
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | DataStatusStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
 
 PressTextStep:
-    'press' selector=TestSelector text=STRING;
+    'press' selector=TestSelector? text=STRING;
 
 TagPressStep:
     'press' tag=TagOrHexColor;
@@ -51,13 +48,13 @@ TestExpectation:
     | ('input' 'value' value=STRING);
 
 EnterTextStep:
-    'enter' value=STRING 'into' selector=TestSelector target=STRING;
+    'enter' value=STRING 'into' selector=TestSelector? target=STRING;
 
 TagEnterStep:
     'enter' value=STRING 'into' tag=TagOrHexColor;
 
 SubmitInputStep:
-    'submit' selector=TestSelector target=STRING;
+    'submit' selector=TestSelector? target=STRING;
 
 TagSubmitStep:
     'submit' tag=TagOrHexColor;
@@ -67,9 +64,6 @@ SelectStep:
 
 BackTestStep:
     {infer BackTestStep} 'back';
-
-DataStatusStep:
-    'data' (status=('loading' | 'ready') | 'error' message=STRING);
 
 TestSelector returns string:
     'text' | 'label' | 'placeholder';

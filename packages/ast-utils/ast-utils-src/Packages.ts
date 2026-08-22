@@ -69,7 +69,7 @@ export namespace Packages {
   export function createResolver(context: Context): PackageResolver {
     return {
       async intrinsicFilePaths() {
-        const prelude = FS.resolvePath('tao/Prelude.tao', context.stdlibRoot)
+        const prelude = FS.resolvePath('@tao/Prelude.tao', context.stdlibRoot)
         return await FS.isFile(prelude) ? [prelude] : []
       },
       collectTargetDeclarations(useStatement, request) {
@@ -102,22 +102,53 @@ export namespace Packages {
     }
   }
 
-  /** createIndex scans a project root for local Tao package directories. */
+  /** createIndex scans a project root, and the directories above it, for Tao package directories. */
   export async function createIndex(projectRoot: string): Promise<Index> {
     const resolvedRoot = FS.resolvePath(projectRoot)
     const packages = new Map<string, string[]>()
+    const record = (path: string) => {
+      const name = FS.basename(path)
+      const paths = packages.get(name) ?? []
+      if (!paths.includes(path)) {
+        paths.push(path)
+      }
+      packages.set(name, paths)
+    }
     if (await FS.isDirectory(resolvedRoot)) {
       for (const path of await Repo.directoriesUnder(resolvedRoot, { namePrefix: '@' })) {
-        const name = FS.basename(path)
-        const paths = packages.get(name) ?? []
-        paths.push(path)
-        packages.set(name, paths)
+        record(path)
       }
+    }
+    // A workspace is often rooted below the project — at one test sidecar's own folder, say — so a
+    // package declared above that root is still in scope. Without this, whether `@data` resolves
+    // would depend on which file the workspace happened to be opened for.
+    for (const ancestor of await ancestorPackageDirectories(resolvedRoot)) {
+      record(ancestor)
     }
     for (const paths of packages.values()) {
       paths.sort()
     }
     return { projectRoot: resolvedRoot, packages }
+  }
+
+  async function ancestorPackageDirectories(root: string): Promise<string[]> {
+    const found: string[] = []
+    let current = FS.dirname(root)
+    let previous = root
+    while (current !== previous) {
+      for (const name of await FS.listDir(current).catch(() => [])) {
+        const path = FS.resolvePath(name, current)
+        if (name.startsWith('@') && await FS.isDirectory(path)) {
+          found.push(path)
+        }
+      }
+      if (await FS.isDirectory(FS.resolvePath('.git', current))) {
+        break
+      }
+      previous = current
+      current = FS.dirname(current)
+    }
+    return found
   }
 
   /** resolve resolves a Tao use path using local packages, relative paths, and the stdlib root. */
@@ -130,10 +161,12 @@ export namespace Packages {
       return resolveBareUse(context, request)
     }
     if (isStdLibImport(importPath)) {
+      // The stdlib lives in a real `@tao` package directory, so the import path maps to it
+      // literally rather than having its `@` stripped.
       return {
         importPath,
         relation: 'stdlib',
-        targetPath: FS.resolvePath(importPath.slice(1), context.stdlibRoot),
+        targetPath: FS.resolvePath(importPath, context.stdlibRoot),
         candidateMode: 'direct',
       }
     }
@@ -419,8 +452,15 @@ export namespace Packages {
     if (visibility === undefined || visibility === 'file' || resolution.relation === 'invalid') {
       return false
     }
+    // A `folder` declaration is visible to its siblings, which reach it without a `use` statement.
+    if (visibility === 'folder') {
+      return resolution.relation === 'same-directory'
+    }
     if (visibility === 'package') {
-      return resolution.relation === 'same-package'
+      // A file outside any `@package` directory still has a package: its own folder. Without this
+      // the marker is unusable in an ordinary app directory, where every sibling import resolves
+      // as `same-directory` rather than `same-package`.
+      return resolution.relation === 'same-package' || resolution.relation === 'same-directory'
     }
     if (visibility === 'workspace') {
       return resolution.relation === 'same-directory'

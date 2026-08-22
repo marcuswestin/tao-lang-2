@@ -1,0 +1,70 @@
+// Who may read and write what, and what crosses the public boundary. Everything below is enforced by
+// the store; screens ask `can change Stop` and the answer comes from here.
+
+// -- Audiences -------------------------------------------------------------------------------------------
+
+audience TripFolk for Trip = Trip.Members[is Joined].Person
+audience TripEditors for Trip = Trip.Members[is Joined and Role in Owner, Editor].Person
+audience TripOwners for Trip = Trip.Members[is Joined and Role is Owner].Person
+
+// -- Access ------------------------------------------------------------------------------------------------
+
+access Trip {
+   read to TripFolk
+   create through CreateTrip // the one path that can establish the owner invariant
+   change to TripEditors
+   change Shared, ShareCode through ShareTrip or StopSharing // a field named in a `through` grant changes only that way
+   delete to TripOwners
+}
+
+access Day {
+   read to TripFolk of Trip
+   create, change, delete to TripEditors of Trip
+}
+access Stop as Day
+access Attachment as Stop
+
+access Member {
+   read to TripFolk of Trip or holder of InviteCode // the joiner reads the seat the code names
+   // A grant may name both an audience and a path: editors may mint editor and viewer seats, owners any
+   // seat, and only through the invitation transaction; the owner's own seat is minted by CreateTrip.
+   create to TripEditors of Trip where Role in Editor, Viewer through InviteTraveler
+   create to TripOwners of Trip through InviteTraveler
+   create through CreateTrip
+   change Role to TripOwners of Trip
+   change through JoinWithInvite // claiming a seat is the only other change
+   delete to TripOwners of Trip or Person // an owner may remove you; you may always leave
+}
+
+// A private document is readable by its person alone; the rest are the trip's. `where` constrains the
+// grant by the row; two grants with different `where`s read like the two sentences they are.
+access Document {
+   read to TripFolk of Trip where PrivateTo is none
+   read, change, delete to PrivateTo
+   create to TripEditors of Trip
+   create to TripFolk of Trip where PrivateTo is Me // anyone on the trip may keep a document of their own
+   change, delete to TripEditors of Trip where PrivateTo is none
+}
+
+// -- The public boundary ------------------------------------------------------------------------------------
+//
+// Sharing is a projection, not a permission. `SharedTrip` is a different, read-only type holding exactly
+// the fields below; `Notes`, `Reservation`, `Visited`, documents, and the whole member list cannot reach
+// it, because they are not in the list.
+
+public publish Trip when Trip is Shared as SharedTrip by capability Trip.ShareCode {
+   Name
+   Summary
+   Begins
+   Ends
+   HomeZone
+   Cover
+   Days { Date, Title, Stops { Title, Kind, Place, Starts, Duration } }
+}
+
+// An invitation shows the trip's name and dates before you belong to it, and nothing else.
+public publish Trip as InvitedTrip by capability Member.InviteCode {
+   Name
+   Begins
+   Ends
+}

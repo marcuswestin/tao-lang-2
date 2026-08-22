@@ -23,6 +23,16 @@ function checksFiles(files: TaoFiles, check: FilesCheck, entryFile = 'Main.tao')
   return async () => await withValidatedFiles(entryFile, files, check)
 }
 
+function acceptsFiles(files: TaoFiles): () => Promise<void> {
+  return acceptsFilesFrom('Main.tao', files)
+}
+
+function acceptsFilesFrom(entryFile: string, files: TaoFiles): () => Promise<void> {
+  return checksFiles(files, result => {
+    Expect(validationErrorMessages(result)).toEqual([])
+  }, entryFile)
+}
+
 function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
   return rejectsFilesFrom('Main.tao', files, ...messages)
 }
@@ -50,7 +60,7 @@ function stubApp(extra = ''): string {
 
 function importedTextFiles(
   imports: string,
-  importedSource = visibleView('Text', 'Value is text'),
+  importedSource = visibleView('Text', 'Value text'),
   importedPath = 'Views.tao',
 ): TaoFiles {
   return {
@@ -68,7 +78,7 @@ Describe('validator: use and imports', () => {
         `type Card is text
          let CardValue = Card "Ada"
          ${stubView('Card')}
-         ${stubView('Text', 'Value is text')}`,
+         ${stubView('Text', 'Value text')}`,
       ),
     ),
   )
@@ -80,8 +90,8 @@ Describe('validator: use and imports', () => {
         'render Text(CardName)',
         `type Card is { Name text }
          let CardName = Card.Name "Ada"
-         ${stubView('Card', 'Label is text')}
-         ${stubView('Text', 'Value is text')}`,
+         ${stubView('Card', 'Label text')}
+         ${stubView('Text', 'Value text')}`,
       ),
     ),
   )
@@ -101,7 +111,7 @@ Describe('validator: use and imports', () => {
               render Text(Primary.Name)
             }
 
-            ${stubView('Text', 'Value is text')}
+            ${stubView('Text', 'Value text')}
           `,
           'Declarations.tao': valueFirst
             ? `workspace let Person = "person"
@@ -123,7 +133,7 @@ Describe('validator: use and imports', () => {
         'Main.tao': importingApp(
           'use Name from ./Types.tao',
           'render Text(Name)',
-          stubView('Text', 'Value is text'),
+          stubView('Text', 'Value text'),
         ),
         'Types.tao': `
           let Name = "Hidden"
@@ -144,7 +154,7 @@ Describe('validator: use and imports', () => {
           'use Name from ./Types.tao',
           `let DisplayName = Name "Ro"
            render Text(DisplayName)`,
-          stubView('Text', 'Value is text'),
+          stubView('Text', 'Value text'),
         ),
         'Types.tao': `
           type Name is text
@@ -154,6 +164,31 @@ Describe('validator: use and imports', () => {
       result => {
         Expect(validationErrorMessages(result).some(message => message.includes('Name'))).toBe(true)
       },
+    ),
+  )
+
+  // A folder outside any `@package` directory is still a package boundary, so `package` has to be
+  // usable in an ordinary app directory, where every sibling import resolves as `same-directory`.
+  Test(
+    'accepts package-visible imports from another file in the same directory',
+    acceptsFiles(
+      importedTextFiles(
+        'use Text from ./',
+        stubView('Text', 'Value text').replace('view ', 'package view '),
+      ),
+    ),
+  )
+
+  // What `package` still refuses, and what separates it from `workspace`: reaching into a different
+  // package of the same project.
+  Test(
+    'rejects package-visible imports from another package in the same project',
+    rejectsFiles(
+      {
+        'Main.tao': importingApp('use Text from @views'),
+        'Packages/@views/Views.tao': stubView('Text', 'Value text').replace('view ', 'package view '),
+      },
+      useValidationMessages.notVisible('Text'),
     ),
   )
 
@@ -176,7 +211,7 @@ Describe('validator: use and imports', () => {
       rejectsFiles(
         importedTextFiles(
           `use Text from ${visibilityCase.importPath}`,
-          stubView('Text', 'Value is text'),
+          stubView('Text', 'Value text'),
           visibilityCase.sourcePath,
         ),
         useValidationMessages.notVisible('Text'),
@@ -190,7 +225,7 @@ Describe('validator: use and imports', () => {
       importedTextFiles(
         'use Text from ./',
         `
-          workspace view Text(Value is text) {
+          workspace view Text(Value text) {
             render inject Value, Value ${tsFence}
               return null
             ${fence}
@@ -209,7 +244,7 @@ Describe('validator: use and imports', () => {
 
   Test(
     'reports parser errors inside imported Tao files',
-    checksFiles(importedTextFiles('use Text from ./', 'view Text(Value is text) {'), result => {
+    checksFiles(importedTextFiles('use Text from ./', 'view Text(Value text) {'), result => {
       Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
     }),
   )
@@ -241,7 +276,7 @@ Describe('validator: use and imports', () => {
       importedTextFiles(
         'use Text from ./',
         `
-          workspace view Text(Value is text) {
+          workspace view Text(Value text) {
             render MissingView()
           }
         `,
@@ -270,9 +305,9 @@ Describe('validator: use and imports', () => {
         'Main.tao': importingApp(
           'use Text from ./Views.tao',
           'render Text("Hello")',
-          stubView('Text', 'Value is text'),
+          stubView('Text', 'Value text'),
         ),
-        'Views.tao': visibleView('Text', 'Value is text'),
+        'Views.tao': visibleView('Text', 'Value text'),
       },
       useValidationMessages.localDeclarationCollision('Text'),
     ),
@@ -297,7 +332,7 @@ Describe('validator: use and imports', () => {
             render Col() { }
           }
           test "support app imports" {
-            check "runs the inferred app value" { run AppLet }
+            test "runs the inferred app value" { run AppLet }
           }
         `,
       },
@@ -313,7 +348,7 @@ Describe('validator: use and imports', () => {
           'use OtherView from ./Other.tao',
           'render OtherView()',
           `test "inline smoke" {
-             check "renders" {
+             test "renders" {
                run MyApp
                expect text "Hello"
              }
@@ -328,6 +363,24 @@ Describe('validator: use and imports', () => {
     ),
   )
 
+  // Once sources are grouped into folders, the app a sidecar runs is declared in an ancestor
+  // directory rather than beside it.
+  Test(
+    'lets a test sidecar in a subfolder run an app declared in an ancestor directory',
+    acceptsFilesFrom('ui/Main.test.tao', {
+      'Main.tao': stubApp(),
+      'ui/Main.test.tao': `
+        use MyApp from ../
+        test "sidecar smoke" {
+          test "renders" {
+            run MyApp
+            expect text "Hello"
+          }
+        }
+      `,
+    }),
+  )
+
   Test(
     'does not let test sidecars relax app placement outside their directory',
     rejectsFilesFrom(
@@ -337,7 +390,7 @@ Describe('validator: use and imports', () => {
           use MyApp from ./
           use OtherView from ./nested/Other.tao
           test "sidecar smoke" {
-            check "renders" {
+            test "renders" {
               run MyApp
               expect text "Hello"
             }
@@ -442,7 +495,7 @@ Describe('validator: imported declaration regressions', () => {
           'use Workspaces from ./Schema',
           `query Workspaces { }
            render Text("Rows: { Workspaces.Count }")`,
-          stubView('Text', 'Value is text'),
+          stubView('Text', 'Value text'),
         ),
       },
       result => {

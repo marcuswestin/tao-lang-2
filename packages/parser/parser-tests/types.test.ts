@@ -24,7 +24,7 @@ Describe('parser: types', () => {
       view Profile(Person) {
         render Text(Person.Job.Title)
       }
-      view Text(Value is text) { }
+      view Text(Value text) { }
     `)
 
     Expect(parseResult.diagnostics).toEqual([])

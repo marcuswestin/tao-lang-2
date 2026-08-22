@@ -1,0 +1,63 @@
+# Skillet — the `tao` CLI as a Skillet developer would use it once Tao is Tao.
+#
+# A specification artifact, like the `.tao-revolution` files beside it: nothing here runs today.
+
+set quiet
+
+TAO := justfile_directory() + "/../../../tao"
+
+# Print available recipes
+help:
+    just --list
+
+# Check everything: syntax, types, access rules, design rules, words coverage, canonical form.
+check:
+    {{ TAO }} check .
+
+# Apply every source fix in place, then format.
+fix:
+    {{ TAO }} fix .
+
+# Run every journey on every device a check names.
+test:
+    {{ TAO }} test .
+
+# Run one journey, on one device, and watch it.
+test-one CHECK DEVICE="phone":
+    {{ TAO }} test . --check "{{ CHECK }}" --device {{ DEVICE }} --watch
+
+# Live-develop: pick a simulator, an emulator, a browser, or the desktop app.
+dev DEVICE="phone":
+    {{ TAO }} dev . --app Skillet --device {{ DEVICE }}
+
+# Live-develop against the device store, with no account or network involved.
+dev-on-device:
+    {{ TAO }} dev . --app SkilletOnDevice
+
+# Open the in-memory preview, signed in as the demo account.
+preview:
+    {{ TAO }} dev . --app SkilletPreview
+
+# Render every scenario for review.
+scenarios:
+    {{ TAO }} design scenarios . --app Skillet
+
+# Hold the app to the design's rules across every scenario.
+design-check:
+    {{ TAO }} design check . --app Skillet
+
+# Report what crosses the public boundary, from the projections in Access.tao-revolution.
+public-surface:
+    {{ TAO }} access report . --app Skillet --public
+
+# Report every literal and phrase each language has not translated.
+words-check:
+    {{ TAO }} words check .
+
+# Build for the stores, the web, and the desktop, from the same source.
+build PROFILE="production":
+    {{ TAO }} build . --app Skillet --profile {{ PROFILE }} --target ios,android,web,macos
+
+# Publish to the stores and the web.
+publish:
+    {{ TAO }} publish . --app Skillet

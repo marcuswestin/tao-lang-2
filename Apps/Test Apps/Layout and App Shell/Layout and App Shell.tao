@@ -41,6 +41,7 @@ ui MainView() {
          Text("Deterministic")
          Text("Cross-platform")
       }
+
       #layoutPanes
       Panes() [gap 16, width fill] {
          #layoutScroll
@@ -49,6 +50,7 @@ ui MainView() {
             Col() [width max 720] {
                Text("Adaptive primary pane")
          }  }
+
          #layoutSecondary
          Col() [claim 1] {
             Text("Adaptive secondary pane")

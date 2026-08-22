@@ -50,6 +50,33 @@ const overlayLayerStyle = {
 const hiddenNavigationLevelStyle = { display: 'none' } as const
 const visibleOverlayLevelStyle = { flex: 1 } as const
 
+// A dialogue is modal: it dims what it covers and sits centred over it, rather than rendering as
+// another full-bleed layer on top of the content it is supposed to interrupt.
+const dialogueScrimStyle = {
+  alignItems: 'center',
+  backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  bottom: 0,
+  justifyContent: 'center',
+  left: 0,
+  padding: 24,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+} as const
+
+const dialogueSurfaceStyle = {
+  backgroundColor: '#ffffff',
+  borderRadius: 12,
+  elevation: 8,
+  maxWidth: 420,
+  padding: 20,
+  shadowColor: '#000000',
+  shadowOffset: { height: 8, width: 0 },
+  shadowOpacity: 0.25,
+  shadowRadius: 24,
+  width: '100%',
+} as const
+
 /** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
 export function NavigationSurface(props: {
   content?: React.ReactNode
@@ -60,19 +87,20 @@ export function NavigationSurface(props: {
   const runtime = requireReactNativeRuntime()
   const overlays = props.overlays.length > 0
     ? React.createElement(runtime.View, {
-      children: props.overlays.map((entry, index) =>
-        React.createElement(NavigationLevel, {
-          children: entry.presentable.render(
-            entry.arguments,
-            entry.dialogue
-              ? dialogueProps(props.taoProps, props.navigation, entry.dialogue)
-              : navigationProps(props.taoProps, props.navigation),
-          ),
+      children: props.overlays.map((entry, index) => {
+        const content = entry.presentable.render(
+          entry.arguments,
+          entry.dialogue
+            ? dialogueProps(props.taoProps, props.navigation, entry.dialogue)
+            : navigationProps(props.taoProps, props.navigation),
+        )
+        return React.createElement(NavigationLevel, {
+          children: entry.dialogue ? modalDialogue(content) : content,
           fill: true,
           hidden: index !== props.overlays.length - 1,
           key: entry.instanceId,
         })
-      ),
+      }),
       pointerEvents: 'box-none',
       style: overlayLayerStyle,
     })
@@ -82,6 +110,16 @@ export function NavigationSurface(props: {
     { pointerEvents: 'box-none', style: navigationHostStyle },
     props.content,
     overlays,
+  )
+}
+
+/** modalDialogue centres one dialogue on a dimming scrim, which is what makes it read as modal. */
+function modalDialogue(content: React.ReactNode): React.ReactNode {
+  const runtime = requireReactNativeRuntime()
+  return React.createElement(
+    runtime.View,
+    { style: dialogueScrimStyle },
+    React.createElement(runtime.View, { style: dialogueSurfaceStyle }, content),
   )
 }
 

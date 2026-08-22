@@ -116,6 +116,18 @@ Describe('Tao dev app discovery and selection', () => {
     Expect(await selectTaoDevApp(projects, { input, output })).toEqual({ kind: 'exit', exitCode: 0 })
   })
 
+  // The selector resumes stdin to read one key. Leaving it flowing keeps the event loop alive, so
+  // the CLI hangs after quitting — with the terminal already back in echoing cooked mode.
+  Test('releases its input stream so the process can exit after quitting', async () => {
+    const projects = projectFixture(2)
+    const input = terminalStream()
+    const output = terminalStream()
+    input.write('q')
+
+    Expect(await selectTaoDevApp(projects, { input, output })).toEqual({ kind: 'exit', exitCode: 0 })
+    Expect(input.isPaused()).toBe(true)
+  })
+
   Test('returns to the same Tao CLI selector when the running loop requests an app switch', async () => {
     const root = await mkTestDir('tao-dev-switch-')
     try {

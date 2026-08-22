@@ -16,15 +16,15 @@ import {
 
 const aliasMessages = AliasesValidator.messages
 const invocationMessages = InvocationsValidator.messages
-const textView = stubView('Text', 'Value is text')
+const textView = stubView('Text', 'Value text')
 const stackLayout = stubLayout('Stack')
 
 const eventViews = `
   ${stackLayout}
-  ${stubView('Input', 'Value is text, Change is action(text), Submit is action()')}
-  ${stubView('BooleanInput', 'Value is boolean, Change is action(boolean)')}
-  ${stubView('NumericInput', 'Value is number, Change is action(number)')}
-  ${stubView('LabelButton', 'Press is text')}
+  ${stubView('Input', 'Value text, Change action(text), Submit action()')}
+  ${stubView('BooleanInput', 'Value boolean, Change action(boolean)')}
+  ${stubView('NumericInput', 'Value number, Change action(number)')}
+  ${stubView('LabelButton', 'Press text')}
 `
 
 function eventApp(child: string, setup = ''): string {
@@ -32,9 +32,9 @@ function eventApp(child: string, setup = ''): string {
     `
     state Draft = ""
     action Submit() { }
-    action Normalize(Value is text) { }
-    action BooleanChange(Value is boolean) { }
-    action NumberChange(Value is number) { }
+    action Normalize(Value text) { }
+    action BooleanChange(Value boolean) { }
+    action NumberChange(Value number) { }
     ${setup}
     render Stack() { ${child} }
   `,
@@ -54,7 +54,7 @@ Describe('validator: aliases and invocations', () => {
         title: 'rejects local let references to later values',
         source: `
         app MyApp { view MainView }
-        view MainView(Label is text) {
+        view MainView(Label text) {
           let Greeting = Later
           let Later = Label
         }
@@ -78,7 +78,7 @@ Describe('validator: aliases and invocations', () => {
       },
       {
         title: 'rejects local aliases that shadow visible parameters',
-        source: 'app MyApp { view MainView }\nview MainView(Label is text) { let Label = "shadow" }',
+        source: 'app MyApp { view MainView }\nview MainView(Label text) { let Label = "shadow" }',
         messages: [aliasMessages.duplicateName('Label')],
       },
       {
@@ -114,7 +114,7 @@ Describe('validator: aliases and invocations', () => {
     const [title, source, message] of [
       [
         'rejects aliases that duplicate view names',
-        app('', `let Text = "Hello"\n${stubView('Text', 'Value is text')}`),
+        app('', `let Text = "Hello"\n${stubView('Text', 'Value text')}`),
         aliasMessages.duplicateName('Text'),
       ],
       [
@@ -147,7 +147,7 @@ Describe('validator: aliases and invocations', () => {
       [
         'rejects view parameters that shadow view declarations',
         `app MyApp { view MainView }
-       view MainView(Text is text) { render Text(Text) }
+       view MainView(Text text) { render Text(Text) }
        ${textView}`,
       ],
     ] as const
@@ -228,7 +228,7 @@ Describe('validator: aliases and invocations', () => {
   Test('attaches missing-render-argument diagnostics to the render AST node', async () => {
     const message = invocationMessages.missingArgument('Tile', 'Count')
     const result = await testValidateCodeWithErrors(
-      app('render Tile("Open")', stubView('Tile', 'Title is text, Count is number')),
+      app('render Tile("Open")', stubView('Tile', 'Title text, Count number')),
     )
     const diagnostic = result.diagnostics.find(candidate => candidate.message === message)
 
@@ -244,7 +244,7 @@ Describe('validator: aliases and invocations', () => {
   Test(
     'rejects missing arguments in child view invocations',
     rejects(
-      app('render Stack(){ Tile(42) }', `${stackLayout}\n${stubView('Tile', 'Title is text, Count is number')}`),
+      app('render Stack(){ Tile(42) }', `${stackLayout}\n${stubView('Tile', 'Title text, Count number')}`),
       invocationMessages.missingArgument('Tile', 'Title'),
     ),
   )
@@ -252,7 +252,7 @@ Describe('validator: aliases and invocations', () => {
   Test(
     'reports both unmatched and missing arguments for positional type mismatches',
     rejects(
-      app('render Tile("not a count")', stubView('Tile', 'Count is number')),
+      app('render Tile("not a count")', stubView('Tile', 'Count number')),
       invocationMessages.unmatchedArgument('Tile'),
       invocationMessages.missingArgument('Tile', 'Count'),
     ),
@@ -382,7 +382,7 @@ Describe('validator: aliases and invocations', () => {
       ],
     ] as const
   ) {
-    Test(title, rejects(app(`render ${invocation}`, stubView('Field', 'Value is text')), message))
+    Test(title, rejects(app(`render ${invocation}`, stubView('Field', 'Value text')), message))
   }
 
   Test(
@@ -390,7 +390,7 @@ Describe('validator: aliases and invocations', () => {
     rejects(
       app(
         'render Card(Title: "Visible type names are not labels")',
-        `type Title is text\n${stubView('Card', 'Label is text')}`,
+        `type Title is text\n${stubView('Card', 'Label text')}`,
       ),
       invocationMessages.unknownNamedArgument('Card', 'Title'),
       invocationMessages.missingArgument('Card', 'Label'),

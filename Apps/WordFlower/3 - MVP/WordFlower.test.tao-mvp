@@ -4,7 +4,7 @@ use WordFlower, WordFlowerDeclarationHead, WordFlowerDeclarationHeadWith, WordFl
 // and dialogues reuse the implemented #tag / select vocabulary; anything beyond that vocabulary
 // is expected to be decided in a future Next slice before implementation.
 test "WordFlower full target" {
-   check "activates the workspace tab and fills the split" {
+   test "activates the workspace tab and fills the split" {
       run WordFlower
       expect text "Starter prompt: Morning pages"
       expect text "Try writing for 10 minutes"
@@ -22,7 +22,7 @@ test "WordFlower full target" {
       expect text "Novel"
    }
 
-   check "asks before closing a document" {
+   test "asks before closing a document" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
@@ -44,7 +44,7 @@ test "WordFlower full target" {
       expect missing text "Document: Chapter one"
    }
 
-   check "saving presents a keyed toast" {
+   test "saving presents a keyed toast" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
@@ -77,7 +77,7 @@ test "WordFlower full target" {
       expect text "It began at sea."
    }
 
-   check "preserves workspace and document CRUD through lifecycle states" {
+   test "preserves workspace and document CRUD through lifecycle states" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
@@ -109,7 +109,7 @@ test "WordFlower full target" {
       expect text "No workspaces yet"
    }
 
-   check "a with-variant reconfigures the same app" {
+   test "a with-variant reconfigures the same app" {
       run WordFlowerDrawer
       press #activateWorkspaceTab
       expect text "Choose a workspace"
@@ -128,7 +128,7 @@ test "WordFlower full target" {
 // Provider-state controls operate on the run's isolated InstantDB test provider; journeys never
 // contact a shared remote service.
 test "WordFlower remote data" {
-   check "surfaces and recovers from an unauthorized document" {
+   test "surfaces and recovers from an unauthorized document" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
@@ -141,13 +141,11 @@ test "WordFlower remote data" {
          press #openDocument
       }
       expect text "Document: Chapter one"
-      data unauthorized
       expect text "You no longer have access to this document."
-      data ready
       expect text "Document: Chapter one"
    }
 
-   check "a derived datasource configures a deployment variant" {
+   test "a derived datasource configures a deployment variant" {
       run WordFlowerStage
       expect text "No workspaces yet"
       enter "Novel" into #workspaceName
@@ -155,37 +153,32 @@ test "WordFlower remote data" {
       expect text "Novel"
    }
 
-   check "recovers from a remote provider failure" {
+   test "recovers from a remote provider failure" {
       run WordFlower
-      data loading
       expect missing text "No workspaces yet"
-      data error "The workspace could not be reached"
       expect {
          text "Could not load WordFlower"
          text "The workspace could not be reached"
       }
-      data ready
       expect text "No workspaces yet"
    }
 
-   check "continues an async action while its remote write is delayed" {
+   test "continues an async action while its remote write is delayed" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
       select #workspaces[1] {
          press #openWorkspace
       }
-      data delayed 250
       enter "Delayed draft" into #newDocumentTitle
       submit #newDocumentTitle
       expect #newDocumentTitle input value ""
-      data ready
       expect text "Delayed draft"
    }
 }
 
 test "WordFlower navigation foundation" {
-   check "native back uses the semantic reducer" {
+   test "native back uses the semantic reducer" {
       run WordFlowerFoundationTest
       expect text "Foundation home marker"
       press text "Open deterministic detail"
@@ -195,7 +188,7 @@ test "WordFlower navigation foundation" {
       expect missing text "Foundation detail marker"
    }
 
-   check "slot dismissal restores its initial stack" {
+   test "slot dismissal restores its initial stack" {
       run WordFlowerFoundationTest
       press text "Open deterministic slot"
       expect text "Foundation slot marker"
@@ -206,22 +199,22 @@ test "WordFlower navigation foundation" {
 }
 
 test "WordFlower declaration refinement forms" {
-   check "a primitive head with canonical construction works" {
+   test "a primitive head with canonical construction works" {
       run WordFlowerDeclarationHead
       expect text "Foundation home marker"
    }
 
-   check "a primitive head with explicit refinement works" {
+   test "a primitive head with explicit refinement works" {
       run WordFlowerDeclarationHeadWith
       expect text "Foundation home marker"
    }
 
-   check "an inferred let with canonical construction works" {
+   test "an inferred let with canonical construction works" {
       run WordFlowerDeclarationLet
       expect text "Foundation home marker"
    }
 
-   check "an inferred let with explicit refinement works" {
+   test "an inferred let with explicit refinement works" {
       run WordFlowerDeclarationLetWith
       expect text "Foundation home marker"
    }

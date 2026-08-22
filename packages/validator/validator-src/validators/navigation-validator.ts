@@ -57,7 +57,7 @@ export const navigationValidationChecks = {
     if (!AST.isUiDeclaration(AST.findOwningView(activation))) {
       ctx.error(navigationValidationMessages.activationContext, activation)
     }
-    const app = activation.app.ref
+    const app = activation.app?.ref
     if (app) {
       for (const contract of selectionKeyContractsForAppFamily(app, file)) {
         if (!contract.keys.has(activation.key)) {
@@ -77,8 +77,7 @@ export const navigationValidationChecks = {
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
       ctx.error(navigationValidationMessages.replaceNavigator(Type.displayName(actual)), replace.navigator)
     }
-    const app = replace.app.ref
-    void app
+    void replace.app?.ref
   },
 } satisfies NodeValidationChecks
 

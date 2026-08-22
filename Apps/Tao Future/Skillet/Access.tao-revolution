@@ -1,0 +1,98 @@
+// Who may read and write what, and what crosses the public boundary.
+//
+// One file, because security you have to assemble from twelve scattered lines is security nobody
+// reviews. Everything below is enforced by the store. No screen in this app decides whether a person
+// may do something — it asks (`can change Recipe`) and the answer comes from here.
+
+// -- Audiences -------------------------------------------------------------------------------------------
+//
+// An audience is a named set of accounts, reached by a path and narrowed by a filter. Naming them once
+// is what lets the rules below read like sentences and lets a screen ask the same question.
+
+audience Family for Household = Household.Memberships.Person
+audience Cooks for Household = Household.Memberships[Role in Owner, Cook].Person
+audience Owners for Household = Household.Memberships[Role is Owner].Person
+
+// -- Access ------------------------------------------------------------------------------------------------
+//
+// Four verbs, each granted to an audience. A verb may name the fields it covers (`change Role to …`),
+// constrain the row as it will be (`create … where Role in Cook, Guest`), or be reserved for named
+// transactions (`create through …`). A path to a row inherits that row's rule: `access Ingredient as
+// Recipe` means "whatever the recipe says". A write is checked against the row **as it will be**, which
+// is what lets an invitation create the very membership that then protects it.
+
+access Household {
+   read to Family
+   create through StartKitchen // the only path that can satisfy the owner invariant
+   change to Owners
+   delete to Owners
+}
+
+access Membership {
+   read to Family of Household
+   create through JoinWithInvite or StartKitchen // no other path may mint one
+   change Role to Owners of Household
+   delete to Owners of Household or Person // an owner may remove you; you may always leave
+}
+
+access Invite {
+   read to Cooks of Household or holder of Code
+   create to Cooks of Household where Role in Cook, Guest // a cook may invite cooks and guests
+   create to Owners of Household // only an owner may mint an owner
+   change Used to holder of Code // accepting marks it used
+   delete to Owners of Household
+}
+
+access Recipe {
+   read to Family of Household
+   create, change to Cooks of Household
+   change Shared, ShareCode through StartSharing or StopSharing // a field named in a `through` grant changes only that way
+   delete to Owners of Household
+}
+access Ingredient as Recipe
+access Step as Recipe
+
+access Meal {
+   read to Family of Household
+   create, change, delete to Cooks of Household
+}
+
+access Grocery {
+   read to Family of Household
+   create, change to Family of Household // a guest may add "we're out of milk"
+   delete to Cooks of Household
+}
+access PantryItem {
+   read, create, change to Family of Household
+   delete to Cooks of Household
+}
+
+access Timer {
+   read to Family of Household
+   create to Cooks of Household
+   change, delete to StartedBy // only the person who started it may stop it
+}
+
+// -- The public boundary ------------------------------------------------------------------------------------
+//
+// Sharing is a projection, not a permission. `SharedRecipe` is a different, read-only type holding
+// exactly the fields below; `Notes`, `Source`, the household, and who cooked it cannot reach it, because
+// they are not in the list. It is addressed by a rotating capability, so revoking is not hiding a live
+// URL — every link already sent stops resolving.
+
+public publish Recipe when Recipe is Shared as SharedRecipe by capability Recipe.ShareCode {
+   Title
+   Course
+   Servings
+   Duration
+   Photo
+   Ingredients { Name, Amount, Unit }
+   Steps { Text, Timer }
+}
+
+// An invitation shows the kitchen's name before you belong to it, and whether it is open to anyone
+// holding it — and nothing else.
+public publish Household as InvitedKitchen by capability Invite.Code {
+   Name
+   Anyone = Invite.Email is none // open to whoever holds the link
+}

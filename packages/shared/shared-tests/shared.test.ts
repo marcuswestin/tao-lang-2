@@ -469,7 +469,7 @@ Describe('Errors, Assert, and Switch', () => {
     const value: string | undefined = 'tao'
 
     Assert(value, 'value exists')
-    Assert.defined(value, 'value is defined')
+    Assert.defined(value, 'value defined')
     Assert.is(value, isString, 'value is a string')
     Expect(value.toUpperCase()).toBe('TAO')
     Expect(() => Assert(false, 'truthy')).toThrow(Errors.UnexpectedBehaviorError)

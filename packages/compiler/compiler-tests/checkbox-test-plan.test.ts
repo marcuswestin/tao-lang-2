@@ -13,7 +13,7 @@ Describe('compiler: checkbox test-plan IR', () => {
           use CheckboxApp from ./
 
           test "Checkbox state" {
-            check "checks both states" {
+            test "checks both states" {
               run CheckboxApp
               expect checkbox #markFinal checked
               expect checkbox #marketingOptIn unchecked

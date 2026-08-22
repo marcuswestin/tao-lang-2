@@ -24,6 +24,8 @@ export type NodeFormat<NodeT extends AST.Node> = {
   oneSpaceBeforeProperty(...properties: Langium.Properties<NodeT>[]): void
   /** oneSpaceBetweenProperties requests exactly one space before the second property when both are present. */
   oneSpaceBetweenProperties(left: Langium.Properties<NodeT>, right: Langium.Properties<NodeT>): void
+  /** visibilityOnOwnLine puts a declaration's visibility modifier on the line above its head. */
+  visibilityOnOwnLine(): void
   /** commaSpacedList formats list commas with no space before and one space after. */
   commaSpacedList(): void
   /** commaLineList formats block-list commas without adding a space before the line break. */
@@ -100,6 +102,14 @@ export function createNodeFormat<NodeT extends AST.Node>(
       if (properties[left] !== undefined && properties[right] !== undefined) {
         formatter.property(right).prepend(Formatting.oneSpace())
       }
+    },
+    visibilityOnOwnLine() {
+      // Every declaration carrying a modifier names the property `visibility`; the cast is confined
+      // here so the verb stays callable from any declaration's handler.
+      if ((node as { visibility?: string }).visibility === undefined) {
+        return
+      }
+      formatter.property('visibility' as Langium.Properties<NodeT>).append(Formatting.newLine())
     },
     commaSpacedList() {
       formatter.keywords(',').prepend(Formatting.noSpace()).append(Formatting.oneSpace())
@@ -242,6 +252,34 @@ function newLinesAction(separation: LineSeparation, tabs = 0): Langium.Formattin
 
 function newLinesWithTabs(lines: number, tabs: number): Langium.FormattingAction {
   return tabs === 0 ? Langium.Formatting.newLines(lines) : { options: {}, moves: [{ lines, tabs }] }
+}
+
+/** hasInteriorComments reports whether a node encloses a comment. */
+export function hasInteriorComments(node: AST.Node): boolean {
+  const cst = node.$cstNode
+  if (cst === undefined) {
+    return false
+  }
+  return Langium.CstUtils.flattenCst(cst.root).toArray().some(leaf =>
+    leaf.hidden && leaf.offset >= cst.offset && leaf.end <= cst.end
+  )
+}
+
+/**
+ * collapsesToOneLine reports whether `node` holds exactly one statement and encloses no comment.
+ *
+ * There is deliberately no width budget. Tao formatting has no line-width model, and the only
+ * width available here is the column the node occupies in the *input*, which says nothing about
+ * the output: dense one-line source measures far past any budget and would never collapse, while
+ * the same code already formatted would. A real budget needs the output indent, which is not known
+ * until the surrounding moves are applied.
+ *
+ * A comment has to hold the block open: the formatter only adjusts whitespace between existing
+ * tokens, so it cannot move a trailing comment past the closing brace, and collapsing would pull
+ * the brace into the comment.
+ */
+export function collapsesToOneLine(node: AST.Node, statements: readonly AST.Node[]): boolean {
+  return statements.length === 1 && node.$cstNode !== undefined && !hasInteriorComments(node)
 }
 
 /** isInjectionFenceOpenLine returns true when a line opens a multiline inject TS fence. */

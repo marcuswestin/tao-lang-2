@@ -28,15 +28,11 @@ Describe('minimal Tao parser', () => {
         'Packages/@custom/Constructs.tao': `
           public type CustomNav is nav with {
             Initial ui
-            implement inject nav \`\`\`ts
-              return TR.NavKind.Stack()
-            \`\`\`
+            nav TestNavKind from ./TestNav.ts
           }
           public type CustomData is datasource with {
             StorageKey text
-            implement inject provider \`\`\`ts
-              return TR.DataProvider.Local()
-            \`\`\`
+            provider TestProvider from ./TestProvider.ts
           }
         `,
       },
@@ -92,7 +88,7 @@ Describe('minimal Tao parser', () => {
       `,
         'Main.test.tao': `
         test "Sidecar" {
-          check "intentionally incomplete" {
+          test "intentionally incomplete" {
             expect text "This file should not load"
           }
         }
@@ -118,12 +114,12 @@ Describe('minimal Tao parser', () => {
           return <>{Content}</>
         \`\`\`
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject \`\`\`ts
           return null
         \`\`\`
       }
-      view MainView(Label is text) {
+      view MainView(Label text) {
         let Greeting = "View"
         let LabelAlias = Label
         render Stack(){
@@ -206,7 +202,7 @@ Describe('minimal Tao parser', () => {
           return <>{Content}</>
         \`\`\`
       }
-      workspace view Text(Value is text) {
+      workspace view Text(Value text) {
         render inject Value \`\`\`ts
           return <RN.Text>{Value}</RN.Text>
         \`\`\`
@@ -236,7 +232,7 @@ Describe('minimal Tao parser', () => {
   Test('parses bare use statements', async () => {
     const parseResult = await testParseSyntax(`
       use Text
-      workspace view Text(Value is text) {
+      workspace view Text(Value text) {
         render inject Value \`\`\`ts
           return null
         \`\`\`

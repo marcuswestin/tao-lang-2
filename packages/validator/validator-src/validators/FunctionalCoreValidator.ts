@@ -32,7 +32,7 @@ const messages = {
 /** FunctionalCoreValidator validates pure expressions, functions, and render control flow. */
 export const FunctionalCoreValidator = {
   checks: {
-    [AST.EnumDeclaration.$type]: validateEnum,
+    [AST.TypeDeclaration.$type]: validateEnum,
     ...FunctionsValidator.checks,
     [AST.BinaryExpression.$type]: validateBinary,
     [AST.UnaryExpression.$type]: (expression, ctx) => {
@@ -125,16 +125,17 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
 
 type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardActionBranch | AST.GuardRenderBranch
 
-function validateEnum(declaration: AST.EnumDeclaration, ctx: ValidationContext): void {
+function validateEnum(declaration: AST.TypeDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(declaration.$container)) {
     ctx.error(messages.enumPlacement, declaration)
   }
   const seen = new Set<string>()
-  for (const enumCase of declaration.block.cases) {
-    if (seen.has(enumCase.name)) {
-      ctx.error(messages.duplicateEnumCase(declaration.name, enumCase.name), enumCase)
+  for (const enumCase of AST.caseSetCasesOf(declaration)) {
+    const caseName = AST.caseSetCaseName(enumCase)
+    if (seen.has(caseName)) {
+      ctx.error(messages.duplicateEnumCase(declaration.name, caseName), enumCase)
     }
-    seen.add(enumCase.name)
+    seen.add(caseName)
   }
 }
 
@@ -162,10 +163,10 @@ function validateCaseTestExpression(expression: AST.CaseTestExpression, ctx: Val
   if (type.kind === 'unresolved') {
     return
   }
-  if (AST.isEnumCase(declaredCase)) {
-    const owner = AST.enumOwningCase(declaredCase)
+  if (AST.isCaseSetCase(declaredCase)) {
+    const owner = AST.caseSetOwningCase(declaredCase)
     if (type.kind !== 'enum' || type.declaration !== owner) {
-      ctx.error(messages.invalidCase(declaredCase.name, Type.displayName(type)), expression)
+      ctx.error(messages.invalidCase(AST.caseSetCaseName(declaredCase), Type.displayName(type)), expression)
     }
     return
   }

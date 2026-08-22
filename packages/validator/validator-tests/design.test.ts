@@ -39,7 +39,7 @@ Describe('validator: minimal design', () => {
     rejects(
       `
         test "tags" {
-          check "digit leading" {
+          test "digit leading" {
             press #123abc
           }
         }

@@ -1,0 +1,162 @@
+// The vocabulary every screen uses: the home, the safety net, the frames, the item row, capture, and the
+// one question.
+
+// -- Live handles ------------------------------------------------------------------------------------------
+//
+// The open home is a preference on the account, so `MyHome` is a value and the app root can be a `when`
+// over it. Joining, switching, and leaving are ordinary writes; no screen replaces the root.
+let MyHome = Me.CurrentHome
+let MyMembership = exactly one Me.Memberships where Home is MyHome
+
+// -- The safety net -----------------------------------------------------------------------------------------
+
+guard default {
+   loading -> Spinner(Label: "Opening Hearth…")
+   missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone", Body: "Someone in your home may have cleared it.")
+   unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask someone at home to invite you back.")
+   rejected -> Problem { Text(Problem) [caption, danger] }
+   error -> Message { Text(Message) [body] }
+   failed -> Problem { present Notice(Problem) as toast (Key: "failed") }
+}
+
+// -- Frames --------------------------------------------------------------------------------------------------
+
+frame Section(Title text) {
+   @actions = empty
+   render Col [gap sm] {
+      Row [content spread center, gap sm] {
+         Text(Title) [sectionTitle]
+         Row [content right center, gap xs] { @actions }
+      }
+      Col [gap xs] { @@content }
+}  }
+
+frame EmptyState(Icon icon, Title text, Body text) {
+   render Col [pattern EmptyState] {
+      Icon(Icon) [@icon]
+      Text(Title) [@title]
+      Text(Body) [@body]
+      Col [@action] { @@content }
+}  }
+
+// -- Views ------------------------------------------------------------------------------------------------------
+
+type Tone is one of Neutral, Good, Warning
+
+view Status(Message text, Tone Tone (default Neutral), Announce yes / no (default no)) {
+   let Symbol = when Tone { Neutral -> "circle"; Good -> "checkmark.circle"; Warning -> "exclamationmark.triangle" }
+   render Row [content left center, gap sm, announce when Announce] {
+      Icon(Symbol) [muted, ink good when Tone is Good, ink danger when Tone is Warning]
+      Text(Message) [caption]
+}  }
+
+view OfflineNotice() {
+   render if Connection is Offline { Status("Offline — your changes are safe on this device", Tone: Warning, Announce: yes) }
+}
+
+phrase MarkDone(Title text) = "Mark { Title } done"
+
+// One row serves Today, every list, the week, and search. It has no press of its own: the `List` that
+// holds it says what selecting does. Ticking runs the completion transaction; `runs latest per Item`
+// keys the guard to the row, so a quick tick-untick on one item settles on the last state.
+view HearthItemRow(Item) {
+   let Now = now every minute
+   action Tick(Done yes / no) runs latest per Item { do SetDone(Item, Done) }
+   render Row [pattern Line] {
+      #tick
+      Checkbox(Value: Item.Complete, Label: MarkDone(Item.Title)) [@leading] { on change -> Done { do Tick(Done) } }
+      Col [@content, gap xxs] {
+         Text(Item.Title, Lines: 1) [body, strike when Item is Complete]
+         if Item.Note is not empty { Text(Item.Note, Lines: 1) [caption] }
+      }
+      Row [content right center, gap xs, @trailing] {
+         if Item.Due is not none { Text(Item.Due.Short) [chip, ink danger when Item.Due < Now and Item is Open] }
+         if Item.Assignee is not none { Text(Item.Assignee.Name) [chip] }
+         if Item.Place is not none { Icon("mappin", Label: Item.Place.Name) [muted] }
+}  }  }
+
+// -- Capture --------------------------------------------------------------------------------------------------
+//
+// No row exists yet and a person chooses the list before anything is committed, so this is a draft. It
+// carries the entity's own `required` copy — "Say what needs doing" is written once, on the data — and an
+// abandoned capture never syncs to the whole home.
+
+command AddSomething {
+   Label "Add something"
+   Icon "plus"
+   Key "cmd+n"
+   does { present QuickCapture(MyHome) as sheet }
+}
+
+ui QuickCapture(Home) {
+   Title "Add something"
+   draft New = HearthItem for new { CreatedBy: Me }
+   query Lists from Home.Lists { }
+
+   action Add() runs single {
+      when save New {
+         saved -> dismiss
+   }  }
+
+   render Col [card, width max 560, gap md] {
+      guard Lists
+      if Lists is empty { Text("Make a list first, then add to it.") [body, muted] }
+      Choice(Value: New.HearthList, Options: Lists, Label: "List")
+      #captureTitle
+      TextInput(Value: New.Title, Label: "What needs doing?", Focus: initial) { on submit Add }
+      TextInput(Value: New.Note, Label: "Notes", Lines: 3)
+      DateTimeInput(Value: New.Due, Label: "When")
+      Choice(Value: New.Assignee, Options: Home.Memberships.Person, Placeholder: "Nobody yet", Label: "Who")
+      Problems(New)
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> dismiss }
+         #captureAdd
+         Button("Add", Disabled: New.Incomplete, Busy: Add running) [primary] { on press Add }
+}  }  }
+
+// -- The one question -----------------------------------------------------------------------------------------
+
+dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
+   render Col(Label: Question) [card, width max 480, gap md] {
+      Text(Question) [sectionTitle]
+      Text(Body) [body]
+      Row [content right center, gap sm] {
+         Button("Cancel") [secondary] { on press -> respond no }
+         #confirm
+         Button(Verb) [destructive] { on press -> respond yes }
+}  }  }
+
+ui Notice(Message text) {
+   render Text(Message) [toast]
+}
+
+// -- Find anything ---------------------------------------------------------------------------------------------
+
+command FindAnything {
+   Label "Find anything"
+   Icon "magnifyingglass"
+   Key "cmd+k"
+   does { present FindSheet() as palette }
+}
+
+ui FindSheet() {
+   Title "Find anything"
+   Search Query
+   query Hits from MyHome.Lists.Items {
+      search Query in Title, Note, Comments.Body
+      order by relevance
+      limit 20
+   }
+   render Col [surface, width max 680] {
+      if Query is empty { Text("Search every list in this home.") [muted, pad md] }
+      guard Hits
+      if Hits is empty and Query is not empty { Text("Nothing matches.") [muted, pad md] }
+      List(Hits) {
+         Row [pattern Line] {
+            Icon("checklist") [@leading]
+            Col [@content, gap xxs] {
+               Text(HearthItem.Title) [body]
+               Text(HearthItem.HearthList.Name) [caption]
+         }  }
+         on select -> { dismiss; open ItemLink(HearthItem) }
+}  }  }

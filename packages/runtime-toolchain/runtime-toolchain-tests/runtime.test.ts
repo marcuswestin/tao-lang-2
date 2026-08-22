@@ -191,7 +191,7 @@ Describe('Tao runtime app generation', () => {
         'Constructs.tao': `
           public type SidecarStack is nav with {
             Initial ui
-            implement inject nav "./SidecarStack.ts"
+            nav SidecarStack from ./SidecarStack.ts
           }
         `,
         'SidecarStack.ts': `
@@ -199,7 +199,7 @@ Describe('Tao runtime app generation', () => {
           import type { SidecarStackConfig } from './Constructs.tao'
 
           let factoryCalls = 0
-          export default function createSidecarStack(): TR.NavKind<'stack', SidecarStackConfig> {
+          export function SidecarStack(): TR.NavKind<'stack', SidecarStackConfig> {
             factoryCalls++
             if (factoryCalls !== 1) throw new Error('sidecar factory must be evaluated exactly once')
             return TR.NavKind.Stack()
@@ -216,7 +216,7 @@ Describe('Tao runtime app generation', () => {
         Expect(await FS.exists(declarationsPath)).toBe(true)
         Expect(await FS.exists(sidecarPath)).toBe(true)
         Expect(moduleCode).toContain(
-          "import __tao_configuration_implementation_SidecarStack__ from './SidecarStack'",
+          "import { SidecarStack as __tao_configuration_implementation_SidecarStack__ } from './SidecarStack'",
         )
         Expect(moduleCode).toContain('__tao_configuration_implementation_SidecarStack__')
 

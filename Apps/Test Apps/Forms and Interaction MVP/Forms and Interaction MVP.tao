@@ -7,7 +7,7 @@ app FormsInteractionMVP {
       Initial MainView
 }  }
 
-function SubmittedLabel(Title is text) returns text {
+function SubmittedLabel(Title text) returns text {
    return "Submitted: { Title }"
 }
 
@@ -19,10 +19,10 @@ ui MainView() {
    state Completed = false
    state Submitting = false
    state SubmissionCount = 0
-   action RecordNamedChange(Value is text) {
+   action RecordNamedChange(Value text) {
       set NamedChange = "Named: { Value }"
    }
-   action SetCompleted(Value is boolean) {
+   action SetCompleted(Value boolean) {
       set Completed = Value
    }
    action Submit() {
@@ -38,52 +38,45 @@ ui MainView() {
       TextInput(Value: Draft, Label: "Task title", Placeholder: "Capture something") {
          on submit Submit
       }
+
       #namedChange
       TextInput(Value: NamedChange, Label: "Named change") {
          on change RecordNamedChange
          on submit Submit
       }
+
       #inlineChange
       TextInput(Value: InlineChange, Label: "Inline change") {
-         on change -> Entered {
-            set InlineChange = "Inline: { Entered }"
-         }
+         on change -> Entered { set InlineChange = "Inline: { Entered }" }
          on submit Submit
       }
       Text("Named value: { NamedChange }")
       Text("Inline value: { InlineChange }")
+
       #completed
       Checkbox(Value: Completed, Label: "Complete") {
          on change SetCompleted
       }
       when Completed {
-         true -> {
-            Text("Checkbox: checked")
-         }
-         otherwise -> {
-            Text("Checkbox: unchecked")
-      }  }
+         true -> { Text("Checkbox: checked") }
+         otherwise -> { Text("Checkbox: unchecked") }
+      }
       when Draft {
-         empty -> {
-            Text("Title is required")
-         }
-         otherwise -> {
-            Text(Draft)
-      }  }
+         empty -> { Text("Title is required") }
+         otherwise -> { Text(Draft) }
+      }
+
       #clear
       FormButton(Title: "Clear", Disabled: Draft is empty) {
-         on press -> {
-            set Draft = ""
-      }  }
+         on press -> { set Draft = "" }
+      }
+
       #save
       FormButton(Title: "Save", Disabled: Draft is empty, Submitting: Submitting) {
          on press Submit
       }
       Text("Submissions: { SubmissionCount }")
       when Submitted {
-         empty -> {
-            Text("")
-         }
-         otherwise -> {
-            Text(SubmittedLabel(Submitted))
-}  }  }  }
+         empty -> { Text("") }
+         otherwise -> { Text(SubmittedLabel(Submitted)) }
+}  }  }

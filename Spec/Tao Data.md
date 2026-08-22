@@ -15,7 +15,7 @@ data Workspaces / Workspace {
    Name text
    CreatedAt time (default now)
    Pinned yes / no
-   Documents (relation Documents, auto-delete)
+   Documents (relation Documents, owned)
    index CreatedAt
    order by CreatedAt
 }
@@ -27,7 +27,7 @@ data Documents / Document {
    Public yes / no Private (default Public)
    CreatedAt time (default now)
    Workspace (relation Workspace)
-   Paragraphs (auto-delete)
+   Paragraphs (owned)
    index CreatedAt
    order by CreatedAt
 }
@@ -59,9 +59,9 @@ Indexes are separate statements, and one default `order by` may be declared for 
 A bare singular name such as `Workspace` is a stored to-one relationship when it names another
 entity. A bare plural name such as `Paragraphs` is an inferred inverse to-many relationship. The
 `relation` modifier states the related declaration explicitly when inference is insufficient.
-`auto-delete` belongs on the owner's inverse collection: deleting that owner transitively deletes
+`owned` belongs on the owner's inverse collection: deleting that owner transitively deletes
 the related rows in the collection. A stored to-one relationship does not declare cascade policy;
-without owner-side `auto-delete`, deletion is restricted while another row refers to the target.
+without owner-side `owned`, deletion is restricted while another row refers to the target.
 Relationship values are live entity handles, not text IDs.
 
 ## App datasource configuration
@@ -119,34 +119,32 @@ restart. Schemas with no bound datasource keep their ordinary query error state 
 `Local` and `Memory` are ordinary public Tao declarations in `@tao/data`, not compiler-known names:
 
 Reusable provider types use `type Name is datasource with { ... }`. Their explicit
-`implement inject provider` clause fills primitive `datasource`'s implementation requirement; it is
-a protocol binding, not ordinary Tao data.
+`provider <Export> from <path>` clause fills primitive `datasource`'s implementation requirement; it
+is a protocol binding, not ordinary Tao data.
 
-````tao
-public type Local is datasource with {
+```tao
+public
+type Local is datasource with {
    StorageKey text
 
-   implement inject provider ```ts
-      return TR.DataProvider.Local()
-   ```
+   provider LocalProvider from ./Providers.ts
 }
 
-public type Memory is datasource with {
-   implement inject provider ```ts
-      return TR.DataProvider.Memory()
-   ```
+public
+type Memory is datasource with {
+   provider MemoryProvider from ./Providers.ts
 }
-````
+```
 
-A reusable `datasource` type is top-level rather than nested, has `package`, `workspace`, or `public`
-visibility, and binds exactly one `implement inject provider`. Its declared properties are the
-complete generic configuration contract: construction and patch validation read their names and
-types from the linked declaration, so copied and third-party datasources receive the same unknown,
-duplicate, missing, and type diagnostics without a shipped-name table.
+A reusable `datasource` type is top-level rather than nested, declares its visibility, and binds
+exactly one `provider` clause. Its declared properties are the complete generic configuration
+contract: construction and patch validation read their names and types from the linked declaration,
+so copied and third-party datasources receive the same unknown, duplicate, missing, and type
+diagnostics without a shipped-name table.
 
-The implementation may remain an inline `ts` fence or name a sibling TypeScript sidecar, for
-example `implement inject provider "./Local.ts"`. A sidecar default-exports a zero-argument factory;
-the compiler copies and imports it into generated output and evaluates it once for the declaration.
+The implementation always names a TypeScript sidecar; the inline fence is retired. The sidecar
+exports the named zero-argument factory — a named export, never a default — and the compiler copies
+and imports it into generated output and evaluates it once for the declaration.
 The resulting package-scope value satisfies the published `TR.DataProvider` full-snapshot protocol.
 `load(storageKey)` returns the starting serialized snapshot
 or no value; `persist(storageKey, snapshot)` accepts complete committed snapshots in order and must

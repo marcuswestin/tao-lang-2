@@ -15,7 +15,7 @@ Describe('compiler: selectable loops', () => {
         }
       }
       layout Stack() { render inject \`\`\`ts return null \`\`\` }
-      view Text(Value is text) { render inject Value \`\`\`ts return null \`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `)
 
     const code = compiled.code
@@ -38,7 +38,7 @@ Describe('compiler: selectable loops', () => {
         }
       }
       layout Stack() { render inject \`\`\`ts return null \`\`\` }
-      view Text(Value is text) { render inject Value \`\`\`ts return null \`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `)
 
     Expect(compiled.code.match(/_Scope.Row = _TaoFunctionArg0/g)).toHaveLength(1)

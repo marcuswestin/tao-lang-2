@@ -9,7 +9,7 @@ workspace package index, and public self-hosted `nav` and `datasource` declarati
 CLI package commands, and package publishing remain future work.
 
 The implemented package surface includes `@tao/text`, exporting injected
-`CountWords(Value is text)` and `Join(Values is list of text, Separator is text)`, and requires
+`CountWords(Value text)` and `Join(Values list of text, Separator text)`, and requires
 parentheses on every visual, dialogue, action, and function declaration parameter list.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
 all-whitespace text. `Join` preserves source order, inserts the separator only between adjacent
@@ -171,36 +171,32 @@ Navigation kinds and datasource providers are self-hosted by ordinary package de
 stdlib definitions are the proof rather than compiler exceptions:
 
 The `nav` and `datasource` heads declare values; reusable types use
-`type Name is nav|datasource with { ... }`. Their explicit `implement inject` clause fills the
+`type Name is nav|datasource with { ... }`. Their explicit `nav`/`provider` clause fills the
 primitive family's implementation requirement as a protocol binding, not as ordinary Tao data.
 
-````tao
-public type StackNav is nav with {
+```tao
+public
+type StackNav is nav with {
    Initial ui
 
-   implement inject nav ```ts
-      return TR.NavKind.Stack()
-   ```
+   nav StackNavKind from ./NavKinds.ts
 }
 
-public type Memory is datasource with {
-   implement inject provider ```ts
-      return TR.DataProvider.Memory()
-   ```
+public
+type Memory is datasource with {
+   provider MemoryProvider from ./Providers.ts
 }
-````
+```
 
-These declarations are top-level rather than nested and require `package`, `workspace`, or `public`
-visibility. Their physical file location does not change this rule: package scope describes
-declaration ownership, not a requirement to live in an `@package` folder. Each binds exactly one
-package-scope implementation with
-`implement inject nav` or `implement inject provider`. The implementation is either the existing
-inline `ts` fence or a quoted path such as `"./StackNav.ts"` to an existing sibling `.ts` file. In
-the path form, the compiler copies the sidecar into generated output and imports its default export.
-That export is a zero-argument factory, invoked once when its defining generated module initializes,
-just like the inline factory body. `TR.NavKind` and `TR.DataProvider` are published protocols, with
+These declarations are top-level rather than nested. Their physical file location does not change
+this rule: package scope describes declaration ownership, not a requirement to live in an
+`@package` folder. Each binds exactly one package-scope implementation with
+`nav <Export> from <path>` or `provider <Export> from <path>`, naming a sibling `.ts` file; the
+inline fence is retired. The compiler copies the sidecar into generated output and imports the
+named export. That export is a zero-argument factory, invoked once when its defining generated
+module initializes. `TR.NavKind` and `TR.DataProvider` are published protocols, with
 `TR.testNavKind` and `TR.testProvider` conformance suites. Tao validation checks the sidecar's
-location, existence, and default export; generated-output TypeScript checks and those runtime suites
+location, existence, and named export; generated-output TypeScript checks and those runtime suites
 establish type and behavioral conformance. The shipped `StackNav` and `Memory` declarations use the
 same mechanisms available to copied or third-party packages.
 

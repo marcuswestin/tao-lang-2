@@ -187,7 +187,7 @@ Describe('Expo runtime', () => {
             \`\`\`
         }
 
-        view Text(Value is text) {
+        view Text(Value text) {
             render inject Value \`\`\`ts
                 return <RN.Text>{Value}</RN.Text>
             \`\`\`

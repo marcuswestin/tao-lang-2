@@ -9,7 +9,7 @@ function checkboxCheck(steps: string): string {
     render,
     `
     test "Checkbox state" {
-      check "checks state" {
+      test "checks state" {
         ${steps}
       }
     }

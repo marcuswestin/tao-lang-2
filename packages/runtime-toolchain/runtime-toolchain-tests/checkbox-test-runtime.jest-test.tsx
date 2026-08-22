@@ -24,7 +24,7 @@ const checkboxApp = `
     \`\`\`
   }
 
-  view NativeCheckbox(Value is boolean, Change is action()) {
+  view NativeCheckbox(Value boolean, Change action()) {
     render inject Value, Change, Layout @@layout, Tag @@tag \`\`\`ts
       const style = TR.Layout.resolve({
         parentDirection: Layout?.parentDirection,
@@ -52,7 +52,7 @@ Describe('Expo runtime checkbox test expectations', () => {
           use CheckboxApp from ./
 
           test "Checkbox state" {
-            check "changes state" {
+            test "changes state" {
               run CheckboxApp
               expect checkbox #markFinal unchecked
               press #markFinal
@@ -76,7 +76,7 @@ Describe('Expo runtime checkbox test expectations', () => {
           use CheckboxApp from ./
 
           test "Checkbox state" {
-            check "reports mismatch" {
+            test "reports mismatch" {
               run CheckboxApp
               expect checkbox #markFinal checked
             }

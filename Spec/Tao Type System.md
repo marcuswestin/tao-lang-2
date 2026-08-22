@@ -12,7 +12,7 @@ custom values and items, configured `ui`/`nav`/`datasource` values, and schema-s
 types. `time` is a distinct data-field type whose current producing form is data-only `(default now)`;
 the runtime applies `now` separately for every created row. Text, lists, and queries support
 `Value is empty`; lists and queries retain `.Count`. `Value is <Case>` is the general boolean case
-test for enum values, boolean data fields, and built-in subject cases. Public `.Empty`, `.Loading`,
+test for case-set values, boolean data fields, and built-in subject cases. Public `.Empty`, `.Loading`,
 and `.Error` members are retired. Every entity handle exposes stable text `.Id`, including after its
 row becomes missing; application code may retain that identity without gaining access to raw rows.
 
@@ -65,17 +65,17 @@ parenthesized parameter list, including `()` when empty. Product functions use s
 explicit `return`, and an optional inferred return type:
 
 ```tao
-function DocumentLabel(Title is text) returns text {
+function DocumentLabel(Title text) returns text {
    return "Document: { Title }"
 }
 
-function Double(Value is number) {
+function Double(Value number) {
    return Value * 2
 }
 ```
 
 Lists declare their element type as `list of T`. Enums are nominal types whose cases are nominal
-values; a one-case enum is valid. Optional item fields use `optional Field Type`. `async { ... }`
+values; a one-case set is valid. Optional item fields use `Field Type?`. `async { ... }`
 runs its block without delaying later statements and surfaces failures as provider error state;
 async functions, `await`, scheduling, and fork/concurrency policy remain future work.
 
@@ -153,7 +153,7 @@ action with incompatible value types or required arity is rejected.
 ```tao
 view Editor() {
    state Draft = ""
-   action ChangeDraft(Value is text) { set Draft = Value }
+   action ChangeDraft(Value text) { set Draft = Value }
    action Save() { }
    render TextInput(Value: Draft, Label: "Draft") {
       on change ChangeDraft
@@ -247,7 +247,7 @@ The implemented dialogue form is `dialogue Name(<Parameters>) responds <Enum>`, 
 `dialogue Name() responds <Enum>` when it has no parameters. A dialogue is
 response-demanding presentable content. `ask`
 creates a fresh stacked occurrence and suspends its action until that occurrence answers.
-`respond Case` supplies the declared enum case; bare `respond`, Back, or dismissal supplies `none`.
+`respond Case` supplies the declared case; bare `respond`, Back, or dismissal supplies `none`.
 Each occurrence owns its resolver, so nested or repeated asks cannot answer one another.
 
 ### Collections and entities
@@ -269,24 +269,22 @@ patches its named entries and may add direct keyed entries when the declaration 
 contract. The descriptor retains its declaration identity across imports, aliases, and generated
 modules.
 
-````tao
-public type CopiedStack is nav with {
+```tao
+public
+type CopiedStack is nav with {
    Initial ui
 
-   implement inject nav ```ts
-      return TR.NavKind.Stack()
-   ```
+   nav CopiedStackKind from ./CopiedStack.ts
 }
 
 let HomeNav = CopiedStack {
    Initial Home
 }
-````
+```
 
-`implement inject nav|provider` is a top-level, visible declaration binding rather than app or
-configuration content. Its source is either an inline `ts` fence or a sibling `.ts` path such as
-`"./CopiedStack.ts"`; the sidecar form default-exports a zero-argument factory that generated output
-copies, imports, and evaluates once. It supplies the published `TR.NavKind` or `TR.DataProvider`
+`nav|provider <Export> from <path>` is a top-level, visible declaration binding rather than app or
+configuration content. Its source is always a sibling `.ts` path such as `./CopiedStack.ts`, whose
+named zero-argument factory generated output copies, imports, and evaluates once. It supplies the published `TR.NavKind` or `TR.DataProvider`
 protocol value. Third-party declarations and the shipped `StackNav` and `Memory` declarations use
 the same path and must pass the published conformance suites.
 

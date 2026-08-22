@@ -18,7 +18,7 @@ UiDeclaration:
 
 DialogueDeclaration:
     visibility=DeclarationVisibility? 'dialogue' name=ID parameterList=ParameterList
-    'responds' response=[EnumDeclaration:ID] block=Block;
+    'responds' response=[TypeDeclaration:ID] block=Block;
 
 ViewDeclaration:
     visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList block=Block;

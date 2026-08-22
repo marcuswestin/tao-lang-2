@@ -12,11 +12,11 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       public type Navigator is nav with {
         Initial ui
-        implement inject nav ${tsFence} return TR.NavKind.Stack() ${fence}
+        nav TestNavImpl from ./TestNavImpl.ts
       }
       public type Datasource is datasource with {
         StorageKey text
-        implement inject provider ${tsFence} return TR.DataProvider.Local() ${fence}
+        provider TestProviderImpl from ./TestProviderImpl.ts
       }
       app Demo {
         Name "Demo"
@@ -41,7 +41,7 @@ Describe('compiler: language lowering', () => {
           Kind is "document",
         }
         let Draft = Document { Name "Roadmap" }
-        ${stubView('Text', 'Value is text')}
+        ${stubView('Text', 'Value text')}
       `,
     ))
 
@@ -90,7 +90,7 @@ Describe('compiler: language lowering', () => {
         type Admin is Person with { Role is "admin", Access number is 1 }
         let Admin = { Name "Ro" }
         let Renamed = Admin with { Name "Grace", Access 2 }
-        ${stubView('Text', 'Value is text')}
+        ${stubView('Text', 'Value text')}
       `,
     ))
 
@@ -109,16 +109,16 @@ Describe('compiler: language lowering', () => {
         Name text
         CreatedAt time (default now)
         Pinned yes / no
-        Documents (relation Documents, auto-delete)
+        Documents (owned)
         index CreatedAt
         order by CreatedAt desc
       }
       data Documents / Document {
         Title text
-        Final yes / no Draft
-        Public yes / no Private (default Public)
+        Final yes / Draft no
+        Public yes / Private no (default Public)
         Workspace
-        Paragraphs (auto-delete)
+        Paragraphs (owned)
       }
       data Paragraphs / Paragraph {
         Text text
@@ -150,7 +150,7 @@ Describe('compiler: language lowering', () => {
         action Reopen() { update Document { Draft } }
         render Text("Editor")
       }
-      view Text(Value is text) { render inject ${tsFence} return null ${fence} }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
       layout Col() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -205,7 +205,7 @@ Describe('compiler: language lowering', () => {
             Text("Child") [width fill, margin bottom 4]
           }
         `,
-        `${stubLayout('Col')}${stubView('Text', 'Value is text')}`,
+        `${stubLayout('Col')}${stubView('Text', 'Value text')}`,
       ),
     )
 
@@ -251,7 +251,7 @@ Describe('compiler: language lowering', () => {
         action Add() { create __proto__ { __proto__: "safe" } }
         render Text("Ready")
       }
-      view Text(Value is text) { render inject ${tsFence} return null ${fence} }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
     `)
 
     Expect(compiled.code.match(/\["__proto__"\]/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
@@ -316,7 +316,7 @@ Describe('compiler: language lowering', () => {
 
   Test('compiles dialogue asks and responses through an async-compatible action chain', async () => {
     const compiled = await Compiler.compileCode(`
-      enum ConfirmResult { Confirmed }
+      type ConfirmResult is one of Confirmed
       app DialogueApp { view Editor }
       view Editor() {
         action Close() {
@@ -325,7 +325,7 @@ Describe('compiler: language lowering', () => {
         }
         render Empty()
       }
-      dialogue ConfirmClose(Title is text) responds ConfirmResult {
+      dialogue ConfirmClose(Title text) responds ConfirmResult {
         action Confirm() { respond Confirmed }
         action Cancel() { respond }
         render Empty()
@@ -433,16 +433,16 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
       view MainView() {
-        action Receive(Label is text, Count is number) { }
+        action Receive(Label text, Count number) { }
         render Wrapper(Receive)
       }
-      view Wrapper(Callback is action(text, number)) {
+      view Wrapper(Callback action(text, number)) {
         action CallCallback() {
           do Callback("first", 2)
         }
         render Text("Done")
       }
-      view Text(Value is text) {
+      view Text(Value text) {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -465,7 +465,7 @@ Describe('compiler: language lowering', () => {
         action Run() { do Save() }
         render Text("Ready")
       }
-      view Text(Value is text) { render inject ${tsFence} return null ${fence} }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
     `)
 
     Expect(compiled.code).toContain('TR.Alias(() => TR.Action')
@@ -480,15 +480,14 @@ Describe('compiler: language lowering', () => {
         use MyApp from ./
 
         test "Smoke" {
-          check "renders" {
+          test "renders" {
             run MyApp
             expect text "Hello"
-            press text "Add"
+            press "Add"
             enter "Draft" into label "Title"
             submit placeholder "Title"
             expect input placeholder "Title" value "Draft"
             back
-            data loading
             expect missing text "Loading"
           }
         }
@@ -523,9 +522,6 @@ Describe('compiler: language lowering', () => {
             ...('text' in step ? { text: step.text } : {}),
             ...('target' in step ? { target: step.target } : {}),
             ...('value' in step ? { value: step.value } : {}),
-            ...(step.kind === 'dataStatus'
-              ? { status: step.status, message: step.message }
-              : {}),
           })),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },
@@ -534,7 +530,6 @@ Describe('compiler: language lowering', () => {
           { kind: 'submit', selector: 'placeholder', target: 'Title' },
           { kind: 'expectInputValue', selector: 'placeholder', target: 'Title', value: 'Draft' },
           { kind: 'back' },
-          { kind: 'dataStatus', status: 'loading', message: '' },
           { kind: 'expect', selector: 'text', text: 'Loading' },
         ])
         Expect(plan.suites[0]?.source.range).toBeDefined()
@@ -544,7 +539,7 @@ Describe('compiler: language lowering', () => {
   })
 
   Test(
-    'compiles tag selectors, grouped expectations, selected rows, and bare data status to structured IR',
+    'compiles tag selectors, grouped expectations, and selected rows to structured IR',
     async () => {
       await withTaoFiles(
         'tao-structured-test-plan-',
@@ -553,7 +548,7 @@ Describe('compiler: language lowering', () => {
         use MyApp from ./
 
         test "Structured" {
-          check "scopes interactions" {
+          test "scopes interactions" {
             run MyApp
             expect {
               text "Ready"
@@ -569,7 +564,6 @@ Describe('compiler: language lowering', () => {
               expect text "Second"
               press #open
             }
-            data loading
           }
         }
       `,
@@ -613,8 +607,7 @@ Describe('compiler: language lowering', () => {
               { kind: 'press', selector: 'tag', text: 'open' },
             ],
           })
-          Expect(steps[5]).toEqual(Expect['objectContaining']({ kind: 'dataStatus', status: 'loading', message: '' }))
-          Expect('dataName' in steps[5]!).toBe(false)
+          Expect(steps).toHaveLength(5)
         },
       )
     },
@@ -625,7 +618,7 @@ function primitiveAppValueSpellings(): string {
   return `
     public type TestStack is nav with {
       Initial ui
-      implement inject nav ${tsFence} return TR.NavKind.Stack() ${fence}
+      nav TestNavImpl from ./TestNavImpl.ts
     }
     workspace type CompleteTestStack is TestStack with { Initial is Home }
     workspace nav HeadNavigation = CompleteTestStack { }

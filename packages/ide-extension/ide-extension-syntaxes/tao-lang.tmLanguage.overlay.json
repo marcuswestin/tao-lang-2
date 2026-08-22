@@ -1,30 +1,65 @@
 {
-  "_info": "Merged onto Langium's auto-generated tao-lang.tmLanguage.json. Adds TSX injection fence highlighting plus Tao string interpolation, numbers, identifiers, property access, operators, and punctuation.",
+  "_info": "Merged onto Langium's auto-generated tao-lang.tmLanguage.json. Adds TSX injection fence highlighting plus Tao string interpolation, numbers, keyed names, declaration names, tags and hex colors, identifiers, property access, operators, and punctuation.",
   "patterns": [
-    { "include": "#ts-fenced-block" },
-    { "include": "#string-template" },
-    { "include": "#tag-or-hex-color" },
-    { "include": "#number" },
-    { "include": "#property-access" },
-    { "include": "#render-name" },
-    { "include": "#pascal-identifier" },
-    { "include": "#identifier" },
-    { "include": "#operators" },
-    { "include": "#punctuation" }
+    {
+      "include": "#ts-fenced-block"
+    },
+    {
+      "include": "#string-template"
+    },
+    {
+      "include": "#keyed-name"
+    },
+    {
+      "include": "#hex-color"
+    },
+    {
+      "include": "#tag"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#declaration-name"
+    },
+    {
+      "include": "#property-access"
+    },
+    {
+      "include": "#render-name"
+    },
+    {
+      "include": "#pascal-identifier"
+    },
+    {
+      "include": "#identifier"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
   ],
   "repository": {
     "ts-fenced-block": {
       "name": "meta.embedded.block.ts.tao-lang",
       "begin": "```\\s*ts\\s*",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.codeblock.begin.tao-lang" }
+        "0": {
+          "name": "punctuation.definition.codeblock.begin.tao-lang"
+        }
       },
       "end": "```",
       "endCaptures": {
-        "0": { "name": "punctuation.definition.codeblock.end.tao-lang" }
+        "0": {
+          "name": "punctuation.definition.codeblock.end.tao-lang"
+        }
       },
       "patterns": [
-        { "include": "source.tsx" }
+        {
+          "include": "source.tsx"
+        }
       ]
     },
     "string-template": {
@@ -32,14 +67,22 @@
       "begin": "\"",
       "end": "\"",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.string.begin.tao-lang" }
+        "0": {
+          "name": "punctuation.definition.string.begin.tao-lang"
+        }
       },
       "endCaptures": {
-        "0": { "name": "punctuation.definition.string.end.tao-lang" }
+        "0": {
+          "name": "punctuation.definition.string.end.tao-lang"
+        }
       },
       "patterns": [
-        { "include": "#string-escape" },
-        { "include": "#string-interpolation" }
+        {
+          "include": "#string-escape"
+        },
+        {
+          "include": "#string-interpolation"
+        }
       ]
     },
     "string-escape": {
@@ -51,54 +94,92 @@
       "begin": "\\{",
       "end": "\\}",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.template-expression.begin.tao-lang" }
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.tao-lang"
+        }
       },
       "endCaptures": {
-        "0": { "name": "punctuation.definition.template-expression.end.tao-lang" }
+        "0": {
+          "name": "punctuation.definition.template-expression.end.tao-lang"
+        }
       },
       "patterns": [
-        { "include": "#interpolation-object-literal" },
-        { "include": "#number" },
-        { "include": "#string-template" },
-        { "include": "#property-access" },
-        { "include": "#pascal-identifier" },
-        { "include": "#identifier" },
-        { "include": "#operators" },
-        { "include": "#punctuation" }
+        {
+          "include": "#interpolation-object-literal"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#string-template"
+        },
+        {
+          "include": "#property-access"
+        },
+        {
+          "include": "#pascal-identifier"
+        },
+        {
+          "include": "#identifier"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
       ]
     },
     "interpolation-object-literal": {
       "begin": "\\{",
       "end": "\\}",
       "beginCaptures": {
-        "0": { "name": "punctuation.section.braces.begin.tao-lang" }
+        "0": {
+          "name": "punctuation.section.braces.begin.tao-lang"
+        }
       },
       "endCaptures": {
-        "0": { "name": "punctuation.section.braces.end.tao-lang" }
+        "0": {
+          "name": "punctuation.section.braces.end.tao-lang"
+        }
       },
       "patterns": [
-        { "include": "#interpolation-object-literal" },
-        { "include": "#number" },
-        { "include": "#string-template" },
-        { "include": "#property-access" },
-        { "include": "#pascal-identifier" },
-        { "include": "#identifier" },
-        { "include": "#operators" },
-        { "include": "#punctuation" }
+        {
+          "include": "#interpolation-object-literal"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#string-template"
+        },
+        {
+          "include": "#property-access"
+        },
+        {
+          "include": "#pascal-identifier"
+        },
+        {
+          "include": "#identifier"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#punctuation"
+        }
       ]
     },
     "number": {
       "name": "constant.numeric.tao-lang",
       "match": "\\b[0-9]+\\b"
     },
-    "tag-or-hex-color": {
-      "name": "constant.other.tag-or-hex-color.tao-lang",
-      "match": "#[A-Za-z0-9_]+"
-    },
     "render-name": {
       "match": "^\\s*([A-Z][A-Za-z0-9_]*)",
       "captures": {
-        "1": { "name": "entity.name.tag.tao-lang" }
+        "1": {
+          "name": "entity.name.tag.tao-lang"
+        }
       }
     },
     "pascal-identifier": {
@@ -112,8 +193,12 @@
     "property-access": {
       "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)",
       "captures": {
-        "1": { "name": "punctuation.accessor.tao-lang" },
-        "2": { "name": "variable.other.property.tao-lang" }
+        "1": {
+          "name": "punctuation.accessor.tao-lang"
+        },
+        "2": {
+          "name": "variable.other.property.tao-lang"
+        }
       }
     },
     "operators": {
@@ -123,6 +208,29 @@
     "punctuation": {
       "name": "punctuation.separator.tao-lang",
       "match": "[,:()\\[\\]{}]"
+    },
+    "keyed-name": {
+      "name": "entity.other.attribute-name.tao-lang",
+      "match": "@@?[A-Za-z_][A-Za-z0-9_]*"
+    },
+    "hex-color": {
+      "name": "constant.other.color.tao-lang",
+      "match": "#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\\b"
+    },
+    "tag": {
+      "name": "constant.other.tag.tao-lang",
+      "match": "#[A-Za-z0-9_]+"
+    },
+    "declaration-name": {
+      "match": "\\b(action|app|data|datasource|design|dialogue|frame|function|layout|let|nav|primitive|state|type|ui|view)\\s+([A-Z][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tao-lang"
+        },
+        "2": {
+          "name": "entity.name.function.tao-lang"
+        }
+      }
     }
   }
 }

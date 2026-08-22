@@ -35,10 +35,10 @@ export const NavigationCompiler = {
 
   /** SelectionActivateStatement reveals a keyed app item without presenting new content. */
   SelectionActivateStatement(statement: AST.SelectionActivateStatement): Compiled {
-    const app = resolveRef(statement.app)
+    const app = statement.app ? resolveRef(statement.app) : undefined
     return gen`TR.Navigation.Activate(
       _ViewProps.__tao,
-      ${appDefinitionReference(app)},
+      ${app ? appDefinitionReference(app) : 'undefined'},
       ${gen.jsLiteral(statement.key.slice(1))},
     )`
   },
@@ -50,11 +50,11 @@ export const NavigationCompiler = {
 
   /** ReplaceStatement replaces an app root through the selected app definition. */
   ReplaceStatement(statement: AST.ReplaceStatement): Compiled {
-    const app = resolveRef(statement.app)
+    const app = statement.app ? resolveRef(statement.app) : undefined
     return gen`TR.Navigation.Replace(
       _ViewProps.__tao,
       ${Compile.Expression(statement.navigator)},
-      ${appDefinitionReference(app)},
+      ${app ? appDefinitionReference(app) : 'undefined'},
     )`
   },
 

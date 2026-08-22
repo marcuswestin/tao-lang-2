@@ -3,7 +3,8 @@ import type { FormatHandlers } from '../formatting'
 /** DesignFormatter formats the minimal flat-token and named-bundle declaration surface. */
 export default {
   DesignDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'design')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('design')
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.members)
   },

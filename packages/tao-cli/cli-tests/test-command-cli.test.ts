@@ -17,7 +17,7 @@ Describe('tao test CLI', () => {
       const output = `${result.stdout}${result.stderr}`
 
       Expect(result.exitCode).not.toBe(0)
-      Expect(output).toContain("Test 'Empty' must declare at least one check.")
+      Expect(output).toContain("Test 'Empty' must start exactly one app with run.")
       Expect(output).toContain('Empty.test.tao')
       Expect(output).toContain('Validating Tao test files')
       Expect(output).not.toContain('Compiling apps')

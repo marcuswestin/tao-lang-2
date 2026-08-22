@@ -46,6 +46,10 @@ const BUN_SUITE_ARGS = new Map<string, readonly string[]>([
   ['compiler', ['--concurrent']],
   ['dev', ['--concurrent']],
   ['ide-extension', ['--concurrent']],
+  // runtime-toolchain tests spawn full tsc typechecks; under parallel suite load these exceed
+  // bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
+  // empty output.
+  ['runtime-toolchain', ['--timeout=60000']],
   ['validator', ['--concurrent']],
 ])
 const SUITE_PRIORITIES = new Map<string, number>([

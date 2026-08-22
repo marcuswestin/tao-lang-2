@@ -18,7 +18,7 @@ Describe('parser: selectable loops', () => {
         }
       }
       layout Stack() { }
-      view Text(Value is text) { }
+      view Text(Value text) { }
     `)
 
     const loop = AST.streamAllContents(parsed.entry.ast).find(AST.isForStatement)

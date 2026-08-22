@@ -8,7 +8,6 @@ import { completenessValidationMessages } from './completeness-validator'
 /** configurationValidationMessages declares self-hosted construct diagnostics. */
 export const configurationValidationMessages = {
   topLevel: (kind: string) => `${kind} declarations are only allowed as top-level declarations.`,
-  visible: (kind: string) => `${kind} declarations must declare package, workspace, or public visibility.`,
   duplicateProperty: (name: string) => `Configuration property '${name}' is declared more than once.`,
   duplicateKey: 'A configuration declaration can declare at most one @key item contract.',
   duplicateImplementation: 'A configuration declaration can bind exactly one implementation.',
@@ -16,7 +15,8 @@ export const configurationValidationMessages = {
   protocol: (name: string, expected: string) => `${name} implementation must use the '${expected}' protocol.`,
   sidecarLocation: (path: string) => `Configuration implementation sidecar '${path}' must be a sibling .ts file.`,
   sidecarMissing: (path: string) => `Configuration implementation sidecar '${path}' does not exist.`,
-  sidecarDefaultExport: (path: string) => `Configuration implementation sidecar '${path}' must have a default export.`,
+  sidecarNamedExport: (path: string, name: string) =>
+    `Configuration implementation sidecar '${path}' must export '${name}'.`,
   datasourceKey: 'Datasource declarations cannot declare keyed configuration items.',
   keyProperty: (name: string) =>
     `Key type is only valid for a property of a keyed nav declaration; '${name}' is invalid.`,
@@ -50,9 +50,6 @@ function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: Vali
   const kind = primitive === 'nav' ? 'Nav' : 'Datasource'
   if (!AST.isTaoFile(declaration.$container)) {
     ctx.error(configurationValidationMessages.topLevel(kind), declaration)
-  }
-  if (!declaration.visibility) {
-    ctx.error(configurationValidationMessages.visible(kind), declaration)
   }
 
   validateConfigurationProperties(declaration, ctx)
@@ -187,7 +184,7 @@ function validateSidecarImplementation(
   implementation: AST.ConfigurationImplementation,
   ctx: ValidationContext,
 ): void {
-  const sidecarPath = implementation.sidecarPath
+  const sidecarPath = implementation.path
   if (sidecarPath === undefined) {
     return
   }
@@ -204,6 +201,11 @@ function validateSidecarImplementation(
     ctx.error(configurationValidationMessages.sidecarLocation(sidecarPath), implementation)
     return
   }
+  // A synthetic in-memory document has no directory to read, so only the path-shape rules above
+  // apply to it. The compiler still asserts the sidecar exists before emitting.
+  if (!FS.existsSync(documentDirectory)) {
+    return
+  }
   if (!FS.existsSync(resolvedSidecarPath)) {
     ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
     return
@@ -216,8 +218,11 @@ function validateSidecarImplementation(
     ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
     return
   }
-  if (!hasDefaultExport(sidecarSource)) {
-    ctx.error(configurationValidationMessages.sidecarDefaultExport(sidecarPath), implementation)
+  if (!hasNamedExport(sidecarSource, implementation.exportName)) {
+    ctx.error(
+      configurationValidationMessages.sidecarNamedExport(sidecarPath, implementation.exportName),
+      implementation,
+    )
   }
 }
 
@@ -225,19 +230,19 @@ function isAbsolutePath(path: string): boolean {
   return path.startsWith('/') || path.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(path)
 }
 
-function hasDefaultExport(source: string): boolean {
+function hasNamedExport(source: string, name: string): boolean {
   const executableSource = withoutCommentsAndLiterals(source)
-  if (/(?:^|[;}\n])\s*export\s+default\s+(?!(?:interface|type)\b)/m.test(executableSource)) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const declared = new RegExp(
+    `(?:^|[;}\\n])\\s*export\\s+(?!type\\b)(?:async\\s+)?(?:const|let|var|function|class)\\s+${escaped}\\b`,
+    'm',
+  )
+  if (declared.test(executableSource)) {
     return true
   }
   for (const match of executableSource.matchAll(/(?:^|[;}\n])\s*export\s+(?!type\b)\{([^}]*)\}/gm)) {
-    const fullMatch = match[0]
-    const matchEnd = (match.index ?? 0) + fullMatch.length
-    if (/^\s*from\b/.test(executableSource.slice(matchEnd))) {
-      continue
-    }
     const exports = match[1]?.split(',') ?? []
-    if (exports.some(exported => !/^\s*type\b/.test(exported) && /\bas\s+default\s*$/.test(exported))) {
+    if (exports.some(exported => new RegExp(`(?:\\bas\\s+${escaped}|^\\s*${escaped})\\s*$`).test(exported))) {
       return true
     }
   }

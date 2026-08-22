@@ -1,15 +1,26 @@
+import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
+
+// `index` and `order by` state storage facts about the whole entity, so they trail the field list
+// as one group with a blank line above it.
+function isStorageTail(entry: AST.Node): boolean {
+  return AST.isDataIndex(entry) || AST.isDataDefaultOrder(entry)
+}
 
 export default {
   EntityDataDeclaration(f) {
-    f.oneSpaceAfter('file', 'package', 'workspace', 'public', 'data')
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('data')
     f.oneSpaceAround('/')
   },
 
   EntityDataDeclarationBlock(f) {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.entries)
-    f.lineSeparatedList(f.node.entries)
+    f.separateIndentedLines(
+      f.node.entries,
+      (previous, next) => isStorageTail(next) && !isStorageTail(previous) ? 2 : 1,
+    )
   },
 
   EntityDataField(f) {
@@ -21,8 +32,15 @@ export default {
     f.commaSpacedList()
   },
 
-  EntityDataFieldModifier(f) {
-    f.oneSpaceAfter('default', 'relation')
+  Trait(f) {
+    f.oneSpaceAfter('default', 'relation', 'required', 'touch', 'on')
+  },
+
+  TraitList(f) {
+    f.oneSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+    f.commaSpacedList()
   },
 
   DataIndex(f) {
@@ -81,10 +99,5 @@ export default {
 
   DataWriteField(f) {
     f.oneSpaceAfter(':')
-  },
-
-  DataStatusStep(f) {
-    f.oneSpaceAfter('data', 'error')
-    f.oneSpaceBefore('loading', 'ready', 'error')
   },
 } satisfies Partial<FormatHandlers>

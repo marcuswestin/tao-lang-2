@@ -43,7 +43,6 @@ async function runStep(
 ): Promise<void> {
   await Switch.kind<TestCompiler.Step, void | Promise<void>>(step, {
     back: back => backStep(back),
-    dataStatus: status => dataStatusStep(status),
     enter: enter => enterStep(screen, enter, resolveScope()),
     expect: expectation => assertExpectation(screen, expectation, resolveScope()),
     expectCheckboxState: expectation => assertCheckboxState(screen, expectation, resolveScope()),
@@ -58,12 +57,6 @@ async function runStep(
 async function backStep(_step: Extract<TestCompiler.Step, { kind: 'back' }>): Promise<void> {
   await act(async () => {
     TR.Navigation.Back()
-  })
-}
-
-function dataStatusStep(step: Extract<TestCompiler.Step, { kind: 'dataStatus' }>): void {
-  act(() => {
-    TR.Data.setTestStatus(step.status, step.message)
   })
 }
 
@@ -231,10 +224,6 @@ function formatStep(step: TestCompiler.Step): string {
   return Switch.kind<TestCompiler.Step, string>(step, {
     back: () => 'back',
     enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
-    dataStatus: status =>
-      status.status === 'error'
-        ? `data error "${status.message}"`
-        : `data ${status.status}`,
     expect: expectation =>
       expectation.missing
         ? `expect missing ${expectation.selector} "${expectation.text}"`

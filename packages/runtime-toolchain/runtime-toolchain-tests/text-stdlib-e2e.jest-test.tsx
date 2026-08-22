@@ -29,12 +29,12 @@ Describe('Tao text stdlib runtime', () => {
         }
 
         view Native(
-          Count is number,
-          BlankCount is number,
-          UnicodeCount is number,
-          Joined is text,
-          Singleton is text,
-          Empty is text
+          Count number,
+          BlankCount number,
+          UnicodeCount number,
+          Joined text,
+          Singleton text,
+          Empty text
         ) {
           render inject Count, BlankCount, UnicodeCount, Joined, Singleton, Empty \`\`\`ts
             return (

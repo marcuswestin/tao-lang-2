@@ -4,14 +4,14 @@ import { AST } from '../parser-src/parser'
 import { parseCodeWithErrors, testParseCode } from './test-parse'
 
 Describe('parser: typed values', () => {
-  Test('parses alias ascriptions, element-typed lists, optional fields, and typed injections', async () => {
+  Test('parses alias ascriptions, element-typed lists, fields?, and typed injections', async () => {
     const result = await testParseCode(`
       type Profile is {
         Name text,
-        optional Subtitle text,
+        Subtitle text?,
       }
       let Names is list of text = ["Ada", "Grace"]
-      function CountWords(Value is text) returns number {
+      function CountWords(Value text) returns number {
         return inject number Value \`\`\`ts
           return Value.length
         \`\`\`

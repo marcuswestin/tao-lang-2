@@ -9,7 +9,7 @@ Describe('Tao AST invocation resolution', () => {
       view MainView() {
         render Tile("Open", 1)
       }
-      view Tile(Title is text, Count is number) { }
+      view Tile(Title text, Count number) { }
     `)
     const mainView = findMainView(parseResult)
     const render = AST.blockStatementOf(mainView, 0)
@@ -27,7 +27,7 @@ Describe('Tao AST invocation resolution', () => {
       view MainView() {
         render Tile(1, "Open")
       }
-      view Tile(Title is text, Count is number) { }
+      view Tile(Title text, Count number) { }
     `)
     const mainView = findMainView(parseResult)
     const render = AST.blockStatementOf(mainView, 0)
@@ -43,13 +43,13 @@ Describe('Tao AST invocation resolution', () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
       view MainView() {
-        action Save(Count is number, Label is text) { }
+        action Save(Count number, Label text) { }
         action CallSave() {
           do Save("Open", 1)
         }
         render Text("Done")
       }
-      view Text(Value is text) { }
+      view Text(Value text) { }
     `)
     const mainView = findMainView(parseResult)
     const callSave = AST.blockStatementOf(mainView, {
@@ -70,13 +70,13 @@ Describe('Tao AST invocation resolution', () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }
       view MainView() {
-        action AddStep(Step is number) { }
+        action AddStep(Step number) { }
         action CallAddStep() {
           do AddStep("wrong")
         }
         render Text("Done")
       }
-      view Text(Value is text) { }
+      view Text(Value text) { }
     `)
     const mainView = findMainView(parseResult)
     const callAddStep = AST.blockStatementOf(mainView, {
@@ -106,7 +106,7 @@ Describe('Tao AST invocation resolution', () => {
         }
         render Text("Done")
       }
-      view Text(Value is text) { }
+      view Text(Value text) { }
     `)
     const mainView = findMainView(parseResult)
     const callSave = AST.blockStatementOf(mainView, {
@@ -130,7 +130,7 @@ Describe('Tao AST invocation resolution', () => {
       view MainView() {
         render Tile("Open")
       }
-      view Tile(Title is text, Count is number) { }
+      view Tile(Title text, Count number) { }
     `)
     const missingRender = AST.blockStatementOf(findMainView(missingParseResult), 0)
     Expect.Is(missingRender, AST.isRenderStatement)
@@ -141,7 +141,7 @@ Describe('Tao AST invocation resolution', () => {
       view MainView() {
         render Tile("Open", 1, "extra")
       }
-      view Tile(Title is text, Count is number) { }
+      view Tile(Title text, Count number) { }
     `)
     const extraRender = AST.blockStatementOf(findMainView(extraParseResult), 0)
     Expect.Is(extraRender, AST.isRenderStatement)
@@ -213,7 +213,7 @@ Describe('Tao AST invocation resolution', () => {
           return <>{Content}</>
         \`\`\`
       }
-      view Tile(Title is text, Count is number) {
+      view Tile(Title text, Count number) {
         render inject \`\`\`ts
           return null
         \`\`\`

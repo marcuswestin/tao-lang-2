@@ -1,0 +1,90 @@
+use SignedOutNav from @nav
+use Col, FormButton, Row, Text from @tao/ui
+
+// The screens the app shell mounts directly.
+workspace
+ui Settings() {
+   render Scroller() [screen] {
+      Col() [width max 720, centered, gap 10] {
+         Toolbar() {
+            Text("Settings") [title]
+         }
+         Card(Title: "Writing session") {
+            WordBadge(SessionGoal)
+            Text("Build { BuildStamp }") [body] // a typed injected value, not a render
+            @actions FormButton("Reset to signed out") {
+               #resetSignedOut
+               on press -> { replace SignedOutNav in app }
+}  }  }  }  }
+
+workspace
+ui SignedOut() {
+   render Col() [screen, centered] {
+      Text("Signed out") [title]
+}  }
+
+// `is` narrows, `=` binds. An ascribed binding keeps the `let` column while naming the type it must
+// satisfy; `ParagraphGoal` above demonstrates the equivalent inferred form without the constraint.
+let SessionGoal is number = 10
+
+// `inject <type>` produces a typed value outside render position. The declared Tao type is checked
+// against what the injected TypeScript returns.
+let BuildStamp = inject text ```ts
+   return process.env['TAO_BUILD'] ?? 'development'
+```
+
+// Content acceptance belongs to the kind. A `view` is a leaf and accepts none; a `layout` and a
+// `frame` accept caller content and choose where it lands with `@@content`.
+// The simplest case: a layout places caller content directly.
+layout Toolbar() {
+   render Row() [gap 8, content right] {
+      @@content
+}  }
+
+// A frame surrounds caller content with its own fixed siblings. Putting `@@content` inside an
+// explicit inner host means caller layout applies to the caller's children rather than to the
+// frame's own structure. `@actions` is a named slot with a default, so callers may omit it.
+frame Card(Title text) {
+   @actions = empty
+   render Col() [gap 8, pad 12, panel] {
+      Row() [content spread center] {
+         Text(Title) [title]
+         @actions
+      }
+      Col() [gap 6] {
+         @@content
+}  }  }
+
+// `TR`, `RN`, and `process` are always in scope inside injected TypeScript. The inject list names
+// every additional binding received from Tao: no `_ViewProps`, no `_tao`, and no compiler-prefixed
+// name of any kind. Each entry is `<Name> <value>`, and a bare name is shorthand for binding a
+// property under its own name. Literal values and ambient channels are ordinary expressions in
+// that position. This retires the implicit props bag across Tao, stdlib included.
+//
+// Three ambient channels are exposed, which is what a non-stdlib implementation needs to cover its
+// cases: `@@content` is caller content, `@@layout` is the layout resolved for this occurrence
+// including the parent direction it lays out against, and `@@tag` is the call site's test tag.
+// Everything else Tao propagates today — navigation, dialogue, app, caller inheritance — stays
+// private and travels on its own, so a hand-written implementation never touches it.
+view WordBadge(Total number) {
+   render inject Total, Suffix " words", Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Text({ children: [`${Total}${Suffix}`], layout: Layout, tag: Tag })
+   ```
+}
+
+// A TypeScript-backed container is a `layout` like any other, so it takes the content channel too.
+// The value of `render inject` is the view's root element: Tao wraps nothing around it. Applying
+// `Layout` and `Tag` is therefore the implementation's job, as is rendering `Content` exactly once,
+// and Tao checks none of it.
+//
+// `Content` is opaque: it may be placed anywhere, but it is not a collection to inspect, map over,
+// or take apart. The compiled shape of caller content is not a public interface.
+layout Scroller() {
+   render inject Content @@content, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.View({
+        children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
+        layout: Layout,
+        tag: Tag,
+      })
+   ```
+}

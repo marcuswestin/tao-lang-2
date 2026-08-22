@@ -15,12 +15,16 @@ ui MainView() {
       Text("Runtime stdlib smoke")
       Number(LaunchCount)
       Text("Media and status primitives")
+
       #informativeImage
       Image("./images/runtime-stdlib.png", Label: "Runtime stdlib illustration")
+
       #decorativeImage
       Image("./images/divider.png", Decorative: true)
+
       #loadingIndicator
       Spinner()
+
       #completionProgress
       Progress(Value: 2)
       Button("Tap me") {

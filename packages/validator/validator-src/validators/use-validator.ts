@@ -22,7 +22,8 @@ export const useValidationMessages = {
   duplicateVisibleDeclaration: (name: string, folderPath: string) =>
     `Visible declaration '${name}' is declared more than once in folder '${folderPath}'.`,
   missingImport: (name: string, importPath: string) => `'${name}' is not visible from '${importPath}'.`,
-  notVisible: (name: string) => `'${name}' is not visible from here; mark it as 'package', 'workspace', or 'public'.`,
+  notVisible: (name: string) =>
+    `'${name}' is not visible from here; mark it as 'folder', 'package', 'workspace', or 'public'.`,
   appImport: (name: string) => `App '${name}' cannot be imported.`,
 } as const
 

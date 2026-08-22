@@ -1,0 +1,72 @@
+// Writes that have to land together, and work the provider owns.
+
+transaction CreateTrip(Name text, Summary text, Begins date, Ends date) for Me returns Trip {
+   let Trip = create Trip { Name, Summary, Begins, Ends }
+   create Member in Trip.Members { Person: Me, Email: Me.Email, Name: Me.Name, Owner, Joined }
+   create Day in Trip.Days { Date: Begins }
+   update Me { CurrentTrip: Trip } // the Today tab follows this write
+   return Trip
+}
+
+transaction InviteTraveler(Trip, Address text, Role) for Me returns Member {
+   refuse when cannot create Member in Trip.Members { Role } "Only an owner or editor can invite travelers."
+   // `unique Trip, Email` would refuse this anyway; saying it here turns a store rejection into a sentence.
+   refuse when Trip.Members has any where Email is Address "This person is already on the trip."
+   return create Member in Trip.Members { Email: Address, Role }
+}
+
+transaction JoinWithInvite(Secret secret) for Me returns Trip {
+   let Seat = exactly one Members where InviteCode is Secret
+   refuse when Seat is missing "This invitation is no longer available."
+   refuse when Seat is Joined "This invitation has already been used."
+   refuse when Seat.Email is not Me.Email "This invitation was sent to someone else."
+
+   update Seat { Person: Me, Name: Me.Name, Joined }
+   update Me { CurrentTrip: Seat.Trip }
+   return Seat.Trip
+}
+
+transaction LeaveTrip(Member) for Me {
+   // `validate at least one Members where Role is Owner and is Joined` on Trip does the real work.
+   delete Member
+   if Me.CurrentTrip is Member.Trip { update Me { CurrentTrip: none } }
+}
+
+transaction ShareTrip(Trip) for Me returns SharedTrip {
+   update Trip { Shared }
+   return publish Trip as SharedTrip
+}
+
+transaction StopSharing(Trip) for Me {
+   // Rotating the code is the revocation.
+   update Trip { Private, ShareCode: new secret }
+}
+
+transaction DeleteMyAccount() for Me {
+   // Seats I have joined go; so do invitations still waiting on my address. The owner invariant stops a
+   // sole owner with the trip's own sentence.
+   delete Me.Seats
+   delete Members where Email is Me.Email and is Invited
+   delete Documents where PrivateTo is Me
+   delete Me
+}
+
+// -- Automations ----------------------------------------------------------------------------------------------
+//
+// "We should be leaving" reaches every traveler, provider-side, in the trip's own zone — not from the
+// device that set the time, and not only if that screen ran.
+
+automation StopSoon for Stop {
+   schedule when Stop.Starts {
+      none -> never
+      otherwise -> at (Stop.Day.Date at Stop.Starts in Stop.Day.Trip.HomeZone) - 30 minutes
+   }
+   while Stop is Planned
+   once per Stop.Starts
+   to TripFolk of Stop.Day.Trip
+   notify {
+      Title Stop.Day.Trip.Name
+      Body "{ Stop.Title } starts in 30 minutes"
+   }
+   opens StopLink(Stop)
+}
