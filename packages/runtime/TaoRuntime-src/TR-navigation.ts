@@ -241,7 +241,7 @@ export const NavigationControls = {
       throw new Error(`Cannot present ${presentable.name} as toast: Key must evaluate to text.`)
     }
     if (typeof duration !== 'number' || !Number.isFinite(duration) || duration < 0) {
-      throw new Error(`Cannot present ${presentable.name} as toast: Duration must be a finite non-negative number.`)
+      throw new Error(`Cannot present ${presentable.name} as toast: Duration must be a finite non-negative duration.`)
     }
     app.presentToast(key, duration, presentable, arguments_)
   },

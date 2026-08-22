@@ -12,6 +12,9 @@ primitive list
 
 primitive time
 
+// A duration is a unit value of the `duration` family; `.unit` builds and reads it (Decisions §2).
+primitive duration
+
 primitive action
 
 primitive design

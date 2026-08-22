@@ -3,6 +3,7 @@ import { valueMatchesKind } from './TR-data-definition'
 import { entityHandle } from './TR-data-entity'
 import type { StoredRow } from './TR-data-persistence'
 import RuntimeSwitch from './TR-switch'
+import { Clock } from './TR-units'
 
 export type Evaluable = {
   evaluate(): { jsValue: unknown }
@@ -36,7 +37,7 @@ export function rowValues(
     if (!Object.prototype.hasOwnProperty.call(field, 'defaultValue') && field.defaultNow !== true) {
       throw new Error(`Create of '${entityName}' is missing required field '${name}'.`)
     }
-    const value = field.defaultNow === true ? Date.now() : field.defaultValue
+    const value = field.defaultNow === true ? Clock.now() : field.defaultValue
     result[name] = storedFieldValue({ entityName, fieldName: name, field, value, schema })
   }
   return result

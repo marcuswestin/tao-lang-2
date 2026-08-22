@@ -175,13 +175,13 @@ Describe('TR.Navigation', () => {
         duration: TR.Value(Number.POSITIVE_INFINITY),
         key: TR.Value('saved'),
       })
-    ).toThrow('Duration must be a finite non-negative number')
+    ).toThrow('Duration must be a finite non-negative duration')
     Expect(() =>
       TR.Navigation.PresentToast(taoProps, saved, {}, {
         duration: TR.Value(-1),
         key: TR.Value('saved'),
       })
-    ).toThrow('Duration must be a finite non-negative number')
+    ).toThrow('Duration must be a finite non-negative duration')
     TR.Navigation.beginTest()
   })
 

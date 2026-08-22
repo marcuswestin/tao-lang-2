@@ -347,7 +347,7 @@ Describe('compiler: language lowering', () => {
       app ToastApp { Name "Toast" Navigator StackNav { Initial Home } }
       ui Home() { render Editor() }
       view Editor() {
-        action Save() { present Saved() as toast (Key: "document-saved", Duration: 3) }
+        action Save() { present Saved() as toast (Key: "document-saved", Duration: 3.s) }
         render Empty()
       }
       ui Saved() { render Empty() }
@@ -357,7 +357,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Navigation.PresentToast(')
     Expect(compiled.code).toContain('_ViewProps.__tao')
     Expect(compiled.code).toContain('key: TR.Value("document-saved")')
-    Expect(compiled.code).toContain('duration: TR.Value(3)')
+    Expect(compiled.code).toContain('duration: TR.Units.Build(TR.Value(3), 1000000000)')
     Expect(compiled.code).not.toContain('TR.Navigation.Target(')
   })
 

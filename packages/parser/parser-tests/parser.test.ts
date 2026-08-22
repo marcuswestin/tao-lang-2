@@ -517,7 +517,7 @@ Describe('parser: core language syntax', () => {
       }
       ui Home() {
         action Open() { present Detail() as overlay }
-        action Toast() { present Detail() as toast (Key: "saved", Duration: 3) }
+        action Toast() { present Detail() as toast (Key: "saved", Duration: 3.s) }
         action Activate() { present Notes@home }
         render inject \`\`\`ts return null \`\`\`
       }
@@ -542,8 +542,10 @@ Describe('parser: core language syntax', () => {
     Expect(toast.mode?.kind).toBe('toast')
     Expect.Is(toast.mode?.toast?.key, AST.isStringLiteral)
     Expect(toast.mode.toast.key.value).toBe('saved')
-    Expect.Is(toast.mode.toast.duration, AST.isNumberLiteral)
-    Expect(toast.mode.toast.duration.value).toBe(3)
+    Expect.Is(toast.mode.toast.duration, AST.isPostfixMemberAccess)
+    Expect(toast.mode.toast.duration.member).toBe('s')
+    Expect.Is(toast.mode.toast.duration.receiver, AST.isNumberLiteral)
+    Expect(toast.mode.toast.duration.receiver.value).toBe(3)
     const activation = AST.streamAllContents(home).find(AST.isSelectionActivateStatement)
     Expect.Is(activation, AST.isSelectionActivateStatement)
     Expect(activation.app?.ref).toBe(app)

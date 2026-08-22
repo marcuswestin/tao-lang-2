@@ -31,7 +31,7 @@ export const navigationValidationMessages = {
   toastContext: 'Toast presentation is allowed only inside a rendered declaration.',
   toastTarget: 'Toast presentation is app-level and does not accept `in`.',
   toastKeyType: (actual: string) => `Toast Key expects text, got ${actual}.`,
-  toastDurationType: (actual: string) => `Toast Duration expects number, got ${actual}.`,
+  toastDurationType: (actual: string) => `Toast Duration expects duration, got ${actual}.`,
   toastDurationNegative: 'Toast Duration cannot be negative.',
   activationContext: 'Selection activation is allowed only inside a ui declaration.',
   strictTargetDeclaration: (name: string) =>
@@ -331,7 +331,7 @@ function validatePresentationMode(
     const durationType = Type.ofExpression(toast.duration)
     if (
       durationType.kind !== 'unresolved'
-      && !Type.isAssignable(durationType, { kind: 'primitive', primitive: 'number' })
+      && !Type.isAssignable(durationType, { kind: 'primitive', primitive: 'duration' })
     ) {
       ctx.error(navigationValidationMessages.toastDurationType(Type.displayName(durationType)), toast.duration)
     }
@@ -387,9 +387,11 @@ function validatePresentationTarget(
 }
 
 function negativeNumberLiteral(expression: AST.Expression): boolean {
-  return AST.isUnaryExpression(expression)
-    && expression.operator === '-'
-    && AST.isNumberLiteral(expression.operand)
+  if (!AST.isUnaryExpression(expression) || expression.operator !== '-') {
+    return false
+  }
+  const operand = AST.isPostfixMemberAccess(expression.operand) ? expression.operand.receiver : expression.operand
+  return AST.isNumberLiteral(operand)
 }
 
 function reportBindingDiagnostic(

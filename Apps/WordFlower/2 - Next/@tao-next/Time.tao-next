@@ -1,26 +1,22 @@
 // Scratch contract for `@tao/time`; it graduates to `packages/stdlib/@tao/time/Time.tao` with its
 // sidecar `Time.ts` at absorption.
-//
-// `use time from @tao/time` binds the package under its lowercase service name, so `time.Interval`
-// is a call into it (Decisions §9; §11's `use auth from @tao/auth` is the same shape). A lowercase
-// name in a `use` line imports the package itself; capitalized names import declarations.
 
-// An interval is a reactive library value: `Value` is the time as of the latest tick, `Running`
-// whether it ticks, and `Start()` and `Stop()` control it. It starts when its owning view mounts
-// and stops when that view unmounts; `Start()` on a running interval and `Stop()` on a stopped one
-// do nothing.
+// A ticker is a reactive library value: `Value` is the time as of the latest tick, `Running`
+// whether it ticks, and `Start()` and `Stop()` control it. It starts when the view that holds it
+// mounts and stops when that view unmounts; `Start()` on a running ticker and `Stop()` on a stopped
+// one do nothing.
 public
-type Interval is item {
+type Ticker is {
    Value time
    Running boolean
    Start action()
    Stop action()
 }
 
-// `Interval(Every)` constructs an interval that ticks every `Every`. The lowering is the obvious
-// one — `setInterval` plus a state update per tick — reached through the expression-position `from`
+// `Interval(Every)` constructs a ticker that ticks every `Every`. The lowering is the obvious one —
+// an interval timer plus a state update per tick — reached through the expression-position `from`
 // (§15), which is the whole bridge: no clock grammar enters the language.
 public
-function Interval(Every duration) returns Interval {
+function Interval(Every duration) returns Ticker {
    return Interval(Every) from ./Time.ts
 }

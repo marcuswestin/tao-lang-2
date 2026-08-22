@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { type ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
@@ -27,6 +27,8 @@ const messages = {
   subjectCases: '`when` and `guard` subjects must be text, list, query, entity, or boolean values.',
   unaryBoolean: "Unary 'not' requires a boolean value.",
   unaryNumber: "Unary '-' requires a number value.",
+  dimensional: (left: string, operator: string, right: string) =>
+    `Operator '${operator}' does not apply to ${left} and ${right}.`,
 } as const
 
 /** FunctionalCoreValidator validates pure expressions, functions, and render control flow. */
@@ -37,9 +39,15 @@ export const FunctionalCoreValidator = {
     [AST.BinaryExpression.$type]: validateBinary,
     [AST.UnaryExpression.$type]: (expression, ctx) => {
       const operand = Type.ofExpression(expression.operand)
-      const expected = expression.operator === 'not' ? 'boolean' : 'number'
-      if (!isPrimitive(operand, expected)) {
-        ctx.error(expression.operator === 'not' ? messages.unaryBoolean : messages.unaryNumber, expression)
+      if (expression.operator === 'not') {
+        if (!isPrimitive(operand, 'boolean')) {
+          ctx.error(messages.unaryBoolean, expression)
+        }
+        return
+      }
+      // Negating a unit value is negating its magnitude, so the family passes through.
+      if (!isPrimitive(operand, 'number') && !Type.unitFamilyOf(operand)) {
+        ctx.error(messages.unaryNumber, expression)
       }
     },
     [AST.CaseTestExpression.$type]: validateCaseTestExpression,
@@ -104,12 +112,18 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
     return
   }
   if (['<', '<=', '>', '>='].includes(expression.operator)) {
+    if (comparesUnitValues(expression, left, right)) {
+      return
+    }
     if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
       ctx.error(messages.binaryComparable(expression.operator), expression)
     }
     return
   }
   if (expression.operator === '==' || expression.operator === '!=') {
+    if (comparesUnitValues(expression, left, right)) {
+      return
+    }
     if (!Type.isAssignable(left, right) && !Type.isAssignable(right, left)) {
       ctx.error(messages.binaryCompatible(expression.operator), expression)
     }
@@ -118,9 +132,53 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   if (expression.operator === '+' && isPrimitive(left, 'text') && isPrimitive(right, 'text')) {
     return
   }
+  // A unit value on either side makes this dimensional analysis rather than plain arithmetic.
+  if (Type.unitFamilyOf(left) || Type.unitFamilyOf(right) || isPrimitive(left, 'time') || isPrimitive(right, 'time')) {
+    if (!Type.dimensionalResult(left, expression.operator, right)) {
+      ctx.error(
+        messages.dimensional(dimensionName(left), expression.operator, dimensionName(right)),
+        expression,
+      )
+    }
+    return
+  }
   if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
     ctx.error(messages.binaryNumeric(expression.operator), expression)
   }
+}
+
+/**
+ * A dimensional mismatch is about families, so the message names the family rather than the nominal
+ * type a parameter or declaration happens to carry.
+ */
+function dimensionName(type: ASTUtils.TaoType): string {
+  return type.kind === 'primitive' && (Type.unitFamilyOf(type) || type.primitive === 'time')
+    ? type.primitive
+    : Type.displayName(type)
+}
+
+/**
+ * Two values of one family compare after normalization, and a unit value compares against the bare
+ * literal `0` because zero carries no unit. Every other pairing falls through to the ordinary rules.
+ */
+function comparesUnitValues(
+  expression: AST.BinaryExpression,
+  left: ASTUtils.TaoType,
+  right: ASTUtils.TaoType,
+): boolean {
+  const leftFamily = Type.unitFamilyOf(left)
+  const rightFamily = Type.unitFamilyOf(right)
+  if (leftFamily && leftFamily === rightFamily) {
+    return true
+  }
+  if (leftFamily && isZeroLiteral(expression.right)) {
+    return true
+  }
+  return rightFamily !== undefined && isZeroLiteral(expression.left)
+}
+
+function isZeroLiteral(expression: AST.Expression): boolean {
+  return AST.isNumberLiteral(expression) && expression.value === 0
 }
 
 type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardActionBranch | AST.GuardRenderBranch

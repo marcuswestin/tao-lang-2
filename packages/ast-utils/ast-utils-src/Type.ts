@@ -1,5 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import { type UnitFamily, Units } from './Units'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
 export type TaoType =
@@ -10,6 +11,7 @@ export type TaoType =
       | 'number'
       | 'boolean'
       | 'time'
+      | 'duration'
       | 'none'
       | 'design'
       | 'visual'
@@ -387,6 +389,29 @@ export class Type {
     })
   }
 
+  /** unitFamilyOf returns the unit family a resolved type belongs to, if it is a unit value. */
+  static unitFamilyOf(type: TaoType): UnitFamily | undefined {
+    return primitiveUnitFamily(type)
+  }
+
+  /**
+   * unitMemberType resolves one member read on a unit value: a unit of the family reads back as a
+   * number, and a declared reading has its own type.
+   */
+  static unitMemberType(family: UnitFamily, member: string): TaoType | undefined {
+    if (Units.readingOf(family, member)) {
+      return primitiveType('text')
+    }
+    return Units.ratioToBase(family, member) === undefined ? undefined : primitiveType('number')
+  }
+
+  /** dimensionalResult returns the type an operator yields over unit values, or none when illegal. */
+  static dimensionalResult(left: TaoType, operator: string, right: TaoType): TaoType | undefined {
+    return left.kind === 'unresolved' || right.kind === 'unresolved'
+      ? { kind: 'unresolved' }
+      : dimensionalResultType(left, operator, right)
+  }
+
   /** ofMemberAccess resolves the static type reached by a member access expression. */
   static ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
     return new TypeResolutionContext().ofMemberAccess(expression)
@@ -528,6 +553,58 @@ function inferredParameterNameFromNamedType(type: AST.NamedTypeReference): strin
 
 function isUnresolvedType(type: TaoType): type is Extract<TaoType, { kind: 'unresolved' }> {
   return type.kind === 'unresolved'
+}
+
+/** unitFamilyOfPrimitive returns the unit family a primitive type names, if it is one. */
+export function unitFamilyOfPrimitive(primitive: string): UnitFamily | undefined {
+  return Units.isFamily(primitive) ? primitive : undefined
+}
+
+/**
+ * Dimensional analysis (Decisions §2): a unit value added to or subtracted from its own family stays
+ * in it, scaling by a bare number stays in it, dividing two of a family yields a number, and the
+ * calendar pairs relate `time` and `duration`. Everything else is rejected by the validator.
+ */
+function dimensionalResultType(
+  left: TaoType,
+  operator: string,
+  right: TaoType,
+): TaoType | undefined {
+  const leftFamily = primitiveUnitFamily(left)
+  const rightFamily = primitiveUnitFamily(right)
+  const leftIsTime = isPrimitiveNamed(left, 'time')
+  const rightIsTime = isPrimitiveNamed(right, 'time')
+  if (leftIsTime && rightIsTime) {
+    return operator === '-' ? primitiveType('duration') : undefined
+  }
+  if (leftIsTime && rightFamily === 'duration') {
+    return operator === '+' || operator === '-' ? primitiveType('time') : undefined
+  }
+  if (!leftFamily && !rightFamily) {
+    return undefined
+  }
+  if (leftFamily && leftFamily === rightFamily) {
+    return operator === '+' || operator === '-'
+      ? primitiveType(leftFamily)
+      : operator === '/'
+      ? primitiveType('number')
+      : undefined
+  }
+  if (leftFamily && isPrimitiveNamed(right, 'number')) {
+    return operator === '*' || operator === '/' ? primitiveType(leftFamily) : undefined
+  }
+  if (rightFamily && isPrimitiveNamed(left, 'number')) {
+    return operator === '*' ? primitiveType(rightFamily) : undefined
+  }
+  return undefined
+}
+
+function primitiveUnitFamily(type: TaoType): UnitFamily | undefined {
+  return isPrimitiveKind(type) ? unitFamilyOfPrimitive(type.primitive) : undefined
+}
+
+function isPrimitiveNamed(type: TaoType, primitive: string): boolean {
+  return isPrimitiveKind(type) && type.primitive === primitive
 }
 
 function isPrimitiveKind(type: TaoType): type is Extract<TaoType, { kind: 'primitive' }> {
@@ -749,7 +826,7 @@ class TypeResolutionContext {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
       NowExpression: () => primitiveType('time'),
-      PostfixMemberAccess: () => unresolvedType(),
+      PostfixMemberAccess: access => this.postfixMemberAccessType(access),
       BooleanLiteral: () => primitiveType('boolean'),
       CaseTestExpression: () => primitiveType('boolean'),
       ConfigurationConstructor: value => Type.ofConfiguredValue(value),
@@ -773,9 +850,35 @@ class TypeResolutionContext {
       StringLiteral: () => primitiveType('text'),
       TypedInjectionExpression: injection => this.ofReference(injection.type),
       TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
-      UnaryExpression: unary => unary.operator === 'not' ? primitiveType('boolean') : primitiveType('number'),
+      UnaryExpression: unary => this.unaryExpressionType(unary),
       ValueReference: reference => this.ofValueDeclaration(reference.target.ref),
     })
+  }
+
+  /**
+   * A postfix member on a number constructs a unit value of that unit's family, and the same member
+   * on a value of the family reads it back as a number. A family may also expose named readings.
+   */
+  private postfixMemberAccessType(access: AST.PostfixMemberAccess): TaoType {
+    const receiver = this.ofExpression(access.receiver)
+    if (!isPrimitiveKind(receiver)) {
+      return unresolvedType()
+    }
+    if (receiver.primitive === 'number') {
+      const family = Units.familyOf(access.member)
+      return family ? primitiveType(family) : unresolvedType()
+    }
+    const family = unitFamilyOfPrimitive(receiver.primitive)
+    return family ? Type.unitMemberType(family, access.member) ?? unresolvedType() : unresolvedType()
+  }
+
+  /** Negating a unit value keeps its family; every other unary result is fixed by its operator. */
+  private unaryExpressionType(expression: AST.UnaryExpression): TaoType {
+    if (expression.operator === 'not') {
+      return primitiveType('boolean')
+    }
+    const operand = this.ofExpression(expression.operand)
+    return primitiveUnitFamily(operand) ? operand : primitiveType('number')
   }
 
   private binaryExpressionType(expression: AST.BinaryExpression): TaoType {
@@ -783,9 +886,11 @@ class TypeResolutionContext {
       return primitiveType('boolean')
     }
     const left = this.ofExpression(expression.left)
-    return expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text'
-      ? primitiveType('text')
-      : primitiveType('number')
+    if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text') {
+      return primitiveType('text')
+    }
+    const right = this.ofExpression(expression.right)
+    return dimensionalResultType(left, expression.operator, right) ?? primitiveType('number')
   }
 
   private whenExpressionType(expression: AST.WhenExpression): TaoType {
@@ -917,6 +1022,15 @@ class TypeResolutionContext {
         current = primitiveType('number')
         continue
       }
+      const family = primitiveUnitFamily(current)
+      if (family) {
+        const memberType = Type.unitMemberType(family, member)
+        if (!memberType) {
+          return unresolvedType()
+        }
+        current = memberType
+        continue
+      }
       if (current.kind === 'entity') {
         if (member === 'Id') {
           current = primitiveType('text')
@@ -1024,6 +1138,7 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     number: () => ({ kind: 'primitive', primitive: 'number' }),
     boolean: () => ({ kind: 'primitive', primitive: 'boolean' }),
     time: () => ({ kind: 'primitive', primitive: 'time' }),
+    duration: () => ({ kind: 'primitive', primitive: 'duration' }),
     action: () => actionType([]),
     none: () => ({ kind: 'primitive', primitive: 'none' }),
     list: () => ({ kind: 'list' }),

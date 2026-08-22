@@ -31,6 +31,9 @@ without erasing compatible coverage:
   `let Name is Type = Value`, primitive app/nav/datasource value heads, and the settled `with`
   construction-versus-value-derivation rules.
 - Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
+- Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
+  dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
+  feature, and package tests own the diagnostics.
 - All `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declarations use a
   parenthesized parameter list, including `()`.
 
@@ -97,6 +100,14 @@ Exercise view-local state, actions, and reactive rerendering.
 **Belongs here:** `state` declarations; named actions with parameters; `action()` -typed view parameters; inline `on press -> { }` handlers and named action references; `set`, compound `set`, and `do`; state-derived immutable bindings.
 
 **Does not belong here:** placement or type diagnostics; input, submit, and non-press events, which belong to Forms and Interaction MVP; control flow, data, navigation, or custom types.
+
+## Unit Values
+
+Exercise unit values (Decisions §2) through the one family the language registers.
+
+**Belongs here:** `.unit` on a number and on a unit value; canonical units and their long singular and plural aliases; equality after normalization; dimensional arithmetic — duration ± duration, duration × number, duration ÷ duration; the `.Clock` reading and its boundaries at an hour and at zero.
+
+**Does not belong here:** the ticking clock and live derivation, which WordFlower's focused writing session owns; unit diagnostics, which are package tests; families beyond `duration`, which are not registered until a feature forces one.
 
 ## Type System Tests
 

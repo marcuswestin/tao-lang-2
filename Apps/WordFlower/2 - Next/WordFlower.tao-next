@@ -32,20 +32,28 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   else is a compile error, except that a unit value compares against the bare literal `0`
 // - Calendar arithmetic (§2): `now` is an ordinary expression anywhere, not only a `time` default;
 //   `time − time → duration` and `time + duration → time`
-// - `duration` is a primitive type in the Prelude and a value head: `duration Long = 10.s`, a
-//   parameter `Length duration`, a `state` or `let` holding a duration
+// - `duration` is a primitive type in the Prelude, used wherever a type goes: a parameter
+//   `Length duration`, a `returns duration`, a `state` or `let` holding one
 // - `.Clock` reads a duration as clock text: whole seconds, `m:ss` under an hour and `h:mm:ss` from
 //   an hour up, and `0:00` for zero or negative
-// - `@tao/time` (§9): `use time from @tao/time` binds the package under its lowercase service name
-//   and `time.Interval(Every)` constructs a reactive interval that starts when its owning view
-//   mounts and stops when it unmounts. `Tick.Value` is the time as of the latest tick,
-//   `Tick.Running` whether it ticks, and `Tick.Stop()` and `Tick.Start()` control it. No clock
-//   grammar enters the language
-// - A `let` over an interval is a live derivation: `let Left = EndsAt - Tick.Value` recomputes on
+// - `@tao/time` (§9): `use Interval from @tao/time` imports its declarations by name, like every
+//   other package, and `Interval(Every)` constructs a reactive ticker that starts when the view
+//   holding it mounts and stops when that view unmounts. `Tick.Value` is the time as of the latest
+//   tick, `Tick.Running` whether it ticks, and `do Tick.Stop()` and `do Tick.Start()` control it.
+//   No clock grammar enters the language. This amends Decisions §9 and §11, which sketched a
+//   lowercase service import (`use time from @tao/time`, `time.Interval(1.s)`): a package binding
+//   would need a second `use` form and a package-as-namespace value, and the segment names of the
+//   packages that already exist — `ui`, `nav`, `data` — are Tao keywords, so the shape does not
+//   generalize to the packages it would first apply to
+// - A `let` over a ticker is a live derivation: `let Left = EndsAt - Tick.Value` recomputes on
 //   every tick, and every display that reads it re-renders
-// - `<expression> from <path>` (§15) in expression position: the expression's free names resolve to
-//   named exports of the sidecar, which is how `@tao/time` binds its runtime. `@tao/text` migrates
-//   off its `inject … ```ts` fences in the same step, and the inline fence retires from bodies
+// - `<expression> from <path>` (§15) in expression position, binding loosest: the expression is a
+//   name or a call to one, that head name is the sidecar's named export, and any arguments are
+//   ordinary Tao expressions. An arbitrary expression to the left would leave every name in it
+//   ambiguous between Tao scope and module scope; §15's own examples all name the export as the
+//   head. This is how `@tao/time` binds its runtime. Value-position `inject <type> … ```ts` retires
+//   with it — `@tao/text` and `BuildStamp` migrate — while `render inject` stays as the view
+//   authoring mode
 // - The compact two-outcome `when <boolean> <Yes> / not <No>` (§8) is the value form a display of
 //   `Left` needs: `when Left > 0 Left.Clock / not "Time's up"`
 // - A toast's `Duration` is a duration: `present … as toast (Key: "…", Duration: 3.s)`

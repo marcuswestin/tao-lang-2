@@ -24,6 +24,7 @@ import { projectValidationChecks, validateProjectFile } from './validators/proje
 import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
 import { typeValidationChecks } from './validators/types-validator'
+import { unitsValidationChecks } from './validators/units-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './validators/use-validator'
 import { ViewsValidator } from './validators/views-validator'
 
@@ -47,6 +48,7 @@ const nodeValidationChecks = NodeValidation.compile(
     preludeValidationChecks,
     DialogueValidator.checks,
     navigationValidationChecks,
+    unitsValidationChecks,
     configuredValueValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
 )

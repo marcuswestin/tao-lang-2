@@ -338,7 +338,7 @@ Describe('validator: declaration contracts', () => {
   const toastCases: ReadonlyArray<readonly [name: string, statement: string, message: string]> = [
     [
       'non-text toast keys',
-      'present Saved() as toast (Key: 3, Duration: 1)',
+      'present Saved() as toast (Key: 3, Duration: 1.s)',
       navigationValidationMessages.toastKeyType('number'),
     ],
     [
@@ -348,12 +348,12 @@ Describe('validator: declaration contracts', () => {
     ],
     [
       'negative toast durations',
-      'present Saved() as toast (Key: "saved", Duration: -1)',
+      'present Saved() as toast (Key: "saved", Duration: -1.s)',
       navigationValidationMessages.toastDurationNegative,
     ],
     [
       'explicit toast targets',
-      'present Saved() as toast (Key: "saved", Duration: 1) in Target',
+      'present Saved() as toast (Key: "saved", Duration: 1.s) in Target',
       navigationValidationMessages.toastTarget,
     ],
   ]

@@ -110,6 +110,7 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         none: () => gen`null`,
         text: () => gen`string`,
         time: () => gen`number`,
+        duration: () => gen`number`,
         design: () => gen`any`,
         visual: () => gen`import('react').ReactNode`,
         presentable: () => gen`TR.Presentable`,

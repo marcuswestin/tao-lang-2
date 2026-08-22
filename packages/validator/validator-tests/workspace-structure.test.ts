@@ -95,6 +95,7 @@ Describe('validator: workspace structure', () => {
         'boolean',
         'list',
         'time',
+        'duration',
         'action',
         'design',
         'visual',

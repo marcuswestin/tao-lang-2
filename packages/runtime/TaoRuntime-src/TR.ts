@@ -35,6 +35,7 @@ import {
 import { SelectableRow } from './TR-selectable-row'
 import RuntimeSwitch from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
+import { Clock, createTicker, isTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
 
 /** TR exposes the generated-code runtime API used by generated apps. */
@@ -274,13 +275,38 @@ class TR {
     state.set(new RuntimeValue(!state.evaluate().jsValue))
   }
 
-  /** State creates view-local reactive Tao state. */
+  /**
+   * State creates view-local reactive Tao state. A library value that changes on its own — an
+   * interval, today — is held like any other value, and the holder re-renders while it is mounted,
+   * which is what gives the value the holder's lifetime.
+   */
   static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
     const [jsValue, setJsValue] = React.useState<T>(() => initialValue().evaluate().jsValue)
+    const [, onSelfDrivenChange] = React.useReducer((count: number) => count + 1, 0)
+    React.useEffect(
+      () => isTicker(jsValue) ? jsValue.subscribe(onSelfDrivenChange) : undefined,
+      [jsValue, onSelfDrivenChange],
+    )
     const jsValueRef = React.useRef(jsValue)
     jsValueRef.current = jsValue
     return new RuntimeState(jsValueRef, setJsValue)
   }
+
+  /** now reads the current time from the Tao clock, which a check holds still and advances. */
+  static now(): number {
+    return Clock.now()
+  }
+
+  /** Units converts unit values, relates them to `time`, and renders a family's named readings. */
+  static Units = makeUnitControls(<T>(jsValue: T) => new RuntimeValue(jsValue))
+
+  /** Interval constructs the reactive ticker behind `@tao/time`. */
+  static Interval(everyNanoseconds: number): TaoTicker {
+    return createTicker(everyNanoseconds)
+  }
+
+  /** Clock exposes the runtime clock a check holds, advances, and releases. */
+  static Clock = Clock
 
   /** Use binds an imported module declaration into a file scope as a lazy, live binding. */
   static Use(scope: TR.Scope, name: string, getValue: () => unknown): void {
@@ -485,6 +511,8 @@ namespace TR {
   export type State<T> = RuntimeState<T>
   /** Value declares a runtime Tao value wrapper. */
   export type Value<T> = RuntimeValue<T>
+  /** Ticker declares the reactive value `@tao/time`'s `Interval` returns. */
+  export type Ticker = TaoTicker
   /** UnaryOperator declares the shipped Tao unary operators. */
   export type UnaryOperator = '-' | 'not'
   /** Scope declares generated Tao runtime declaration storage. */

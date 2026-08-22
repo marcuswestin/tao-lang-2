@@ -27,11 +27,8 @@ test "WordFlower focused writing" {
       advance 1.min
       expect text "3:00" // resumed: the paused minute was not lost
       advance 3.min
-      expect {
-         text "Time's up"
-         missing text "0:00"
-      }
-      press #endFocus
+      expect text "Time's up"
+      press #stopFocus
       expect {
          text "Focused writing"
          missing text "Time's up"

@@ -1,70 +1,64 @@
-use time from @tao/time
+use Interval from @tao/time
 use Col, FormButton, Text from @tao/ui
 
 // A focused writing session: pick a length, write until the clock runs out, pause and resume, or
-// stop early. The clock is a library value — `time.Interval` ticks every second from mount to
-// unmount — and `Left` is an ordinary derivation that recomputes on every tick.
+// stop early. The clock is a library value — `Interval` ticks every second from mount to unmount —
+// and `Left` is an ordinary derivation that recomputes on every tick.
 folder
 view FocusSession() {
-   state Tick = time.Interval(1.s)
-   state Focusing = no
+   state Tick = Interval(1.s)
    state EndsAt = now
+   state Focusing = false
    let Left = EndsAt - Tick.Value
    action Start(Length duration) {
       set EndsAt = now + Length
-      set Focusing = yes
-      Tick.Start()
+      set Focusing = true
+      do Tick.Start()
    }
    // Pausing stops the tick, which freezes `Left`; resuming re-anchors the deadline to the frozen
    // remainder, so paused time is not lost.
    action Pause() {
-      Tick.Stop()
+      do Tick.Stop()
    }
    action Resume() {
       set EndsAt = now + Left
-      Tick.Start()
+      do Tick.Start()
    }
    action Finish() {
-      set Focusing = no
+      set Focusing = false
    }
    render Col() [gap 6] {
       when Focusing {
-         yes -> {
+         true -> {
             Text(when Left > 0 Left.Clock / not "Time's up") [title]
-            when Left > 0 {
-               yes -> {
-                  when Tick.Running {
-                     yes -> {
-                        #pauseFocus
-                        FormButton("Pause") {
-                           on press Pause
-                        }
-                     }
-                     no -> {
-                        #resumeFocus
-                        FormButton("Resume") {
-                           on press Resume
-                  }  }  }
-
-                  #stopFocus
-                  FormButton("Stop") {
-                     on press Finish
+            when Tick.Running {
+               true -> {
+                  #pauseFocus
+                  FormButton("Pause") {
+                     on press Pause
                   }
                }
-               no -> {
-                  #endFocus
-                  FormButton("Back to writing") {
-                     on press Finish
-         }  }  }  }
-         no -> {
+               otherwise -> {
+                  #resumeFocus
+                  FormButton("Resume") {
+                     on press Resume
+               }  }
+            }
+
+            #stopFocus
+            FormButton("Stop") {
+               on press Finish
+            }
+         }
+         otherwise -> {
             Text("Focused writing") [title]
 
             #focusFive
             FormButton("Focus for 5 min") {
-               on press -> { Start(5.min) }
+               on press -> { do Start(5.min) }
             }
 
             #focusTwentyFive
             FormButton("Focus for 25 min") {
-               on press -> { Start(25.min) }
-}  }  }  }  }
+               on press -> { do Start(25.min) }
+}  }  }  }

@@ -12,8 +12,9 @@ import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
 import { Type } from './Type'
+import { Units } from './Units'
 
-export { Packages, Type }
+export { Packages, Type, Units }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
@@ -52,4 +53,6 @@ export namespace ASTUtils {
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
   export type TaoType = import('./Type').TaoType
+  export type UnitFamily = import('./Units').UnitFamily
+  export type UnitReading = import('./Units').UnitReading
 }

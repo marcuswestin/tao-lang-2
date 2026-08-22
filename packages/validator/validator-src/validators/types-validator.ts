@@ -408,6 +408,17 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       typeName = 'number'
       continue
     }
+    const unitFamily = Type.unitFamilyOf(current)
+    if (unitFamily) {
+      const memberType = Type.unitMemberType(unitFamily, member)
+      if (!memberType) {
+        ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
+        return
+      }
+      current = memberType
+      typeName = Type.displayName(current)
+      continue
+    }
     if (current.kind === 'entity') {
       if (member === 'Id') {
         current = { kind: 'primitive', primitive: 'text' }
