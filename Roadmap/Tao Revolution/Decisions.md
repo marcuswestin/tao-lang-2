@@ -1186,10 +1186,10 @@ TextField(Value: bind New.Title) { on change -> { } }
   reactive, and ordinary `let` derives readings from it:
 
 ```swift
-use time from @tao/time
+use Interval from @tao/time
 
 file view TimerBar(Timer) {
-   state Tick = time.Interval(1.s)              // starts on mount, stops when the view unmounts
+   state Tick = Interval(1.s)                    // starts on mount, stops when the view unmounts
    let Left = Timer.EndsAt - Tick.Value          // Tick.Value: the time as of the latest tick
 
    render Row [card, content spread center] {
@@ -1203,6 +1203,16 @@ file view TimerBar(Timer) {
 one — `setInterval` plus a state update per tick — and because `Interval` is a library value
 bridged like any other (§15's `from` mechanism inside `@tao/time`), the language carries no timer
 grammar at all. One interval serves several displays through derived `let`s.
+
+**Amended by the focused writing tranche** (implemented; `Roadmap/Focused writing tranche/`). This
+section and §11's `use auth from @tao/auth` originally imported a stdlib package under a lowercase
+service name and reached its declarations through it (`time.Interval(1.s)`, `auth.Account`). A
+package binds nothing of its own: `use X from @pkg` imports declarations by name, as every other
+import in the language does, so the spelling is `use Interval from @tao/time` and `Interval(1.s)`.
+Implementing the service form would have needed a second `use` form plus a package-as-namespace
+value kind, and the segment names of the packages that already exist — `ui`, `nav`, `data` — are Tao
+keywords, so the shape does not generalize to the packages it would first apply to. A package that
+wants a namespace declares a type or a value and exports it under a name.
 
 - **`loop` repeats content over a collection with the singular row name**:
 
@@ -1369,8 +1379,8 @@ A provider _type_ that needs a TypeScript implementation names it with an ordina
   from everywhere else in this document:
 
 ```swift
-use auth from @tao/auth
-let Me = auth.Account            // module-visible; every screen reads Me, tests sign accounts in
+use Account from @tao/auth
+let Me = Account                 // module-visible; every screen reads Me, tests sign accounts in
 ```
 
 The live root then gates on it as ordinary data: `Navigator when Me { none -> WelcomeNav,

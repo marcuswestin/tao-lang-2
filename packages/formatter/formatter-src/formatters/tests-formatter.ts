@@ -93,4 +93,9 @@ export default {
 
   /** BackTestStep has no operands. */
   BackTestStep() {},
+
+  /** AdvanceStep spaces its duration after the keyword. */
+  AdvanceStep(f) {
+    f.oneSpaceAfter('advance')
+  },
 } satisfies Partial<FormatHandlers>

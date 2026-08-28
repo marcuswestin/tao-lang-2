@@ -27,11 +27,9 @@ ui SignedOut() {
 // satisfy; `ParagraphGoal` above demonstrates the equivalent inferred form without the constraint.
 let SessionGoal is number = 10
 
-// `inject <type>` produces a typed value outside render position. The declared Tao type is checked
-// against what the injected TypeScript returns.
-let BuildStamp = inject text ```ts
-   return process.env['TAO_BUILD'] ?? 'development'
-```
+// `<expression> from <path>` reaches TypeScript from any expression position. The names in the
+// expression are the sidecar's named exports, and the ascribed type is the contract they must meet.
+let BuildStamp is text = BuildStamp() from ./Shell.ts
 
 // Content acceptance belongs to the kind. A `view` is a leaf and accepts none; a `layout` and a
 // `frame` accept caller content and choose where it lands with `@@content`.

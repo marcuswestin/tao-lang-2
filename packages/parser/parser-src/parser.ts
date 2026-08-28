@@ -270,6 +270,7 @@ function diagnosticsForDocuments(documents: readonly AST.Document[]): Diagnostic
     ...document.parseResult.parserErrors.map(error => parserDiagnostic(error, document)),
     ...document.references
       .filter(reference => reference.error !== undefined)
+      .filter(reference => !bridgesToATypeScriptExport(reference))
       .map(reference => referenceDiagnostic(reference, document)),
   ]))
 }
@@ -292,6 +293,24 @@ function parserDiagnostic(error: ParserError, document?: AST.Document): Diagnost
     severity: 'error',
     source: 'parser',
   }
+}
+
+/**
+ * The head name of a bridged expression names a TypeScript export (Decisions §15), so it is not
+ * expected to resolve in Tao scope and an unresolved reference there is not a linking error. Its
+ * arguments are ordinary Tao values and still have to resolve, so only the head is exempt.
+ */
+function bridgesToATypeScriptExport(reference: AST.Document['references'][number]): boolean {
+  const info = reference.error?.info
+  const container = info?.container
+  if (!container || !AST.isFromExpression(container.$container)) {
+    return false
+  }
+  const bridged = container.$container.expression
+  if (AST.isFunctionCallExpression(container)) {
+    return container === bridged && info.property === 'function'
+  }
+  return AST.isValueReference(container) && container === bridged && info.property === 'target'
 }
 
 function referenceDiagnostic(reference: AST.Document['references'][number], document: AST.Document): Diagnostic {

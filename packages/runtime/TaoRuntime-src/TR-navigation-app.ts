@@ -17,10 +17,11 @@ import {
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
+import { Clock } from './TR-units'
 
 type ToastEntry = PresentableEntry & {
   key: string
-  timeout: ReturnType<typeof setTimeout>
+  cancelExpiry: () => void
 }
 
 /** RuntimeAppDefinition lazily resolves app nav factories after generated module initialization. */
@@ -78,21 +79,24 @@ export class RuntimeAppDefinition implements Subscription {
 
   presentToast(
     key: string,
-    durationSeconds: number,
+    durationNanoseconds: number,
     presentable: TaoPresentable,
     arguments_: TaoNavigationArguments,
   ): void {
     const existing = this.toastEntries.get(key)
     if (existing) {
-      clearTimeout(existing.timeout)
+      existing.cancelExpiry()
     }
     const entry: ToastEntry = {
       arguments: { ...arguments_ },
       instanceId: this.nextToastEntryId++,
       key,
       presentable,
-      timeout: setTimeout(() => this.expireToast(key, entry), durationSeconds * 1000),
+      cancelExpiry: () => {},
     }
+    // A toast expires on the Tao clock, so a check can advance to its expiry the same way it
+    // advances a ticker.
+    entry.cancelExpiry = Clock.after(durationNanoseconds / 1e6, () => this.expireToast(key, entry))
     this.toastEntries.set(key, entry)
     this.emit()
   }
@@ -127,7 +131,7 @@ export class RuntimeAppDefinition implements Subscription {
   reset(): void {
     this.replacement = undefined
     for (const entry of this.toastEntries.values()) {
-      clearTimeout(entry.timeout)
+      entry.cancelExpiry()
     }
     this.toastEntries.clear()
     this.navigatorValue?.reset()

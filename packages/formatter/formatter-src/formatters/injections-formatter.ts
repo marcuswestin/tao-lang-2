@@ -8,13 +8,6 @@ export default {
     f.oneSpaceBeforeProperty('tsCodeBlock')
   },
 
-  /** TypedInjectionExpression separates the result type, arguments, and TS fence. */
-  TypedInjectionExpression(f) {
-    f.oneSpaceAfter('inject')
-    f.oneSpaceBetweenProperties('type', 'argumentList')
-    f.oneSpaceBeforeProperty('tsCodeBlock')
-  },
-
   /** InjectionArgumentList formats comma-separated injection arguments. */
   InjectionArgumentList(f) {
     f.commaSpacedList()

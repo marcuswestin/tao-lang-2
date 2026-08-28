@@ -116,12 +116,22 @@ export default {
     f.oneSpaceAfter('not')
   },
 
-  /** WhenExpression puts each branch and its required fallback on an indented line. */
+  /**
+   * The block form puts each branch and its required fallback on an indented line; the compact form
+   * is a value and stays on one, with its separator spaced like an operator.
+   */
   WhenExpression(f) {
     f.oneSpaceAfter('when')
+    if (f.node.positive) {
+      f.oneSpaceBeforeProperty('positive')
+      f.oneSpaceAround('/')
+      f.oneSpaceBeforeProperty('negative')
+      return
+    }
+    const branches = [...f.node.branches, ...(f.node.otherwise ? [f.node.otherwise] : [])]
     f.oneSpaceBefore('{')
-    f.indentedBraceBlock([...f.node.branches, f.node.otherwise])
-    f.lineSeparatedList([...f.node.branches, f.node.otherwise])
+    f.indentedBraceBlock(branches)
+    f.lineSeparatedList(branches)
   },
 
   /** WhenBranch spaces a value branch around its arrow. */
@@ -170,6 +180,11 @@ export default {
   /** ItemProperty formats an optional owner-field label. */
   ItemProperty(f) {
     f.oneSpaceAfter(':')
+  },
+
+  /** FromExpression keeps one space around `from`, matching a `use` line's provenance clause. */
+  FromExpression(f) {
+    f.oneSpaceAround('from')
   },
 
   /** MemberAccessExpression has no whitespace around member dots. */

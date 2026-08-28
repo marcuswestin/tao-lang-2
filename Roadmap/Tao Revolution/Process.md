@@ -75,6 +75,10 @@ tranches as they are reached.
   authority-cluster scope question. The result plus Skillet's future milestone defines v1-done.
 - **Step 5 — the tranche loop.** Cut tranches from the Current ↔ MVP gap, one at a time, until
   Current ≡ MVP. Then expand to the Tao Future apps and continue toward Revolution the same way.
+  The focused writing tranche is the first of these and is closed
+  (`Roadmap/Archive/Focused writing tranche/`); it ran ahead of steps 2–4 because its forcing
+  feature was already named in MVP scope, and its reconcile pass folded the session into both later
+  tiers.
 
 ## Cutting a tranche
 

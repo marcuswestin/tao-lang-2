@@ -10,10 +10,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // The contract is now a DIRECTORY. Every mapped source and test file here is part of it:
 //
 //   WordFlower       this entry file — project, apps, navigation, local datasource, variants, shell
-//   Data             the data catalog
 //   Design           the minimal design system — implemented last, see that file
-//   ui/              the workspace and document areas, with their behavior journeys
-//   nav/             the deterministic navigation harness, with its behavior journey
+//   @ui/             the workspace, document, and focus-session areas
+//   @nav/            the navigation values and the deterministic harness navigator
+//   @data/           the data catalog
 //   *.test           the behavior journeys, each beside what it exercises
 //
 // Declarations carry the narrowest visibility that works. A file-private declaration carries no
@@ -22,8 +22,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // those keep an explicit `use`. `ui` and `nav` are separate folders, so what they publish across a
 // boundary is `workspace` and is imported by path.
 //
-// The tranche's scratch Prelude and `@tao/text` contracts graduated to `packages/stdlib/@tao` and
-// `packages/stdlib/@tao/text` respectively; their `@tao-next/` copies are intentionally absent at
+// Each tranche's scratch contracts graduate before its boundary: the Prelude and `@tao/text` to
+// `packages/stdlib/@tao` and
+// `packages/stdlib/@tao/text`, and this tranche's `duration` primitive and `@tao/time` to the
+// Prelude and `packages/stdlib/@tao/time`. Their `@tao-next/` copies are intentionally absent at
 // this absorbed boundary.
 //
 // The absorption gates must compare `1 - Current` and `2 - Next` as whole directories: the same
@@ -106,7 +108,6 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - `type Name is one of Cases` declares a nominal type in the ordinary type system, and each case is a
 //   value of that type. One-case enums are valid; `ConfirmResult` deliberately uses `none` for
 //   dismissal rather than declaring a second case
-// - `inject <type>` produces a typed value outside render position
 // - `optional <Name> <type>` declares an item field that may be absent
 // - `expect checkbox <selector> checked|unchecked` joins the test vocabulary, since a two-state
 //   control cannot be asserted through visible text
@@ -115,6 +116,53 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `TagOrHexColor: /#[A-Za-z0-9_]+/`. AST context distinguishes tag and design-token positions.
 //   The validator requires tags to match `#[A-Za-z_][A-Za-z0-9_]*` and design color values to match
 //   CSS hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively
+//
+// FOCUSED WRITING. This tranche gives WordFlower a focused writing session — pick a length, write
+// until the clock runs out, pause and resume, or stop early — and with it the first capability cut
+// from the Current ↔ MVP gap: unit values (Decisions §2) and the ticking clock (§9), reached
+// through the expression-position TypeScript boundary (§15) and proved under a controllable test
+// clock (§16).
+//
+// Earlier tranches' decisions are recorded in `Spec/` and `Roadmap/Tao Revolution/Decisions.md`;
+// this header lists only what this tranche decides:
+// - Unit values (§2): `.unit` on a number constructs a typed value and `.unit` on a typed value
+//   reads it back as a number in that unit, so `10.min`, `1.s`, and `220.ms` construct durations
+//   and `Wait.s` reads one. A value belongs to one family with a canonical base and fixed ratios.
+//   The mechanism is generic; `duration` — `ms`, `s`, `min`, `h`, `d`, `wk`, with §2's long singular
+//   and plural aliases — is the only family this tranche registers. Equality normalizes
+//   (`60.s == 1.min`); a cross-family read is a compile error; arithmetic is dimensional: duration
+//   ± duration → duration, duration × number → duration, duration ÷ duration → number, and anything
+//   else is a compile error, except that a unit value compares against the bare literal `0`
+// - Calendar arithmetic (§2): `now` is an ordinary expression anywhere, not only a `time` default;
+//   `time − time → duration` and `time + duration → time`
+// - `duration` is a primitive type in the Prelude, used wherever a type goes: a parameter
+//   `Length duration`, a `returns duration`, a `state` or `let` holding one
+// - `.Clock` reads a duration as clock text: whole seconds, `m:ss` under an hour and `h:mm:ss` from
+//   an hour up, and `0:00` for zero or negative
+// - `@tao/time` (§9): `use Interval from @tao/time` imports its declarations by name, like every
+//   other package, and `Interval(Every)` constructs a reactive ticker that starts when the view
+//   holding it mounts and stops when that view unmounts. `Tick.Value` is the time as of the latest
+//   tick, `Tick.Running` whether it ticks, and `do Tick.Stop()` and `do Tick.Start()` control it.
+//   No clock grammar enters the language. This amends Decisions §9 and §11, which sketched a
+//   lowercase service import (`use time from @tao/time`, `time.Interval(1.s)`): a package binding
+//   would need a second `use` form and a package-as-namespace value, and the segment names of the
+//   packages that already exist — `ui`, `nav`, `data` — are Tao keywords, so the shape does not
+//   generalize to the packages it would first apply to
+// - A `let` over a ticker is a live derivation: `let Left = EndsAt - Tick.Value` recomputes on
+//   every tick, and every display that reads it re-renders
+// - `<expression> from <path>` (§15) in expression position, binding loosest: the expression is a
+//   name or a call to one, that head name is the sidecar's named export, and any arguments are
+//   ordinary Tao expressions. An arbitrary expression to the left would leave every name in it
+//   ambiguous between Tao scope and module scope; §15's own examples all name the export as the
+//   head. This is how `@tao/time` binds its runtime. Value-position `inject <type> … ```ts` retires
+//   with it — `@tao/text` and `BuildStamp` migrate — while `render inject` stays as the view
+//   authoring mode
+// - The compact two-outcome `when <boolean> <Yes> / not <No>` (§8) is the value form a display of
+//   `Left` needs: `when Left > 0 Left.Clock / not "Time's up"`
+// - A toast's `Duration` is a duration: `present … as toast (Key: "…", Duration: 3.s)`
+// - Tests (§16): every test starts from a fresh, fixed clock, and `advance <duration>` moves it,
+//   firing every interval tick that falls due, in order, so a ticking journey is deterministic.
+//   Toast expiry is thereby testable and is proved in the documents journey
 project {
    name "WordFlower"
    remote none

@@ -11,6 +11,7 @@ const expectedPrimitives = [
   'boolean',
   'list',
   'time',
+  'duration',
   'action',
   'design',
   'visual',

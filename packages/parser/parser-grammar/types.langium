@@ -81,11 +81,11 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action' | 'design'
+    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'list' | 'action' | 'design'
     | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
 
 NonListPrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'item' | 'action' | 'design'
+    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'action' | 'design'
     | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
 
 ConstructablePrimitiveType returns string:

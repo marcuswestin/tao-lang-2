@@ -4,6 +4,7 @@ import type { ValidationContext } from './validation'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
+import { bridgeValidationChecks } from './validators/bridge-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
 import { configurationValidationChecks } from './validators/configuration-validator'
 import {
@@ -24,6 +25,7 @@ import { projectValidationChecks, validateProjectFile } from './validators/proje
 import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
 import { typeValidationChecks } from './validators/types-validator'
+import { unitsValidationChecks } from './validators/units-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './validators/use-validator'
 import { ViewsValidator } from './validators/views-validator'
 
@@ -47,6 +49,8 @@ const nodeValidationChecks = NodeValidation.compile(
     preludeValidationChecks,
     DialogueValidator.checks,
     navigationValidationChecks,
+    unitsValidationChecks,
+    bridgeValidationChecks,
     configuredValueValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
 )

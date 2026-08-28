@@ -22,6 +22,7 @@ const primitiveTypes = [
   'number',
   'boolean',
   'time',
+  'duration',
   'action',
   'item',
   'list',

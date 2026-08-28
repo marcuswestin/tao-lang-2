@@ -291,13 +291,15 @@ Describe('Expo runtime', () => {
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
       const taoProps: TR.TaoProps = { app }
 
+      // A toast duration is a Tao duration, carried in the family's base unit of nanoseconds.
+      const seconds = (count: number) => TR.Value(count * 1e9)
       act(() => {
         TR.Navigation.PresentToast(taoProps, first, {}, {
-          duration: TR.Value(3),
+          duration: seconds(3),
           key: TR.Value('saved'),
         })
         TR.Navigation.PresentToast(taoProps, other, {}, {
-          duration: TR.Value(10),
+          duration: seconds(10),
           key: TR.Value('other'),
         })
       })
@@ -317,7 +319,7 @@ Describe('Expo runtime', () => {
       act(() => {
         jest.advanceTimersByTime(2_000)
         TR.Navigation.PresentToast(taoProps, replacement, {}, {
-          duration: TR.Value(3),
+          duration: seconds(3),
           key: TR.Value('saved'),
         })
       })
@@ -333,7 +335,7 @@ Describe('Expo runtime', () => {
 
       act(() => {
         TR.Navigation.PresentToast(taoProps, zero, {}, {
-          duration: TR.Value(0),
+          duration: seconds(0),
           key: TR.Value('zero'),
         })
       })
@@ -697,7 +699,7 @@ Describe('Expo runtime', () => {
 
         view Editor() {
           action Save() {
-            present SavedToast() as toast (Key: "saved", Duration: 1)
+            present SavedToast() as toast (Key: "saved", Duration: 1.s)
           }
           render Col() {
             FormButton("Save") { on press Save }

@@ -23,7 +23,7 @@ Describe('validator: typed values', () => {
     accepts(promptTagsApp()),
   )
 
-  Test('accepts typed list parameters, typed injections, alias ascriptions, and omitted fields?', async () => {
+  Test('accepts typed list parameters, bridged bodies, alias ascriptions, and omitted fields?', async () => {
     await withValidationParse(
       `
         type Profile is { Name text, Subtitle text? }
@@ -34,9 +34,7 @@ Describe('validator: typed values', () => {
           render Empty()
         }
         function Join(Values list of text, Separator text) returns text {
-          return inject text Values, Separator ${tsFence}
-            return Values.join(Separator)
-          ${fence}
+          return Join(Values, Separator) from ./Join.ts
         }
         ${stubView('Empty')}
       `,
@@ -99,14 +97,14 @@ Describe('validator: typed values', () => {
   )
 
   Test(
-    'applies duplicate argument validation to typed injections',
+    'applies duplicate argument validation to render injections',
     rejects(
       app(
-        '',
+        'render Native("Ada")',
         `
-          function Size(Value text) returns number {
-            return inject number Value, Value 1 ${tsFence}
-              return Value.length
+          view Native(Value text) {
+            render inject Value, Value 1 ${tsFence}
+              return null
             ${fence}
           }
         `,
@@ -151,9 +149,7 @@ function promptTagsApp(): string {
     }
 
     function Join(Values list of text, Separator text) returns text {
-      return inject text Values, Separator ${tsFence}
-        return Values.join(Separator)
-      ${fence}
+      return Join(Values, Separator) from ./Join.ts
     }
 
     app TypedTags { view Main }

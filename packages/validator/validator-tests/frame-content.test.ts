@@ -83,7 +83,10 @@ Describe('validator: frame content and render injection channels', () => {
 
   Test('limits ambient channels to render inject and content to container implementations', async () => {
     const result = await testValidateCodeWithErrors(`
-      let Build = inject text Layout @@layout ${tsFence} return "build" ${fence}
+      view Stray() {
+        inject Layout @@layout ${tsFence} return null ${fence}
+        render Leaf()
+      }
       view Leaf() {
         render inject Content @@content ${tsFence} return Content ${fence}
       }

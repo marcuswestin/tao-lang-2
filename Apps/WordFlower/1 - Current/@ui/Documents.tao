@@ -49,7 +49,7 @@ view DocumentEditor(Document) {
       }
       set SaveCount += 1
       // A keyed toast replaces the previous occurrence with the same key instead of stacking.
-      present SavedToast() as toast (Key: "document-saved", Duration: 3)
+      present SavedToast() as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
       guard ParagraphText empty
@@ -87,6 +87,9 @@ view DocumentEditor(Document) {
                on submit SaveDocument
             }
             WordCountLabel(BodyDraft)
+
+            #focusSession
+            FocusSession()
 
             #markFinal
             Checkbox(Value: Document.Final is Final, Label: "Final") {

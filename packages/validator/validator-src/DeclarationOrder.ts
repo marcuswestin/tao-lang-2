@@ -21,6 +21,8 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     ActionExpression: expressionValueReferences,
     BinaryExpression: expressionValueReferences,
     NowExpression: expressionValueReferences,
+    // The names a bridged expression uses are the sidecar's exports, not Tao value references.
+    FromExpression: bridgedArgumentValueReferences,
     PostfixMemberAccess: expressionValueReferences,
     BooleanLiteral: expressionValueReferences,
     CaseTestExpression: expressionValueReferences,
@@ -35,11 +37,17 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     PrimitiveConfigurationConstructor: expressionValueReferences,
     RefinementExpression: expressionValueReferences,
     StringLiteral: expressionValueReferences,
-    TypedInjectionExpression: expressionValueReferences,
     TypedConstructor: expressionValueReferences,
     UnaryExpression: expressionValueReferences,
     ValueReference: reference => [reference],
   })
+}
+
+/** A bridged expression's Tao values are its arguments; its head name belongs to the module. */
+function bridgedArgumentValueReferences(value: AST.FromExpression): ValueReferenceLike[] {
+  return AST.isFunctionCallExpression(value.expression)
+    ? (value.expression.argumentList?.arguments ?? []).flatMap(argument => valueReferences(argument.value))
+    : []
 }
 
 function expressionValueReferences(value: AST.Expression): ValueReferenceLike[] {

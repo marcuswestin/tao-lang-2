@@ -4,7 +4,7 @@ import { AST } from '../parser-src/parser'
 import { parseCodeWithErrors, testParseCode } from './test-parse'
 
 Describe('parser: typed values', () => {
-  Test('parses alias ascriptions, element-typed lists, fields?, and typed injections', async () => {
+  Test('parses alias ascriptions, element-typed lists, fields?, and bridged expressions', async () => {
     const result = await testParseCode(`
       type Profile is {
         Name text,
@@ -12,9 +12,7 @@ Describe('parser: typed values', () => {
       }
       let Names is list of text = ["Ada", "Grace"]
       function CountWords(Value text) returns number {
-        return inject number Value \`\`\`ts
-          return Value.length
-        \`\`\`
+        return CountWords(Value) from ./Text.ts
       }
     `)
 
@@ -29,8 +27,10 @@ Describe('parser: typed values', () => {
     Expect(Type.referenceName(names.type)).toBe('list of text')
     Expect.Is(countWords, AST.isFunctionDeclaration)
     const returned = AST.returnStatementsOf(countWords)[0]?.value
-    Expect.Is(returned, AST.isTypedInjectionExpression)
-    Expect(Type.referenceName(returned.type)).toBe('number')
+    Expect.Is(returned, AST.isFromExpression)
+    Expect(returned.path).toBe('./Text.ts')
+    Expect.Is(returned.expression, AST.isFunctionCallExpression)
+    Expect(returned.expression.function.$refText).toBe('CountWords')
   })
 
   Test('rejects bare list in user type references while primitive list remains valid', async () => {

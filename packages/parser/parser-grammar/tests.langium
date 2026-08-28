@@ -11,7 +11,7 @@ entry TestsGrammarEntrypoint:
 TestDeclaration:
     'test' name=STRING block=Block;
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -64,6 +64,11 @@ SelectStep:
 
 BackTestStep:
     {infer BackTestStep} 'back';
+
+// Every check holds the clock still, so a journey over anything that ticks is deterministic.
+// `advance` moves it by a duration, firing every callback that falls due, in order.
+AdvanceStep:
+    'advance' duration=Expression;
 
 TestSelector returns string:
     'text' | 'label' | 'placeholder';

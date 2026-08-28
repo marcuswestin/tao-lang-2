@@ -12,6 +12,7 @@ export const StatementsCompiler = {
       AppDeclaration: Compile.App,
       ActionDeclaration: Compile.ActionDeclaration,
       AsyncActionStatement: Compile.AsyncActionStatement,
+      AdvanceStep: Compile.AdvanceStep,
       BackTestStep: Compile.BackTestStep,
       EntityDataDeclaration: Compile.EntityDataDeclaration,
       EntityQueryDeclaration: Compile.EntityQueryDeclaration,

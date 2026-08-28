@@ -8,6 +8,9 @@ import {
   isRuntimeConfigurableDeclaration,
 } from './codegen/app/configuration-compiler'
 import {
+  bridgeBindingName,
+  bridgedExpressionsOf,
+  bridgeExportName,
   type InlineInjection,
   inlineInjectionsOf,
   withInlineInjectionBindings,
@@ -38,7 +41,7 @@ type DataCatalogPlan = {
 }
 
 type PlannedSidecar = {
-  declaration: AST.ConfigurableDeclaration
+  binding: string
   exportName: string
   sourcePath: string
   relativePath: string
@@ -229,15 +232,10 @@ function planOutputPaths(
         usedOutputPaths,
       )
     const sidecarPathBySourcePath = new Map<string, string>()
-    const sidecars = declarations.flatMap(declaration => {
-      const implementation = AST.configurationImplementationOf(declaration)
-      const sidecarPath = implementation?.path
-      if (implementation === undefined || sidecarPath === undefined) {
-        return []
-      }
-      // A derived declaration reuses its base's implementation, which an imported file may own,
-      // so the sidecar resolves against the file that declares it rather than this one.
-      const sourcePath = FS.resolvePath(sidecarPath, FS.dirname(AST.getDocument(implementation).uri.path))
+    // A sidecar is named relative to the file that declares it, which an imported file may own, so
+    // every path resolves against its own declaring document rather than this one.
+    const planSidecar = (node: AST.Node, path: string, exportName: string, binding: string): PlannedSidecar => {
+      const sourcePath = FS.resolvePath(path, FS.dirname(AST.getDocument(node).uri.path))
       let relativePath = sidecarPathBySourcePath.get(sourcePath)
       if (relativePath === undefined) {
         relativePath = reserveOutputPath(
@@ -246,8 +244,25 @@ function planOutputPaths(
         )
         sidecarPathBySourcePath.set(sourcePath, relativePath)
       }
-      return [{ declaration, exportName: implementation.exportName, sourcePath, relativePath }]
-    })
+      return { binding, exportName, sourcePath, relativePath }
+    }
+    const sidecars = [
+      ...declarations.flatMap(declaration => {
+        const implementation = AST.configurationImplementationOf(declaration)
+        const sidecarPath = implementation?.path
+        return implementation === undefined || sidecarPath === undefined
+          ? []
+          : [planSidecar(
+            implementation,
+            sidecarPath,
+            implementation.exportName,
+            configurationSidecarBindingName(declaration),
+          )]
+      }),
+      ...bridgedExpressionsOf(file.ast).map(bridge =>
+        planSidecar(bridge, bridge.path, bridgeExportName(bridge), bridgeBindingName(bridge))
+      ),
+    ]
     bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars })
   }
   return { bySourcePath, modulePathBySourcePath }
@@ -276,7 +291,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       `import ${injection.binding} from '${relativeImportPath(planned.modulePath, injection.relativePath)}'`
     ),
     ...planned.sidecars.map(sidecar =>
-      `import { ${sidecar.exportName} as ${configurationSidecarBindingName(sidecar.declaration)} } from '${
+      `import { ${sidecar.exportName} as ${sidecar.binding} } from '${
         relativeImportPath(planned.modulePath, sidecar.relativePath)
       }'`
     ),
@@ -336,7 +351,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     if (!FS.existsSync(FS.dirname(sidecar.sourcePath))) {
       continue
     }
-    Assert(FS.existsSync(sidecar.sourcePath), 'validated configuration sidecar exists', {
+    Assert(FS.existsSync(sidecar.sourcePath), 'validated sidecar exists', {
       sourcePath: sidecar.sourcePath,
     })
     copiedSidecars.set(sidecar.relativePath, {

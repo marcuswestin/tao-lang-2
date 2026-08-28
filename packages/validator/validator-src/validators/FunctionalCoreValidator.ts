@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { type ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
@@ -11,6 +11,9 @@ const messages = {
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   conditionalBranch: '`when` branches must produce compatible value types.',
+  compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
+  compactWhenLabel: (label: string, expected: string) =>
+    `'${label}' is not this subject's no-pole label; use '${expected}'.`,
   duplicateCase: (name: string) => `Case '${name}' is declared more than once for this subject.`,
   emptySubject: '`is empty` accepts text, list, or query values.',
   enumPlacement: 'Enums must be declared at file level.',
@@ -27,6 +30,8 @@ const messages = {
   subjectCases: '`when` and `guard` subjects must be text, list, query, entity, or boolean values.',
   unaryBoolean: "Unary 'not' requires a boolean value.",
   unaryNumber: "Unary '-' requires a number value.",
+  dimensional: (left: string, operator: string, right: string) =>
+    `Operator '${operator}' does not apply to ${left} and ${right}.`,
 } as const
 
 /** FunctionalCoreValidator validates pure expressions, functions, and render control flow. */
@@ -37,18 +42,22 @@ export const FunctionalCoreValidator = {
     [AST.BinaryExpression.$type]: validateBinary,
     [AST.UnaryExpression.$type]: (expression, ctx) => {
       const operand = Type.ofExpression(expression.operand)
-      const expected = expression.operator === 'not' ? 'boolean' : 'number'
-      if (!isPrimitive(operand, expected)) {
-        ctx.error(expression.operator === 'not' ? messages.unaryBoolean : messages.unaryNumber, expression)
+      if (expression.operator === 'not') {
+        if (!isPrimitive(operand, 'boolean')) {
+          ctx.error(messages.unaryBoolean, expression)
+        }
+        return
+      }
+      // Negating a unit value is negating its magnitude, so the family passes through.
+      if (!isPrimitive(operand, 'number') && !Type.unitFamilyOf(operand)) {
+        ctx.error(messages.unaryNumber, expression)
       }
     },
     [AST.CaseTestExpression.$type]: validateCaseTestExpression,
     [AST.WhenExpression.$type]: (expression, ctx) => {
       validateSubjectCases(expression.subject, expression.branches, ctx)
-      validateCompatibleBranches(
-        [...expression.branches.map(branch => branch.value), expression.otherwise.value],
-        ctx,
-      )
+      validateCompatibleBranches(AST.whenExpressionOutcomes(expression).values, ctx)
+      validateCompactWhen(expression, ctx)
     },
     [AST.StringInterpolation.$type]: (interpolation, ctx) => {
       const type = Type.ofExpression(interpolation.expression)
@@ -104,12 +113,18 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
     return
   }
   if (['<', '<=', '>', '>='].includes(expression.operator)) {
+    if (comparesUnitValues(expression, left, right)) {
+      return
+    }
     if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
       ctx.error(messages.binaryComparable(expression.operator), expression)
     }
     return
   }
   if (expression.operator === '==' || expression.operator === '!=') {
+    if (comparesUnitValues(expression, left, right)) {
+      return
+    }
     if (!Type.isAssignable(left, right) && !Type.isAssignable(right, left)) {
       ctx.error(messages.binaryCompatible(expression.operator), expression)
     }
@@ -118,9 +133,86 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   if (expression.operator === '+' && isPrimitive(left, 'text') && isPrimitive(right, 'text')) {
     return
   }
+  // A unit value on either side makes this dimensional analysis rather than plain arithmetic.
+  if (Type.unitFamilyOf(left) || Type.unitFamilyOf(right) || isPrimitive(left, 'time') || isPrimitive(right, 'time')) {
+    if (!Type.dimensionalResult(left, expression.operator, right)) {
+      ctx.error(
+        messages.dimensional(dimensionName(left), expression.operator, dimensionName(right)),
+        expression,
+      )
+    }
+    return
+  }
   if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
     ctx.error(messages.binaryNumeric(expression.operator), expression)
   }
+}
+
+/**
+ * A dimensional mismatch is about families, so the message names the family rather than the nominal
+ * type a parameter or declaration happens to carry.
+ */
+/**
+ * The compact form is the two-outcome sibling of the block form, so its subject is a yes/no value
+ * and the mandatory label before the second branch is `not` or the subject's own no-pole alias.
+ */
+function validateCompactWhen(expression: AST.WhenExpression, ctx: ValidationContext): void {
+  if (!expression.positive) {
+    return
+  }
+  const subject = Type.ofExpression(expression.subject)
+  if (subject.kind !== 'unresolved' && !isPrimitive(subject, 'boolean')) {
+    ctx.error(messages.compactWhenSubject, expression)
+    return
+  }
+  const label = expression.negativeLabel
+  if (label === undefined || label === 'not') {
+    return
+  }
+  const alias = negativePoleAlias(expression.subject)
+  if (label !== alias) {
+    ctx.error(messages.compactWhenLabel(label, alias ?? 'not'), expression)
+  }
+}
+
+/** negativePoleAlias returns the name a yes/no type gives its no pole, when it declares one. */
+function negativePoleAlias(subject: AST.Expression): string | undefined {
+  const field = AST.isMemberAccessExpression(subject) ? Type.dataFieldOfMemberAccess(subject) : undefined
+  if (field?.negativeName) {
+    return field.negativeName
+  }
+  const declaration = AST.isValueReference(subject) ? subject.target.ref : undefined
+  return AST.isEntityDataField(declaration) ? declaration.negativeName : undefined
+}
+
+function dimensionName(type: ASTUtils.TaoType): string {
+  return type.kind === 'primitive' && (Type.unitFamilyOf(type) || type.primitive === 'time')
+    ? type.primitive
+    : Type.displayName(type)
+}
+
+/**
+ * Two values of one family compare after normalization, and a unit value compares against the bare
+ * literal `0` because zero carries no unit. Every other pairing falls through to the ordinary rules.
+ */
+function comparesUnitValues(
+  expression: AST.BinaryExpression,
+  left: ASTUtils.TaoType,
+  right: ASTUtils.TaoType,
+): boolean {
+  const leftFamily = Type.unitFamilyOf(left)
+  const rightFamily = Type.unitFamilyOf(right)
+  if (leftFamily && leftFamily === rightFamily) {
+    return true
+  }
+  if (leftFamily && isZeroLiteral(expression.right)) {
+    return true
+  }
+  return rightFamily !== undefined && isZeroLiteral(expression.left)
+}
+
+function isZeroLiteral(expression: AST.Expression): boolean {
+  return AST.isNumberLiteral(expression) && expression.value === 0
 }
 
 type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardActionBranch | AST.GuardRenderBranch

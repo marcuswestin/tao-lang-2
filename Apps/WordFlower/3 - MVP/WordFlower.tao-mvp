@@ -1,6 +1,7 @@
 use InstantDB from @instantdb
 use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, Window, WindowHost from @tao/nav
 use CountWords, Join from @tao/text
+use Interval from @tao/time
 use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
 
 // WordFlower/MVP is the malleable full target for the v1 release: everything Tao must cover to call
@@ -11,13 +12,13 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 // This file predates the Tao Revolution decisions (`Roadmap/Tao Revolution/Decisions.md`) and is
 // re-derived from the rewritten Revolution tier at Process step 4 — same spellings, fewer
 // capabilities. Requirements settled for that derivation, beyond what this sketch shows:
-// - A "focused writing" mode — spend X minutes free-writing before stopping — as the forcing
-//   feature for `@tao/time`: `time.Interval`, live derived values, Stop/Start/Running, and
-//   duration literals (`10.min`).
 // - No automations, notifications, or interruption levels in MVP; those wait for the app
 //   expansion (`Apps/Tao Future/`, Skillet first).
 // - Open at derivation time: whether the authority cluster (access rules, transactions, invites,
 //   publish, presence) enters MVP via collaborative workspaces or waits for the app expansion.
+//
+// The focused writing mode landed in Current with the focused writing tranche; the session below is
+// the same feature, sized for the full MVP surface.
 //
 // MVP retains the requirements intentionally moved out of the current Next tranche:
 // - The InstantDB provider protocol handles inbound subscription deltas, write acknowledgement,
@@ -139,6 +140,9 @@ let ParagraphGoal = 10
 
 let SessionGoal is number = 10
 
+// The focused writing session's length, in minutes.
+let SessionMinutes is number = 25
+
 type PromptTitle is text
 
 type PromptMinutes is number
@@ -206,9 +210,7 @@ function GoalFraction(Count number) {
    return Count / ParagraphGoal
 }
 
-let BuildStamp = inject text ```ts
-   return process.env['TAO_BUILD'] ?? 'development'
-```
+let BuildStamp is text = BuildStamp() from ./Shell.ts
 
 frame Card(Title text) {
    @actions = empty
@@ -583,7 +585,7 @@ view DocumentEditor(Document) {
       set SaveCount += 1
       // A keyed toast replaces the same key instead of stacking. Duration is a number of seconds;
       // unit literals remain deferred.
-      present SavedToast() as toast (Key: "document-saved", Duration: 3)
+      present SavedToast() as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
       guard ParagraphText empty
@@ -614,6 +616,8 @@ view DocumentEditor(Document) {
          on submit SaveDocument
       }
       WordCount(BodyDraft)
+      #focusSession
+      FocusSession()
       #markFinal
       Checkbox(Value: Document.Final is Final, Label: "Final") {
          on change SetFinished
@@ -696,6 +700,57 @@ ui DocumentSnapshot(Snapshot Document.Snapshot) {
       }
    }
 }
+
+// A focused writing session: pick a length, write until the clock runs out, pause and resume, or
+// stop early. The clock is a library value; `Left` is an ordinary derivation that recomputes as it
+// ticks. The session length comes from the person's preference rather than a fixed pair of buttons.
+file view FocusSession() {
+   state Tick = Interval(1.s)
+   state EndsAt = now
+   state Focusing = false
+   let Left = EndsAt - Tick.Value
+   action Start(Length duration) {
+      set EndsAt = now + Length
+      set Focusing = true
+      do Tick.Start()
+   }
+   action Pause() {
+      do Tick.Stop()
+   }
+   action Resume() {
+      set EndsAt = now + Left
+      do Tick.Start()
+   }
+   action Finish() {
+      set Focusing = false
+   }
+   render Col() [gap 6] {
+      when Focusing {
+         true -> {
+            Text(when Left > 0 Left.Clock / not "Time's up") [title]
+            when Tick.Running {
+               true -> {
+                  #pauseFocus
+                  FormButton("Pause") {
+                     on press Pause
+                  }
+               }
+               otherwise -> {
+                  #resumeFocus
+                  FormButton("Resume") {
+                     on press Resume
+               }  }
+            }
+            #stopFocus
+            FormButton("Stop") {
+               on press Finish
+            }
+         }
+         otherwise -> {
+            #startFocus
+            FormButton("Focus for { SessionMinutes } min") {
+               on press -> { do Start(SessionMinutes.min) }
+}  }  }  }  }
 
 ui SavedToast() {
    render Text("Saved")

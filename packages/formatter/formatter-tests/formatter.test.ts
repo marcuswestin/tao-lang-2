@@ -626,11 +626,11 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'formats keyed app toast presentation with canonical modifiers',
     formats(
-      `view Main(){action Save(){present Saved( )as toast( Key : "document-saved" ,Duration:3)}}`,
+      `view Main(){action Save(){present Saved( )as toast( Key : "document-saved" ,Duration:3.s)}}`,
       `
         view Main() {
            action Save() {
-              present Saved() as toast (Key: "document-saved", Duration: 3)
+              present Saved() as toast (Key: "document-saved", Duration: 3.s)
         }  }
       `,
     ),

@@ -1,9 +1,10 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils, Type, Units } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { configurationRuntimeBindingName } from './configuration-compiler'
+import { bridgeBindingName } from './injection-plan'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
 
@@ -14,6 +15,7 @@ export const ExpressionsCompiler = {
       ActionExpression: Compile.ActionExpression,
       BinaryExpression: Compile.BinaryExpression,
       NowExpression: () => gen`TR.Value(TR.now())`,
+      FromExpression: Compile.FromExpression,
       PostfixMemberAccess: Compile.PostfixMemberAccess,
       BooleanLiteral: Compile.BooleanLiteral,
       CaseTestExpression: Compile.CaseTestExpression,
@@ -27,7 +29,6 @@ export const ExpressionsCompiler = {
       PrimitiveConfigurationConstructor: Compile.PrimitiveConfigurationConstructor,
       RefinementExpression: Compile.RefinementExpression,
       StringLiteral: Compile.StringLiteral,
-      TypedInjectionExpression: Compile.TypedInjectionExpression,
       ListLiteral: Compile.ListLiteral,
       MemberAccessExpression: Compile.MemberAccessExpression,
       TypedConstructor: Compile.TypedConstructor,
@@ -138,6 +139,10 @@ export const ExpressionsCompiler = {
 
   /** BinaryExpression delegates Tao operator semantics to the runtime. */
   BinaryExpression(expression: AST.BinaryExpression): Compiled {
+    const calendar = compileCalendarArithmetic(expression)
+    if (calendar) {
+      return calendar
+    }
     return gen`TR.Binary(${Compile.Expression(expression.left)}, ${gen.jsLiteral(expression.operator)}, ${
       Compile.Expression(expression.right)
     })`
@@ -165,6 +170,15 @@ export const ExpressionsCompiler = {
 
   /** WhenExpression evaluates one subject and selects one lazy value case. */
   WhenExpression(expression: AST.WhenExpression): Compiled {
+    // The compact form is the two-outcome sibling of the block form, so it lowers to the same case
+    // switch: the positive case is `true`, and an omitted negative outcome is absence.
+    if (expression.positive) {
+      const negative = expression.negative
+      return gen`TR.WhenCase(${Compile.Expression(expression.subject)}, [
+        ['true', () => ${Compile.Expression(expression.positive)}],
+      ], () => ${negative ? Compile.Expression(negative) : gen`TR.Value(null)`})`
+    }
+    Assert.defined(expression.otherwise, 'validated block-form when has an otherwise branch')
     return gen`TR.WhenCase(${Compile.Expression(expression.subject)}, [
       ${
       gen.list(
@@ -252,12 +266,31 @@ export const ExpressionsCompiler = {
   MemberAccessExpression(reference: AST.MemberAccessExpression): Compiled {
     const target = resolveRef(reference.target)
     const root = Compile.ValueDeclarationReference(target)
-    return gen`TR.Member(${root}, [${gen.join(reference.members, member => gen`${gen.jsLiteral(member)}`)}])`
+    return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
+  },
+
+  /**
+   * FromExpression calls the sidecar's named export with plain JavaScript arguments and wraps the
+   * result as a Tao value, which is the whole bridge (Decisions §15).
+   */
+  FromExpression(bridge: AST.FromExpression): Compiled {
+    const call = bridge.expression
+    const values = AST.isFunctionCallExpression(call)
+      ? (call.argumentList?.arguments ?? []).map(argument => gen`${Compile.Expression(argument.value)}.jsValue`)
+      : undefined
+    const binding = gen.Name({ name: bridgeBindingName(bridge) })
+    return values
+      ? gen`TR.Value(${binding}(${gen.join(values, value => value)}))`
+      : gen`TR.Value(${binding})`
   },
 
   /** PostfixMemberAccess compiles a member read on any expression, including unit accessors. */
   PostfixMemberAccess(access: AST.PostfixMemberAccess): Compiled {
-    return gen`TR.Member(${Compile.Expression(access.receiver)}, [${gen.jsLiteral(access.member)}])`
+    return compileMemberPath(
+      Compile.Expression(access.receiver),
+      Type.ofExpression(access.receiver),
+      [access.member],
+    )
   },
 
   /** ValueReference compiles an alias or parameter reference into a Tao value expression. */
@@ -663,4 +696,80 @@ function configuredDeclarationOfValue(
     return inferred && AST.isConfigurableDeclaration(inferred) ? inferred : undefined
   }
   return undefined
+}
+
+/**
+ * A member path walks one segment at a time, because a segment's lowering depends on the type it
+ * reads from: a unit of a family converts, a family's reading renders, and everything else is an
+ * ordinary member read.
+ */
+function compileMemberPath(root: Compiled, rootType: ASTUtils.TaoType, members: readonly string[]): Compiled {
+  let compiled = root
+  let current = rootType
+  let plainMembers: string[] = []
+  const flushPlainMembers = () => {
+    if (plainMembers.length > 0) {
+      const names = plainMembers
+      compiled = gen`TR.Member(${compiled}, [${gen.join(names, member => gen`${gen.jsLiteral(member)}`)}])`
+      plainMembers = []
+    }
+  }
+  for (const member of members) {
+    const family = unitFamilyOf(current)
+    if (family) {
+      flushPlainMembers()
+      const reading = Units.readingOf(family, member)
+      compiled = reading
+        ? gen`TR.Units.${reading}(${compiled})`
+        : gen`TR.Units.Read(${compiled}, ${gen.jsLiteral(ratioOf(family, member))})`
+      current = Type.unitMemberType(family, member) ?? { kind: 'unresolved' }
+      continue
+    }
+    if (primitiveNamed(current, 'number') && Units.familyOf(member)) {
+      flushPlainMembers()
+      const constructed = Units.familyOf(member)!
+      compiled = gen`TR.Units.Build(${compiled}, ${gen.jsLiteral(ratioOf(constructed, member))})`
+      current = { kind: 'primitive', primitive: constructed }
+      continue
+    }
+    plainMembers.push(member)
+    current = Type.atMemberPath(current, [member])
+  }
+  flushPlainMembers()
+  return compiled
+}
+
+/**
+ * `time` is milliseconds and a duration is its family's base unit, so the pairs that mix them
+ * convert rather than adding raw numbers. Same-family duration arithmetic needs no conversion and
+ * stays on the ordinary numeric path.
+ */
+function compileCalendarArithmetic(expression: AST.BinaryExpression): Compiled | undefined {
+  const left = Type.ofExpression(expression.left)
+  const right = Type.ofExpression(expression.right)
+  const leftCompiled = () => Compile.Expression(expression.left)
+  const rightCompiled = () => Compile.Expression(expression.right)
+  if (primitiveNamed(left, 'time') && primitiveNamed(right, 'time') && expression.operator === '-') {
+    return gen`TR.Units.Between(${leftCompiled()}, ${rightCompiled()})`
+  }
+  if (primitiveNamed(left, 'time') && unitFamilyOf(right) === 'duration') {
+    if (expression.operator === '+' || expression.operator === '-') {
+      return gen`TR.Units.Shift(${leftCompiled()}, ${gen.jsLiteral(expression.operator)}, ${rightCompiled()})`
+    }
+  }
+  return undefined
+}
+
+function unitFamilyOf(type: ASTUtils.TaoType): ASTUtils.UnitFamily | undefined {
+  return type.kind === 'primitive' && Units.isFamily(type.primitive) ? type.primitive : undefined
+}
+
+function primitiveNamed(type: ASTUtils.TaoType, primitive: string): boolean {
+  return type.kind === 'primitive' && type.primitive === primitive
+}
+
+function ratioOf(family: ASTUtils.UnitFamily, unit: string): number {
+  const ratio = Units.ratioToBase(family, unit)
+  Assert.defined(ratio, 'validated unit accessor names a unit of its family', { family, unit })
+  return ratio
 }

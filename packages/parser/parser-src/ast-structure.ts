@@ -513,7 +513,7 @@ export function argumentsOf(node: ArgumentListOwner): AST.Argument[] {
 
 /** injectionArgumentsOf returns the arguments declared by a statement, render, or typed-value injection. */
 export function injectionArgumentsOf(
-  injection: AST.Injection | AST.TypedInjectionExpression,
+  injection: AST.Injection,
 ): AST.InjectionArgument[] {
   return injection.argumentList?.arguments ?? []
 }
@@ -627,6 +627,28 @@ export function blockStatementOf<StatementT extends AST.OwnedBlockStatement, Val
 
 export function blockStatements(owner: AST.BlockStatementOwner): readonly AST.OwnedBlockStatement[] {
   return (owner.block?.statements || []) as readonly AST.OwnedBlockStatement[]
+}
+
+/**
+ * whenExpressionOutcomes returns the values a `when` can produce and whether they cover the subject.
+ * The block form is total by construction; the compact form covers both poles only when it declares
+ * a negative branch, and otherwise contributes absence (Decisions §8).
+ */
+export function whenExpressionOutcomes(
+  expression: AST.WhenExpression,
+): { values: AST.Expression[]; total: boolean } {
+  if (expression.positive) {
+    const negative = expression.negative
+    return {
+      values: negative ? [expression.positive, negative] : [expression.positive],
+      total: negative !== undefined,
+    }
+  }
+  const otherwise = expression.otherwise
+  return {
+    values: [...expression.branches.map(branch => branch.value), ...(otherwise ? [otherwise.value] : [])],
+    total: true,
+  }
 }
 
 /** findOwningView returns the renderable declaration that owns `node`, if any. */
