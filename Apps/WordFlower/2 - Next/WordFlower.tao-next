@@ -1,5 +1,6 @@
 use WordFlowerNavigator from @nav
-use Local from @tao/data
+use InstantDB from @tao/data/providers/instantdb
+use Local from @tao/data/providers/local
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
 // Tranche status: absorbed
@@ -9,7 +10,7 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //
 // The contract is now a DIRECTORY. Every mapped source and test file here is part of it:
 //
-//   WordFlower       this entry file — project, apps, navigation, local datasource, variants, shell
+//   WordFlower       this entry file — project, apps, navigation, datasources, variants, shell
 //   Data             the data catalog
 //   Design           the minimal design system — implemented last, see that file
 //   ui/              the workspace and document areas, with their behavior journeys
@@ -136,6 +137,11 @@ app WordFlowerDrawer = WordFlower with {
       Display "drawer"
 }  }
 
+app WordFlowerInstantDB = WordFlower with {
+   Name "WordFlower - InstantDB"
+   Datasource WordFlowerInstantDBStore
+}
+
 app WordFlowerNavHarness {
    Name "WordFlower Navigation Harness"
    Navigator HarnessNavigator
@@ -160,6 +166,14 @@ app WordFlowerStackByNavWith = app with {
 // deriving from an existing datasource keeps `with` visible.
 datasource DeviceStore = Local {
    StorageKey "WordFlowerData"
+}
+
+// Experimental sync fixture backed by `just start-local-instantdb`.
+datasource WordFlowerInstantDBStore = InstantDB {
+   StorageKey "WordFlowerData"
+   AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
+   ApiURI "http://localhost:9020"
+   WebsocketURI "ws://localhost:9020/runtime/session"
 }
 
 folder

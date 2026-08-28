@@ -20,10 +20,12 @@ function navSidecar(exportName: string): string {
 /** providerSidecar writes the TypeScript half of one `provider <Export> from ./<Export>.ts`. */
 function providerSidecar(exportName: string): string {
   return [
-    "import TR from '@runtime/TR'",
+    "import type TR from '@runtime/TR'",
     '',
-    `export function ${exportName}() {`,
-    '  return TR.DataProvider.Local()',
+    `export function ${exportName}(): TR.DataProvider {`,
+    '  return {',
+    '    connect: () => ({ load: () => undefined, save: () => {} }),',
+    '  }',
     '}',
   ].join('\n')
 }
@@ -123,7 +125,7 @@ Describe('compiler: files and packages', () => {
           "import { TestNavImpl as __tao_configuration_implementation_LocalStack__ } from './TestNavImpl'",
         )
         Expect(sidecarCopy(files, 'TestNavImpl.ts').code).toContain('return TR.NavKind.Stack()')
-        Expect(sidecarCopy(files, 'TestProviderImpl.ts').code).toContain('return TR.DataProvider.Local()')
+        Expect(sidecarCopy(files, 'TestProviderImpl.ts').code).toContain('connect: () =>')
         Expect(appCode).toContain('TR.Navigation.Configure(_Scope.__tao_type_CustomStack, {')
         Expect(appCode).toContain('TR.Data.Configure(_Scope.__tao_type_SnapshotStore, {')
       },
@@ -155,10 +157,10 @@ Describe('compiler: files and packages', () => {
       '}',
     ].join('\n')
     const providersCode = [
-      "import TR from '@runtime/TR'",
+      "import type TR from '@runtime/TR'",
       '',
-      'export function MemoryProvider() {',
-      '  return TR.DataProvider.Memory()',
+      'export function MemoryProvider(): TR.DataProvider {',
+      '  return { connect: () => ({ load: () => undefined, save: () => {} }) }',
       '}',
     ].join('\n')
     await withTaoFiles(
@@ -230,7 +232,7 @@ Describe('compiler: files and packages', () => {
             `import { ${exportName} as __tao_configuration_implementation_${declaration}__ } from './NavKinds'`,
           )
         }
-        Expect(providers.code).toContain('return TR.DataProvider.Memory()')
+        Expect(providers.code).toContain('connect: () =>')
         Expect(sidecar.sourcePath).toBe(paths['SidecarStack.ts'])
         Expect(sidecar.code).toBe(sidecarCode)
         Expect(declarations.code).toContain("import type TR from '@runtime/TR'")

@@ -1,4 +1,4 @@
-use InstantDB from @instantdb
+use InstantDB from @tao/data/providers/instantdb
 use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, Window, WindowHost from @tao/nav
 use CountWords, Join from @tao/text
 use Checkbox, Col, FormButton, Icon, Image, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui

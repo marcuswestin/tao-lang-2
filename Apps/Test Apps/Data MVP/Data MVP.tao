@@ -1,4 +1,4 @@
-use Memory from @tao/data
+use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 

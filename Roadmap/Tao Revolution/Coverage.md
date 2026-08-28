@@ -36,7 +36,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Navigation: links, split, windows (§10)          | WordFlower · workspace/document navigation                  | MVP      | partially in Current    |
 | Restoration policy (§10)                         | WordFlower · relaunch                                       | MVP      | pending                 |
 | App composition, variants, providers (§11)       | WordFlower · app root + test variants                       | MVP      | partially in Current    |
-| InstantDB datasource (§11)                       | WordFlower · sync                                           | MVP      | pending                 |
+| InstantDB datasource (§11)                       | WordFlower · sync                                           | MVP      | experimental            |
 | auth library, Me binding (§11)                   | WordFlower · account                                        | MVP      | pending                 |
 | Files provider (§11)                             | Wayfare · offline documents                                 | Post-MVP | —                       |
 | Offline closure (§11)                            | WordFlower · offline writing                                | TBD      | —                       |
