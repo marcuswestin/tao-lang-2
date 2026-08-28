@@ -31,9 +31,9 @@ use every, Interval from @tao/time
 //   - Direct package references without imports (LANG-002)
 //   - Namespaces, and exporting types and values from one default export (Roadmap.md, Ro's STACK)
 // Type system
-//   - Overloaded declarations via `match` cases (Spec/Tao Type System.md, future design)
-//   - Structural `like` types, heterogeneous list element unions (Spec/Tao Type System.md)
-//   - `stateful T` contagion and collapse-on-read semantics (Spec/Tao Type System.md)
+//   - Overloaded declarations via `match` cases (Docs/Spec/Tao Type System.md, future design)
+//   - Structural `like` types, heterogeneous list element unions (Docs/Spec/Tao Type System.md)
+//   - `stateful T` contagion and collapse-on-read semantics (Docs/Spec/Tao Type System.md)
 //   - Contextual bare scalar literals (LANG-005)
 //   - Generics, macros, async functions, higher-order collection APIs (Autonomous MVP deferrals)
 //   - `${…}` template-literal sugar alongside `"{ X }"` interpolation (Autonomous MVP decision log)
@@ -45,7 +45,7 @@ use every, Interval from @tao/time
 //   - Local editable copies of entity fields (LANG-019)
 //   - Capability manifests and runtime-target-owned provider selection (LANG-010)
 //   - Authentication, accounts, permissions, collaboration, and sync (Autonomous MVP deferrals)
-//   - Schema migrations (Spec/Tao Data.md)
+//   - Schema migrations (Docs/Spec/Tao Data.md)
 // Events and control flow
 //   - Declared events with `does`/`did`/`on` and inferred event names (LANG-020)
 //   - Navigation lifecycle: appear/disappear/focus/blur and unsaved-change guards (DEF-NAV-006)
@@ -63,20 +63,20 @@ use every, Interval from @tao/time
 //   - Interactive toasts and refreshed child-occurrence policy (DEF-NAV-017)
 //   - Non-semantic cosmetic property metadata (DEF-NAV-015)
 // Layout, style, and motion
-//   - `nudge`, `overlay`, scroll helpers, safe-area and keyboard insets (LANG-017, Spec/Tao Layout and UI.md)
-//   - Logical `start`/`end` directions, aspect ratio, wrapped-line controls (Spec/Tao Layout and UI.md)
+//   - `nudge`, `overlay`, scroll helpers, safe-area and keyboard insets (LANG-017, Docs/Spec/Tao Layout and UI.md)
+//   - Logical `start`/`end` directions, aspect ratio, wrapped-line controls (Docs/Spec/Tao Layout and UI.md)
 //   - Visual layers, portals, popovers, one Modal abstraction (LANG-018)
 //   - Which future spec modifiers, if any, must remain inline-only (LANG-013)
 //   - Motion policy and recipes, with reduced motion expressible (LANG-024)
-//   - Container-query adaptive variants; the condition syntax is unsettled (Spec/Tao Design - WIP.md)
+//   - Container-query adaptive variants; the condition syntax is unsettled (Docs/Spec/Tao Design - WIP.md)
 // Accessibility, localization, assets
 //   - Accessibility and localization policy and UI metadata (LANG-023)
 //   - Ambient `app.theme` / `app.data` / `app.strings` / `app.assets` capabilities (LANG-003)
 //   - Permission declarations and native bridge generation (LANG-025)
 // Testing
-//   - Bounded retrying, event-driven settling, count and uniqueness assertions (Spec/Tao Testing.md)
-//   - Row seeding, remote adapters, credentials, and cleanup policy (Spec/Tao Testing.md)
-//   - Package testing (Spec/Tao Testing.md)
+//   - Bounded retrying, event-driven settling, count and uniqueness assertions (Docs/Spec/Tao Testing.md)
+//   - Row seeding, remote adapters, credentials, and cleanup policy (Docs/Spec/Tao Testing.md)
+//   - Package testing (Docs/Spec/Tao Testing.md)
 
 project {
    id "wordflower" // an opaque, immutable, developer-chosen identity that survives moves and forks
