@@ -123,7 +123,7 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // through the expression-position TypeScript boundary (§15) and proved under a controllable test
 // clock (§16).
 //
-// Earlier tranches' decisions are recorded in `Spec/` and `Roadmap/Tao Revolution/Decisions.md`;
+// Earlier tranches' decisions are recorded in `Docs/Spec/` and `Docs/Roadmap/Tao Revolution/Decisions.md`;
 // this header lists only what this tranche decides:
 // - Unit values (§2): `.unit` on a number constructs a typed value and `.unit` on a typed value
 //   reads it back as a number in that unit, so `10.min`, `1.s`, and `220.ms` construct durations

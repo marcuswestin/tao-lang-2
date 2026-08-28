@@ -9,7 +9,7 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 // reconciled — not frozen — whenever Current absorbs a Next slice and the implementation teaches us
 // something. Intended functionality beyond the release lives in `../4 - Revolution`.
 //
-// This file predates the Tao Revolution decisions (`Roadmap/Tao Revolution/Decisions.md`) and is
+// This file predates the Tao Revolution decisions (`Docs/Roadmap/Tao Revolution/Decisions.md`) and is
 // re-derived from the rewritten Revolution tier at Process step 4 — same spellings, fewer
 // capabilities. Requirements settled for that derivation, beyond what this sketch shows:
 // - No automations, notifications, or interruption levels in MVP; those wait for the app

@@ -8,7 +8,7 @@ feature in one of these apps forces it.
 ## Origin
 
 Four independent designs of post-MVP Tao were produced and compared item by item; Ro resolved every
-agreement and disagreement into `Roadmap/Tao Revolution/Decisions.md`, which is the authoritative
+agreement and disagreement into `Docs/Roadmap/Tao Revolution/Decisions.md`, which is the authoritative
 record of the decided language. These app sources were seeded from design D
 (`tao-revolution-synthesis-da6265`), the design whose dialect the decisions most often selected.
 
@@ -18,7 +18,7 @@ they disagree with `Decisions.md`, the decisions win — known deltas include `i
 (now bare `publish`), role-word test selectors (now text or `#tag`), `check "…"` journeys (now
 `test "…"`; `check` is only the early-exit statement), `List(Rows)` (now `loop … on select`), and
 the design-block structure. Consolidating them to the decided dialect is
-step 3 of `Roadmap/Tao Revolution/Process.md`.
+step 3 of `Docs/Roadmap/Tao Revolution/Process.md`.
 
 ## How these apps drive implementation
 
@@ -31,7 +31,7 @@ step 3 of `Roadmap/Tao Revolution/Process.md`.
   the consolidation was incomplete or the implementation diverged from `Decisions.md`, and both are
   findings to resolve, not to patch around. Graduated tests join `tao test` and become part of the
   permanent suite.
-- **Coverage.** `Roadmap/Tao Revolution/Coverage.md` maps each language capability to the app
+- **Coverage.** `Docs/Roadmap/Tao Revolution/Coverage.md` maps each language capability to the app
   feature that forces it and the test that proves it. When touching these apps, keep the matrix
   true.
 - **Expansion order.** WordFlower alone carries the program to MVP. After MVP, Skillet activates

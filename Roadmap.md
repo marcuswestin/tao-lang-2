@@ -1,11 +1,11 @@
 # Tao Roadmap
 
-Open work only. Completed work is recorded under `Roadmap/Archive/`.
+Open work only. Completed work is recorded under `Docs/Roadmap/Archive/`.
 
 Language features are built in tranches through the WordFlower app family: decisions are settled in
 `Apps/WordFlower/2 - Next` and implemented into `1 - Current` slice by slice.
 `Apps/WordFlower/README.md` owns the tranche mechanics. The language target and the program that
-reaches it — first MVP, then Revolution — are owned by `Roadmap/Tao Revolution/`: `Decisions.md`
+reaches it — first MVP, then Revolution — are owned by `Docs/Roadmap/Tao Revolution/`: `Decisions.md`
 (what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
 app feature and Tao test proves each capability).
 
@@ -19,7 +19,7 @@ neither blocks a tranche.
     follow-ups, so nothing can be scanned for what to pick up next. Group entries by area and mark
     their rough size, keeping this file the single index of open work.
 - [ ] Rework the rest of the markdown set
-  - Covers `Spec/` and the remaining `Roadmap/` folders: archive the landed declaration-model
+  - Covers `Docs/Spec/` and the remaining `Docs/Roadmap/` folders: archive the landed declaration-model
     records, de-duplicate the design-system open questions and the project-ID contract into one
     home each, settle the descriptor-identity draft, and write down the draft-suffix convention plus
     an authoritative map of what every document is for. An audit produced concrete per-file
@@ -28,16 +28,16 @@ neither blocks a tranche.
 
 ## The Tao Revolution program
 
-The language target is fully decided (`Roadmap/Tao Revolution/Decisions.md`); the steps below are
+The language target is fully decided (`Docs/Roadmap/Tao Revolution/Decisions.md`); the steps below are
 `Process.md`'s sequence as open work, in order. The dialect tranche is absorbed (`1 - Current` and
 `2 - Next` are byte-identical, both `Tranche status: absorbed`), so everything written anywhere is
 now written once, in the final dialect. Each step lands per the tranche definition of done: behavior
 tests written in Tao, green in Current, for every construct introduced.
 
 - [x] Cut and implement the dialect-migration tranche (Process step 1)
-  - Closed. `Roadmap/Archive/Dialect migration tranche/` holds the brief and prompt.
+  - Closed. `Docs/Roadmap/Archive/Dialect migration tranche/` holds the brief and prompt.
 - [x] Implement the focused writing tranche
-  - Closed. `Roadmap/Archive/Focused writing tranche/` holds the brief and prompt.
+  - Closed. `Docs/Roadmap/Archive/Focused writing tranche/` holds the brief and prompt.
 - [ ] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
   - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
     as sibling references.
@@ -66,11 +66,11 @@ tests written in Tao, green in Current, for every construct introduced.
     aisles, drag to "bought"), bridging RN Gesture Handler + Reanimated the way the card grid
     bridges FlashList. Deliberately an example app to implement, not a design decision to settle
     up front — findings feed back through the tranche process. Context:
-    `Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 intents).
+    `Docs/Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 intents).
 - [ ] Harden `tao test`
   - Filters, watch and CI output, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
 - [ ] Add the Tao design system MVP
-  - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Roadmap/Add Tao design system MVP/`.
+  - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Docs/Roadmap/Add Tao design system MVP/`.
 - [ ] Add beautiful app defaults
   - Polished default text, input, and button styles, seeded accent, neutral palette, app-shell content frame, and empty/error/loading surfaces.
 - [ ] Add `tao create` project scaffold
@@ -101,7 +101,7 @@ tests written in Tao, green in Current, for every construct introduced.
 - [ ] Build the enforcement and diagnostics surface
   - A hosted gate that runs `verify` on pushed work, and a real diagnostic rendering for `tao check`,
     which today only reports canonicalization. Brief:
-    `Roadmap/Enforcement and diagnostics surface/`. Its repository claims were verified against a
+    `Docs/Roadmap/Enforcement and diagnostics surface/`. Its repository claims were verified against a
     much older commit, so re-check them before planning.
 - [ ] Complete canonical app and v1 hardening
   - Build WordFlower end to end, close gaps, tighten diagnostics and docs, remove stale drift, and validate `verify`.
@@ -114,7 +114,7 @@ Product and codebase backlog, unordered.
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
 - [ ] Allow only one project definition per project root; scope workspace package lookup to that root, have the IDE extension manage one workspace per project folder, and stop requiring a Git repo at the project root.
-- [ ] Implement styling, and then all of `Spec/Tao Layout and UI.md`.
+- [ ] Implement styling, and then all of `Docs/Spec/Tao Layout and UI.md`.
   - Consider declaration-level style defaults that a caller may override, and settle how the two
     merge — in particular how a caller clears a default rather than adding to it:
     ```tao
@@ -144,8 +144,8 @@ Product and codebase backlog, unordered.
 ## Records
 
 - `Apps/WordFlower/README.md` — the implementation process and the four app tiers.
-- `Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
-- `Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
-- `Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
-- `Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
-- `Roadmap/Archive/` — frozen records of completed work.
+- `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
+- `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
+- `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
+- `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
+- `Docs/Roadmap/Archive/` — frozen records of completed work.

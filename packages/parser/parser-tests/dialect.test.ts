@@ -1,7 +1,7 @@
 import { Describe, Test } from '@shared/test'
 import { parses, rejectsParser } from './test-parse'
 
-// The decided dialect (Roadmap/Tao Revolution/Decisions.md §2, §8, §15, §16). Each test guards a
+// The decided dialect (Docs/Roadmap/Tao Revolution/Decisions.md §2, §8, §15, §16). Each test guards a
 // spelling the dialect migration tranche introduced, including the traps the spike surfaced.
 Describe('parser: decided dialect', () => {
   Test(
