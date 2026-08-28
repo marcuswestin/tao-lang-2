@@ -1,6 +1,6 @@
 import React from 'react'
 import { entityHandle, metadataOf } from './TR-data-entity'
-import { MemoryProvider, UnboundProvider } from './TR-data-provider'
+import { testDataConnection, UnboundConnection } from './TR-data-provider'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -15,7 +15,7 @@ import {
 import { RuntimeDataSchema } from './TR-data-schema'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
 
-export { DataProviderControls, testProvider } from './TR-data-provider'
+export { testProvider } from './TR-data-provider'
 
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'
@@ -65,9 +65,45 @@ export type TaoQueryPlan = {
   }
 }
 
+/**
+ * TaoDataConnection is one provider connection bound to a schema and evaluated datasource config.
+ *
+ * The protocol deliberately exchanges complete serialized snapshots:
+ * - load returns one starting snapshot or undefined for an empty mount.
+ * - save receives every committed snapshot in call order and must propagate rejection.
+ * - subscribe, when present, publishes complete replacement snapshots after load.
+ * - close, when present, synchronously releases connection-owned resources and must not throw.
+ *
+ * The runtime owns schema validation, queries, identity, defaults, relationships, status, and
+ * notifications. Providers own persistence and transport only. A provider must either isolate its
+ * instances or share one coherent stateless storage boundary. Incremental change or sync protocols
+ * belong to a future provider family rather than leaking into this full-snapshot contract.
+ */
+export type TaoDataConnection = {
+  close?(): void
+  load(): Promise<string | undefined> | string | undefined
+  /** reset is optional because remote providers may not permit destructive recovery. */
+  reset?(): Promise<void> | void
+  save(snapshot: string): Promise<void> | void
+  subscribe?(observer: TaoDataConnectionObserver): () => void
+}
+
+/** TaoDataConnectionObserver receives provider snapshots and failures after the initial load. */
+export type TaoDataConnectionObserver = Readonly<{
+  error(error: unknown): void
+  snapshot(value: string | undefined): void
+}>
+
+/** TaoDataProviderContext is the provider-neutral mount passed to a package implementation. */
+export type TaoDataProviderContext = Readonly<{
+  configuration: Readonly<Record<string, unknown>>
+  schema: TaoDataSchemaDefinition
+  storageKey: string
+}>
+
+/** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
-  load(storageKey: string): Promise<string | undefined> | string | undefined
-  persist(storageKey: string, snapshot: string): Promise<void> | void
+  connect(context: TaoDataProviderContext): TaoDataConnection
 }
 
 export type TaoDataProviderFactory = () => TaoDataProvider
@@ -88,38 +124,63 @@ export type TaoConfiguredDatasource = Readonly<{
   evaluate(): TaoConfiguredDatasource
 }>
 
-export type TaoKeyValueStorage = {
-  getItem(key: string): Promise<string | null>
-  setItem(key: string, value: string): Promise<void>
-}
-
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
-  const storageKey = configuredStorageKey(source)
+  const signature = configuredDatasourceSignature(source)
   React.useLayoutEffect(() => {
-    DataControls.BindConfigured(schema, source.declaration, storageKey)
-  }, [schema, source.declaration, storageKey])
+    DataControls.BindConfigured(schema, source)
+  }, [schema, source.declaration, signature])
 }
 
-function configuredStorageKey(source: TaoConfiguredDatasource): string | undefined {
-  const configured = source.config['StorageKey']
-  if (configured === undefined) {
-    return undefined
+/** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
+export function evaluatedDatasourceConfiguration(
+  source: TaoConfiguredDatasource,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(source.config).map(([name, value]) => [name, evaluatedConfigurationValue(value)]),
+  ))
+}
+
+/** configuredDatasourceSignature is stable across equivalent values reconstructed during React renders. */
+export function configuredDatasourceSignature(source: TaoConfiguredDatasource): string {
+  return JSON.stringify(sortConfigurationValue(evaluatedDatasourceConfiguration(source)))
+}
+
+function evaluatedConfigurationValue(value: unknown): unknown {
+  if (isEvaluable(value)) {
+    return evaluatedConfigurationValue(value.evaluate().jsValue)
   }
-  if (!isEvaluable(configured)) {
-    throw new Error(`Datasource ${source.declaration.name} configuration 'StorageKey' expects text.`)
+  if (Array.isArray(value)) {
+    return value.map(evaluatedConfigurationValue)
   }
-  const value = configured.evaluate().jsValue
-  if (typeof value !== 'string') {
-    throw new Error(`Datasource ${source.declaration.name} configuration 'StorageKey' expects text.`)
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([name, nested]) => [name, evaluatedConfigurationValue(nested)]),
+    )
+  }
+  return value
+}
+
+function sortConfigurationValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortConfigurationValue)
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+        .map(([name, nested]) => [name, sortConfigurationValue(nested)]),
+    )
   }
   return value
 }
 
 function isEvaluable(value: unknown): value is Evaluable {
-  return typeof value === 'object' && value !== null && 'evaluate' in value
-    && typeof value.evaluate === 'function'
+  return isRecord(value) && 'evaluate' in value && typeof value['evaluate'] === 'function'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
@@ -150,16 +211,14 @@ export const DataControls = {
 
   Schema(
     definition: TaoDataSchemaDefinition,
-    provider?: TaoDataProvider,
-    providerStorageKey?: string,
+    connection?: TaoDataConnection,
   ): RuntimeDataSchema {
-    const selectedProvider = provider
-      ?? (isDataTestMode() ? MemoryProvider() : UnboundProvider(definition.name))
+    const selectedConnection = connection
+      ?? (isDataTestMode() ? testDataConnection() : UnboundConnection(definition.name))
     const schema = new RuntimeDataSchema(
       definition,
-      selectedProvider,
-      isDataTestMode() ? 'test' : provider ? undefined : 'unbound',
-      providerStorageKey,
+      selectedConnection,
+      isDataTestMode() ? 'test' : connection ? undefined : 'unbound',
     )
     registerDataSchema(schema)
     return schema
@@ -168,10 +227,9 @@ export const DataControls = {
   /** BindConfigured selects a declaration-owned provider while preserving test isolation. */
   BindConfigured(
     schema: RuntimeDataSchema,
-    declaration: TaoDatasourceDeclaration,
-    storageKey?: string,
+    source: TaoConfiguredDatasource,
   ): void {
-    bindConfiguredDataSchema(schema, declaration, storageKey)
+    bindConfiguredDataSchema(schema, source)
   },
 
   /** UseConfigured binds a declaration-owned datasource configuration at an app root. */

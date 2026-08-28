@@ -1,5 +1,5 @@
-import type { TaoDataSchema } from './TR-data'
-import { MemoryProvider } from './TR-data-provider'
+import type { TaoConfiguredDatasource, TaoDataSchema } from './TR-data'
+import { testDataConnection } from './TR-data-provider'
 
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 
@@ -19,13 +19,13 @@ export function registerDataSchema(schema: TaoDataSchema): void {
 
 export function bindConfiguredDataSchema(
   schema: TaoDataSchema,
-  ...binding: Parameters<TaoDataSchema['bindConfigured']>
+  source: TaoConfiguredDatasource,
 ): void {
   if (testMode) {
     activeTestSchemas.add(schema)
     return
   }
-  schema.bindConfigured(...binding)
+  schema.bindConfigured(source)
 }
 
 export function subscribeAll(listener: () => void): () => void {
@@ -41,7 +41,7 @@ export function beginTest(): void {
   testMode = true
   activeTestSchemas.clear()
   for (const schema of schemas) {
-    schema.configure(MemoryProvider(), 'test')
+    schema.configure(testDataConnection(), 'test')
   }
 }
 

@@ -3,10 +3,13 @@ import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell } from './TR-app-shell'
 import {
   DataControls,
-  DataProviderControls,
   type TaoConfiguredDatasource,
+  type TaoDataConnection,
+  type TaoDataConnectionObserver,
   type TaoDataProvider,
+  type TaoDataProviderContext,
   type TaoDataSchema,
+  type TaoDataSchemaDefinition,
   type TaoDatasourceDeclaration,
   testProvider as testDataProvider,
 } from './TR-data'
@@ -339,9 +342,6 @@ class TR {
   /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
   static readonly Data = DataControls
 
-  /** DataProvider exposes the published provider factories used by datasource injections. */
-  static readonly DataProvider = DataProviderControls
-
   /** Design exposes declaration-local flat tokens, named bundles, and combined spec resolution. */
   static readonly Design = DesignControls
 
@@ -497,8 +497,16 @@ namespace TR {
   export type DevModeOptions = TaoDevModeOptions
   /** DataSchema declares one runtime-backed Tao data schema. */
   export type DataSchema = TaoDataSchema
-  /** DataProvider declares the published full-snapshot persistence protocol. */
+  /** DataSchemaDefinition declares the provider-visible shape of one mounted Tao data catalog. */
+  export type DataSchemaDefinition = TaoDataSchemaDefinition
+  /** DataConnection is one provider connection bound to evaluated datasource configuration. */
+  export type DataConnection = TaoDataConnection
+  /** DataConnectionObserver receives live provider snapshots and failures. */
+  export type DataConnectionObserver = TaoDataConnectionObserver
+  /** DataProvider declares the package-owned datasource implementation protocol. */
   export type DataProvider = TaoDataProvider
+  /** DataProviderContext carries one schema mount and plain evaluated configuration. */
+  export type DataProviderContext = TaoDataProviderContext
   /** DatasourceDeclaration owns the identity and provider implementation of a Tao datasource. */
   export type DatasourceDeclaration = TaoDatasourceDeclaration
   /** ConfiguredDatasource is an immutable declaration-linked provider configuration. */

@@ -1,10 +1,15 @@
 import type {
+  TaoConfiguredDatasource,
+  TaoDataConnection,
   TaoDataEntity,
-  TaoDataProvider,
   TaoDataSchemaDefinition,
   TaoDatasourceDeclaration,
   TaoEntityAvailability,
   TaoQueryPlan,
+} from './TR-data'
+import {
+  configuredDatasourceSignature,
+  evaluatedDatasourceConfiguration,
 } from './TR-data'
 import { validateDefinition } from './TR-data-definition'
 import {
@@ -32,6 +37,11 @@ import {
 import RuntimeSwitch from './TR-switch'
 
 type DeleteTarget = { entity: string; id: string }
+type ConfiguredProviderBinding = Readonly<{
+  declaration: TaoDatasourceDeclaration
+  signature: string
+}>
+type ProviderBinding = ConfiguredProviderBinding | 'test' | 'unbound' | undefined
 
 export class RuntimeDataSchema {
   readonly name: string
@@ -43,26 +53,26 @@ export class RuntimeDataSchema {
   private listeners = new Set<() => void>()
   private loadPromise: Promise<void> = Promise.resolve()
   private nextSaveSequence = 0
-  private provider: TaoDataProvider
-  private providerBinding: TaoDatasourceDeclaration | 'test' | 'unbound' | undefined
-  private storageKeyBinding: string | undefined
+  private connection: TaoDataConnection
+  private completedSaveSequence = 0
+  private hasUsableSnapshot = false
+  private providerBinding: ProviderBinding
+  private providerUnsubscribe: (() => void) | undefined
   private saveQueue: Promise<void> = Promise.resolve()
   private status: DataStatus = 'loading'
   private version = 0
 
   constructor(
     readonly definition: TaoDataSchemaDefinition,
-    provider: TaoDataProvider,
-    providerBinding?: TaoDatasourceDeclaration | 'test' | 'unbound',
-    storageKeyBinding?: string,
+    connection: TaoDataConnection,
+    providerBinding?: ProviderBinding,
   ) {
     validateDefinition(definition)
     this.name = definition.name
-    this.provider = provider
+    this.connection = connection
     this.providerBinding = providerBinding
-    this.storageKeyBinding = storageKeyBinding
     this.data = emptyData(definition)
-    this.configure(provider, providerBinding)
+    this.configure(connection, providerBinding)
   }
 
   readonly subscribe = (listener: () => void): () => void => {
@@ -72,59 +82,82 @@ export class RuntimeDataSchema {
 
   readonly snapshot = (): number => this.version
 
-  private async resetAfterLoadFailure(): Promise<void> {
-    const provider = this.provider
+  private async recoverAfterLoadFailure(): Promise<void> {
+    const connection = this.connection
     const providerBinding = this.providerBinding
-    const storageKey = this.storageKey()
-    await provider.persist(storageKey, JSON.stringify(envelope(emptyData(this.definition), this.definition)))
-    if (this.provider !== provider || this.storageKey() !== storageKey) {
+    await connection.reset?.()
+    if (this.connection !== connection) {
       return
     }
 
-    this.configure(provider, providerBinding)
+    this.configure(connection, providerBinding)
     await this.settle()
-    if (this.provider === provider && this.storageKey() === storageKey && this.status === 'error') {
+    if (this.connection === connection && this.status === 'error') {
       throw new Error(this.error)
     }
   }
 
-  bindConfigured(declaration: TaoDatasourceDeclaration, storageKey?: string): void {
-    if (this.providerBinding === declaration && this.storageKeyBinding === storageKey) {
+  bindConfigured(source: TaoConfiguredDatasource): void {
+    const signature = configuredDatasourceSignature(source)
+    if (
+      typeof this.providerBinding === 'object'
+      && this.providerBinding.declaration === source.declaration
+      && this.providerBinding.signature === signature
+    ) {
       return
     }
-    this.storageKeyBinding = storageKey
-    this.configure(declaration.provider, declaration)
+    const configuration = evaluatedDatasourceConfiguration(source)
+    const configuredStorageKey = configuration['StorageKey']
+    if (configuredStorageKey !== undefined && typeof configuredStorageKey !== 'string') {
+      throw new Error(`Datasource ${source.declaration.name} configuration 'StorageKey' expects text.`)
+    }
+    const storageKey = configuredStorageKey ?? this.definition.name
+    const connection = source.declaration.provider.connect(Object.freeze({
+      configuration,
+      schema: this.definition,
+      storageKey,
+    }))
+    this.configure(connection, Object.freeze({ declaration: source.declaration, signature }))
   }
 
   configure(
-    provider: TaoDataProvider,
-    providerBinding?: TaoDatasourceDeclaration | 'test' | 'unbound',
+    connection: TaoDataConnection,
+    providerBinding?: ProviderBinding,
   ): void {
     const generation = ++this.generation
-    this.provider = provider
+    this.providerUnsubscribe?.()
+    this.providerUnsubscribe = undefined
+    if (this.connection !== connection) {
+      this.connection.close?.()
+    }
+    this.connection = connection
     this.providerBinding = providerBinding
     this.data = emptyData(this.definition)
     this.handles.clear()
     this.error = ''
     this.status = 'loading'
     this.failedSaveSequence = undefined
+    this.completedSaveSequence = 0
+    this.hasUsableSnapshot = false
     this.nextSaveSequence = 0
     this.saveQueue = Promise.resolve()
     this.emit()
 
     try {
-      const loaded = provider.load(this.storageKey())
+      const loaded = connection.load()
       if (isPromise(loaded)) {
         this.loadPromise = loaded.then(
           value => this.finishLoad(generation, value),
           error => this.failLoad(generation, error),
-        )
+        ).then(() => this.startSubscription(generation, connection))
         return
       }
       this.finishLoad(generation, loaded)
+      this.startSubscription(generation, connection)
       this.loadPromise = Promise.resolve()
     } catch (error) {
       this.failLoad(generation, error)
+      this.startSubscription(generation, connection)
       this.loadPromise = Promise.resolve()
     }
   }
@@ -276,7 +309,7 @@ export class RuntimeDataSchema {
   setStatus(status: DataStatus, message: string): void {
     this.failedSaveSequence = undefined
     this.status = status
-    this.error = status === 'error' ? message || 'Local data provider failed.' : ''
+    this.error = status === 'error' ? message || 'Data provider failed.' : ''
     this.emit()
   }
 
@@ -309,13 +342,13 @@ export class RuntimeDataSchema {
 
   private commit(): void {
     const generation = this.generation
-    const provider = this.provider
+    const connection = this.connection
     const saveSequence = ++this.nextSaveSequence
     const serialized = JSON.stringify(envelope(this.data, this.definition))
     this.emit()
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await provider.persist(this.storageKey(), serialized)
+        await connection.save(serialized)
         if (
           generation === this.generation
           && this.failedSaveSequence !== undefined
@@ -330,8 +363,12 @@ export class RuntimeDataSchema {
         if (generation === this.generation) {
           this.failedSaveSequence = saveSequence
           this.status = 'error'
-          this.error = `Could not save local data: ${errorMessage(error)}`
+          this.error = `Could not save data: ${errorMessage(error)}`
           this.emit()
+        }
+      } finally {
+        if (generation === this.generation) {
+          this.completedSaveSequence = saveSequence
         }
       }
     })
@@ -348,9 +385,12 @@ export class RuntimeDataSchema {
     }
     this.failedSaveSequence = undefined
     this.status = 'error'
-    this.error = `Could not load local data: ${errorMessage(error)}`
+    this.error = `Could not load data: ${errorMessage(error)}`
     if (this.providerBinding !== 'unbound') {
-      DataLoadRecovery.report(this, this.error, () => this.resetAfterLoadFailure())
+      DataLoadRecovery.report(this, this.error, {
+        label: this.connection.reset === undefined ? 'Try loading data again' : 'Reset app data and reload',
+        run: () => this.recoverAfterLoadFailure(),
+      })
     }
     this.emit()
   }
@@ -362,6 +402,7 @@ export class RuntimeDataSchema {
     try {
       this.data = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
       this.failedSaveSequence = undefined
+      this.hasUsableSnapshot = true
       this.status = 'ready'
       this.error = ''
       DataLoadRecovery.resolve(this)
@@ -369,6 +410,64 @@ export class RuntimeDataSchema {
     } catch (error) {
       this.failLoad(generation, error)
     }
+  }
+
+  private startSubscription(generation: number, connection: TaoDataConnection): void {
+    if (generation !== this.generation || connection !== this.connection || !connection.subscribe) {
+      return
+    }
+    try {
+      this.providerUnsubscribe = connection.subscribe({
+        error: error => this.failSubscription(generation, error),
+        snapshot: value => this.receiveSnapshot(generation, value),
+      })
+    } catch (error) {
+      this.failSubscription(generation, error)
+    }
+  }
+
+  private failSubscription(generation: number, error: unknown): void {
+    if (!this.hasUsableSnapshot) {
+      this.failLoad(generation, error)
+      return
+    }
+    if (generation !== this.generation) {
+      return
+    }
+    this.status = 'error'
+    this.error = `Could not synchronize data: ${errorMessage(error)}`
+    this.emit()
+  }
+
+  private receiveSnapshot(generation: number, stored: string | undefined): void {
+    if (generation !== this.generation) {
+      return
+    }
+    // A local snapshot already visible in the UI wins over remote events observed while its ordered
+    // save is pending. Applying those events would briefly replace local state before the queued save
+    // writes that same local snapshot back to the provider.
+    if (this.completedSaveSequence < this.nextSaveSequence) {
+      return
+    }
+    try {
+      const serialized = JSON.stringify(envelope(this.data, this.definition))
+      if (stored === serialized || (stored === undefined && this.isEmpty())) {
+        return
+      }
+      this.data = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
+      this.failedSaveSequence = undefined
+      this.hasUsableSnapshot = true
+      this.status = 'ready'
+      this.error = ''
+      DataLoadRecovery.resolve(this)
+      this.emit()
+    } catch (error) {
+      this.failLoad(generation, error)
+    }
+  }
+
+  private isEmpty(): boolean {
+    return Object.values(this.data.rows).every(rows => rows.length === 0)
   }
 
   private handle(entity: string, id: string): RuntimeEntityHandle {
@@ -413,10 +512,6 @@ export class RuntimeDataSchema {
     if (this.status !== 'ready') {
       throw new Error(`Cannot ${operation} data while the provider is ${this.status}.`)
     }
-  }
-
-  private storageKey(): string {
-    return this.storageKeyBinding ?? this.definition.name
   }
 
   private storedRow(entity: string, id: string): StoredRow | undefined {

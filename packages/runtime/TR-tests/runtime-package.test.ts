@@ -20,10 +20,12 @@ const frameworkPackages = ['react', 'react-native', 'react-native-safe-area-cont
 function providerPackageFixture(): TR.DataProvider {
   let snapshot: string | undefined
   return {
-    load: () => snapshot,
-    persist: (_storageKey, value) => {
-      snapshot = value
-    },
+    connect: () => ({
+      load: () => snapshot,
+      save: value => {
+        snapshot = value
+      },
+    }),
   }
 }
 
@@ -77,9 +79,14 @@ Describe('tao-runtime package boundary', () => {
 
   Test('exports the provider protocol through the runtime TR subpath', async () => {
     const provider = providerPackageFixture()
+    const connection = provider.connect({
+      configuration: {},
+      schema: { entities: {}, name: 'PackageFixture' },
+      storageKey: 'demo',
+    })
 
-    await provider.persist('demo', '{"provider":"third-party"}')
+    await connection.save('{"provider":"third-party"}')
 
-    Expect(await provider.load('demo')).toBe('{"provider":"third-party"}')
+    Expect(await connection.load()).toBe('{"provider":"third-party"}')
   })
 })
