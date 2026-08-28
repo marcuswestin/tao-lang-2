@@ -4,17 +4,22 @@ import { Describe, Expect, Test } from '@shared/test'
 import { act, fireEventAsync, render, waitFor } from '@testing-library/react-native'
 import { createElement, type ReactElement, useState } from 'react'
 import * as RN from 'react-native'
+import { InstantDBProvider } from '../../stdlib/@tao/data/providers/instantdb/InstantDB'
 import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileFiles } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  Test('constructs the InstantDB provider without loading native modules before connect', () => {
+    Expect(typeof InstantDBProvider().connect).toBe('function')
+  })
+
   Test('shares one data catalog across the app, schema, and query modules', async () => {
     await testCompileFiles(
       'App.tao',
       {
         'App.tao': `
-          use Memory from @tao/data
+          use Memory from @tao/data/providers/memory
           use StackNav from @tao/nav
           use Main from ./Screen.tao
 
@@ -47,7 +52,7 @@ Describe('Expo runtime', () => {
 
   Test('binds an app datasource after render without updating an existing query subscriber during render', async () => {
     const datasource = TR.Data.Configure(
-      TR.Data.Declaration('Memory', TR.DataProvider.Memory()),
+      TR.Data.Declaration('Memory', memoryProvider()),
       {},
     )
     const schema = TR.Data.Schema({
@@ -96,7 +101,7 @@ Describe('Expo runtime', () => {
   })
 
   Test('binds a declaration-owned provider and StorageKey through UseConfigured', async () => {
-    const provider = TR.DataProvider.Memory()
+    const provider = memoryProvider()
     const declaration = TR.Data.Declaration('ConfiguredMemory', provider)
     const configured = TR.Data.Configure(declaration, { StorageKey: TR.Value('configured-runtime') })
     const schema = TR.Data.Schema({
@@ -126,14 +131,14 @@ Describe('Expo runtime', () => {
     binding.rerender(createElement(ProviderBinding))
 
     Expect(schema.snapshot()).toBe(revision)
-    Expect(await provider.load('ConfiguredRuntimeSchema')).toBeUndefined()
-    Expect(await provider.load('configured-runtime')).toContain('Declaration bound')
+    Expect(await providerConnection(provider, 'ConfiguredRuntimeSchema').load()).toBeUndefined()
+    Expect(await providerConnection(provider, 'configured-runtime').load()).toContain('Declaration bound')
   })
 
-  Test('blocks provider load failures until local data is reset and the app remounts', async () => {
+  Test('blocks provider load failures until recovery succeeds and the app remounts', async () => {
     let firstLoad = true
     let stored: string | undefined
-    const provider: TR.DataProvider = {
+    const provider: TR.DataConnection = {
       load: () => {
         if (firstLoad) {
           firstLoad = false
@@ -141,7 +146,7 @@ Describe('Expo runtime', () => {
         }
         return stored
       },
-      persist: (_storageKey, snapshot) => {
+      save: snapshot => {
         stored = snapshot
       },
     }
@@ -170,14 +175,34 @@ Describe('Expo runtime', () => {
     ))
 
     ExpectScreen(screen).toHaveText("Couldn't load app data")
-    ExpectScreen(screen).toHaveText('Could not load local data: storage unavailable')
+    ExpectScreen(screen).toHaveText('Could not load data: storage unavailable')
     Expect(screen.queryByText('Dismiss')).toBeNull()
-    await fireEventAsync.press(screen.getByLabelText('Reset local data and reload'))
+    await fireEventAsync.press(screen.getByLabelText('Try loading data again'))
     await TR.Data.Settle(schema)
 
     Expect(screen.queryByLabelText('App data load failure')).toBeNull()
     ExpectScreen(screen).toHaveText('Recovery root 2')
     Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error).toBe('')
-    Expect((JSON.parse(stored!) as { rows: { Note: unknown[] } }).rows.Note).toEqual([])
+    Expect(stored).toBeUndefined()
   })
 })
+
+function memoryProvider(): TR.DataProvider {
+  const snapshots = new Map<string, string>()
+  return {
+    connect: ({ storageKey }) => ({
+      load: () => snapshots.get(storageKey),
+      save: snapshot => {
+        snapshots.set(storageKey, snapshot)
+      },
+    }),
+  }
+}
+
+function providerConnection(provider: TR.DataProvider, storageKey: string): TR.DataConnection {
+  return provider.connect({
+    configuration: {},
+    schema: { entities: {}, name: 'RuntimeToolchainTest' },
+    storageKey,
+  })
+}

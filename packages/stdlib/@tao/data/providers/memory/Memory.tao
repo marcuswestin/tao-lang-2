@@ -1,0 +1,5 @@
+// Memory gives each configured datasource declaration an isolated process-local snapshot store.
+public
+type Memory is datasource with {
+   provider MemoryProvider from ./Memory.ts
+}

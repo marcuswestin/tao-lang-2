@@ -350,7 +350,7 @@ Describe('Expo runtime', () => {
       `,
         'Main.tao': `
         use Col, FormButton, Text, TextInput from @tao/ui
-        use Memory from @tao/data
+        use Memory from @tao/data/providers/memory
         use StackNav from @tao/nav
 
         data Items / Item { Name text }

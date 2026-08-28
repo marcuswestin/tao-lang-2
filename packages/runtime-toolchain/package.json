@@ -9,6 +9,9 @@
     "./testing/runtime-testing": "./runtime-toolchain-src/testing/runtime-testing.ts"
   },
   "dependencies": {
+    "@instantdb/react-native": "1.0.22",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "12.0.1",
     "tao-runtime": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-workspace": "workspace:*",
@@ -17,6 +20,7 @@
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
+    "react-native-get-random-values": "2.0.0",
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
