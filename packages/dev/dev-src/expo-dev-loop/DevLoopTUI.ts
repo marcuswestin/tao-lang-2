@@ -26,12 +26,16 @@ type DevLoopOutputStream = {
 }
 
 type DevLoopOutputState = {
+  failure?: {
+    message: string
+    streamName: string
+  }
   prompt?: string
   streams: Map<string, DevLoopOutputStream>
 }
 
 type DevLoopOutputHandle = {
-  stop: () => Promise<void>
+  stop: (options?: { printFailure?: boolean }) => Promise<void>
 }
 
 const DEV_LOOP_LINE_LIMIT = 120
@@ -79,6 +83,7 @@ export const DevLoopTUI = {
   devLoopOutputHandler,
   logDevLoop,
   printDevLoopControls,
+  recordFailure,
   startDevLoopOutput,
   stopDevLoopOutput,
   writeDevLoopOutput,
@@ -137,7 +142,7 @@ function startDevLoopOutput(): DevLoopOutputHandle | undefined {
   return { stop: stopDevLoopOutput }
 }
 
-async function stopDevLoopOutput(): Promise<void> {
+async function stopDevLoopOutput(options: { printFailure?: boolean } = {}): Promise<void> {
   const activeOutput = activeDevLoopOutput
   activeDevLoopOutput = undefined
   if (activeOutput?.renderTimeout !== undefined) {
@@ -146,6 +151,18 @@ async function stopDevLoopOutput(): Promise<void> {
   activeOutput?.app.rerender(React.createElement(DevLoopOutputDashboard, { state: activeOutput.state }))
   await activeOutput?.app.waitUntilRenderFlush()
   activeOutput?.app.unmount()
+  if (options.printFailure && activeOutput?.state.failure) {
+    const { message, streamName } = activeOutput.state.failure
+    fallbackLog(streamName, message, 'error')
+  }
+}
+
+/** recordFailure keeps the terminal error available after the alternate-screen dashboard closes. */
+function recordFailure(streamName: string, message: string): void {
+  logDevLoop(streamName, message, 'error')
+  if (activeDevLoopOutput !== undefined) {
+    activeDevLoopOutput.state.failure = { message, streamName }
+  }
 }
 
 function logDevLoop(streamName: string, message: string, kind: DevLoopOutputKind = 'info'): void {

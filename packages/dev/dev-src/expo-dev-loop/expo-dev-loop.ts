@@ -31,6 +31,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   let watcher: DevFileWatcher | undefined
   let finished = false
   let cleanupStarted = false
+  let printFailure = false
   let exitLoop!: (outcome: DevLoopOutcome) => void
 
   const done = new Promise<DevLoopOutcome>(resolve => {
@@ -81,7 +82,9 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     void finish({ kind: 'exit', exitCode })
   }
 
-  expoServer.onUnexpectedExit(() => {
+  expoServer.onUnexpectedExit(message => {
+    printFailure = true
+    DevLoopTUI.recordFailure('expo', message)
     void finish({ kind: 'exit', exitCode: 1 })
   })
 
@@ -105,6 +108,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
       return await done
     }
     if (!initialCompileSucceeded) {
+      printFailure = true
       return { kind: 'exit', exitCode: 1 }
     }
     watcher = new DevFileWatcher(appPath, shouldRunParserGen => {
@@ -130,10 +134,14 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     }
     void ExpoRunner.openStartupTargets(shouldStop)
     return await done
+  } catch (error) {
+    printFailure = true
+    DevLoopTUI.recordFailure('dev', Run.failureDiagnostics.format(error))
+    throw error
   } finally {
     removeSigint()
     removeSigterm()
     await cleanup()
-    await output?.stop()
+    await output?.stop({ printFailure })
   }
 }

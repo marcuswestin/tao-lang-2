@@ -3,6 +3,9 @@ set quiet
 WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
 DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
+LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
+LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
+LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
 
 # Print available recipes
 help:
@@ -11,9 +14,20 @@ help:
 # Setup dependencies and generated agent adapters
 setup: deps _agent-config
 
-# Discover and run Tao apps through the Tao CLI dev loop
-dev app_path="Apps":
-    ./tao dev "{{ app_path }}"
+# Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
+[positional-arguments]
+dev app_path="Apps" APP="":
+    ./tao dev "$1" {{ if APP == "" { "" } else { "--app \"$2\"" } }}
+
+# Start the official self-hosted InstantDB stack and provision WordFlower's local app
+start-local-instantdb:
+    {{ LOCAL_INSTANTDB_COMPOSE }} up --detach --wait
+    {{ LOCAL_INSTANTDB_COMPOSE }} exec -T postgres psql --set ON_ERROR_STOP=1 --username instant --dbname instant --set app_id="{{ LOCAL_INSTANTDB_APP_ID }}" --file /dev/stdin < "{{ LOCAL_INSTANTDB_DIR }}/seed-app.sql"
+    echo "InstantDB is ready at http://localhost:9020 (dashboard: http://localhost:3000)"
+
+# Stop local InstantDB while preserving its database and object-storage volumes
+stop-local-instantdb:
+    {{ LOCAL_INSTANTDB_COMPOSE }} down
 
 # Install development dependencies
 deps:

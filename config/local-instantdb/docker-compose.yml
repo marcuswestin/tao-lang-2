@@ -1,0 +1,111 @@
+# Local adaptation of InstantDB's official self-hosting/docker-compose.local.yml.
+# It keeps WordFlower's established backend port and omits source-build contexts
+# because development uses the published self-hosted images.
+services:
+  postgres:
+    image: ghcr.io/instantdb/postgresql:postgresql-17-pg-hint-plan
+    ports:
+      - "8890:5432"
+    environment:
+      POSTGRES_PASSWORD: pass
+      POSTGRES_USER: instant
+      POSTGRES_DB: instant
+    volumes:
+      - backend-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U instant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+      - -c
+      - shared_preload_libraries=pg_hint_plan
+      - -c
+      - random_page_cost=1.1
+
+  dashboard:
+    image: ghcr.io/instantdb/dashboard:latest
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      INSTANT_BACKEND_URL: http://localhost:9020
+
+  minio:
+    image: minio/minio:latest
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BROWSER: "on"
+      MINIO_SKIP_CLIENT_CERT_VALIDATION: "on"
+    command: server /data --console-address ":9001" --address ":9000"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  create-bucket:
+    image: minio/mc:latest
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      S3_BUCKET: instant-bucket
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      set -e;
+      /usr/bin/mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      /usr/bin/mc mb --ignore-existing local/$$S3_BUCKET;
+      exit"
+
+  server:
+    image: ghcr.io/instantdb/server:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      create-bucket:
+        condition: service_completed_successfully
+    ports:
+      - "9020:8888"
+    environment:
+      WAL_HISTORY_STORAGE: pg
+      DATABASE_URL: postgresql://instant:pass@postgres:5432/instant?sslmode=disable
+      CONNECTION_POOL_SIZE: 20
+      INSTANT_BACKEND_URL: http://localhost:9020
+      INSTANT_DASHBOARD_URL: http://localhost:3000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: instant-bucket
+    volumes:
+      - server-config:/app/resources/config
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8888/health/system"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  backend-db:
+  minio-data:
+  server-config:
