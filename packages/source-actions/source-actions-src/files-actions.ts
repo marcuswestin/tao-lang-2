@@ -13,19 +13,24 @@ export function canonicalizeTopLevel(document: AST.Document): string {
   const context = sourceStatementContext(document)
   const { file, slices } = context
   const useSlices = slices.filter(isUseSlice)
+  const usePackageSlices = slices.filter(isUsePackageSlice)
   const ranked = slices
-    .filter(slice => !isUseSlice(slice))
+    .filter(slice => !isUseSlice(slice) && !isUsePackageSlice(slice))
     .map((slice, index) => ({ slice, index }))
     .sort((a, b) => (statementRank(a.slice.statement) - statementRank(b.slice.statement)) || (a.index - b.index))
 
   return assembleWithTrailingSource(context, [
-    { text: synthesizeImportSection(file, useSlices), blankBefore: false },
+    { text: synthesizeImportSection(file, useSlices, usePackageSlices), blankBefore: false },
     ...ranked.map(entry => ({ text: sliceText(entry.slice), blankBefore: entry.slice.leading !== '' })),
   ])
 }
 
 function isUseSlice(slice: StatementSlice<AST.Statement>): slice is StatementSlice<AST.UseStatement> {
   return AST.isUseStatement(slice.statement)
+}
+
+function isUsePackageSlice(slice: StatementSlice<AST.Statement>): slice is StatementSlice<AST.UsePackageStatement> {
+  return AST.isUsePackageStatement(slice.statement)
 }
 
 const ProjectStatementRank = 0

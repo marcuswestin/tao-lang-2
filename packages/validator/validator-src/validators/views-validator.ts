@@ -122,6 +122,10 @@ function validateDuplicateParameters(view: AST.VisualDeclaration, ctx: Validatio
 }
 
 function validateRenderCount(view: AST.VisualDeclaration, ctx: ValidationContext): void {
+  // A pass-through alias renders whatever its target renders; it has no body of its own.
+  if (AST.isViewDeclaration(view) && view.aliasTarget) {
+    return
+  }
   const renderCount = AST.blockStatementOf(view, { filter: AST.isRenderStatement }).length
   if (renderCount !== 1) {
     ctx.error(viewValidationMessages.renderCount(view.name), view)
@@ -144,7 +148,11 @@ function validateRenderableBodyBlock(view: AST.VisualDeclaration, ctx: Validatio
     LayoutDeclaration: layout => validateLayoutBodyBlock(layout.block, ctx),
     DialogueDeclaration: dialogue => validateViewBodyBlock(dialogue.block, ctx),
     UiDeclaration: ui => validateViewBodyBlock(ui.block, ctx),
-    ViewDeclaration: viewDeclaration => validateViewBodyBlock(viewDeclaration.block, ctx),
+    ViewDeclaration: viewDeclaration => {
+      if (viewDeclaration.block) {
+        validateViewBodyBlock(viewDeclaration.block, ctx)
+      }
+    },
   })
 }
 

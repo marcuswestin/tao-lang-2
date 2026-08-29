@@ -31,6 +31,8 @@ without erasing compatible coverage:
   `let Name is Type = Value`, primitive app/nav/datasource value heads, and the settled `with`
   construction-versus-value-derivation rules.
 - Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
+- Component Aliases covers `use package` namespace imports and pass-through view aliases
+  (`public view Badge = widgets.Badge`), the mechanism `@tao/ui` uses to publish implementations.
 - Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
   dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
   feature, and package tests own the diagnostics.
@@ -118,6 +120,14 @@ Exercise the ticking clock (Decisions §9) and the deterministic clock a check h
 **Belongs here:** `Interval(Every)` held as view-local state; `Tick.Value` as a live reading; `let` derivations that recompute per tick; `do Tick.Stop()` and `do Tick.Start()`; `Tick.Running`; `advance <duration>` moving the clock and firing due ticks in order; the compact `when Subject Yes / not No` form.
 
 **Does not belong here:** unit construction and conversion, which Unit Values owns; the product shape of a writing session, which WordFlower owns; toast expiry, which WordFlower's documents journey proves.
+
+## Component Aliases
+
+Exercise namespace imports and pass-through view aliases, the mechanism behind component kits.
+
+**Belongs here:** `use package @pkg [as name]`; a derived namespace name and an `as` rename; `public view Name = ns.Member` publishing a package member under the file's own name; a same-named alias proving the namespace avoids shadowing; call sites binding through the alias to the target's parameters.
+
+**Does not belong here:** namespace-import diagnostics (duplicate namespaces, unresolvable packages, non-view targets), which are package tests; the stdlib's own native components, which `@tao/ui` and its conformance suite own.
 
 ## Type System Tests
 

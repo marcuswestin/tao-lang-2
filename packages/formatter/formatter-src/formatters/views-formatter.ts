@@ -73,4 +73,6 @@ function ViewDeclaration(f: NodeFormat<AST.VisualDeclaration>): void {
   f.visibilityOnOwnLine()
   f.oneSpaceAfter('view', 'layout', 'frame', 'ui', 'dialogue')
   f.noSpaceBefore('(')
+  // The pass-through alias form: `view Name = ns.Member`.
+  f.oneSpaceAround('=')
 }

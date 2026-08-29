@@ -26,6 +26,10 @@ import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
 import { typeValidationChecks } from './validators/types-validator'
 import { unitsValidationChecks } from './validators/units-validator'
+import {
+  usePackageValidationChecks,
+  validatePackageUseStatements,
+} from './validators/use-package-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './validators/use-validator'
 import { ViewsValidator } from './validators/views-validator'
 
@@ -51,6 +55,7 @@ const nodeValidationChecks = NodeValidation.compile(
     navigationValidationChecks,
     unitsValidationChecks,
     bridgeValidationChecks,
+    usePackageValidationChecks,
     configuredValueValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
 )
@@ -69,6 +74,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   if (document.uri.scheme === 'file') {
     validateVisibleDeclarations(ctx, file)
     validateUseStatements(file, ctx)
+    validatePackageUseStatements(file, ctx)
   }
   return nodes
 }
