@@ -24,6 +24,24 @@ view Button(Title text, Press action(), Disabled boolean default false) {
    ```
 }
 
+// The form button: the same interface as the wireframe one, including its busy state, rendered as
+// the platform's own button. A busy button shows the saving title and refuses presses.
+public
+view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false) {
+   render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('FormButton', Layout)
+      const busy = Disabled || Submitting
+      return TR.Element(RN.Button, {
+        accessibilityLabel: Title,
+        accessibilityState: { busy: Submitting, disabled: busy },
+        disabled: busy,
+        onPress: () => Press.invoke(),
+        testID: Tag || Id || undefined,
+        title: Submitting ? 'Saving…' : Title,
+      })
+   ```
+}
+
 // The platform switch — a true native host control — paired with its label, since the platform
 // switch renders no text of its own.
 public

@@ -168,36 +168,3 @@ view TextInput(Value text, Change action(text), Submit action(), Label text, Pla
       )
    ```
 }
-
-public
-view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false) {
-   render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
-      const effectiveDisabled = Disabled || Submitting
-      return TR.Views.Pressable(
-        {
-          layout: Layout,
-          tag: Tag,
-          title: Submitting ? 'Saving…' : Title,
-          action: Press,
-          disabled: effectiveDisabled,
-        },
-        {
-          nativeProps: {
-            accessibilityLabel: Title,
-            accessibilityRole: 'button',
-            accessibilityState: { busy: Submitting, disabled: effectiveDisabled },
-            disabled: effectiveDisabled,
-            style: {
-              alignItems: 'center',
-              backgroundColor: effectiveDisabled ? '#9aa49d' : '#2f6b4f',
-              borderRadius: 8,
-              minHeight: 44,
-              paddingHorizontal: 16,
-              paddingVertical: 11,
-            },
-            testID: Id || undefined,
-          },
-        },
-      )
-   ```
-}

@@ -10,6 +10,9 @@ public
 view Button = native.Button
 
 public
+view FormButton = native.FormButton
+
+public
 view Switch = native.Switch
 
 public
