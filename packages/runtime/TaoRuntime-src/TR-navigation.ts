@@ -24,6 +24,7 @@ import {
 } from './TR-navigation-registry'
 import { RuntimeNavigationValue } from './TR-navigation-value'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
+import { disableNativeNavigationSurfaces } from './TR-navigation-native-tabs'
 
 export { testNavKind } from './TR-navigation-conformance'
 export { NavKindControls } from './TR-navigation-kinds'
@@ -329,6 +330,8 @@ export const NavigationControls = {
 
   /** beginTest resets cached generated navigation and apps before each Tao behavior check. */
   beginTest(): void {
+    // Checks run the deterministic JS surfaces; a native tab bar has no host under the harness.
+    disableNativeNavigationSurfaces()
     resetNavigationRuntime()
   },
 } as const

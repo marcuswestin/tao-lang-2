@@ -10,6 +10,7 @@ import type {
   TaoSlotNavConfiguration,
   TaoStackNavConfiguration,
 } from './TR-navigation'
+import { renderNativeSelectionTabs } from './TR-navigation-native-tabs'
 import type { PresentableEntry } from './TR-navigation-state'
 import { navigationHostStyle, NavigationLevel, navigationProps } from './TR-navigation-surfaces'
 import { RuntimeNavigationValue } from './TR-navigation-value'
@@ -274,6 +275,27 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
   protected renderContent(taoProps?: TaoProps): React.ReactNode {
     const runtime = requireReactNativeRuntime()
     const display = String(this.descriptor.config.display.evaluate().jsValue)
+    // `automatic` prefers the platform's own tab surface. The native bar runs controlled — Tao's
+    // reducer stays the source of truth — and every tab's entry stack stays mounted inside its
+    // native screen, matching the JS surface's covered-content contract. Where no native host
+    // exists (web, checks, a platform without the module), the JS bar below renders instead.
+    if (display === 'automatic') {
+      const native = renderNativeSelectionTabs({
+        activeKey: this.activeKey,
+        items: this.items.map(item => ({
+          content: this.itemEntryLevels(item, taoProps),
+          iconName: selectionItemIconName(item.definition),
+          key: item.key,
+          title: String(item.definition.label.evaluate().jsValue),
+        })),
+        onActivate: key => {
+          this.activate(key)
+        },
+      })
+      if (native !== undefined) {
+        return native
+      }
+    }
     return React.createElement(runtime.View, {
       children: [
         React.createElement(runtime.View, {
@@ -324,6 +346,17 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     })
   }
 
+  /** itemEntryLevels renders one tab's entry stack; only the top entry is visible within the tab. */
+  private itemEntryLevels(item: SelectionItemState, taoProps?: TaoProps): React.ReactNode {
+    return item.entries.map((entry, index) =>
+      React.createElement(NavigationLevel, {
+        children: renderPresentable(entry.presentable, entry.arguments, navigationProps(taoProps, this)),
+        hidden: index !== item.entries.length - 1,
+        key: `${item.key}-${entry.instanceId}`,
+      })
+    )
+  }
+
   private activeItem(): SelectionItemState {
     return this.item(this.activeKey)!
   }
@@ -335,6 +368,12 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
   private item(key: string): SelectionItemState | undefined {
     return this.items.find(item => item.key === key)
   }
+}
+
+/** selectionItemIconName reads an item's `Icon` property, which carries an SF Symbol name. */
+function selectionItemIconName(definition: TaoSelectionNavItemDefinition): string | undefined {
+  const icon = definition.icon?.evaluate().jsValue
+  return typeof icon === 'string' && icon.length > 0 ? icon : undefined
 }
 
 const selectionContentStyle = { flex: 1 } as const
