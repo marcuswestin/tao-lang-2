@@ -1,0 +1,17 @@
+use NativeComponents from ./
+
+test "Native components" {
+   test "presses the platform button through its title" {
+      run NativeComponents
+
+      expect text "Count: 0"
+      press "Add one"
+      press "Add one"
+      expect text "Count: 2"
+   }
+   test "renders the labeled platform switch" {
+      run NativeComponents
+      expect {
+         text "Enabled"
+         text "Off"
+}  }  }

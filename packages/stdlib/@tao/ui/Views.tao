@@ -151,16 +151,6 @@ view Number(Value number) {
 }
 
 public
-view Button(Title text, Press action()) {
-   render inject Title, Press, Layout @@layout, Tag @@tag ```ts
-      return TR.Views.Pressable(
-        { title: Title, action: Press, layout: Layout, tag: Tag },
-        { nativeProps: { accessibilityRole: 'button' } },
-      )
-   ```
-}
-
-public
 view TextInput(Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false) {
    render inject Value, Change, Submit, Label, Placeholder, Id, Disabled, Layout @@layout, Tag @@tag ```ts
       return TR.Views.TextInput(

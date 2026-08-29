@@ -1,0 +1,39 @@
+use StackNav from @tao/nav
+use Button, Col, Switch, Text from @tao/ui
+
+app NativeComponents {
+   Name "Native Components"
+   Navigator StackNav {
+      Initial MainView
+}  }
+
+// `Button` and `Switch` resolve through @tao/ui's pass-through aliases to the platform-native
+// implementations — the same import shape as every other stdlib component.
+ui MainView() {
+   state Count = 0
+   state Enabled = false
+   action AddOne() {
+      set Count += 1
+   }
+   action SetEnabled(Value boolean) {
+      set Enabled = Value
+   }
+   render Col() [gap 8] {
+      Text("Count: { Count }")
+
+      #addOne
+      Button("Add one") {
+         on press AddOne
+      }
+
+      #disabledButton
+      Button("Never", Disabled: true) {
+         on press AddOne
+      }
+
+      #enabled
+      Switch(Value: Enabled, Label: "Enabled") {
+         on change SetEnabled
+      }
+      Text(when Enabled "On" / not "Off")
+}  }

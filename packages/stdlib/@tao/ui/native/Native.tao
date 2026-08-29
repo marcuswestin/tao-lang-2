@@ -1,0 +1,42 @@
+// The platform-native implementations behind `@tao/ui`'s published components. Each is an ordinary
+// Tao view whose inject passes through to the platform's own control, so an app gets the OS's
+// appearance and behavior by default — and swaps any of them by importing another package, since
+// the published names in `../Components.tao` are pass-through aliases.
+//
+// Styling is best-effort: a native control renders the OS's own chrome and cannot honor layout
+// clauses, so anything passed in is reported outside production rather than silently diverging.
+// The platform button: system-styled per OS, following its human-interface conventions.
+public
+view Button(Title text, Press action(), Disabled boolean default false) {
+   render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('Button', Layout)
+      return TR.Element(RN.Button, {
+        accessibilityLabel: Title,
+        disabled: Disabled,
+        onPress: () => Press.invoke(),
+        testID: Tag,
+        title: Title,
+      })
+   ```
+}
+
+// The platform switch — a true native host control — paired with its label, since the platform
+// switch renders no text of its own.
+public
+view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean default false) {
+   render inject Value, Change, Label, Disabled, Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('Switch', Layout)
+      return TR.Element(
+        RN.View,
+        { style: { alignItems: 'center', flexDirection: 'row', gap: 8 }, testID: Tag },
+        TR.Element(RN.Switch, {
+          accessibilityLabel: Label,
+          disabled: Disabled,
+          key: 'control',
+          onValueChange: (value: boolean) => Change.invoke(TR.Value(value)),
+          value: Value,
+        }),
+        TR.Element(RN.Text, { key: 'label' }, Label),
+      )
+   ```
+}

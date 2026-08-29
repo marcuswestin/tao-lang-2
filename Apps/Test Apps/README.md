@@ -33,6 +33,8 @@ without erasing compatible coverage:
 - Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
 - Component Aliases covers `use package` namespace imports and pass-through view aliases
   (`public view Badge = widgets.Badge`), the mechanism `@tao/ui` uses to publish implementations.
+- Native Components covers `@tao/ui`'s published components resolving to their platform-native
+  implementations, exercised through the behavior every implementation must share.
 - Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
   dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
   feature, and package tests own the diagnostics.
@@ -128,6 +130,14 @@ Exercise namespace imports and pass-through view aliases, the mechanism behind c
 **Belongs here:** `use package @pkg [as name]`; a derived namespace name and an `as` rename; `public view Name = ns.Member` publishing a package member under the file's own name; a same-named alias proving the namespace avoids shadowing; call sites binding through the alias to the target's parameters.
 
 **Does not belong here:** namespace-import diagnostics (duplicate namespaces, unresolvable packages, non-view targets), which are package tests; the stdlib's own native components, which `@tao/ui` and its conformance suite own.
+
+## Native Components
+
+Exercise `@tao/ui`'s published components against their platform-native implementations.
+
+**Belongs here:** importing `Button` and `Switch` from bare `@tao/ui` and getting the native set; pressing a native button by its title; a disabled native button; a native switch reporting its value through an action; behavior that must hold identically whichever implementation is bound.
+
+**Does not belong here:** the alias mechanism itself, which Component Aliases owns; per-implementation appearance, which is not assertable from a journey; navigation surfaces, which the nav layer owns.
 
 ## Type System Tests
 

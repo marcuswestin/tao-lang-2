@@ -1,0 +1,13 @@
+// The wireframe tier: minimally-styled implementations that honor every Tao clause, the base a
+// design styles up with element defaults. An app opts down deliberately with
+// `use Button from @tao/ui/basic`; the bare `@tao/ui` names pass through to the native set.
+// A tappable title, fully receptive to layout clauses and design bundles.
+public
+view Button(Title text, Press action(), Disabled boolean default false) {
+   render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Pressable(
+        { title: Title, action: Press, layout: Layout, tag: Tag, disabled: Disabled },
+        { nativeProps: { accessibilityRole: 'button', accessibilityState: { disabled: Disabled } } },
+      )
+   ```
+}

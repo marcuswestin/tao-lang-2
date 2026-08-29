@@ -11,6 +11,7 @@ import {
   mountConfiguredNavigation,
   resolveNavigationTarget,
 } from './TR-navigation-configuration'
+import { disableNativeNavigationSurfaces } from './TR-navigation-native-tabs'
 import {
   type Evaluable,
   RuntimeDialogue,
@@ -24,7 +25,6 @@ import {
 } from './TR-navigation-registry'
 import { RuntimeNavigationValue } from './TR-navigation-value'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
-import { disableNativeNavigationSurfaces } from './TR-navigation-native-tabs'
 
 export { testNavKind } from './TR-navigation-conformance'
 export { NavKindControls } from './TR-navigation-kinds'

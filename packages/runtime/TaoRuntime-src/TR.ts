@@ -38,6 +38,8 @@ import * as TRTaoProps from './TR-TaoProps'
 import { Clock, createTicker, isTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
 
+const warnedUnhonoredLayouts = new Set<string>()
+
 /** TR exposes the generated-code runtime API used by generated apps. */
 class TR {
   private constructor() {}
@@ -252,6 +254,37 @@ class TR {
     const jsValueRef = React.useRef(jsValue)
     jsValueRef.current = jsValue
     return new RuntimeState(jsValueRef, setJsValue)
+  }
+
+  /** Element creates one React element; the escape hatch native pass-through implementations use. */
+  static Element(
+    component: React.ComponentType<any> | string,
+    props: Record<string, unknown> | null,
+    ...children: React.ReactNode[]
+  ): React.ReactNode {
+    return React.createElement(component as React.ComponentType<any>, props as any, ...children)
+  }
+
+  /**
+   * WarnUnhonoredLayout reports, outside production, styling passed to a platform-native component
+   * that renders the OS's own control and cannot honor layout clauses. The component still renders
+   * — best-effort, never a failure — but silent divergence between the declared style and the
+   * screen would be worse than a named limitation.
+   */
+  static WarnUnhonoredLayout(component: string, layout: unknown): void {
+    if (process.env.NODE_ENV === 'production') {
+      return
+    }
+    const clauses = (layout as { layout?: Record<string, unknown> } | undefined)?.layout
+    const keys = clauses ? Object.keys(clauses) : []
+    if (keys.length === 0 || warnedUnhonoredLayouts.has(component)) {
+      return
+    }
+    warnedUnhonoredLayouts.add(component)
+    console.warn(
+      `Tao: the platform-native ${component} ignores styling clauses (${keys.join(', ')}). `
+        + `Use the design's semantic surface, or alias a styled implementation instead.`,
+    )
   }
 
   /** now reads the current time from the Tao clock, which a check holds still and advances. */
