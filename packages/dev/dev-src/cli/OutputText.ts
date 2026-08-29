@@ -1,3 +1,5 @@
+import wrapAnsi from 'wrap-ansi'
+
 type PendingLineBuffer = {
   pending: string
 }
@@ -11,6 +13,13 @@ export const OutputText = {
   formatElapsed,
   sanitize,
   stripAnsi,
+  /** wrapLine splits one output line to `width` so a dashboard pane can show it without clipping. */
+  wrapLine(text: string, width: number): string[] {
+    if (width <= 0 || text.length === 0) {
+      return [text]
+    }
+    return wrapAnsi(text, width, { hard: true, trim: false, wordWrap: false }).split('\n')
+  },
 }
 
 function appendCompleteLines(buffer: PendingLineBuffer, output: string, onLine: (line: string) => void): void {

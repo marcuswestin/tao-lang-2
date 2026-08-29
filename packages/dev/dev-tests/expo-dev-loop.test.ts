@@ -1,12 +1,21 @@
 import { Describe, Expect, Test } from '@shared/test'
+import { OutputText } from '../dev-src/cli/OutputText'
+import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
 import { ExpoRunner } from '../dev-src/expo-dev-loop/expo-runner/ExpoRunner'
+import { parseIfconfigIPv4, preferredLanIPv4 } from '../dev-src/expo-dev-loop/expo-runner/lan-host'
+import {
+  expoGoUrl,
+  iosPhysicalDevicesFromDevicectl,
+} from '../dev-src/expo-dev-loop/expo-runner/physical-device'
 import { handleCommandKey } from '../dev-src/expo-dev-loop/keyboard-input/CommandKeys'
 import Commands from '../dev-src/expo-dev-loop/keyboard-input/Commands'
 
 Describe('Expo dev-loop command helpers', () => {
-  Test('recognizes the verify dev-loop shortcut key', () => {
+  Test('recognizes the verify and device shortcut keys', () => {
     Expect(Commands.isCommandKey('v')).toBe(true)
-    Expect(Commands.isCommandKey('p')).toBe(false)
+    Expect(Commands.isCommandKey('d')).toBe(true)
+    Expect(Commands.isCommandKey('p')).toBe(true)
+    Expect(Commands.isCommandKey('x')).toBe(false)
   })
 
   Test('quits on q and opens app selection only on s', async () => {
@@ -89,5 +98,85 @@ Describe('Expo dev-loop port helpers', () => {
     })
 
     Expect(listeners).toEqual([])
+  })
+})
+
+Describe('Expo physical-device host and device listing', () => {
+  Test('prefers an active USB link-local address over Wi-Fi', () => {
+    const interfaces = parseIfconfigIPv4(`
+en0: flags=8863
+	inet 192.168.1.20 netmask 0xffffff00
+	status: active
+en7: flags=8863
+	inet 169.254.37.4 netmask 0xffff0000
+	status: active
+`)
+
+    Expect(preferredLanIPv4(interfaces, '192.168.1.20')).toBe('169.254.37.4')
+  })
+
+  Test('falls back to the default-route address when USB is absent', () => {
+    Expect(preferredLanIPv4([
+      { active: true, address: '192.168.1.20', iface: 'en0' },
+    ], '192.168.1.20')).toBe('192.168.1.20')
+  })
+
+  Test('keeps physical iPhones from devicectl output', () => {
+    Expect(iosPhysicalDevicesFromDevicectl({
+      result: {
+        devices: [
+          {
+            deviceProperties: { name: 'roPhone' },
+            hardwareProperties: { deviceType: 'iPhone', reality: 'physical', udid: 'UDID-1' },
+            identifier: 'ID-1',
+          },
+          {
+            deviceProperties: { name: 'Simulator' },
+            hardwareProperties: { deviceType: 'iPhone', reality: 'virtual', udid: 'SIM-1' },
+          },
+          {
+            deviceProperties: { name: 'Watch' },
+            hardwareProperties: { deviceType: 'appleWatch', reality: 'physical', udid: 'WATCH-1' },
+          },
+        ],
+      },
+    })).toEqual([{ id: 'UDID-1', name: 'roPhone' }])
+  })
+
+  Test('builds an Expo Go URL for the detected host', () => {
+    Expect(expoGoUrl('169.254.37.4')).toBe('exp://169.254.37.4:8081')
+  })
+})
+
+Describe('Expo dev-loop dashboard layout', () => {
+  Test('wraps long output instead of clipping it', () => {
+    Expect(OutputText.wrapLine('Compiled /Users/ro/code/tao-lang-2/Apps/Books/Books.tao', 20)).toEqual([
+      'Compiled /Users/ro/c',
+      'ode/tao-lang-2/Apps/',
+      'Books/Books.tao',
+    ])
+  })
+
+  Test('wraps output by terminal width without splitting Unicode graphemes', () => {
+    Expect(OutputText.wrapLine('123456789😀界', 10)).toEqual([
+      '123456789',
+      '😀界',
+    ])
+  })
+
+  Test('uses a two-by-two grid when four skinny columns would clip', () => {
+    const layout = DevLoopTUI.dashboardLayout({ columns: 120, rows: 28 }, 4, 2)
+    Expect(layout.columnsPerRow).toBe(2)
+    Expect(layout.columnWidth).toBeGreaterThanOrEqual(48)
+  })
+
+  Test('keeps a two-column grid in a wide terminal instead of a four-column strip', () => {
+    const layout = DevLoopTUI.dashboardLayout({ columns: 220, rows: 28 }, 5, 2)
+    Expect(layout.columnsPerRow).toBe(2)
+  })
+
+  Test('keeps one full-width column in a narrow terminal', () => {
+    const layout = DevLoopTUI.dashboardLayout({ columns: 72, rows: 28 }, 4, 2)
+    Expect(layout.columnsPerRow).toBe(1)
   })
 })

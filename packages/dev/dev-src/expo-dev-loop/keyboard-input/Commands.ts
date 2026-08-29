@@ -5,7 +5,7 @@ function printControls(): void {
   DevLoopTUI.printDevLoopControls()
 }
 
-const COMMAND_KEYS = ['\u0003', 'q', 'r', 'd', 'w', 'i', 'c', 'f', 't', 'v', 'e', 'a', 's'] as const
+const COMMAND_KEYS = ['\u0003', 'q', 'r', 'd', 'p', 'w', 'i', 'c', 'f', 't', 'v', 'e', 'a', 's'] as const
 
 /** CommandKey names a single-key dev loop command. */
 export type CommandKey = typeof COMMAND_KEYS[number]

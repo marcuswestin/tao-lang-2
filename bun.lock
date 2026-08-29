@@ -38,6 +38,7 @@
         "ink": "^7.1.0",
         "react": "^19.2.7",
         "tao-shared": "workspace:*",
+        "wrap-ansi": "^10.0.0",
       },
       "devDependencies": {
         "@types/react": "^19.2.17",
