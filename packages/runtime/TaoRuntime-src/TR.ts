@@ -17,6 +17,7 @@ import {
 } from './TR-design'
 import { reportUnownedFailure } from './TR-errors'
 import { LayoutControls } from './TR-layout'
+import { NativeHosts } from './TR-native-hosts'
 import {
   NavigationControls,
   NavKindControls,
@@ -32,6 +33,7 @@ import {
   type TaoStackNavConfiguration,
   testNavKind as testNavigationKind,
 } from './TR-navigation'
+import { requireReactNativeRuntime } from './TR-react-native'
 import { SelectableRow } from './TR-selectable-row'
 import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
@@ -302,6 +304,18 @@ class TR {
 
   /** Clock exposes the runtime clock a check holds, advances, and releases. */
   static Clock = Clock
+
+  /** Hosts resolves the optional platform components `@tao/ui/native` implementations reach for. */
+  static Hosts = NativeHosts
+
+  /** Alert opens the platform's own alert dialog; `undefined` where the platform has none. */
+  static Alert(title: string, message: string, confirm: string, cancel?: string, onConfirm?: () => void): void {
+    const alert = (requireReactNativeRuntime() as { Alert?: { alert: (...args: any[]) => void } }).Alert
+    const buttons = cancel === undefined
+      ? [{ onPress: onConfirm, text: confirm }]
+      : [{ style: 'cancel', text: cancel }, { onPress: onConfirm, text: confirm }]
+    alert?.alert(title, message || undefined, buttons)
+  }
 
   /** Use binds an imported module declaration into a file scope as a lazy, live binding. */
   static Use(scope: TR.Scope, name: string, getValue: () => unknown): void {

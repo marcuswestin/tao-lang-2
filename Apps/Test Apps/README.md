@@ -33,8 +33,9 @@ without erasing compatible coverage:
 - Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
 - Component Aliases covers `use package` namespace imports and pass-through view aliases
   (`public view Badge = widgets.Badge`), the mechanism `@tao/ui` uses to publish implementations.
-- Native Components covers `@tao/ui`'s published components resolving to their platform-native
-  implementations, exercised through the behavior every implementation must share.
+- Native Components covers `@tao/ui`'s published components — Button, Switch, Slider, Picker,
+  SegmentedControl, DatePicker, Spinner — resolving to their platform-native implementations,
+  exercised through the behavior every implementation must share.
 - Sheet Presentation covers `present X as sheet`, the platform-hosted modal presentation.
 - Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
   dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
@@ -136,7 +137,7 @@ Exercise namespace imports and pass-through view aliases, the mechanism behind c
 
 Exercise `@tao/ui`'s published components against their platform-native implementations.
 
-**Belongs here:** importing `Button` and `Switch` from bare `@tao/ui` and getting the native set; pressing a native button by its title; a disabled native button; a native switch reporting its value through an action; behavior that must hold identically whichever implementation is bound.
+**Belongs here:** importing from bare `@tao/ui` and getting the native set; pressing a native button by its title; a disabled native button; a switch, slider, picker, segmented control, and date picker reporting their values through actions; the portable rendering each falls back to where its platform host is absent; behavior that must hold identically whichever implementation is bound.
 
 **Does not belong here:** the alias mechanism itself, which Component Aliases owns; per-implementation appearance, which is not assertable from a journey; navigation surfaces, which the nav layer owns.
 

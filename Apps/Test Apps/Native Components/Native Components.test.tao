@@ -1,4 +1,4 @@
-use Button, Switch from @tao/ui
+use Button, DatePicker, Picker, SegmentedControl, Slider, Spinner, Switch from @tao/ui
 use NativeComponents from ./
 
 // The behavior every implementation of these components must share. Each test declares the
@@ -31,5 +31,46 @@ test Switch "Switch behavior" {
       }
       press #enabled
       expect text "On"
+   }
+}
+
+test Slider "Slider behavior" {
+   test "renders its label and current value" {
+      run NativeComponents
+
+      expect text "Volume: 0"
+   }
+}
+
+test Picker "Picker behavior" {
+   test "renders its options and reports the chosen one" {
+      run NativeComponents
+
+      expect text "Aisle: Produce"
+      select #aisle[1] {
+         press "Bakery"
+      }
+      expect text "Aisle: Bakery"
+   }
+}
+
+test SegmentedControl "Segmented control behavior" {
+   test "renders its options and reports the chosen one" {
+      run NativeComponents
+
+      expect text "View: List"
+      select #view[1] {
+         press "Grid"
+      }
+      expect text "View: Grid"
+   }
+}
+
+test DatePicker, Spinner "Date picker and spinner render" {
+   test "renders both where the platform host is absent" {
+      run NativeComponents
+
+      // Every check holds the clock at a fixed instant, so the degraded reading is deterministic.
+      expect text "Day: 2026-01-01"
    }
 }

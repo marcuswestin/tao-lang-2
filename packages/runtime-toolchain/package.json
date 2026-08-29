@@ -9,6 +9,10 @@
     "./testing/runtime-testing": "./runtime-toolchain-src/testing/runtime-testing.ts"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "8.4.5",
+    "@react-native-community/slider": "5.0.1",
+    "@react-native-picker/picker": "2.11.2",
+    "@react-native-segmented-control/segmented-control": "2.5.7",
     "expo": "~54.0.33",
     "react": "19.1.0",
     "react-dom": "19.1.0",

@@ -5,6 +5,10 @@
 //
 // Styling is best-effort: a native control renders the OS's own chrome and cannot honor layout
 // clauses, so anything passed in is reported outside production rather than silently diverging.
+//
+// Every host is optional. Where a platform has no equivalent — the web, the Jest harness, an
+// Android device asked for a segmented control — the component renders a portable equivalent that
+// keeps the same behavior and reports the same events, so one journey covers every platform.
 // The platform button: system-styled per OS, following its human-interface conventions.
 public
 view Button(Title text, Press action(), Disabled boolean default false) {
@@ -38,5 +42,126 @@ view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean 
         }),
         TR.Element(RN.Text, { key: 'label' }, Label),
       )
+   ```
+}
+
+// The platform's continuous value control. Without the host it degrades to a labeled readout, so a
+// value is still visible and a journey still passes.
+public
+view Slider(Value number, Change action(number), Label text, Minimum number default 0, Maximum number default 1, Disabled boolean default false) {
+   render inject Value, Change, Label, Minimum, Maximum, Disabled, Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('Slider', Layout)
+      const host = TR.Hosts.Slider()
+      if (!host) {
+        return TR.Element(RN.Text, { testID: Tag }, `${Label}: ${Value}`)
+      }
+      return TR.Element(host, {
+        accessibilityLabel: Label,
+        disabled: Disabled,
+        maximumValue: Maximum,
+        minimumValue: Minimum,
+        onValueChange: (value: number) => Change.invoke(TR.Value(value)),
+        testID: Tag,
+        value: Value,
+      })
+   ```
+}
+
+// The platform's spinner, sized by the OS rather than by clauses.
+public
+view Spinner() {
+   render inject Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('Spinner', Layout)
+      return TR.Element(RN.ActivityIndicator, { accessibilityRole: 'progressbar', testID: Tag })
+   ```
+}
+
+// The platform's selection control: a wheel on iOS, a dropdown on Android. Options arrive as a list
+// of labels, and the change reports the chosen label rather than an index, so product code never
+// carries positions.
+public
+view Picker(Value text, Change action(text), Options list of text, Label text) {
+   render inject Value, Change, Options, Label, Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('Picker', Layout)
+      const host = TR.Hosts.Picker()
+      if (!host) {
+        return TR.Element(
+          RN.View,
+          { testID: Tag },
+          ...Options.map((option: string) =>
+            TR.Element(RN.Button, {
+              accessibilityState: { selected: option === Value },
+              key: option,
+              onPress: () => Change.invoke(TR.Value(option)),
+              title: option,
+            })
+          ),
+        )
+      }
+      return TR.Element(
+        host.Picker,
+        {
+          accessibilityLabel: Label,
+          onValueChange: (option: string) => Change.invoke(TR.Value(option)),
+          selectedValue: Value,
+          testID: Tag,
+        },
+        ...Options.map((option: string) => TR.Element(host.Item, { key: option, label: option, value: option })),
+      )
+   ```
+}
+
+// The iOS segmented control. Android has no system equivalent, so it degrades to a labeled row of
+// buttons that reports the same selection.
+public
+view SegmentedControl(Value text, Change action(text), Options list of text, Label text) {
+   render inject Value, Change, Options, Label, Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('SegmentedControl', Layout)
+      const host = RN.Platform?.OS === 'ios' ? TR.Hosts.SegmentedControl() : undefined
+      if (!host) {
+        return TR.Element(
+          RN.View,
+          { accessibilityLabel: Label, style: { flexDirection: 'row', gap: 4 }, testID: Tag },
+          ...Options.map((option: string) =>
+            TR.Element(RN.Button, {
+              accessibilityState: { selected: option === Value },
+              key: option,
+              onPress: () => Change.invoke(TR.Value(option)),
+              title: option,
+            })
+          ),
+        )
+      }
+      return TR.Element(host, {
+        accessibilityLabel: Label,
+        onValueChange: (option: string) => Change.invoke(TR.Value(option)),
+        selectedIndex: Math.max(0, Options.indexOf(Value)),
+        testID: Tag,
+        values: Options,
+      })
+   ```
+}
+
+// The platform's date picker. Its value is a `time`, so it composes with the rest of the language's
+// calendar arithmetic rather than carrying its own format.
+public
+view DatePicker(Value time, Change action(time), Label text) {
+   render inject Value, Change, Label, Layout @@layout, Tag @@tag ```ts
+      TR.WarnUnhonoredLayout('DatePicker', Layout)
+      const host = TR.Hosts.DateTimePicker()
+      if (!host) {
+        return TR.Element(RN.Text, { testID: Tag }, `${Label}: ${new Date(Value).toISOString().slice(0, 10)}`)
+      }
+      return TR.Element(host, {
+        accessibilityLabel: Label,
+        mode: 'date',
+        onChange: (_event: unknown, selected?: Date) => {
+          if (selected) {
+            Change.invoke(TR.Value(selected.getTime()))
+          }
+        },
+        testID: Tag,
+        value: new Date(Value),
+      })
    ```
 }

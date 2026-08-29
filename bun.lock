@@ -108,6 +108,10 @@
     "packages/runtime-toolchain": {
       "name": "tao-runtime-toolchain",
       "dependencies": {
+        "@react-native-community/datetimepicker": "8.4.5",
+        "@react-native-community/slider": "5.0.1",
+        "@react-native-picker/picker": "2.11.2",
+        "@react-native-segmented-control/segmented-control": "2.5.7",
         "expo": "~54.0.33",
         "react": "19.1.0",
         "react-dom": "19.1.0",
@@ -627,6 +631,14 @@
     "@octokit/types": ["@octokit/types@16.0.0", "", { "dependencies": { "@octokit/openapi-types": "^27.0.0" } }, "sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg=="],
 
     "@react-native-async-storage/async-storage": ["@react-native-async-storage/async-storage@2.2.0", "", { "dependencies": { "merge-options": "^3.0.4" }, "peerDependencies": { "react-native": "^0.0.0-0 || >=0.65 <1.0" } }, "sha512-gvRvjR5JAaUZF8tv2Kcq/Gbt3JHwbKFYfmb445rhOj6NUMx3qPLixmDx5pZAyb9at1bYvJ4/eTUipU5aki45xw=="],
+
+    "@react-native-community/datetimepicker": ["@react-native-community/datetimepicker@8.4.5", "", { "dependencies": { "invariant": "^2.2.4" }, "peerDependencies": { "expo": ">=52.0.0", "react": "*", "react-native": "*", "react-native-windows": "*" }, "optionalPeers": ["expo", "react-native-windows"] }, "sha512-vvVOJAHjU8TFBzTUjQzANCL6C3pZSE2zjfutCATk790uz7ASEc2tOBD+EIG4BTelWtP2G9jqvXp2L7XGdhEBRg=="],
+
+    "@react-native-community/slider": ["@react-native-community/slider@5.0.1", "", {}, "sha512-K3JRWkIW4wQ79YJ6+BPZzp1SamoikxfPRw7Yw4B4PElEQmqZFrmH9M5LxvIo460/3QSrZF/wCgi3qizJt7g/iw=="],
+
+    "@react-native-picker/picker": ["@react-native-picker/picker@2.11.2", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-2zyFdW4jgHjF+NeuDZ4nl3hJ+8suey69bI3yljqhNyowfklW2NwNrdDUaJ2iwtPCpk2pt7834aPF8TI6iyZRhA=="],
+
+    "@react-native-segmented-control/segmented-control": ["@react-native-segmented-control/segmented-control@2.5.7", "", { "peerDependencies": { "react": ">=16.0", "react-native": ">=0.62" } }, "sha512-l84YeVX8xAU3lvOJSvV4nK/NbGhIm2gBfveYolwaoCbRp+/SLXtc6mYrQmM9ScXNwU14mnzjQTpTHWl5YPnkzQ=="],
 
     "@react-native/assets-registry": ["@react-native/assets-registry@0.81.5", "", {}, "sha512-705B6x/5Kxm1RKRvSv0ADYWm5JOnoiQ1ufW7h8uu2E6G9Of/eE6hP/Ivw3U5jI16ERqZxiKQwk34VJbB0niX9w=="],
 

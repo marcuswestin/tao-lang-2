@@ -1,5 +1,5 @@
 use StackNav from @tao/nav
-use Button, Col, Switch, Text from @tao/ui
+use Button, Col, DatePicker, Picker, SegmentedControl, Slider, Spinner, Switch, Text from @tao/ui
 
 app NativeComponents {
    Name "Native Components"
@@ -7,16 +7,32 @@ app NativeComponents {
       Initial MainView
 }  }
 
-// `Button` and `Switch` resolve through @tao/ui's pass-through aliases to the platform-native
-// implementations — the same import shape as every other stdlib component.
+// Every control here resolves through @tao/ui's pass-through aliases to a platform-native
+// implementation, and reports its value the same way whichever implementation is bound.
 ui MainView() {
    state Count = 0
    state Enabled = false
+   state Volume = 0
+   state Aisle = "Produce"
+   state View = "List"
+   state Day = now
    action AddOne() {
       set Count += 1
    }
    action SetEnabled(Value boolean) {
       set Enabled = Value
+   }
+   action SetVolume(Value number) {
+      set Volume = Value
+   }
+   action SetAisle(Value text) {
+      set Aisle = Value
+   }
+   action SetView(Value text) {
+      set View = Value
+   }
+   action SetDay(Value time) {
+      set Day = Value
    }
    render Col() [gap 8] {
       Text("Count: { Count }")
@@ -36,4 +52,30 @@ ui MainView() {
          on change SetEnabled
       }
       Text(when Enabled "On" / not "Off")
+
+      #volume
+      Slider(Value: Volume, Label: "Volume", Maximum: 10) {
+         on change SetVolume
+      }
+      Text("Volume: { Volume }")
+
+      #aisle
+      Picker(Value: Aisle, Options: ["Produce", "Bakery"], Label: "Aisle") {
+         on change SetAisle
+      }
+      Text("Aisle: { Aisle }")
+
+      #view
+      SegmentedControl(Value: View, Options: ["List", "Grid"], Label: "View") {
+         on change SetView
+      }
+      Text("View: { View }")
+
+      #day
+      DatePicker(Value: Day, Label: "Day") {
+         on change SetDay
+      }
+
+      #spinner
+      Spinner()
 }  }
