@@ -3,13 +3,19 @@ grammar TaoTests
 import "./app"
 import "./blocks"
 import "./data"
+import "./visibility"
 import "./terminals"
 
 entry TestsGrammarEntrypoint:
     TestDeclaration;
 
+// A test declares what it exercises before what it asserts: `test Button "Handles press" { … }`,
+// or `test Button { test "…" { … } }` for a group. Visibility lets a package publish its suite, so
+// another implementation can be held to the same journeys.
 TestDeclaration:
-    'test' name=STRING block=Block;
+    visibility=DeclarationVisibility? 'test'
+    (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
+    name=STRING? block=Block;
 
 type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep;
 

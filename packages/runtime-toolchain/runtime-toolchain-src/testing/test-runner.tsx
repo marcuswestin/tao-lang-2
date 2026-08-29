@@ -77,7 +77,26 @@ async function pressStep(
   scope?: TestInstance,
 ): Promise<void> {
   const match = requireSingleMatch(screen, step, { target: step.text, description: 'pressable', scope })
+  // A person interacts with a control; the control decides what that means. A platform switch
+  // reports through `onValueChange` and has no press, so `press` drives it the same way, which is
+  // what keeps a native implementation and a JS one interchangeable under one journey.
+  const valueControl = valueChangingNode(match)
+  if (valueControl) {
+    await dispatchInteraction(() => fireEvent(valueControl, 'valueChange', valueControl.props['value'] !== true))
+    return
+  }
   await dispatchInteraction(() => fireEvent.press(match))
+}
+
+/** valueChangingNode returns a value-reporting control with no press of its own, if this is one. */
+function valueChangingNode(root: TestInstance): TestInstance | undefined {
+  const candidates = [root, ...root.findAll((node: TestInstance) => node !== root)].filter(node =>
+    typeof node.props['onValueChange'] === 'function'
+  )
+  const pressable = [root, ...root.findAll((node: TestInstance) => node !== root)].some(node =>
+    typeof node.props['onPress'] === 'function'
+  )
+  return pressable ? undefined : candidates[0]
 }
 
 async function enterStep(

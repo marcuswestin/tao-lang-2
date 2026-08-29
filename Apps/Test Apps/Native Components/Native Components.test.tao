@@ -1,7 +1,11 @@
+use Button, Switch from @tao/ui
 use NativeComponents from ./
 
-test "Native components" {
-   test "presses the platform button through its title" {
+// The behavior every implementation of these components must share. Each test declares the
+// component it exercises, so the suite reads as a contract: swap the implementation behind
+// `@tao/ui` and these journeys must still pass, without asserting anything about appearance.
+test Button "Button behavior" {
+   test "renders its title and reports each press" {
       run NativeComponents
 
       expect text "Count: 0"
@@ -9,9 +13,23 @@ test "Native components" {
       press "Add one"
       expect text "Count: 2"
    }
-   test "renders the labeled platform switch" {
+   test "renders a disabled button without reporting presses" {
+      run NativeComponents
+
+      expect text "Never"
+      press "Never"
+      expect text "Count: 0"
+   }
+}
+
+test Switch "Switch behavior" {
+   test "renders its label and reports each change" {
       run NativeComponents
       expect {
          text "Enabled"
          text "Off"
-}  }  }
+      }
+      press #enabled
+      expect text "On"
+   }
+}

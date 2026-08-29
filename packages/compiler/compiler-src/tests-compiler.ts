@@ -150,7 +150,7 @@ export function compileTestPlan(input: TaoTestPlanInput, _context: CompilerConte
 
 function compileSuite(suite: AST.TestDeclaration): TaoTestSuite {
   return {
-    name: suite.name,
+    name: AST.testDisplayName(suite),
     source: sourceLocation(suite),
     checks: suite.block.statements.filter(AST.isTestDeclaration).map(compileCheck),
   }
@@ -161,7 +161,7 @@ function compileCheck(check: AST.TestDeclaration): TaoTestCheck {
   Assert.defined(run, 'validated check has one run step', { checkName: check.name })
   const steps = check.block.statements.filter(AST.isCheckStep).filter(isRunnableTestStep).map(compileStep)
   return {
-    name: check.name,
+    name: AST.testDisplayName(check),
     source: sourceLocation(check),
     run: compileRun(run),
     steps,

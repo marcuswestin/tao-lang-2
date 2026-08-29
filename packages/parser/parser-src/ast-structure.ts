@@ -44,6 +44,15 @@ export function rememberUseTargets(
   resolvedUseTargets.set(useStatement, declarations)
 }
 
+/** testDisplayName returns a test's sentence, falling back to the dependencies it declares. */
+export function testDisplayName(test: AST.TestDeclaration): string {
+  if (test.name) {
+    return test.name
+  }
+  const dependencies = test.dependencies.map(reference => reference.$refText).filter(name => name.length > 0)
+  return dependencies.join(', ')
+}
+
 /** packageNamespaceName returns the name a use-package statement binds, derived from its path. */
 export function packageNamespaceName(statement: AST.UsePackageStatement): string | undefined {
   if (statement.name) {
