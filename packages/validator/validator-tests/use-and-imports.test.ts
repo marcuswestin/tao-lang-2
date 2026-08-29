@@ -7,48 +7,19 @@ import { injectionValidationMessages } from '../validator-src/validators/injecti
 import { useValidationMessages } from '../validator-src/validators/use-validator'
 import {
   accepts,
+  acceptsFiles,
+  acceptsFilesFrom,
   app,
+  checksFiles,
   fence,
+  rejectsFiles,
+  rejectsFilesFrom,
   stubView,
+  type TaoFiles,
   tsFence,
-  type ValidatedFiles,
   validationErrorMessages,
-  withValidatedFiles,
+  visibleView,
 } from './test-validate'
-
-type TaoFiles = Record<string, string>
-type FilesCheck = (result: ValidatedFiles) => Promise<void> | void
-
-function checksFiles(files: TaoFiles, check: FilesCheck, entryFile = 'Main.tao'): () => Promise<void> {
-  return async () => await withValidatedFiles(entryFile, files, check)
-}
-
-function acceptsFiles(files: TaoFiles): () => Promise<void> {
-  return acceptsFilesFrom('Main.tao', files)
-}
-
-function acceptsFilesFrom(entryFile: string, files: TaoFiles): () => Promise<void> {
-  return checksFiles(files, result => {
-    Expect(validationErrorMessages(result)).toEqual([])
-  }, entryFile)
-}
-
-function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
-  return rejectsFilesFrom('Main.tao', files, ...messages)
-}
-
-function rejectsFilesFrom(entryFile: string, files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
-  return checksFiles(files, result => {
-    const errors = validationErrorMessages(result).join('\n')
-    for (const message of messages) {
-      Expect(errors).toContain(message)
-    }
-  }, entryFile)
-}
-
-function visibleView(name: string, parameters = ''): string {
-  return stubView(name, parameters).replace('view ', 'workspace view ')
-}
 
 function importingApp(imports: string, body = 'render Text("Hello")', extra = ''): string {
   return `${imports}\n${app(body, extra)}`

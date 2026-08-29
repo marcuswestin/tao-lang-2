@@ -60,7 +60,6 @@ const Formatter = {
   createSession,
   formatCode,
   formatFile,
-  formatParsed,
 }
 
 export default Formatter

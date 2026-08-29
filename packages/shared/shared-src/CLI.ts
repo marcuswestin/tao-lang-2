@@ -134,30 +134,27 @@ function startCommand(
     child.unref()
   }
 
-  child.stdout?.on('data', chunk => {
-    const buffer = Buffer.from(chunk)
-    if (options.captureOutput) {
-      stdoutChunks.push(buffer)
-    }
-    spec.onOutput?.('stdout', buffer)
-    if (stdio.streamOutput) {
-      HCI.write(buffer)
-    } else if (prefixedOutput) {
-      prefixedOutput.write('stdout', buffer)
-    }
-  })
-  child.stderr?.on('data', chunk => {
-    const buffer = Buffer.from(chunk)
-    if (options.captureOutput) {
-      stderrChunks.push(buffer)
-    }
-    spec.onOutput?.('stderr', buffer)
-    if (stdio.streamOutput) {
-      HCI.writeError(buffer)
-    } else if (prefixedOutput) {
-      prefixedOutput.write('stderr', buffer)
-    }
-  })
+  const attachOutputHandler = (
+    readable: typeof child.stdout,
+    stream: CommandOutputStream,
+    chunks: Buffer[],
+    writeToTerminal: (chunk: Buffer) => void,
+  ) => {
+    readable?.on('data', chunk => {
+      const buffer = Buffer.from(chunk)
+      if (options.captureOutput) {
+        chunks.push(buffer)
+      }
+      spec.onOutput?.(stream, buffer)
+      if (stdio.streamOutput) {
+        writeToTerminal(buffer)
+      } else if (prefixedOutput) {
+        prefixedOutput.write(stream, buffer)
+      }
+    })
+  }
+  attachOutputHandler(child.stdout, 'stdout', stdoutChunks, buffer => HCI.write(buffer))
+  attachOutputHandler(child.stderr, 'stderr', stderrChunks, buffer => HCI.writeError(buffer))
 
   if (spec.stdin !== undefined) {
     child.stdin?.end(spec.stdin)

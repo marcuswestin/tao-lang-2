@@ -59,7 +59,7 @@ async function processFile(
 async function workspaceRootForPath(path: string, options: InPlace.PathOptions = {}): Promise<string> {
   const root = FS.resolvePath(path, options.cwd)
   const cwd = FS.resolvePath('.', options.cwd)
-  if (pathIsWithin(root, cwd)) {
+  if (FS.pathIsWithin(root, cwd)) {
     return packageContainerRoot(cwd) ?? cwd
   }
   return packageAwarePathRoot(root, await FS.isFile(root))
@@ -101,9 +101,4 @@ function packageContainerRoot(directoryPath: string): string | undefined {
     }
   }
   return undefined
-}
-
-function pathIsWithin(path: string, directoryPath: string): boolean {
-  const relative = FS.relativePath(directoryPath, path)
-  return relative === '' || (!relative.startsWith('..') && relative !== '..')
 }

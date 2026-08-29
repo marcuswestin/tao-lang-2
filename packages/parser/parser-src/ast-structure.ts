@@ -311,17 +311,35 @@ function configurationPrimitiveOfTypeExpression(
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
+  return visibleFileDeclarations(node, AST.isTypeDeclaration).find(declaration => declaration.name === name)
+}
+
+/** visibleFileDeclarations returns a file's own and use-imported declarations matching `guard`. */
+export function visibleFileDeclarations<DeclarationT extends AST.Node>(
+  node: AST.Node,
+  guard: (candidate: unknown) => candidate is DeclarationT,
+): DeclarationT[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
-    return undefined
+    return []
   }
-  return [
-    ...root.statements.filter(AST.isTypeDeclaration),
-    ...root.statements
-      .filter(AST.isUseStatement)
-      .flatMap(resolvedImportedDeclarations)
-      .filter(AST.isTypeDeclaration),
-  ].find(declaration => declaration.name === name)
+  const declarations: DeclarationT[] = []
+  for (const statement of root.statements) {
+    if (guard(statement)) {
+      declarations.push(statement)
+    }
+  }
+  for (const statement of root.statements) {
+    if (!AST.isUseStatement(statement)) {
+      continue
+    }
+    for (const declaration of resolvedImportedDeclarations(statement)) {
+      if (guard(declaration)) {
+        declarations.push(declaration)
+      }
+    }
+  }
+  return declarations
 }
 
 function effectiveConfigurationProperties(

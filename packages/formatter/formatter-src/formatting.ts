@@ -164,6 +164,31 @@ export function createNodeFormat<NodeT extends AST.Node>(
   }
 }
 
+// Flattening the CST is linear in the document, so each root is flattened once per parse and
+// reused by every formatted list. A reparse creates a new root, which naturally evicts the entry.
+type DocumentLeaves = {
+  leaves: readonly Langium.CstNode[]
+  indexByOffset: ReadonlyMap<number, number>
+}
+
+const documentLeavesByRoot = new WeakMap<Langium.CstNode, DocumentLeaves>()
+
+function documentLeaves(root: Langium.CstNode): DocumentLeaves {
+  let cached = documentLeavesByRoot.get(root)
+  if (!cached) {
+    const leaves = Langium.CstUtils.flattenCst(root).toArray()
+    const indexByOffset = new Map<number, number>()
+    for (const [index, leaf] of leaves.entries()) {
+      if (!indexByOffset.has(leaf.offset)) {
+        indexByOffset.set(leaf.offset, index)
+      }
+    }
+    cached = { leaves, indexByOffset }
+    documentLeavesByRoot.set(root, cached)
+  }
+  return cached
+}
+
 function separateLines<ItemT extends AST.Node>(
   formatter: Langium.NodeFormatter<AST.Node>,
   items: readonly ItemT[],
@@ -173,7 +198,7 @@ function separateLines<ItemT extends AST.Node>(
   if (items.length < 2) {
     return
   }
-  const leaves = Langium.CstUtils.flattenCst(items[0]!.$cstNode!.root).toArray()
+  const leaves = documentLeaves(items[0]!.$cstNode!.root)
   for (let index = 1; index < items.length; index++) {
     const previous = items[index - 1]!
     const next = items[index]!
@@ -193,14 +218,14 @@ function prependIndentedLines(
   if (!first) {
     return
   }
-  const leaves = Langium.CstUtils.flattenCst(first.$cstNode!.root).toArray()
+  const leaves = documentLeaves(first.$cstNode!.root)
   for (const item of items) {
     prependLineWithLeadingComments(formatter, item, { leaves, separation: 1, tabs: 1 })
   }
 }
 
 type PrependLineOptions = {
-  leaves: readonly Langium.CstNode[]
+  leaves: DocumentLeaves
   separation: LineSeparation
   tabs: number
 }
@@ -222,9 +247,8 @@ function prependLineWithLeadingComments(
 }
 
 // A leading comment owns its line; a comment trailing earlier source on the same line stays there.
-function leadingCommentLeaves(item: AST.Node, leaves: readonly Langium.CstNode[]): Langium.CstNode[] {
-  const itemOffset = item.$cstNode!.offset
-  let index = leaves.findIndex(leaf => leaf.offset === itemOffset)
+function leadingCommentLeaves(item: AST.Node, { leaves, indexByOffset }: DocumentLeaves): Langium.CstNode[] {
+  let index = indexByOffset.get(item.$cstNode!.offset) ?? -1
   const comments: Langium.CstNode[] = []
   while (index > 0) {
     const candidate = leaves[index - 1]!
@@ -260,9 +284,7 @@ export function hasInteriorComments(node: AST.Node): boolean {
   if (cst === undefined) {
     return false
   }
-  return Langium.CstUtils.flattenCst(cst.root).toArray().some(leaf =>
-    leaf.hidden && leaf.offset >= cst.offset && leaf.end <= cst.end
-  )
+  return documentLeaves(cst.root).leaves.some(leaf => leaf.hidden && leaf.offset >= cst.offset && leaf.end <= cst.end)
 }
 
 /**

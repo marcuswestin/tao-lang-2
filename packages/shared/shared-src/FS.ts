@@ -47,6 +47,16 @@ export const basename = (inputPath: string, suffix?: string) => nodePath.basenam
 export const extname = (inputPath: string) => nodePath.extname(inputPath)
 /** relativePath returns the slash-separated path from `fromPath` to `toPath`. */
 export const relativePath = (fromPath: string, toPath: string) => slashPath(nodePath.relative(fromPath, toPath))
+/** pathIsWithin returns whether `path` is `directoryPath` or a path inside it. */
+export function pathIsWithin(path: string, directoryPath: string): boolean {
+  const relative = relativePath(directoryPath, path)
+  return relative === '' || (!relative.startsWith('..') && relative !== '..')
+}
+/** displayPath returns a path relative to the current working directory for human-readable output. */
+export function displayPath(inputPath: string): string {
+  const relative = relativePath(resolvePath('.'), inputPath)
+  return relative === '' ? '.' : relative
+}
 /** slashPath returns a path with host separators normalized to slashes. */
 export const slashPath = (inputPath: string) =>
   nodePath.sep === '/' ? inputPath : inputPath.replaceAll(nodePath.sep, '/')

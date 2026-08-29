@@ -1,6 +1,6 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { DeclarationOrder } from '../DeclarationOrder'
+import { DeclarationOrder, type ValueReferenceLike } from '../DeclarationOrder'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
@@ -23,7 +23,6 @@ type NamedFileValueDeclaration =
   | AST.VisualDeclaration
 type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
 type NamedDeclaration = NamedValueDeclaration | NamedTypeDeclaration
-type ValueReferenceLike = AST.ValueReference | AST.RefinementExpression | AST.MemberAccessExpression
 
 /** aliasValidationMessages declares name and immutable-binding reference diagnostics. */
 const aliasValidationMessages = {
@@ -171,7 +170,7 @@ function aliasValueReferences(alias: AST.AliasDeclaration): ValueReferenceLike[]
   ) {
     return [alias.value]
   }
-  return AST.streamAllContents(alias.value).filter(isValueReferenceLike)
+  return AST.streamAllContents(alias.value).filter(DeclarationOrder.isValueReferenceLike)
 }
 
 function isReferenceInAliasOrStateInitializer(reference: ValueReferenceLike): boolean {
@@ -235,8 +234,7 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
       collectRenderChildBlocks(statement.otherwise.block, blocks)
     }
     if (AST.isGuardRenderStatement(statement)) {
-      const branches = statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
-      for (const branch of branches) {
+      for (const branch of ASTUtils.guardBranches(statement)) {
         if (branch.block) {
           collectRenderChildBlocks(branch.block, blocks)
         }
@@ -249,10 +247,6 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
       collectRenderChildBlocks(statement.block, blocks)
     }
   }
-}
-
-function isValueReferenceLike(node: AST.Node): node is ValueReferenceLike {
-  return AST.isValueReference(node) || AST.isRefinementExpression(node) || AST.isMemberAccessExpression(node)
 }
 
 function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclaration {

@@ -33,7 +33,7 @@ import {
   testNavKind as testNavigationKind,
 } from './TR-navigation'
 import { SelectableRow } from './TR-selectable-row'
-import RuntimeSwitch from './TR-switch'
+import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
 import { Clock, createTicker, isTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
@@ -49,31 +49,17 @@ class TR {
 
   /** Binary applies Tao's small, deterministic binary-operator set. */
   static Binary(left: TR.Evaluable, operator: TR.BinaryOperator, right: TR.Evaluable): TR.Value<any> {
-    const leftValue = left.evaluate().jsValue
-    const rightValue = right.evaluate().jsValue
-    return new RuntimeValue(RuntimeSwitch(operator, {
-      '!=': () => !Object.is(leftValue, rightValue),
-      '*': () => leftValue * rightValue,
-      '+': () => leftValue + rightValue,
-      '-': () => leftValue - rightValue,
-      '/': () => leftValue / rightValue,
-      '<': () => leftValue < rightValue,
-      '<=': () => leftValue <= rightValue,
-      '==': () => Object.is(leftValue, rightValue),
-      '>': () => leftValue > rightValue,
-      '>=': () => leftValue >= rightValue,
-      and: () => Boolean(leftValue && rightValue),
-      or: () => Boolean(leftValue || rightValue),
-    }))
+    return new RuntimeValue(
+      runtimeSwitchHandler(operator, binaryOperations)(
+        left.evaluate().jsValue,
+        right.evaluate().jsValue,
+      ),
+    )
   }
 
   /** Unary applies Tao boolean negation or numeric negation. */
   static Unary(operator: TR.UnaryOperator, operand: TR.Evaluable): TR.Value<any> {
-    const value = operand.evaluate().jsValue
-    return new RuntimeValue(RuntimeSwitch<TR.UnaryOperator, any>(operator, {
-      '-': () => -value,
-      not: () => !value,
-    }))
+    return new RuntimeValue(runtimeSwitchHandler(operator, unaryOperations)(operand.evaluate().jsValue))
   }
 
   /** Interpolate concatenates Tao values, rendering absence as an empty string. */
@@ -114,14 +100,8 @@ class TR {
     branches: readonly TR.CaseBranch<TR.Evaluable>[],
     otherwise: () => TR.Evaluable,
   ): TR.Value<T> {
-    const value = subject.evaluate().jsValue
-    for (const [caseName, body] of branches) {
-      const match = matchSubjectCase(value, caseName)
-      if (match.matched) {
-        return body(new RuntimeValue(match.payload)).evaluate() as TR.Value<T>
-      }
-    }
-    return otherwise().evaluate() as TR.Value<T>
+    const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
+    return (matched ? matched.result.evaluate() : otherwise().evaluate()) as TR.Value<T>
   }
 
   /** WhenCaseRender evaluates one subject once and renders one matching case. */
@@ -130,14 +110,8 @@ class TR {
     branches: readonly TR.CaseBranch<React.ReactNode>[],
     otherwise: () => React.ReactNode,
   ): React.ReactNode {
-    const value = subject.evaluate().jsValue
-    for (const [caseName, body] of branches) {
-      const match = matchSubjectCase(value, caseName)
-      if (match.matched) {
-        return body(new RuntimeValue(match.payload))
-      }
-    }
-    return otherwise()
+    const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
+    return matched ? matched.result : otherwise()
   }
 
   /** GuardAction runs a matching handler and reports whether the enclosing block must stop. */
@@ -145,15 +119,11 @@ class TR {
     subject: TR.Evaluable,
     branches: readonly TR.CaseBranch<unknown>[],
   ): boolean | Promise<boolean> {
-    const value = subject.evaluate().jsValue
-    for (const [caseName, body] of branches) {
-      const match = matchSubjectCase(value, caseName)
-      if (match.matched) {
-        const result = body(new RuntimeValue(match.payload))
-        return isPromiseLike(result) ? Promise.resolve(result).then(() => true) : true
-      }
+    const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
+    if (!matched) {
+      return false
     }
-    return false
+    return isPromiseLike(matched.result) ? Promise.resolve(matched.result).then(() => true) : true
   }
 
   /** GuardRender renders a matching handler or the untouched remainder of the enclosing block. */
@@ -162,14 +132,8 @@ class TR {
     branches: readonly TR.CaseBranch<React.ReactNode>[],
     remaining: () => React.ReactNode,
   ): React.ReactNode {
-    const value = subject.evaluate().jsValue
-    for (const [caseName, body] of branches) {
-      const match = matchSubjectCase(value, caseName)
-      if (match.matched) {
-        return body(new RuntimeValue(match.payload))
-      }
-    }
-    return remaining()
+    const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
+    return matched ? matched.result : remaining()
   }
 
   /** Member reads item fields and the built-in Count collection and text member. */
@@ -250,14 +214,12 @@ class TR {
     operator: TR.CompoundSetOperator,
     value: TR.Value<number>,
   ): TR.Value<number> {
-    const current = state.evaluate().jsValue
-    const next = value.evaluate().jsValue
-    return RuntimeSwitch(operator, {
-      '+=': () => new RuntimeValue(current + next),
-      '-=': () => new RuntimeValue(current - next),
-      '*=': () => new RuntimeValue(current * next),
-      '/=': () => new RuntimeValue(current / next),
-    })
+    return new RuntimeValue(
+      runtimeSwitchHandler(operator, compoundSetOperations)(
+        state.evaluate().jsValue,
+        value.evaluate().jsValue,
+      ),
+    )
   }
 
   /** Do invokes a Tao action value with already-compiled runtime arguments. */
@@ -564,6 +526,55 @@ namespace TR {
   export type NavigationValue = TaoNavigationValue
   /** Presentable declares a first-class Tao ui descriptor. */
   export type Presentable = TaoPresentable
+}
+
+// Frozen operator tables keep the generated app's hottest evaluation path allocation-free:
+// each application is one lookup and one call, with no per-evaluation closure objects.
+const binaryOperations = Object.freeze(
+  {
+    '!=': (left: any, right: any) => !Object.is(left, right),
+    '*': (left: any, right: any) => left * right,
+    '+': (left: any, right: any) => left + right,
+    '-': (left: any, right: any) => left - right,
+    '/': (left: any, right: any) => left / right,
+    '<': (left: any, right: any) => left < right,
+    '<=': (left: any, right: any) => left <= right,
+    '==': (left: any, right: any) => Object.is(left, right),
+    '>': (left: any, right: any) => left > right,
+    '>=': (left: any, right: any) => left >= right,
+    and: (left: any, right: any) => Boolean(left && right),
+    or: (left: any, right: any) => Boolean(left || right),
+  } satisfies Record<TR.BinaryOperator, (left: any, right: any) => unknown>,
+)
+
+const unaryOperations = Object.freeze(
+  {
+    '-': (value: any) => -value,
+    not: (value: any) => !value,
+  } satisfies Record<TR.UnaryOperator, (value: any) => unknown>,
+)
+
+const compoundSetOperations = Object.freeze(
+  {
+    '+=': (current: number, next: number) => current + next,
+    '-=': (current: number, next: number) => current - next,
+    '*=': (current: number, next: number) => current * next,
+    '/=': (current: number, next: number) => current / next,
+  } satisfies Record<TR.CompoundSetOperator, (current: number, next: number) => number>,
+)
+
+/** firstMatchedBranch runs the first branch whose case matches `value` and returns its result. */
+function firstMatchedBranch<ResultT>(
+  value: unknown,
+  branches: readonly TR.CaseBranch<ResultT>[],
+): { result: ResultT } | undefined {
+  for (const [caseName, body] of branches) {
+    const match = matchSubjectCase(value, caseName)
+    if (match.matched) {
+      return { result: body(new RuntimeValue(match.payload)) }
+    }
+  }
+  return undefined
 }
 
 type SubjectCaseMatch = { matched: boolean; payload: unknown }

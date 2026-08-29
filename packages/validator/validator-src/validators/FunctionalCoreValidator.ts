@@ -1,4 +1,4 @@
-import { type ASTUtils, Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
@@ -73,11 +73,11 @@ export const FunctionalCoreValidator = {
       validateRenderControlPlacement(statement, ctx)
     },
     [AST.GuardRenderStatement.$type]: (statement, ctx) => {
-      validateSubjectCases(statement.subject, guardRenderBranches(statement), ctx)
+      validateSubjectCases(statement.subject, ASTUtils.guardBranches(statement), ctx)
       validateRenderControlPlacement(statement, ctx)
     },
     [AST.GuardActionStatement.$type]: (statement, ctx) => {
-      validateSubjectCases(statement.subject, guardActionBranches(statement), ctx)
+      validateSubjectCases(statement.subject, ASTUtils.guardBranches(statement), ctx)
     },
     [AST.IfActionStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)
@@ -346,14 +346,6 @@ function subjectCaseLabel(category: SubjectCaseCategory): string {
     return 'this subject type'
   }
   return category === 'entity' ? 'an entity subject' : `a ${category} subject`
-}
-
-function guardActionBranches(statement: AST.GuardActionStatement): AST.GuardActionBranch[] {
-  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
-}
-
-function guardRenderBranches(statement: AST.GuardRenderStatement): AST.GuardRenderBranch[] {
-  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
 }
 
 function validateCompatibleBranches(

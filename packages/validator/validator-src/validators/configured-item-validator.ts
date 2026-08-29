@@ -110,13 +110,7 @@ function validateInferredConfiguredItem(
   value: AST.InferredConfigurationConstructor,
   ctx: ValidationContext,
 ): void {
-  const owner = value.$container
-  const inferredName = AST.isAliasDeclaration(owner)
-    ? owner.name
-    : AST.isAppProperty(owner)
-    ? owner.name
-    : undefined
-  const declaration = inferredName ? Type.visibleDeclaration(value, inferredName) : undefined
+  const declaration = Type.inferredConfigurationDeclaration(value)
   if (declaration && AST.isConfigurableDeclaration(declaration)) {
     return
   }

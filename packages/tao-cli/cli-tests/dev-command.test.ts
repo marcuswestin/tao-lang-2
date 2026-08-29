@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { discoverTaoDevProjects, type TaoDevProject } from '../cli-src/dev-app-discovery'
@@ -180,6 +180,4 @@ function terminalStream(): PassThrough & { isTTY: boolean } {
   return stream
 }
 
-function stripAnsi(value: string): string {
-  return value.replace(/\u001b\[[0-9;]+m/g, '')
-}
+const stripAnsi = Text.stripAnsi

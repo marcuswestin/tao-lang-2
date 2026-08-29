@@ -95,8 +95,11 @@ function selectionKeyContractsForAppFamily(
   app: AST.AppValueDeclaration,
   file: AST.TaoFile,
 ): SelectionKeyContract[] {
-  const root = rootAppValue(app)
-  return AST.appValueDeclarationsInFile(file).filter(candidate => rootAppValue(candidate) === root).flatMap(
+  const root = ASTUtils.rootAppValue(app)
+  if (!root) {
+    return []
+  }
+  return AST.appValueDeclarationsInFile(file).filter(candidate => ASTUtils.rootAppValue(candidate) === root).flatMap(
     candidate => {
       const keys = selectionKeysForApp(candidate)
       return keys ? [{ app: candidate, keys }] : []
@@ -208,24 +211,6 @@ function navigatorFromConfigurationBlock(
     }
   }
   return result
-}
-
-function rootAppValue(
-  app: AST.AppValueDeclaration,
-  seen: Set<AST.AppValueDeclaration> = new Set(),
-): AST.AppValueDeclaration {
-  if (seen.has(app)) {
-    return app
-  }
-  seen.add(app)
-  const expression = app.value
-  if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
-    const target = expression.target.ref
-    if (AST.isConcreteAppValueDeclaration(target)) {
-      return rootAppValue(target, seen)
-    }
-  }
-  return app
 }
 
 function configuredExpressionConfiguration(
@@ -375,7 +360,7 @@ function validatePresentationTarget(
     return
   }
   const targetKey = target.key.slice(1)
-  const rootApp = rootAppValue(app)
+  const rootApp = ASTUtils.rootAppValue(app)
   const auxiliary = rootApp
     && AST.isAppDeclaration(rootApp)
     && AST.blockStatements(rootApp).find(statement =>

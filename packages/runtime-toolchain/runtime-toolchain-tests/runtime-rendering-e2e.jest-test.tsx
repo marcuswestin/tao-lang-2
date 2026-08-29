@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, setReactNativeDevModeForTest, Test } from '@shared/test'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, type ReactNode, useState } from 'react'
 import * as RN from 'react-native'
@@ -382,22 +382,6 @@ function layoutBoundWidth(style: { borderWidth?: unknown; outlineWidth?: unknown
 
 function layoutBoundColor(style: { borderColor?: unknown; outlineColor?: unknown } | undefined): unknown {
   return style?.outlineColor ?? style?.borderColor
-}
-
-function setReactNativeDevModeForTest(value: boolean): () => void {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, '__DEV__')
-  Object.defineProperty(globalThis, '__DEV__', {
-    configurable: true,
-    value,
-    writable: true,
-  })
-  return () => {
-    if (descriptor) {
-      Object.defineProperty(globalThis, '__DEV__', descriptor)
-      return
-    }
-    delete (globalThis as { __DEV__?: unknown }).__DEV__
-  }
 }
 
 function TaoRuntimeBox(props: { __tao?: TR.TaoProps; children?: ReactNode }): ReactElement {

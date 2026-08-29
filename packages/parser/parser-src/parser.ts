@@ -358,6 +358,8 @@ function isParsedFile(file: ParsedFile | undefined): file is ParsedFile {
 
 async function loadReachableDocuments(context: ParserContext, entryDocument: AST.Document): Promise<AST.Document[]> {
   const documents = new Map<string, AST.Document>()
+  // Sibling scans are memoized per directory for this load only; files may change between runs.
+  const siblingScans: SiblingScanCache = new Map()
   const intrinsicDocuments = await Promise.all(
     (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path)),
   )
@@ -370,7 +372,7 @@ async function loadReachableDocuments(context: ParserContext, entryDocument: AST
       continue
     }
     documents.set(currentPath, document)
-    queue.push(...await loadReferencedDocuments(context, document, documents))
+    queue.push(...await loadReferencedDocuments(context, document, documents, siblingScans))
   }
 
   return [...documents.values()]
@@ -380,6 +382,7 @@ async function loadReferencedDocuments(
   context: ParserContext,
   document: AST.Document,
   loadedDocuments: ReadonlyMap<string, AST.Document>,
+  siblingScans: SiblingScanCache,
 ): Promise<AST.Document[]> {
   const ast = document.parseResult.value
   if (ast === undefined) {
@@ -388,7 +391,7 @@ async function loadReferencedDocuments(
   const referencedDocuments: AST.Document[] = []
   // A sibling may carry `folder` declarations this file reaches without naming them in a `use`,
   // so the whole folder is loaded rather than only what the imports point at.
-  for (const siblingPath of await siblingTaoFilePaths(document.uri.path)) {
+  for (const siblingPath of await siblingTaoFilePaths(document.uri.path, siblingScans)) {
     if (!loadedDocuments.has(siblingPath)) {
       referencedDocuments.push(await documentFromFilePath(context, siblingPath))
     }
@@ -410,15 +413,26 @@ async function loadReferencedDocuments(
 // does not use the marker keeps exactly the document set its `use` statements describe.
 const folderDeclarationPattern = /^[ \t]*folder[ \t\r\n]/m
 
-async function siblingTaoFilePaths(filePath: string): Promise<string[]> {
+/** SiblingScanCache memoizes one load's per-directory folder-sibling scans. */
+type SiblingScanCache = Map<string, Promise<string[]>>
+
+async function siblingTaoFilePaths(filePath: string, siblingScans: SiblingScanCache): Promise<string[]> {
   const directory = FS.dirname(filePath)
+  let scan = siblingScans.get(directory)
+  if (!scan) {
+    scan = folderSiblingPathsIn(directory)
+    siblingScans.set(directory, scan)
+  }
+  return (await scan).filter(path => path !== filePath)
+}
+
+async function folderSiblingPathsIn(directory: string): Promise<string[]> {
   if (!await FS.isDirectory(directory)) {
     return []
   }
   const candidates = (await FS.listDir(directory))
     .filter(name => FS.extname(name) === '.tao' && !name.endsWith('.test.tao'))
     .map(name => FS.resolvePath(name, directory))
-    .filter(path => path !== filePath)
   const paths: string[] = []
   for (const path of candidates) {
     if (folderDeclarationPattern.test(await FS.readText(path))) {

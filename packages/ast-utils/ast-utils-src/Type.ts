@@ -94,11 +94,6 @@ export class Type {
     })
   }
 
-  /** constructorReferenceName returns the source-facing name of a typed constructor's type prefix. */
-  static constructorReferenceName(type: AST.ConstructablePrimitiveTypeReference): string {
-    return Type.referenceName(type)
-  }
-
   static definitionName(type: AST.TypeDefinition): string {
     return Switch.type(type, {
       TypeDeclaration: declaration => declaration.name,
@@ -130,7 +125,7 @@ export class Type {
           ? `list of ${Type.displayName(type.element)}`
           : 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
-      entity: type => dataEntityName(type.entity),
+      entity: type => Type.dataEntityName(type.entity),
       enum: type => type.declaration.name,
       union: type => type.members.map(Type.displayName).join(' | '),
     })
@@ -210,17 +205,22 @@ export class Type {
 
   /** ofInferredConfiguration resolves a bare block from its same-name declaration context. */
   static ofInferredConfiguration(value: AST.InferredConfigurationConstructor): TaoType {
+    const declaration = Type.inferredConfigurationDeclaration(value)
+    return declaration ? Type.ofDefinition(declaration) : unresolvedType()
+  }
+
+  /** inferredConfigurationDeclaration resolves a bare block's same-name visible type declaration
+   * from its alias or app-property owner. */
+  static inferredConfigurationDeclaration(
+    value: AST.InferredConfigurationConstructor,
+  ): AST.TypeDeclaration | undefined {
     const owner = value.$container
     const name = AST.isAliasDeclaration(owner)
       ? owner.name
       : AST.isAppProperty(owner)
       ? owner.name
       : undefined
-    if (!name) {
-      return unresolvedType()
-    }
-    const declaration = visibleTypeDeclaration(value, name)
-    return declaration ? Type.ofDefinition(declaration) : unresolvedType()
+    return name ? visibleTypeDeclaration(value, name) : undefined
   }
 
   /** ofValue resolves an ordinary expression or configured runtime value. */
@@ -341,7 +341,7 @@ export class Type {
   /** entityOfReference resolves a top-level entity's singular type name. */
   static entityOfReference(reference: AST.NamedTypeReference): DataEntityDefinition | undefined {
     return reference.members.length === 0
-      ? visibleEntityDataDeclarations(reference).find(entity => entity.singularName === reference.root)
+      ? Type.visibleDataEntities(reference).find(entity => entity.singularName === reference.root)
       : undefined
   }
 
@@ -383,7 +383,7 @@ export class Type {
           : `${type.kind}:${type.primitive}`,
       list: type => `list:${type.element ? Type.identityKey(type.element) ?? 'unresolved' : 'unknown'}`,
       item: type => type.kind,
-      entity: type => `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`,
+      entity: type => `entity:${AST.getDocument(type.entity).uri.path}#${Type.dataEntityName(type.entity)}`,
       enum: type => `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`,
       union: type => `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`,
     })
@@ -495,16 +495,7 @@ export class Type {
 
   /** visibleDataEntities returns local plus use-imported catalog declarations for a node. */
   static visibleDataEntities(node: AST.Node): AST.EntityDataDeclaration[] {
-    const root = AST.findRoot(node)
-    if (!AST.isTaoFile(root)) {
-      return []
-    }
-    return [
-      ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...root.statements
-        .filter(AST.isUseStatement)
-        .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
-    ]
+    return AST.visibleFileDeclarations(node, AST.isEntityDataDeclaration)
   }
 
   /** dataFieldType resolves the value type stored by a schema field. */
@@ -1166,10 +1157,6 @@ function definitionIdentityName(type: AST.TypeDefinition): string {
   return `${AST.getDocument(type).uri.path}#${Type.definitionName(type)}`
 }
 
-function dataEntityName(entity: DataEntityDefinition): string {
-  return entity.singularName
-}
-
 function unresolvedType(): TaoType {
   return { kind: 'unresolved' }
 }
@@ -1251,50 +1238,13 @@ function namedParentDefinition(type: AST.TypeExpression): AST.TypeDefinition | u
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
-  const root = AST.findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return undefined
-  }
-  return typeDeclarationsInFile(root).find(type => type.name === name)
-}
-
-function visibleEntityDataDeclarations(node: AST.Node): AST.EntityDataDeclaration[] {
-  const root = AST.findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return []
-  }
-  return [
-    ...root.statements.filter(AST.isEntityDataDeclaration),
-    ...root.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
-  ]
-}
-
-function typeDeclarationsInFile(file: AST.TaoFile): AST.TypeDeclaration[] {
-  return [
-    ...file.statements.filter(AST.isTypeDeclaration),
-    ...file.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isTypeDeclaration)),
-  ]
+  return AST.visibleFileDeclarations(node, AST.isTypeDeclaration).find(type => type.name === name)
 }
 
 function visibleParameterizedDeclaration(node: AST.Node, name: string): AST.ParameterizedDeclaration | undefined {
-  const root = AST.findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return undefined
-  }
-  return parameterizedDeclarationsInFile(root).find(declaration => declaration.name === name)
-}
-
-function parameterizedDeclarationsInFile(file: AST.TaoFile): AST.ParameterizedDeclaration[] {
-  return [
-    ...file.statements.filter(AST.isParameterizedDeclaration),
-    ...file.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isParameterizedDeclaration)),
-  ]
+  return AST.visibleFileDeclarations(node, AST.isParameterizedDeclaration).find(declaration =>
+    declaration.name === name
+  )
 }
 
 function owningTypePropertyDefinition(property: AST.TypeProperty): AST.TypeDefinition | undefined {

@@ -75,17 +75,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'entity' && AST.isCreateStatement(context.container)) {
       return this.createEntityDataScope(context.container)
     }
-    if (context.property === 'app' && AST.isRunStep(context.container)) {
-      return this.createRunAppScope(context.container)
-    }
-    if (context.property === 'app' && AST.isNavigationTarget(context.container)) {
-      return this.createRunAppScope(context.container)
-    }
-    if (context.property === 'app' && AST.isSelectionActivateStatement(context.container)) {
-      return this.createRunAppScope(context.container)
-    }
-    if (context.property === 'app' && AST.isReplaceStatement(context.container)) {
-      return this.createRunAppScope(context.container)
+    const isAppReference = context.property === 'app'
+      && (AST.isRunStep(container)
+        || AST.isNavigationTarget(container)
+        || AST.isSelectionActivateStatement(container)
+        || AST.isReplaceStatement(container))
+    if (isAppReference) {
+      return this.createRunAppScope(container)
     }
     return super.getScope(context)
   }
@@ -311,7 +307,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       ...this.importedCaseSetCases(test),
     ]
     const exactField = booleanFieldForCaseTest(test)
-    const fields = visibleEntityDataDeclarations(test).flatMap(entity =>
+    const fields = AST.visibleFileDeclarations(test, AST.isEntityDataDeclaration).flatMap(entity =>
       entity.block.entries.filter(AST.isEntityDataField).filter(field => field.boolean)
     )
     let scope = this.createScope(fields.flatMap(field => this.booleanFieldCaseDescriptions(field)))
@@ -467,7 +463,9 @@ function entityDataForValueDeclaration(
   context: AST.Node,
 ): AST.EntityDataDeclaration | undefined {
   if (AST.isParameterDeclaration(declaration) && declaration.type?.members.length === 0) {
-    return visibleEntityDataDeclarations(context).find(entity => entity.singularName === declaration.type?.root)
+    return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
+      entity.singularName === declaration.type?.root
+    )
   }
   if (AST.isForStatement(declaration)) {
     return entityDataForCollection(declaration.collection, context)
@@ -505,7 +503,7 @@ function relationEntityForField(
     return undefined
   }
   const relationName = field.name
-  return visibleEntityDataDeclarations(context).find(entity =>
+  return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
     entity.singularName === relationName || entity.name === relationName
   )
 }
@@ -526,7 +524,7 @@ function entityDataForCollection(
   if (!owner || !fieldName) {
     return undefined
   }
-  return visibleEntityDataDeclarations(context).find(entity => entity.name === fieldName)
+  return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity => entity.name === fieldName)
 }
 
 function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDeclaration | undefined {
@@ -534,20 +532,7 @@ function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDe
     return entityDataForCollection(query.source, query)
   }
   const sourceName = query.sourceName ?? query.name
-  return visibleEntityDataDeclarations(query).find(entity => entity.name === sourceName)
-}
-
-function visibleEntityDataDeclarations(node: AST.Node): AST.EntityDataDeclaration[] {
-  const root = AST.findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return []
-  }
-  return [
-    ...root.statements.filter(AST.isEntityDataDeclaration),
-    ...root.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
-  ]
+  return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration).find(entity => entity.name === sourceName)
 }
 
 type ScopeCarrier =

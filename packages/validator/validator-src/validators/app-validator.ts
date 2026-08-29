@@ -233,7 +233,7 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
 
 function isInsidePackage(filePath: string, ctx: ValidationContext): boolean {
   for (const packagePaths of ctx.packagesContext.index.packages.values()) {
-    if (packagePaths.some(packagePath => pathIsWithin(filePath, packagePath))) {
+    if (packagePaths.some(packagePath => FS.pathIsWithin(filePath, packagePath))) {
       return true
     }
   }
@@ -249,11 +249,5 @@ function isTestCompanionAppFile(filePath: string, ctx: ValidationContext): boole
   }
   const testDirectory = FS.dirname(ctx.entryFilePath)
   const appDirectory = FS.dirname(filePath)
-  const relative = FS.relativePath(appDirectory, testDirectory)
-  return relative === '' || !relative.startsWith('..')
-}
-
-function pathIsWithin(path: string, directoryPath: string): boolean {
-  const relative = FS.relativePath(directoryPath, path)
-  return relative === '' || (!relative.startsWith('..') && relative !== '..')
+  return FS.pathIsWithin(testDirectory, appDirectory)
 }

@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { viewValidationCodes } from '../diagnostic-codes'
@@ -248,8 +248,7 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
     }
     if (AST.isGuardRenderStatement(statement)) {
       hasChildInvocation = true
-      const branches = statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
-      for (const branch of branches) {
+      for (const branch of ASTUtils.guardBranches(statement)) {
         if (branch.block) {
           validateRenderBlock(branch.block, ctx)
         }

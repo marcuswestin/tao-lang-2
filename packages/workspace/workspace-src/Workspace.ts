@@ -3,7 +3,7 @@ import { Langium, Parser, type ParseResult } from '@parser'
 import { Assert, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { createWorkspaceServices, type WorkspaceServices } from './langium-services'
-import { createProjectContext, pathIsWithin, type ProjectContext } from './workspace-utils'
+import { createProjectContext, type ProjectContext } from './workspace-utils'
 
 type CompileTestPlanOptions = {
   skipValidation?: boolean
@@ -131,7 +131,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
 
   private resolveInsideRoot(path: string): string {
     const resolvedPath = FS.resolvePath(path, this.project.root)
-    Assert(pathIsWithin(resolvedPath, this.project.root), 'workspace path is inside the workspace root', {
+    Assert(FS.pathIsWithin(resolvedPath, this.project.root), 'workspace path is inside the workspace root', {
       path: resolvedPath,
       root: this.project.root,
     })

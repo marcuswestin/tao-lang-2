@@ -1,17 +1,18 @@
 import { afterAll, afterEach, describe, expect, test } from 'bun:test'
-import {
+import { type JestApi, setTestRuntime } from './Test'
+
+export { app, fence, stubLayout, stubView, tsFence } from './TaoFixtures'
+export {
   AfterAll,
   AfterEach,
   Describe,
   Expect,
   Jest,
-  type JestApi,
   mkTestDir,
-  setTestRuntime,
+  setReactNativeDevModeForTest,
   Test,
   withTaoFiles,
 } from './Test'
-export { app, fence, stubLayout, stubView, tsFence } from './TaoFixtures'
 
 setTestRuntime({
   afterAll,
@@ -25,8 +26,6 @@ setTestRuntime({
   },
   test,
 })
-
-export { AfterAll, AfterEach, Describe, Expect, Jest, mkTestDir, Test, withTaoFiles }
 
 function getJest(): JestApi {
   const value = (globalThis as unknown as { jest?: JestApi }).jest

@@ -486,30 +486,26 @@ function resolveImports(
       })
     )
     for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
-      const target = targets.find(candidate =>
-        candidate.ast.statements.some(statement =>
+      for (const target of targets) {
+        const declarations = target.ast.statements.filter(statement =>
           declarationEmitsRuntimeBinding(statement)
           && statement.name === importedName
           && Packages.declarationIsImportableFromUse(statement, resolution)
         )
-      )
-      if (!target) {
-        continue
+        if (declarations.length === 0) {
+          continue
+        }
+        const names = bySource.get(target.path) ?? new Set<string>()
+        for (const declaration of declarations) {
+          const binding = isRuntimeConfigurableDeclaration(declaration)
+            ? configurationRuntimeBindingName(declaration)
+            : importedName
+          names.add(binding)
+          scopeBindings.set(binding, binding)
+        }
+        bySource.set(target.path, names)
+        break
       }
-      const names = bySource.get(target.path) ?? new Set<string>()
-      const declarations = target.ast.statements.filter(statement =>
-        declarationEmitsRuntimeBinding(statement)
-        && statement.name === importedName
-        && Packages.declarationIsImportableFromUse(statement, resolution)
-      )
-      for (const declaration of declarations) {
-        const binding = isRuntimeConfigurableDeclaration(declaration)
-          ? configurationRuntimeBindingName(declaration)
-          : importedName
-        names.add(binding)
-        scopeBindings.set(binding, binding)
-      }
-      bySource.set(target.path, names)
     }
   }
   return { bySource, scopeBindings }

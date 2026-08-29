@@ -27,13 +27,7 @@ export const configuredValueValidationMessages = {
 export const configuredValueValidationChecks = {
   [AST.ConfiguredValue.$type]: validateConfiguredValue,
   [AST.InferredConfigurationConstructor.$type]: (value, ctx) => {
-    const owner = value.$container
-    const inferredName = AST.isAliasDeclaration(owner)
-      ? owner.name
-      : AST.isAppProperty(owner)
-      ? owner.name
-      : undefined
-    const declaration = inferredName ? Type.visibleDeclaration(value, inferredName) : undefined
+    const declaration = Type.inferredConfigurationDeclaration(value)
     if (declaration && AST.isConfigurableDeclaration(declaration)) {
       validateConfigurationBlock(value.block, declaration, ctx, { requireConstructorProperties: true })
     }

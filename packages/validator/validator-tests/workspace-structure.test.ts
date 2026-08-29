@@ -12,34 +12,15 @@ import { useValidationMessages, validateVisibleDeclarations } from '../validator
 import {
   accepts,
   app,
+  checksFiles,
   rejects,
+  rejectsFiles,
   stubView,
   testValidateCodeWithErrors,
-  type ValidatedFiles,
   validationErrorMessages,
-  withValidatedFiles,
+  visibleView,
   withValidationParse,
 } from './test-validate'
-
-type TaoFiles = Record<string, string>
-type FilesCheck = (result: ValidatedFiles) => Promise<void> | void
-
-function checksFiles(files: TaoFiles, check: FilesCheck): () => Promise<void> {
-  return async () => await withValidatedFiles('Main.tao', files, check)
-}
-
-function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
-  return checksFiles(files, result => {
-    const errors = validationErrorMessages(result).join('\n')
-    for (const message of messages) {
-      Expect(errors).toContain(message)
-    }
-  })
-}
-
-function visibleView(name: string, parameters = ''): string {
-  return stubView(name, parameters).replace('view ', 'workspace view ')
-}
 
 function stubApp(extra = ''): string {
   return app('render Fixture()', `${stubView('Fixture')}\n${extra}`)

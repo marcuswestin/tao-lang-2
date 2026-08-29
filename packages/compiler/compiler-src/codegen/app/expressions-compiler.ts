@@ -44,10 +44,9 @@ export const ExpressionsCompiler = {
     if (AST.isConfigurableDeclaration(declaration)) {
       Assert.defined(value.block, 'validated configurable type constructor has a block')
       const config = compileConfiguredTypeObject(declaration, value.block)
-      const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
-      return AST.configurationPrimitiveOf(declaration) === 'nav'
-        ? gen`TR.Navigation.Configure(${runtimeDeclaration}, ${config})`
-        : gen`TR.Data.Configure(${runtimeDeclaration}, ${config})`
+      // The validator does not yet reject constructors of other configurable primitives (such as
+      // app) in expression position; those keep their historical data-configuration lowering.
+      return configureCall(declaration, config) ?? dataConfigureCall(declaration, config)
     }
     if (AST.isTypeDeclaration(declaration) || AST.isParameterizedDeclaration(declaration)) {
       if (value.value) {
@@ -87,16 +86,9 @@ export const ExpressionsCompiler = {
   InferredConfiguration(value: AST.InferredConfigurationConstructor): Compiled {
     const declaration = inferredConfigurationDeclaration(value)
     if (declaration) {
-      const configured = compileConfiguredTypeObject(declaration, value.block)
-      const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
-      const primitive = AST.configurationPrimitiveOf(declaration)
-      if (primitive === 'nav') {
-        return gen`TR.Navigation.Configure(${runtimeDeclaration}, ${configured})`
-      }
-      if (primitive === 'datasource') {
-        return gen`TR.Data.Configure(${runtimeDeclaration}, ${configured})`
-      }
-      return Assert.never(primitive as never, 'app inference is compiled by the owning app value')
+      const call = configureCall(declaration, compileConfiguredTypeObject(declaration, value.block))
+      Assert.defined(call, 'app inference is compiled by the owning app value')
+      return call
     }
     const resolvedType = Type.ofInferredConfiguration(value)
     if (resolvedType.kind !== 'item') {
@@ -331,32 +323,30 @@ export const ExpressionsCompiler = {
 
   /** UiValue creates a presentation descriptor without making `ui` embeddable as a child render. */
   UiValue(ui: AST.UiDeclaration): Compiled {
-    return gen`TR.Navigation.UI({
-      name: ${gen.jsLiteral(ui.name)},
-      render: (_NavigationArguments, _NavigationProps) =>
-        <${gen.scopeName(ui)}${
-      gen.join(AST.parametersOf(ui), parameter => {
-        const name = Type.parameterName(parameter)
-        return gen` ${gen.Name({ name })}={_NavigationArguments[${gen.jsLiteral(name)}]}`
-      }, { separator: '' })
-    } __tao={_NavigationProps} />,
-    })`
+    return compileNavigationDescriptor('UI', ui)
   },
 
   /** DialogueValue creates the independently askable descriptor for one dialogue declaration. */
   DialogueValue(dialogue: AST.DialogueDeclaration): Compiled {
-    return gen`TR.Navigation.Dialogue({
-      name: ${gen.jsLiteral(dialogue.name)},
-      render: (_NavigationArguments, _NavigationProps) =>
-        <${gen.scopeName(dialogue)}${
-      gen.join(AST.parametersOf(dialogue), parameter => {
-        const name = Type.parameterName(parameter)
-        return gen` ${gen.Name({ name })}={_NavigationArguments[${gen.jsLiteral(name)}]}`
-      }, { separator: '' })
-    } __tao={_NavigationProps} />,
-    })`
+    return compileNavigationDescriptor('Dialogue', dialogue)
   },
 } as const
+
+function compileNavigationDescriptor(
+  kind: 'UI' | 'Dialogue',
+  declaration: AST.UiDeclaration | AST.DialogueDeclaration,
+): Compiled {
+  return gen`TR.Navigation.${kind}({
+      name: ${gen.jsLiteral(declaration.name)},
+      render: (_NavigationArguments, _NavigationProps) =>
+        <${gen.scopeName(declaration)}${
+    gen.join(AST.parametersOf(declaration), parameter => {
+      const name = Type.parameterName(parameter)
+      return gen` ${name}={_NavigationArguments[${gen.jsLiteral(name)}]}`
+    }, { separator: '' })
+  } __tao={_NavigationProps} />,
+    })`
+}
 
 function itemPropertyBindingPairs(
   item: AST.ItemLiteral,
@@ -402,15 +392,7 @@ function compileConfiguredItemBlock(
     }
     const candidate = compileConfiguredItemEntry(entry, itemType)
     Assert.defined(candidate, 'validated configured item entry has a constructable value')
-    const actual = candidate.type
-    const exact = [...remaining].filter(property =>
-      Type.identityKey(Type.ofProperty(property)) === Type.identityKey(actual)
-    )
-    const assignable = exact.length === 1
-      ? exact
-      : [...remaining].filter(property => Type.isAssignable(actual, Type.ofProperty(property)))
-    Assert(assignable.length === 1, 'validated configured item entry binds one field')
-    const expected = assignable[0]!
+    const expected = bindSingleSlot(remaining, candidate.type, 'validated configured item entry binds one field')
     remaining.delete(expected)
     pairs.push({ expected, compiled: candidate.compiled })
   }
@@ -472,15 +454,42 @@ function compileConfiguredItemEntry(
   return undefined
 }
 
+/** configureCall binds a nav or datasource contract's runtime declaration to one compiled configuration.
+ * App contracts have no runtime binding; they return undefined for the caller's own fallback. */
+function configureCall(declaration: AST.ConfigurableDeclaration, config: Compiled): Compiled | undefined {
+  const primitive = AST.configurationPrimitiveOf(declaration)
+  if (primitive === 'nav') {
+    const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+    return gen`TR.Navigation.Configure(${runtimeDeclaration}, ${config})`
+  }
+  return primitive === 'datasource' ? dataConfigureCall(declaration, config) : undefined
+}
+
+function dataConfigureCall(declaration: AST.ConfigurableDeclaration, config: Compiled): Compiled {
+  const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+  return gen`TR.Data.Configure(${runtimeDeclaration}, ${config})`
+}
+
+/** bindSingleSlot picks the one unfilled slot an entry binds: an exact identity match wins, else assignability. */
+function bindSingleSlot(
+  remaining: ReadonlySet<AST.TypeProperty>,
+  actual: ASTUtils.TaoType,
+  message: string,
+): AST.TypeProperty {
+  const exact = [...remaining].filter(property =>
+    Type.identityKey(Type.ofProperty(property)) === Type.identityKey(actual)
+  )
+  const assignable = exact.length === 1
+    ? exact
+    : [...remaining].filter(property => Type.isAssignable(actual, Type.ofProperty(property)))
+  Assert(assignable.length === 1, message)
+  return assignable[0]!
+}
+
 function compileConfigurationReference(value: AST.ConfigurationReference): Compiled {
   const target = resolveRef(value.target)
   if (AST.isConfigurableDeclaration(target)) {
-    const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(target) })
-    return AST.configurationPrimitiveOf(target) === 'nav'
-      ? gen`TR.Navigation.Configure(${runtimeDeclaration}, {})`
-      : AST.configurationPrimitiveOf(target) === 'datasource'
-      ? gen`TR.Data.Configure(${runtimeDeclaration}, {})`
-      : gen`TR.Value({})`
+    return configureCall(target, gen`{}`) ?? gen`TR.Value({})`
   }
   if (AST.isUiDeclaration(target)) {
     return Compile.UiValue(target)
@@ -611,16 +620,8 @@ function compileItemPatch(
       : undefined
     const candidate = compileConfiguredItemEntry(entry, itemType)
     Assert.defined(candidate, 'validated item patch entry has a value')
-    const expected = named ?? (() => {
-      const exact = [...available].filter(property =>
-        Type.identityKey(Type.ofProperty(property)) === Type.identityKey(candidate.type)
-      )
-      const assignable = exact.length === 1
-        ? exact
-        : [...available].filter(property => Type.isAssignable(candidate.type, Type.ofProperty(property)))
-      Assert(assignable.length === 1, 'validated item patch entry binds one slot')
-      return assignable[0]!
-    })()
+    const expected = named
+      ?? bindSingleSlot(available, candidate.type, 'validated item patch entry binds one slot')
     available.delete(expected)
     pairs.push({ expected, compiled: candidate.compiled })
   }
@@ -652,13 +653,7 @@ function compileConfigurationPatchObject(
 function inferredConfigurationDeclaration(
   value: AST.InferredConfigurationConstructor,
 ): AST.ConfigurableDeclaration | undefined {
-  const owner = value.$container
-  const name = AST.isAliasDeclaration(owner)
-    ? owner.name
-    : AST.isAppProperty(owner)
-    ? owner.name
-    : undefined
-  const declaration = name ? Type.visibleDeclaration(value, name) : undefined
+  const declaration = Type.inferredConfigurationDeclaration(value)
   return declaration && AST.isConfigurableDeclaration(declaration) ? declaration : undefined
 }
 

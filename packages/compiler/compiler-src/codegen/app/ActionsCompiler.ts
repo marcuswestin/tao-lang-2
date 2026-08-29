@@ -129,7 +129,7 @@ export const ActionsCompiler = {
     return gen`if (await TR.GuardAction(${Compile.Expression(statement.subject)}, [
       ${
       gen.list(
-        guardActionBranches(statement),
+        ASTUtils.guardBranches(statement),
         branch =>
           gen`[${gen.jsLiteral(branch.case)}, async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => {
           ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
@@ -149,10 +149,6 @@ export const ActionsCompiler = {
     )`
   },
 } as const
-
-function guardActionBranches(statement: AST.GuardActionStatement): AST.GuardActionBranch[] {
-  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
-}
 
 function actionParameters(action: AST.ActionDeclaration): ActionParameter[] {
   return AST.parametersOf(action).map((parameter, index) => ({ index, parameter }))

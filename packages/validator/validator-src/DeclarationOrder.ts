@@ -8,6 +8,7 @@ export const DeclarationOrder = {
   allowsForwardActionReference,
   isLocalValueDeclaration,
   isUsedBeforeDeclaration,
+  isValueReferenceLike,
   isViewOwnedValueDeclaration,
   valueReferences,
 }
@@ -54,6 +55,7 @@ function expressionValueReferences(value: AST.Expression): ValueReferenceLike[] 
   return AST.streamAllContents(value).filter(isValueReferenceLike)
 }
 
+/** isValueReferenceLike identifies expressions that read a value declaration by reference. */
 function isValueReferenceLike(node: AST.Node): node is ValueReferenceLike {
   return AST.isValueReference(node) || AST.isRefinementExpression(node) || AST.isMemberAccessExpression(node)
 }

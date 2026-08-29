@@ -52,11 +52,25 @@ const BUN_SUITE_ARGS = new Map<string, readonly string[]>([
   ['runtime-toolchain', ['--timeout=60000']],
   ['validator', ['--concurrent']],
 ])
-const SUITE_PRIORITIES = new Map<string, number>([
-  ['runtime-jest', 4],
-  ['tao-apps', 4],
-  ['source-actions', 3],
-  ['tao-cli', 2],
+/** SuiteScheduling weights one suite for the shared worker-slot scheduler. */
+type SuiteScheduling = {
+  /** Higher-priority suites start earlier. Default 0. */
+  priority?: number
+  // A suite occupies `cost` of the cpuCount worker slots while it runs, so CPU-hungry suites
+  // (multi-process runners, or single-process compile phases that must not be starved) hold
+  // back cheap suites instead of running under full contention. Default 1.
+  cost?: number
+}
+const SUITE_SCHEDULING = new Map<string, SuiteScheduling>([
+  // tao-apps dominates the wall time of a full run; its validate+compile phase is one
+  // single-threaded process, so it gets the earliest start and a wide slot reservation.
+  // tao-apps fans out into compiler worker processes plus a Jest run of its own.
+  ['tao-apps', { priority: 5, cost: 12 }],
+  ['runtime-jest', { priority: 4, cost: 4 }],
+  // runtime-toolchain spawns tsc typecheck children per test.
+  ['runtime-toolchain', { priority: 3, cost: 3 }],
+  ['source-actions', { priority: 3 }],
+  ['tao-cli', { priority: 2 }],
 ])
 
 async function discoverTestSuites(pattern = ''): Promise<TestSuite[]> {
@@ -97,15 +111,32 @@ async function runSuiteProcesses(
   options: RunSuiteProcessesOptions,
 ): Promise<void> {
   const queue = [...states].sort((left, right) => suitePriority(right) - suitePriority(left))
+  const capacity = Math.max(1, maxSuiteJobs(options.jobs))
+  const running = new Set<Promise<void>>()
+  let availableSlots = capacity
   let nextSuite = 0
-  const workerCount = Math.min(maxSuiteJobs(options.jobs), queue.length)
 
-  await Promise.all(Array.from({ length: workerCount }, async () => {
+  while (nextSuite < queue.length || running.size > 0) {
+    // Start suites in priority order while slots remain; a suite whose cost does not fit waits
+    // for running suites to release slots rather than letting cheaper suites jump the queue.
     while (nextSuite < queue.length) {
-      const state = queue[nextSuite++]!
-      await runSuite(state, options)
+      const state = queue[nextSuite]!
+      const cost = Math.min(suiteCost(state), capacity)
+      if (cost > availableSlots && running.size > 0) {
+        break
+      }
+      nextSuite += 1
+      availableSlots -= cost
+      const run: Promise<void> = runSuite(state, options).finally(() => {
+        availableSlots += cost
+        running.delete(run)
+      })
+      running.add(run)
     }
-  }))
+    if (running.size > 0) {
+      await Promise.race(running)
+    }
+  }
 }
 
 async function runSuitesInterleaved(pattern = '', options: TestRunOptions = {}): Promise<number> {
@@ -237,7 +268,11 @@ function maxSuiteJobs(requestedJobs: number | undefined): number {
 }
 
 function suitePriority(state: SuiteState): number {
-  return SUITE_PRIORITIES.get(state.name) ?? 0
+  return SUITE_SCHEDULING.get(state.name)?.priority ?? 0
+}
+
+function suiteCost(state: SuiteState): number {
+  return SUITE_SCHEDULING.get(state.name)?.cost ?? 1
 }
 
 async function runSuite(state: SuiteState, options: RunSuiteProcessesOptions): Promise<void> {

@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, setReactNativeDevModeForTest, Test } from '@shared/test'
 import type { TaoLayout, TaoLayoutEntry } from '../TaoRuntime-src/TR-layout'
 import { configuredStack } from './TR-navigation-test-fixtures'
 
@@ -501,19 +501,3 @@ Describe('TR.Dev', () => {
     }
   })
 })
-
-function setReactNativeDevModeForTest(value: boolean): () => void {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, '__DEV__')
-  Object.defineProperty(globalThis, '__DEV__', {
-    configurable: true,
-    value,
-    writable: true,
-  })
-  return () => {
-    if (descriptor) {
-      Object.defineProperty(globalThis, '__DEV__', descriptor)
-      return
-    }
-    delete (globalThis as { __DEV__?: unknown }).__DEV__
-  }
-}

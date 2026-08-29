@@ -252,7 +252,7 @@ function validateConstructorKind(
 ): void {
   if (!valid) {
     ctx.error(
-      typeValidationMessages.constructorShape(Type.constructorReferenceName(constructor.type), expected),
+      typeValidationMessages.constructorShape(Type.referenceName(constructor.type), expected),
       constructor,
     )
   }
@@ -395,7 +395,7 @@ function typePropertyOwner(property: AST.TypeProperty): AST.TypeDefinition | und
 }
 
 function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: ValidationContext): void {
-  let current = declarationType(memberAccess.target.ref)
+  let current = Type.ofValueDeclaration(memberAccess.target.ref)
   if (current.kind === 'unresolved') {
     return
   }
@@ -449,31 +449,4 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
     }
     typeName = Type.displayName(current)
   }
-}
-
-function declarationType(declaration: AST.ValueDeclaration | undefined): ASTUtils.TaoType {
-  return Switch.typeMaybe<AST.ValueDeclaration | undefined, ASTUtils.TaoType>(declaration, {
-    ParameterDeclaration: Type.ofParameter,
-    AliasDeclaration: Type.ofValueDeclaration,
-    AppDeclaration: Type.ofValueDeclaration,
-    AskStatement: Type.ofValueDeclaration,
-    StateDeclaration: declaration => Type.ofExpression(declaration.value),
-    ActionDeclaration: Type.ofAction,
-    CasePayload: () => ({ kind: 'primitive', primitive: 'text' }),
-    EntityDataField: field => field.negativeName ? { kind: 'primitive', primitive: 'boolean' } : { kind: 'unresolved' },
-    CaseSetCase: caseSetCase => ({ kind: 'enum', declaration: AST.caseSetOwningCase(caseSetCase) }),
-    EntityQueryDeclaration: declaration => {
-      const entity = Type.queryEntity(declaration)
-      return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }
-    },
-    ForStatement: statement => {
-      const collection = Type.ofExpression(statement.collection)
-      return collection.kind === 'list' ? collection.element ?? { kind: 'unresolved' } : { kind: 'unresolved' }
-    },
-    DatasourceDeclaration: Type.ofValueDeclaration,
-    DesignDeclaration: Type.ofValueDeclaration,
-    NavDeclaration: Type.ofValueDeclaration,
-    UiDeclaration: () => ({ kind: 'primitive', primitive: 'ui' }),
-    undefined: () => ({ kind: 'unresolved' }),
-  })
 }

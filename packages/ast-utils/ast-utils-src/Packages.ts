@@ -285,17 +285,12 @@ export namespace Packages {
     const matches: Indexed[] = []
     for (const [name, paths] of index.packages) {
       for (const packagePath of paths) {
-        if (pathIsWithin(path, packagePath)) {
+        if (FS.pathIsWithin(path, packagePath)) {
           matches.push({ name, path: packagePath, duplicatePaths: paths })
         }
       }
     }
     return matches.sort((a, b) => b.path.length - a.path.length)[0]
-  }
-
-  function pathIsWithin(path: string, directoryPath: string): boolean {
-    const relative = FS.relativePath(directoryPath, path)
-    return relative === '' || (!relative.startsWith('..') && relative !== '..')
   }
 
   /** isStdLibImport returns true when `importPath` references the Tao standard library namespace. */
@@ -422,7 +417,7 @@ export namespace Packages {
     if (filePath === targetPath || filePath === `${targetPath}.tao`) {
       return true
     }
-    if (FS.extname(filePath) !== '.tao' || !pathIsWithin(filePath, targetPath)) {
+    if (FS.extname(filePath) !== '.tao' || !FS.pathIsWithin(filePath, targetPath)) {
       return false
     }
     const relativeDirectory = FS.dirname(FS.relativePath(targetPath, filePath))

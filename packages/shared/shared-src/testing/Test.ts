@@ -53,6 +53,23 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
   }
 }
 
+/** setReactNativeDevModeForTest overrides the React Native `__DEV__` global and returns a restore function. */
+export function setReactNativeDevModeForTest(value: boolean): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, '__DEV__')
+  Object.defineProperty(globalThis, '__DEV__', {
+    configurable: true,
+    value,
+    writable: true,
+  })
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(globalThis, '__DEV__', descriptor)
+      return
+    }
+    delete (globalThis as { __DEV__?: unknown }).__DEV__
+  }
+}
+
 /** setTestRuntime configures the active runner used by Tao test wrappers. */
 export function setTestRuntime(nextRuntime: TestRuntime): void {
   testRuntime = nextRuntime
