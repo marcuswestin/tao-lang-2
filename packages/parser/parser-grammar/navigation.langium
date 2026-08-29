@@ -11,8 +11,10 @@ entry NavigationGrammarEntrypoint:
 ContextualPresentStatement:
     'present' ui=[UiDeclaration:ID] '(' argumentList=ArgumentList? ')' mode=PresentationMode? ('in' target=NavigationTarget)?;
 
+// A sheet is the platform's own modal presentation — a card that slides up over the content and is
+// dismissed by dragging it down or by `dismiss`, hosted by the OS where one exists.
 PresentationMode:
-    'as' (kind='overlay' | kind='toast' toast=ToastPresentationOptions);
+    'as' (kind='overlay' | kind='sheet' | kind='toast' toast=ToastPresentationOptions);
 
 ToastPresentationOptions:
     '(' 'Key' ':' key=Expression ',' 'Duration' ':' duration=Expression ')';

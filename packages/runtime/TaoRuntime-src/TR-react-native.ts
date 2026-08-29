@@ -11,6 +11,7 @@ export type ReactNativeRuntime = {
   }
   Image: React.ComponentType<any>
   KeyboardAvoidingView: React.ComponentType<any>
+  Modal?: React.ComponentType<any>
   Platform?: { OS: string }
   Pressable: React.ComponentType<any>
   ScrollView: React.ComponentType<any>

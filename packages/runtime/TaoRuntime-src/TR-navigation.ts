@@ -217,12 +217,14 @@ export const NavigationControls = {
     target: TaoNavigationInput | undefined,
     presentable: TaoPresentable,
     arguments_: TaoNavigationArguments,
+    options: { sheet?: boolean } = {},
   ): void {
     const navigation = resolveNavigationTarget(taoProps, target)
     if (!navigation) {
-      throw new Error(`Cannot present ${presentable.name} as overlay: no enclosing or explicit navigation target.`)
+      const mode = options.sheet ? 'sheet' : 'overlay'
+      throw new Error(`Cannot present ${presentable.name} as ${mode}: no enclosing or explicit navigation target.`)
     }
-    navigation.presentOverlay(presentable, arguments_)
+    navigation.presentOverlay(presentable, arguments_, options)
   },
 
   /** PresentToast replaces one app-owned key and restarts its transient expiry. */

@@ -35,6 +35,7 @@ without erasing compatible coverage:
   (`public view Badge = widgets.Badge`), the mechanism `@tao/ui` uses to publish implementations.
 - Native Components covers `@tao/ui`'s published components resolving to their platform-native
   implementations, exercised through the behavior every implementation must share.
+- Sheet Presentation covers `present X as sheet`, the platform-hosted modal presentation.
 - Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
   dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
   feature, and package tests own the diagnostics.
@@ -138,6 +139,14 @@ Exercise `@tao/ui`'s published components against their platform-native implemen
 **Belongs here:** importing `Button` and `Switch` from bare `@tao/ui` and getting the native set; pressing a native button by its title; a disabled native button; a native switch reporting its value through an action; behavior that must hold identically whichever implementation is bound.
 
 **Does not belong here:** the alias mechanism itself, which Component Aliases owns; per-implementation appearance, which is not assertable from a journey; navigation surfaces, which the nav layer owns.
+
+## Sheet Presentation
+
+Exercise `present X as sheet`, the platform's own modal presentation.
+
+**Belongs here:** presenting a `ui` as a sheet; dismissing one from inside with `dismiss`; dismissing one with Back; a sheet behaving as an overlay does for every navigation operation.
+
+**Does not belong here:** overlays and toasts, which WordFlower and the navigation tests own; the platform chrome a sheet is hosted in, which is not assertable from a journey.
 
 ## Type System Tests
 

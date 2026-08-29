@@ -24,12 +24,15 @@ export const NavigationCompiler = {
         },
       )`
     }
-    const runtimeMethod = presentation.mode?.kind === 'overlay' ? 'PresentOverlay' : 'PresentIn'
+    // A sheet is an overlay the platform hosts modally, so it takes the overlay path with one flag
+    // rather than a lane of its own — Back and `dismiss` then behave identically for both.
+    const sheet = presentation.mode?.kind === 'sheet'
+    const runtimeMethod = sheet || presentation.mode?.kind === 'overlay' ? 'PresentOverlay' : 'PresentIn'
     return gen`TR.Navigation.${runtimeMethod}(
       _ViewProps.__tao,
       ${presentation.target ? compileNavigationTarget(presentation.target) : 'undefined'},
       ${Compile.UiValue(ui)},
-      { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
+      { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },${sheet ? '\n      { sheet: true },' : ''}
     )`
   },
 

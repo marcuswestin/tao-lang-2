@@ -77,6 +77,49 @@ const dialogueSurfaceStyle = {
   width: '100%',
 } as const
 
+// A sheet is the platform's own modal presentation. RN's Modal hosts the OS presentation on both
+// platforms — a page sheet on iOS, a modal window on Android — and dragging it down or a system
+// back press enters the same root-safe reducer every other dismissal does.
+const sheetScrimStyle = {
+  backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  flex: 1,
+  justifyContent: 'flex-end',
+} as const
+
+const sheetSurfaceStyle = {
+  backgroundColor: '#ffffff',
+  borderTopLeftRadius: 16,
+  borderTopRightRadius: 16,
+  maxHeight: '90%',
+  padding: 20,
+} as const
+
+function modalSheet(content: React.ReactNode, navigation: TaoNavigationValue): React.ReactNode {
+  const runtime = requireReactNativeRuntime()
+  const modal = (runtime as { Modal?: React.ComponentType<any> }).Modal
+  const surface = React.createElement(
+    runtime.View,
+    { style: sheetScrimStyle },
+    React.createElement(runtime.View, { style: sheetSurfaceStyle }, content),
+  )
+  if (!modal) {
+    return surface
+  }
+  return React.createElement(
+    modal,
+    {
+      animationType: 'slide',
+      onRequestClose: () => {
+        backNavigation(navigation)
+      },
+      presentationStyle: 'pageSheet',
+      transparent: true,
+      visible: true,
+    },
+    surface,
+  )
+}
+
 /** NavigationSurface gives every nav a relative host and its own absolute overlay lane. */
 export function NavigationSurface(props: {
   content?: React.ReactNode
@@ -95,7 +138,11 @@ export function NavigationSurface(props: {
             : navigationProps(props.taoProps, props.navigation),
         )
         return React.createElement(NavigationLevel, {
-          children: entry.dialogue ? modalDialogue(content) : content,
+          children: entry.dialogue
+            ? modalDialogue(content)
+            : entry.sheet
+            ? modalSheet(content, props.navigation)
+            : content,
           fill: true,
           hidden: index !== props.overlays.length - 1,
           key: entry.instanceId,

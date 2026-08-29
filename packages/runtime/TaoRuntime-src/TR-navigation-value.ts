@@ -54,11 +54,16 @@ export abstract class RuntimeNavigationValue implements Subscription {
     return false
   }
 
-  presentOverlay(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
+  presentOverlay(
+    presentable: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+    options: { sheet?: boolean } = {},
+  ): void {
     this.overlayEntries.push({
       arguments: { ...arguments_ },
       instanceId: this.nextOverlayEntryId++,
       presentable,
+      ...(options.sheet ? { sheet: true } : {}),
     })
     this.emit()
   }
