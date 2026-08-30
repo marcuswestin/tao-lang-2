@@ -334,7 +334,7 @@ function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
     boolean: () => new Set(['true', 'false']),
     entity: () => new Set(['loading', 'missing', 'unauthorized', 'error']),
     list: () => new Set(['empty']),
-    query: () => new Set(['empty', 'loading', 'error']),
+    query: () => new Set(['empty', 'loading', 'refreshing', 'stale', 'error']),
     text: () => new Set(['empty']),
     unresolved: () => new Set<string>(),
     unsupported: () => new Set<string>(),

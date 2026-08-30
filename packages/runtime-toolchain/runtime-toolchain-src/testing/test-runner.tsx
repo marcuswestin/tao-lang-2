@@ -25,8 +25,10 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
     // Every check starts from the same instant and moves only when the journey says so.
     TR.Clock.beginTest()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
+    await settleData()
     for (const step of check.steps) {
       await runStep(screen, step)
+      await settleData()
     }
   } catch (error) {
     throw new Error(
@@ -121,6 +123,13 @@ async function submitStep(
 async function dispatchInteraction(dispatch: () => void): Promise<void> {
   dispatch()
   await act(async () => {})
+}
+
+/** settleData waits out data loads, query fills, and saves so assertions read a quiet store. */
+async function settleData(): Promise<void> {
+  await act(async () => {
+    await TR.Data.SettleAll()
+  })
 }
 
 function assertExpectation(

@@ -34,7 +34,7 @@ QueryBlock:
     '{' clauses+=QueryClause* '}';
 
 QueryClause:
-    WhereClause | BooleanWhereClause | OrderClause;
+    WhereClause | BooleanWhereClause | OrderClause | LimitClause;
 
 WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
@@ -47,6 +47,9 @@ QueryComparisonOperator returns string:
 
 OrderClause:
     'order' 'by' fieldName=ID direction=OrderDirection?;
+
+LimitClause:
+    'limit' count=NumberLiteral;
 
 OrderDirection returns string:
     'asc' | 'desc';

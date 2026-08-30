@@ -5,6 +5,7 @@ import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalC
 import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
+  accepts,
   app,
   rejects,
   stubLayout,
@@ -149,6 +150,36 @@ Describe('validator: functional core', () => {
         ${runtimeViews}
       `,
       FunctionalCoreValidator.messages.invalidCasePayload,
+    ),
+  )
+
+  Test(
+    'accepts the advisory refreshing and stale cases on query subjects',
+    accepts(`
+      data Documents / Document { Final yes / Draft no }
+      view Main() {
+        query Documents { }
+        render Stack(){
+          guard Documents { loading -> { Text("Loading") } }
+          if Documents is refreshing { Text("Refreshing") }
+          when Documents { stale -> { Text("Stale") } otherwise -> { Text("Ready") } }
+        }
+      }
+      ${runtimeViews}
+    `),
+  )
+
+  Test(
+    'rejects the advisory refreshing case on entity subjects',
+    rejects(
+      `
+        data Documents / Document { Final yes / Draft no }
+        view Main(Document) {
+          render Stack(){ guard Document { refreshing -> { Text("Wrong") } } }
+        }
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.invalidCase('refreshing', 'an entity subject'),
     ),
   )
 

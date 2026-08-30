@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hnreader-dev",
+      "runtimeExecutable": "direnv",
+      "runtimeArgs": ["exec", ".", "./tao", "dev", "Apps/HNReader", "--app", "HNReader"],
+      "port": 8081
+    }
+  ]
+}

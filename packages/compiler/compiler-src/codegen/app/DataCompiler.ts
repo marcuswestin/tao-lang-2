@@ -66,6 +66,7 @@ export const DataCompiler = {
     }
           ],
           ${clauses.find(AST.isOrderClause) ? Compile.OrderClause(clauses.find(AST.isOrderClause)!) : ''}
+          ${compileLimitClause(clauses.find(AST.isLimitClause))}
         },
         TR.Value,
       )
@@ -133,6 +134,10 @@ function dataCatalogScope(): Compiled {
   return gen.scopeName({ name: '_TaoDataCatalog' })
 }
 
+function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {
+  return limit ? gen`limit: ${limit.count.value},` : gen.noop()
+}
+
 function compileRelationSourceFilter(
   source: AST.MemberAccessExpression,
   entity: ASTUtils.DataEntityDefinition,
@@ -174,6 +179,7 @@ function compileEntityDataField(
     return gen`[${gen.jsLiteral(field.name)}]: {
       kind: ${gen.jsLiteral(kind)},
       ${indexed ? 'indexed: true,' : ''}
+      ${traits.some(trait => trait.unique) ? 'unique: true,' : ''}
       ${compileEntityFieldDefault(field, defaultModifier)}
     },`
   }

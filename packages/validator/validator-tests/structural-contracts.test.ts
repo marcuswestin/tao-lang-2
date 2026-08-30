@@ -542,6 +542,36 @@ Describe('validator: declaration contracts', () => {
     Test(`rejects ${name}`, rejects(source, message))
   }
 
+  Test(
+    'accepts a query limit beside ordering',
+    accepts(queryApp(
+      'query Workspaces { order by Name limit 20 }',
+      'data Workspaces / Workspace { Name text }',
+    )),
+  )
+
+  Test(
+    'rejects duplicate query limits',
+    rejects(
+      queryApp(
+        'query Workspaces { limit 20 limit 10 }',
+        'data Workspaces / Workspace { Name text }',
+      ),
+      dataValidationMessages.duplicateLimit,
+    ),
+  )
+
+  Test(
+    'rejects a query limit below one',
+    rejects(
+      queryApp(
+        'query Workspaces { limit 0 }',
+        'data Workspaces / Workspace { Name text }',
+      ),
+      dataValidationMessages.limitCount,
+    ),
+  )
+
   const dataFieldCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'boolean cases that collide with field names',
@@ -576,6 +606,35 @@ Describe('validator: declaration contracts', () => {
   for (const [name, source, message] of dataFieldCases) {
     Test(`rejects ${name}`, rejects(source, message))
   }
+
+  Test(
+    'accepts unique on a primitive field',
+    accepts('data Parents / Parent { ExternalId number (unique) Name text }'),
+  )
+
+  Test(
+    'rejects unique on a non-primitive field',
+    rejects(
+      'data Parents / Parent { Enabled yes / Disabled no (unique) }',
+      dataValidationMessages.uniqueFieldKind('Enabled'),
+    ),
+  )
+
+  Test(
+    'rejects duplicate unique modifiers',
+    rejects(
+      'data Parents / Parent { ExternalId number (unique, unique) }',
+      dataValidationMessages.duplicateModifier('ExternalId', 'unique'),
+    ),
+  )
+
+  Test(
+    'rejects a second unique field on one entity',
+    rejects(
+      'data Parents / Parent { ExternalId number (unique) Slug text (unique) }',
+      dataValidationMessages.duplicateUniqueField('Parent'),
+    ),
+  )
 
   const tagCases: ReadonlyArray<readonly [name: string, body: string, message: string]> = [
     [

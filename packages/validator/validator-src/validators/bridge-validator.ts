@@ -33,5 +33,12 @@ function declaresBridgedType(bridge: AST.FromExpression): boolean {
     const owner = AST.findOwningFunction(container)
     return owner?.returnType !== undefined
   }
-  return AST.isAliasDeclaration(container) && container.type !== undefined
+  if (AST.isAliasDeclaration(container)) {
+    return container.type !== undefined
+  }
+  // A configuration slot default types its bridge in place: `Adapter item is HNAdapter from ./X.ts`.
+  if (AST.isTypeProperty(container)) {
+    return container.type !== undefined
+  }
+  return AST.isConfigurationPropertyDeclaration(container)
 }

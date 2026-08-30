@@ -10,6 +10,7 @@ import {
   registerDataSchema,
   revision as dataRevision,
   setTestStatus as setDataTestStatus,
+  settleAllDataSchemas,
   subscribeAll as subscribeToAllData,
 } from './TR-data-registry'
 import { RuntimeDataSchema } from './TR-data-schema'
@@ -32,6 +33,7 @@ export type TaoDataField = {
   kind: DataPrimitive | 'relation'
   onDelete?: RelationDeleteBehavior
   relation?: string
+  unique?: boolean
 }
 
 export type TaoDataEntity = {
@@ -59,15 +61,54 @@ export type TaoQueryFilter = {
 export type TaoQueryPlan = {
   entity: string
   filters: TaoQueryFilter[]
+  limit?: number
   order?: {
     direction: 'asc' | 'desc'
     field: string
   }
 }
 
+/** TaoQueryDescriptor is the serializable shape of one active query offered to a fill provider. */
+export type TaoQueryDescriptor = {
+  entity: string
+  limit?: number
+  orderBy?: string
+  orderDirection?: 'asc' | 'desc'
+  where: Record<string, TaoDescriptorValue>
+}
+
+/**
+ * TaoDescriptorValue carries an equality filter's plain value. A related row travels as a plain
+ * snapshot of its scalar fields, so an adapter reads `where.Story.HnId` without holding a handle.
+ */
+export type TaoDescriptorValue = boolean | number | string | Readonly<Record<string, unknown>>
+
+export type TaoFillRequest = {
+  descriptor: TaoQueryDescriptor
+}
+
+export type TaoFillOps = {
+  /** upsert lands fetched rows in the store, matching existing rows by the entity's unique field. */
+  upsert(entity: string, rows: readonly Record<string, unknown>[]): void
+}
+
 export type TaoDataProvider = {
   load(storageKey: string): Promise<string | undefined> | string | undefined
   persist(storageKey: string, snapshot: string): Promise<void> | void
+  /**
+   * fill is the remote half of a query-driven provider: the schema offers each activated query
+   * descriptor, and the provider fetches and upserts rows. The store keeps evaluating every query
+   * locally over its rows; a fill may land a superset. Rejections become the query's failed state
+   * (`stale` over cached rows, `error` over none), never a thrown render.
+   */
+  fill?(request: TaoFillRequest, ops: TaoFillOps): Promise<void>
+  /** fillCacheMs suppresses re-fills of a descriptor filled within the window (default 0: always). */
+  fillCacheMs?: number
+  /**
+   * withConfiguration derives the bound provider from a datasource value's configuration — how a
+   * declaration-owned factory receives properties like `Adapter` and `CacheFor` at bind time.
+   */
+  withConfiguration?(config: Readonly<Record<string, unknown>>): TaoDataProvider
 }
 
 export type TaoDataProviderFactory = () => TaoDataProvider
@@ -98,8 +139,8 @@ type RuntimeValueFactory = <T>(value: T) => Evaluable
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
   const storageKey = configuredStorageKey(source)
   React.useLayoutEffect(() => {
-    DataControls.BindConfigured(schema, source.declaration, storageKey)
-  }, [schema, source.declaration, storageKey])
+    DataControls.BindConfigured(schema, source.declaration, storageKey, source.config)
+  }, [schema, source.declaration, storageKey, source.config])
 }
 
 function configuredStorageKey(source: TaoConfiguredDatasource): string | undefined {
@@ -170,8 +211,9 @@ export const DataControls = {
     schema: RuntimeDataSchema,
     declaration: TaoDatasourceDeclaration,
     storageKey?: string,
+    config?: Readonly<Record<string, unknown>>,
   ): void {
-    bindConfiguredDataSchema(schema, declaration, storageKey)
+    bindConfiguredDataSchema(schema, declaration, storageKey, config)
   },
 
   /** UseConfigured binds a declaration-owned datasource configuration at an app root. */
@@ -179,6 +221,17 @@ export const DataControls = {
 
   Query(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
     React.useSyncExternalStore(schema.subscribe, schema.snapshot, schema.snapshot)
+    // A fill-capable provider is offered each live query's descriptor: on mount, and again
+    // whenever the descriptor itself changes (a different row, order, or limit).
+    const activationKey = schema.queryActivationKey(plan)
+    const livePlan = React.useRef(plan)
+    livePlan.current = plan
+    React.useEffect(() => {
+      if (activationKey === undefined) {
+        return
+      }
+      return schema.activateQuery(livePlan.current)
+    }, [schema, activationKey])
     return value(schema.query(plan))
   },
 
@@ -222,6 +275,12 @@ export const DataControls = {
   /** Settle waits for the active provider load and every save enqueued before this call. */
   async Settle(schema: RuntimeDataSchema): Promise<void> {
     await schema.settle()
+  },
+
+  /** SettleAll waits out every schema's load, in-flight query fills, and queued saves — the test
+   * harness's determinism point between steps. */
+  async SettleAll(): Promise<void> {
+    await settleAllDataSchemas()
   },
 
   /** subscribeAll is the app/navigation seam for rerendering entity-valued screens after data changes. */

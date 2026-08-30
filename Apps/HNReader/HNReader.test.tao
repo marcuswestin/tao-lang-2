@@ -1,0 +1,25 @@
+use HNReaderStub from ./
+
+test "hn reader" {
+   test "fills the front page from the feed" {
+      run HNReaderStub
+
+      expect text "1."
+      expect text "Show HN: A Tao reader"
+      expect text "42 points by tester · 2 comments"
+      expect text "Why local-first sync wins"
+   }
+   test "opens a story and reads its flattened comment thread" {
+      run HNReaderStub
+      press "Show HN: A Tao reader"
+      expect text "alice"
+      expect text "Yes, queries evaluate locally."
+      back
+      expect text "Why local-first sync wins"
+   }
+   test "shows an empty thread as content, not failure" {
+      run HNReaderStub
+      press "Why local-first sync wins"
+      expect text "No comments yet"
+   }
+}

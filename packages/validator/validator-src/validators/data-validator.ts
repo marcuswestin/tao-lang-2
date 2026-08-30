@@ -34,6 +34,11 @@ export const dataValidationMessages = {
   duplicateIndex: (name: string) => `Index '${name}' is declared more than once.`,
   unknownField: (entity: string, name: string) => `Entity '${entity}' has no field named '${name}'.`,
   duplicateOrder: 'A query may declare only one order clause.',
+  duplicateLimit: 'A query may declare only one limit clause.',
+  limitCount: 'A query limit must be a whole number of at least 1.',
+  uniqueFieldKind: (field: string) => `Only primitive data fields can declare 'unique', not '${field}'.`,
+  duplicateUniqueField: (entity: string) =>
+    `Entity '${entity}' declares more than one unique field; one field is the reconciliation key.`,
   relationOrder: (name: string) => `Relationship field '${name}' cannot be used for ordering.`,
   relationComparison: (name: string, operator: string) =>
     `Relationship field '${name}' supports only == and !=, not '${operator}'.`,
@@ -85,6 +90,10 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   for (const duplicate of orders.slice(1)) {
     ctx.error(dataValidationMessages.duplicateOrder, duplicate)
   }
+  const uniqueFields = fields.filter(field => (field.traits?.traits ?? []).some(trait => trait.unique))
+  for (const extra of uniqueFields.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateUniqueField(entity.singularName), extra)
+  }
   for (const field of fields) {
     validateEntityField(entity, field, ctx)
   }
@@ -117,6 +126,15 @@ function validateEntityField(
   const owned = traits.filter(trait => trait.owned)
   for (const duplicate of owned.slice(1)) {
     ctx.error(dataValidationMessages.duplicateModifier(field.name, 'owned'), duplicate)
+  }
+  const uniques = traits.filter(trait => trait.unique)
+  for (const duplicate of uniques.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'unique'), duplicate)
+  }
+  if (!field.primitive) {
+    for (const trait of uniques) {
+      ctx.error(dataValidationMessages.uniqueFieldKind(field.name), trait)
+    }
   }
   if (field.primitive || field.boolean) {
     for (const trait of owned) {
@@ -186,8 +204,21 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
   for (const duplicate of orders.slice(1)) {
     ctx.error(dataValidationMessages.duplicateOrder, duplicate)
   }
+  const limits = clauses.filter(AST.isLimitClause)
+  for (const duplicate of limits.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateLimit, duplicate)
+  }
+  for (const limit of limits) {
+    const count = Number(limit.count.value)
+    if (!Number.isInteger(count) || count < 1) {
+      ctx.error(dataValidationMessages.limitCount, limit)
+    }
+  }
   const fields = Type.dataFields(entity)
   for (const clause of clauses) {
+    if (AST.isLimitClause(clause)) {
+      continue
+    }
     if (AST.isBooleanWhereClause(clause)) {
       const field = clause.case.ref
       if (field && !fields.includes(field)) {

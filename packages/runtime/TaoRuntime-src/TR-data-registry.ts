@@ -23,9 +23,22 @@ export function bindConfiguredDataSchema(
 ): void {
   if (testMode) {
     activeTestSchemas.add(schema)
-    return
+    // A snapshot provider stays replaced by the fresh test Memory store. A fill-capable provider
+    // binds anyway: fills are how a query-driven datasource has any rows at all, and determinism
+    // is the running app variant's responsibility — a test runs the variant whose adapter is a
+    // deterministic stub, never the network (Decisions §11, §16).
+    if (binding[0]?.provider.fill === undefined) {
+      return
+    }
   }
   schema.bindConfigured(...binding)
+}
+
+/** settleAllDataSchemas waits out every schema's load, in-flight fills, and queued saves. */
+export async function settleAllDataSchemas(): Promise<void> {
+  for (const schema of schemas) {
+    await schema.settle()
+  }
 }
 
 export function subscribeAll(listener: () => void): () => void {
