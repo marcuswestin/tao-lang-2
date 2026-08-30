@@ -858,6 +858,39 @@ Describe('TR.Data save and sync reconciliation', () => {
       .toBe('')
   })
 
+  Test('degrades a mid-session unparseable snapshot to a recoverable sync failure', async () => {
+    let observer: TaoDataConnectionObserver | undefined
+    const connection: TaoDataConnection = {
+      load: () => persistedNotes('Kept'),
+      save: () => {},
+      subscribe: next => {
+        observer = next
+        return () => {}
+      },
+    }
+    const schema = TR.Data.Schema(noteDefinition, connection)
+    await TR.Data.Settle(schema)
+
+    // A peer on a newer schema version pushes an envelope this client cannot parse. The last
+    // usable data stays visible and writable instead of the app blocking behind the overlay.
+    observer?.snapshot('{"formatVersion":99}')
+    const held = schema.query({ entity: 'Note', filters: [] }) as Array<Record<string, unknown>> & {
+      Error: string
+    }
+    Expect(held.map(row => row['Title'])).toEqual(['Kept'])
+    Expect(held.Error).toContain('Could not synchronize data')
+
+    TR.Data.Update(TR.Value(held[0]), { Title: TR.Value('Still writable') })
+    await TR.Data.Settle(schema)
+
+    observer?.snapshot(persistedNotes('Recovered'))
+    const recovered = schema.query({ entity: 'Note', filters: [] }) as Array<Record<string, unknown>> & {
+      Error: string
+    }
+    Expect(recovered.map(row => row['Title'])).toEqual(['Recovered'])
+    Expect(recovered.Error).toBe('')
+  })
+
   Test('replays the latest remote snapshot suppressed while ordered saves were pending', async () => {
     const pendingSave = new Deferred<void>()
     let observer: TaoDataConnectionObserver | undefined

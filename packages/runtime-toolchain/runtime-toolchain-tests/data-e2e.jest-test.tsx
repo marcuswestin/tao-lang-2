@@ -221,16 +221,20 @@ Describe('Expo runtime', () => {
     Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error).toBe('')
   })
 
-  Test('recovers a corrupt snapshot destructively even when the connection has no reset', async () => {
+  Test('keeps a corrupt snapshot retry-only when the connection grants no reset', async () => {
+    // A connection without reset — a shared remote store, deliberately — must never overwrite
+    // data this client failed to parse, so the overlay offers only the retry.
     let stored: string | undefined = '{"formatVersion":99}'
+    let saves = 0
     const connection: TR.DataConnection = {
       load: () => stored,
       save: snapshot => {
+        saves += 1
         stored = snapshot
       },
     }
     const schema = TR.Data.Schema({
-      name: 'CorruptOverwriteData',
+      name: 'CorruptSharedData',
       schemaVersion: 1,
       entities: {
         Note: { collection: 'Notes', fields: { Title: { kind: 'text' } } },
@@ -241,15 +245,75 @@ Describe('Expo runtime', () => {
     const screen = render(createElement(TR.AppShell, null, createElement(RN.Text, null, 'App content')))
 
     ExpectScreen(screen).toHaveText("Couldn't load app data")
-    // Without reset, recovery overwrites the corrupt row with an empty envelope and reloads it.
-    await fireEventAsync.press(screen.getByLabelText('Reset app data and reload'))
+    Expect(screen.queryByLabelText('Reset app data and reload')).toBeNull()
+
+    // A retry against data another client can still parse recovers once that data is fixed
+    // upstream, and never writes anything itself.
+    stored = undefined
+    await fireEventAsync.press(screen.getByLabelText('Try loading data again'))
     await TR.Data.Settle(schema)
 
     Expect(screen.queryByLabelText('App data load failure')).toBeNull()
-    Expect(stored).toContain('"formatVersion":1')
-    const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
-    Expect(rows).toHaveLength(0)
-    Expect(rows.Error).toBe('')
+    Expect(saves).toBe(0)
+  })
+
+  Test('rebinds through UseConfigured inside a Studio cell without wiping data on re-renders', async () => {
+    const declaration = TR.Data.Declaration('StudioMemory', memoryProvider())
+    const schema = TR.Data.Schema({
+      name: 'StudioCellData',
+      entities: {
+        Entry: { collection: 'Entries', fields: { Name: { kind: 'text' } } },
+      },
+    })
+    function ProviderBinding(): null {
+      // The app root reconstructs the configured value per render, exactly like generated code.
+      TR.Data.UseConfigured(schema, TR.Data.Configure(declaration, {}))
+      return null
+    }
+    // One stable cell across re-renders, as the Studio host keeps per preview session; a new cell
+    // object is a deliberate cell reset.
+    const cell = {
+      environment: {
+        network: { mode: 'online' },
+        scheme: {
+          capability: 'inert',
+          reason: 'Reactive Scheme is not implemented yet.',
+          requested: 'light',
+        },
+        version: 1,
+      },
+      fixture: { accounts: [], creates: [] },
+      scenario: { arguments: {}, kind: 'app', prepare: [], subjectId: 'App' },
+    } as const
+    const host = (): ReactElement =>
+      createElement(
+        TR.Studio.Environment.Host,
+        { cell, children: createElement(ProviderBinding) },
+      )
+
+    const screen = render(host())
+    await act(async () => {
+      await TR.Data.Settle(schema)
+    })
+    act(() => {
+      TR.Data.Create(schema, 'Entry', { Name: TR.Value('Kept') })
+    })
+    const row = schema.query({ entity: 'Entry', filters: [] })[0]
+
+    screen.rerender(host())
+    await act(async () => {
+      await TR.Data.Settle(schema)
+    })
+
+    // A re-render must not rebind the studio-wrapped datasource: the store and its live handles
+    // survive, so fixture handles held in state stay usable.
+    Expect(schema.query({ entity: 'Entry', filters: [] })).toHaveLength(1)
+    Expect(TR.Data.EntityAvailability(row)).toEqual({ status: 'available' })
+    act(() => {
+      TR.Data.Update(TR.Value(row), { Name: TR.Value('Still live') })
+    })
+    Expect((schema.query({ entity: 'Entry', filters: [] })[0] as Record<string, unknown>)['Name'])
+      .toBe('Still live')
   })
 })
 

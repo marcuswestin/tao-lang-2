@@ -133,13 +133,7 @@ export class RuntimeDataSchema {
     const connection = this.connection
     const providerBinding = this.providerBinding
     if (destructive) {
-      // A connection without reset still recovers from a corrupt snapshot: overwriting it with an
-      // empty envelope is the destructive half, and the reload below is the rest.
-      if (connection.reset) {
-        await connection.reset()
-      } else {
-        await connection.save(JSON.stringify(envelope(emptyData(this.definition), this.definition)))
-      }
+      await connection.reset?.()
     }
     if (this.connection !== connection) {
       return
@@ -777,11 +771,14 @@ export class RuntimeDataSchema {
     this.error = `Could not load data: ${errorMessage(error)}`
     if (this.providerBinding !== 'unbound') {
       // A transport failure gets a plain retry; only provably corrupt stored data offers the
-      // destructive reset, so a transient outage can never wipe a provider's good snapshot.
+      // destructive reset, so a transient outage can never wipe a provider's good snapshot. And
+      // the reset exists only where the connection grants it: a connection without `reset` — a
+      // shared remote store, deliberately — keeps the retry, because overwriting data this client
+      // failed to parse could erase every peer's rows.
       DataLoadRecovery.report(
         this,
         this.error,
-        cause === 'corrupt'
+        cause === 'corrupt' && this.connection.reset !== undefined
           ? { label: 'Reset app data and reload', run: () => this.recoverAfterLoadFailure(true) }
           : { label: 'Try loading data again', run: () => this.recoverAfterLoadFailure(false) },
       )
@@ -794,17 +791,22 @@ export class RuntimeDataSchema {
       return
     }
     try {
-      this.data = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
-      this.failedSaveSequence = undefined
-      this.errorRecoverable = false
-      this.hasUsableSnapshot = true
-      this.status = 'ready'
-      this.error = ''
-      DataLoadRecovery.resolve(this)
-      this.emit()
+      this.applySnapshot(stored)
     } catch (error) {
       this.failLoad(generation, error, 'corrupt')
     }
+  }
+
+  /** applySnapshot replaces the store with one parsed snapshot; a parse failure throws unapplied. */
+  private applySnapshot(stored: string | undefined): void {
+    this.data = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
+    this.failedSaveSequence = undefined
+    this.errorRecoverable = false
+    this.hasUsableSnapshot = true
+    this.status = 'ready'
+    this.error = ''
+    DataLoadRecovery.resolve(this)
+    this.emit()
   }
 
   private startSubscription(generation: number, connection: TaoDataConnection): void {
@@ -853,11 +855,18 @@ export class RuntimeDataSchema {
     }
     // After a failed save the local write is the only copy; a differing remote snapshot must not
     // silently revert it. The write stays visible with its error until a retried write saves, or
-    // the provider echoes this exact snapshot and clears the error through finishLoad below.
+    // the provider echoes this exact snapshot and clears the error through the apply below.
     if (!matchesLocal && this.failedSaveSequence !== undefined) {
       return
     }
-    this.finishLoad(generation, stored)
+    try {
+      this.applySnapshot(stored)
+    } catch (error) {
+      // A mid-session snapshot this client cannot parse — a peer on a newer schema version, or a
+      // corrupted payload — degrades to the recoverable sync failure over the last usable data
+      // rather than blocking the app behind the load-recovery overlay.
+      this.failSubscription(generation, error)
+    }
   }
 
   private isEmpty(): boolean {

@@ -10,9 +10,12 @@ const NANOSECONDS_PER_MILLISECOND = 1e6
  * never silently non-fetches.
  */
 export function HttpProvider(): TR.DataProvider {
-  const snapshots = new Map<string, string>()
   return {
     connect: context => {
+      // The snapshot store is connection-scoped: a rebind with a different adapter starts clean
+      // instead of reloading rows the previous configuration fetched, and Tao checks that bind
+      // this fill-capable provider stay isolated from one another.
+      const snapshots = new Map<string, string>()
       const adapter = context.configuration['Adapter'] as TR.HttpAdapter | undefined
       const cacheForNs = context.configuration['CacheFor'] as number | undefined
       return {
@@ -20,6 +23,9 @@ export function HttpProvider(): TR.DataProvider {
         fillCacheMs: (cacheForNs ?? 0) / NANOSECONDS_PER_MILLISECOND,
         load: () => snapshots.get(context.storageKey),
         referenceToken: reference => reference.id,
+        reset: () => {
+          snapshots.delete(context.storageKey)
+        },
         resolveReference: reference => reference.token,
         save: snapshot => {
           snapshots.set(context.storageKey, snapshot)

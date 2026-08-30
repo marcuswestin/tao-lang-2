@@ -49,7 +49,8 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
       const query = snapshotQuery(entityId)
       let closed = false
       let observer: TR.DataConnectionObserver | undefined
-      let missedSnapshot: { value: string | undefined } | undefined
+      let missedResult: { error: unknown } | { snapshot: string | undefined } | undefined
+      let rejectPendingLoad: ((error: Error) => void) | undefined
       let stopQuery: (() => void) | undefined
 
       return {
@@ -60,6 +61,8 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
           closed = true
           stopQuery?.()
           stopQuery = undefined
+          rejectPendingLoad?.(new Error('The InstantDB connection closed before its load settled.'))
+          rejectPendingLoad = undefined
           const remaining = (clientReferences.get(db.core) ?? 1) - 1
           if (remaining > 0) {
             clientReferences.set(db.core, remaining)
@@ -76,10 +79,18 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
           new Promise<string | undefined>((resolve, reject) => {
             let settled = false
             stopQuery?.()
+            rejectPendingLoad?.(new Error('The InstantDB connection restarted its load.'))
+            rejectPendingLoad = error => {
+              if (!settled) {
+                settled = true
+                reject(error)
+              }
+            }
             stopQuery = db.core.subscribeQuery(query, result => {
               const { error, snapshot } = readResult(result, context.storageKey)
               if (!settled) {
                 settled = true
+                rejectPendingLoad = undefined
                 if (error !== undefined) {
                   reject(toError(error))
                 } else {
@@ -89,8 +100,8 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
               }
               if (observer === undefined) {
                 // The runtime subscribes one microtask after load resolves; keep the latest result
-                // from that gap so subscribe can replay it.
-                missedSnapshot = error === undefined ? { value: snapshot } : missedSnapshot
+                // from that gap — an error included — so subscribe can replay it.
+                missedResult = error !== undefined ? { error } : { snapshot }
                 return
               }
               if (error !== undefined) {
@@ -114,10 +125,14 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
         },
         subscribe: next => {
           observer = next
-          const replay = missedSnapshot
-          missedSnapshot = undefined
+          const replay = missedResult
+          missedResult = undefined
           if (replay !== undefined) {
-            next.snapshot(replay.value)
+            if ('error' in replay) {
+              next.error(replay.error)
+            } else {
+              next.snapshot(replay.snapshot)
+            }
           }
           return () => {
             if (observer === next) {

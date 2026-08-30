@@ -121,10 +121,13 @@ confirmed snapshot.
 
 When a bound datasource cannot load at all, the runtime blocks that app behind a recovery boundary
 reporting the load error, rather than leaving every screen rendering against unusable data. A
-transport failure offers a plain retry; provably corrupt stored data offers the destructive reset,
-which wipes through the connection's `reset` — or overwrites the corrupt snapshot with an empty
-envelope when the connection has none — and remounts the app root, so recovery needs no manual
-restart. Schemas with no bound datasource keep their ordinary query error state instead.
+transport failure offers a plain retry; provably corrupt stored data offers the destructive reset
+only when the connection grants `reset`, which wipes and remounts the app root so recovery needs no
+manual restart. A connection without `reset` — a shared remote store, deliberately — keeps the
+retry, because overwriting data this client failed to parse could erase every peer's rows. A
+snapshot that fails to parse mid-session degrades to the recoverable sync failure over the last
+usable data instead of blocking the app. Schemas with no bound datasource keep their ordinary query
+error state instead.
 
 ## Self-hosted datasource declarations
 

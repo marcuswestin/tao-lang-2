@@ -282,6 +282,7 @@ function providerOverlay(
       // the fill half the environment throttles, fails, and forwards.
       const baseConnection = base.fills === undefined ? undefined : base.connect(context)
       return {
+        close: () => baseConnection?.close?.(),
         load: () => state.snapshots.get(context.storageKey),
         referenceToken: reference => reference.id,
         resolveReference: reference => reference.token,

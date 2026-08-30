@@ -186,20 +186,22 @@ export type TaoKeyValueStorage = {
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
+  // The wrapped declaration must be stable across renders: the app root reconstructs the
+  // configured value per render, and bindConfigured treats a new declaration object as a full
+  // rebind. Only `source.declaration` and the studio overlay are stable inputs.
   const studioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
-  const boundSource = React.useMemo<TaoConfiguredDatasource>(() =>
+  const declaration = React.useMemo<TaoDatasourceDeclaration>(() =>
     studioProvider === source.declaration.provider
-      ? source
-      : DataControls.Configure(
-        Object.freeze({ ...source.declaration, provider: studioProvider }),
-        { ...source.config },
-      ), [source, studioProvider])
-  // The app root reconstructs the configured value per render, so the effect re-runs on each
-  // render's fresh `config` object and BindConfigured compares evaluated configuration values to
-  // make an unchanged rebind a cheap no-op.
+      ? source.declaration
+      : Object.freeze({ ...source.declaration, provider: studioProvider }), [source.declaration, studioProvider])
+  // The effect re-runs on each render's fresh `config` object and BindConfigured compares
+  // evaluated configuration values to make an unchanged rebind a cheap no-op.
   React.useLayoutEffect(() => {
-    DataControls.BindConfigured(schema, boundSource)
-  }, [schema, boundSource.declaration, boundSource.config])
+    DataControls.BindConfigured(
+      schema,
+      declaration === source.declaration ? source : DataControls.Configure(declaration, { ...source.config }),
+    )
+  }, [schema, declaration, source.config])
 }
 
 /** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
