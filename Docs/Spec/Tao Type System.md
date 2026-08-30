@@ -8,7 +8,7 @@ remains in `3 - MVP` and `4 - Revolution`, and unresolved questions live in
 ## Implemented value and control-flow contract
 
 The current value core supports `text`, `number`, `boolean`, `none`, `duration`, homogeneous lists,
-nominal custom values and items, configured `ui`/`nav`/`datasource` values, and schema-specific live
+nominal custom values and items, view values, configured `nav`/`datasource` values, and schema-specific live
 entity types. `time` is a distinct type; `now` is an ordinary expression that reads the runtime
 clock, and `(default now)` on a data field applies it separately for every created row. Text, lists, and queries support
 `Value is empty`; lists and queries retain `.Count`. `Value is <Case>` is the general boolean case
@@ -19,9 +19,10 @@ row becomes missing; application code may retain that identity without gaining a
 The executable language includes precedence-aware arithmetic, comparison, equality, and boolean
 expressions; unit values and dimensional arithmetic; pure functions; immutable `let`; reactive `state`; named and inline actions; `set`,
 compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
-`loop`; first-class `view`, `layout`, `frame`, `ui`, `dialogue`, and configured `nav` values; the
-primitive `visual`/`presentable` role hierarchy; top-level data/query/write forms; declaration-owned
-configuration; dialogue `ask`/`respond`; and the expression-position TypeScript boundary.
+`loop`; first-class `view` and configured `nav` values under the collapsed primitive hierarchy
+(`view` is the one renderable primitive; `nav` refines it); top-level data/query/write forms;
+declaration-owned configuration; `ask`/`respond` on views declaring `responds`; and the
+expression-position TypeScript boundary.
 
 `match`, heterogeneous lists, richer collection transforms, and general concurrency policy remain
 future work. Optional item fields and non-blocking `async { ... }` are implemented as described
@@ -60,8 +61,8 @@ An explicit annotation remains available as `let Name is Type = Value`. `Age Nam
 arbitrary type-headed value declarations are not part of this contract; only the named primitive
 value heads are privileged.
 
-Every `view`, `layout`, `frame`, `ui`, `dialogue`, `action`, and `function` declaration has a
-parenthesized parameter list, including `()` when empty. Product functions use statement blocks,
+Every `view`, `action`, and `function` declaration has a parenthesized parameter list, including
+`()` when empty. Product functions use statement blocks,
 explicit `return`, and an optional inferred return type:
 
 ```tao
@@ -80,10 +81,10 @@ runs its block without delaying later statements and surfaces failures as provid
 async functions, `await`, scheduling, and fork/concurrency policy remain future work.
 
 Injection bindings are explicit. `inject Type` produces a typed value outside render
-position. A TypeScript-backed visual uses
+position. A TypeScript-backed view uses
 `render inject Name expression, Content @@content, Layout @@layout, Tag @@tag`; a bare name binds the
 same-named Tao value. `TR`, `RN`, and `process` are always available in injected TypeScript, while no
-other Tao value or compiler-prefixed props bag is implicit. The returned element is the visual root;
+other Tao value or compiler-prefixed props bag is implicit. The returned element is the view's root;
 Tao adds no wrapper, and applying layout/tag plus rendering content exactly once is the injected
 implementation's responsibility.
 
@@ -142,7 +143,7 @@ optional when it can be inferred from all returned expressions.
 
 Calls use the same non-positional owner binder as other invocations. Parameters are immutable, the
 declared return type must accept the expression result, and the body cannot read reactive state or
-perform actions, data writes, presentation, dialogue, or injection.
+perform actions, data writes, presentation, asks, or injection.
 
 ### Action callback contracts and control events
 
@@ -241,12 +242,11 @@ The handle keeps `.Id` through every availability state. The guard implements ru
 fall-through in this tranche; static flow narrowing and rejection of unguarded field access remain
 deferred.
 
-### Dialogue
+### Responses
 
-The implemented dialogue form is `dialogue Name(<Parameters>) responds <Enum>`, including
-`dialogue Name() responds <Enum>` when it has no parameters. A dialogue is
-response-demanding presentable content. `ask`
-creates a fresh stacked occurrence and suspends its action until that occurrence answers.
+A view that can answer declares `view Name(<Parameters>) responds <Enum>`, including
+`view Name() responds <Enum>` when it has no parameters. `ask` targets a view declaring `responds`,
+creates a fresh stacked occurrence, and suspends its action until that occurrence answers.
 `respond Case` supplies the declared case; bare `respond`, Back, or dismissal supplies `none`.
 Each occurrence owns its resolver, so nested or repeated asks cannot answer one another.
 
@@ -320,7 +320,7 @@ Tao owns the type. A bridged value therefore needs a declared one — a `returns
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
 compiler copies the named sidecar beside its generated module and imports the export from there.
 
-`render inject` remains the separate authoring mode for a visual whose implementation Tao does not
+`render inject` remains the separate authoring mode for a view whose implementation Tao does not
 own. Value-position `inject <type>` and its inline `ts` fence are retired.
 
 ## Declaration-owned configuration
@@ -335,7 +335,7 @@ modules.
 ```tao
 public
 type CopiedStack is nav with {
-   Initial ui
+   Initial view
 
    nav CopiedStackKind from ./CopiedStack.ts
 }

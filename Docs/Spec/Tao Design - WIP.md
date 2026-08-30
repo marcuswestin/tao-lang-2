@@ -392,7 +392,7 @@ review, the phased implementation path, prior art, and the remaining tooling dec
   syntax, recipes, and recipe variants remain open.
 - ~~Does source use `design`, `theme`, or both as public capability names?~~ **Decided: `design`.** The declaration is `design <Name> { ... }` and an app selects it with `Design <Name>`.
 - ~~Should the first design data live in `.tao` source, a `tao.design` file, or both?~~ **Decided: `.tao` source.** Design is an ordinary Tao declaration subject to the same visibility, imports, and validation as the rest of the language; no separate design file format.
-- Which visual treatments can apply to `layout` and `frame` declarations?
+- Which visual treatments can apply to content-accepting wrapper views?
 - How do combined specs interact with future slot forms beyond the implemented opaque single-fill named slot
   and intrinsic `@@content`?
 - Which diagnostics are ordinary validator diagnostics, and which belong to `tao design check`?

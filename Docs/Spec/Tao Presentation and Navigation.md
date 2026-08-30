@@ -2,22 +2,19 @@
 
 Status: authoritative implemented contract for the current WordFlower tranche.
 
-Tao separates embeddable `view` values from first-class `ui` values that may enter an app's
-presentation tree. A configured `nav` is also presentable. The implemented core hierarchy is:
+Tao has one renderable declaration kind, `view`, and presentation is a property of each call
+site: the same view may compose inline in a render tree, be presented as an overlay, sheet, or
+toast, be presented into a nav, or be asked for a typed response. The implemented core hierarchy
+is:
 
 ```tao
-primitive visual
-primitive presentable is visual
-primitive view is visual
-primitive layout is visual
-primitive frame is visual
-primitive ui is presentable
-primitive nav is presentable with { implement }
+primitive view
+primitive nav is view with { implement }
 ```
 
-Every presentable is therefore visual, but an embeddable `view`, `layout`, or `frame` is not directly
-presentable by a navigator. A configured nav is not a render-bearing declaration despite sharing
-the visual type root. Apps mount navigation; they do not render ordinary content directly.
+`nav` refines `view`, so a configured nav fills any view-typed configuration slot; it is not a
+render-bearing declaration, and cannot be embedded as an ordinary render child. Apps mount
+navigation; they do not render ordinary content directly.
 
 ## Apps and configured navigation
 
@@ -111,7 +108,7 @@ ordinary Tao data property.
 ```tao
 public
 type StackNav is nav with {
-   Initial ui
+   Initial view
 
    nav StackNavKind from ./NavKinds.ts
 }
@@ -139,19 +136,19 @@ must pass the exported `TR.testNavKind(kind, profile)` common and profile-specif
 
 The implemented declarations are:
 
-- `StackNav { Initial <ui> }` keeps ordered push history. Covered entries stay mounted but hidden
+- `StackNav { Initial <view> }` keeps ordered push history. Covered entries stay mounted but hidden
   visually and from accessibility traversal, preserving local state.
-- `SlotNav { Initial <ui-or-nav> }` shows one presentable value at a time. Dismissing presented
+- `SlotNav { Initial <view> }` shows one presented value at a time. Dismissing presented
   content restores its configured initial value.
 - `SelectionNav` requires `Initial @key`, `Display <text>`, and at least one keyed item with `Label`
-  text and `Content` presentable. An item may also supply `Icon` text as system-icon metadata.
+  text and view-typed `Content`. An item may also supply `Icon` text as system-icon metadata.
   Selecting another key reveals its mounted item without pushing a content occurrence. Inactive
   items stay mounted but hidden, preserving their state.
 
 The configured `Initial` value is a descriptor, not an invoked rendered element. The general
 declaration-completeness rule requires every supplied slot to be filled before any declaration is
-used as a value. A `StackNav` initial value is a `ui`; a `SlotNav` initial value and SelectionNav item
-content may be a `ui` or configured `nav`.
+used as a value. Every `Initial` value and every SelectionNav item `Content` is view-typed;
+`nav` refines `view`, so a configured nav fills the same slots.
 
 Selection keys belong to their configured declaration's namespace. `Initial` must name one of its
 items. The visible controls use each item's `Label`; `Icon` is preserved in the descriptor while the
@@ -199,21 +196,22 @@ A toast is app-level, transient, and never accepts `in`:
 present SavedToast() as toast (Key: "document-saved", Duration: 3)
 ```
 
-`Key` is text and `Duration` is a finite non-negative number of seconds. Unit literals such as
-`N.seconds` remain deferred. Presenting the same key replaces the existing toast and restarts its
+`Key` is text and `Duration` is a non-negative duration value such as `3.s`. Presenting the same key replaces the existing toast and restarts its
 expiry; different keys coexist. Toasts render above app content, do not consume Back, and are not
 plainly dismissible.
 
-Arguments use the shared owner binder. `Name: Value` selects a parameter owned by the invoked `ui`;
-unlabeled values bind uniquely by exact or nominal type. Unknown, duplicate, ambiguous, missing, or
+Arguments use the shared owner binder. `Name: Value` selects a parameter owned by the invoked view;
+unlabeled values bind uniquely by exact or nominal type. A presented view's parameters are ordinary
+parameters — an ephemeral presentation such as an overlay or toast may take a non-serializable
+value like an `action`. Unknown, duplicate, ambiguous, missing, or
 incorrectly typed arguments are diagnostics, and source order never disambiguates.
 
-## Dialogue, dismissal, and replacement
+## Responses, dismissal, and replacement
 
-A dialogue declares the case set it can answer:
+A view that can answer declares the case set it responds with:
 
 ```tao
-dialogue ConfirmClose(Document) responds ConfirmResult {
+view ConfirmClose(Document) responds ConfirmResult {
    // ...
    on press -> { respond Confirmed }
 }
@@ -224,24 +222,26 @@ action CloseDocument() {
 }
 ```
 
-`ask` creates an independent stacked occurrence above the nearest nav and suspends only its calling
-action until that occurrence answers. `respond Case` supplies the declared case. Bare `respond`,
-Back, or plain dismissal answers `none`. Removal completes before the suspended continuation resumes.
+`ask` targets a view that declares `responds`, creates an independent stacked occurrence above the
+nearest nav, and suspends only its calling action until that occurrence answers. `respond Case`
+supplies the declared case and is legal only in a view that declares `responds`. Bare `respond`,
+Back, or plain dismissal answers `none`. Removal completes before the suspended continuation
+resumes.
 
-Outside a dialogue, `dismiss` delegates to the nearest enclosing nav. It removes the top overlay,
-pops a stack entry, or restores a SlotNav's initial value as appropriate. Dismissal at a root-safe
-state changes nothing.
+Outside an asked occurrence, `dismiss` delegates to the nearest enclosing nav. It removes the top
+overlay, pops a stack entry, or restores a SlotNav's initial value as appropriate. Dismissal at a
+root-safe state changes nothing.
 
 ```tao
 replace FoundationNavigator in WordFlowerFoundationTest
 ```
 
-`replace <nav> in <App>` is allowed only from an action inside a visual declaration. It replaces
+`replace <nav> in <App>` is allowed only from an action inside a view declaration. It replaces
 that app's mounted root with the given configured nav and does not append a stack occurrence.
 
 ## Back, mounting, and layout
 
-Presenting the same `ui` and semantic arguments again creates a distinct occurrence. Entity-valued
+Presenting the same view and semantic arguments again creates a distinct occurrence. Entity-valued
 parameters remain live, and navigation hosts subscribe to data revisions. Mounts of the same
 descriptor in separate app occurrences remain independent.
 
@@ -251,7 +251,8 @@ nav removes its top overlay before delegating into its content history. Root-saf
 without changing state. Each behavior check resets every mounted app and nav occurrence before it
 starts.
 
-`ui` is presentable content and `view` is embeddable content. Both use ordinary render and layout
-rules internally. A configured nav is mounted at an app root, as an app auxiliary, or as content of
-another nav; it is not an ordinary child view. Tags used by Tao tests attach metadata to concrete
-rendered roots and do not add navigation or layout nodes.
+Whether a view is presented or composed inline is decided where it is used; presenting,
+dismissing, replacing, and selection activation are legal in any view body. A configured nav is
+mounted at an app root, as an app auxiliary, or as content of another nav; it is not an ordinary
+child view. Tags used by Tao tests attach metadata to concrete rendered roots and do not add
+navigation or layout nodes.

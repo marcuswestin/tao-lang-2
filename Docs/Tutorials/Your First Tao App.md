@@ -38,7 +38,7 @@ nav LibraryStack = StackNav {
    Initial BookList
 }
 
-ui BookList() {
+view BookList() {
    render Col() {
       Text("Reading List")
 }  }
@@ -50,7 +50,8 @@ Four declarations, and each one has a job:
 - **`app`** is what launches. It mounts a navigator; an app never renders content itself.
 - **`nav`** is a navigator _value_. `StackNav` pushes and pops screens, and `Initial` is what it
   shows first.
-- **`ui`** is content a navigator can present. `render` is the tree it draws.
+- **`view`** is content that draws on screen. `render` is the tree it draws, and a navigator
+  can present any view.
 
 Closing braces gather on one line rather than marching down the page. That is Tao's convention.
 
@@ -58,7 +59,7 @@ The screen is a column with the words **Reading List**.
 
 ## Step 2 — layout
 
-Views compose out of a few containers. Replace the `ui BookList()` declaration with this, and add
+Views compose out of a few containers. Replace the `view BookList()` declaration with this, and add
 `Row` and `ScrollView` to the `@tao/ui` use line:
 
 ```tao
@@ -66,7 +67,7 @@ use Col, Row, ScrollView, Text from @tao/ui
 ```
 
 ```tao
-ui BookList() {
+view BookList() {
    render ScrollView() {
       Col() [width max 960, centered, gap 10] {
          Text("Reading List")
@@ -121,7 +122,7 @@ app ReadingList {
 Now apply the bundles. A bundle goes in the same brackets as any other clause, and mixes with them:
 
 ```tao
-ui BookList() {
+view BookList() {
    render ScrollView() [screen] {
       Col() [width max 960, centered, gap 10] {
          Text("Reading List") [title]
@@ -184,10 +185,10 @@ app ReadingList {
 `Local` persists on the device. The `StorageKey` belongs to the configured store, not to the app's
 display name, which is what lets two variants of one app keep separate data.
 
-Now read the rows. Replace `ui BookList()` with:
+Now read the rows. Replace `view BookList()` with:
 
 ```tao
-ui BookList() {
+view BookList() {
    query Books { }
    render ScrollView() [screen] {
       Col() [width max 960, centered, gap 10] {
@@ -223,18 +224,19 @@ Add `Spinner` to the `@tao/ui` use line. Four new ideas:
 
 `{ Message }` inside a string is interpolation — any expression goes between the braces.
 
-`view BookRow(Book)` is a second kind of declaration. A **`view`** is embeddable content; a **`ui`**
-is content a navigator can present. The parameter `Book` takes its type from its name.
+`view BookRow(Book)` is another view — the one declaration kind covers a whole screen and a single
+row alike; whether a view is presented or composed inline is decided where it is used. The
+parameter `Book` takes its type from its name.
 
 The list is empty, which is progress — nothing can create a book yet.
 
 ## Step 5 — creating rows
 
-Add `FormButton` and `TextInput` to the `@tao/ui` use line, then replace `ui BookList()` with the
+Add `FormButton` and `TextInput` to the `@tao/ui` use line, then replace `view BookList()` with the
 version below — `view BookRow(Book)` underneath it does not change:
 
 ```tao
-ui BookList() {
+view BookList() {
    state NewTitle = ""
    query Books { }
    action AddBook() {
@@ -297,13 +299,13 @@ Add `on select` inside the loop:
 ```
 
 `on select` makes each row pressable, scoped to that row — so `Book` in the handler is the row you
-touched. **`present`** puts a `ui` on screen; because the app's navigator is a `StackNav`, it pushes,
+touched. **`present`** puts a view on screen; because the app's navigator is a `StackNav`, it pushes,
 and Back pops it.
 
 Now the screen itself. Add `Checkbox` to the `@tao/ui` use line and add this declaration at the end:
 
 ```tao
-ui BookScreen(Book) {
+view BookScreen(Book) {
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
@@ -412,7 +414,7 @@ app ReadingList {
 And a screen for the second tab, at the end of the file:
 
 ```tao
-ui About() {
+view About() {
    render Col() [screen, gap 10] {
       Text("About") [title]
       Text("A small reading list, written in Tao.") [body]
@@ -590,7 +592,7 @@ nav ReadingListNavigator = SelectionNav {
       Content About
 }  }
 
-ui BookList() {
+view BookList() {
    state NewTitle = ""
    query Books { }
    query Books as CurrentlyReading {
@@ -649,7 +651,7 @@ view BookRow(Book) {
       Text(Book.Author) [body]
 }  }
 
-ui BookScreen(Book) {
+view BookScreen(Book) {
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
@@ -700,7 +702,7 @@ ui BookScreen(Book) {
             on press Remove
 }  }  }  }
 
-ui About() {
+view About() {
    render Col() [screen, gap 10] {
       Text("About") [title]
       Text("A small reading list, written in Tao.") [body]

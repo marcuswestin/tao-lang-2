@@ -30,11 +30,11 @@ public view Slider = native.Slider
 - **`use package <path> [as name]`** imports a package as a namespace. The name defaults to the
   path's last segment; `as` renames — which also covers segments that collide with keywords
   (`use package @tao/nav as navs`).
-- **`view Name = ns.Member`** declares a pass-through alias, with ordinary visibility. Proposed:
-  the alias form exists for the visual kinds (`view`, `layout`, `frame`), and the declared kind
-  must match the target's kind — call sites are checked differently per kind (a `layout` accepts
-  caller content, a `frame` has named slots), so the kind is part of the published interface.
-  `ui`/`dialogue` aliasing waits (navigation identity questions); navs keep their own value heads.
+- **`view Name = ns.Member`** declares a pass-through alias, with ordinary visibility. Implemented:
+  the alias form targets a `view` — since the unified view tranche there is only one renderable
+  kind, and call-site checks (caller content, named slots, `responds`) are inferred from the
+  target's body, so the alias publishes the target's whole interface. Navs keep their own value
+  heads.
 - **Namespace member access** is cheap at runtime — the generated module does the equivalent of
   `import * as ns` from the target module, which generated code already does for every import.
   The cost is per grammar position; alias right-hand sides and render sites
