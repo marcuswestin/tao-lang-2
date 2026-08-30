@@ -168,8 +168,10 @@ snapshots: `load()` returns the starting snapshot or no value; `save(snapshot)` 
 committed snapshots in order and must propagate rejection; optional `subscribe(observer)` publishes
 complete replacement snapshots after load; optional `reset()` grants destructive recovery; optional
 `close()` synchronously releases connection-owned resources once the runtime has drained its queued
-saves. A query-driven connection additionally implements the `fill` half described under _The Http
-datasource_, and its provider marks itself `fills: true` so Tao checks bind it.
+saves; optional `referenceToken`/`resolveReference` grant the versioned entity-restoration
+capability navigation persistence uses (see _Tao Presentation and Navigation.md_). A query-driven
+connection additionally implements the `fill` half described under _The Http datasource_, and its
+provider marks itself `fills: true` so Tao checks bind it.
 
 `TR.testProvider` checks empty load, exact round trips, storage-key and provider instance
 boundaries, ordered replacement, and rejection behavior. Instances must be isolated or share one

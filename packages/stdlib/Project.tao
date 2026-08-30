@@ -1,0 +1,4 @@
+project {
+   id "tao-stdlib"
+   name "Tao Standard Library"
+}

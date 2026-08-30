@@ -6,9 +6,11 @@ export function MemoryProvider(): TR.DataProvider {
   return {
     connect: context => ({
       load: () => snapshots.get(context.storageKey),
+      referenceToken: reference => reference.id,
       reset: () => {
         snapshots.delete(context.storageKey)
       },
+      resolveReference: reference => reference.token,
       save: snapshot => {
         snapshots.set(context.storageKey, snapshot)
       },

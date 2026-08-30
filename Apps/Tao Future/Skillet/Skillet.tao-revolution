@@ -114,7 +114,7 @@ app Skillet {
    link JoinLink(Code secret) "/join/{Code}" -> {
       present JoinKitchen(Code) as sheet
    }
-   public link SharedRecipeLink "/shared/{SharedRecipe}" -> {
+   link SharedRecipeLink "/shared/{SharedRecipe}" -> {
       present SharedRecipeScreen(SharedRecipe) as root
    }
 }

@@ -7,20 +7,114 @@ import type {
   TaoPresentable,
 } from './TR-navigation'
 import {
-  type RuntimeHostReadChannel,
+  RuntimeHostReadChannel,
   type TaoHostSlotValues,
   type TaoNavHostSlotConfiguration,
   useHostSlots,
 } from './TR-navigation-host-slots'
 import { type Evaluable, RuntimeNavigationResult } from './TR-navigation-presentables'
-import type { OverlayEntry, ResponseOccurrenceState, Subscription } from './TR-navigation-state'
+import type {
+  TaoNavigationContentSnapshot,
+  TaoNavigationRestorationCodec,
+  TaoNavigationSnapshot,
+} from './TR-navigation-restoration-state'
+import type {
+  OverlayEntry,
+  PresentableEntry,
+  ResponseOccurrenceState,
+  Subscription,
+} from './TR-navigation-state'
 import { NavigationSurface } from './TR-navigation-surfaces'
 import type { TaoProps } from './TR-TaoProps'
+
+export function withBrowserHistoryEntry<ResultT>(
+  navigation: unknown,
+  instanceId: number,
+  mutation: () => ResultT,
+): ResultT {
+  const method = (navigation as {
+    withBrowserHistoryEntry?: (instanceId: number, mutation: () => ResultT) => ResultT
+  })?.withBrowserHistoryEntry
+  return method ? method.call(navigation, instanceId, mutation) : mutation()
+}
+
+export function takeRemovedBrowserHistoryId(navigation: unknown): number | undefined {
+  const method = (navigation as {
+    takeRemovedBrowserHistoryId?: RuntimeNavigationValue['takeRemovedBrowserHistoryId']
+  })?.takeRemovedBrowserHistoryId
+  return method?.call(navigation)
+}
+
+type ActivationObserverState = {
+  listeners: Set<(key: string) => void>
+  ownDescriptor: PropertyDescriptor | undefined
+}
+
+const activationObservers = new WeakMap<object, ActivationObserverState>()
+
+/** observeNavigationActivation instruments a mounted occurrence without extending the nav protocol. */
+export function observeNavigationActivation(
+  navigation: RuntimeNavigationValue,
+  listener: (key: string) => void,
+): { dispose(): void; observesKey: boolean } {
+  const observed = navigation as RuntimeNavigationValue & object
+  let state = activationObservers.get(observed)
+  if (!state) {
+    const original = observed.activate
+    state = {
+      listeners: new Set(),
+      ownDescriptor: Object.getOwnPropertyDescriptor(observed, 'activate'),
+    }
+    try {
+      Object.defineProperty(observed, 'activate', {
+        configurable: true,
+        value(key: string): boolean {
+          const activated = original.call(this, key)
+          if (activated) {
+            for (const notify of state!.listeners) {
+              notify(key)
+            }
+          }
+          return activated
+        },
+        writable: true,
+      })
+    } catch {
+      // Structural third-party mounts may be sealed. They remain usable, but cannot publish
+      // history-free activation changes without extending the public navigation protocol.
+      return { dispose: () => {}, observesKey: false }
+    }
+    activationObservers.set(observed, state)
+  }
+  state.listeners.add(listener)
+  let active = true
+  return {
+    dispose() {
+      if (!active) {
+        return
+      }
+      active = false
+      state?.listeners.delete(listener)
+      if (state?.listeners.size !== 0) {
+        return
+      }
+      if (state.ownDescriptor) {
+        Object.defineProperty(observed, 'activate', state.ownDescriptor)
+      } else {
+        Reflect.deleteProperty(observed, 'activate')
+      }
+      activationObservers.delete(observed)
+    },
+    observesKey: true,
+  }
+}
 
 /** RuntimeNavigationValue is the shared process-local contract for configured navigation values. */
 export abstract class RuntimeNavigationValue implements Subscription {
   protected listeners = new Set<() => void>()
   protected version = 0
+  private browserHistoryId: number | undefined
+  private removedBrowserHistoryId: number | undefined
   private nextOverlayEntryId = 1
   private overlayEntries: OverlayEntry[] = []
 
@@ -49,11 +143,29 @@ export abstract class RuntimeNavigationValue implements Subscription {
   }
 
   back(): boolean {
+    this.removedBrowserHistoryId = undefined
     return this.dismissOverlay() || this.backContent()
   }
 
   dismiss(): boolean {
+    this.removedBrowserHistoryId = undefined
     return this.dismissOverlay() || this.dismissContent()
+  }
+
+  withBrowserHistoryEntry<ResultT>(instanceId: number, mutation: () => ResultT): ResultT {
+    const previous = this.browserHistoryId
+    this.browserHistoryId = instanceId
+    try {
+      return mutation()
+    } finally {
+      this.browserHistoryId = previous
+    }
+  }
+
+  takeRemovedBrowserHistoryId(): number | undefined {
+    const removed = this.removedBrowserHistoryId
+    this.removedBrowserHistoryId = undefined
+    return removed
   }
 
   abstract present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void
@@ -83,27 +195,27 @@ export abstract class RuntimeNavigationValue implements Subscription {
     options: { sheet?: boolean } = {},
   ): void {
     this.overlayEntries.push({
-      arguments: { ...arguments_ },
-      instanceId: this.nextOverlayEntryId++,
-      presentable,
+      ...this.presentableEntry(presentable, arguments_, this.nextOverlayEntryId++),
       ...(options.sheet ? { sheet: true } : {}),
     })
     this.emit()
   }
 
-  ask(view: TaoPresentable, arguments_: TaoNavigationArguments): Promise<Evaluable> {
+  ask(
+    view: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+    onRespond?: () => void,
+  ): Promise<Evaluable> {
     return new Promise(resolve => {
       let entry: OverlayEntry
       const occurrence: ResponseOccurrenceState = {
         resolve,
-        respond: value => this.settleResponse(entry, value),
+        respond: value => this.settleResponse(entry, value, onRespond),
         settled: false,
       }
       entry = {
-        arguments: { ...arguments_ },
+        ...this.presentableEntry(view, arguments_, this.nextOverlayEntryId++),
         response: occurrence,
-        instanceId: this.nextOverlayEntryId++,
-        presentable: view,
       }
       this.overlayEntries.push(entry)
       this.emit()
@@ -145,6 +257,44 @@ export abstract class RuntimeNavigationValue implements Subscription {
     this.emit()
   }
 
+  navigationRestorationSnapshot(
+    codec: TaoNavigationRestorationCodec,
+    exclusions: ReadonlySet<string>,
+  ): TaoNavigationSnapshot {
+    const descriptor = this.descriptor.canonicalDescriptor?.canonical
+    if (!descriptor) {
+      throw new Error(`Navigation kind '${this.name}' lacks canonical restoration identity.`)
+    }
+    const overlays = this.overlayEntries.flatMap(entry => {
+      if (entry.response || (entry.sheet && exclusions.has('sheets'))) {
+        return []
+      }
+      const snapshot = codec.snapshotPresentable(entry)
+      return snapshot ? [{ ...snapshot, ...(entry.sheet ? { sheet: true as const } : {}) }] : []
+    })
+    return {
+      content: this.snapshotRestorationContent(codec),
+      descriptor,
+      kind: this.kind,
+      overlays,
+    }
+  }
+
+  restoreNavigationSnapshot(snapshot: TaoNavigationSnapshot, codec: TaoNavigationRestorationCodec): void {
+    const descriptor = this.descriptor.canonicalDescriptor?.canonical
+    if (snapshot.kind !== this.kind || descriptor === undefined || snapshot.descriptor !== descriptor) {
+      throw new Error(`Restored navigation descriptor does not match live '${this.name}'.`)
+    }
+    this.overlayEntries = snapshot.overlays.map(entry => ({
+      ...codec.restorePresentable(entry),
+      host: new RuntimeHostReadChannel(),
+      instanceId: this.nextOverlayEntryId++,
+      ...(entry.sheet ? { sheet: true } : {}),
+    }))
+    this.restoreRestorationContent(snapshot.content, codec)
+    this.emit()
+  }
+
   protected abstract backContent(): boolean
   protected abstract canGoBackContent(): boolean
   protected abstract dismissContent(): boolean
@@ -153,6 +303,31 @@ export abstract class RuntimeNavigationValue implements Subscription {
   }
   protected abstract renderContent(taoProps?: TaoProps): React.ReactNode
   protected abstract resetContent(): void
+  protected abstract restoreRestorationContent(
+    snapshot: TaoNavigationContentSnapshot,
+    codec: TaoNavigationRestorationCodec,
+  ): void
+  protected abstract snapshotRestorationContent(
+    codec: TaoNavigationRestorationCodec,
+  ): TaoNavigationContentSnapshot
+
+  protected adoptRemovedBrowserHistoryId(instanceId: number | undefined): void {
+    this.removedBrowserHistoryId = instanceId
+  }
+
+  protected presentableEntry<PresentableT extends TaoPresentable>(
+    presentable: PresentableT,
+    arguments_: TaoNavigationArguments,
+    instanceId: number,
+  ): PresentableEntry<PresentableT> & { host: RuntimeHostReadChannel } {
+    return {
+      arguments: { ...arguments_ },
+      ...(this.browserHistoryId === undefined ? {} : { browserHistoryId: this.browserHistoryId }),
+      host: new RuntimeHostReadChannel(),
+      instanceId,
+      presentable,
+    }
+  }
 
   protected emit(): void {
     this.version += 1
@@ -171,11 +346,12 @@ export abstract class RuntimeNavigationValue implements Subscription {
       return true
     }
     this.overlayEntries.pop()
+    this.adoptRemovedBrowserHistoryId(entry.browserHistoryId)
     this.emit()
     return true
   }
 
-  private settleResponse(entry: OverlayEntry, value?: Evaluable): void {
+  private settleResponse(entry: OverlayEntry, value?: Evaluable, onRespond?: () => void): void {
     const occurrence = entry.response
     if (!occurrence || occurrence.settled) {
       return
@@ -187,7 +363,9 @@ export abstract class RuntimeNavigationValue implements Subscription {
     const index = this.overlayEntries.indexOf(entry)
     if (index >= 0) {
       this.overlayEntries.splice(index, 1)
+      this.adoptRemovedBrowserHistoryId(entry.browserHistoryId)
       this.emit()
+      onRespond?.()
     }
   }
 }

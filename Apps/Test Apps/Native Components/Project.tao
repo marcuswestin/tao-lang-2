@@ -1,0 +1,4 @@
+project {
+   id "native-components"
+   name "Native Components"
+}

@@ -79,6 +79,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'view' && AST.isRender(context.container)) {
       return this.createViewScope(context.container)
     }
+    if (context.property === 'view' && AST.isScenarioRenderClause(container)) {
+      return this.createDeclarationScope(container, AST.isViewDeclaration)
+    }
     if (context.property === 'slot' && AST.isRenderSlotUse(context.container)) {
       return this.createRenderSlotScope(context.container)
     }
@@ -88,11 +91,30 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'entity' && AST.isCreateStatement(context.container)) {
       return this.createEntityDataScope(context.container)
     }
+    if (context.property === 'entity' && AST.isFixtureCreateBinding(container)) {
+      return this.createEntityDataScope(container)
+    }
+    if (context.property === 'action' && AST.isFixtureThroughClause(container)) {
+      return this.createDeclarationScope(container, AST.isActionDeclaration)
+    }
+    if (context.property === 'account' && AST.isFixtureCreateBinding(container)) {
+      return this.createFixtureAccountScope(container)
+    }
+    if (context.property === 'target' && AST.isFixtureValueReference(container)) {
+      return this.createFixtureValueScope(container)
+    }
+    if (context.property === 'fixture' && AST.isScenarioFixtureClause(container)) {
+      return this.createFixtureDeclarationScope(container)
+    }
+    if (context.property === 'target' && AST.isScenarioPrepareUpdate(container)) {
+      return this.createScenarioFixtureValueScope(container)
+    }
     const isAppReference = context.property === 'app'
       && (AST.isRunStep(container)
         || AST.isNavigationTarget(container)
         || AST.isSelectionActivateStatement(container)
-        || AST.isReplaceStatement(container))
+        || AST.isReplaceStatement(container)
+        || AST.isScenarioRunClause(container))
     if (isAppReference) {
       return this.createRunAppScope(container)
     }
@@ -300,6 +322,53 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScope(descriptions)
   }
 
+  private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause): Langium.Scope {
+    const root = AST.findRoot(node)
+    return this.createScopeForNodes(AST.isTaoFile(root) ? root.statements.filter(AST.isFixtureDeclaration) : [])
+  }
+
+  private createFixtureAccountScope(node: AST.FixtureCreateBinding): Langium.Scope {
+    return this.createScopeForNodes(this.fixtureValuesBefore(node).filter(AST.isFixtureAccountDeclaration))
+  }
+
+  private createFixtureValueScope(reference: AST.FixtureValueReference): Langium.Scope {
+    const fixture = AST.findOwningFixture(reference)
+    if (fixture) {
+      const entry = fixture.block.entries.find(candidate => containsNode(candidate, reference))
+      if (entry) {
+        return this.createScopeForNodes(this.fixtureValuesBefore(entry))
+      }
+      return this.createScopeForNodes(AST.fixtureValueDeclarations(fixture))
+    }
+    return this.createScopeForNodes(this.scenarioFixtureValues(reference))
+  }
+
+  private createScenarioFixtureValueScope(node: AST.ScenarioPrepareUpdate): Langium.Scope {
+    return this.createScopeForNodes(this.scenarioFixtureValues(node))
+  }
+
+  private fixtureValuesBefore(entry: AST.FixtureEntry): AST.FixtureValueDeclaration[] {
+    const fixture = AST.findOwningFixture(entry)
+    if (!fixture) {
+      return []
+    }
+    const index = fixture.block.entries.indexOf(entry)
+    return fixture.block.entries.slice(0, index).filter(AST.isFixtureValueDeclaration)
+  }
+
+  private scenarioFixtureValues(node: AST.Node): AST.FixtureValueDeclaration[] {
+    const scenario = AST.findOwningScenario(node)
+    const fixtureName = scenario?.block.entries.find(AST.isScenarioFixtureClause)?.fixture.$refText
+    const root = AST.findRoot(node)
+    if (!fixtureName || !AST.isTaoFile(root)) {
+      return []
+    }
+    const fixture = root.statements
+      .filter(AST.isFixtureDeclaration)
+      .find(candidate => candidate.name === fixtureName)
+    return fixture ? AST.fixtureValueDeclarations(fixture) : []
+  }
+
   private createDataWriteValueScope(reference: AST.ValueReference): Langium.Scope {
     const outer = this.createValueScope(reference)
     const write = reference.$container
@@ -361,7 +430,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createRunAppScope(
-    node: AST.RunStep | AST.NavigationTarget | AST.SelectionActivateStatement | AST.ReplaceStatement,
+    node:
+      | AST.RunStep
+      | AST.NavigationTarget
+      | AST.SelectionActivateStatement
+      | AST.ReplaceStatement
+      | AST.ScenarioRunClause,
   ): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
@@ -512,6 +586,17 @@ function entityDataForWrite(operation: AST.Node | undefined): AST.EntityDataDecl
   }
   const target = operation.target.target.ref
   return AST.isValueDeclaration(target) ? entityDataForValueDeclaration(target, operation) : undefined
+}
+
+function containsNode(ancestor: AST.Node, node: AST.Node): boolean {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (current === ancestor) {
+      return true
+    }
+    current = current.$container
+  }
+  return false
 }
 
 function entityDataForValueDeclaration(

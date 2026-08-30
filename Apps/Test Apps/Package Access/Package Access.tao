@@ -2,6 +2,7 @@ use MainView from @cards/screens
 use StackNav from @tao/nav
 
 project {
+   id "package-access"
    name "Package Access"
    remote none
    license MIT

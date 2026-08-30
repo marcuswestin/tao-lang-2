@@ -58,6 +58,20 @@ import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue } from './TR-reactive'
 import { SelectableRow } from './TR-selectable-row'
 import { createShareSheet, type TaoShareSheet } from './TR-share'
+import {
+  StudioEnvironmentControls,
+  type TaoStudioEnvironment,
+  type TaoStudioProviderOverlay,
+  type TaoStudioStateCapture,
+  type TaoStudioStateSeed,
+} from './TR-studio-environment'
+import { StudioPreview } from './TR-studio-preview'
+import {
+  StudioStateControls,
+  type TaoStudioStateArtifact,
+  type TaoStudioStateDomainCodec,
+  type TaoStudioStateLayer,
+} from './TR-studio-state'
 import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
@@ -431,6 +445,19 @@ class TR {
     return TRTaoProps.TaoPropsControls.visualTag(props)
   }
 
+  /** VisualNativeProps lowers private Studio identity and a test tag onto an injected native root. */
+  static VisualNativeProps(layout: TR.TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
+    return TRTaoProps.TaoPropsControls.visualNativeProps(layout, tag)
+  }
+
+  /** VisualNativeRoot preserves filtered native controls while making their Studio occurrence selectable. */
+  static VisualNativeRoot(layout: TR.TaoVisualLayout | undefined, child: React.ReactNode): React.ReactNode {
+    const props = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
+    return Object.keys(props).length === 0
+      ? child
+      : React.createElement(requireReactNativeRuntime().View, props, child)
+  }
+
   /** setDevMode configures Tao runtime development-only diagnostics. */
   static setDevMode(options?: TR.DevModeOptions): void {
     Dev.setMode(options)
@@ -444,6 +471,13 @@ class TR {
 
   /** Dev exposes public Tao runtime development-only diagnostic controls. */
   static readonly Dev = DevControls
+
+  /** Studio exposes opt-in preview-only runtime behavior for generated Studio apps. */
+  static readonly Studio = {
+    ...StudioPreview,
+    Environment: StudioEnvironmentControls,
+    State: StudioStateControls,
+  } as const
 
   /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
   static readonly Data = DataControls
@@ -622,6 +656,24 @@ namespace TR {
   export type Scope = Record<string, any>
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
   export type TaoProps = TRTaoProps.TaoProps
+  /** TaoStudioIdentity locates one concrete render occurrence in Tao source. */
+  export type TaoStudioIdentity = TRTaoProps.TaoStudioIdentity
+  /** StudioPreviewConfig identifies and secures one generated Studio preview bridge. */
+  export type StudioPreviewConfig = import('./TR-studio-preview').StudioPreviewConfig
+  /** StudioEnvironment is one isolated preview cell's versioned provider and inert-Scheme configuration. */
+  export type StudioEnvironment = TaoStudioEnvironment
+  /** StudioStateSeed carries exact full-snapshot provider envelopes into one isolated preview cell. */
+  export type StudioStateSeed = TaoStudioStateSeed
+  /** StudioStateCapture carries the exact current provider envelopes out of one isolated preview cell. */
+  export type StudioStateCapture = TaoStudioStateCapture
+  /** StudioProviderOverlay is the cell-local provider wrapper exposed to generated Studio hosts. */
+  export type StudioProviderOverlay = TaoStudioProviderOverlay
+  /** StudioStateArtifact is the versioned, explicit-domain durable state transport. */
+  export type StudioStateArtifact = TaoStudioStateArtifact
+  /** StudioStateLayer is one named input to ordered state composition. */
+  export type StudioStateLayer = TaoStudioStateLayer
+  /** StudioStateDomainCodec owns validation and composition for one explicit state domain. */
+  export type StudioStateDomainCodec<ValueT> = TaoStudioStateDomainCodec<ValueT>
   /** TaoVisualLayout is the layout-only snapshot exposed to injected visual implementations. */
   export type TaoVisualLayout = TRTaoProps.TaoVisualLayout
   /** DevModeOptions declares runtime development-only diagnostic flags. */

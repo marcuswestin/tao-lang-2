@@ -12,6 +12,7 @@ export default {
 
 function formatProjectStatement(statement: AST.ProjectStatement): string {
   return Switch.type(statement, {
+    ProjectId: projectId => `id ${gen.jsLiteral(projectId.value)}`,
     ProjectLicense: projectLicense => `license ${projectLicense.value}`,
     ProjectName: projectName => `name ${gen.jsLiteral(projectName.value)}`,
     ProjectRemote: () => 'remote none',

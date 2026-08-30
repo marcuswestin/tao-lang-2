@@ -10,6 +10,10 @@ type TaoFileCompileOptions = {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   selectedAppName?: string
+  studioDataCatalog?: boolean
+  studio?: boolean
+  studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
+  viewRegistrations?: string
 }
 
 export default {
@@ -31,5 +35,10 @@ export default {
   /** ConfigurationTypes emits sidecar-facing contracts inside one generated runtime module. */
   ConfigurationTypes(taoFile: AST.TaoFile): string {
     return Langium.toString(Compile.ConfigurationTypes(taoFile))
+  },
+
+  /** ViewRegistrations emits eager canonical view registrations for restoration and link arrival. */
+  ViewRegistrations(taoFile: AST.TaoFile): string {
+    return Langium.toString(Compile.ViewRegistrations(taoFile))
   },
 } as const

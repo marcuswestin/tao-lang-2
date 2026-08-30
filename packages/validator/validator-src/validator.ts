@@ -5,6 +5,7 @@ import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typi
 import { type TaoSpecifics, TaoTypeSystem, type TaoTypirServices } from './type-system'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
+import { validateProjectWorkspace } from './validators/project-validator'
 
 const codeProjectRoot = '/__tao__'
 
@@ -48,6 +49,7 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
     typir: context.typir,
     workspaceFiles: context.workspaceFiles,
   })
+  validateProjectWorkspace(ctx)
   for (const file of context.workspaceFiles) {
     const nodes = Validate.TaoFile(file, ctx)
     Validate.TypirProblems(file, nodes, context.typir, ctx)

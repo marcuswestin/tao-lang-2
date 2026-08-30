@@ -1395,11 +1395,11 @@ present Notice("Saved") as toast
   mount:
 
 ```swift
-link RecipeLink "/recipes/{Recipe}" -> {
+link RecipeLink(Recipe) "/recipes/{Recipe}" -> {
    reveal RecipeScreen(Recipe) in @detail   // revealing into a slot also selects the tab holding it
    focus @detail
 }
-link CookMealLink "/cook/{Recipe}/{Meal}" -> {
+link CookMealLink(Recipe, Meal) "/cook/{Recipe}/{Meal}" -> {
    present CookScreen(Recipe, Meal: Meal) as window (Key: Recipe)   // one window per recipe
 }
 link JoinLink(Code secret) "/join/{Code}" -> {
@@ -1407,9 +1407,12 @@ link JoinLink(Code secret) "/join/{Code}" -> {
 }
 ```
 
-- **Every link has a path.** A place with no external address is a `reveal` in an action, not a link.
-- **Non-entity parameters are typed on the link** (`link JoinLink(Code secret)`), and a path may
-  carry more than one.
+- **Link parameters are declared on the head.** Entity parameters name their entity type; other
+  parameters state their type, and secrets add `secret`. The path is optional: without one, Tao
+  derives a kebab-cased path with parameters in declaration order. Supplying a path is the author's
+  explicit stability promise. Links are ordinary in-app invocable declarations and expose `.Url`.
+  Alias declarations retain the target's one authored address; a wrapper link is required for a new
+  address.
 - **A window's `Key:` is the row itself**, which is what makes reopening the same subject focus the
   one window rather than open a second.
 - **`focus` takes a slot expression**, so `focus @detail` is the ordinary line and the conditional
@@ -1450,12 +1453,39 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   secrets (§4). No `public` marker exists on links or screens.
 - **Links wait and win.** A link whose target is not mounted yet runs when it is, so a shared link
   opens after sign-in, and an incoming link supersedes restored state.
-- **An explicit restoration policy is declared** as a default plus an exclusion list, and a variant
-  may opt out entirely: `Restore automatic { Exclude sheets, menus, toasts }` on the app,
-  `Restore fresh` on a preview or test variant. What a relaunch brings back — navigation and open
-  windows — and the precedence of an incoming link are language rules stated once above, not per-app
-  policy; and restoration never names a fallback destination, because an unrestorable state lands on
-  the live root.
+- **The browser is a delivery medium, not a language target.** Browser Back dispatches the same
+  semantic reducer as hardware Back, visible Back, and tests. Session history mirrors successful
+  Back-consumable mutations but is never authoritative over app state; drift is repaired from the
+  reducer state. Forward is an in-memory redo of Back: consecutive Back chains replay as fresh
+  occurrences, while any new navigation clears the redo journal even when the navigation itself,
+  such as selection activation or root replacement, adds no browser entry. An asked occurrence
+  is dismissed by browser Back but never re-asked by Forward. Once the app reducer reaches its root,
+  Back is no longer intercepted and the browser leaves the app origin. History entries from before
+  a reload are inert, and Forward across a reload is not a current goal.
+- **Restoration is default-on and host managed.** `Restore` is written only to deviate:
+  `Restore automatic { Exclude sheets, menus, toasts }` applies declared semantic-category
+  subtractions at snapshot time, while `Restore fresh` on a preview or test variant neither reads nor
+  writes host storage. Toasts and responding/asked occurrences never restore by language rule.
+  Every committed reducer change schedules a coalesced snapshot and payload equality suppresses
+  redundant writes; this classification is intentionally independent of browser-history visibility.
+- **Restoration is transactional for the whole app.** A restored tree must be one the live reducer
+  could have produced. Invalid or incompatible data, an unavailable provider, an unregistered view,
+  or a nav kind without restoration capability emits a warning-level tooling diagnostic and lands on
+  the live initial root. Declared exclusions are partial by policy; failures never manufacture a
+  partially restored tree. Applications cannot observe restoration diagnostics or name a fallback.
+  Production telemetry carries codes and identities, not view arguments or entity tokens.
+- **Snapshot identity is owner derived.** Declaration identity is
+  `["tao.declaration", 1, projectId, packageId, modulePath, declarationKind, declarationName]`, where
+  `packageId` is the owning project's checked-in `@folder` or the reserved `@workspace` root marker.
+  Consumers read it and never recompute it from an installation name. Variants and complete
+  configured datasource bindings receive distinct snapshot keys. Providers own opaque entity-token
+  production and resolution; the snapshot also fixes provider, schema, and entity identity and
+  restores a live availability-tracked handle.
+- **Project identity is explicit and stable.** Clones, moves, and organizational transfers retain a
+  checked-in project ID. `tao project id <new> --replace` is the explicit independent-fork operation
+  and severs persisted-state compatibility. Duplicate IDs are rejected when distinct dependencies
+  meet locally and at publish time. Public alias chains flatten to the target's canonical identity
+  while retaining one-hop lexical navigation; cycles are invalid, and a wrapper creates new identity.
 
 ---
 
@@ -2031,6 +2061,16 @@ scenario Recipe.tablet {
    appearance dark
 }
 ```
+
+- **A scenario subject is either an app run or one focused view render.** `run Skillet` exercises the
+  app, optionally at a destination; `render RecipeRow(Recipe: Shakshuka)` mounts one parameterized
+  view with named fixture-handle arguments. The two subjects are mutually exclusive.
+- **`prepare` is the scenario-local data delta.** It contains ordered `update <fixture-handle> { … }`
+  statements applied after the selected fixture and before the subject mounts. It does not introduce
+  a second fixture or hidden Studio-owned state.
+- **The first network spelling is exactly `network online` or `network offline`.** Latency, injected
+  failures, and synchronization controls remain part of the broader verification world and need their
+  own provider-addressed spelling before they join authored scenarios.
 
 - **There is no `design check` declaration.** The design's `rules { }` are the acceptance criteria,
   and each rule runs where it is actually decidable, so nothing is restated at a check site and

@@ -15,9 +15,11 @@ export function LocalProvider(loadStorage: () => AsyncStorageBoundary = asyncSto
       const storageKey = `${keyPrefix}:${context.storageKey}`
       return {
         load: async () => (await storage.getItem(storageKey)) ?? undefined,
+        referenceToken: reference => reference.id,
         reset: async () => {
           await storage.removeItem(storageKey)
         },
+        resolveReference: reference => reference.token,
         save: async snapshot => {
           await storage.setItem(storageKey, snapshot)
         },

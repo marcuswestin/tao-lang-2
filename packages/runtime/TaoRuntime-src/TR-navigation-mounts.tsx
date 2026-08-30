@@ -15,9 +15,13 @@ import { BasicStackSurface } from './TR-navigation-basic-stack'
 import { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import { nativeStackAvailable, NativeStackSurface } from './TR-navigation-native-stack'
 import { nativeSelectionTabsAvailable, renderNativeSelectionTabs } from './TR-navigation-native-tabs'
+import type {
+  TaoNavigationContentSnapshot,
+  TaoNavigationRestorationCodec,
+} from './TR-navigation-restoration-state'
 import type { PresentableEntry } from './TR-navigation-state'
 import { navigationHostStyle, NavigationLevel, navigationProps } from './TR-navigation-surfaces'
-import { RuntimeNavigationValue } from './TR-navigation-value'
+import { RuntimeNavigationValue, takeRemovedBrowserHistoryId } from './TR-navigation-value'
 import {
   assertPatchKeys,
   isNavigation,
@@ -54,12 +58,7 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   }
 
   present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
-    this.entries.push({
-      arguments: { ...arguments_ },
-      host: new RuntimeHostReadChannel(),
-      instanceId: this.nextEntryId++,
-      presentable,
-    })
+    this.entries.push(this.presentableEntry(presentable, arguments_, this.nextEntryId++))
     this.emit()
   }
 
@@ -86,7 +85,8 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
 
   protected backContent(): boolean {
     if (this.entries.length > 1) {
-      this.entries.pop()
+      const removed = this.entries.pop()
+      this.adoptRemovedBrowserHistoryId(removed?.browserHistoryId)
       this.emit()
       return true
     }
@@ -96,6 +96,33 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   protected resetContent(): void {
     this.entries = [this.initialEntry()]
     this.initialNavigation()?.reset()
+  }
+
+  protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
+    return {
+      entries: this.entries.slice(1).flatMap(entry => {
+        const snapshot = codec.snapshotPresentable(entry)
+        return snapshot ? [snapshot] : []
+      }),
+      kind: 'stack',
+    }
+  }
+
+  protected restoreRestorationContent(
+    snapshot: TaoNavigationContentSnapshot,
+    codec: TaoNavigationRestorationCodec,
+  ): void {
+    if (snapshot.kind !== 'stack') {
+      throw new Error(`Restored content is not a stack for '${this.name}'.`)
+    }
+    this.entries = [
+      this.initialEntry(),
+      ...snapshot.entries.map(entry => ({
+        ...codec.restorePresentable(entry),
+        host: new RuntimeHostReadChannel(),
+        instanceId: this.nextEntryId++,
+      })),
+    ]
   }
 
   protected renderContent(taoProps?: TaoProps): React.ReactNode {
@@ -174,7 +201,7 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
   }
 
   present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
-    this.presented = { arguments: { ...arguments_ }, instanceId: this.nextEntryId++, presentable }
+    this.presented = this.presentableEntry(presentable, arguments_, this.nextEntryId++)
     this.emit()
   }
 
@@ -191,7 +218,9 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
     if (!this.presented) {
       return false
     }
+    const removed = this.presented
     this.presented = undefined
+    this.adoptRemovedBrowserHistoryId(removed.browserHistoryId)
     this.emit()
     return true
   }
@@ -215,13 +244,51 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
     if (this.presented) {
       return this.dismissContent()
     }
-    return isNavigation(this.descriptor.config.initial) ? this.descriptor.config.initial.back() : false
+    if (!isNavigation(this.descriptor.config.initial)) {
+      return false
+    }
+    const consumed = this.descriptor.config.initial.back()
+    if (consumed) {
+      this.adoptRemovedBrowserHistoryId(takeRemovedBrowserHistoryId(this.descriptor.config.initial))
+    }
+    return consumed
   }
 
   protected resetContent(): void {
     this.presented = undefined
     if (isNavigation(this.descriptor.config.initial)) {
       this.descriptor.config.initial.reset()
+    }
+  }
+
+  protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
+    const presented = this.presented ? codec.snapshotPresentable(this.presented) : undefined
+    const initial = this.descriptor.config.initial
+    return {
+      ...(isNavigation(initial) && hasRestorationCapability(initial)
+        ? { initialNavigation: initial.navigationRestorationSnapshot(codec, codec.exclusions) }
+        : {}),
+      kind: 'slot',
+      ...(presented ? { presented } : {}),
+    }
+  }
+
+  protected restoreRestorationContent(
+    snapshot: TaoNavigationContentSnapshot,
+    codec: TaoNavigationRestorationCodec,
+  ): void {
+    if (snapshot.kind !== 'slot') {
+      throw new Error(`Restored content is not a slot for '${this.name}'.`)
+    }
+    this.presented = snapshot.presented
+      ? { ...codec.restorePresentable(snapshot.presented), instanceId: this.nextEntryId++ }
+      : undefined
+    const initial = this.descriptor.config.initial
+    if (snapshot.initialNavigation) {
+      if (!isNavigation(initial) || !hasRestorationCapability(initial)) {
+        throw new Error(`Restored slot '${this.name}' requires an unrestorable nested navigator.`)
+      }
+      initial.restoreNavigationSnapshot(snapshot.initialNavigation, codec)
     }
   }
 
@@ -241,6 +308,7 @@ type SelectionItemState = {
   definition: TaoSelectionNavItemDefinition
   entries: Array<{
     arguments: TaoNavigationArguments
+    browserHistoryId?: number
     instanceId: number
     presentable: TaoPresentable | TaoNavigationValue
   }>
@@ -291,9 +359,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
 
   present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
     this.activeItem().entries.push({
-      arguments: { ...arguments_ },
-      instanceId: this.nextEntryId++,
-      presentable,
+      ...this.presentableEntry(presentable, arguments_, this.nextEntryId++),
     })
     this.emit()
   }
@@ -339,12 +405,20 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
   protected backContent(): boolean {
     const active = this.activeItem()
     if (active.entries.length > 1) {
-      active.entries.pop()
+      const removed = active.entries.pop()
+      this.adoptRemovedBrowserHistoryId(removed?.browserHistoryId)
       this.emit()
       return true
     }
     const content = active.definition.content
-    return isNavigation(content) ? content.back() : false
+    if (!isNavigation(content)) {
+      return false
+    }
+    const consumed = content.back()
+    if (consumed) {
+      this.adoptRemovedBrowserHistoryId(takeRemovedBrowserHistoryId(content))
+    }
+    return consumed
   }
 
   protected resetContent(): void {
@@ -353,6 +427,58 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
       item.entries = [this.initialEntry(item.definition.content)]
       if (isNavigation(item.definition.content)) {
         item.definition.content.reset()
+      }
+    }
+  }
+
+  protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
+    return {
+      activeKey: this.activeKey,
+      items: Object.fromEntries(this.items.map(item => {
+        const content = item.definition.content
+        return [item.key, {
+          entries: item.entries.slice(1).flatMap(entry => {
+            if (isNavigation(entry.presentable)) {
+              return []
+            }
+            const snapshot = codec.snapshotPresentable(entry as PresentableEntry)
+            return snapshot ? [snapshot] : []
+          }),
+          ...(isNavigation(content) && hasRestorationCapability(content)
+            ? { navigation: content.navigationRestorationSnapshot(codec, codec.exclusions) }
+            : {}),
+        }]
+      })),
+      kind: 'selection',
+    }
+  }
+
+  protected restoreRestorationContent(
+    snapshot: TaoNavigationContentSnapshot,
+    codec: TaoNavigationRestorationCodec,
+  ): void {
+    if (snapshot.kind !== 'selection' || !this.item(snapshot.activeKey)) {
+      throw new Error(`Restored content is not a valid selection for '${this.name}'.`)
+    }
+    this.activeKey = snapshot.activeKey
+    for (const item of this.items) {
+      const restored = snapshot.items[item.key]
+      if (!restored) {
+        throw new Error(`Restored selection '${this.name}' has no '@${item.key}' item.`)
+      }
+      item.entries = [
+        this.initialEntry(item.definition.content),
+        ...restored.entries.map(entry => ({
+          ...codec.restorePresentable(entry),
+          instanceId: this.nextEntryId++,
+        })),
+      ]
+      const content = item.definition.content
+      if (restored.navigation) {
+        if (!isNavigation(content) || !hasRestorationCapability(content)) {
+          throw new Error(`Restored selection '${this.name}@${item.key}' requires an unrestorable navigator.`)
+        }
+        content.restoreNavigationSnapshot(restored.navigation, codec)
       }
     }
   }
@@ -476,6 +602,15 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
   private item(key: string): SelectionItemState | undefined {
     return this.items.find(item => item.key === key)
   }
+}
+
+function hasRestorationCapability(navigation: TaoNavigationValue): navigation is TaoNavigationValue & {
+  navigationRestorationSnapshot: RuntimeNavigationValue['navigationRestorationSnapshot']
+  restoreNavigationSnapshot: RuntimeNavigationValue['restoreNavigationSnapshot']
+} {
+  const candidate = navigation as Partial<RuntimeNavigationValue>
+  return typeof candidate.navigationRestorationSnapshot === 'function'
+    && typeof candidate.restoreNavigationSnapshot === 'function'
 }
 
 /** selectionItemIconName reads an item's `Icon` property, which carries an SF Symbol name. */

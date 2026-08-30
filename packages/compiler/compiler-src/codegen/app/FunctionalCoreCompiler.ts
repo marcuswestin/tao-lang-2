@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 type FunctionParameter = {
@@ -75,21 +75,22 @@ export const FunctionalCoreCompiler = {
   /** RenderFragmentStatement compiles one child render/control-flow fragment. */
   RenderFragmentStatement(
     statement: AST.RenderFragment,
+    options: CodegenOptions = {},
   ): Compiled {
     return Switch.type(statement, {
-      ForStatement: Compile.ForStatement,
-      GuardRenderStatement: statement => Compile.GuardRenderStatement(statement, []),
-      IfRenderStatement: Compile.IfRenderStatement,
-      WhenRenderStatement: Compile.WhenRenderStatement,
+      ForStatement: value => Compile.ForStatement(value, options),
+      GuardRenderStatement: value => Compile.GuardRenderStatement(value, [], options),
+      IfRenderStatement: value => Compile.IfRenderStatement(value, options),
+      WhenRenderStatement: value => Compile.WhenRenderStatement(value, options),
       CallerContentStatement: Compile.CallerContentStatement,
       RenderSlotUse: Compile.RenderSlotUse,
-      RenderStatement: Compile.Render,
-      ViewRender: Compile.Render,
+      RenderStatement: value => Compile.Render(value, options),
+      ViewRender: value => Compile.Render(value, options),
     })
   },
 
   /** WhenRenderStatement evaluates one subject and renders one lazy case. */
-  WhenRenderStatement(statement: AST.WhenRenderStatement): Compiled {
+  WhenRenderStatement(statement: AST.WhenRenderStatement, options: CodegenOptions = {}): Compiled {
     return gen`
       {TR.WhenCaseRender(${Compile.Expression(statement.subject)}, [
         ${
@@ -98,22 +99,22 @@ export const FunctionalCoreCompiler = {
         branch =>
           gen`[${gen.jsLiteral(branch.case)}, _TaoCasePayload => TR.BlockScope(_Scope, _Scope => {
             ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
-            ${Compile.RenderBlockBody(branch.block)}
+            ${Compile.RenderBlockBody(branch.block, options)}
           })],`,
       )
     }
       ], () => TR.BlockScope(_Scope, _Scope => {
-        ${Compile.RenderBlockBody(statement.otherwise.block)}
+        ${Compile.RenderBlockBody(statement.otherwise.block, options)}
       }))}
     `
   },
 
   /** IfRenderStatement conditionally renders only its own child block. */
-  IfRenderStatement(statement: AST.IfRenderStatement): Compiled {
+  IfRenderStatement(statement: AST.IfRenderStatement, options: CodegenOptions = {}): Compiled {
     return gen`
       {TR.If(${Compile.Expression(statement.condition)}, () =>
         TR.BlockScope(_Scope, _Scope => {
-          ${Compile.RenderBlockBody(statement.block)}
+          ${Compile.RenderBlockBody(statement.block, options)}
         })
       ) ?? null}
     `
@@ -123,6 +124,7 @@ export const FunctionalCoreCompiler = {
   GuardRenderStatement(
     statement: AST.GuardRenderStatement,
     remaining: readonly AST.RenderFragment[],
+    options: CodegenOptions = {},
   ): Compiled {
     return gen`
       {TR.GuardRender(${Compile.Expression(statement.subject)}, [
@@ -132,24 +134,24 @@ export const FunctionalCoreCompiler = {
         branch =>
           gen`[${gen.jsLiteral(branch.case)}, _TaoCasePayload => TR.BlockScope(_Scope, _Scope => {
           ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
-          ${branch.block ? Compile.RenderBlockBody(branch.block) : gen`return null`}
+          ${branch.block ? Compile.RenderBlockBody(branch.block, options) : gen`return null`}
         })],`,
       )
     }
       ], () => <>
-        ${Compile.RenderBlockFragments(remaining)}
+        ${Compile.RenderBlockFragments(remaining, options)}
       </>)}
     `
   },
 
   /** ForStatement compiles repeated rendering with an iteration-local Tao value binding. */
-  ForStatement(statement: AST.ForStatement): Compiled {
+  ForStatement(statement: AST.ForStatement, options: CodegenOptions = {}): Compiled {
     const selectHandler = AST.loopSelectHandlers(statement)[0]
     return gen`
       {TR.ForEach(${Compile.Expression(statement.collection)}, ${functionRuntimeParameterName(0)} =>
         TR.BlockScope(_Scope, _Scope => {
           ${gen.scopeName(statement)} = ${functionRuntimeParameterName(0)}
-          ${Compile.RenderBlockBody(statement.block)}
+          ${Compile.RenderBlockBody(statement.block, options)}
         })
       ${selectHandler ? gen`, ${Compile.LoopSelectHandlerCallback(selectHandler)}` : ''})}
     `

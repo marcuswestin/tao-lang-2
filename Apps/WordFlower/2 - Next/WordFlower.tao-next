@@ -1,9 +1,22 @@
+use Workspaces from @data
 use WordFlowerNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
+use WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
 // Tranche status: absorbed
+//
+// STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
+// shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
+// `scenario Name.case` selects one fixture, ordered preparation, a runnable app and destination,
+// and explicit environment pins. Studio adds no `example` declaration or sidecar authority.
+//
+// The approved focused subject is `render ViewName(Parameter: FixtureHandle)`. Its named arguments
+// bind the view's declared parameters, and every scenario has exactly one `run` or `render` subject.
+// Runtime lowering begins with deterministic fixture data plus viewport, appearance, locale,
+// direction, and the explicitly spelled online/offline network pins. The clock value spelling remains
+// deferred rather than guessed. Scheme remains a visibly inert Studio protocol seam.
 //
 // SURFACES AND DECLARATIONS. This tranche gives WordFlower the UI primitives, adaptive layout,
 // declaration model, and minimal design system used by the code in this directory.
@@ -252,6 +265,7 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `expect toolbar command "Save workspace" enabled|disabled` asserts a visible command state, and
 //   `press toolbar command "Save workspace"` invokes that command through the host surface
 project {
+   id "wordflower"
    name "WordFlower"
    remote none
    license MIT
@@ -294,6 +308,39 @@ app WordFlowerStackByNav {
 app WordFlowerStackByNavWith = app with {
    Name "WordFlower Declaration Head With"
    Navigator StackByNavWith
+}
+
+fixture StudioWorkspace {
+   Novel = create Workspace {
+      Name: "Novel"
+}  }
+
+scenario WorkspaceRow.novel {
+   fixture StudioWorkspace
+   render WorkspaceRow(Workspace: Novel)
+   device phone
+   appearance light
+   network online
+   locale "en"
+}
+
+scenario WordFlower.phone {
+   fixture StudioWorkspace
+   run WordFlower
+   device phone
+   appearance light
+   network online
+   locale "en"
+}
+
+scenario WordFlower.tabletDark {
+   fixture StudioWorkspace
+   run WordFlower
+   device tablet 1024 x 1366
+   appearance dark
+   network offline
+   locale pseudolocale
+   direction rightToLeft
 }
 
 // A configured datasource is a named value like any other. The bare constructor block is the

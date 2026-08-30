@@ -758,12 +758,29 @@ Describe('Tao formatter project metadata', () => {
   Test(
     'formats project metadata blocks',
     formats(
-      `project{name "Package Access" remote   none license   MIT}`,
+      `project{id "package-access" name "Package Access" remote   none license   MIT}`,
       `
         project {
+           id "package-access"
            name "Package Access"
            remote none
            license MIT
+        }
+      `,
+    ),
+  )
+})
+
+Describe('Tao formatter restoration policy', () => {
+  Test(
+    'formats automatic exclusions and fresh variants',
+    formats(
+      `app Demo{Name "Demo" Navigator Nav Restore automatic{Exclude sheets,menus,toasts}}`,
+      `
+        app Demo {
+           Name "Demo"
+           Navigator Nav
+           Restore automatic { Exclude sheets, menus, toasts }
         }
       `,
     ),

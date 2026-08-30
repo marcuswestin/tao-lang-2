@@ -295,6 +295,7 @@ Describe('minimal Tao parser', () => {
   Test('parses local project metadata', async () => {
     const parseResult = await testParseCode(`
       project {
+        id "package-access"
         name "Package Access"
         remote none
         license MIT
@@ -304,6 +305,7 @@ Describe('minimal Tao parser', () => {
     const [project] = parseResult.entry.ast.statements
     Expect.Is(project, AST.isProjectDeclaration)
     Expect(AST.blockStatementOf(project, { map: statement => statement.$type })).toEqual([
+      AST.ProjectId.$type,
       AST.ProjectName.$type,
       AST.ProjectRemote.$type,
       AST.ProjectLicense.$type,

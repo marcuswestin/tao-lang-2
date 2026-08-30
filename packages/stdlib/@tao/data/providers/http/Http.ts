@@ -19,6 +19,8 @@ export function HttpProvider(): TR.DataProvider {
         fill: (request, ops) => runAdapterFill(adapter, request, ops),
         fillCacheMs: (cacheForNs ?? 0) / NANOSECONDS_PER_MILLISECOND,
         load: () => snapshots.get(context.storageKey),
+        referenceToken: reference => reference.id,
+        resolveReference: reference => reference.token,
         save: snapshot => {
           snapshots.set(context.storageKey, snapshot)
         },

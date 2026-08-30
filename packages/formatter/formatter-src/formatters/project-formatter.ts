@@ -8,6 +8,10 @@ export default {
     f.indentedBraceBlock(f.node.statements)
   },
 
+  ProjectId(f) {
+    f.oneSpaceAfter('id')
+  },
+
   ProjectName(f) {
     f.oneSpaceAfter('name')
   },

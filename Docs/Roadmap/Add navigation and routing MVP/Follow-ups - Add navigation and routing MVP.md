@@ -33,11 +33,10 @@ settled while toasts are implemented.
 
 ### FOLLOW-NAV-003: Restoration, Routes, Entity Recovery, And Project Identity
 
-Implement the versioned presentation-state schema, round-trip restoration, invalid-state fallback,
-stable public route declarations, and deep-link transactions that do not expose internal mount
-paths. Loading, missing, and unauthorized entity-reference guards ship in Current. Settle the
-source-facing restoration API under
-`DEF-NAV-013` before implementation planning.
+The versioned presentation-state schema, round-trip restoration, invalid-state fallback, and project
+identity are implemented. Remaining work is the decided `link` declaration and arrival pipeline,
+whose authored addresses do not expose internal mount paths. Loading, missing, and unauthorized
+entity-reference guards ship in Current.
 
 Restorable descriptor identity depends on a checked-in project ID, whose contract is settled:
 
@@ -46,9 +45,13 @@ Restorable descriptor identity depends on a checked-in project ID, whose contrac
 - `tao create <id>` uses the new project's directory name as the checked-in ID, and
   `tao project id <id> [path]` migrates an existing project as a deliberate, reviewable command.
 - Clones and published artifacts retain the ID; an independent fork supplies a replacement with
-  `--replace`.
+  `--replace`, which explicitly severs persisted-state compatibility.
 - A missing ID produces a diagnostic naming the migration command. It never falls back to a
   filesystem path, remote URL, lockfile key, or per-run value.
+- The owning project's checked-in `@folder` names are package IDs; `@workspace` is the reserved root
+  marker. Consumer installation names never participate.
+- Distinct dependencies with the same project ID are a local hard error; first publish claims an ID
+  in the registry.
 
 ### FOLLOW-NAV-004: Dialogue Scheduling
 
@@ -64,9 +67,11 @@ Future work adds source actions only where a later migration is semantically mec
 
 ## Deferred Design
 
-### DEF-NAV-001: Exact Route Declaration Syntax
+### DEF-NAV-001: Exact Route Declaration Syntax (superseded)
 
-Choose route declaration spelling after descriptor, target, and restoration IR exist. Public routes map stable names and restorable parameters to semantic transactions, never raw internal paths.
+Superseded by `Docs/Roadmap/Tao Revolution/Decisions.md` §10. `link` declarations own their address,
+head parameters, optional derived path, semantic transaction body, and `.Url`; mounted paths never
+become public URLs.
 
 ### DEF-NAV-002: Custom Restoration Migration Syntax
 
@@ -114,13 +119,18 @@ Define whether actions can opt into queue, single-flight, cancel-previous, exclu
 
 Design conditional app chrome and auxiliary activation after Selection and auxiliary hosts exist. Preserve the Meny exploration use case of showing a floating creation control only while a particular selection item is active without making presentation state directly mutable.
 
-### DEF-NAV-013: Restoration Ownership And Source API
+### DEF-NAV-013: Restoration Ownership And Source API (resolved)
 
-Decide whether restoration is entirely app-host-managed or also exposes explicit `serialize presentation`, `deserialize presentation`, and app-restore hooks. The runtime schema and fallback semantics are settled, but the deleted exploration's exact source syntax was only a sketch and must not become an API accidentally.
+Resolved as entirely host managed. Tao exposes only the default-on policy deviations
+`Restore automatic { Exclude ... }` and `Restore fresh`; there is no serialize, deserialize,
+migration, restore hook, diagnostic observer, or named fallback API.
 
-### DEF-NAV-014: Auxiliary Restoration Policy
+### DEF-NAV-014: Auxiliary Restoration Policy (resolved)
 
-Toasts and active dialogues are never restored. Decide whether overlays and windows restore automatically, opt in per host or occurrence, or always start empty before implementing persisted auxiliary state.
+Resolved by `Decisions.md` §10. Restorable navigation, overlays, and windows restore automatically;
+toasts and asked/responding occurrences never do. `Exclude sheets, menus, toasts` is semantic
+policy vocabulary applied while snapshotting. Any failure falls back as one whole app rather than
+partially restoring auxiliaries.
 
 ### DEF-NAV-015: User-Defined Semantic Identity Metadata
 

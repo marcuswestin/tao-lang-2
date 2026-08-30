@@ -14,13 +14,16 @@ public
 view Button(Title text, Press action(), Disabled boolean default false) {
    render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Button', Layout)
-      return TR.Element(RN.Button, {
-        accessibilityLabel: Title,
-        disabled: Disabled,
-        onPress: () => Press.invoke(),
-        testID: Tag,
-        title: Title,
-      })
+      return TR.VisualNativeRoot(
+        Layout,
+        TR.Element(RN.Button, {
+          accessibilityLabel: Title,
+          disabled: Disabled,
+          onPress: () => Press.invoke(),
+          testID: Tag,
+          title: Title,
+        }),
+      )
    ```
 }
 
@@ -31,14 +34,17 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
    render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('FormButton', Layout)
       const busy = Disabled || Submitting
-      return TR.Element(RN.Button, {
-        accessibilityLabel: Title,
-        accessibilityState: { busy: Submitting, disabled: busy },
-        disabled: busy,
-        onPress: () => Press.invoke(),
-        testID: Tag || Id || undefined,
-        title: Submitting ? 'Saving…' : Title,
-      })
+      return TR.VisualNativeRoot(
+        Layout,
+        TR.Element(RN.Button, {
+          accessibilityLabel: Title,
+          accessibilityState: { busy: Submitting, disabled: busy },
+          disabled: busy,
+          onPress: () => Press.invoke(),
+          testID: Tag || Id || undefined,
+          title: Submitting ? 'Saving…' : Title,
+        }),
+      )
    ```
 }
 
@@ -50,7 +56,7 @@ view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean 
       TR.WarnUnhonoredLayout('Switch', Layout)
       return TR.Element(
         RN.View,
-        { style: { alignItems: 'center', flexDirection: 'row', gap: 8 }, testID: Tag },
+        { ...TR.VisualNativeProps(Layout, Tag), style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
         TR.Element(RN.Switch, {
           accessibilityLabel: Label,
           disabled: Disabled,
@@ -74,7 +80,7 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
         const step = (Maximum - Minimum) / 10
         return TR.Element(
           RN.View,
-          { style: { alignItems: 'center', flexDirection: 'row', gap: 8 }, testID: Tag },
+          { ...TR.VisualNativeProps(Layout, Tag), style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
           TR.Element(RN.Button, {
             accessibilityLabel: `Decrease ${Label}`,
             disabled: Disabled,
@@ -93,12 +99,12 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
         )
       }
       return TR.Element(host, {
+        ...TR.VisualNativeProps(Layout, Tag),
         accessibilityLabel: Label,
         disabled: Disabled,
         maximumValue: Maximum,
         minimumValue: Minimum,
         onValueChange: (value: number) => Change.invoke(TR.Value(value)),
-        testID: Tag,
         value: Value,
       })
    ```
@@ -110,11 +116,11 @@ view Spinner() {
    render inject Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Spinner', Layout)
       return TR.Element(RN.ActivityIndicator, {
+        ...TR.VisualNativeProps(Layout, Tag),
         accessibilityLabel: 'Loading',
         accessibilityRole: 'progressbar',
         accessibilityState: { busy: true },
         animating: true,
-        testID: Tag,
       })
    ```
 }
@@ -130,7 +136,7 @@ view Picker(Value text, Change action(text), Options list of text, Label text) {
       if (!host) {
         return TR.Element(
           RN.View,
-          { testID: Tag },
+          TR.VisualNativeProps(Layout, Tag),
           ...Options.map((option: string) =>
             TR.Element(RN.Button, {
               accessibilityState: { selected: option === Value },
@@ -144,10 +150,10 @@ view Picker(Value text, Change action(text), Options list of text, Label text) {
       return TR.Element(
         host.Picker,
         {
+          ...TR.VisualNativeProps(Layout, Tag),
           accessibilityLabel: Label,
           onValueChange: (option: string) => Change.invoke(TR.Value(option)),
           selectedValue: Value,
-          testID: Tag,
         },
         ...Options.map((option: string) => TR.Element(host.Item, { key: option, label: option, value: option })),
       )
@@ -164,7 +170,11 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
       if (!host) {
         return TR.Element(
           RN.View,
-          { accessibilityLabel: Label, style: { flexDirection: 'row', gap: 4 }, testID: Tag },
+          {
+            ...TR.VisualNativeProps(Layout, Tag),
+            accessibilityLabel: Label,
+            style: { flexDirection: 'row', gap: 4 },
+          },
           ...Options.map((option: string) =>
             TR.Element(RN.Button, {
               accessibilityState: { selected: option === Value },
@@ -176,10 +186,10 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
         )
       }
       return TR.Element(host, {
+        ...TR.VisualNativeProps(Layout, Tag),
         accessibilityLabel: Label,
         onValueChange: (option: string) => Change.invoke(TR.Value(option)),
         selectedIndex: Math.max(0, Options.indexOf(Value)),
-        testID: Tag,
         values: Options,
       })
    ```
@@ -198,7 +208,7 @@ view DatePicker(Value time, Change action(time), Label text) {
         const day = 24 * 60 * 60 * 1000
         return TR.Element(
           RN.View,
-          { style: { alignItems: 'center', flexDirection: 'row', gap: 8 }, testID: Tag },
+          { ...TR.VisualNativeProps(Layout, Tag), style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
           TR.Element(RN.Button, {
             accessibilityLabel: `Previous ${Label}`,
             key: 'previous',
@@ -215,6 +225,7 @@ view DatePicker(Value time, Change action(time), Label text) {
         )
       }
       return TR.Element(host, {
+        ...TR.VisualNativeProps(Layout, Tag),
         accessibilityLabel: Label,
         mode: 'date',
         onChange: (_event: unknown, selected?: Date) => {
@@ -222,7 +233,6 @@ view DatePicker(Value time, Change action(time), Label text) {
             Change.invoke(TR.Value(selected.getTime()))
           }
         },
-        testID: Tag,
         value: new Date(Value),
       })
    ```

@@ -1,7 +1,7 @@
 import type React from 'react'
 import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError } from './TR-errors'
-import { RuntimeAppDefinition } from './TR-navigation-app'
+import { ownerOfNavigation, RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
 import {
   configureNavigation,
@@ -20,6 +20,12 @@ import {
   type TaoNavHostSlotConfiguration,
   useHostSlots,
 } from './TR-navigation-host-slots'
+import {
+  declarationIdentity,
+  type TaoCanonicalDescriptor,
+  type TaoDeclarationIdentity,
+  type TaoDeclarationIdentityTuple,
+} from './TR-navigation-identity'
 import { disableNativeNavigationSurfaces } from './TR-navigation-native-hosts'
 import {
   type Evaluable,
@@ -29,8 +35,14 @@ import {
   backNavigation,
   registerNavigation,
   registerNavigationApp,
+  registerPresentable,
   resetNavigationRuntime,
+  resolvePresentable,
 } from './TR-navigation-registry'
+import {
+  beginNavigationRestorationTest,
+  endNavigationRestorationTest,
+} from './TR-navigation-restoration'
 import { RuntimeNavigationValue } from './TR-navigation-value'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 
@@ -40,6 +52,7 @@ export { NavKindControls } from './TR-navigation-kinds'
 export type TaoNavigationArguments = Record<string, Evaluable>
 
 export type TaoPresentableDefinition = {
+  identity?: TaoDeclarationIdentity
   name: string
   render(
     arguments_: TaoNavigationArguments,
@@ -55,6 +68,7 @@ export type TaoSelectionNavItemDefinition = {
 }
 
 export type TaoAppDeclaration = Readonly<{
+  canonicalIdentity?: TaoDeclarationIdentity
   identity: symbol
   name: string
 }>
@@ -65,11 +79,20 @@ export type TaoAppDefinition = {
   design?(): TaoDesign
   name: string
   navigator(): TaoNavigationInput
+  restoration?: TaoAppRestorationDefinition
 }
+
+export type TaoAppRestorationDefinition = Readonly<{
+  exclusions: readonly ('menus' | 'sheets' | 'toasts')[]
+  mode: 'automatic' | 'fresh'
+  providerIdentity?(): string | undefined
+  variant: string
+}>
 
 export type TaoNavigationPatch = Readonly<Record<string, unknown>>
 type TaoNavigationConfiguration = Readonly<Record<string, unknown>>
 export type TaoConfiguredNavigation = Readonly<{
+  canonicalDescriptor?: TaoCanonicalDescriptor
   config: TaoNavigationConfiguration
   declaration: TaoImplementedNavDeclaration
   evaluate(): TaoConfiguredNavigation
@@ -90,6 +113,7 @@ export type TaoNavHostSlotContract = Readonly<{
 }>
 
 export type TaoNavDeclaration = Readonly<{
+  canonicalIdentity?: TaoDeclarationIdentity
   identity: symbol
   name: string
 }>
@@ -121,6 +145,7 @@ export type TaoNavDescriptor<
   ProfileT extends TaoNavKindProfile = TaoNavKindProfile,
   ConfigurationT extends object = object,
 > = Readonly<{
+  canonicalDescriptor?: TaoCanonicalDescriptor
   config: Readonly<ConfigurationT>
   declaration: TaoNavDeclaration
   kind: TaoNavKind<ProfileT, ConfigurationT>
@@ -175,14 +200,23 @@ export type TaoNavKind<
 
 /** NavigationControls is the deterministic generated-code API for Tao navigation. */
 export const NavigationControls = {
+  /** Identity constructs one validated canonical declaration identity from generated owner metadata. */
+  Identity(tuple: TaoDeclarationIdentityTuple): TaoDeclarationIdentity {
+    return declarationIdentity(tuple)
+  },
+
   /** AppDeclaration creates one process-local source declaration identity for app configurations. */
-  AppDeclaration(name: string): TaoAppDeclaration {
-    return createAppDeclaration(name)
+  AppDeclaration(name: string, identity?: TaoDeclarationIdentity): TaoAppDeclaration {
+    return createAppDeclaration(name, identity)
   },
 
   /** Declaration binds one Tao declaration identity to its package-scope implementation. */
-  Declaration(name: string, kind: TaoNavKind<any, any>): TaoImplementedNavDeclaration {
-    const declaration = { ...createNavDeclaration(name), kind }
+  Declaration(
+    name: string,
+    kind: TaoNavKind<any, any>,
+    identity?: TaoDeclarationIdentity,
+  ): TaoImplementedNavDeclaration {
+    const declaration = { ...createNavDeclaration(name, identity), kind }
     return Object.freeze(declaration)
   },
 
@@ -201,7 +235,12 @@ export const NavigationControls = {
 
   /** View creates the first-class presentation descriptor for one Tao view declaration. */
   View(definition: TaoPresentableDefinition): TaoPresentable {
-    return new RuntimePresentable(definition)
+    return registerPresentable(new RuntimePresentable(definition))
+  },
+
+  /** ViewReference resolves a module-registered view without rebuilding its render closure. */
+  ViewReference(identity: TaoDeclarationIdentity): TaoPresentable {
+    return resolvePresentable(identity.canonical)
   },
 
   /** Command binds one intent invocation and its live chrome metadata to the declaring view occurrence. */
@@ -241,7 +280,8 @@ export const NavigationControls = {
     if (!navigation) {
       throw new Error(`Cannot present ${presentable.name}: no enclosing or explicit navigation target.`)
     }
-    navigation.present(presentable, arguments_)
+    const app = resolveNavigationApp(taoProps, navigation)
+    app ? app.present(navigation, presentable, arguments_) : navigation.present(presentable, arguments_)
   },
 
   /** PresentOverlay layers a UI above an explicit nav or the nearest enclosing nav. */
@@ -257,7 +297,10 @@ export const NavigationControls = {
       const mode = options.sheet ? 'sheet' : 'overlay'
       throw new Error(`Cannot present ${presentable.name} as ${mode}: no enclosing or explicit navigation target.`)
     }
-    navigation.presentOverlay(presentable, arguments_, options)
+    const app = resolveNavigationApp(taoProps, navigation)
+    app
+      ? app.presentOverlay(navigation, presentable, arguments_, options)
+      : navigation.presentOverlay(presentable, arguments_, options)
   },
 
   /** PresentToast replaces one app-owned key and restarts its transient expiry. */
@@ -292,7 +335,8 @@ export const NavigationControls = {
     if (!navigation) {
       throw new Error(`Cannot ask ${view.name}: no enclosing navigation target.`)
     }
-    return navigation.ask(view, arguments_)
+    const app = resolveNavigationApp(taoProps, navigation)
+    return app ? app.ask(navigation, view, arguments_) : navigation.ask(view, arguments_)
   },
 
   /** Respond settles only the asked occurrence inherited by the responding render tree. */
@@ -310,7 +354,8 @@ export const NavigationControls = {
     if (!navigation) {
       throw new Error('Cannot dismiss: no enclosing navigation target.')
     }
-    navigation.dismiss()
+    const app = resolveNavigationApp(taoProps, navigation)
+    app ? app.dismiss(navigation) : navigation.dismiss()
   },
 
   /** Replace swaps the matching enclosing app occurrence's root navigator. */
@@ -352,7 +397,7 @@ export const NavigationControls = {
   /** Activate reveals one keyed item on the matching enclosing app occurrence. */
   Activate(taoProps: TaoProps | undefined, target: RuntimeAppDefinition | undefined, key: string): void {
     const app = resolveStrictAppTarget(taoProps, target, 'activate')
-    if (!app.navigator.activate(key)) {
+    if (!app.activate(key)) {
       throw new Error(`App ${app.definition.name} has no selection item '@${key}'.`)
     }
   },
@@ -372,10 +417,17 @@ export const NavigationControls = {
   },
 
   /** beginTest resets cached generated navigation and apps before each Tao behavior check. */
-  beginTest(): void {
+  beginTest(options: { freshRestoration?: boolean } = {}): void {
     // Checks run the deterministic JS surfaces; a native tab bar has no host under the harness.
     disableNativeNavigationSurfaces()
+    if (options.freshRestoration) {
+      beginNavigationRestorationTest()
+    }
     resetNavigationRuntime()
+  },
+
+  endTest(): void {
+    endNavigationRestorationTest()
   },
 } as const
 
@@ -389,6 +441,13 @@ export type TaoPresentable = RuntimePresentable
 export type TaoNavigationValue = RuntimeNavigationValue
 export type TaoRuntimeApp = RuntimeAppDefinition
 export type { RuntimeHostReadChannel, RuntimeNavigationCommand, TaoNavHostSlotConfiguration }
+
+function resolveNavigationApp(
+  taoProps: TaoProps | undefined,
+  navigation: TaoNavigationValue,
+): RuntimeAppDefinition | undefined {
+  return TaoPropsControls.appInChain(taoProps) ?? ownerOfNavigation(navigation)?.app
+}
 
 function resolveStrictAppTarget(
   taoProps: TaoProps | undefined,

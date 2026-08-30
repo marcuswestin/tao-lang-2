@@ -1,9 +1,9 @@
 import { AST } from '@parser'
-import { type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { isRuntimeConfigurableDeclaration } from './configuration-compiler'
 
-type TaoFileCompileOptions = {
+type TaoFileCompileOptions = CodegenOptions & {
   configurationTypes?: string
   dataEntities?: readonly AST.EntityDataDeclaration[]
   emitDataCatalog?: boolean
@@ -11,6 +11,7 @@ type TaoFileCompileOptions = {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   selectedAppName?: string
+  viewRegistrations?: string
 }
 
 export default {
@@ -19,6 +20,7 @@ export default {
     const configurationTypes = opts.configurationTypes ?? ''
     const importLines = opts.importLines?.join('\n') ?? ''
     const scopeBindings = opts.scopeBindings?.join('\n') ?? ''
+    const viewRegistrations = opts.viewRegistrations ?? ''
     const exportLines = opts.exportedBindings
       ?.map(({ exported, binding }) => `export const ${exported} = _Scope.${binding}`)
       .join('\n') ?? ''
@@ -46,10 +48,11 @@ export default {
 
       const _Scope: any = {}
       ${gen.textLines(scopeBindings)}
+      ${gen.textLines(viewRegistrations)}
 
       ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
 
-      ${gen.list(taoFile.statements, Compile.Statement, { newLines: 2 })}
+      ${gen.list(taoFile.statements, statement => Compile.Statement(statement, opts), { newLines: 2 })}
       ${registry}
       ${gen.textLines(exportLines)}
       ${gen.textLines(configurationTypes)}

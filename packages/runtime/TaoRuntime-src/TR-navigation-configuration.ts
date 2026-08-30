@@ -8,18 +8,19 @@ import type {
   TaoPresentable,
 } from './TR-navigation'
 import { RuntimeNavigationCommand } from './TR-navigation-host-slots'
+import { canonicalDescriptor, type TaoDeclarationIdentity } from './TR-navigation-identity'
 import type { Evaluable } from './TR-navigation-presentables'
 import { registerNavigation } from './TR-navigation-registry'
 import { RuntimeNavigationValue } from './TR-navigation-value'
 import { isPresentable } from './TR-navigation-values'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 
-export function createAppDeclaration(name: string): TaoAppDeclaration {
-  return createNavDeclaration(name)
+export function createAppDeclaration(name: string, identity?: TaoDeclarationIdentity): TaoAppDeclaration {
+  return createNavDeclaration(name, identity)
 }
 
-export function createNavDeclaration(name: string): TaoNavDeclaration {
-  return Object.freeze({ identity: Symbol(name), name })
+export function createNavDeclaration(name: string, canonicalIdentity?: TaoDeclarationIdentity): TaoNavDeclaration {
+  return Object.freeze({ ...(canonicalIdentity ? { canonicalIdentity } : {}), identity: Symbol(name), name })
 }
 
 export function configureNavigation(
@@ -28,11 +29,28 @@ export function configureNavigation(
 ): TaoConfiguredNavigation {
   let configured: TaoConfiguredNavigation
   configured = Object.freeze({
+    ...(declaration.canonicalIdentity
+      ? {
+        canonicalDescriptor: canonicalDescriptor(
+          declaration.canonicalIdentity,
+          restorableNavigationConfiguration(declaration, config),
+        ),
+      }
+      : {}),
     config: freezeNavConfiguration(config),
     declaration,
     evaluate: () => configured,
   })
   return configured
+}
+
+function restorableNavigationConfiguration(
+  declaration: TaoImplementedNavDeclaration,
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  const hostSlots = new Set<string>(declaration.kind.hostSlots?.reads ?? [])
+  hostSlots.add('__taoHostSlots')
+  return Object.fromEntries(Object.entries(config).filter(([name]) => !hostSlots.has(name)))
 }
 
 export function freezeNavConfiguration<ConfigurationT extends object>(
@@ -49,10 +67,14 @@ export function isConfiguredNavigation(value: unknown): value is TaoConfiguredNa
 export function mountConfiguredNavigation(
   configured: TaoConfiguredNavigation,
   registerMount?: (configured: TaoConfiguredNavigation, mount: TaoNavigationValue) => void,
+  resolvePresentable?: (presentable: TaoPresentable) => TaoPresentable,
 ): TaoNavigationValue {
   const kind = configured.declaration.kind
-  const config = normalizeConfiguredNavigation(configured, registerMount)
-  const descriptor = kind.configure(configured.declaration, config)
+  const config = normalizeConfiguredNavigation(configured, registerMount, resolvePresentable)
+  const configuredDescriptor = kind.configure(configured.declaration, config)
+  const descriptor = configured.canonicalDescriptor
+    ? Object.freeze({ ...configuredDescriptor, canonicalDescriptor: configured.canonicalDescriptor })
+    : configuredDescriptor
   const mount = registerNavigation(kind.mount(descriptor) as RuntimeNavigationValue)
   registerMount?.(configured, mount)
   return mount
@@ -81,12 +103,19 @@ export function resolveNavigationTarget(
 function normalizeConfiguredNavigation(
   configured: TaoConfiguredNavigation,
   registerMount?: (configured: TaoConfiguredNavigation, mount: TaoNavigationValue) => void,
+  resolvePresentable?: (presentable: TaoPresentable) => TaoPresentable,
 ): Record<string, unknown> {
   const config = configured.config
   if (configured.declaration.kind.profile === 'stack' || configured.declaration.kind.profile === 'slot') {
     return {
       ...normalizedHostSlots(configured),
-      initial: configuredPresentable(config['Initial'], configured.declaration.name, 'Initial', registerMount),
+      initial: configuredPresentable(
+        config['Initial'],
+        configured.declaration.name,
+        'Initial',
+        registerMount,
+        resolvePresentable,
+      ),
       name: configured.declaration.name,
     }
   }
@@ -105,6 +134,7 @@ function normalizeConfiguredNavigation(
             configured.declaration.name,
             `@${key}.Content`,
             registerMount,
+            resolvePresentable,
           ),
           ...(icon ? { icon } : {}),
           label: configuredEvaluable(item['Label'], configured.declaration.name, `@${key}.Label`),
@@ -122,9 +152,10 @@ function normalizeConfiguredNavigation(
 
 function normalizedHostSlots(configured: TaoConfiguredNavigation): Record<string, unknown> {
   const supplied = configured.config['__taoHostSlots']
+  const reads = configured.declaration.kind.hostSlots?.reads ?? []
   const values = isPlainRecord(supplied)
     ? supplied
-    : Object.fromEntries(configured.declaration.kind.hostSlots.reads.map(name => [name, configured.config[name]]))
+    : Object.fromEntries(reads.map(name => [name, configured.config[name]]))
   const entries = Object.entries(values).flatMap(([name, value]) => {
     if (value && typeof (value as Evaluable).evaluate === 'function') {
       return [[name, value] as const]
@@ -149,12 +180,15 @@ function configuredPresentable(
   name: string,
   property: string,
   registerMount?: (configured: TaoConfiguredNavigation, mount: TaoNavigationValue) => void,
+  resolvePresentable?: (presentable: TaoPresentable) => TaoPresentable,
 ): TaoPresentable | TaoNavigationValue {
-  const mounted = isConfiguredNavigation(value) ? mountConfiguredNavigation(value, registerMount) : value
+  const mounted = isConfiguredNavigation(value)
+    ? mountConfiguredNavigation(value, registerMount, resolvePresentable)
+    : value
   if (!isPresentable(mounted)) {
     throw new Error(`${name} configuration '${property}' expects ui or nav.`)
   }
-  return mounted
+  return mounted.kind === 'view' && resolvePresentable ? resolvePresentable(mounted) : mounted
 }
 
 function configuredKey(value: unknown, name: string, property: string): string {

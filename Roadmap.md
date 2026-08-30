@@ -63,6 +63,19 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
+- [ ] Complete Tao Studio v1
+  - The local editor/preview/semantic-edit chassis and the fixture/scenario language, preview-manifest,
+    cell-matrix, focused WordFlower host, provider/environment wiring, and data-state foundations are
+    implemented, including promotion of current argument controls into an authored scenario and
+    snapshot-to-new-named-fixture capture/save through the source-action bus. Remaining work is exact
+    server-produced diff review, loading captured state in tests, and real browser/Electron proof. The
+    repository gate is green. Living
+    ledger:
+    `Docs/Roadmap/Tao Studio v1/Plan - Tao Studio v1.md`.
+  - A native phone as a Studio canvas is feasible for an explicitly instrumented Expo development
+    build, limited for internal preview builds, and rejected as an unrestricted production-code path.
+    No native transport is implemented and a real-iPhone spike remains required. Exploration:
+    `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`.
 - [ ] Implement a drag-and-drop example app
   - Drag and drop stress-tests more UI assumptions at once than anything else: gesture ownership
     (loop vs cell vs scroll container), drag previews, declarable drop targets (including
@@ -87,7 +100,9 @@ tests written in Tao, green in Current, for every construct introduced.
     `Docs/Roadmap/Tao Studio/Prompt - Tao Studio v1.md`. Absorbs the Ro's-stack simulation-mode item.
 - [ ] Implement secrets
 - [ ] Polish the IDE MVP
-  - Syntax, diagnostics, formatting, source actions, go-to-definition and references, and live preview once the runtime and test flow are stable.
+  - Syntax, diagnostics, formatting, source actions, go-to-definition, and references remain the IDE
+    surface. Tao Studio now owns the richer live-preview product rather than duplicating it inside the
+    IDE; finish the browser proof and capture workflow in the Studio workstream above.
 - [ ] Widen the HTTP datasource
   - The query-driven `Http` datasource landed with `Apps/HNReader`; see
     `Docs/Roadmap/HTTP Datasource/Overview - HTTP datasource.md` for the settled design and its
@@ -123,7 +138,12 @@ tests written in Tao, green in Current, for every construct introduced.
 
 Product and codebase backlog, unordered.
 
-- [ ] Add simulation mode: local datasources with simulated network delays, saved library states, and demo renders. Absorbed into Tao Studio v1 (`Docs/Roadmap/Tao Studio/Prompt - Tao Studio v1.md`).
+- [ ] Finish simulation mode in Tao Studio
+  - The versioned cell matrix, viewport/network contract, provider overlay, exact data snapshot codec,
+    fixture/scenario metadata, generated-host provider wiring, and captured-fixture save exist.
+    Remaining: review the exact server-produced capture diff, load captured state in tests, and finish browser
+    proof of observable delay, offline, failure, and cross-cell isolation. Viewport/network controls
+    exist, and Scheme is visibly inert until reactive design resolution exists.
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
 - [ ] Allow only one project definition per project root; scope workspace package lookup to that root, have the IDE extension manage one workspace per project folder, and stop requiring a Git repo at the project root.
@@ -145,7 +165,10 @@ Product and codebase backlog, unordered.
 - [ ] Apply the named-const export pattern across the repo, then rename modules to match their main export in one coordinated sweep.
 - [ ] Rename `gen` helper properties to capitalized names, and stop `fmt` from breaking `gen\`…\`` onto the next line.
 - [ ] Add generic compiled test declarations.
-- [ ] Enable over-the-network dev app running for iOS devices.
+- [ ] Enable over-the-network dev app running for iOS devices
+  - Start with the authenticated Expo-development-build Studio renderer described in the native-device
+    exploration; require foreground pairing, local-network permission, revision recovery, revocation,
+    and a real-iPhone validation pass. Do not add an unrestricted production remote-code path.
 
 ### Smaller follow-ups
 

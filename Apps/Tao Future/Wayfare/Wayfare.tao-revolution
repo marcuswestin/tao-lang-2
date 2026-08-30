@@ -102,7 +102,7 @@ app Wayfare {
    link JoinLink(Code secret) "/join/{Code}" -> {
       present JoinTrip(Code) as sheet
    }
-   public link SharedTripLink "/shared/{SharedTrip}" -> {
+   link SharedTripLink "/shared/{SharedTrip}" -> {
       present SharedTripScreen(SharedTrip) as root
    }
 }

@@ -12,6 +12,11 @@ export type RuntimeScreen = RuntimeTesting.Screen
 type RuntimeFiles = Record<string, string>
 type RuntimeScreenAssertions = (screen: RuntimeScreen) => void | Promise<void>
 type RuntimeScreensAssertions = (screens: Readonly<Record<string, RuntimeScreen>>) => void | Promise<void>
+let nextProjectId = 1
+
+function testProjectDeclaration(name: string): string {
+  return `project { id "tao-runtime-e2e-${nextProjectId++}" name "${name}" }`
+}
 
 /** registerRuntimeE2ELifecycle registers shared compiler and render cleanup for a runtime E2E suite. */
 export function registerRuntimeE2ELifecycle(): void {
@@ -52,7 +57,10 @@ export async function testCompileApps(
   appNames: readonly string[],
   testsFunction: RuntimeScreensAssertions,
 ): Promise<void> {
-  await withTaoFiles('tao-runtime-e2e-multi-', { 'App.tao': source }, async paths => {
+  await withTaoFiles('tao-runtime-e2e-multi-', {
+    'App.tao': source,
+    'Project.tao': testProjectDeclaration('Runtime E2E multi'),
+  }, async paths => {
     const screens: Record<string, RuntimeScreen> = {}
     for (const appName of appNames) {
       screens[appName] = await RuntimeTesting.compileAndRenderApp(paths['App.tao'], { appName })
@@ -67,7 +75,12 @@ export async function testCompileFiles(
   files: RuntimeFiles,
   testsFunction: RuntimeScreenAssertions,
 ): Promise<void> {
-  await withTaoFiles('tao-runtime-e2e-', files, async (_paths, rootDir) => {
+  await withTaoFiles('tao-runtime-e2e-', {
+    ...files,
+    ...(files['Project.tao'] === undefined
+      ? { 'Project.tao': testProjectDeclaration('Runtime E2E') }
+      : {}),
+  }, async (_paths, rootDir) => {
     const screen = await RuntimeTesting.compileAndRenderApp(FS.resolvePath(entryFile, rootDir))
 
     await testsFunction(screen)

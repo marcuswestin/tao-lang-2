@@ -207,6 +207,110 @@ Describe('Expo runtime', () => {
     }
   })
 
+  Test('mirrors browser Back, Forward, and ask response through the app reducer', async () => {
+    let popState: ((event: { state: unknown }) => void) | undefined
+    let removes = 0
+    const pushes: unknown[] = []
+    const replacements: unknown[] = []
+    const goes: number[] = []
+    let browserState: unknown = { router: 'preserved' }
+    const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        addEventListener(event: string, listener: (event: { state: unknown }) => void) {
+          Expect(event).toBe('popstate')
+          popState = listener
+        },
+        history: {
+          go: (delta: number) => goes.push(delta),
+          pushState: (state: unknown) => {
+            browserState = state
+            pushes.push(state)
+          },
+          replaceState: (state: unknown) => {
+            browserState = state
+            replacements.push(state)
+          },
+          get state() {
+            return browserState
+          },
+        },
+        removeEventListener(event: string, listener: (event: { state: unknown }) => void) {
+          Expect(event).toBe('popstate')
+          if (popState === listener) {
+            popState = undefined
+          }
+          removes += 1
+        },
+      },
+    })
+
+    try {
+      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+      const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+      let responseProps: TR.TaoProps | undefined
+      const confirm = TR.Navigation.View({
+        name: 'Confirm',
+        render: (_arguments, taoProps) => {
+          responseProps = taoProps
+          return createElement(RN.Text, null, 'Confirm')
+        },
+      })
+      const stack = configuredStack('BrowserHistoryTest', home)
+      const app = TR.Navigation.App({
+        name: 'Browser History App',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
+      })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+      act(() => {
+        TR.Navigation.PresentIn({ app, navigation: stack }, stack, detail, {})
+      })
+      ExpectScreen(screen).toHaveText('Detail')
+      Expect(replacements[0]).toMatchObject({
+        __taoNavigation: [Expect['any'](String), 0],
+        router: 'preserved',
+      })
+      Expect(pushes[0]).toMatchObject({
+        __taoNavigation: [Expect['any'](String), 1],
+        router: 'preserved',
+      })
+
+      act(() => popState?.({ state: replacements[0] }))
+      ExpectScreen(screen).toHaveText('Home')
+      act(() => popState?.({ state: pushes[0] }))
+      ExpectScreen(screen).toHaveText('Detail')
+
+      let answer: Promise<TR.Evaluable>
+      act(() => {
+        answer = TR.Navigation.Ask({ app, navigation: stack }, confirm, {})
+      })
+      ExpectScreen(screen).toHaveText('Confirm')
+      act(() => TR.Navigation.Respond(responseProps))
+      Expect((await answer!).evaluate().jsValue).toBe(null)
+      Expect(goes).toEqual([-1])
+      act(() => popState?.({ state: pushes[0] }))
+      act(() => popState?.({ state: pushes[1] }))
+      ExpectScreen(screen).toHaveText('Detail')
+      Expect(screen.queryByText('Confirm')).toBeNull()
+      Expect(replacements.at(-1)).toMatchObject({
+        __taoNavigation: [Expect['any'](String), 1],
+        router: 'preserved',
+      })
+
+      screen.unmount()
+      Expect(removes).toBe(1)
+    } finally {
+      if (originalWindow) {
+        Object.defineProperty(globalThis, 'window', originalWindow)
+      } else {
+        Reflect.deleteProperty(globalThis, 'window')
+      }
+    }
+  })
+
   Test('keeps one visible Back affordance above a covered depth-two stack', () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
     const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
@@ -277,6 +381,8 @@ Describe('Expo runtime', () => {
       TextInput: RN.TextInput,
       View: RN.View,
     })
+    let screen: ReturnType<typeof render> | undefined
+    let otherScreen: ReturnType<typeof render> | undefined
     try {
       const home = TR.Navigation.View({ name: 'Web home', render: () => createElement(RN.Text, null, 'Web home') })
       const detail = TR.Navigation.View({
@@ -306,7 +412,7 @@ Describe('Expo runtime', () => {
         navigator: () => stack,
         auxiliaries: () => ({ window }),
       })
-      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+      screen = render(createElement(TR.Navigation.AppHost, { app }))
       Expect(popListeners.size).toBe(1)
       Expect(replacements.length).toBeGreaterThan(0)
 
@@ -316,32 +422,14 @@ Describe('Expo runtime', () => {
       ExpectScreen(screen).toHaveText('Web detail')
       ExpectScreen(screen).toHaveText('Web notice')
 
-      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 1 } }))
+      act(() => popListeners.values().next().value!({ state: pushes[0] }))
       Expect(screen.queryByText('Web notice')).toBeNull()
       ExpectScreen(screen).toHaveText('Web detail')
-      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 0 } }))
+      act(() => popListeners.values().next().value!({ state: replacements[0] }))
       Expect(screen.queryByText('Web detail')).toBeNull()
       ExpectScreen(screen).toHaveText('Web home')
 
       act(() => TR.Navigation.PresentIn(undefined, stack, detail, {}))
-      act(() => TR.Navigation.PresentIn(undefined, stack, secondDetail, {}))
-      act(() => TR.Navigation.PresentIn(undefined, stack, thirdDetail, {}))
-      act(() => app.back())
-      act(() => app.back())
-      Expect(goes).toEqual([-1, -1])
-      ExpectScreen(screen).toHaveText('Web detail')
-      // Both delayed popstates correspond to the two programmatic moves above. Neither may
-      // reduce the still-retained first detail after Tao has already handled those Backs.
-      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 2 } }))
-      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 1 } }))
-      ExpectScreen(screen).toHaveText('Web detail')
-      // Forward cannot restore a popped occurrence yet, but it must never dispatch another Back.
-      // The adapter rejects the cursor move and suppresses the corrective popstate.
-      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 2 } }))
-      Expect(goes).toEqual([-1, -1, -1])
-      ExpectScreen(screen).toHaveText('Web detail')
-      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 1 } }))
-      ExpectScreen(screen).toHaveText('Web detail')
 
       const otherHome = TR.Navigation.View({
         name: 'Other web home',
@@ -358,24 +446,29 @@ Describe('Expo runtime', () => {
         auxiliaries: () => ({}),
       })
       const pushesBeforeOtherHost = pushes.length
-      const otherScreen = render(createElement(TR.Navigation.AppHost, { app: otherApp }))
+      otherScreen = render(createElement(TR.Navigation.AppHost, { app: otherApp }))
       Expect(popListeners.size).toBe(2)
 
       // Only the most recently mounted host owns browser entries. The retained host still updates
       // semantically, then resumes ownership at its current depth when the active host unmounts.
-      act(() => stack.present(secondDetail, {}))
+      act(() => TR.Navigation.PresentIn(undefined, stack, secondDetail, {}))
       Expect(pushes).toHaveLength(pushesBeforeOtherHost)
-      act(() => otherStack.present(otherDetail, {}))
+      act(() => TR.Navigation.PresentIn(undefined, otherStack, otherDetail, {}))
       Expect(pushes).toHaveLength(pushesBeforeOtherHost + 1)
       otherScreen.unmount()
+      otherScreen = undefined
       Expect(popListeners.size).toBe(1)
-      act(() => stack.present(thirdDetail, {}))
-      Expect(pushes).toHaveLength(pushesBeforeOtherHost + 2)
+      const pushesAfterResume = pushes.length
+      act(() => TR.Navigation.PresentIn(undefined, stack, thirdDetail, {}))
+      Expect(pushes).toHaveLength(pushesAfterResume + 1)
 
       Expect(popListeners.size).toBe(1)
       screen.unmount()
+      screen = undefined
       Expect(popListeners.size).toBe(0)
     } finally {
+      otherScreen?.unmount()
+      screen?.unmount()
       restoreRuntime.mockRestore()
       restoreGlobalProperty('history', previousHistory)
       restoreGlobalProperty('addEventListener', previousAdd)
@@ -438,6 +531,35 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Overlay count 1')
     fireEvent.press(screen.getByLabelText('Back'))
     Expect(screen.queryByText('Overlay count 1')).toBeNull()
+    ExpectScreen(screen).toHaveText('Home')
+  })
+
+  Test('reconciles native sheet dismissal through the owning app history funnel', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+    const sheet = TR.Navigation.View({ name: 'Sheet', render: () => createElement(RN.Text, null, 'Sheet') })
+    const stack = configuredStack('Sheet dismissal stack', home)
+    const app = TR.Navigation.App({
+      name: 'Sheet dismissal app',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
+    const goes: number[] = []
+    app.attachBrowserHistory({
+      go: delta => goes.push(delta),
+      push: () => {},
+      replace: () => {},
+      subscribe: () => () => {},
+    })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    act(() => {
+      TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, sheet, {}, { sheet: true })
+    })
+    act(() => {
+      screen.UNSAFE_getByType(RN.Modal).props.onRequestClose()
+    })
+
+    Expect(goes).toEqual([-1])
     ExpectScreen(screen).toHaveText('Home')
   })
 
@@ -878,11 +1000,17 @@ Describe('Expo runtime', () => {
       }
     `
 
-    await withTaoFiles('tao-runtime-first-app-identity-', { 'App.tao': appSource('First') }, async firstPaths => {
+    await withTaoFiles('tao-runtime-first-app-identity-', {
+      'App.tao': appSource('First'),
+      'Project.tao': 'project { id "runtime-first" name "Runtime first" }',
+    }, async firstPaths => {
       const first = await compileAndRenderApp(firstPaths['App.tao']!)
       await withTaoFiles(
         'tao-runtime-second-app-identity-',
-        { 'App.tao': appSource('Second') },
+        {
+          'App.tao': appSource('Second'),
+          'Project.tao': 'project { id "runtime-second" name "Runtime second" }',
+        },
         async secondPaths => {
           const generatedRoot = FS.resolvePath(
             `_gen_tao-app-test/app-identity/${RuntimeTesting.TestRunId.create()}`,

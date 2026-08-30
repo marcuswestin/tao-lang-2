@@ -69,6 +69,7 @@ Describe('tao test', () => {
 
   Test('reports preflight validation errors at their source file path', async () => {
     await withTaoFixture({
+      'Project.tao': 'project { id "tao-cli-test" name "Tao CLI test" }',
       'Main.test.tao': Text.stripIndent(`
         use BrokenApp from ./
 

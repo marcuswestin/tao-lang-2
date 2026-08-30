@@ -12,6 +12,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       {
         'Main.tao': `
           project {
+            id "workspace-package-test"
             name "Workspace Package Test"
             remote none
             license MIT
@@ -40,7 +41,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const validation = await workspace.validate(paths['Main.tao']!)
         const compiled = await workspace.compile(paths['Main.tao']!)
 
-        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(4)
+        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(5)
         Expect(parseResult.files.some(file => file.path.endsWith('/@tao/Prelude.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
         Expect([...new Set(compiled.files.map(file => file.sourcePath))].sort()).toEqual([
@@ -118,6 +119,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         Expect(loadedPaths.filter(path => path.startsWith(rootDir))).toEqual([
           FS.resolvePath('Apps/WordFlower/1 - Current/Valid.tao', rootDir),
           FS.resolvePath('Main.tao', rootDir),
+          FS.resolvePath('Project.tao', rootDir),
           FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
         ])
       },

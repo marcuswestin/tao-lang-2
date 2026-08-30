@@ -86,6 +86,12 @@
       "@runtime-toolchain/*": [
         "./runtime-toolchain/runtime-toolchain-src/*"
       ],
+      "@studio": [
+        "./studio/studio-src/studio.ts"
+      ],
+      "@studio/*": [
+        "./studio/studio-src/*"
+      ],
       "@stdlib": [
         "./stdlib/stdlib-src/stdlib.ts"
       ],

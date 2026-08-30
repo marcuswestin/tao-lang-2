@@ -19,6 +19,7 @@ import {
   metadataOf,
   RuntimeEntityHandle,
   type RuntimeEntityMetadata,
+  type TaoEntityReferenceSnapshot,
 } from './TR-data-entity'
 import { DataLoadRecovery } from './TR-data-load-recovery'
 import {
@@ -97,6 +98,36 @@ export class RuntimeDataSchema {
   }
 
   readonly snapshot = (): number => this.version
+
+  serializeReference(handle: RuntimeEntityHandle): TaoEntityReferenceSnapshot {
+    const metadata = this.requireOwnedHandle(handle)
+    const token = this.connection.referenceToken?.({ entity: metadata.entity, id: metadata.id, schema: this.name })
+    if (token === undefined) {
+      throw new Error(`Datasource provider for '${this.name}' does not support restoration references.`)
+    }
+    return {
+      entity: metadata.entity,
+      provider: this.referenceProviderIdentity(),
+      schema: this.name,
+      token,
+    }
+  }
+
+  restoreReference(reference: TaoEntityReferenceSnapshot): RuntimeEntityHandle | undefined {
+    if (reference.schema !== this.name || reference.provider !== this.referenceProviderIdentity()) {
+      return undefined
+    }
+    this.requireEntity(reference.entity)
+    const id = this.connection.resolveReference?.({
+      entity: reference.entity,
+      schema: reference.schema,
+      token: reference.token,
+    })
+    if (id === undefined) {
+      throw new Error(`Datasource provider for '${this.name}' cannot resolve restoration references.`)
+    }
+    return this.handle(reference.entity, id)
+  }
 
   private async recoverAfterLoadFailure(destructive: boolean): Promise<void> {
     const connection = this.connection
@@ -892,6 +923,18 @@ export class RuntimeDataSchema {
       throw new Error(`Datasource ${declarationName} configuration 'StorageKey' expects text.`)
     }
     return configured ?? this.definition.name
+  }
+
+  private referenceProviderIdentity(): string {
+    const binding = this.providerBinding
+    if (typeof binding === 'object') {
+      const canonical = binding.declaration.canonicalIdentity?.canonical
+      if (canonical) {
+        return canonical
+      }
+      throw new Error(`Datasource declaration '${binding.declaration.name}' has no canonical identity.`)
+    }
+    return String(binding ?? 'unbound')
   }
 
   private storedRow(entity: string, id: string): StoredRow | undefined {

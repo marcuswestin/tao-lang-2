@@ -1,4 +1,4 @@
-import Runtime from '@runtime-toolchain'
+import Runtime, { type GeneratePreviewOptions } from '@runtime-toolchain'
 import TR from '@runtime/TR'
 import { Assert, CLI, FS, Repo } from '@shared'
 import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
@@ -6,6 +6,7 @@ import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@sha
 const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
 const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
 const typeSystemTestsPath = Repo.resolvePath('Apps/Test Apps/Type System Tests/Type System Tests.tao')
+const previewProject = '/workspace/preview-project'
 const runtimeRoots: string[] = []
 
 async function createRuntimePackageRoot(): Promise<string> {
@@ -14,12 +15,37 @@ async function createRuntimePackageRoot(): Promise<string> {
   return runtimePackageRoot
 }
 
+async function createExecutableRuntimePackageRoot(name: string): Promise<string> {
+  const executableRoot = Repo.resolvePath(`packages/runtime-toolchain/.artifacts/${name}`)
+  await FS.mkdir(executableRoot)
+  const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('runtime-', executableRoot))
+  runtimeRoots.push(runtimePackageRoot)
+  return runtimePackageRoot
+}
+
 function generatedAppPath(runtimePackageRoot: string): string {
   return FS.resolvePath('_gen_tao-app/App.tsx', runtimePackageRoot)
 }
 
+function generatedPreviewPath(runtimePackageRoot: string, relativePath: string): string {
+  return FS.resolvePath(`_gen_tao-app/${relativePath}`, runtimePackageRoot)
+}
+
+function previewOptions(
+  revision: number,
+  overrides: Partial<GeneratePreviewOptions> = {},
+): GeneratePreviewOptions {
+  return {
+    project: previewProject,
+    revision,
+    sourceVersions: { 'Main.tao': `text-v${revision}` },
+    ...overrides,
+  }
+}
+
 AfterEach(async () => {
   for (const root of runtimeRoots.splice(0)) {
+    await Runtime.resetStudioPreviewSession({ runtimePackageRoot: root })
     await FS.remove(root)
   }
 })
@@ -63,6 +89,243 @@ Describe('Tao runtime app generation', () => {
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
   })
 
+  Test('generates a stable preview root with a caller-supplied revision', async () => {
+    const runtimePackageRoot = await createExecutableRuntimePackageRoot('preview-bridge-tests')
+
+    await withTaoFiles(
+      'tao-runtime-preview-root-',
+      {
+        'Main.tao': 'app Preview { view Main }\nview Main() { render inject ```ts return null ``` }',
+      },
+      async paths => {
+        const generated = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(7),
+          runtimePackageRoot,
+        })
+        const stableRoot = await FS.readText(generated.outputPath)
+        const taoAppPath = generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx')
+        const revisionPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioRevision.ts')
+        const projectPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioProject.ts')
+
+        Expect(generated.preview).toEqual({
+          appName: 'Preview',
+          project: previewProject,
+          revision: 7,
+          sourceVersions: { [`${previewProject}/Main.tao`]: 'text-v7' },
+        })
+        Expect(generated.previewRevision).toBe(7)
+        Expect(generated.studioManifest?.views.map(view => view.name)).toEqual(['Main'])
+        Expect(generated.code).toBe(stableRoot)
+        Expect(stableRoot).toContain("import TR from '@runtime/TR'")
+        Expect(stableRoot).toContain("import TaoApp from './TaoApp'")
+        Expect(stableRoot).toContain("import TaoStudioProject from './TaoStudioProject'")
+        Expect(stableRoot).toContain("import TaoStudioRevision from './TaoStudioRevision'")
+        Expect(stableRoot).toContain("params.get('taoStudioParentOrigin')")
+        Expect(stableRoot).toContain("params.get('taoStudioPreviewInstanceId')")
+        Expect(stableRoot).toContain("params.get('taoStudioCell') === '1'")
+        Expect(stableRoot).toContain("new URL('/api/preview/cell/bootstrap'")
+        Expect(stableRoot).toContain('setBootstrapError(error)')
+        Expect(stableRoot).toContain('<TR.Studio.Pending />')
+        Expect(stableRoot).toContain('<TR.Studio.Failure error={bootstrapError} />')
+        Expect(stableRoot).toContain('<TR.Studio.ErrorBoundary')
+        Expect(stableRoot).toContain('<StudioPreviewContent cell={cell} config={TaoStudioPreviewConfig} />')
+        Expect(stableRoot).toContain('if (TaoStudioPreviewConfig === undefined)')
+        Expect(stableRoot).toContain('return <TaoApp />')
+        Expect(stableRoot).toContain('<TR.Studio.PreviewBridge config={config}>')
+        Expect(stableRoot).toContain('</TR.Studio.PreviewBridge>')
+        Expect(await FS.readText(taoAppPath)).toContain('export default TaoApps["Preview"]')
+        Expect(await FS.readText(projectPath)).toContain(
+          JSON.stringify({
+            appName: 'Preview',
+            project: previewProject,
+          }),
+        )
+        Expect(await FS.readText(revisionPath)).toContain(JSON.stringify({
+          compileRevision: 7,
+          sourceVersions: { [`${previewProject}/Main.tao`]: 'text-v7' },
+        }))
+
+        const stableRootWrite = await FS.modifiedTimeMs(generated.outputPath)
+        const stableProjectWrite = await FS.modifiedTimeMs(projectPath)
+        const next = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(8),
+          runtimePackageRoot,
+        })
+
+        Expect(next.previewRevision).toBe(8)
+        Expect(await FS.modifiedTimeMs(generated.outputPath)).toBe(stableRootWrite)
+        Expect(await FS.modifiedTimeMs(projectPath)).toBe(stableProjectWrite)
+        Expect(await FS.readText(generated.outputPath)).toBe(stableRoot)
+        Expect(await FS.readText(revisionPath)).toContain('"compileRevision":8')
+        Expect(await FS.readText(revisionPath)).toContain('text-v8')
+
+        const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
+        Assert(typecheck.exitCode === 0, 'generated Studio preview bridge type-checks', {
+          stderr: typecheck.stderr,
+          stdout: typecheck.stdout,
+        })
+
+        const standard = await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
+        Expect(standard.previewRevision).toBe(undefined)
+        Expect(standard.studioManifest).toBeUndefined()
+        Expect(await FS.readText(standard.outputPath)).toBe(standard.code)
+        Expect(standard.code).not.toContain("import TaoApp from './TaoApp'")
+        Expect(await FS.exists(taoAppPath)).toBe(false)
+        Expect(await FS.exists(projectPath)).toBe(false)
+        Expect(await FS.exists(revisionPath)).toBe(false)
+      },
+    )
+  })
+
+  Test('preserves multi-app selection for stable previews', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+
+    await withTaoFiles(
+      'tao-runtime-preview-multi-app-',
+      {
+        'Main.tao': `
+          app First { view Main }
+          app Second { view Main }
+          view Main() { render inject \`\`\`ts return null \`\`\` }
+        `,
+      },
+      async paths => {
+        await Runtime.generateApp(paths['Main.tao'], {
+          appName: 'Second',
+          preview: previewOptions(1),
+          runtimePackageRoot,
+        })
+
+        const taoApp = await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))
+        Expect(taoApp).toContain('"First": TaoApp_First')
+        Expect(taoApp).toContain('"Second": TaoApp_Second')
+        Expect(taoApp).toContain('export default TaoApps["Second"]')
+      },
+    )
+  })
+
+  Test('generates the real WordFlower scenario as an isolated focused-view host', async () => {
+    const runtimePackageRoot = await createExecutableRuntimePackageRoot('wordflower-studio-host-tests')
+    const appPath = FS.resolvePath('WordFlower.tao', wordFlowerDir)
+
+    const generated = await Runtime.generateApp(appPath, {
+      appName: 'WordFlower',
+      preview: previewOptions(1, { project: wordFlowerDir }),
+      runtimePackageRoot,
+    })
+
+    const scenario = generated.studioManifest?.scenarios.find(candidate => candidate.name === 'WorkspaceRow.novel')
+    const taoApp = await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))
+    const stableRoot = await FS.readText(generated.outputPath)
+    Expect(scenario?.subject.kind).toBe('view')
+    Expect(taoApp).toContain('TR.Studio.Environment.useScenario()')
+    Expect(taoApp).toContain(JSON.stringify(scenario?.subject.subjectId))
+    Expect(taoApp).toContain('__tao: { app: _TaoAppDefinition_WordFlower }')
+    Expect(stableRoot).toContain('<TR.Studio.Environment.Host cell={TaoStudioCell}>')
+
+    const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
+    Assert(typecheck.exitCode === 0, 'generated WordFlower Studio host type-checks', {
+      stderr: typecheck.stderr,
+      stdout: typecheck.stdout,
+    })
+  })
+
+  Test('requires monotonic revisions and a stable project/app identity until an explicit reset', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+
+    await withTaoFiles(
+      'tao-runtime-preview-session-',
+      {
+        'Main.tao': `
+          app First { view Main }
+          app Second { view Main }
+          view Main() { render inject \`\`\`ts return null \`\`\` }
+        `,
+      },
+      async paths => {
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          appName: 'First',
+          preview: previewOptions(4, { project: '/workspace/first' }),
+          runtimePackageRoot,
+        })
+        const publishedGraph = await generatedGraph(runtimePackageRoot)
+
+        await Expect(Runtime.generateApp(paths['Main.tao'], {
+          appName: 'First',
+          preview: previewOptions(4, { project: '/workspace/first' }),
+          runtimePackageRoot,
+        })).rejects.toThrow('revision increases monotonically')
+        await Expect(Runtime.generateApp(paths['Main.tao'], {
+          appName: 'First',
+          preview: previewOptions(5, { project: '/workspace/other' }),
+          runtimePackageRoot,
+        })).rejects.toThrow('retains its project and app identity until reset')
+        await Expect(Runtime.generateApp(paths['Main.tao'], {
+          appName: 'Second',
+          preview: previewOptions(5, { project: '/workspace/first' }),
+          runtimePackageRoot,
+        })).rejects.toThrow('retains its project and app identity until reset')
+        Expect(await generatedGraph(runtimePackageRoot)).toEqual(publishedGraph)
+        Expect(first.preview).toMatchObject({ appName: 'First', project: '/workspace/first', revision: 4 })
+
+        await Runtime.resetStudioPreviewSession({ runtimePackageRoot })
+        const reset = await Runtime.generateApp(paths['Main.tao'], {
+          appName: 'Second',
+          preview: previewOptions(1, { project: '/workspace/other' }),
+          runtimePackageRoot,
+        })
+
+        Expect(reset.preview).toMatchObject({ appName: 'Second', project: '/workspace/other', revision: 1 })
+        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoStudioProject.ts'))).toContain(
+          '"appName":"Second"',
+        )
+      },
+    )
+  })
+
+  Test('retains the last successful preview graph and publication when a draft does not compile', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+
+    await withTaoFiles(
+      'tao-runtime-preview-invalid-draft-',
+      {
+        'Main.tao': 'app Preview { view Main }\nview Main() { render inject ```ts return null ``` }',
+      },
+      async paths => {
+        await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2),
+          runtimePackageRoot,
+        })
+        const lastGoodGraph = await generatedGraph(runtimePackageRoot)
+
+        await FS.writeText(paths['Main.tao'], 'app Preview {')
+        await Expect(Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(3),
+          runtimePackageRoot,
+        })).rejects.toThrow()
+
+        Expect(await generatedGraph(runtimePackageRoot)).toEqual(lastGoodGraph)
+
+        await FS.writeText(
+          paths['Main.tao'],
+          'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Recovered</RN.Text> ``` }',
+        )
+        const recovered = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(3),
+          runtimePackageRoot,
+        })
+
+        Expect(recovered.preview).toMatchObject({ appName: 'Preview', project: previewProject, revision: 3 })
+        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoStudioRevision.ts'))).toContain(
+          '"compileRevision":3',
+        )
+        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx'))).toContain(
+          'Recovered',
+        )
+      },
+    )
+  })
+
   Test('removes stale generated module files and empty directories when imports change', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
 
@@ -104,6 +367,47 @@ Describe('Tao runtime app generation', () => {
           generatedFiles.push(FS.relativePath(generatedRoot, path))
         }
         Expect(generatedFiles.toSorted()).toEqual(['App.injection-1.tsx', 'App.tsx'])
+      },
+    )
+  })
+
+  Test('serializes overlapping preview generation and publishes the latest complete graph', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-concurrent-preview-generation-',
+      {
+        'Large.tao': injectionHeavyApp('Preview', 120),
+        'Small.tao': injectionHeavyApp('Preview', 1),
+      },
+      async paths => {
+        const largeGeneration = Runtime.generateApp(paths['Large.tao'], {
+          preview: previewOptions(20),
+          runtimePackageRoot,
+        })
+        const smallGeneration = Runtime.generateApp(paths['Small.tao'], {
+          preview: previewOptions(21),
+          runtimePackageRoot,
+        })
+        const [, generatedSmall] = await Promise.all([largeGeneration, smallGeneration])
+
+        Expect(generatedSmall.previewRevision).toBe(21)
+        Expect(await FS.readText(generatedSmall.outputPath)).toBe(generatedSmall.code)
+        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoStudioRevision.ts'))).toContain(
+          '"compileRevision":21',
+        )
+        const generatedFiles: string[] = []
+        const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
+        for await (const path of FS.walk(generatedRoot)) {
+          generatedFiles.push(FS.relativePath(generatedRoot, path))
+        }
+        Expect(generatedFiles.toSorted()).toEqual([
+          'App.injection-1.tsx',
+          'App.tsx',
+          'TaoApp.tsx',
+          'TaoStudioManifest.ts',
+          'TaoStudioProject.ts',
+          'TaoStudioRevision.ts',
+        ])
       },
     )
   })
@@ -270,6 +574,15 @@ async function findGeneratedModule(runtimePackageRoot: string, fileName: string)
   }
   Assert.defined(foundPath, 'generated module exists', { fileName })
   return foundPath
+}
+
+async function generatedGraph(runtimePackageRoot: string): Promise<Record<string, string>> {
+  const outputRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
+  const graph: Record<string, string> = {}
+  for await (const path of FS.walk(outputRoot)) {
+    graph[FS.relativePath(outputRoot, path)] = await FS.readText(path)
+  }
+  return graph
 }
 
 async function typecheckGeneratedApp(

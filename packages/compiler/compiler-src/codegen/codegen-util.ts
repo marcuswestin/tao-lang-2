@@ -4,6 +4,13 @@ import { Assert } from '@shared'
 /** Compiled declares a structured generated source node. */
 export type Compiled = Langium.GeneratorNode
 
+/** CodegenOptions carries explicit per-compilation generation modes through recursive emitters. */
+export type CodegenOptions = {
+  studioDataCatalog?: boolean
+  studio?: boolean
+  studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
+}
+
 /** GenValue declares values accepted inside generated source template substitutions. */
 type GenValue = Langium.Generated | number | boolean | null
 

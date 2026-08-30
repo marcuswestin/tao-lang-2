@@ -29,6 +29,34 @@ start-local-instantdb:
 stop-local-instantdb:
     {{ LOCAL_INSTANTDB_COMPOSE }} down
 
+# Launch Tao Studio against a project folder
+studio project=".":
+    ./dev studio "{{ project }}"
+
+# Launch Tao Studio in its local Electron wrapper
+studio-native project=".":
+    ./dev studio-native "{{ project }}"
+
+# Run the focused Tao Studio package suite
+studio-test:
+    bun test packages/studio/studio-tests
+
+# Run an explicit slow Studio smoke file in an isolated lane
+studio-smoke test_file run_id="local":
+    ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
+
+# Run an explicit slow Studio smoke through the local Electron wrapper
+studio-smoke-native test_file run_id="local":
+    ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
+
+# Prove Studio compile/edit/undo against the real HNReader app
+studio-proof-real-app run_id="local":
+    ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
+
+# Package the local macOS Tao Studio wrapper
+studio-package output_root=".artifacts/build/studio-native":
+    ./dev package-studio-native --output-root "{{ output_root }}"
+
 # Install development dependencies
 deps:
     bun install

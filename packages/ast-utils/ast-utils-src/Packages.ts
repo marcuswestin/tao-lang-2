@@ -70,7 +70,12 @@ export namespace Packages {
     return {
       async intrinsicFilePaths() {
         const prelude = FS.resolvePath('@tao/Prelude.tao', context.stdlibRoot)
-        return await FS.isFile(prelude) ? [prelude] : []
+        const stdlibProject = FS.resolvePath('Project.tao', context.stdlibRoot)
+        const project = await ancestorProjectFile(context.index.projectRoot)
+        return await Promise.all(
+          [project, stdlibProject, prelude].map(async path => path && await FS.isFile(path) ? path : undefined),
+        )
+          .then(paths => paths.filter((path): path is string => path !== undefined))
       },
       collectTargetDeclarations(useStatement, request) {
         const resolution = resolveUse(context, useStatement, request.fromFilePath)
@@ -91,6 +96,23 @@ export namespace Packages {
         return await candidateFilePaths(resolveUse(context, useStatement, request.fromFilePath))
       },
     }
+  }
+
+  async function ancestorProjectFile(root: string): Promise<string | undefined> {
+    let current = root
+    let previous = ''
+    while (current !== previous) {
+      const project = FS.resolvePath('Project.tao', current)
+      if (await FS.isFile(project)) {
+        return project
+      }
+      if (await FS.isDirectory(FS.resolvePath('.git', current))) {
+        return undefined
+      }
+      previous = current
+      current = FS.dirname(current)
+    }
+    return undefined
   }
 
   /** createContext creates shared package lookup state for one project root. */

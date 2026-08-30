@@ -24,6 +24,10 @@ import { navigationValidationChecks } from './validators/navigation-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { ResponsesValidator } from './validators/responses-validator'
+import {
+  scenarioValidationChecks,
+  validateScenarioFile,
+} from './validators/scenarios-validator'
 import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
 import { typeValidationChecks } from './validators/types-validator'
@@ -61,6 +65,7 @@ const nodeValidationChecks = NodeValidation.compile(
     bridgeValidationChecks,
     usePackageValidationChecks,
     configuredValueValidationChecks,
+    scenarioValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
 )
 
@@ -69,6 +74,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   validateProjectFile(file, ctx)
   AliasesValidator.validateFile(file, ctx)
   validateDataFile(file, ctx)
+  validateScenarioFile(file, ctx)
   validatePreludeFile(file, ctx)
   const nodes = AST.streamAllContents(file)
   NodeValidation.validate(nodes, file, ctx, nodeValidationChecks)

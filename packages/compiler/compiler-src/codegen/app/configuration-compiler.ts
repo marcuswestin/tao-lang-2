@@ -2,6 +2,7 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
+import { compileDeclarationIdentity } from './declaration-identity'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ConfigurationCompiler = {
@@ -17,10 +18,12 @@ export const ConfigurationCompiler = {
       ? gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Navigation.Declaration(
           ${gen.jsLiteral(declaration.name)},
           ${factory},
+          ${compileDeclarationIdentity(declaration)},
         )`
       : gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Data.Declaration(
           ${gen.jsLiteral(declaration.name)},
           ${factory},
+          ${compileDeclarationIdentity(declaration)},
         )`
   },
 

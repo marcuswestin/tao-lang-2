@@ -4,6 +4,7 @@ import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { configurationRuntimeBindingName } from './configuration-compiler'
+import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
@@ -334,16 +335,7 @@ export const ExpressionsCompiler = {
 function compileNavigationDescriptor(
   declaration: AST.ViewDeclaration,
 ): Compiled {
-  return gen`TR.Navigation.View({
-      name: ${gen.jsLiteral(declaration.name)},
-      render: (_NavigationArguments, _NavigationProps, _NavigationHost) =>
-        <${gen.scopeName(declaration)}${
-    gen.join(AST.parametersOf(declaration), parameter => {
-      const name = Type.parameterName(parameter)
-      return gen` ${name}={_NavigationArguments[${gen.jsLiteral(name)}]}`
-    }, { separator: '' })
-  } __tao={_NavigationProps} __taoHost={_NavigationHost} />,
-    })`
+  return gen`TR.Navigation.ViewReference(${compileDeclarationIdentity(declaration)})`
 }
 
 function itemPropertyBindingPairs(

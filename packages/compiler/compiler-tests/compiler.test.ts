@@ -64,7 +64,7 @@ Describe('compiler: language lowering', () => {
     `)
 
     Expect(compiled.appNames).toEqual(['Product'])
-    Expect(compiled.code).toContain('declaration: TR.Navigation.AppDeclaration("Product")')
+    Expect(compiled.code).toContain('declaration: TR.Navigation.AppDeclaration("Product", TR.Navigation.Identity(')
     Expect(compiled.code).toContain('name: TR.Value("Reusable").evaluate().jsValue as string')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_StackNav, {')
     Expect(compiled.code).toContain('<TR.Navigation.AppHost')
@@ -77,9 +77,31 @@ Describe('compiler: language lowering', () => {
 
     Expect(compiled.appNames).toEqual(['HeadApp', 'HeadWithApp', 'LetApp', 'LetWithApp'])
     for (const name of compiled.appNames) {
-      Expect(compiled.code).toContain(`TR.Navigation.AppDeclaration("${name}")`)
+      Expect(compiled.code).toContain(`TR.Navigation.AppDeclaration("${name}", TR.Navigation.Identity(`)
     }
     Expect(compiled.code).toContain('export default TaoApps["LetWithApp"]')
+  })
+
+  Test('compiles restoration policy and variant-specific storage identity into the app host definition', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+      use StackNav from @tao/nav
+      app Base {
+        Name "Base"
+        Navigator StackNav { Initial Home }
+        Restore automatic { Exclude sheets, menus }
+      }
+      app Preview = Base with { Restore fresh }
+      view Home() { Title "Home" render Empty() }
+      view Empty() { render inject ${tsFence} return null ${fence} }
+    `,
+      { appName: 'Preview' },
+    )
+
+    Expect(compiled.code).toContain('exclusions: ["sheets","menus"]')
+    Expect(compiled.code).toContain('mode: "automatic"')
+    Expect(compiled.code).toContain('mode: "fresh"')
+    Expect(compiled.code).toContain('variant: "Preview"')
   })
 
   Test('compiles derived item slots, inferred bare values, and generic immutable patches', async () => {
@@ -345,7 +367,9 @@ Describe('compiler: language lowering', () => {
       /TR\.Navigation\.Replace\(\s+_ViewProps\.__tao,\s+_Scope\.ResetNavigator\.evaluate\(\),\s+_Scope\.NavigationApp,/
         .test(compiled.code),
     ).toBe(true)
-    Expect(compiled.code).toContain('declaration: TR.Navigation.AppDeclaration("NavigationApp")')
+    Expect(compiled.code).toContain(
+      'declaration: TR.Navigation.AppDeclaration("NavigationApp", TR.Navigation.Identity(',
+    )
     Expect(compiled.code).toContain('declaration: _Scope.NavigationApp.declaration')
     Expect(compiled.code).not.toContain('key: "NavigationApp"')
     Expect(compiled.code).toContain('<TR.Navigation.AppHost')
@@ -466,7 +490,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Navigation.Patch(_Scope.MainNavBase.evaluate(), {')
     Expect(compiled.code).toContain('"@other": {')
     Expect(compiled.code).toContain('"Label": TR.Value("Other")')
-    Expect(compiled.code).toContain('"Content": TR.Navigation.View({')
+    Expect(compiled.code).toContain('"Content": TR.Navigation.ViewReference(TR.Navigation.Identity(')
   })
 
   Test('compiles typed dynamic action arguments in source order', async () => {

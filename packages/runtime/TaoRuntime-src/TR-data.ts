@@ -15,6 +15,9 @@ import {
 } from './TR-data-registry'
 import { RuntimeDataSchema } from './TR-data-schema'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
+import type { TaoDeclarationIdentity } from './TR-navigation-identity'
+import { canonicalDescriptor } from './TR-navigation-identity'
+import { StudioEnvironmentControls } from './TR-studio-environment'
 
 export { testProvider } from './TR-data-provider'
 
@@ -109,6 +112,9 @@ export type TaoFillOps = {
  */
 export type TaoDataConnection = {
   close?(): void
+  /** referenceToken and resolveReference are the optional, versioned restoration capability. */
+  referenceToken?(reference: { entity: string; id: string; schema: string }): string
+  resolveReference?(reference: { entity: string; schema: string; token: string }): string | undefined
   /**
    * fill is the remote half of a query-driven connection: the schema offers each activated query
    * descriptor, and the connection fetches and upserts rows. The store keeps evaluating every
@@ -155,6 +161,7 @@ export type TaoDataProviderFactory = () => TaoDataProvider
 
 /** TaoDatasourceDeclaration binds one immutable Tao declaration identity to its injected provider. */
 export type TaoDatasourceDeclaration = Readonly<{
+  canonicalIdentity?: TaoDeclarationIdentity
   identity: symbol
   name: string
   provider: TaoDataProvider
@@ -164,20 +171,35 @@ type TaoDatasourceConfiguration = Readonly<Record<string, unknown>>
 
 /** TaoConfiguredDatasource is an immutable declaration-owned provider configuration. */
 export type TaoConfiguredDatasource = Readonly<{
+  bindingIdentity(): string | undefined
   config: TaoDatasourceConfiguration
   declaration: TaoDatasourceDeclaration
   evaluate(): TaoConfiguredDatasource
 }>
 
+export type TaoKeyValueStorage = {
+  getItem(key: string): Promise<string | null>
+  removeItem?(key: string): Promise<void>
+  setItem(key: string, value: string): Promise<void>
+}
+
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
+  const studioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
+  const boundSource = React.useMemo<TaoConfiguredDatasource>(() =>
+    studioProvider === source.declaration.provider
+      ? source
+      : DataControls.Configure(
+        Object.freeze({ ...source.declaration, provider: studioProvider }),
+        { ...source.config },
+      ), [source, studioProvider])
   // The app root reconstructs the configured value per render, so the effect re-runs on each
   // render's fresh `config` object and BindConfigured compares evaluated configuration values to
   // make an unchanged rebind a cheap no-op.
   React.useLayoutEffect(() => {
-    DataControls.BindConfigured(schema, source)
-  }, [schema, source.declaration, source.config])
+    DataControls.BindConfigured(schema, boundSource)
+  }, [schema, boundSource.declaration, boundSource.config])
 }
 
 /** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
@@ -237,8 +259,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
 export const DataControls = {
   /** Declaration binds one Tao declaration identity to its package-scope provider implementation. */
-  Declaration(name: string, provider: TaoDataProvider): TaoDatasourceDeclaration {
-    return Object.freeze({ identity: Symbol(name), name, provider })
+  Declaration(
+    name: string,
+    provider: TaoDataProvider,
+    canonicalIdentity?: TaoDeclarationIdentity,
+  ): TaoDatasourceDeclaration {
+    return Object.freeze({
+      ...(canonicalIdentity ? { canonicalIdentity } : {}),
+      identity: Symbol(name),
+      name,
+      provider,
+    })
   },
 
   /** Configure creates an immutable declaration-owned datasource value. */
@@ -248,6 +279,7 @@ export const DataControls = {
   ): TaoConfiguredDatasource {
     let configured: TaoConfiguredDatasource
     configured = Object.freeze({
+      bindingIdentity: () => datasourceBindingIdentity(declaration, config),
       config: Object.freeze({ ...config }),
       declaration,
       evaluate: () => configured,
@@ -297,6 +329,7 @@ export const DataControls = {
       if (activationKey === undefined) {
         return
       }
+
       return schema.activateQuery(livePlan.current)
     }, [schema, activationKey])
     return value(schema.query(plan))
@@ -375,5 +408,54 @@ export const DataControls = {
     setDataTestStatus(status, message)
   },
 } as const
+
+function datasourceBindingIdentity(
+  declaration: TaoDatasourceDeclaration,
+  config: Record<string, unknown>,
+): string | undefined {
+  if (!declaration.canonicalIdentity) {
+    return undefined
+  }
+  try {
+    return canonicalDescriptor(
+      declaration.canonicalIdentity,
+      canonicalDatasourceValue(config, new Set()) as Readonly<Record<string, unknown>>,
+    ).canonical
+  } catch {
+    // An opaque provider configuration cannot safely share persisted entity tokens with another
+    // binding, so restoration is disabled instead of falling back to declaration-only identity.
+    return undefined
+  }
+}
+
+function canonicalDatasourceValue(value: unknown, ancestors: Set<object>): unknown {
+  if (typeof value !== 'object' || value === null) {
+    return value
+  }
+  if ('evaluate' in value && typeof value.evaluate === 'function') {
+    return canonicalDatasourceValue(value.evaluate().jsValue, ancestors)
+  }
+  if (ancestors.has(value)) {
+    throw new Error('Datasource configuration is cyclic.')
+  }
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      return value.map(item => canonicalDatasourceValue(item, ancestors))
+    }
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error('Datasource configuration contains an opaque host value.')
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        canonicalDatasourceValue(item, ancestors),
+      ]),
+    )
+  } finally {
+    ancestors.delete(value)
+  }
+}
 
 export type TaoDataSchema = RuntimeDataSchema

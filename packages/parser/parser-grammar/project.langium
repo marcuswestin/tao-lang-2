@@ -12,7 +12,10 @@ ProjectBlock:
     '{' statements+=ProjectStatement* '}';
 
 ProjectStatement:
-    ProjectName | ProjectRemote | ProjectLicense | ProjectRequires;
+    ProjectId | ProjectName | ProjectRemote | ProjectLicense | ProjectRequires;
+
+ProjectId:
+    'id' value=STRING;
 
 ProjectName:
     'name' value=STRING;

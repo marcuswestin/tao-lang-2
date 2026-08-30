@@ -100,6 +100,10 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
               }
             })
           }),
+        // The full envelope round-trips row ids untouched, so identity tokens restore across
+        // relaunches exactly as for the local snapshot providers.
+        referenceToken: reference => reference.id,
+        resolveReference: reference => reference.token,
         save: async snapshot => {
           await db.transact(
             db.tx.taoSnapshots[entityId]!.update({

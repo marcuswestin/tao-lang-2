@@ -4,6 +4,7 @@ import type {
   TaoDataProviderContext,
   TaoDataProviderFactory,
   TaoDataSchemaDefinition,
+  TaoKeyValueStorage,
 } from './TR-data'
 
 const conformanceSchema: TaoDataSchemaDefinition = {
@@ -103,6 +104,8 @@ export function testDataConnection(initial?: string): TaoDataConnection {
   let stored = initial
   return {
     load: () => stored,
+    referenceToken: reference => reference.id,
+    resolveReference: reference => reference.token,
     save: value => {
       stored = value
     },
@@ -120,4 +123,12 @@ export function UnboundConnection(schemaName: string): TaoDataConnection {
       throw new Error(message)
     },
   }
+}
+
+/** platformKeyValueStorage exposes the shared host storage boundary to navigation persistence. */
+export function platformKeyValueStorage(): TaoKeyValueStorage {
+  const required = require('@react-native-async-storage/async-storage') as
+    | TaoKeyValueStorage
+    | { default: TaoKeyValueStorage }
+  return 'default' in required ? required.default : required
 }

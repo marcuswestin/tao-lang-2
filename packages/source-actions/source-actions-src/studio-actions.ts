@@ -1,0 +1,1002 @@
+import { ASTUtils } from '@ast-utils'
+import Formatter from '@formatter'
+import { AST } from '@parser'
+import { Errors, Switch } from '@shared'
+import { assertNoSyntaxErrors } from './source-actions-utils'
+
+export type StudioComponentKind = 'Button' | 'Number' | 'Stack' | 'Text'
+
+/** StudioInsertComponentPatchRequest inserts one constrained palette choice into a Tao render block. */
+export type StudioInsertComponentPatchRequest = {
+  component: StudioComponentKind
+  kind: 'insert-component'
+}
+
+/** StudioInsertProjectViewPatchRequest inserts a zero-argument project view invocation into a Tao render block. */
+export type StudioInsertProjectViewPatchRequest = {
+  kind: 'insert-project-view'
+  viewName: string
+}
+
+export type StudioLayoutAlignment = 'baseline' | 'bottom' | 'center' | 'left' | 'right' | 'top'
+export type StudioLayoutContentTerm = StudioLayoutAlignment | 'spread' | 'spread-balanced' | 'spread-inset' | 'stretch'
+export type StudioLayoutSpacingSide = 'bottom' | 'horizontal' | 'left' | 'right' | 'top' | 'vertical'
+export type StudioLayoutTermValue = string | number
+export type StudioLayoutEntry =
+  | readonly ['aligned', StudioLayoutAlignment]
+  | readonly ['centered' | 'compress' | 'fill' | 'hug' | 'rigid']
+  | readonly ['claim' | 'gap', number]
+  | readonly ['content', StudioLayoutContentTerm]
+  | readonly [
+    'content',
+    StudioLayoutContentTerm,
+    StudioLayoutContentTerm,
+  ]
+  | readonly ['height', 'fill' | number]
+  | readonly ['margin' | 'pad', number]
+  | readonly ['margin' | 'pad', StudioLayoutSpacingSide, number, ...(StudioLayoutSpacingSide | number)[]]
+  | readonly ['width', 'fill' | number]
+  | readonly ['width', 'max', number]
+
+/** StudioSetLayoutEntryPatchRequest sets one layout entry on a rendered Tao node. */
+export type StudioSetLayoutEntryPatchRequest = {
+  entry: StudioLayoutEntry
+  kind: 'set-layout-entry'
+  renderId: string
+}
+
+/** StudioWrapRenderPatchRequest wraps one rendered Tao node in a Studio-owned container. */
+export type StudioWrapRenderPatchRequest = {
+  kind: 'wrap-render'
+  renderId: string
+  wrapper: 'Stack'
+}
+
+export type StudioScenarioArgumentValue =
+  | boolean
+  | number
+  | string
+  | Readonly<{ kind: 'now' }>
+  | Readonly<{ handle: string; kind: 'fixture-reference' }>
+
+/** StudioSetScenarioArgumentsPatchRequest promotes ephemeral controls into Tao source truth. */
+export type StudioSetScenarioArgumentsPatchRequest = {
+  arguments: Readonly<Record<string, StudioScenarioArgumentValue>>
+  kind: 'set-scenario-arguments'
+  scenarioName: string
+}
+
+/** StudioInsertCapturedFixturePatchRequest accepts a reviewed runtime-data capture into Tao source. */
+export type StudioInsertCapturedFixturePatchRequest = {
+  fixtureName: string
+  kind: 'insert-captured-fixture'
+  plan: Readonly<{
+    accounts: readonly Readonly<{ fields: Readonly<Record<string, StudioScenarioArgumentValue>>; name: string }>[]
+    creates: readonly Readonly<{
+      entity: string
+      fields: Readonly<Record<string, StudioScenarioArgumentValue>>
+      name: string
+    }>[]
+  }>
+}
+
+/** StudioMoveRenderRequest declares a visual reorder of rendered Tao nodes. */
+export type StudioMoveRenderRequest = {
+  afterId?: string
+  beforeId?: string
+  draggedId: string
+}
+
+/** StudioMoveRenderPatchRequest moves a rendered Tao node to another visual render gap. */
+export type StudioMoveRenderPatchRequest = StudioMoveRenderRequest & {
+  kind: 'move-render'
+}
+
+/** StudioSourcePatchRequest declares one semantic visual source mutation from Studio. */
+export type StudioSourcePatchRequest =
+  | StudioInsertCapturedFixturePatchRequest
+  | StudioInsertComponentPatchRequest
+  | StudioInsertProjectViewPatchRequest
+  | StudioSetLayoutEntryPatchRequest
+  | StudioSetScenarioArgumentsPatchRequest
+  | StudioWrapRenderPatchRequest
+  | StudioMoveRenderPatchRequest
+
+/** StudioSourceTextEdit describes one exact text replacement produced by a Studio source action. */
+export type StudioSourceTextEdit = {
+  end: number
+  replacement: string
+  start: number
+}
+
+/** StudioSourcePatch is the source-actions patch bus result consumed by Studio. */
+export type StudioSourcePatch = {
+  content: string
+  edits: readonly StudioSourceTextEdit[]
+  sourcePath: string
+  sourceVersion: string
+}
+
+/** StudioActions exposes source transforms used by Tao Studio visual editing. */
+export const StudioActions = {
+  applyPatch,
+  insertCapturedFixture,
+  insertComponent,
+  insertProjectView,
+  moveRender,
+  setLayoutEntry,
+  setScenarioArguments,
+  sourceVersion: contentVersion,
+  wrapRender,
+} as const
+
+/** applyPatch applies a typed Studio source-action request to a Tao document. */
+async function applyPatch(document: AST.Document, request: StudioSourcePatchRequest): Promise<StudioSourcePatch> {
+  const source = document.textDocument.getText()
+  const content = await applyPatchContent(document, request)
+  return {
+    content,
+    edits: fullDocumentEdit(source, content),
+    sourcePath: document.uri.fsPath,
+    sourceVersion: contentVersion(content),
+  }
+}
+
+async function applyPatchContent(document: AST.Document, request: StudioSourcePatchRequest): Promise<string> {
+  return await Switch.kind(request, {
+    'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
+    'insert-component': async action => await insertComponent(document, action.component),
+    'insert-project-view': async action => await insertProjectView(document, action.viewName),
+    'move-render': async action => await moveRender(document, action),
+    'set-layout-entry': async action => await setLayoutEntry(document, action),
+    'set-scenario-arguments': async action => await setScenarioArguments(document, action),
+    'wrap-render': async action => await wrapRender(document, action),
+  })
+}
+
+async function insertCapturedFixture(
+  document: AST.Document,
+  request: StudioInsertCapturedFixturePatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireIdentifier(request.fixtureName, 'captured fixture')
+  if (
+    document.parseResult.value.statements.some(statement =>
+      AST.isFixtureDeclaration(statement) && statement.name === request.fixtureName
+    )
+  ) {
+    throw new Errors.UserInputError(`Tao fixture already exists: ${request.fixtureName}`)
+  }
+  const entries = [
+    ...request.plan.accounts.map(account => {
+      requireIdentifier(account.name, 'captured account')
+      return `account ${account.name} { ${fixtureFieldsSource(account.fields)} }`
+    }),
+    ...request.plan.creates.map(create => {
+      requireIdentifier(create.name, 'captured row')
+      requireIdentifier(create.entity, 'captured entity')
+      return `${create.name} = create ${create.entity} { ${fixtureFieldsSource(create.fields)} }`
+    }),
+  ]
+  const suffix = document.textDocument.getText().endsWith('\n') ? '' : '\n'
+  return await Formatter.formatCode(
+    `${document.textDocument.getText()}${suffix}\nfixture ${request.fixtureName} {\n${entries.join('\n')}\n}\n`,
+  )
+}
+
+function fixtureFieldsSource(fields: Readonly<Record<string, StudioScenarioArgumentValue>>): string {
+  return Object.entries(fields).map(([name, value]) => {
+    requireIdentifier(name, 'captured field')
+    return `${name}: ${scenarioArgumentSource(value)}`
+  }).join(', ')
+}
+
+function requireIdentifier(value: string, label: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+    throw new Errors.UserInputError(`Studio ${label} name is invalid: ${value}`)
+  }
+}
+
+/** setScenarioArguments replaces one focused scenario's named arguments and canonicalizes the file. */
+async function setScenarioArguments(
+  document: AST.Document,
+  request: StudioSetScenarioArgumentsPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  const scenarios = document.parseResult.value.statements
+    .filter(AST.isScenarioDeclaration)
+    .filter(scenario => scenario.name === request.scenarioName)
+  if (scenarios.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio scenario is not uniquely declared in this source file: ${request.scenarioName}`,
+    )
+  }
+  const render = scenarios[0]!.block.entries.find(AST.isScenarioRenderClause)
+  if (render?.$cstNode === undefined) {
+    throw new Errors.UserInputError(
+      `Studio can only promote arguments into a focused render scenario: ${request.scenarioName}`,
+    )
+  }
+  const argumentsSource = Object.entries(request.arguments)
+    .map(([name, value]) => `${name}: ${scenarioArgumentSource(value)}`)
+    .join(', ')
+  const source = document.textDocument.getText()
+  const content = applySourceEdits(source, [{
+    end: render.$cstNode.end,
+    replacement: `render ${render.view.$refText}(${argumentsSource})`,
+    start: render.$cstNode.offset,
+  }])
+  return await Formatter.formatCode(content)
+}
+
+function scenarioArgumentSource(value: StudioScenarioArgumentValue): string {
+  if (typeof value === 'string') {
+    return taoStringLiteral(value)
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Errors.UserInputError('Studio scenario numbers must be finite.')
+    }
+    return String(value)
+  }
+  if (typeof value === 'boolean') {
+    return String(value)
+  }
+  if (value.kind === 'now') {
+    return 'now'
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.handle)) {
+    throw new Errors.UserInputError(`Studio fixture handle is invalid: ${value.handle}`)
+  }
+  return value.handle
+}
+
+function taoStringLiteral(value: string): string {
+  let source = '"'
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]!
+    const escaped = taoStringEscapes[character]
+    if (escaped !== undefined) {
+      source += escaped
+      continue
+    }
+    const codeUnit = value.charCodeAt(index)
+    source += codeUnit <= 0x1f || (codeUnit >= 0xd800 && codeUnit <= 0xdfff)
+      ? `\\u${codeUnit.toString(16).padStart(4, '0')}`
+      : character
+  }
+  return `${source}"`
+}
+
+const taoStringEscapes: Readonly<Record<string, string>> = {
+  '\b': '\\b',
+  '\t': '\\t',
+  '\n': '\\n',
+  '\f': '\\f',
+  '\r': '\\r',
+  '"': '\\"',
+  '\\': '\\\\',
+  '{': '\\{',
+}
+
+/** insertComponent inserts a constrained current-dialect palette component into the first render block. */
+async function insertComponent(document: AST.Document, component: StudioComponentKind): Promise<string> {
+  assertNoSyntaxErrors(document)
+  if (!studioComponentKinds.has(component)) {
+    throw new Errors.UserInputError(`Unsupported Studio palette component: ${String(component)}`)
+  }
+  const source = document.textDocument.getText()
+  const insertion = studioComponentSnippets[component]
+  const insertionOffset = studioComponentInsertionOffset(document.parseResult.value, source)
+  const inserted = insertStudioComponentSnippet(source, insertionOffset, insertion)
+  return await Formatter.formatCode(ensureUiComponentImport(inserted, document.parseResult.value, component))
+}
+
+async function insertViewRender(document: AST.Document, insertion: string): Promise<string> {
+  const source = document.textDocument.getText()
+  const insertionOffset = studioComponentInsertionOffset(document.parseResult.value, source)
+  return await Formatter.formatCode(insertStudioComponentSnippet(source, insertionOffset, insertion))
+}
+
+/** insertProjectView inserts a zero-argument project view invocation into the first render block. */
+async function insertProjectView(document: AST.Document, viewName: string): Promise<string> {
+  assertNoSyntaxErrors(document)
+  const target = studioInsertionRender(document.parseResult.value)
+  requireInsertableProjectView(document.parseResult.value, viewName, AST.findOwningView(target)?.name)
+  return await insertViewRender(document, `${viewName}()`)
+}
+
+/** setLayoutEntry sets or replaces one layout entry on a rendered node. */
+async function setLayoutEntry(document: AST.Document, request: StudioSetLayoutEntryPatchRequest): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, request.renderId, 'edit layout for renders')
+  const entry = formatLayoutEntry(requireSupportedLayoutEntry(request.entry))
+  const render = requireRenderById(document.parseResult.value, request.renderId)
+  if (AST.isRenderStatement(render) && render.injection !== undefined) {
+    throw new Errors.UserInputError('Cannot add a Tao layout clause to an injected root render.')
+  }
+  requireCompatibleLayoutEntry(render, layoutEntryHead(entry))
+  return await Formatter.formatCode(setRenderLayoutEntrySource(document.textDocument.getText(), render, entry))
+}
+
+/** wrapRender wraps a rendered node in a Studio-owned Stack() container. */
+async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, request.renderId, 'wrap renders')
+  const render = requireRenderById(document.parseResult.value, request.renderId)
+  return await Formatter.formatCode(wrapRenderSource(document.textDocument.getText(), render, request.wrapper))
+}
+
+/** moveRender moves a rendered source node between sibling render positions. */
+async function moveRender(document: AST.Document, request: StudioMoveRenderRequest): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, request.draggedId, 'move render expressions')
+  if (request.afterId === undefined && request.beforeId === undefined) {
+    throw new Errors.UserInputError('A render move requires at least one drop-gap anchor.')
+  }
+  if (request.afterId !== undefined) {
+    requireLocalRenderId(document, request.afterId, 'move render expressions')
+  }
+  if (request.beforeId !== undefined) {
+    requireLocalRenderId(document, request.beforeId, 'move render expressions')
+  }
+  return await Formatter.formatCode(
+    moveRenderSource(document.textDocument.getText(), document.parseResult.value, request),
+  )
+}
+
+function requireInsertableProjectView(file: AST.TaoFile, viewName: string, targetViewName: string | undefined): void {
+  const view = file.statements.filter(AST.isViewDeclaration).find(candidate => candidate.name === viewName)
+  if (view === undefined) {
+    throw new Errors.UserInputError(`Project view is not declared in this source file: ${viewName}`)
+  }
+  if (AST.parametersOf(view).length > 0) {
+    throw new Errors.UserInputError(`Cannot insert parameterized project view without arguments: ${viewName}`)
+  }
+  if (viewName === targetViewName) {
+    throw new Errors.UserInputError(`Cannot insert project view ${viewName} into its own render block.`)
+  }
+}
+
+const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
+  Button: 'Button("New button") {\n   on press -> { }\n}',
+  Number: 'Number(0)',
+  Stack: 'Stack() [gap 8, pad 8] {\n   Text("Nested text")\n}',
+  Text: 'Text("New text")',
+}
+const studioComponentKinds = new Set<StudioComponentKind>(['Button', 'Number', 'Stack', 'Text'])
+
+function ensureUiComponentImport(source: string, file: AST.TaoFile, component: StudioComponentKind): string {
+  const uses = file.statements.filter(AST.isUseStatement)
+  const required = component === 'Stack' ? ['Stack', 'Text'] : [component]
+  const imported = new Set(uses.flatMap(statement =>
+    statement.importPath === '@tao/ui'
+      ? statement.importedDeclarations.map(reference => reference.$refText)
+      : []
+  ))
+  if (required.every(name => imported.has(name))) {
+    return source
+  }
+  const uiUse = uses.find(statement => statement.importPath === '@tao/ui')
+  if (uiUse?.$cstNode !== undefined) {
+    const names = new Set(uiUse.importedDeclarations.map(reference => reference.$refText))
+    for (const name of required) {
+      names.add(name)
+    }
+    return applySourceEdits(source, [{
+      end: uiUse.$cstNode.end,
+      replacement: `use ${[...names].toSorted().join(', ')} from @tao/ui`,
+      start: uiUse.$cstNode.offset,
+    }])
+  }
+  const insertionOffset = file.statements[0]?.$cstNode?.offset ?? 0
+  return applySourceEdits(source, [{
+    end: insertionOffset,
+    replacement: `use ${required.join(', ')} from @tao/ui\n\n`,
+    start: insertionOffset,
+  }])
+}
+
+function fullDocumentEdit(source: string, content: string): readonly StudioSourceTextEdit[] {
+  return source === content
+    ? []
+    : [{
+      end: source.length,
+      replacement: content,
+      start: 0,
+    }]
+}
+
+type RenderId = {
+  end: number
+  sourcePath: string
+  start: number
+}
+
+function parseRenderId(value: string): RenderId {
+  const endSeparator = value.lastIndexOf(':')
+  const startSeparator = value.lastIndexOf(':', endSeparator - 1)
+  const sourcePath = value.slice(0, startSeparator)
+  const start = Number(value.slice(startSeparator + 1, endSeparator))
+  const end = Number(value.slice(endSeparator + 1))
+  if (
+    sourcePath === ''
+    || !Number.isInteger(start)
+    || !Number.isInteger(end)
+    || start < 0
+    || end < start
+  ) {
+    throw new Errors.UserInputError(`Invalid render id: ${value}`)
+  }
+  return { end, sourcePath, start }
+}
+
+function requireLocalRenderId(document: AST.Document, value: string, operation: string): RenderId {
+  const renderId = parseRenderId(value)
+  if (renderId.sourcePath !== document.uri.fsPath) {
+    throw new Errors.UserInputError(`Can only ${operation} inside the edited Tao source file.`)
+  }
+  return renderId
+}
+
+function moveRenderSource(source: string, file: AST.TaoFile, request: StudioMoveRenderRequest): string {
+  const dragged = requireRenderById(file, request.draggedId)
+  const after = request.afterId === undefined ? undefined : requireRenderById(file, request.afterId)
+  const before = request.beforeId === undefined ? undefined : requireRenderById(file, request.beforeId)
+  const owner = AST.findOwningView(dragged)
+  if (
+    owner === undefined
+    || (after !== undefined && AST.findOwningView(after) !== owner)
+    || (before !== undefined && AST.findOwningView(before) !== owner)
+  ) {
+    throw new Errors.UserInputError('Can only move between render expressions in the same view definition.')
+  }
+  const draggedStatement = directViewRenderStatement(dragged)
+  const afterStatement = after === undefined ? undefined : directViewRenderStatement(after)
+  const beforeStatement = before === undefined ? undefined : directViewRenderStatement(before)
+  const targetStatement = afterStatement ?? beforeStatement
+  if (
+    draggedStatement === undefined
+    || targetStatement === undefined
+    || !AST.isBlock(draggedStatement.$container)
+    || !AST.isBlock(targetStatement.$container)
+    || (afterStatement !== undefined && afterStatement.$container !== targetStatement.$container)
+    || (beforeStatement !== undefined && beforeStatement.$container !== targetStatement.$container)
+  ) {
+    throw new Errors.UserInputError('Can only move direct child view renders between render blocks.')
+  }
+  return moveRenderBetweenBlocksSource(source, draggedStatement.$container, targetStatement.$container, request)
+}
+
+function directViewRenderStatement(render: AST.Render): AST.ViewRender | undefined {
+  return AST.isViewRender(render) && AST.isBlock(render.$container) ? render : undefined
+}
+
+function requireRenderById(file: AST.TaoFile, id: string): AST.Render {
+  const render = AST.streamAllContents(file)
+    .filter(AST.isRender)
+    .find(candidate => renderIdFor(candidate) === id)
+  if (render === undefined) {
+    throw new Errors.UserInputError(`Render expression no longer exists: ${id}`)
+  }
+  return render
+}
+
+function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: string): string {
+  const head = layoutEntryHead(entry)
+  const layoutClause = render.layoutClause
+  if (layoutClause === undefined) {
+    const insertionOffset = renderLayoutInsertionOffset(render)
+    return applySourceEdits(source, [{
+      end: insertionOffset,
+      replacement: ` [${entry}]`,
+      start: insertionOffset,
+    }])
+  }
+  const existingEntry = layoutClause.entries.findLast(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  if (existingEntry !== undefined) {
+    return applySourceEdits(source, [{
+      end: existingEntry.$cstNode!.end,
+      replacement: entry,
+      start: existingEntry.$cstNode!.offset,
+    }])
+  }
+  const closeBracket = source.lastIndexOf(']', layoutClause.$cstNode!.end - 1)
+  const insertionOffset = closeBracket === -1 ? layoutClause.$cstNode!.end : closeBracket
+  return applySourceEdits(source, [{
+    end: insertionOffset,
+    replacement: layoutClause.entries.length === 0 ? entry : `, ${entry}`,
+    start: insertionOffset,
+  }])
+}
+
+function renderLayoutInsertionOffset(render: AST.Render): number {
+  return render.block?.$cstNode?.offset ?? render.$cstNode!.end
+}
+
+function wrapRenderSource(source: string, render: AST.Render, wrapper: 'Stack'): string {
+  const cstNode = render.$cstNode
+  if (cstNode === undefined) {
+    throw new Errors.UserInputError('Cannot wrap a render without source coordinates.')
+  }
+  const indent = lineIndentAt(source, cstNode.offset)
+  const childIndent = `${indent}   `
+  if (AST.isRenderStatement(render) && render.injection !== undefined) {
+    throw new Errors.UserInputError('Cannot wrap an injected root render.')
+  }
+  const selectedSource = source.slice(cstNode.offset, cstNode.end).trimEnd()
+  const childSource = AST.isRenderStatement(render)
+    ? selectedSource.replace(/^render\s+/, '')
+    : selectedSource
+  const rootPrefix = AST.isRenderStatement(render) ? 'render ' : ''
+  return applySourceEdits(source, [{
+    end: cstNode.end,
+    replacement: `${rootPrefix}${wrapper}() [gap 8, pad 8] {\n${indentSnippet(childSource, childIndent)}\n${indent}}`,
+    start: cstNode.offset,
+  }])
+}
+
+function layoutEntryHead(entry: string): StudioLayoutTermValue {
+  const head = entry.split(/\s+/, 1)[0]
+  if (head === undefined || head === '') {
+    throw new Errors.UserInputError('Layout entry must have a head term.')
+  }
+  return head
+}
+
+function formatLayoutEntry(values: StudioLayoutEntry): string {
+  if (values.length === 0) {
+    throw new Errors.UserInputError('Layout entry cannot be empty.')
+  }
+  return values.map(formatLayoutTermValue).join(' ')
+}
+
+function requireSupportedLayoutEntry(values: StudioLayoutEntry): StudioLayoutEntry {
+  if (!Array.isArray(values) || values.length === 0 || typeof values[0] !== 'string') {
+    throw invalidLayoutEntry(values)
+  }
+  const head = values[0]
+  if (bareLayoutHeads.has(head)) {
+    if (values.length !== 1) {
+      throw invalidLayoutEntry(values)
+    }
+    return values
+  }
+  if (head === 'claim' || head === 'gap') {
+    requirePositiveLayoutNumber(values, 1, 2)
+    return values
+  }
+  if (head === 'aligned') {
+    if (values.length !== 2 || typeof values[1] !== 'string' || !alignmentTerms.has(values[1])) {
+      throw invalidLayoutEntry(values)
+    }
+    return values
+  }
+  if (head === 'content') {
+    requireContentLayoutEntry(values)
+    return values
+  }
+  if (head === 'width' || head === 'height') {
+    requireDimensionLayoutEntry(values, head)
+    return values
+  }
+  if (head === 'margin' || head === 'pad') {
+    requireSpacingLayoutEntry(values)
+    return values
+  }
+  throw new Errors.UserInputError(`Unsupported Studio layout entry: ${formatLayoutValues(values)}`)
+}
+
+const alignmentTerms = new Set<StudioLayoutAlignment>(['baseline', 'bottom', 'center', 'left', 'right', 'top'])
+const contentTerms = new Set<StudioLayoutContentTerm>([
+  ...alignmentTerms,
+  'spread',
+  'spread-balanced',
+  'spread-inset',
+  'stretch',
+])
+const spacingSides = new Set<StudioLayoutSpacingSide>([
+  'bottom',
+  'horizontal',
+  'left',
+  'right',
+  'top',
+  'vertical',
+])
+const bareLayoutHeads = new Set(['centered', 'compress', 'fill', 'hug', 'rigid'])
+
+function requireContentLayoutEntry(values: readonly StudioLayoutTermValue[]): void {
+  const terms = values.slice(1)
+  if (
+    (terms.length !== 1 && terms.length !== 2)
+    || terms.some(term => typeof term !== 'string' || !contentTerms.has(term as StudioLayoutContentTerm))
+  ) {
+    throw invalidLayoutEntry(values)
+  }
+  const slots = new Set<string>()
+  for (const term of terms as StudioLayoutContentTerm[]) {
+    const slot = contentTermSlot(term)
+    if (slots.has(slot)) {
+      throw invalidLayoutEntry(values)
+    }
+    slots.add(slot)
+  }
+}
+
+function contentTermSlot(term: StudioLayoutContentTerm): string {
+  if (term === 'left' || term === 'right') {
+    return 'horizontal'
+  }
+  if (term === 'top' || term === 'bottom') {
+    return 'vertical'
+  }
+  if (term === 'baseline' || term === 'stretch') {
+    return 'cross-alignment'
+  }
+  if (term === 'spread' || term === 'spread-balanced' || term === 'spread-inset') {
+    return 'main-distribution'
+  }
+  return 'center'
+}
+
+function requireDimensionLayoutEntry(values: readonly StudioLayoutTermValue[], head: 'height' | 'width'): void {
+  if (values.length === 2 && values[1] === 'fill') {
+    return
+  }
+  if (values.length === 2) {
+    requirePositiveLayoutNumber(values, 1, 2)
+    return
+  }
+  if (head === 'width' && values.length === 3 && values[1] === 'max') {
+    requirePositiveLayoutNumber(values, 2, 3)
+    return
+  }
+  throw invalidLayoutEntry(values)
+}
+
+function requireSpacingLayoutEntry(values: readonly StudioLayoutTermValue[]): void {
+  if (values.length === 2) {
+    requirePositiveLayoutNumber(values, 1, 2)
+    return
+  }
+  if (values.length < 3 || values.length > 9 || values.length % 2 === 0) {
+    throw invalidLayoutEntry(values)
+  }
+  const physicalSides = new Set<string>()
+  for (let index = 1; index < values.length; index += 2) {
+    const side = values[index]
+    if (typeof side !== 'string' || !spacingSides.has(side as StudioLayoutSpacingSide)) {
+      throw invalidLayoutEntry(values)
+    }
+    requirePositiveLayoutNumber(values, index + 1, values.length)
+    for (const physicalSide of spacingPhysicalSides(side as StudioLayoutSpacingSide)) {
+      if (physicalSides.has(physicalSide)) {
+        throw invalidLayoutEntry(values)
+      }
+      physicalSides.add(physicalSide)
+    }
+  }
+}
+
+function spacingPhysicalSides(side: StudioLayoutSpacingSide): readonly string[] {
+  if (side === 'horizontal') {
+    return ['left', 'right']
+  }
+  if (side === 'vertical') {
+    return ['top', 'bottom']
+  }
+  return [side]
+}
+
+function requirePositiveLayoutNumber(
+  values: readonly StudioLayoutTermValue[],
+  index: number,
+  expectedLength: number,
+): void {
+  const value = values[index]
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new Errors.UserInputError('Layout number must be finite.')
+  }
+  if (values.length !== expectedLength || typeof value !== 'number' || value <= 0) {
+    throw invalidLayoutEntry(values)
+  }
+}
+
+function invalidLayoutEntry(values: unknown): Errors.UserInputError {
+  return new Errors.UserInputError(`Invalid Studio layout entry: ${formatLayoutValues(values)}`)
+}
+
+function formatLayoutValues(values: unknown): string {
+  return Array.isArray(values) ? values.map(String).join(' ') : String(values)
+}
+
+function requireCompatibleLayoutEntry(render: AST.Render, nextHead: StudioLayoutTermValue): void {
+  const entries = render.layoutClause?.entries ?? []
+  const heads = entries.map(entry => String(ASTUtils.layoutEntryValues(entry)[0]))
+  const replacementIndex = heads.findLastIndex(head => head === nextHead)
+  if (replacementIndex === -1) {
+    heads.push(String(nextHead))
+  } else {
+    heads[replacementIndex] = String(nextHead)
+  }
+  const growth = heads.findLast(head => head === 'claim' || head === 'fill' || head === 'hug')
+  const shrink = heads.findLast(head => head === 'compress' || head === 'rigid')
+  if (growth === 'claim' && shrink === 'rigid') {
+    throw new Errors.UserInputError("Studio layout action would leave incompatible 'claim' and 'rigid' entries.")
+  }
+}
+
+function formatLayoutTermValue(value: StudioLayoutTermValue): string {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Errors.UserInputError('Layout number must be finite.')
+    }
+    return String(value)
+  }
+  if (/^[A-Za-z_]\w*(?:-[A-Za-z_]\w*)*$/.test(value)) {
+    return value
+  }
+  throw new Errors.UserInputError(`Invalid layout word: ${value}`)
+}
+
+function renderIdFor(render: AST.Render): string {
+  const document = AST.getDocument(render)
+  const cstNode = render.$cstNode
+  return `${document.uri.fsPath}:${cstNode?.offset ?? 0}:${cstNode?.end ?? 0}`
+}
+
+function moveRenderBetweenBlocksSource(
+  source: string,
+  draggedBlock: AST.Block,
+  targetBlock: AST.Block,
+  request: StudioMoveRenderRequest,
+): string {
+  const draggedSlices = blockStatementSlices(source, draggedBlock)
+  const targetSlices = draggedBlock === targetBlock ? draggedSlices : blockStatementSlices(source, targetBlock)
+  const draggedIndex = renderStatementIndex(draggedSlices, request.draggedId)
+  if (draggedIndex === -1) {
+    throw new Errors.UserInputError('Dragged render is not a direct block statement.')
+  }
+  const draggedSlice = draggedSlices[draggedIndex]!
+  if (draggedBlock === targetBlock) {
+    return moveRenderInsideBlockSource(source, draggedBlock, draggedSlices, draggedIndex, request)
+  }
+  if (sliceContainsBlock(draggedSlice, targetBlock)) {
+    throw new Errors.UserInputError('Cannot move a render expression into its own contents.')
+  }
+  const removeEdit = removeStatementEdit(source, draggedBlock, draggedSlices, draggedIndex)
+  const insertEdit = insertStatementEdit(source, targetBlock, targetSlices, draggedSlice.source, request)
+  if (sourceEditsOverlap(removeEdit, insertEdit)) {
+    throw new Errors.UserInputError('Cannot move render expressions across overlapping block edits.')
+  }
+  return applySourceEdits(source, [removeEdit, insertEdit])
+}
+
+function moveRenderInsideBlockSource(
+  source: string,
+  block: AST.Block,
+  slices: BlockStatementSlice[],
+  draggedIndex: number,
+  request: StudioMoveRenderRequest,
+): string {
+  const draggedSlice = slices[draggedIndex]!
+  const remaining = slices.filter((_, index) => index !== draggedIndex)
+  const beforeIndex = requireOrderedTargetIndex(remaining, request)
+  remaining.splice(beforeIndex, 0, draggedSlice)
+  return applySourceEdits(source, [replaceBlockStatementsEdit(source, block, slices, remaining)])
+}
+
+function removeStatementEdit(
+  source: string,
+  block: AST.Block,
+  slices: BlockStatementSlice[],
+  draggedIndex: number,
+): SourceEdit {
+  return replaceBlockStatementsEdit(source, block, slices, slices.filter((_, index) => index !== draggedIndex))
+}
+
+function insertStatementEdit(
+  source: string,
+  block: AST.Block,
+  slices: BlockStatementSlice[],
+  draggedSource: string,
+  request: StudioMoveRenderRequest,
+): SourceEdit {
+  const insertIndex = requireOrderedTargetIndex(slices, request)
+  const next = [...slices]
+  const targetSlice = slices[insertIndex] ?? slices[slices.length - 1]
+  const insertionOffset = targetSlice === undefined
+    ? blockCloseBraceOffset(source, block)
+    : insertIndex === slices.length
+    ? targetSlice.end
+    : targetSlice.start
+  next.splice(insertIndex, 0, {
+    end: insertionOffset,
+    source: draggedSource,
+    start: insertionOffset,
+    statement: targetSlice?.statement ?? throwEmptyMoveTarget(),
+  })
+  return replaceBlockStatementsEdit(source, block, slices, next)
+}
+
+function requireOrderedTargetIndex(slices: BlockStatementSlice[], request: StudioMoveRenderRequest): number {
+  const afterIndex = request.afterId === undefined ? undefined : renderStatementIndex(slices, request.afterId)
+  const beforeIndex = request.beforeId === undefined ? undefined : renderStatementIndex(slices, request.beforeId)
+  if (afterIndex === -1 || beforeIndex === -1) {
+    throw new Errors.UserInputError('Drop target is no longer between the requested render expressions.')
+  }
+  if (afterIndex !== undefined && beforeIndex !== undefined) {
+    if (beforeIndex !== afterIndex + 1) {
+      throw new Errors.UserInputError('Drop-gap anchors are no longer adjacent render expressions.')
+    }
+    return beforeIndex
+  }
+  if (beforeIndex !== undefined) {
+    if (beforeIndex !== 0) {
+      throw new Errors.UserInputError('A before-only drop anchor must be the first render expression.')
+    }
+    return 0
+  }
+  if (afterIndex !== undefined) {
+    if (afterIndex !== slices.length - 1) {
+      throw new Errors.UserInputError('An after-only drop anchor must be the last render expression.')
+    }
+    return slices.length
+  }
+  throw new Errors.UserInputError('A render move requires at least one drop-gap anchor.')
+}
+
+function throwEmptyMoveTarget(): never {
+  throw new Errors.UserInputError('Cannot move a render into an empty target block without an anchor.')
+}
+
+function replaceBlockStatementsEdit(
+  source: string,
+  block: AST.Block,
+  oldSlices: BlockStatementSlice[],
+  nextSlices: BlockStatementSlice[],
+): SourceEdit {
+  const start = oldSlices[0]?.start ?? blockCloseBraceOffset(source, block)
+  return {
+    end: blockCloseBraceOffset(source, block),
+    replacement: nextSlices.map(slice => slice.source).join(''),
+    start,
+  }
+}
+
+function applySourceEdits(source: string, edits: readonly SourceEdit[]): string {
+  return edits.toSorted((left, right) => right.start - left.start)
+    .reduce(
+      (nextSource, edit) => `${nextSource.slice(0, edit.start)}${edit.replacement}${nextSource.slice(edit.end)}`,
+      source,
+    )
+}
+
+function sourceEditsOverlap(left: SourceEdit, right: SourceEdit): boolean {
+  return left.start < right.end && right.start < left.end
+}
+
+function renderStatementIndex(slices: readonly BlockStatementSlice[], renderId: string): number {
+  return slices.findIndex(slice => statementContainsRenderId(slice.statement, renderId))
+}
+
+function sliceContainsBlock(slice: BlockStatementSlice, block: AST.Block): boolean {
+  const cstNode = block.$cstNode
+  return cstNode !== undefined && slice.start <= cstNode.offset && cstNode.end <= slice.end
+}
+
+type BlockStatementSlice = {
+  end: number
+  source: string
+  start: number
+  statement: AST.Statement
+}
+
+type SourceEdit = {
+  end: number
+  replacement: string
+  start: number
+}
+
+function blockStatementSlices(source: string, block: AST.Block): BlockStatementSlice[] {
+  const contentStart = block.$cstNode!.offset + 1
+  const starts = block.statements.map((statement, index) => {
+    const statementStart = statement.$cstNode!.offset
+    const lineStart = lineStartAt(source, statementStart)
+    const previousEnd = block.statements[index - 1]?.$cstNode?.end ?? contentStart
+    return lineStart < previousEnd ? statementStart : lineStart
+  })
+  const slices = block.statements.map((statement, index) => {
+    const start = starts[index]!
+    const end = starts[index + 1] ?? blockCloseBraceOffset(source, block)
+    return {
+      end,
+      source: source.slice(start, end),
+      start,
+      statement,
+    }
+  })
+  const grouped: BlockStatementSlice[] = []
+  for (let index = 0; index < slices.length; index += 1) {
+    const slice = slices[index]!
+    const next = slices[index + 1]
+    if (
+      AST.isTagStatement(slice.statement)
+      && next !== undefined
+      && (AST.isRender(next.statement) || AST.isForStatement(next.statement))
+    ) {
+      grouped.push({
+        end: next.end,
+        source: source.slice(slice.start, next.end),
+        start: slice.start,
+        statement: next.statement,
+      })
+      index += 1
+    } else {
+      grouped.push(slice)
+    }
+  }
+  return grouped
+}
+
+function renderIdForStatement(statement: AST.Statement): string | undefined {
+  return AST.isRender(statement) ? renderIdFor(statement) : undefined
+}
+
+function statementContainsRenderId(statement: AST.Statement, renderId: string): boolean {
+  return renderIdForStatement(statement) === renderId
+    || AST.streamAllContents(statement).filter(AST.isRender).some(render => renderIdFor(render) === renderId)
+}
+
+function studioComponentInsertionOffset(file: AST.TaoFile, text: string): number {
+  return blockCloseBraceOffset(text, studioInsertionRender(file).block)
+}
+
+function studioInsertionRender(file: AST.TaoFile): AST.Render & { block: AST.Block } {
+  const render = AST.streamAllContents(file)
+    .filter(AST.isRender)
+    .filter(candidate => candidate.block !== undefined)
+    .sort((left, right) => left.$cstNode!.offset - right.$cstNode!.offset)[0]
+  if (render?.block === undefined) {
+    throw new Errors.UserInputError('No render block found for Studio component insertion.')
+  }
+  return render as AST.Render & { block: AST.Block }
+}
+
+function blockCloseBraceOffset(text: string, block: AST.Block): number {
+  const blockEnd = block.$cstNode!.end
+  const closeOffset = text.lastIndexOf('}', blockEnd - 1)
+  return closeOffset === -1 ? blockEnd : closeOffset
+}
+
+function insertStudioComponentSnippet(source: string, offset: number, snippet: string): string {
+  const indent = `${lineIndentAt(source, offset)}   `
+  return `${source.slice(0, offset)}\n${indentSnippet(snippet, indent)}${source.slice(offset)}`
+}
+
+function lineIndentAt(source: string, offset: number): string {
+  const lineStart = lineStartAt(source, offset)
+  const line = source.slice(lineStart, offset)
+  return /^[ \t]*/.exec(line)?.[0] ?? ''
+}
+
+function lineStartAt(source: string, offset: number): number {
+  return source.lastIndexOf('\n', offset - 1) + 1
+}
+
+function indentSnippet(snippet: string, indent: string): string {
+  return snippet.split('\n').map(line => line === '' ? line : `${indent}${line}`).join('\n')
+}
+
+/** contentVersion returns the patch protocol's deterministic text version token. */
+function contentVersion(text: string): string {
+  let fnvHash = 0x811c9dc5
+  let mixedHash = 0x9e3779b9
+  for (let index = 0; index < text.length; index += 1) {
+    const codeUnit = text.charCodeAt(index)
+    fnvHash ^= codeUnit
+    fnvHash = Math.imul(fnvHash, 0x01000193) >>> 0
+    mixedHash = Math.imul(mixedHash ^ codeUnit, 0x85ebca6b) >>> 0
+  }
+  return `text-v1:${text.length}:${fnvHash.toString(36).padStart(7, '0')}${mixedHash.toString(36).padStart(7, '0')}`
+}

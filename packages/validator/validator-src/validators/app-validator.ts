@@ -25,6 +25,12 @@ const appValidationMessages = {
   propertyType: (name: string, property: string, expected: string, actual: string) =>
     `App ${name} ${property} expects ${expected}, got ${actual}.`,
   headType: (name: string, actual: string) => `App head ${name} expects app, got ${actual}.`,
+  restorationDuplicate: (name: string) => `App ${name} declares Restore more than once.`,
+  restorationFreshExclusions: () =>
+    `Restore fresh cannot declare exclusions because it neither reads nor writes state.`,
+  restorationExclusion: (value: string) =>
+    `Unknown restoration exclusion '${value}'; expected sheets, menus, or toasts.`,
+  restorationExclusionDuplicate: (value: string) => `Restoration exclusion '${value}' is declared more than once.`,
 } as const
 
 /** AppValidator validates Tao app placement and Prelude-owned supplied slots. */
@@ -61,17 +67,23 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
   const statements = AST.blockStatements(app)
   const properties = statements.filter(AST.isAppProperty)
   const roots = statements.filter(AST.isAppView)
+  const restoration = statements.filter(AST.isRestorationPolicy)
   if (properties.length === 0 && roots.length > 0) {
     validateLegacyApp(app, ctx)
     return
   }
   for (const statement of statements) {
-    if (!AST.isAppProperty(statement) && !AST.isAppAuxiliaryNavigator(statement)) {
+    if (
+      !AST.isAppProperty(statement)
+      && !AST.isAppAuxiliaryNavigator(statement)
+      && !AST.isRestorationPolicy(statement)
+    ) {
       ctx.error(appValidationMessages.appBlock(app.name), statement)
     }
   }
   validateAppProperties(app.name, properties.map(suppliedSlotOfProperty), app, ctx, true)
   validateAppAuxiliaryNavigators(app, ctx)
+  validateRestorationPolicies(app.name, restoration, ctx)
 }
 
 /** SuppliedSlot names one app slot supplied either as an app property or as a variant patch entry. */
@@ -162,6 +174,9 @@ function validateAppVariant(
   ctx: ValidationContext,
 ): void {
   const supplied = refinement.patchBlock.entries.flatMap<SuppliedSlot>(entry => {
+    if (entry.restoration) {
+      return []
+    }
     if (!entry.name) {
       ctx.error(appValidationMessages.variantProperty(variant.name, entry.key ?? ''), entry)
       return []
@@ -175,6 +190,34 @@ function validateAppVariant(
     }]
   })
   validateAppProperties(variant.name, supplied, variant, ctx, false)
+  const restoration = refinement.patchBlock.entries.flatMap(entry => entry.restoration ? [entry.restoration] : [])
+  validateRestorationPolicies(variant.name, restoration, ctx)
+}
+
+function validateRestorationPolicies(
+  appName: string,
+  policies: readonly AST.RestorationPolicy[],
+  ctx: ValidationContext,
+): void {
+  for (const policy of policies.slice(1)) {
+    ctx.error(appValidationMessages.restorationDuplicate(appName), policy)
+  }
+  const policy = policies[0]
+  if (!policy) {
+    return
+  }
+  if (policy.mode === 'fresh' && policy.exclusions) {
+    ctx.error(appValidationMessages.restorationFreshExclusions(), policy.exclusions)
+  }
+  const seen = new Set<string>()
+  for (const exclusion of policy.exclusions?.exclusions ?? []) {
+    if (!['sheets', 'menus', 'toasts'].includes(exclusion)) {
+      ctx.error(appValidationMessages.restorationExclusion(exclusion), policy.exclusions!)
+    } else if (seen.has(exclusion)) {
+      ctx.error(appValidationMessages.restorationExclusionDuplicate(exclusion), policy.exclusions!)
+    }
+    seen.add(exclusion)
+  }
 }
 
 function validateAppAuxiliaryNavigators(app: AST.AppDeclaration, ctx: ValidationContext): void {

@@ -8,6 +8,7 @@ import {
   rejects,
   stubContainer,
   stubView,
+  testValidateCode,
   testValidateCodeWithErrors,
   tsFence,
   validationErrorMessages,
@@ -83,6 +84,38 @@ Describe('validator: apps and views', () => {
     `)
 
     Expect(validationErrorMessages(result)).toContain(AppValidator.messages.headType('MyApp', 'text'))
+  })
+
+  Test('accepts restoration deviations and rejects unknown or incoherent exclusions', async () => {
+    Expect(validationErrorMessages(
+      await testValidateCode(`
+      use StackNav from @tao/nav
+      app Base {
+        Name "Base"
+        Navigator StackNav { Initial MainView }
+        Restore automatic { Exclude sheets, menus, toasts }
+      }
+      app Fresh = Base with { Restore fresh }
+      view MainView() { Title "Main" render Empty() }
+      ${stubView('Empty')}
+    `),
+    )).toEqual([])
+
+    const invalid = validationErrorMessages(
+      await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app Invalid {
+        Name "Invalid"
+        Navigator StackNav { Initial MainView }
+        Restore fresh { Exclude overlays, sheets, sheets }
+      }
+      view MainView() { Title "Main" render Empty() }
+      ${stubView('Empty')}
+    `),
+    )
+    Expect(invalid).toContain(AppValidator.messages.restorationFreshExclusions())
+    Expect(invalid).toContain(AppValidator.messages.restorationExclusion('overlays'))
+    Expect(invalid).toContain(AppValidator.messages.restorationExclusionDuplicate('sheets'))
   })
 
   Test('attaches app variant patch diagnostics to the offending entry, not the file start', async () => {

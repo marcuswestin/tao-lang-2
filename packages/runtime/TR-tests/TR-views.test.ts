@@ -1,3 +1,4 @@
+import type TRType from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { mock } from 'bun:test'
 import React from 'react'
@@ -22,6 +23,58 @@ const { default: TR } = await import('@runtime/TR')
 type RuntimeElement = React.ReactElement<Record<string, unknown>>
 
 Describe('TR.Views explicit visual props', () => {
+  Test('carries Studio identity privately through the injected visual layout boundary', () => {
+    const occurrence = {
+      end: 91,
+      kind: 'render',
+      ownerName: 'StoryRow',
+      sourcePath: '/project/HNReader.tao',
+      start: 42,
+    } as const
+    const useContext = React.useContext
+    React.useContext = (() => undefined) as typeof React.useContext
+    let layout: ReturnType<typeof TR.VisualLayout>
+    try {
+      layout = TR.VisualLayout({ studio: occurrence })
+    } finally {
+      React.useContext = useContext
+    }
+
+    const view = renderRuntimeElement(TR.Views.View({ children: 'Story', layout }))
+
+    Expect(view.props['dataSet']).toEqual({ taoStudio: JSON.stringify(occurrence) })
+  })
+
+  Test('lowers Studio identity and the existing test tag onto an injected native root', () => {
+    const occurrence = {
+      end: 91,
+      kind: 'render',
+      ownerName: 'Form',
+      sourcePath: '/project/Form.tao',
+      start: 42,
+    } as const
+    const useContext = React.useContext
+    React.useContext = (() => undefined) as typeof React.useContext
+    let layout: ReturnType<typeof TR.VisualLayout>
+    try {
+      layout = TR.VisualLayout({ studio: occurrence })
+    } finally {
+      React.useContext = useContext
+    }
+
+    Expect(TR.VisualNativeProps(layout, 'submit')).toEqual({
+      dataSet: { taoStudio: JSON.stringify(occurrence) },
+      testID: 'submit',
+    })
+    const button = React.createElement('Button', { testID: 'submit' })
+    const root = TR.VisualNativeRoot(layout, button) as RuntimeElement
+    Expect(root.type).toBe('View')
+    Expect(root.props['dataSet']).toEqual({ taoStudio: JSON.stringify(occurrence) })
+    Expect(root.props['children']).toBe(button)
+    Expect(TR.VisualNativeRoot(undefined, button)).toBe(button)
+    Expect(TR.VisualNativeRoot({ layout: TR.Layout.create([['gap', 8]]) }, button)).toBe(button)
+  })
+
   Test('applies an injected layout snapshot and tag to the concrete root', () => {
     const view = renderRuntimeElement(TR.Views.View(
       {
@@ -97,6 +150,63 @@ Describe('TR.Views explicit visual props', () => {
 
     Expect(flattenStyle(lightView.props['style'])['backgroundColor']).toBe('#ffffff')
     Expect(flattenStyle(darkView.props['style'])['backgroundColor']).toBe('#000000')
+  })
+
+  Test('marks the concrete root with the inherited Studio occurrence without disturbing native props', () => {
+    const implementation: TRType.TaoStudioIdentity = {
+      end: 145,
+      kind: 'render',
+      ownerName: 'Card',
+      sourcePath: '/project/Card.tao',
+      start: 120,
+    }
+    const occurrence: TRType.TaoStudioIdentity = {
+      end: 72,
+      kind: 'render',
+      ownerName: 'Dashboard',
+      sourcePath: '/project/Dashboard.tao',
+      start: 58,
+    }
+
+    const view = renderRuntimeElement(TR.Views.View(
+      {
+        __tao: {
+          callerProps: { studio: occurrence },
+          studio: implementation,
+        },
+        tag: 'studio-card',
+      },
+      {
+        direction: 'column',
+        nativeProps: {
+          accessibilityLabel: 'Card',
+          dataSet: { existingMarker: 'preserved' },
+          style: { opacity: 0.75 },
+        },
+        style: { backgroundColor: '#ffffff' },
+      },
+    ))
+
+    Expect(view.props['accessibilityLabel']).toBe('Card')
+    Expect(view.props['dataSet']).toEqual({
+      existingMarker: 'preserved',
+      taoStudio: JSON.stringify(occurrence),
+    })
+    Expect(flattenStyle(view.props['style'])).toEqual({
+      backgroundColor: '#ffffff',
+      flexDirection: 'column',
+      opacity: 0.75,
+    })
+    Expect(view.props['testID']).toBe('studio-card')
+  })
+
+  Test('does not add Studio host metadata when an occurrence is absent', () => {
+    const view = renderRuntimeElement(TR.Views.View(
+      {},
+      { nativeProps: { dataSet: { existingMarker: 'preserved' } } },
+    ))
+
+    Expect(view.props['dataSet']).toEqual({ existingMarker: 'preserved' })
   })
 })
 

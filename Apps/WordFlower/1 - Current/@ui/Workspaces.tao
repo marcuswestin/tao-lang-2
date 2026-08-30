@@ -40,8 +40,6 @@ view WorkspaceList() {
    render ScrollView() [screen] {
       Col() [width max 720, centered, gap 10] {
          Text("WordFlower") [title]
-         Text(WordFlowerTagline) [body]
-         // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
          guard Workspaces {
             loading -> { Spinner() }
             error -> Message {
@@ -56,6 +54,8 @@ view WorkspaceList() {
             }
             on submit AddWorkspace
          }
+         Text(WordFlowerTagline) [body]
+         // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
          Text(when WorkspaceName {
             empty -> "Workspace name is required"
             otherwise -> WorkspaceName
@@ -76,7 +76,9 @@ view WorkspaceList() {
          #workspaces
          loop Workspaces / Workspace {
             WorkspaceRow(Workspace)
-}  }  }  }
+      }  }
+      WorkspaceChooser()
+}  }
 
 // Presented above the nearest nav; overlays stack above content and are dismissible.
 view WorkspaceNameNotice() {
@@ -222,13 +224,14 @@ view NoWorkspacesYet() {
       Image("./images/empty-workspaces.png", Decorative: true) [width 160, centered]
       Text("No workspaces yet") [title]
       Text("Create one to start capturing documents.") [body]
-      Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
       Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
+      Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
       TagSummary(StarterPrompt.PromptTags)
 }  }
 
 // One row of the workspace library. Presenting is legal in any view body, so the row opens its own
 // workspace instead of receiving an `Open action()` from the screen that lists it.
+workspace
 view WorkspaceRow(Workspace) {
    render Col() [gap 6, pad 10] {
       Text(Workspace.Name) [body]
@@ -239,7 +242,7 @@ view WorkspaceRow(Workspace) {
       }
 
       #deleteWorkspace
-      FormButton("Delete workspace") {
+      FormButton("Delete workspace") [gap 16] {
          on press -> { delete Workspace }
 }  }  }
 

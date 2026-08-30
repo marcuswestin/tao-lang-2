@@ -102,7 +102,7 @@ app Hearth {
    link JoinLink(Code secret) "/join/{Code}" -> {
       present JoinHome(Code) as sheet
    }
-   public link SharedListLink "/shared/{SharedList}" -> {
+   link SharedListLink "/shared/{SharedList}" -> {
       present SharedListScreen(SharedList) as root
    }
 }

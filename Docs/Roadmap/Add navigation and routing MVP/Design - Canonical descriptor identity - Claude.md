@@ -1,8 +1,7 @@
 # Design - Canonical Descriptor Identity
 
-Draft for review. Extracted from the reviewed navigation foundation plan before its planning worktree
-was archived. `FOLLOW-NAV-003` still owns restoration, and this is the settled identity design that
-work depends on. Nothing here is implemented.
+Implemented by the navigation-restoration slice. Extracted from the reviewed navigation foundation
+plan before its planning worktree was archived; `FOLLOW-NAV-003` retains the remaining route work.
 
 The project-ID contract that the same plan settled is **not** repeated here — `FOLLOW-NAV-003` in
 `Follow-ups - Add navigation and routing MVP.md` already states it, and states it more completely
@@ -16,15 +15,21 @@ A declaration's identity is the compact canonical JSON serialization, encoded as
 ["tao.declaration", 1, projectId, packageId, modulePath, declarationKind, declarationName]
 ```
 
-- A declaration in the workspace root uses package ID `@workspace`. A package declaration uses the
-  identity by which its package is imported, independent of its resolved revision.
+- A declaration in the project root uses package ID `@workspace`. A package declaration uses the
+  checked-in `@folder` name declared by its owning project, independent of consumer installation
+  name or resolved revision. The owner supplies identity; consumers read it and never recompute it.
 - `modulePath` is extensionless, slash-normalized, and relative to the workspace or package root. It
   never contains an absolute checkout path.
 - Declaration kind and declaration name are explicit components, so unrelated declaration namespaces
   cannot collide.
 - Clone location, filesystem separators, Git remote, branch, and revision never participate.
 - This version number is separate from presentation-state schema versions and from descriptor hash
-  versions. The three version independently.
+  versions. The three are versioned independently.
+
+Aliases remain real lexical declarations, so source navigation and diagnostics use the local name
+and Cmd-click walks one alias hop at a time. Canonical identity follows the chain to its final target;
+cycles are invalid. An alias has no separate authored link address. A wrapper body is a new
+declaration and is the explicit way to create new identity and a distinct address.
 
 ## Canonical descriptor values
 

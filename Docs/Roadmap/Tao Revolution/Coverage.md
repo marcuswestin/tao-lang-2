@@ -37,7 +37,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Grid over loop, cell min (§9)                              | Skillet · recipe cards                                      | Post-MVP | —                        |
 | Pages over loop (§9)                                       | Skillet · cook mode steps                                   | Post-MVP | —                        |
 | Navigation: native/basic kits, links, split, windows (§10) | WordFlower · native stack + deterministic harness           | MVP      | partially in Current[^5] |
-| Restoration policy (§10)                                   | WordFlower · relaunch                                       | MVP      | pending                  |
+| Restoration policy (§10)                                   | WordFlower · relaunch                                       | MVP      | in Current               |
 | App composition, variants, providers (§11)                 | WordFlower · app root + test variants                       | MVP      | partially in Current     |
 | InstantDB datasource (§11)                                 | WordFlower · sync                                           | MVP      | pending                  |
 | auth library, Me binding (§11)                             | WordFlower · account                                        | MVP      | pending                  |
@@ -68,12 +68,15 @@ it (`Docs/Roadmap/Focused writing tranche/`).
 [^4]: The unified view tranche: one `view` kind with content acceptance, slots, and `responds`
     inferred from the declaration; the `Collapsible` stateful wrapper proves the deleted
     statelessness ladder, and its conditional `@@content` placement proves the at-most-once rule.
-    Usage-site serializability validation waits for a serialization boundary (§10 restoration).
+    The restoration tranche supplies the serialization boundary and diagnoses statically known
+    non-serializable action parameters at each restorable presentation usage site (§10).
 
 [^5]: The host-read/nav-kit tranche implements action intent titles, focused bound commands,
     `Toolbar`, reactive direct-only `Title`, native-default and explicit basic `StackNav`, and
-    user-visible title/toolbar journey assertions. Broader menus, rails, palettes, SplitNav,
-    window orchestration, links/routes, and restoration remain at their stated later boundary.
+    user-visible title/toolbar journey assertions. WordFlower's Tao journey proves Back uses the
+    semantic reducer; browser Back/Forward adds no Tao construct and is covered by focused runtime
+    and rendered host tests against that reducer. Broader menus, rails, palettes, SplitNav, window
+    orchestration, and links/routes remain at their stated later boundary.
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP
     check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this
