@@ -36,18 +36,8 @@ const optionalHostModules = new Set([
   'react-native-screens',
 ])
 
-// The native tabs probe requires a subpath of react-native-screens, so an optional host covers
-// every module path under its package name, not just the bare specifier.
-function isOptionalHostModule(moduleName) {
-  if (optionalHostModules.has(moduleName)) {
-    return true
-  }
-  const scopeParts = moduleName.startsWith('@') ? 2 : 1
-  return optionalHostModules.has(moduleName.split('/', scopeParts + 1).slice(0, scopeParts).join('/'))
-}
-
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (isOptionalHostModule(moduleName)) {
+  if (optionalHostModules.has(moduleName)) {
     try {
       return context.resolveRequest(context, moduleName, platform)
     } catch {
