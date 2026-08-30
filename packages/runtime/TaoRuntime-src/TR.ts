@@ -1,6 +1,7 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
+import { createClipboard, type TaoPasteboard } from './TR-clipboard'
 import {
   DataControls,
   DataProviderControls,
@@ -23,8 +24,10 @@ import {
   type TaoDesignSpec,
 } from './TR-design'
 import { reportUnownedFailure } from './TR-errors'
+import { createHaptic, type TaoHapticKinds, type TaoHaptics } from './TR-haptic'
 import { LayoutControls } from './TR-layout'
 import { NativeHosts } from './TR-native-hosts'
+import { NativeModules } from './TR-native-modules'
 import {
   NavigationControls,
   NavKindControls,
@@ -41,10 +44,12 @@ import {
   testNavKind as testNavigationKind,
 } from './TR-navigation'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { isReactiveValue } from './TR-reactive'
 import { SelectableRow } from './TR-selectable-row'
+import { createShareSheet, type TaoShareSheet } from './TR-share'
 import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
-import { Clock, createTicker, isTicker, makeUnitControls, type TaoTicker } from './TR-units'
+import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
 
 const warnedUnhonoredLayouts = new Set<string>()
@@ -250,14 +255,14 @@ class TR {
 
   /**
    * State creates view-local reactive Tao state. A library value that changes on its own — an
-   * interval, today — is held like any other value, and the holder re-renders while it is mounted,
-   * which is what gives the value the holder's lifetime.
+   * ticker or device reading — is held like any other value, and the holder re-renders while it is
+   * mounted, which is what gives the value the holder's lifetime.
    */
   static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
     const [jsValue, setJsValue] = React.useState<T>(() => initialValue().evaluate().jsValue)
     const [, onSelfDrivenChange] = React.useReducer((count: number) => count + 1, 0)
     React.useEffect(
-      () => isTicker(jsValue) ? jsValue.subscribe(onSelfDrivenChange) : undefined,
+      () => isReactiveValue(jsValue) ? jsValue.subscribe(onSelfDrivenChange) : undefined,
       [jsValue, onSelfDrivenChange],
     )
     const jsValueRef = React.useRef(jsValue)
@@ -308,6 +313,24 @@ class TR {
   static Interval(everyNanoseconds: number): TaoTicker {
     return createTicker(everyNanoseconds, body => new RuntimeActionValue(body))
   }
+
+  /** Clipboard constructs the reactive pasteboard behind `@tao/device/clipboard`. */
+  static Clipboard(): TaoPasteboard {
+    return createClipboard(body => new RuntimeActionValue(body), TR.native)
+  }
+
+  /** Haptic constructs semantic tactile feedback behind `@tao/device/haptic`. */
+  static Haptic(kinds: TaoHapticKinds): TaoHaptics {
+    return createHaptic(kinds, body => new RuntimeActionValue(body), TR.native)
+  }
+
+  /** Share constructs the system share sheet behind `@tao/device/share`. */
+  static Share(): TaoShareSheet {
+    return createShareSheet(body => new RuntimeActionValue(body), TR.native)
+  }
+
+  /** native is the internal lazy native-module kernel used by curated stdlib bindings. */
+  private static readonly native = NativeModules
 
   /** Clock exposes the runtime clock a check holds, advances, and releases. */
   static Clock = Clock
@@ -537,6 +560,12 @@ namespace TR {
   export type Value<T> = RuntimeValue<T>
   /** Ticker declares the reactive value `@tao/time`'s `Interval` returns. */
   export type Ticker = TaoTicker
+  /** Pasteboard declares the reactive value `@tao/device/clipboard`'s `Clipboard()` returns. */
+  export type Pasteboard = TaoPasteboard
+  /** Haptics declares the semantic action value `@tao/device/haptic`'s `Haptic()` returns. */
+  export type Haptics = TaoHaptics
+  /** ShareSheet declares the action value `@tao/device/share`'s `Share()` returns. */
+  export type ShareSheet = TaoShareSheet
   /** UnaryOperator declares the shipped Tao unary operators. */
   export type UnaryOperator = '-' | 'not'
   /** Scope declares generated Tao runtime declaration storage. */

@@ -4,23 +4,21 @@
  * accessors and the calendar pairs need runtime help. `time` is milliseconds since the epoch.
  */
 
+import { type TaoActionValue } from './TR-action-values'
+import { createReactiveSource, markReactiveValue, type TaoReactiveValue } from './TR-reactive'
+
 const NANOSECONDS_PER_MILLISECOND = 1e6
 const SECONDS_PER_MINUTE = 60
 const MINUTES_PER_HOUR = 60
 
-type IntervalListener = () => void
-
-/** TaoActionValue is the invokable shape a Tao action member holds. */
-type TaoActionValue = { invoke: () => void }
-
 /** TaoTicker is the reactive value `@tao/time`'s `Interval` returns. */
-export type TaoTicker = {
+export type TaoTicker = TaoReactiveValue & {
   readonly Value: number
   readonly Running: boolean
-  readonly Start: TaoActionValue
-  readonly Stop: TaoActionValue
+  readonly Start: TaoActionValue<[]>
+  readonly Stop: TaoActionValue<[]>
   /** subscribe re-renders a holder on every tick and owns the timer for as long as it is held. */
-  subscribe: (listener: IntervalListener) => () => void
+  subscribe: (listener: () => void) => () => void
 }
 
 /** UnitEvaluable is the runtime value shape unit lowering receives and returns. */
@@ -197,21 +195,16 @@ export function createTicker(
   asAction: (body: () => void) => TaoActionValue,
 ): TaoTicker {
   const intervalMs = Math.max(1, Math.round(everyNanoseconds / NANOSECONDS_PER_MILLISECOND))
-  const listeners = new Set<IntervalListener>()
+  const reactive = createReactiveSource()
   let running = true
   let valueMs = Clock.now()
   let cancel: (() => void) | undefined
 
-  const notify = () => {
-    for (const listener of [...listeners]) {
-      listener()
-    }
-  }
   const startTimer = () => {
-    if (!cancel && running && listeners.size > 0) {
+    if (!cancel && running && reactive.listenerCount > 0) {
       cancel = Clock.every(intervalMs, () => {
         valueMs = Clock.now()
-        notify()
+        reactive.notify()
       })
     }
   }
@@ -220,7 +213,7 @@ export function createTicker(
     cancel = undefined
   }
 
-  return {
+  return markReactiveValue({
     get Value() {
       return valueMs
     },
@@ -234,7 +227,7 @@ export function createTicker(
       running = true
       valueMs = Clock.now()
       startTimer()
-      notify()
+      reactive.notify()
     }),
     Stop: asAction(() => {
       if (!running) {
@@ -242,25 +235,19 @@ export function createTicker(
       }
       running = false
       stopTimer()
-      notify()
+      reactive.notify()
     }),
     subscribe(listener) {
-      listeners.add(listener)
+      const unsubscribe = reactive.subscribe(listener)
       startTimer()
       return () => {
-        listeners.delete(listener)
-        if (listeners.size === 0) {
+        unsubscribe()
+        if (reactive.listenerCount === 0) {
           stopTimer()
         }
       }
     },
-  }
-}
-
-/** isTicker reports whether a runtime value drives re-renders as it changes. */
-export function isTicker(value: unknown): value is TaoTicker {
-  return typeof value === 'object' && value !== null && typeof (value as TaoTicker).subscribe === 'function'
-    && 'Running' in value
+  })
 }
 
 function padded(value: number): string {

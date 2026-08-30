@@ -1,0 +1,16 @@
+// Haptics is semantic tactile feedback, not raw vibration: one Tao vocabulary flattens the
+// platform module's selection, impact, and notification categories. Unsupported platforms no-op.
+public
+type HapticKind is one of Selection, Light, Medium, Heavy, Success, Warning, Error
+
+public
+type Haptics is {
+   Play action(HapticKind)
+}
+
+// Expo's enum families never cross the Tao contract, and the native module remains untouched until
+// Play is invoked.
+public
+function Haptic() returns Haptics {
+   return Haptic() from ./Haptic.ts
+}

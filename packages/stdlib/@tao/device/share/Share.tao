@@ -1,0 +1,13 @@
+// The system share sheet is a user-resolved effect. Today's action surface starts it and awaits the
+// native operation, but does not expose its Shared/Dismissed result; that belongs to future `when do`.
+public
+type ShareSheet is {
+   Open action(text)
+}
+
+// `Share()` constructs one share-sheet value. React Native names and result objects never cross the
+// Tao contract.
+public
+function Share() returns ShareSheet {
+   return Share() from ./Share.ts
+}

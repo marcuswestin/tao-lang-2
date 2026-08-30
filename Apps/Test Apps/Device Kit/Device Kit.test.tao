@@ -1,0 +1,21 @@
+use DeviceKit from ./
+
+test "Device Kit" {
+   test "uses semantic native capabilities through reactive stdlib values" {
+      run DeviceKit
+      expect {
+         text "Status: Ready"
+         text "Clipboard: "
+      }
+      press "Play success haptic"
+      expect text "Status: Haptic requested"
+      press "Read clipboard"
+      expect text "Clipboard: Haptic success"
+      press "Copy text"
+      expect text "Status: Copy complete"
+      press "Read clipboard"
+      expect text "Clipboard: Copied from Tao"
+      press "Share text"
+      expect text "Status: Share complete"
+   }
+}

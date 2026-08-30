@@ -61,8 +61,7 @@ export const FunctionalCoreValidator = {
     },
     [AST.StringInterpolation.$type]: (interpolation, ctx) => {
       const type = Type.ofExpression(interpolation.expression)
-      const supported = type.kind === 'primitive'
-        && ['text', 'number', 'boolean', 'none'].includes(type.primitive)
+      const supported = isSupportedInterpolationType(type)
       if (type.kind !== 'unresolved' && !supported) {
         ctx.error(messages.interpolationPart, interpolation.expression)
       }
@@ -146,6 +145,17 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
     ctx.error(messages.binaryNumeric(expression.operator), expression)
   }
+}
+
+function isSupportedInterpolationType(type: ASTUtils.TaoType): boolean {
+  if (type.kind === 'unresolved') {
+    return true
+  }
+  if (type.kind === 'union') {
+    return type.members.every(isSupportedInterpolationType)
+  }
+  return type.kind === 'primitive'
+    && ['text', 'number', 'boolean', 'none'].includes(type.primitive)
 }
 
 /**

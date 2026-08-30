@@ -70,6 +70,19 @@ Describe('organizeSource use statements', () => {
   )
 
   Test(
+    'keeps an imported one-of type when one of its cases is referenced',
+    organized(`
+      use Haptic, HapticKind from @tao/device/haptic
+
+      view MainView() {
+         state Feedback = Haptic()
+         action Play() {
+            do Feedback.Play(Success)
+      }  }
+    `),
+  )
+
+  Test(
     'drops use statements whose imports are all unused',
     organizes(
       `

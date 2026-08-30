@@ -8,8 +8,9 @@ workspace package index, and public self-hosted `nav` and `datasource` declarati
 `tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
-The implemented package surface includes `@tao/text` and `@tao/time`, and requires parentheses on
-every visual, dialogue, action, and function declaration parameter list.
+The implemented package surface includes `@tao/text`, `@tao/time`, and the curated
+`@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every visual,
+dialogue, action, and function declaration parameter list.
 
 `@tao/text` exports `CountWords(Value text)` and `Join(Values list of text, Separator text)`.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
@@ -22,7 +23,22 @@ value: `Value` is the time as of its latest tick, `Running` whether it ticks, an
 over `Value` recomputes on every tick. There is no clock declaration, no live binding, and no `every`
 clause: a ticking clock is a library value, not a language construct.
 
-Both packages are ordinary Tao declarations bound to TypeScript sidecars through the same
+`@tao/device/haptic` exports `HapticKind`, `Haptics`, and `Haptic()`. `Haptics.Play(HapticKind)`
+accepts the semantic cases `Selection`, `Light`, `Medium`, `Heavy`, `Success`, `Warning`, and
+`Error`; the runtime translates them to the platform vocabulary. Haptics safely does nothing on
+web or when the backing capability is unavailable.
+
+`@tao/device/clipboard` exports `Pasteboard` and `Clipboard()`. A pasteboard has `Copy(text)` and
+`Read()` actions plus reactive optional `Value`: `Value` is `none` until a read finishes, then holds
+the result of the most recently started read once it finishes; an older in-flight read cannot
+overwrite it. Copying does not update `Value`, because the system clipboard remains independently
+mutable.
+
+`@tao/device/share` exports `ShareSheet` and `Share()`. `ShareSheet.Open(text)` opens the platform
+share sheet and waits for the native operation, but exposes no shared-versus-dismissed result.
+Action outcomes remain future language work rather than a reactive lookalike result.
+
+These packages are ordinary Tao declarations bound to TypeScript sidecars through the same
 expression-position `from` a third-party package would use, which is the whole mechanism — no
 compiler-known names are involved.
 

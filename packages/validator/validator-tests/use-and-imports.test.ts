@@ -414,6 +414,27 @@ Describe('validator: use organization', () => {
   )
 
   Test(
+    'treats an imported one-of type as used when one of its cases is referenced',
+    checksFiles(
+      {
+        'Main.tao': importingApp(
+          'use Mood from ./Mood.tao',
+          'render Text("Ready")',
+          `let Current = Happy
+           ${stubView('Text', 'Value text')}`,
+        ),
+        'Mood.tao': 'workspace type Mood is one of Happy, Sad',
+      },
+      result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+        Expect(
+          result.diagnostics.some(diagnostic => diagnostic.message === useValidationMessages.unusedImport('Mood')),
+        ).toBe(false)
+      },
+    ),
+  )
+
+  Test(
     'treats plural data imports referenced through their singular entity type as used',
     checksFiles(
       {

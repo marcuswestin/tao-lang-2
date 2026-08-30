@@ -42,6 +42,8 @@ without erasing compatible coverage:
   feature, and package tests own the diagnostics.
 - Ticking Clock covers `@tao/time`: a held ticker, live derivation over it, `Stop`/`Start`/`Running`,
   and the `advance` step that drives the clock a check holds.
+- Device Kit covers the first `@tao/device` contracts: semantic Haptic playback, reactive Clipboard
+  reads and writes, and opening the system Share sheet through deterministic native-module fakes.
 - All `view`, `action`, and `function` declarations use a parenthesized parameter list,
   including `()`.
 
@@ -124,6 +126,17 @@ Exercise the ticking clock (Decisions §9) and the deterministic clock a check h
 **Belongs here:** `Interval(Every)` held as view-local state; `Tick.Value` as a live reading; `let` derivations that recompute per tick; `do Tick.Stop()` and `do Tick.Start()`; `Tick.Running`; `advance <duration>` moving the clock and firing due ticks in order; the compact `when Subject Yes / not No` form.
 
 **Does not belong here:** unit construction and conversion, which Unit Values owns; the product shape of a writing session, which WordFlower owns; toast expiry, which WordFlower's documents journey proves.
+
+## Device Kit
+
+Exercise the frozen-language `@tao/device` binding pattern through Haptic, Clipboard, and Share.
+
+**Belongs here:** parameterized action fields on sidecar-built values; semantic haptic cases; a
+Clipboard read updating reactive `Value`; Clipboard copy followed by read; opening Share with text;
+deterministic native-module substitutes owned by the runtime test harness.
+
+**Does not belong here:** Location, permissions, declared failures, `when do` outcomes, raw
+Vibration, vendor enums or result objects, or app-authored native bindings.
 
 ## Component Aliases
 
