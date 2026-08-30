@@ -39,7 +39,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Navigation: native/basic kits, links, split, windows (§10) | WordFlower · native stack + deterministic harness           | MVP      | partially in Current[^5] |
 | Restoration policy (§10)                                   | WordFlower · relaunch                                       | MVP      | in Current               |
 | App composition, variants, providers (§11)                 | WordFlower · app root + test variants                       | MVP      | partially in Current     |
-| InstantDB datasource (§11)                                 | WordFlower · sync                                           | MVP      | pending                  |
+| InstantDB datasource (§11)                                 | WordFlower · sync                                           | MVP      | experimental             |
 | auth library, Me binding (§11)                             | WordFlower · account                                        | MVP      | pending                  |
 | Files provider (§11)                                       | Wayfare · offline documents                                 | Post-MVP | —                        |
 | Offline closure (§11)                                      | WordFlower · offline writing                                | TBD      | —                        |

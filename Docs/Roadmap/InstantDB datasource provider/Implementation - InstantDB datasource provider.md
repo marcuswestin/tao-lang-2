@@ -19,8 +19,9 @@ two-client acceptance remains before this can be treated as the production sync 
 ## Experimental InstantDB adapter
 
 The adapter stores one `taoSnapshots` entity per `AppId` and storage key. Its deterministic entity ID
-does not require a unique attribute or an Instant schema-push step. Initial state uses `queryOnce`,
-writes use `transact`, and live changes use `subscribeQuery`. `ApiURI` and `WebsocketURI` are optional
+does not require a unique attribute or an Instant schema-push step. Initial state resolves from the
+first `subscribeQuery` result — so an offline launch serves the SDK's local cache — and the same
+subscription then feeds live changes; writes use `transact`. `ApiURI` and `WebsocketURI` are optional
 configuration for local Instant development.
 
 The previous repository supplied the proven client operations and a test app ID:
