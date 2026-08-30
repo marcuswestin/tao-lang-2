@@ -106,7 +106,7 @@ Describe('compiler: language lowering', () => {
       use Local from @tao/data
       use StackNav from @tao/nav
       data Workspaces / Workspace {
-        Name text
+        Name text (unique)
         CreatedAt time (default now)
         Pinned yes / no
         Documents (owned)
@@ -132,7 +132,7 @@ Describe('compiler: language lowering', () => {
         Datasource Local { StorageKey "WordFlowerData" }
       }
       view Main() {
-        query Workspaces { }
+        query Workspaces { limit 25 }
         action Add() { create Workspace { Name: "Home" } }
         render Text("Main")
       }
@@ -169,6 +169,8 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('["Final"]: TR.Value(true)')
     Expect(compiled.code).toContain('["Final"]: TR.Value(false)')
     Expect(compiled.code).toContain('TR.Data.Query')
+    Expect(compiled.code).toContain('unique: true')
+    Expect(compiled.code).toContain('limit: 25')
     Expect(compiled.code).toContain('field: "Workspace"')
     Expect(compiled.code).toContain("operator: '=='")
     Expect(compiled.code).toContain('TR.ForEach(_Scope.Drafts.evaluate()')

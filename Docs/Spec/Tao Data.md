@@ -56,6 +56,11 @@ and boolean query filters use named declared cases rather than raw spelling conv
 
 Indexes are separate statements, and one default `order by` may be declared for the entity.
 
+`unique` marks one primitive field as the entity's external identity — the reconciliation key a
+query-driven datasource upserts by (see _The Http datasource_ below). It is a storage fact stated
+on the field, legal only on primitive fields, declared at most once per field, and carried by at
+most one field per entity, so reconciliation never depends on field order.
+
 A bare singular name such as `Workspace` is a stored to-one relationship when it names another
 entity. A bare plural name such as `Paragraphs` is an inferred inverse to-many relationship. The
 `relation` modifier states the related declaration explicitly when inference is insufficient.
@@ -154,9 +159,11 @@ share one coherent stateless storage boundary. The shipped Memory and Local impl
 that suite. Memory is process-local and instance-isolated; Local delegates its storage boundary to
 AsyncStorage.
 
-Remote sync, authentication, permissions, migrations, transactions, pagination, aggregation, and
+Remote sync, authentication, permissions, migrations, transactions, aggregation, and
 provider-specific query features remain deferred. They require new provider families rather than
-leaking incremental or remote semantics into this full-snapshot protocol.
+leaking incremental or remote semantics into this full-snapshot protocol. The first such family has
+landed: a provider may additionally implement the query-fill half described under _The Http
+datasource_, which layers remote reads over the snapshot contract without changing it.
 
 ## Queries
 
@@ -181,19 +188,114 @@ use `Name from Source`; the `Source as Name` form renames a root plural only, si
 path cannot be a bare source name. Repeated `where` clauses combine with AND. Primitive
 comparisons support `==`, `!=`, `<`, `<=`, `>`, and `>=`; boolean cases are filtered by case name.
 Boolean filters use `where is <Case>`. One explicit order may override the source entity's default
-order. Generated hooks are hoisted while preserving lexical visibility and the authored
-declaration-order rules.
+order. One `limit <count>` clause caps the result after filtering and ordering; the count is a
+whole-number literal of at least 1. Generated hooks are hoisted while preserving lexical visibility
+and the authored declaration-order rules.
 
-Queries and lists expose `.Count`. Emptiness is tested with `Value is empty`. Query status cases are
-mutually exclusive:
+Queries and lists expose `.Count`. Emptiness is tested with `Value is empty`. The availability
+cases split into two kinds. The nothing-to-show cases are mutually exclusive:
 
-- `loading` while the provider is loading;
-- `error -> Message` while it has failed;
+- `loading` while the provider is loading, or while a query's first fill is in flight — it has
+  never filled, so there is nothing to show;
+- `error -> Message` while the provider has failed, or a query's first fill failed;
 - `empty` only when ready with zero rows;
 - the ordinary ready, nonempty path when none of those cases match.
 
+Availability turns on whether a descriptor has ever filled, not on how many rows it produced. A
+feed that legitimately filled empty is `empty` content with `refreshing` behind it on a refill,
+never a spinner a second time.
+
+Two advisory cases describe a fill running or failing _behind renderable rows_ (see _The Http
+datasource_). A guard that does not name them falls through and renders content — cached rows are
+never blanked by a refresh:
+
+- `refreshing` while a descriptor that has already filled is filling again;
+- `stale` while a descriptor that has already filled has since failed. A failed refresh over
+  filled content is `stale`, never `error` — offline is not modelled as an error.
+
+A case is also a predicate, so the inline form reads beside content:
+`if TopStories is refreshing { Spinner() }`.
+
 `Message` is scoped to the matched error handler. The retired `.Empty`, `.Loading`, and `.Error`
 members are not part of the public contract.
+
+## The Http datasource
+
+`Http` in `@tao/data` is the query-driven remote datasource: entities stay ordinary `data`
+declarations, and the provider translates live queries into HTTP requests. An app derives its own
+source from it and supplies an adapter; the configuration slot types its bridge in place:
+
+```tao
+use Http from @tao/data
+
+type HNSource is Http with {
+   Adapter item is HNAdapter from ./HNAdapter.ts
+   CacheFor duration is 5.min
+}
+
+app HNReader {
+   Datasource HNSource { }
+}
+```
+
+The protocol is descriptor-driven fill with local evaluation. When a query goes live, the provider
+is offered its descriptor — entity, equality-filter values, effective order field and direction
+(the query's own or the entity's default), and limit — fetches, and upserts rows into the store;
+the store keeps evaluating every query locally over its rows, exactly as for `Local` and `Memory`.
+A filter the API cannot express means the provider fetches a superset and the query block still
+filters locally. API-side ordering that no field derives (a front-page rank) is materialized by the
+adapter as a row field the query orders by.
+
+Filled rows land in the entity's one shared row set, so distinct feeds over one entity must own
+their queryable facts: each feed materializes its own field (defaulted for rows other feeds fetch)
+and its query filters on it — `Rank number (default 0)` with `where Rank >= 1` is the idiom.
+Without that filter, a query can render rows another feed fetched. Per-feed row provenance in the
+store is deliberately not implemented.
+
+Rows upsert by the entity's `(unique)` field, so a refetch updates rather than duplicates. In fill
+rows, a relation value is a plain object naming the target entity's unique field —
+`Story: { HnId: 123 }` — resolved to the store row; parents upsert before children within one fill,
+and an unresolved reference fails the fill loudly.
+
+The adapter declares the query shapes the API actually supports, authored with `TR.Http.adapter`
+and `TR.Http.on` in a TypeScript sidecar:
+
+```ts
+import TR from '@runtime/TR'
+
+export const HNAdapter = TR.Http.adapter({
+  Story: [
+    TR.Http.on({ orderBy: 'Rank' }, async (query, { upsert }) => {
+      const page = await fetchJson(`${API}/search?tags=front_page&hitsPerPage=${query.limit ?? 30}`)
+      upsert(page.hits.map(toStoryRow))
+    }),
+  ],
+  Comment: [
+    TR.Http.on({ where: 'Story' }, async (query, { upsert }) => {
+      const item = await fetchJson(`${API}/items/${query.where.Story.HnId}`)
+      upsert(flattenComments(item))
+    }),
+  ],
+})
+```
+
+Adapter entries are keyed by the singular entity name. A shape's `where` is matched exactly against
+the descriptor's equality-filter set; a stated `orderBy` or `orderDirection` must match exactly (a
+bounded fetch depends on both — ordering is how genuinely different feeds over one entity are told
+apart), while an omitted one matches any ordering.
+Shapes are tried in declaration order and the first match wins. A live query matching no declared
+shape is a loud failure surfacing through the query's `error` or `stale` case — never a silent
+non-fetch. A relation filter reaches the adapter as a plain snapshot of the related row's scalar
+fields. `upsert` lands rows in the matched entity; `upsertInto(entity, rows)` lands related rows.
+
+Fill lifecycle is per descriptor and drives the query availability cases: `loading` for a first
+fill, `refreshing` for a refill, `stale` after a refill failed, `error` after a first fill failed.
+`CacheFor` suppresses re-fills of a descriptor filled within the window, measured on the runtime
+clock a check holds. Concurrent activations of one descriptor deduplicate to one fill.
+
+A descriptor is offered when its query mounts and whenever the descriptor itself changes. There is
+no focus, foreground, or interval re-offer, so a query held by a long-lived screen fills once per
+mount; a user-triggered refresh spelling is deferred.
 
 ## Writes and iteration
 
@@ -257,9 +359,14 @@ renders its branch instead of the rest of its enclosing render block. A deleted 
 ## Deterministic provider-state tests
 
 Every Tao check receives a fresh instance of the shipped Memory provider in place of the launched
-app's datasource, and a clock held at a fixed instant. The app's configured provider cannot overwrite
-that isolation, so no check reads or mutates durable storage, and `(default now)` samples the held
-clock rather than wall-clock time.
+app's datasource, and a clock held at a fixed instant. A snapshot-only configured provider cannot
+overwrite that isolation, so no check reads or mutates durable storage, and `(default now)` samples
+the held clock rather than wall-clock time.
+
+A fill-capable provider binds in a check anyway: fills are how a query-driven datasource has rows
+at all, and determinism is the running app variant's responsibility — a journey runs the variant
+whose adapter is a deterministic in-repo stub, never the network. Between steps the harness settles
+every schema's load, in-flight fills, and queued saves, so assertions read a quiet store.
 
 Bare `data <status>` steps are retired (Decisions §16). The provider states they drove return through
 the world controls — network, sync, and datasource fault injection — which have not landed yet.

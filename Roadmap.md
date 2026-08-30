@@ -87,6 +87,12 @@ tests written in Tao, green in Current, for every construct introduced.
   - Build profiles, environment handling, runtime manifest boundaries, secrets policy, and Expo build expectations.
 - [ ] Polish the IDE MVP
   - Syntax, diagnostics, formatting, source actions, go-to-definition and references, and live preview once the runtime and test flow are stable.
+- [ ] Widen the HTTP datasource
+  - The query-driven `Http` datasource landed with `Apps/HNReader`; see
+    `Docs/Roadmap/HTTP Datasource/Overview - HTTP datasource.md` for the settled design and its
+    deferred list — offline persistence across launches, remote writes, per-entity datasource
+    scoping, a user-triggered refresh spelling, cache eviction and retry, and per-feed row
+    provenance.
 - [ ] Bridge React Native and Expo APIs into Tao
   - Design how a native API becomes a Tao binding before building more of them: whether bindings can
     be generated from TypeScript type definitions or published documentation, driven by per-API

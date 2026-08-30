@@ -196,7 +196,7 @@ SubjectCaseName returns string:
     BuiltInSubjectCaseName | ID;
 
 BuiltInSubjectCaseName returns string:
-    'empty' | 'loading' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false';
+    'empty' | 'loading' | 'refreshing' | 'stale' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false';
 
 CasePayload:
     name=ID;

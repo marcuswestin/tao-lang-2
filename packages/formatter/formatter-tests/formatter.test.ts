@@ -429,6 +429,24 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
+    'formats query order and limit clauses',
+    formats(
+      `view Main(Workspace){render Col(){query Drafts from Workspace.Documents{order   by   Ordering desc\nlimit   20}\nloop Drafts/Document{Text(Document.Title)}}}`,
+      `
+        view Main(Workspace) {
+           render Col() {
+              query Drafts from Workspace.Documents {
+                 order by Ordering desc
+                 limit 20
+              }
+              loop Drafts / Document {
+                 Text(Document.Title)
+        }  }  }
+      `,
+    ),
+  )
+
+  Test(
     'collapses deep closing brace runs onto one line at the outermost indentation',
     formats(
       `view MainView(){render Stack() {Text("a") {Text("b") {Text("c")}}}}`,

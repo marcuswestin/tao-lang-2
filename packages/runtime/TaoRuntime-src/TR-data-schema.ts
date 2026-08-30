@@ -3,10 +3,12 @@ import type {
   TaoDataProvider,
   TaoDataSchemaDefinition,
   TaoDatasourceDeclaration,
+  TaoDescriptorValue,
   TaoEntityAvailability,
+  TaoQueryDescriptor,
   TaoQueryPlan,
 } from './TR-data'
-import { validateDefinition } from './TR-data-definition'
+import { validateDefinition, valueMatchesKind } from './TR-data-definition'
 import {
   handleKey,
   metadataOf,
@@ -29,16 +31,28 @@ import {
   queryFilterValue,
   rowValues,
 } from './TR-data-values'
+import { reportUnownedFailure } from './TR-errors'
 import RuntimeSwitch from './TR-switch'
+import { Clock } from './TR-units'
 
 type DeleteTarget = { entity: string; id: string }
 
+/** FillState tracks one activated query descriptor's provider-fill lifecycle. */
+type FillState = {
+  filledAtMs?: number
+  message: string
+  status: 'failed' | 'filling' | 'ready'
+}
+
 export class RuntimeDataSchema {
   readonly name: string
+  private boundConfigSnapshot: Record<string, unknown> | undefined
   private data: StoredData
   private error = ''
   private failedSaveSequence: number | undefined
+  private fills = new Map<string, FillState>()
   private generation = 0
+  private pendingFills = new Set<Promise<void>>()
   private handles = new Map<string, RuntimeEntityHandle>()
   private listeners = new Set<() => void>()
   private loadPromise: Promise<void> = Promise.resolve()
@@ -88,12 +102,28 @@ export class RuntimeDataSchema {
     }
   }
 
-  bindConfigured(declaration: TaoDatasourceDeclaration, storageKey?: string): void {
-    if (this.providerBinding === declaration && this.storageKeyBinding === storageKey) {
+  bindConfigured(
+    declaration: TaoDatasourceDeclaration,
+    storageKey?: string,
+    config?: Readonly<Record<string, unknown>>,
+  ): void {
+    // A rebind is compared by configuration value, not object identity: the app root constructs a
+    // fresh configured value per render, while a Patch that changes `Adapter` or `CacheFor` under
+    // the same declaration and storage key must still rebind.
+    const snapshot = unwrapConfigSnapshot(config)
+    if (
+      this.providerBinding === declaration
+      && this.storageKeyBinding === storageKey
+      && configSnapshotsEqual(this.boundConfigSnapshot, snapshot)
+    ) {
       return
     }
     this.storageKeyBinding = storageKey
-    this.configure(declaration.provider, declaration)
+    const provider = config && declaration.provider.withConfiguration
+      ? declaration.provider.withConfiguration(config)
+      : declaration.provider
+    this.configure(provider, declaration)
+    this.boundConfigSnapshot = snapshot
   }
 
   configure(
@@ -103,8 +133,10 @@ export class RuntimeDataSchema {
     const generation = ++this.generation
     this.provider = provider
     this.providerBinding = providerBinding
+    this.boundConfigSnapshot = undefined
     this.data = emptyData(this.definition)
     this.handles.clear()
+    this.fills.clear()
     this.error = ''
     this.status = 'loading'
     this.failedSaveSequence = undefined
@@ -144,11 +176,304 @@ export class RuntimeDataSchema {
       const multiplier = order.direction === 'desc' ? -1 : 1
       rows.sort((left, right) => compare(this.read(left, order.field), this.read(right, order.field)) * multiplier)
     }
-    Object.defineProperties(rows, {
-      Loading: { configurable: true, value: this.status === 'loading' },
-      Error: { configurable: true, value: this.status === 'error' ? this.error : '' },
+    const limited = plan.limit !== undefined && rows.length > plan.limit ? rows.slice(0, plan.limit) : rows
+    const fill = this.fillState(plan)
+    // Availability turns on whether this descriptor has ever filled, not on how many rows it
+    // produced: a feed that legitimately filled empty is `empty` content refreshing behind it,
+    // never a spinner again. Rows and their absence are both content once a fill has landed.
+    const filled = fill?.filledAtMs !== undefined
+    Object.defineProperties(limited, {
+      Loading: {
+        configurable: true,
+        value: this.status === 'loading' || (fill?.status === 'filling' && !filled),
+      },
+      Error: {
+        configurable: true,
+        value: this.status === 'error'
+          ? this.error
+          : fill?.status === 'failed' && !filled
+          ? fill.message
+          : '',
+      },
+      Refreshing: { configurable: true, value: fill?.status === 'filling' && filled },
+      Stale: { configurable: true, value: fill?.status === 'failed' && filled },
     })
-    return rows
+    return limited
+  }
+
+  /**
+   * queryActivationKey identifies one query's fill descriptor, or undefined when the provider has
+   * no fill half. The key is what `Query` re-activates on, so it must be stable across renders.
+   */
+  queryActivationKey(plan: TaoQueryPlan): string | undefined {
+    if (!this.provider.fill) {
+      return undefined
+    }
+    const where = Object.entries(this.equalityFilterValues(plan))
+      .sort(([left], [right]) => left < right ? -1 : 1)
+    const order = this.effectiveOrder(plan)
+    return JSON.stringify(
+      [plan.entity, order?.field ?? null, order?.direction ?? null, plan.limit ?? null, where],
+    )
+  }
+
+  /**
+   * activateQuery offers one live query's descriptor to the provider's fill, once the initial load
+   * settles. Activations are deduplicated by key while a fill runs, and a descriptor filled within
+   * the provider's cache window is not re-filled. The release function abandons a pending offer.
+   */
+  activateQuery(plan: TaoQueryPlan): () => void {
+    const fill = this.provider.fill
+    if (!fill) {
+      return () => {}
+    }
+    const generation = this.generation
+    let released = false
+    void this.loadPromise.then(() => {
+      if (released || generation !== this.generation || this.status !== 'ready') {
+        return
+      }
+      // Building the descriptor evaluates the query's filter thunks, which can throw between
+      // render and this microtask — a relation filter whose target row was deleted meanwhile.
+      // That belongs to the query as a failed fill, never to the platform as an unhandled
+      // rejection; a throw before there is a key has no descriptor to attach to.
+      let key: string | undefined
+      try {
+        key = this.queryActivationKey(plan)
+        if (key === undefined) {
+          return
+        }
+        const current = this.fills.get(key)
+        if (current?.status === 'filling') {
+          return
+        }
+        const cacheForMs = this.provider.fillCacheMs ?? 0
+        if (current?.filledAtMs !== undefined && Clock.now() - current.filledAtMs < cacheForMs) {
+          return
+        }
+        this.startFill(key, plan, current)
+      } catch (error) {
+        if (key === undefined) {
+          reportUnownedFailure(error)
+          return
+        }
+        this.fills.set(key, {
+          filledAtMs: this.fills.get(key)?.filledAtMs,
+          message: errorMessage(error),
+          status: 'failed',
+        })
+        this.emit()
+      }
+    })
+    return () => {
+      released = true
+    }
+  }
+
+  /** fillState reads the fill lifecycle behind one query, or undefined for a fill-less provider. */
+  fillState(plan: TaoQueryPlan): FillState | undefined {
+    const key = this.queryActivationKey(plan)
+    return key === undefined ? undefined : this.fills.get(key)
+  }
+
+  private startFill(key: string, plan: TaoQueryPlan, previous: FillState | undefined): void {
+    const generation = this.generation
+    this.fills.set(key, { filledAtMs: previous?.filledAtMs, message: '', status: 'filling' })
+    this.emit()
+    const request = { descriptor: this.fillDescriptor(plan) }
+    const ops = {
+      upsert: (entity: string, rows: readonly Record<string, unknown>[]): void => {
+        if (generation !== this.generation) {
+          return
+        }
+        this.upsertFromFill(entity, rows)
+      },
+    }
+    const pending = Promise.resolve().then(() => this.provider.fill!(request, ops)).then(
+      () => {
+        if (generation !== this.generation) {
+          return
+        }
+        this.fills.set(key, { filledAtMs: Clock.now(), message: '', status: 'ready' })
+        this.emit()
+      },
+      error => {
+        if (generation !== this.generation) {
+          return
+        }
+        this.fills.set(key, {
+          filledAtMs: previous?.filledAtMs,
+          message: errorMessage(error),
+          status: 'failed',
+        })
+        this.emit()
+      },
+    ).finally(() => {
+      this.pendingFills.delete(pending)
+    })
+    this.pendingFills.add(pending)
+  }
+
+  private fillDescriptor(plan: TaoQueryPlan): TaoQueryDescriptor {
+    const entity = this.requireEntity(plan.entity)
+    const where: Record<string, TaoDescriptorValue> = {}
+    for (const [field, value] of Object.entries(this.equalityFilterValues(plan))) {
+      const definition = entity.fields[field]
+      if (definition?.kind === 'relation' && typeof value === 'string') {
+        where[field] = this.rowSnapshot(definition.relation!, value)
+      } else {
+        where[field] = value as TaoDescriptorValue
+      }
+    }
+    const order = this.effectiveOrder(plan)
+    return {
+      entity: plan.entity,
+      ...(plan.limit !== undefined ? { limit: plan.limit } : {}),
+      ...(order !== undefined ? { orderBy: order.field, orderDirection: order.direction } : {}),
+      where,
+    }
+  }
+
+  /** effectiveOrder mirrors local evaluation: a query's own order, else the entity's default. */
+  private effectiveOrder(plan: TaoQueryPlan): { direction: 'asc' | 'desc'; field: string } | undefined {
+    const order = plan.order ?? this.requireEntity(plan.entity).defaultOrder
+    return order ? { direction: order.direction, field: order.field } : undefined
+  }
+
+  /**
+   * equalityFilterValues resolves the `==` filters a descriptor and its key are built from.
+   * Non-equality filters stay out deliberately: a fill may land a superset and the store still
+   * evaluates the full query locally.
+   */
+  private equalityFilterValues(plan: TaoQueryPlan): Record<string, unknown> {
+    const entity = this.requireEntity(plan.entity)
+    const values: Record<string, unknown> = {}
+    for (const filter of plan.filters) {
+      if (filter.operator === '==') {
+        values[filter.field] = queryFilterValue(plan.entity, entity, filter, this)
+      }
+    }
+    return values
+  }
+
+  /** rowSnapshot flattens one stored row to its scalar fields for a fill descriptor. */
+  private rowSnapshot(entity: string, id: string): Readonly<Record<string, unknown>> {
+    const definition = this.requireEntity(entity)
+    const row = this.storedRow(entity, id)
+    const snapshot: Record<string, unknown> = { Id: id }
+    for (const [name, field] of Object.entries(definition.fields)) {
+      if (field.kind !== 'relation' && row) {
+        snapshot[name] = row[name]
+      }
+    }
+    return Object.freeze(snapshot)
+  }
+
+  /**
+   * upsertFromFill lands fetched rows, matching existing rows by the entity's unique field so a
+   * refetch updates rather than duplicates. A relation value arrives as a plain object naming the
+   * target's unique field (`{ HnId: 123 }`) and resolves to the store row; upsert parents before
+   * children within one fill.
+   */
+  upsertFromFill(entityName: string, rows: readonly Record<string, unknown>[]): void {
+    this.requireReady('fill')
+    const entity = this.requireEntity(entityName)
+    const uniqueField = Object.entries(entity.fields).find(([, field]) => field.unique)?.[0]
+    if (!uniqueField) {
+      throw new Error(`Fill upsert into '${entityName}' requires a field marked (unique).`)
+    }
+    const next = [...(this.data.rows[entityName] ?? [])]
+    for (const raw of rows) {
+      const resolved = this.resolveFillRow(entityName, entity, raw)
+      const uniqueValue = resolved[uniqueField]
+      if (uniqueValue === undefined) {
+        throw new Error(`Fill upsert into '${entityName}' is missing unique field '${uniqueField}'.`)
+      }
+      const index = next.findIndex(row => Object.is(row[uniqueField], uniqueValue))
+      if (index >= 0) {
+        next[index] = { ...next[index], ...resolved, Id: next[index]!.Id }
+      } else {
+        next.push({ Id: this.nextAvailableId(entityName), ...this.filledRowDefaults(entityName, entity, resolved) })
+      }
+    }
+    this.data = { nextId: this.data.nextId, rows: { ...this.data.rows, [entityName]: next } }
+    this.commit()
+  }
+
+  private resolveFillRow(
+    entityName: string,
+    entity: TaoDataEntity,
+    raw: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const resolved: Record<string, unknown> = {}
+    for (const [name, value] of Object.entries(raw)) {
+      const field = entity.fields[name]
+      if (name === 'Id' || !field) {
+        throw new Error(`Entity '${entityName}' has no fillable field '${name}'.`)
+      }
+      if (field.kind !== 'relation') {
+        if (!valueMatchesKind(value, field.kind)) {
+          throw new Error(
+            `Fill field '${entityName}.${name}' expects ${field.kind}, got ${value === null ? 'null' : typeof value}.`,
+          )
+        }
+        resolved[name] = value
+        continue
+      }
+      if (typeof value !== 'object' || value === null) {
+        throw new Error(
+          `Fill relation '${entityName}.${name}' expects an object naming the ${field.relation} unique field.`,
+        )
+      }
+      resolved[name] = this.resolveFillRelation(entityName, name, field.relation!, value as Record<string, unknown>)
+    }
+    return resolved
+  }
+
+  private resolveFillRelation(
+    entityName: string,
+    fieldName: string,
+    targetEntity: string,
+    reference: Record<string, unknown>,
+  ): string {
+    const target = this.requireEntity(targetEntity)
+    const uniqueField = Object.entries(target.fields).find(([, field]) => field.unique)?.[0]
+    if (!uniqueField || reference[uniqueField] === undefined) {
+      throw new Error(
+        `Fill relation '${entityName}.${fieldName}' must name ${targetEntity}'s unique field.`,
+      )
+    }
+    const expected = reference[uniqueField]
+    const row = (this.data.rows[targetEntity] ?? []).find(candidate => Object.is(candidate[uniqueField], expected))
+    if (!row) {
+      throw new Error(
+        `Fill relation '${entityName}.${fieldName}' references no stored ${targetEntity} with `
+          + `${uniqueField} '${String(expected)}'. Upsert the ${targetEntity} rows first in the same fill.`,
+      )
+    }
+    return row.Id
+  }
+
+  private filledRowDefaults(
+    entityName: string,
+    entity: TaoDataEntity,
+    resolved: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const row: Record<string, unknown> = {}
+    for (const [name, field] of Object.entries(entity.fields)) {
+      if (Object.prototype.hasOwnProperty.call(resolved, name)) {
+        row[name] = resolved[name]
+        continue
+      }
+      if (field.defaultNow === true) {
+        row[name] = Clock.now()
+      } else if (Object.prototype.hasOwnProperty.call(field, 'defaultValue')) {
+        row[name] = field.defaultValue
+      } else {
+        throw new Error(`Fill upsert into '${entityName}' is missing required field '${name}'.`)
+      }
+    }
+    return row
   }
 
   create(entityName: string, values: Record<string, unknown>): RuntimeEntityHandle {
@@ -270,6 +595,9 @@ export class RuntimeDataSchema {
 
   async settle(): Promise<void> {
     await this.loadPromise
+    while (this.pendingFills.size > 0) {
+      await Promise.all([...this.pendingFills])
+    }
     await this.saveQueue
   }
 
@@ -426,6 +754,34 @@ export class RuntimeDataSchema {
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
   return !!value && typeof (value as Promise<T>).then === 'function'
+}
+
+function unwrapConfigSnapshot(
+  config: Readonly<Record<string, unknown>> | undefined,
+): Record<string, unknown> | undefined {
+  if (!config) {
+    return undefined
+  }
+  return Object.fromEntries(Object.entries(config).map(([name, value]) => [name, unwrapConfigValue(value)]))
+}
+
+function unwrapConfigValue(value: unknown): unknown {
+  if (typeof value === 'object' && value !== null && 'evaluate' in value) {
+    return (value as { evaluate(): { jsValue: unknown } }).evaluate().jsValue
+  }
+  return value
+}
+
+function configSnapshotsEqual(
+  left: Record<string, unknown> | undefined,
+  right: Record<string, unknown> | undefined,
+): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right
+  }
+  const leftNames = Object.keys(left)
+  return leftNames.length === Object.keys(right).length
+    && leftNames.every(name => Object.is(left[name], right[name]))
 }
 
 function errorMessage(error: unknown): string {

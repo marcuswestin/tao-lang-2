@@ -11,6 +11,13 @@ import {
   testProvider as testDataProvider,
 } from './TR-data'
 import {
+  HttpAdapterControls,
+  HttpProviderFactory,
+  type TaoHttpAdapter,
+  type TaoHttpFillTools,
+  type TaoHttpShape,
+} from './TR-data-http'
+import {
   DesignControls,
   type TaoDesign,
   type TaoDesignSpec,
@@ -378,7 +385,10 @@ class TR {
   static readonly Data = DataControls
 
   /** DataProvider exposes the published provider factories used by datasource injections. */
-  static readonly DataProvider = DataProviderControls
+  static readonly DataProvider = { ...DataProviderControls, Http: HttpProviderFactory } as const
+
+  /** Http is the adapter-authoring surface for Http datasources: `TR.Http.adapter`, `TR.Http.on`. */
+  static readonly Http = HttpAdapterControls
 
   /** Design exposes declaration-local flat tokens, named bundles, and combined spec resolution. */
   static readonly Design = DesignControls
@@ -510,6 +520,8 @@ namespace TR {
   export type SubjectCaseName =
     | 'empty'
     | 'loading'
+    | 'refreshing'
+    | 'stale'
     | 'missing'
     | 'unauthorized'
     | 'error'
@@ -539,6 +551,12 @@ namespace TR {
   export type DataSchema = TaoDataSchema
   /** DataProvider declares the published full-snapshot persistence protocol. */
   export type DataProvider = TaoDataProvider
+  /** HttpAdapter declares an Http datasource's supported query shapes per entity. */
+  export type HttpAdapter = TaoHttpAdapter
+  /** HttpShape is one declared query shape and its fill. */
+  export type HttpShape = TaoHttpShape
+  /** HttpFillTools is what an adapter shape's fill receives to land fetched rows. */
+  export type HttpFillTools = TaoHttpFillTools
   /** DatasourceDeclaration owns the identity and provider implementation of a Tao datasource. */
   export type DatasourceDeclaration = TaoDatasourceDeclaration
   /** ConfiguredDatasource is an immutable declaration-linked provider configuration. */
@@ -647,6 +665,12 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
   if (caseName === 'loading') {
     return { matched: query?.status === 'loading', payload: undefined }
   }
+  if (caseName === 'refreshing') {
+    return { matched: query?.refreshing === true, payload: undefined }
+  }
+  if (caseName === 'stale') {
+    return { matched: query?.stale === true, payload: undefined }
+  }
   if (caseName === 'error') {
     return { matched: query?.status === 'error', payload: query?.message }
   }
@@ -670,18 +694,26 @@ const isCountableValue = (value: unknown): value is string | unknown[] =>
 
 function queryStatus(
   value: unknown,
-): { status: 'loading' | 'error' | 'ready'; message?: string; rows: unknown[] } | undefined {
+): {
+  status: 'loading' | 'error' | 'ready'
+  message?: string
+  refreshing?: boolean
+  rows: unknown[]
+  stale?: boolean
+} | undefined {
   if (!Array.isArray(value) || !Object.prototype.hasOwnProperty.call(value, 'Loading')) {
     return undefined
   }
-  const query = value as unknown[] & { Loading?: boolean; Error?: string }
+  const query = value as unknown[] & { Loading?: boolean; Error?: string; Refreshing?: boolean; Stale?: boolean }
+  // Refreshing and stale are advisory states over renderable rows, never availability by themselves.
+  const advisory = { refreshing: query.Refreshing === true, stale: query.Stale === true }
   if (query.Loading === true) {
-    return { status: 'loading', rows: query }
+    return { status: 'loading', rows: query, ...advisory }
   }
   if (typeof query.Error === 'string' && query.Error.length > 0) {
-    return { status: 'error', message: query.Error, rows: query }
+    return { status: 'error', message: query.Error, rows: query, ...advisory }
   }
-  return { status: 'ready', rows: query }
+  return { status: 'ready', rows: query, ...advisory }
 }
 
 export default TR

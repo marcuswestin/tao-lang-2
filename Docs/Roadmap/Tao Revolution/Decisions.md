@@ -793,6 +793,29 @@ query AisleTotals from MyKitchen.Groceries {
 presence Viewers on Recipe   // Viewers.Others lists the other accounts with this Recipe open now
 ```
 
+**Amended by the HTTP datasource work** (implemented; `Docs/Roadmap/HTTP Datasource/`, forced by
+`Apps/HNReader`). Remote read-only feeds enter through the datasource seam, never through
+imperative fetch actions:
+
+- **`Http` in `@tao/data` is a query-driven datasource.** Entities stay ordinary `data`
+  declarations; a live query's activation is the fetch trigger, so no screen-lifecycle hook, fetch
+  outcome handling, or bulk import verb exists for feeds.
+- **The protocol is descriptor-driven fill with local evaluation.** The provider is offered each
+  active query's descriptor — entity, equality filters, effective order field and direction,
+  limit — fetches through an app adapter, and upserts rows by the entity's single `(unique)`
+  field; the store keeps evaluating every query locally, so a fill may land a superset and
+  API-side ordering is materialized as a row field.
+- **The adapter declares the query shapes the API actually supports** (`TR.Http.adapter` /
+  `TR.Http.on`); a live query matching no declared shape fails loudly, never silently fetching
+  nothing.
+- **Availability is cache-first and per query.** `refreshing` (a fill running behind renderable
+  rows) and `stale` (a failed refill behind renderable rows) join `loading` / `empty` / `error` as
+  **advisory** cases: a guard that does not name them falls through to content, and they never
+  route to the `guard default` net (§5). A failed refresh over cached rows is `stale`, never
+  `error` — offline stays a non-error.
+- **Staleness is declared** (`CacheFor` on the datasource), measured on the runtime clock a check
+  holds; journeys bind a deterministic stub adapter through an ordinary app variant (§11, §16).
+
 ---
 
 ## 7. Editing
