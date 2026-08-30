@@ -1,0 +1,7 @@
+// Local persists each datasource's complete snapshot in the platform's local key-value storage.
+public
+type Local is datasource with {
+   StorageKey text
+
+   provider LocalProvider from ./Local.ts
+}

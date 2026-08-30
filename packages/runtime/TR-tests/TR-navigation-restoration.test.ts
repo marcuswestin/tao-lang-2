@@ -157,7 +157,7 @@ Describe('navigation restoration', () => {
     try {
       const providerDeclaration = TR.Data.Declaration(
         'EntityMemory',
-        TR.DataProvider.Memory(),
+        memoryProvider(),
         identity('datasource', 'EntityMemory'),
       )
       const schema = TR.Data.Schema({
@@ -170,7 +170,7 @@ Describe('navigation restoration', () => {
           },
         },
       })
-      TR.Data.BindConfigured(schema, providerDeclaration)
+      TR.Data.BindConfigured(schema, TR.Data.Configure(providerDeclaration, {}))
       TR.Data.Create(schema, 'Note', { Title: TR.Value('Temporary') })
       const row = schema.query({ entity: 'Note', filters: [] })[0]
 
@@ -204,7 +204,16 @@ Describe('navigation restoration', () => {
       await drainMicrotasks()
       detach()
 
-      schema.configure(TR.DataProvider.Memory(), providerDeclaration)
+      // A fresh store under the same declaration binding: the restored token matches the
+      // provider identity while the row itself is gone.
+      schema.configure(
+        memoryProvider().connect({
+          configuration: {},
+          schema: schema.definition,
+          storageKey: schema.definition.name,
+        }),
+        { configuration: {}, declaration: providerDeclaration },
+      )
       const second = createApp()
       const detachSecond = await second.attachRestoration()
       const restoredEntries = (second.navigator as unknown as {
@@ -218,6 +227,20 @@ Describe('navigation restoration', () => {
     }
   })
 })
+
+function memoryProvider(): TR.DataProvider {
+  const snapshots = new Map<string, string>()
+  return {
+    connect: ({ storageKey }) => ({
+      load: () => snapshots.get(storageKey),
+      referenceToken: reference => reference.id,
+      resolveReference: reference => reference.token,
+      save: snapshot => {
+        snapshots.set(storageKey, snapshot)
+      },
+    }),
+  }
+}
 
 function mapStorage(values: Map<string, string>): TaoKeyValueStorage {
   return {

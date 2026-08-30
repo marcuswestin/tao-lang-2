@@ -26,6 +26,10 @@ type DevLoopOutputStream = {
 }
 
 type DevLoopOutputState = {
+  failure?: {
+    message: string
+    streamName: string
+  }
   prompt?: string
   streams: Map<string, DevLoopOutputStream>
 }
@@ -79,10 +83,12 @@ let activeDevLoopOutput: {
 /** DevLoopTUI owns interactive output for the dev loop. */
 export const DevLoopTUI = {
   askConfirm,
+  clearFailure,
   dashboardLayout: devLoopDashboardLayout,
   devLoopOutputHandler,
   logDevLoop,
   printDevLoopControls,
+  recordFailure,
   startDevLoopOutput,
   stopDevLoopOutput,
   writeDevLoopOutput,
@@ -150,6 +156,27 @@ async function stopDevLoopOutput(): Promise<void> {
   activeOutput?.app.rerender(React.createElement(DevLoopOutputDashboard, { state: activeOutput.state }))
   await activeOutput?.app.waitUntilRenderFlush()
   activeOutput?.app.unmount()
+  // Any failure still recorded — from startup or a later watch-time recompile — outlives the
+  // alternate screen; a stream that recovered has already cleared its record.
+  if (activeOutput?.state.failure) {
+    const { message, streamName } = activeOutput.state.failure
+    fallbackLog(streamName, message, 'error')
+  }
+}
+
+/** recordFailure keeps the terminal error available after the alternate-screen dashboard closes. */
+function recordFailure(streamName: string, message: string): void {
+  logDevLoop(streamName, message, 'error')
+  if (activeDevLoopOutput !== undefined) {
+    activeDevLoopOutput.state.failure = { message, streamName }
+  }
+}
+
+/** clearFailure retires a stream's recorded failure once a later run of it succeeds. */
+function clearFailure(streamName: string): void {
+  if (activeDevLoopOutput?.state.failure?.streamName === streamName) {
+    activeDevLoopOutput.state.failure = undefined
+  }
 }
 
 function logDevLoop(streamName: string, message: string, kind: DevLoopOutputKind = 'info'): void {

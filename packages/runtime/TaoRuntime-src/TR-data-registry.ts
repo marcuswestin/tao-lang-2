@@ -1,6 +1,6 @@
-import type { TaoDataSchema } from './TR-data'
+import type { TaoConfiguredDatasource, TaoDataSchema } from './TR-data'
 import { entityHandle, metadataOf, type TaoEntityReferenceSnapshot } from './TR-data-entity'
-import { MemoryProvider } from './TR-data-provider'
+import { testDataConnection } from './TR-data-provider'
 
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 
@@ -35,19 +35,23 @@ export function restoreEntityReference(reference: TaoEntityReferenceSnapshot): u
 
 export function bindConfiguredDataSchema(
   schema: TaoDataSchema,
-  ...binding: Parameters<TaoDataSchema['bindConfigured']>
+  source: TaoConfiguredDatasource,
 ): void {
   if (testMode) {
     activeTestSchemas.add(schema)
+    // Configuration mistakes must fail the behavior test that mounts them, not the first
+    // production mount, so the runtime-owned validation runs here even though the provider is
+    // never connected under test.
+    schema.validateConfigured(source)
     // A snapshot provider stays replaced by the fresh test Memory store. A fill-capable provider
     // binds anyway: fills are how a query-driven datasource has any rows at all, and determinism
     // is the running app variant's responsibility — a test runs the variant whose adapter is a
     // deterministic stub, never the network (Decisions §11, §16).
-    if (binding[0]?.provider.fill === undefined) {
+    if (source.declaration.provider.fills === undefined) {
       return
     }
   }
-  schema.bindConfigured(...binding)
+  schema.bindConfigured(source)
 }
 
 /** settleAllDataSchemas waits out every schema's load, in-flight fills, and queued saves. */
@@ -70,7 +74,7 @@ export function beginTest(): void {
   testMode = true
   activeTestSchemas.clear()
   for (const schema of schemas) {
-    schema.configure(MemoryProvider(), 'test')
+    schema.configure(testDataConnection(), 'test')
   }
 }
 

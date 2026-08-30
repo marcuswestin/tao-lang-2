@@ -1,4 +1,5 @@
 import { CLI, Errors, Repo } from '@shared'
+import { OutputText } from '../cli/OutputText'
 import CommandRunner from './CommandRunner'
 import { DevLoopTUI } from './DevLoopTUI'
 import { ExpoRunner } from './expo-runner/ExpoRunner'
@@ -77,17 +78,37 @@ async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise
       onOutput: DevLoopTUI.devLoopOutputHandler('compile'),
     })
     if (result.exitCode !== 0 || result.error !== undefined) {
-      DevLoopTUI.logDevLoop('compile', `compile failed for ${appPath}`, 'error')
+      DevLoopTUI.recordFailure('compile', formatCommandOutput(result) ?? Errors.formatForLog(result.error))
       return false
     }
     if (!result.stdout.trim()) {
       DevLoopTUI.logDevLoop('compile', 'compiled')
     }
+    DevLoopTUI.clearFailure('compile')
     return true
   } catch (error) {
-    DevLoopTUI.logDevLoop('compile', Errors.formatForLog(error), 'error')
+    DevLoopTUI.recordFailure('compile', formatDevLoopFailure(error))
     return false
   }
+}
+
+/** formatCommandOutput extracts the child process output that explains a failed dev command. */
+function formatCommandOutput(result: { stderr: string; stdout: string }): string | undefined {
+  const commandOutput = [result.stderr, result.stdout]
+    .map(output => OutputText.stripAnsi(output).trim())
+    .filter(output => output.length > 0)
+  return commandOutput.length > 0 ? commandOutput.join('\n') : undefined
+}
+
+/** formatDevLoopFailure favors the child process output that explains a failed dev command. */
+function formatDevLoopFailure(error: unknown): string {
+  if (error instanceof Errors.CommandExecutionError) {
+    const commandOutput = formatCommandOutput(error.result)
+    if (commandOutput !== undefined) {
+      return commandOutput
+    }
+  }
+  return Errors.formatForLog(error)
 }
 
 /** recompileAndReload recompiles the selected app while a command key owns exclusivity, then reloads Expo. */
@@ -109,6 +130,7 @@ async function recompileAndReload(repoRoot: string, appPath: string, appName?: s
 /** Run provides dev-loop subprocess helpers. */
 const Run = {
   compileApp,
+  formatFailure: formatDevLoopFailure,
   recompileAndReload,
   runJust,
   runTests,

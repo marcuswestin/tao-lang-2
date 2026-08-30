@@ -81,7 +81,8 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     void finish({ kind: 'exit', exitCode })
   }
 
-  expoServer.onUnexpectedExit(() => {
+  expoServer.onUnexpectedExit(message => {
+    DevLoopTUI.recordFailure('expo', message)
     void finish({ kind: 'exit', exitCode: 1 })
   })
 
@@ -132,6 +133,9 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     }
     void ExpoRunner.openStartupTargets(shouldStop)
     return await done
+  } catch (error) {
+    DevLoopTUI.recordFailure('dev', Run.formatFailure(error))
+    throw error
   } finally {
     removeSigint()
     removeSigterm()

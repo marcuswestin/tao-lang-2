@@ -1,6 +1,8 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { OutputText } from '../dev-src/cli/OutputText'
 import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
+import { formatExpoExitFailure } from '../dev-src/expo-dev-loop/expo-runner/expo-server'
 import { ExpoRunner } from '../dev-src/expo-dev-loop/expo-runner/ExpoRunner'
 import { parseIfconfigIPv4, preferredLanIPv4 } from '../dev-src/expo-dev-loop/expo-runner/lan-host'
 import {
@@ -9,6 +11,7 @@ import {
 } from '../dev-src/expo-dev-loop/expo-runner/physical-device'
 import { handleCommandKey } from '../dev-src/expo-dev-loop/keyboard-input/CommandKeys'
 import Commands from '../dev-src/expo-dev-loop/keyboard-input/Commands'
+import Run from '../dev-src/expo-dev-loop/Run'
 
 Describe('Expo dev-loop command helpers', () => {
   Test('recognizes the verify and device shortcut keys', () => {
@@ -37,6 +40,30 @@ Describe('Expo dev-loop command helpers', () => {
     await handleCommandKey('s', context)
 
     Expect(actions).toEqual(['finish:0', 'select-app'])
+  })
+
+  Test('keeps child-process output as the useful dev-loop failure', () => {
+    const error = new Errors.CommandExecutionError({
+      args: ['compile', 'App.tao'],
+      command: './tao',
+      exitCode: 1,
+      signal: null,
+      stderr: '\u001B[31mactual compiler error\u001B[39m\n',
+      stdout: 'compiler context\n',
+    })
+
+    Expect(Run.formatFailure(error)).toBe('actual compiler error\ncompiler context')
+  })
+
+  Test('keeps Expo output with an unexpected-exit summary', () => {
+    Expect(formatExpoExitFailure(
+      'Starting project\n\u001B[31mError: Cannot find module ./publicFolder\u001B[39m\n',
+      'Expo exited with code=1.',
+    )).toBe([
+      'Starting project',
+      'Error: Cannot find module ./publicFolder',
+      'Expo exited with code=1.',
+    ].join('\n'))
   })
 })
 

@@ -125,7 +125,7 @@ Describe('compiler: language lowering', () => {
 
   Test('compiles the top-level data catalog, inferred relations, defaults, and explicit Local key', async () => {
     const compiled = await Compiler.compileCode(`
-      use Local from @tao/data
+      use Local from @tao/data/providers/local
       use StackNav from @tao/nav
       data Workspaces / Workspace {
         Name text (unique)
@@ -199,6 +199,37 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.ForEach(_Scope.Drafts.evaluate()')
   })
 
+  Test('resolves the InstantDB datasource package for a selected app variant', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+        use InstantDB from @tao/data/providers/instantdb
+        use Local from @tao/data/providers/local
+        use StackNav from @tao/nav
+        data Notes / Note { Title text }
+        app LocalNotes {
+          Name "Local Notes"
+          Navigator StackNav { Initial Main }
+          Datasource Local { StorageKey "Notes" }
+        }
+        app SyncedNotes = LocalNotes with {
+          Name "Synced Notes"
+          Datasource InstantDB { AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f" }
+        }
+        view Main() {
+          Title "Notes"
+          render Text("Ready")
+        }
+        view Text(Value text) { render inject ${tsFence} return null ${fence} }
+      `,
+      { appName: 'SyncedNotes' },
+    )
+
+    Expect(compiled.code).toContain('TR.Data.Configure(_Scope.__tao_type_InstantDB, {')
+    Expect(compiled.code).toContain('"AppId": TR.Value("9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f")')
+    Expect(compiled.code).toContain('export default TaoApps["SyncedNotes"]')
+    Expect(compiled.files.some(file => file.sourcePath.endsWith('/InstantDB.ts'))).toBe(true)
+  })
+
   Test('lowers render and loop tags through Tao props without adding a row wrapper', async () => {
     const compiled = await Compiler.compileCode(`
       use Col, Text from @tao/ui
@@ -264,7 +295,7 @@ Describe('compiler: language lowering', () => {
 
   Test('emits prototype-sensitive data names as computed object keys', async () => {
     const compiled = await Compiler.compileCode(`
-      use Memory from @tao/data
+      use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
       data Rows / __proto__ { __proto__ text }
       app SafeApp {

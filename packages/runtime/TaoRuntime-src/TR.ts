@@ -4,18 +4,24 @@ import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import { createClipboard, type TaoPasteboard } from './TR-clipboard'
 import {
   DataControls,
-  DataProviderControls,
   type TaoConfiguredDatasource,
+  type TaoDataConnection,
+  type TaoDataConnectionObserver,
   type TaoDataProvider,
+  type TaoDataProviderContext,
   type TaoDataSchema,
+  type TaoDataSchemaDefinition,
   type TaoDatasourceDeclaration,
+  type TaoFillOps,
+  type TaoFillRequest,
+  type TaoQueryDescriptor,
   testProvider as testDataProvider,
 } from './TR-data'
 import {
   HttpAdapterControls,
-  HttpProviderFactory,
   type TaoHttpAdapter,
   type TaoHttpFillTools,
+  type TaoHttpMatch,
   type TaoHttpShape,
 } from './TR-data-http'
 import {
@@ -476,9 +482,6 @@ class TR {
   /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
   static readonly Data = DataControls
 
-  /** DataProvider exposes the published provider factories used by datasource injections. */
-  static readonly DataProvider = { ...DataProviderControls, Http: HttpProviderFactory } as const
-
   /** Http is the adapter-authoring surface for Http datasources: `TR.Http.adapter`, `TR.Http.on`. */
   static readonly Http = HttpAdapterControls
 
@@ -677,10 +680,26 @@ namespace TR {
   export type DevModeOptions = TaoDevModeOptions
   /** DataSchema declares one runtime-backed Tao data schema. */
   export type DataSchema = TaoDataSchema
-  /** DataProvider declares the published full-snapshot persistence protocol. */
+  /** DataSchemaDefinition declares the provider-visible shape of one mounted Tao data catalog. */
+  export type DataSchemaDefinition = TaoDataSchemaDefinition
+  /** DataConnection is one provider connection bound to evaluated datasource configuration. */
+  export type DataConnection = TaoDataConnection
+  /** DataConnectionObserver receives live provider snapshots and failures. */
+  export type DataConnectionObserver = TaoDataConnectionObserver
+  /** DataProvider declares the package-owned datasource implementation protocol. */
   export type DataProvider = TaoDataProvider
+  /** DataProviderContext carries one schema mount and plain evaluated configuration. */
+  export type DataProviderContext = TaoDataProviderContext
+  /** DataFillRequest carries the query descriptor a connection's fill is offered. */
+  export type DataFillRequest = TaoFillRequest
+  /** DataFillOps is what a connection's fill receives to land fetched rows in the store. */
+  export type DataFillOps = TaoFillOps
+  /** QueryDescriptor is the serializable shape of one active query offered to a fill. */
+  export type QueryDescriptor = TaoQueryDescriptor
   /** HttpAdapter declares an Http datasource's supported query shapes per entity. */
   export type HttpAdapter = TaoHttpAdapter
+  /** HttpMatch declares which query shapes one adapter entry serves. */
+  export type HttpMatch = TaoHttpMatch
   /** HttpShape is one declared query shape and its fill. */
   export type HttpShape = TaoHttpShape
   /** HttpFillTools is what an adapter shape's fill receives to land fetched rows. */

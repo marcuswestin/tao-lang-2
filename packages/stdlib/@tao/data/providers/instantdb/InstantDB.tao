@@ -1,0 +1,11 @@
+// InstantDB syncs each datasource's complete snapshot through one keyed InstantDB entity.
+public
+type InstantDB is datasource with {
+   // Defaults to the mounted Tao data schema name when omitted.
+   StorageKey text?
+   AppId text
+   ApiURI text?
+   WebsocketURI text?
+
+   provider InstantDBProvider from ./InstantDB.ts
+}

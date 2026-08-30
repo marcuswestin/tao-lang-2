@@ -8,7 +8,7 @@ import { Ports } from './Ports'
 import { ExpoTargets } from './run-targets'
 
 type ExpoServerProcess = {
-  onUnexpectedExit: (listener: () => void) => void
+  onUnexpectedExit: (listener: (message: string) => void) => void
   start: () => Promise<void>
   stop: () => Promise<void>
 }

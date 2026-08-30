@@ -1,12 +1,17 @@
 import type {
+  TaoConfiguredDatasource,
+  TaoDataConnection,
   TaoDataEntity,
-  TaoDataProvider,
   TaoDataSchemaDefinition,
   TaoDatasourceDeclaration,
   TaoDescriptorValue,
   TaoEntityAvailability,
   TaoQueryDescriptor,
   TaoQueryPlan,
+} from './TR-data'
+import {
+  configurationValuesEqual,
+  evaluatedDatasourceConfiguration,
 } from './TR-data'
 import { validateDefinition, valueMatchesKind } from './TR-data-definition'
 import {
@@ -38,18 +43,25 @@ import { Clock } from './TR-units'
 
 type DeleteTarget = { entity: string; id: string }
 
-/** FillState tracks one activated query descriptor's provider-fill lifecycle. */
+/** FillState tracks one activated query descriptor's connection-fill lifecycle. */
 type FillState = {
   filledAtMs?: number
   message: string
   status: 'failed' | 'filling' | 'ready'
 }
 
+type ConfiguredProviderBinding = Readonly<{
+  configuration: Readonly<Record<string, unknown>>
+  declaration: TaoDatasourceDeclaration
+}>
+type ProviderBinding = ConfiguredProviderBinding | 'test' | 'unbound' | undefined
+
 export class RuntimeDataSchema {
   readonly name: string
-  private boundConfigSnapshot: Record<string, unknown> | undefined
+  private bufferedRemoteSnapshot: { stored: string | undefined } | undefined
   private data: StoredData
   private error = ''
+  private errorRecoverable = false
   private failedSaveSequence: number | undefined
   private fills = new Map<string, FillState>()
   private generation = 0
@@ -58,26 +70,26 @@ export class RuntimeDataSchema {
   private listeners = new Set<() => void>()
   private loadPromise: Promise<void> = Promise.resolve()
   private nextSaveSequence = 0
-  private provider: TaoDataProvider
-  private providerBinding: TaoDatasourceDeclaration | 'test' | 'unbound' | undefined
-  private storageKeyBinding: string | undefined
+  private connection: TaoDataConnection
+  private completedSaveSequence = 0
+  private hasUsableSnapshot = false
+  private providerBinding: ProviderBinding
+  private providerUnsubscribe: (() => void) | undefined
   private saveQueue: Promise<void> = Promise.resolve()
   private status: DataStatus = 'loading'
   private version = 0
 
   constructor(
     readonly definition: TaoDataSchemaDefinition,
-    provider: TaoDataProvider,
-    providerBinding?: TaoDatasourceDeclaration | 'test' | 'unbound',
-    storageKeyBinding?: string,
+    connection: TaoDataConnection,
+    providerBinding?: ProviderBinding,
   ) {
     validateDefinition(definition)
     this.name = definition.name
-    this.provider = provider
+    this.connection = connection
     this.providerBinding = providerBinding
-    this.storageKeyBinding = storageKeyBinding
     this.data = emptyData(definition)
-    this.configure(provider, providerBinding)
+    this.configure(connection, providerBinding)
   }
 
   readonly subscribe = (listener: () => void): () => void => {
@@ -89,7 +101,7 @@ export class RuntimeDataSchema {
 
   serializeReference(handle: RuntimeEntityHandle): TaoEntityReferenceSnapshot {
     const metadata = this.requireOwnedHandle(handle)
-    const token = this.provider.referenceToken?.({ entity: metadata.entity, id: metadata.id, schema: this.name })
+    const token = this.connection.referenceToken?.({ entity: metadata.entity, id: metadata.id, schema: this.name })
     if (token === undefined) {
       throw new Error(`Datasource provider for '${this.name}' does not support restoration references.`)
     }
@@ -106,7 +118,7 @@ export class RuntimeDataSchema {
       return undefined
     }
     this.requireEntity(reference.entity)
-    const id = this.provider.resolveReference?.({
+    const id = this.connection.resolveReference?.({
       entity: reference.entity,
       schema: reference.schema,
       token: reference.token,
@@ -117,77 +129,105 @@ export class RuntimeDataSchema {
     return this.handle(reference.entity, id)
   }
 
-  private async resetAfterLoadFailure(): Promise<void> {
-    const provider = this.provider
+  private async recoverAfterLoadFailure(destructive: boolean): Promise<void> {
+    const connection = this.connection
     const providerBinding = this.providerBinding
-    const storageKey = this.storageKey()
-    await provider.persist(storageKey, JSON.stringify(envelope(emptyData(this.definition), this.definition)))
-    if (this.provider !== provider || this.storageKey() !== storageKey) {
+    if (destructive) {
+      await connection.reset?.()
+    }
+    if (this.connection !== connection) {
       return
     }
 
-    this.configure(provider, providerBinding)
+    this.configure(connection, providerBinding)
     await this.settle()
-    if (this.provider === provider && this.storageKey() === storageKey && this.status === 'error') {
+    if (this.connection === connection && this.status === 'error') {
       throw new Error(this.error)
     }
   }
 
-  bindConfigured(
-    declaration: TaoDatasourceDeclaration,
-    storageKey?: string,
-    config?: Readonly<Record<string, unknown>>,
-  ): void {
-    // A rebind is compared by configuration value, not object identity: the app root constructs a
-    // fresh configured value per render, while a Patch that changes `Adapter` or `CacheFor` under
-    // the same declaration and storage key must still rebind.
-    const snapshot = unwrapConfigSnapshot(config)
+  /**
+   * validateConfigured runs the runtime-owned configuration checks without connecting a provider —
+   * how a Tao behavior test surfaces a configuration mistake that would otherwise first fire at a
+   * production mount.
+   */
+  validateConfigured(source: TaoConfiguredDatasource): void {
+    this.validatedStorageKey(source.declaration.name, evaluatedDatasourceConfiguration(source))
+  }
+
+  bindConfigured(source: TaoConfiguredDatasource): void {
+    // A rebind is compared by evaluated configuration value, not object identity: the app root
+    // constructs a fresh configured value per render, while a Patch that changes `Adapter` or
+    // `StorageKey` under the same declaration must still rebind.
+    const configuration = evaluatedDatasourceConfiguration(source)
     if (
-      this.providerBinding === declaration
-      && this.storageKeyBinding === storageKey
-      && configSnapshotsEqual(this.boundConfigSnapshot, snapshot)
+      typeof this.providerBinding === 'object'
+      && this.providerBinding.declaration === source.declaration
+      && configurationValuesEqual(this.providerBinding.configuration, configuration)
     ) {
       return
     }
-    this.storageKeyBinding = storageKey
-    const provider = config && declaration.provider.withConfiguration
-      ? declaration.provider.withConfiguration(config)
-      : declaration.provider
-    this.configure(provider, declaration)
-    this.boundConfigSnapshot = snapshot
+    const binding = Object.freeze({ configuration, declaration: source.declaration })
+    // A configuration or connect failure becomes data error state behind the recovery overlay; a
+    // throw would escape into the mounting layout effect, where no error boundary catches it.
+    try {
+      const storageKey = this.validatedStorageKey(source.declaration.name, configuration)
+      const connection = source.declaration.provider.connect(Object.freeze({
+        configuration,
+        schema: this.definition,
+        storageKey,
+      }))
+      this.configure(connection, binding)
+    } catch (error) {
+      this.configure(brokenConnection(error), binding)
+    }
   }
 
   configure(
-    provider: TaoDataProvider,
-    providerBinding?: TaoDatasourceDeclaration | 'test' | 'unbound',
+    connection: TaoDataConnection,
+    providerBinding?: ProviderBinding,
   ): void {
     const generation = ++this.generation
-    this.provider = provider
+    this.providerUnsubscribe?.()
+    this.providerUnsubscribe = undefined
+    const previousConnection = this.connection
+    if (previousConnection !== connection) {
+      // Queued saves already hold committed data, so the outgoing connection closes only after
+      // its save chain settles — a rebind must not reject an in-flight save. The queue never
+      // rejects, and a connection still loading has an empty queue, so this cannot dangle.
+      void this.saveQueue.then(() => previousConnection.close?.())
+    }
+    this.connection = connection
     this.providerBinding = providerBinding
-    this.boundConfigSnapshot = undefined
+    this.bufferedRemoteSnapshot = undefined
     this.data = emptyData(this.definition)
     this.handles.clear()
     this.fills.clear()
     this.error = ''
+    this.errorRecoverable = false
     this.status = 'loading'
     this.failedSaveSequence = undefined
+    this.completedSaveSequence = 0
+    this.hasUsableSnapshot = false
     this.nextSaveSequence = 0
     this.saveQueue = Promise.resolve()
     this.emit()
 
     try {
-      const loaded = provider.load(this.storageKey())
+      const loaded = connection.load()
       if (isPromise(loaded)) {
         this.loadPromise = loaded.then(
           value => this.finishLoad(generation, value),
           error => this.failLoad(generation, error),
-        )
+        ).then(() => this.startSubscription(generation, connection))
         return
       }
       this.finishLoad(generation, loaded)
+      this.startSubscription(generation, connection)
       this.loadPromise = Promise.resolve()
     } catch (error) {
       this.failLoad(generation, error)
+      this.startSubscription(generation, connection)
       this.loadPromise = Promise.resolve()
     }
   }
@@ -233,11 +273,11 @@ export class RuntimeDataSchema {
   }
 
   /**
-   * queryActivationKey identifies one query's fill descriptor, or undefined when the provider has
-   * no fill half. The key is what `Query` re-activates on, so it must be stable across renders.
+   * queryActivationKey identifies one query's fill descriptor, or undefined when the connection
+   * has no fill half. The key is what `Query` re-activates on, so it must be stable across renders.
    */
   queryActivationKey(plan: TaoQueryPlan): string | undefined {
-    if (!this.provider.fill) {
+    if (!this.connection.fill) {
       return undefined
     }
     const where = Object.entries(this.equalityFilterValues(plan))
@@ -249,13 +289,13 @@ export class RuntimeDataSchema {
   }
 
   /**
-   * activateQuery offers one live query's descriptor to the provider's fill, once the initial load
-   * settles. Activations are deduplicated by key while a fill runs, and a descriptor filled within
-   * the provider's cache window is not re-filled. The release function abandons a pending offer.
+   * activateQuery offers one live query's descriptor to the connection's fill, once the initial
+   * load settles. Activations are deduplicated by key while a fill runs, and a descriptor filled
+   * within the connection's cache window is not re-filled. The release function abandons a pending
+   * offer.
    */
   activateQuery(plan: TaoQueryPlan): () => void {
-    const fill = this.provider.fill
-    if (!fill) {
+    if (!this.connection.fill) {
       return () => {}
     }
     const generation = this.generation
@@ -278,7 +318,7 @@ export class RuntimeDataSchema {
         if (current?.status === 'filling') {
           return
         }
-        const cacheForMs = this.provider.fillCacheMs ?? 0
+        const cacheForMs = this.connection.fillCacheMs ?? 0
         if (current?.filledAtMs !== undefined && Clock.now() - current.filledAtMs < cacheForMs) {
           return
         }
@@ -301,7 +341,7 @@ export class RuntimeDataSchema {
     }
   }
 
-  /** fillState reads the fill lifecycle behind one query, or undefined for a fill-less provider. */
+  /** fillState reads the fill lifecycle behind one query, or undefined for a fill-less connection. */
   fillState(plan: TaoQueryPlan): FillState | undefined {
     const key = this.queryActivationKey(plan)
     return key === undefined ? undefined : this.fills.get(key)
@@ -309,6 +349,7 @@ export class RuntimeDataSchema {
 
   private startFill(key: string, plan: TaoQueryPlan, previous: FillState | undefined): void {
     const generation = this.generation
+    const fill = this.connection.fill!
     this.fills.set(key, { filledAtMs: previous?.filledAtMs, message: '', status: 'filling' })
     this.emit()
     const request = { descriptor: this.fillDescriptor(plan) }
@@ -320,7 +361,7 @@ export class RuntimeDataSchema {
         this.upsertFromFill(entity, rows)
       },
     }
-    const pending = Promise.resolve().then(() => this.provider.fill!(request, ops)).then(
+    const pending = Promise.resolve().then(() => fill(request, ops)).then(
       () => {
         if (generation !== this.generation) {
           return
@@ -634,8 +675,9 @@ export class RuntimeDataSchema {
 
   setStatus(status: DataStatus, message: string): void {
     this.failedSaveSequence = undefined
+    this.errorRecoverable = false
     this.status = status
-    this.error = status === 'error' ? message || 'Local data provider failed.' : ''
+    this.error = status === 'error' ? message || 'Data provider failed.' : ''
     this.emit()
   }
 
@@ -668,19 +710,21 @@ export class RuntimeDataSchema {
 
   private commit(): void {
     const generation = this.generation
-    const provider = this.provider
+    const connection = this.connection
     const saveSequence = ++this.nextSaveSequence
     const serialized = JSON.stringify(envelope(this.data, this.definition))
     this.emit()
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await provider.persist(this.storageKey(), serialized)
+        await connection.save(serialized)
         if (
           generation === this.generation
-          && this.failedSaveSequence !== undefined
-          && saveSequence > this.failedSaveSequence
+          && this.status === 'error'
+          && this.errorRecoverable
+          && (this.failedSaveSequence === undefined || saveSequence > this.failedSaveSequence)
         ) {
           this.failedSaveSequence = undefined
+          this.errorRecoverable = false
           this.status = 'ready'
           this.error = ''
           this.emit()
@@ -688,12 +732,28 @@ export class RuntimeDataSchema {
       } catch (error) {
         if (generation === this.generation) {
           this.failedSaveSequence = saveSequence
+          this.errorRecoverable = true
           this.status = 'error'
-          this.error = `Could not save local data: ${errorMessage(error)}`
+          this.error = `Could not save data: ${errorMessage(error)}`
           this.emit()
+        }
+      } finally {
+        if (generation === this.generation) {
+          this.completedSaveSequence = saveSequence
+          this.replayBufferedSnapshot(generation)
         }
       }
     })
+  }
+
+  /** replayBufferedSnapshot re-delivers the latest remote event suppressed during pending saves. */
+  private replayBufferedSnapshot(generation: number): void {
+    if (this.completedSaveSequence !== this.nextSaveSequence || this.bufferedRemoteSnapshot === undefined) {
+      return
+    }
+    const buffered = this.bufferedRemoteSnapshot
+    this.bufferedRemoteSnapshot = undefined
+    this.receiveSnapshot(generation, buffered.stored)
   }
 
   private emit(): void {
@@ -701,15 +761,27 @@ export class RuntimeDataSchema {
     emitDataChange(this.listeners)
   }
 
-  private failLoad(generation: number, error: unknown): void {
+  private failLoad(generation: number, error: unknown, cause: 'corrupt' | 'load' = 'load'): void {
     if (generation !== this.generation) {
       return
     }
     this.failedSaveSequence = undefined
+    this.errorRecoverable = false
     this.status = 'error'
-    this.error = `Could not load local data: ${errorMessage(error)}`
+    this.error = `Could not load data: ${errorMessage(error)}`
     if (this.providerBinding !== 'unbound') {
-      DataLoadRecovery.report(this, this.error, () => this.resetAfterLoadFailure())
+      // A transport failure gets a plain retry; only provably corrupt stored data offers the
+      // destructive reset, so a transient outage can never wipe a provider's good snapshot. And
+      // the reset exists only where the connection grants it: a connection without `reset` — a
+      // shared remote store, deliberately — keeps the retry, because overwriting data this client
+      // failed to parse could erase every peer's rows.
+      DataLoadRecovery.report(
+        this,
+        this.error,
+        cause === 'corrupt' && this.connection.reset !== undefined
+          ? { label: 'Reset app data and reload', run: () => this.recoverAfterLoadFailure(true) }
+          : { label: 'Try loading data again', run: () => this.recoverAfterLoadFailure(false) },
+      )
     }
     this.emit()
   }
@@ -719,15 +791,86 @@ export class RuntimeDataSchema {
       return
     }
     try {
-      this.data = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
-      this.failedSaveSequence = undefined
-      this.status = 'ready'
-      this.error = ''
-      DataLoadRecovery.resolve(this)
-      this.emit()
+      this.applySnapshot(stored)
     } catch (error) {
-      this.failLoad(generation, error)
+      this.failLoad(generation, error, 'corrupt')
     }
+  }
+
+  /** applySnapshot replaces the store with one parsed snapshot; a parse failure throws unapplied. */
+  private applySnapshot(stored: string | undefined): void {
+    this.data = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
+    this.failedSaveSequence = undefined
+    this.errorRecoverable = false
+    this.hasUsableSnapshot = true
+    this.status = 'ready'
+    this.error = ''
+    DataLoadRecovery.resolve(this)
+    this.emit()
+  }
+
+  private startSubscription(generation: number, connection: TaoDataConnection): void {
+    if (generation !== this.generation || connection !== this.connection || !connection.subscribe) {
+      return
+    }
+    try {
+      this.providerUnsubscribe = connection.subscribe({
+        error: error => this.failSubscription(generation, error),
+        snapshot: value => this.receiveSnapshot(generation, value),
+      })
+    } catch (error) {
+      this.failSubscription(generation, error)
+    }
+  }
+
+  private failSubscription(generation: number, error: unknown): void {
+    if (!this.hasUsableSnapshot) {
+      this.failLoad(generation, error)
+      return
+    }
+    if (generation !== this.generation) {
+      return
+    }
+    this.errorRecoverable = true
+    this.status = 'error'
+    this.error = `Could not synchronize data: ${errorMessage(error)}`
+    this.emit()
+  }
+
+  private receiveSnapshot(generation: number, stored: string | undefined): void {
+    if (generation !== this.generation) {
+      return
+    }
+    // A local snapshot already visible in the UI wins over remote events observed while its
+    // ordered save is pending. The latest suppressed event replays once the queue drains, so a
+    // peer write pushed during the window still lands.
+    if (this.completedSaveSequence < this.nextSaveSequence) {
+      this.bufferedRemoteSnapshot = { stored }
+      return
+    }
+    const serialized = JSON.stringify(envelope(this.data, this.definition))
+    const matchesLocal = stored === serialized || (stored === undefined && this.isEmpty())
+    if (matchesLocal && this.status === 'ready') {
+      return
+    }
+    // After a failed save the local write is the only copy; a differing remote snapshot must not
+    // silently revert it. The write stays visible with its error until a retried write saves, or
+    // the provider echoes this exact snapshot and clears the error through the apply below.
+    if (!matchesLocal && this.failedSaveSequence !== undefined) {
+      return
+    }
+    try {
+      this.applySnapshot(stored)
+    } catch (error) {
+      // A mid-session snapshot this client cannot parse — a peer on a newer schema version, or a
+      // corrupted payload — degrades to the recoverable sync failure over the last usable data
+      // rather than blocking the app behind the load-recovery overlay.
+      this.failSubscription(generation, error)
+    }
+  }
+
+  private isEmpty(): boolean {
+    return Object.values(this.data.rows).every(rows => rows.length === 0)
   }
 
   private handle(entity: string, id: string): RuntimeEntityHandle {
@@ -769,23 +912,36 @@ export class RuntimeDataSchema {
   }
 
   private requireReady(operation: string): void {
-    if (this.status !== 'ready') {
-      throw new Error(`Cannot ${operation} data while the provider is ${this.status}.`)
+    if (this.status === 'ready') {
+      return
     }
+    // A failed save or a sync outage keeps committed data usable: writes stay allowed so a retry
+    // can save the store again while the error stays visible over the rows.
+    if (this.status === 'error' && this.errorRecoverable) {
+      return
+    }
+    throw new Error(`Cannot ${operation} data while the provider is ${this.status}.`)
   }
 
-  private storageKey(): string {
-    return this.storageKeyBinding ?? this.definition.name
+  private validatedStorageKey(
+    declarationName: string,
+    configuration: Readonly<Record<string, unknown>>,
+  ): string {
+    const configured = configuration['StorageKey']
+    if (configured !== undefined && typeof configured !== 'string') {
+      throw new Error(`Datasource ${declarationName} configuration 'StorageKey' expects text.`)
+    }
+    return configured ?? this.definition.name
   }
 
   private referenceProviderIdentity(): string {
     const binding = this.providerBinding
     if (typeof binding === 'object') {
-      const canonical = binding.canonicalIdentity?.canonical
+      const canonical = binding.declaration.canonicalIdentity?.canonical
       if (canonical) {
         return canonical
       }
-      throw new Error(`Datasource declaration '${binding.name}' has no canonical identity.`)
+      throw new Error(`Datasource declaration '${binding.declaration.name}' has no canonical identity.`)
     }
     return String(binding ?? 'unbound')
   }
@@ -795,36 +951,20 @@ export class RuntimeDataSchema {
   }
 }
 
+/** brokenConnection carries a configuration or connect failure into load-time error state. */
+function brokenConnection(error: unknown): TaoDataConnection {
+  return {
+    load: () => {
+      throw error
+    },
+    save: () => {
+      throw error
+    },
+  }
+}
+
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
   return !!value && typeof (value as Promise<T>).then === 'function'
-}
-
-function unwrapConfigSnapshot(
-  config: Readonly<Record<string, unknown>> | undefined,
-): Record<string, unknown> | undefined {
-  if (!config) {
-    return undefined
-  }
-  return Object.fromEntries(Object.entries(config).map(([name, value]) => [name, unwrapConfigValue(value)]))
-}
-
-function unwrapConfigValue(value: unknown): unknown {
-  if (typeof value === 'object' && value !== null && 'evaluate' in value) {
-    return (value as { evaluate(): { jsValue: unknown } }).evaluate().jsValue
-  }
-  return value
-}
-
-function configSnapshotsEqual(
-  left: Record<string, unknown> | undefined,
-  right: Record<string, unknown> | undefined,
-): boolean {
-  if (left === undefined || right === undefined) {
-    return left === right
-  }
-  const leftNames = Object.keys(left)
-  return leftNames.length === Object.keys(right).length
-    && leftNames.every(name => Object.is(left[name], right[name]))
 }
 
 function errorMessage(error: unknown): string {

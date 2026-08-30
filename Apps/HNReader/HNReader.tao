@@ -1,4 +1,4 @@
-use Http from @tao/data
+use Http from @tao/data/providers/http
 use StackNav from @tao/nav
 use Col, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
 

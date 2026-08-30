@@ -2,9 +2,10 @@ import React from 'react'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 type DataLoadFailure = Readonly<{
+  actionLabel: string
   id: number
   message: string
-  reset: () => Promise<void>
+  recover: () => Promise<void>
   source: object
 }>
 
@@ -58,8 +59,14 @@ const styles = {
 
 /** DataLoadRecovery is the private seam between provider loading and the app recovery boundary. */
 export const DataLoadRecovery = {
-  report(source: object, message: string, reset: () => Promise<void>): void {
-    activeFailure = { id: ++nextFailureId, message, reset, source }
+  report(source: object, message: string, recovery: { label: string; run: () => Promise<void> }): void {
+    activeFailure = {
+      actionLabel: recovery.label,
+      id: ++nextFailureId,
+      message,
+      recover: recovery.run,
+      source,
+    }
     emit()
   },
 
@@ -72,7 +79,7 @@ export const DataLoadRecovery = {
   },
 } as const
 
-/** DataLoadRecoveryBoundary blocks a failed app and remounts it after its local data is reset. */
+/** DataLoadRecoveryBoundary blocks a failed app and remounts it after provider-defined recovery. */
 export function DataLoadRecoveryBoundary(props: DataLoadRecoveryBoundaryProps): React.JSX.Element {
   React.useSyncExternalStore(subscribe, snapshot, snapshot)
   const failure = activeFailure
@@ -90,8 +97,8 @@ export function DataLoadRecoveryBoundary(props: DataLoadRecoveryBoundaryProps): 
 function DataLoadFailureOverlay(props: { failure: DataLoadFailure }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const [recoveryError, setRecoveryError] = React.useState('')
-  const [resetting, setResetting] = React.useState(false)
-  const buttonLabel = resetting ? 'Resetting…' : 'Reset local data and reload'
+  const [recovering, setRecovering] = React.useState(false)
+  const buttonLabel = recovering ? 'Recovering…' : props.failure.actionLabel
   React.useEffect(() => {
     const subscription = RN.BackHandler?.addEventListener('hardwareBackPress', () => true)
     return () => subscription?.remove()
@@ -115,19 +122,19 @@ function DataLoadFailureOverlay(props: { failure: DataLoadFailure }): React.JSX.
         {
           accessibilityLabel: buttonLabel,
           accessibilityRole: 'button',
-          disabled: resetting,
+          disabled: recovering,
           onPress: async () => {
-            setResetting(true)
+            setRecovering(true)
             setRecoveryError('')
             try {
-              await props.failure.reset()
+              await props.failure.recover()
               completeRecovery(props.failure)
             } catch (error) {
-              setResetting(false)
-              setRecoveryError(`Could not reset local data: ${errorMessage(error)}`)
+              setRecovering(false)
+              setRecoveryError(`Could not recover app data: ${errorMessage(error)}`)
             }
           },
-          style: [styles.button, resetting ? styles.buttonDisabled : undefined],
+          style: [styles.button, recovering ? styles.buttonDisabled : undefined],
         },
         React.createElement(RN.Text, { style: styles.buttonText }, buttonLabel),
       ),

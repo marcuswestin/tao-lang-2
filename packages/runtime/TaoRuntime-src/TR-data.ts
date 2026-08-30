@@ -1,6 +1,6 @@
 import React from 'react'
 import { entityHandle, metadataOf } from './TR-data-entity'
-import { MemoryProvider, UnboundProvider } from './TR-data-provider'
+import { testDataConnection, UnboundConnection } from './TR-data-provider'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -19,7 +19,7 @@ import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
 import { StudioEnvironmentControls } from './TR-studio-environment'
 
-export { DataProviderControls, testProvider } from './TR-data-provider'
+export { testProvider } from './TR-data-provider'
 
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'
@@ -71,7 +71,7 @@ export type TaoQueryPlan = {
   }
 }
 
-/** TaoQueryDescriptor is the serializable shape of one active query offered to a fill provider. */
+/** TaoQueryDescriptor is the serializable shape of one active query offered to a fill connection. */
 export type TaoQueryDescriptor = {
   entity: string
   limit?: number
@@ -95,26 +95,66 @@ export type TaoFillOps = {
   upsert(entity: string, rows: readonly Record<string, unknown>[]): void
 }
 
-export type TaoDataProvider = {
-  load(storageKey: string): Promise<string | undefined> | string | undefined
-  persist(storageKey: string, snapshot: string): Promise<void> | void
+/**
+ * TaoDataConnection is one provider connection bound to a schema and evaluated datasource config.
+ *
+ * The protocol deliberately exchanges complete serialized snapshots:
+ * - load returns one starting snapshot or undefined for an empty mount.
+ * - save receives every committed snapshot in call order and must propagate rejection.
+ * - subscribe, when present, publishes complete replacement snapshots after load.
+ * - close, when present, synchronously releases connection-owned resources and must not throw;
+ *   the runtime calls it only after the connection's queued saves settle.
+ *
+ * The runtime owns schema validation, queries, identity, defaults, relationships, status, and
+ * notifications. Providers own persistence and transport only. A provider must either isolate its
+ * instances or share one coherent stateless storage boundary. Incremental change or sync protocols
+ * belong to a future provider family rather than leaking into this full-snapshot contract.
+ */
+export type TaoDataConnection = {
+  close?(): void
   /** referenceToken and resolveReference are the optional, versioned restoration capability. */
   referenceToken?(reference: { entity: string; id: string; schema: string }): string
   resolveReference?(reference: { entity: string; schema: string; token: string }): string | undefined
   /**
-   * fill is the remote half of a query-driven provider: the schema offers each activated query
-   * descriptor, and the provider fetches and upserts rows. The store keeps evaluating every query
-   * locally over its rows; a fill may land a superset. Rejections become the query's failed state
-   * (`stale` over cached rows, `error` over none), never a thrown render.
+   * fill is the remote half of a query-driven connection: the schema offers each activated query
+   * descriptor, and the connection fetches and upserts rows. The store keeps evaluating every
+   * query locally over its rows; a fill may land a superset. Rejections become the query's failed
+   * state (`stale` over cached rows, `error` over none), never a thrown render.
    */
   fill?(request: TaoFillRequest, ops: TaoFillOps): Promise<void>
   /** fillCacheMs suppresses re-fills of a descriptor filled within the window (default 0: always). */
   fillCacheMs?: number
+  load(): Promise<string | undefined> | string | undefined
+  /** reset is optional because remote providers may not permit destructive recovery. */
+  reset?(): Promise<void> | void
+  save(snapshot: string): Promise<void> | void
+  subscribe?(observer: TaoDataConnectionObserver): () => void
+}
+
+/** TaoDataConnectionObserver receives provider snapshots and failures after the initial load. */
+export type TaoDataConnectionObserver = Readonly<{
+  error(error: unknown): void
+  snapshot(value: string | undefined): void
+}>
+
+/** TaoDataProviderContext is the provider-neutral mount passed to a package implementation. */
+export type TaoDataProviderContext = Readonly<{
+  configuration: Readonly<Record<string, unknown>>
+  schema: TaoDataSchemaDefinition
+  storageKey: string
+}>
+
+/** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
+export type TaoDataProvider = {
+  connect(context: TaoDataProviderContext): TaoDataConnection
   /**
-   * withConfiguration derives the bound provider from a datasource value's configuration — how a
-   * declaration-owned factory receives properties like `Adapter` and `CacheFor` at bind time.
+   * fills marks a query-driven provider whose connections offer fill. Tao behavior tests keep the
+   * fresh test Memory store for snapshot providers but bind a fill-capable provider anyway: fills
+   * are how a query-driven datasource has any rows at all, and determinism is the running app
+   * variant's responsibility — a test runs the variant whose adapter is a deterministic stub,
+   * never the network (Decisions §11, §16).
    */
-  withConfiguration?(config: Readonly<Record<string, unknown>>): TaoDataProvider
+  fills?: true
 }
 
 export type TaoDataProviderFactory = () => TaoDataProvider
@@ -146,35 +186,76 @@ export type TaoKeyValueStorage = {
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
+  // The wrapped declaration must be stable across renders: the app root reconstructs the
+  // configured value per render, and bindConfigured treats a new declaration object as a full
+  // rebind. Only `source.declaration` and the studio overlay are stable inputs.
   const studioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
   const declaration = React.useMemo<TaoDatasourceDeclaration>(() =>
     studioProvider === source.declaration.provider
       ? source.declaration
       : Object.freeze({ ...source.declaration, provider: studioProvider }), [source.declaration, studioProvider])
-  const storageKey = configuredStorageKey(source)
+  // The effect re-runs on each render's fresh `config` object and BindConfigured compares
+  // evaluated configuration values to make an unchanged rebind a cheap no-op.
   React.useLayoutEffect(() => {
-    DataControls.BindConfigured(schema, declaration, storageKey, source.config)
-  }, [schema, declaration, storageKey, source.config])
+    DataControls.BindConfigured(
+      schema,
+      declaration === source.declaration ? source : DataControls.Configure(declaration, { ...source.config }),
+    )
+  }, [schema, declaration, source.config])
 }
 
-function configuredStorageKey(source: TaoConfiguredDatasource): string | undefined {
-  const configured = source.config['StorageKey']
-  if (configured === undefined) {
-    return undefined
+/** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
+export function evaluatedDatasourceConfiguration(
+  source: TaoConfiguredDatasource,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(source.config).map(([name, value]) => [name, evaluatedConfigurationValue(value)]),
+  ))
+}
+
+/**
+ * configurationValuesEqual compares evaluated configuration values so equivalent values
+ * reconstructed during React renders do not rebind. Plain values compare structurally; anything
+ * else — an adapter object's fill functions, for instance — compares by identity, so swapping a
+ * variant's adapter rebinds even when the shapes serialize alike.
+ */
+export function configurationValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true
   }
-  if (!isEvaluable(configured)) {
-    throw new Error(`Datasource ${source.declaration.name} configuration 'StorageKey' expects text.`)
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, index) => configurationValuesEqual(value, right[index]))
   }
-  const value = configured.evaluate().jsValue
-  if (typeof value !== 'string') {
-    throw new Error(`Datasource ${source.declaration.name} configuration 'StorageKey' expects text.`)
+  if (isRecord(left) && isRecord(right)) {
+    const names = Object.keys(left)
+    return names.length === Object.keys(right).length
+      && names.every(name => name in right && configurationValuesEqual(left[name], right[name]))
+  }
+  return false
+}
+
+function evaluatedConfigurationValue(value: unknown): unknown {
+  if (isEvaluable(value)) {
+    return evaluatedConfigurationValue(value.evaluate().jsValue)
+  }
+  if (Array.isArray(value)) {
+    return value.map(evaluatedConfigurationValue)
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([name, nested]) => [name, evaluatedConfigurationValue(nested)]),
+    )
   }
   return value
 }
 
 function isEvaluable(value: unknown): value is Evaluable {
-  return typeof value === 'object' && value !== null && 'evaluate' in value
-    && typeof value.evaluate === 'function'
+  return isRecord(value) && 'evaluate' in value && typeof value['evaluate'] === 'function'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
@@ -215,16 +296,14 @@ export const DataControls = {
 
   Schema(
     definition: TaoDataSchemaDefinition,
-    provider?: TaoDataProvider,
-    providerStorageKey?: string,
+    connection?: TaoDataConnection,
   ): RuntimeDataSchema {
-    const selectedProvider = provider
-      ?? (isDataTestMode() ? MemoryProvider() : UnboundProvider(definition.name))
+    const selectedConnection = connection
+      ?? (isDataTestMode() ? testDataConnection() : UnboundConnection(definition.name))
     const schema = new RuntimeDataSchema(
       definition,
-      selectedProvider,
-      isDataTestMode() ? 'test' : provider ? undefined : 'unbound',
-      providerStorageKey,
+      selectedConnection,
+      isDataTestMode() ? 'test' : connection ? undefined : 'unbound',
     )
     registerDataSchema(schema)
     return schema
@@ -233,11 +312,9 @@ export const DataControls = {
   /** BindConfigured selects a declaration-owned provider while preserving test isolation. */
   BindConfigured(
     schema: RuntimeDataSchema,
-    declaration: TaoDatasourceDeclaration,
-    storageKey?: string,
-    config?: Readonly<Record<string, unknown>>,
+    source: TaoConfiguredDatasource,
   ): void {
-    bindConfiguredDataSchema(schema, declaration, storageKey, config)
+    bindConfiguredDataSchema(schema, source)
   },
 
   /** UseConfigured binds a declaration-owned datasource configuration at an app root. */

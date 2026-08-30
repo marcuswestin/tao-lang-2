@@ -46,7 +46,7 @@ Describe('canonical navigation identity', () => {
   Test('scopes persisted entity tokens to the complete configured provider binding', () => {
     const declaration = TR.Data.Declaration(
       'ScopedMemory',
-      TR.DataProvider.Memory(),
+      { connect: () => ({ load: () => undefined, save: () => {} }) },
       TR.Navigation.Identity([
         'tao.declaration',
         1,

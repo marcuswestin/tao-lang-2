@@ -22,7 +22,7 @@ navigation; they do not render ordinary content directly.
 ## Apps and configured navigation
 
 ```tao
-use Local from @tao/data
+use Local from @tao/data/providers/local
 use SelectionNav, StackNav from @tao/nav
 
 nav HomeStack = StackNav {

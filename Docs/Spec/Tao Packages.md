@@ -54,7 +54,7 @@ compiler-known names are involved.
 - The app selects a primary navigator; see `Tao Presentation and Navigation.md` for its behavior.
 
 ```tao
-use Local from @tao/data
+use Local from @tao/data/providers/local
 use StackNav from @tao/nav
 use Col, FormButton, Text from @tao/ui
 

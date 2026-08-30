@@ -115,7 +115,7 @@ Describe('Tao Studio scenario runtime', () => {
         }
       `,
       'Main.tao': `
-        use Memory from @tao/data
+        use Memory from @tao/data/providers/memory
         use StackNav from @tao/nav
         use Text from @tao/ui
         use Workspaces from ./Data.tao

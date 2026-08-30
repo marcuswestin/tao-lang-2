@@ -215,11 +215,12 @@ The clock owns every repeating and delayed callback in the runtime: `@tao/time`'
 expiry, and `now`. A held clock therefore makes a ticking display, a countdown, and a transient
 notice all deterministic, and releases at the end of the check.
 
-Before every check, the runner installs a fresh Memory instance and prevents the app's configured
-provider from replacing it, so no step reads or mutates durable data. Memory is the shipped
-`@tao/data` declaration bound through the published `TR.DataProvider` full-snapshot protocol; its
-implementation passes the same `TR.testProvider` empty-load, round-trip, key/instance-boundary,
-ordering, and rejection conformance used by other providers.
+Before every check, the runner installs a fresh in-memory snapshot store and prevents the app's
+configured snapshot provider from replacing it, so no step reads or mutates durable data (a
+fill-capable provider still binds; see `Tao Data.md`). The shipped Memory declaration in
+`@tao/data/providers/memory` is bound through the published `TR.DataProvider` connection protocol;
+its implementation passes the same `TR.testProvider` empty-load, round-trip,
+key/instance-boundary, ordering, and rejection conformance used by other providers.
 
 Driving a provider into `loading`, `error`, or `ready` from a test step is retired (Decisions §16).
 The states those steps reached return through the world controls — network, sync, and datasource

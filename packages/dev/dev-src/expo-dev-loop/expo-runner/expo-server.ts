@@ -1,18 +1,24 @@
 import { CLI, FS, Repo, Time } from '@shared'
+import { OutputText } from '../../cli/OutputText'
 import { DevLoopTUI } from '../DevLoopTUI'
 import { ExpoConfig } from './expo-config'
+
+const EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT = 32_000
+const EXPO_FAILURE_OUTPUT_LINE_LIMIT = 40
 
 /** ExpoServer owns the Expo CLI process and its log output. */
 export class ExpoServer {
   private child?: CLI.StartedCommand
   private closeOutputAndLogPromise?: Promise<void>
   private logFile?: FS.FileHandle
-  private unexpectedExit?: () => void
+  private recentOutputChunks: string[] = []
+  private recentOutputLength = 0
+  private unexpectedExit?: (message: string) => void
   private stopping = false
 
   constructor(private readonly runtimeRoot: string) {}
 
-  onUnexpectedExit(listener: () => void): void {
+  onUnexpectedExit(listener: (message: string) => void): void {
     this.unexpectedExit = listener
   }
 
@@ -25,6 +31,7 @@ export class ExpoServer {
       cwd: this.runtimeRoot,
       env: ExpoConfig.EXPO_START_ENV,
       onOutput: (stream, chunk) => {
+        this.appendRecentOutput(String(chunk))
         DevLoopTUI.writeDevLoopOutput('expo', stream, chunk)
         void this.logFile?.write(chunk)
       },
@@ -32,12 +39,15 @@ export class ExpoServer {
     this.child.onceClose((exitCode, signal) => {
       void this.closeOutputAndLog()
       if (!this.stopping) {
-        DevLoopTUI.logDevLoop('dev', `Expo exited with code=${exitCode} signal=${signal}. See ${logPath}.`, 'warn')
-        this.unexpectedExit?.()
+        const summary = `Expo exited with code=${exitCode} signal=${signal}. See ${logPath}.`
+        DevLoopTUI.logDevLoop('dev', summary, 'warn')
+        this.unexpectedExit?.(formatExpoExitFailure(this.recentOutput(), summary))
       }
     })
     this.child.onceError(error => {
-      DevLoopTUI.logDevLoop('dev', `Failed to start Expo: ${error.message}`, 'error')
+      const message = `Failed to start Expo: ${error.message}`
+      this.appendRecentOutput(`\n${message}`)
+      DevLoopTUI.logDevLoop('dev', message, 'error')
     })
     DevLoopTUI.logDevLoop('dev', `Expo log: ${logPath}`)
   }
@@ -75,4 +85,30 @@ export class ExpoServer {
     this.logFile = undefined
     await logFile?.close()
   }
+
+  /** appendRecentOutput keeps a bounded failure tail without recopying the buffer per chunk. */
+  private appendRecentOutput(chunk: string): void {
+    this.recentOutputChunks.push(chunk)
+    this.recentOutputLength += chunk.length
+    while (
+      this.recentOutputChunks.length > 1
+      && this.recentOutputLength - this.recentOutputChunks[0]!.length >= EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT
+    ) {
+      this.recentOutputLength -= this.recentOutputChunks.shift()!.length
+    }
+  }
+
+  private recentOutput(): string {
+    return this.recentOutputChunks.join('').slice(-EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT)
+  }
+}
+
+/** formatExpoExitFailure keeps the useful tail of Expo output when its dashboard disappears. */
+export function formatExpoExitFailure(output: string, summary: string): string {
+  const outputLines = OutputText.stripAnsi(output)
+    .split(/\r?\n/)
+    .map(line => line.trimEnd())
+    .filter(line => line.length > 0)
+    .slice(-EXPO_FAILURE_OUTPUT_LINE_LIMIT)
+  return outputLines.length === 0 ? summary : `${outputLines.join('\n')}\n${summary}`
 }

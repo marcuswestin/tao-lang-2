@@ -1,5 +1,5 @@
 import React from 'react'
-import type { TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
+import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
 import { Clock } from './TR-units'
 
 export const studioEnvironmentVersion = 1 as const
@@ -277,24 +277,29 @@ function providerOverlay(
         ),
         version: studioStateSeedVersion,
       }),
-    load: storageKey => state.snapshots.get(storageKey),
-    persist: (storageKey, snapshot) => {
-      state.snapshots.set(storageKey, snapshot)
-    },
-    ...(base.fill === undefined
-      ? {}
-      : {
-        fill: async (request: TaoFillRequest, ops: TaoFillOps): Promise<void> => {
-          await controlledFill(base, environment.network, state, request, ops)
+    connect: context => {
+      // Persistence stays cell-local, so only a fill-capable base connects — its connection is
+      // the fill half the environment throttles, fails, and forwards.
+      const baseConnection = base.fills === undefined ? undefined : base.connect(context)
+      return {
+        close: () => baseConnection?.close?.(),
+        load: () => state.snapshots.get(context.storageKey),
+        referenceToken: reference => reference.id,
+        resolveReference: reference => reference.token,
+        save: snapshot => {
+          state.snapshots.set(context.storageKey, snapshot)
         },
-      }),
-    ...(base.fillCacheMs === undefined ? {} : { fillCacheMs: base.fillCacheMs }),
-    ...(base.withConfiguration === undefined
-      ? {}
-      : {
-        withConfiguration: (config: Readonly<Record<string, unknown>>) =>
-          providerOverlay(base.withConfiguration!(config), environment, state),
-      }),
+        ...(baseConnection?.fill === undefined
+          ? {}
+          : {
+            fill: async (request: TaoFillRequest, ops: TaoFillOps): Promise<void> => {
+              await controlledFill(baseConnection, environment.network, state, request, ops)
+            },
+          }),
+        ...(baseConnection?.fillCacheMs === undefined ? {} : { fillCacheMs: baseConnection.fillCacheMs }),
+      }
+    },
+    ...(base.fills === undefined ? {} : { fills: true }),
   }
   return overlay
 }
@@ -422,7 +427,7 @@ function identifier(value: string): string {
 }
 
 async function controlledFill(
-  base: TaoDataProvider,
+  baseConnection: TaoDataConnection,
   network: TaoStudioNetworkEnvironment,
   state: OverlayState,
   request: TaoFillRequest,
@@ -440,7 +445,7 @@ async function controlledFill(
   if (failure !== undefined) {
     throw new TaoStudioDeclaredFillError(entity, failure.message)
   }
-  await base.fill!(request, ops)
+  await baseConnection.fill!(request, ops)
 }
 
 function matchingFailure(

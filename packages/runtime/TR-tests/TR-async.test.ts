@@ -1,6 +1,6 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
-import type { TaoDataProvider, TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
+import type { TaoDataConnection, TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
 import { onUnownedFailure } from '../TaoRuntime-src/TR-errors'
 
 const noteDefinition: TaoDataSchemaDefinition = {
@@ -66,9 +66,9 @@ Describe('TR.Async', () => {
   })
 
   Test('leaves failed provider writes observable through query error state', async () => {
-    const provider: TaoDataProvider = {
+    const provider: TaoDataConnection = {
       load: () => undefined,
-      persist: async () => {
+      save: async () => {
         throw new Error('disk unavailable')
       },
     }
@@ -82,7 +82,7 @@ Describe('TR.Async', () => {
 
     const notes = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
     Expect(notes).toHaveLength(1)
-    Expect(notes.Error).toContain('Could not save local data: disk unavailable')
+    Expect(notes.Error).toContain('Could not save data: disk unavailable')
   })
 })
 

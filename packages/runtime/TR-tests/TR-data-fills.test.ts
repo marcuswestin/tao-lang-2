@@ -1,6 +1,12 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
-import type { TaoDataProvider, TaoDataSchemaDefinition, TaoFillOps, TaoFillRequest } from '../TaoRuntime-src/TR-data'
+import type {
+  TaoDataConnection,
+  TaoDataSchemaDefinition,
+  TaoFillOps,
+  TaoFillRequest,
+} from '../TaoRuntime-src/TR-data'
+import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { onUnownedFailure } from '../TaoRuntime-src/TR-errors'
 import { Clock } from '../TaoRuntime-src/TR-units'
 
@@ -44,12 +50,11 @@ function deferred(): Deferred {
   return { promise, reject, resolve }
 }
 
-function fillProvider(
+function fillConnection(
   fill: (request: TaoFillRequest, ops: TaoFillOps) => Promise<void>,
   fillCacheMs?: number,
-): TaoDataProvider {
-  const provider = TR.DataProvider.Memory()
-  return { ...provider, fill, ...(fillCacheMs !== undefined ? { fillCacheMs } : {}) }
+): TaoDataConnection {
+  return { ...testDataConnection(), fill, ...(fillCacheMs !== undefined ? { fillCacheMs } : {}) }
 }
 
 function storiesPlan(limit?: number): Parameters<TR.DataSchema['query']>[0] {
@@ -64,13 +69,13 @@ function storiesPlan(limit?: number): Parameters<TR.DataSchema['query']>[0] {
 Describe('TR.Data query fills', () => {
   Test('fills an activated query and upserts rows by the unique field', async () => {
     let fetchedTitle = 'Original'
-    const provider = fillProvider(async (_request, ops) => {
+    const connection = fillConnection(async (_request, ops) => {
       ops.upsert('Story', [
         { HnId: 1, Title: fetchedTitle, Rank: 1 },
         { HnId: 2, Title: 'Second', Rank: 2 },
       ])
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
 
     schema.activateQuery(storiesPlan())
@@ -87,14 +92,14 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('applies a query limit after ordering', async () => {
-    const provider = fillProvider(async (_request, ops) => {
+    const connection = fillConnection(async (_request, ops) => {
       ops.upsert('Story', [
         { HnId: 3, Title: 'Third', Rank: 3 },
         { HnId: 1, Title: 'First', Rank: 1 },
         { HnId: 2, Title: 'Second', Rank: 2 },
       ])
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
     schema.activateQuery(storiesPlan(2))
     await schema.settle()
@@ -107,11 +112,11 @@ Describe('TR.Data query fills', () => {
 
   Test('reports loading while a first fill has nothing to show, then ready', async () => {
     const gate = deferred()
-    const provider = fillProvider(async (_request, ops) => {
+    const connection = fillConnection(async (_request, ops) => {
       await gate.promise
       ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
 
     schema.activateQuery(storiesPlan())
@@ -130,7 +135,7 @@ Describe('TR.Data query fills', () => {
   Test('reports refreshing over cached rows, and stale when the refill fails', async () => {
     let outcome: 'succeed' | 'fail' | 'wait' = 'succeed'
     let gate = deferred()
-    const provider = fillProvider(async (_request, ops) => {
+    const connection = fillConnection(async (_request, ops) => {
       if (outcome === 'wait') {
         await gate.promise
       }
@@ -139,7 +144,7 @@ Describe('TR.Data query fills', () => {
       }
       ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
     schema.activateQuery(storiesPlan())
     await schema.settle()
@@ -165,10 +170,10 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('surfaces a failed first fill as the query error with nothing to show', async () => {
-    const provider = fillProvider(async () => {
+    const connection = fillConnection(async () => {
       throw new Error('Hacker News is unreachable')
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
     schema.activateQuery(storiesPlan())
     await schema.settle()
@@ -181,7 +186,7 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('resolves fill relations by the target unique field and rejects unknown references', async () => {
-    const provider = fillProvider(async (request, ops) => {
+    const connection = fillConnection(async (request, ops) => {
       if (request.descriptor.entity === 'Story') {
         ops.upsert('Story', [{ HnId: 7, Title: 'Show HN', Rank: 1 }])
         return
@@ -190,7 +195,7 @@ Describe('TR.Data query fills', () => {
         { HnId: 71, Story: { HnId: 7 }, Text: 'First comment' },
       ])
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
     schema.activateQuery(storiesPlan())
     await schema.settle()
@@ -215,13 +220,13 @@ Describe('TR.Data query fills', () => {
 
   Test('offers the adapter a descriptor carrying order, limit, and related-row snapshots', async () => {
     const descriptors: TaoFillRequest['descriptor'][] = []
-    const provider = fillProvider(async (request, ops) => {
+    const connection = fillConnection(async (request, ops) => {
       descriptors.push(request.descriptor)
       if (request.descriptor.entity === 'Story') {
         ops.upsert('Story', [{ HnId: 7, Title: 'Show HN', Rank: 1 }])
       }
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
     schema.activateQuery(storiesPlan(30))
     await schema.settle()
@@ -249,11 +254,11 @@ Describe('TR.Data query fills', () => {
     Clock.beginTest()
     try {
       let fillCount = 0
-      const provider = fillProvider(async (_request, ops) => {
+      const connection = fillConnection(async (_request, ops) => {
         fillCount += 1
         ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
       }, 5000)
-      const schema = TR.Data.Schema(feedDefinition, provider)
+      const schema = TR.Data.Schema(feedDefinition, connection)
       await schema.settle()
 
       schema.activateQuery(storiesPlan())
@@ -277,7 +282,7 @@ Describe('TR.Data query fills', () => {
   Test('bridges fill state to the language subject cases a render site matches', async () => {
     let outcome: 'succeed' | 'fail' | 'wait' = 'succeed'
     let gate = deferred()
-    const provider = fillProvider(async (_request, ops) => {
+    const connection = fillConnection(async (_request, ops) => {
       if (outcome === 'wait') {
         await gate.promise
       }
@@ -286,7 +291,7 @@ Describe('TR.Data query fills', () => {
       }
       ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
     // TR.IsCase is what `Query is refreshing` compiles to, so this crosses the same bridge a
     // render site does.
@@ -336,10 +341,10 @@ Describe('TR.Data query fills', () => {
 
   Test('treats a descriptor that filled empty as content, not a second spinner', async () => {
     let gate = deferred()
-    const provider = fillProvider(async () => {
+    const connection = fillConnection(async () => {
       await gate.promise
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
 
     schema.activateQuery(storiesPlan())
@@ -359,10 +364,10 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('routes a filter that throws during activation to the unowned-failure seam', async () => {
-    const provider = fillProvider(async (_request, ops) => {
+    const connection = fillConnection(async (_request, ops) => {
       ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
     })
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
     schema.activateQuery(storiesPlan())
     await schema.settle()
@@ -390,7 +395,7 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('rejects fill rows that break the entity contract', async () => {
-    const schema = TR.Data.Schema(feedDefinition, fillProvider(async () => {}))
+    const schema = TR.Data.Schema(feedDefinition, fillConnection(async () => {}))
     await schema.settle()
 
     Expect(() => schema.upsertFromFill('Story', [{ Title: 'No key', Rank: 1 }]))
@@ -406,8 +411,8 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('keys fills by sort direction, so opposite bounded feeds fill separately', async () => {
-    const provider = fillProvider(async () => {})
-    const schema = TR.Data.Schema(feedDefinition, provider)
+    const connection = fillConnection(async () => {})
+    const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
 
     const ascending = schema.queryActivationKey({
@@ -426,30 +431,33 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('rebinds on a configuration change and keeps the store on an identical rebind', async () => {
-    const declaration = TR.Data.Declaration('Http', TR.DataProvider.Http())
-    const firstAdapter = TR.Http.adapter({
-      Story: [TR.Http.on({ orderBy: 'Rank' }, async (_query, tools) => {
-        tools.upsert([{ HnId: 1, Title: 'From the first adapter', Rank: 1 }])
-      })],
-    })
-    const secondAdapter = TR.Http.adapter({
-      Story: [TR.Http.on({ orderBy: 'Rank' }, async (_query, tools) => {
-        tools.upsert([{ HnId: 2, Title: 'From the second adapter', Rank: 1 }])
-      })],
-    })
-    const schema = TR.Data.Schema(feedDefinition, TR.DataProvider.Memory())
+    // A fill-capable provider reading its adapter from configuration, the way the stdlib Http
+    // package does — the rebind semantics under test live entirely in the runtime.
+    const feedProvider: TR.DataProvider = {
+      connect: context => {
+        const rows = context.configuration['FillRows'] as ReadonlyArray<Record<string, unknown>>
+        return fillConnection(async (_request, ops) => {
+          ops.upsert('Story', rows)
+        })
+      },
+      fills: true,
+    }
+    const declaration = TR.Data.Declaration('Feed', feedProvider)
+    const firstRows = [{ HnId: 1, Title: 'From the first adapter', Rank: 1 }]
+    const secondRows = [{ HnId: 2, Title: 'From the second adapter', Rank: 1 }]
+    const schema = TR.Data.Schema(feedDefinition, testDataConnection())
 
-    schema.bindConfigured(declaration, undefined, { Adapter: TR.Value(firstAdapter) })
+    schema.bindConfigured(TR.Data.Configure(declaration, { FillRows: TR.Value(firstRows) }))
     await schema.settle()
     schema.activateQuery(storiesPlan())
     await schema.settle()
     Expect(schema.query(storiesPlan())).toHaveLength(1)
 
-    schema.bindConfigured(declaration, undefined, { Adapter: TR.Value(firstAdapter) })
+    schema.bindConfigured(TR.Data.Configure(declaration, { FillRows: TR.Value(firstRows) }))
     await schema.settle()
     Expect(schema.query(storiesPlan())).toHaveLength(1)
 
-    schema.bindConfigured(declaration, undefined, { Adapter: TR.Value(secondAdapter) })
+    schema.bindConfigured(TR.Data.Configure(declaration, { FillRows: TR.Value(secondRows) }))
     await schema.settle()
     schema.activateQuery(storiesPlan())
     await schema.settle()
@@ -458,8 +466,8 @@ Describe('TR.Data query fills', () => {
     Expect(schema.read(rows[0] as never, 'Title')).toBe('From the second adapter')
   })
 
-  Test('keeps fills out of snapshot-only providers and their queries', async () => {
-    const schema = TR.Data.Schema(feedDefinition, TR.DataProvider.Memory())
+  Test('keeps fills out of snapshot-only connections and their queries', async () => {
+    const schema = TR.Data.Schema(feedDefinition, testDataConnection())
     await schema.settle()
 
     Expect(schema.queryActivationKey(storiesPlan())).toBeUndefined()

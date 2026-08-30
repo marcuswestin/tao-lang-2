@@ -75,7 +75,8 @@ The catalog does not own provider identity. An app constructs a datasource from 
 constructor takes a bare block; derivation from an existing value keeps `with` visible:
 
 ```tao
-use Local, Memory from @tao/data
+use Local from @tao/data/providers/local
+use Memory from @tao/data/providers/memory
 
 app WordFlower {
    Name "WordFlower"
@@ -110,18 +111,30 @@ declaration equivalent to auto-typed `let`, not a new datasource type; reusable 
 `type Name is datasource with { ... }`.
 
 The storage key belongs to the configured provider—not to a display `Name`, source filename, or
-data declaration. Local persists the version-1 envelope containing schema version, rows, and the
-next generated ID; an explicit key preserves rehydration and next-ID continuity. A load, format,
-version, or persist failure becomes provider error state and never silently falls back to memory.
+data declaration. A provider persists the version-1 envelope containing schema version, rows, and
+the next generated ID; an explicit key preserves rehydration and next-ID continuity. A load,
+format, version, or save failure becomes provider error state and never silently falls back to
+memory — and a failed save never silently drops the write: the committed rows stay visible under
+the error, later remote snapshots cannot revert them, and writes stay allowed so a retry can save
+the store again. A transient sync failure behaves the same way and clears on the next applied or
+confirmed snapshot.
 
 When a bound datasource cannot load at all, the runtime blocks that app behind a recovery boundary
-reporting the load error, rather than leaving every screen rendering against unusable data. The
-boundary can reset the stored envelope and remount the app root, so recovery needs no manual
-restart. Schemas with no bound datasource keep their ordinary query error state instead.
+reporting the load error, rather than leaving every screen rendering against unusable data. A
+transport failure offers a plain retry; provably corrupt stored data offers the destructive reset
+only when the connection grants `reset`, which wipes and remounts the app root so recovery needs no
+manual restart. A connection without `reset` — a shared remote store, deliberately — keeps the
+retry, because overwriting data this client failed to parse could erase every peer's rows. A
+snapshot that fails to parse mid-session degrades to the recoverable sync failure over the last
+usable data instead of blocking the app. Schemas with no bound datasource keep their ordinary query
+error state instead.
 
 ## Self-hosted datasource declarations
 
-`Local` and `Memory` are ordinary public Tao declarations in `@tao/data`, not compiler-known names:
+Shipped datasources are ordinary public Tao declarations in package-owned homes — not
+compiler-known names. Each provider owns one package path with its declaration and implementation
+side by side: `Memory` in `@tao/data/providers/memory`, `Local` in `@tao/data/providers/local`,
+`Http` in `@tao/data/providers/http`, and `InstantDB` in `@tao/data/providers/instantdb`.
 
 Reusable provider types use `type Name is datasource with { ... }`. Their explicit
 `provider <Export> from <path>` clause fills primitive `datasource`'s implementation requirement; it
@@ -132,12 +145,12 @@ public
 type Local is datasource with {
    StorageKey text
 
-   provider LocalProvider from ./Providers.ts
+   provider LocalProvider from ./Local.ts
 }
 
 public
 type Memory is datasource with {
-   provider MemoryProvider from ./Providers.ts
+   provider MemoryProvider from ./Memory.ts
 }
 ```
 
@@ -149,21 +162,33 @@ diagnostics without a shipped-name table.
 
 The implementation always names a TypeScript sidecar; the inline fence is retired. The sidecar
 exports the named zero-argument factory — a named export, never a default — and the compiler copies
-and imports it into generated output and evaluates it once for the declaration.
-The resulting package-scope value satisfies the published `TR.DataProvider` full-snapshot protocol.
-`load(storageKey)` returns the starting serialized snapshot
-or no value; `persist(storageKey, snapshot)` accepts complete committed snapshots in order and must
-propagate rejection. `TR.testProvider` checks empty load, exact round trips, storage-key and provider
-instance boundaries, ordered replacement, and rejection behavior. Instances must be isolated or
-share one coherent stateless storage boundary. The shipped Memory and Local implementations pass
-that suite. Memory is process-local and instance-isolated; Local delegates its storage boundary to
-AsyncStorage.
+and imports it into generated output and evaluates it once for the declaration. The resulting
+package-scope value satisfies the published `TR.DataProvider` protocol: one
+`connect(context)` call per app binding receives the evaluated configuration, the mounted schema
+definition, and the resolved storage key (the configured `StorageKey`, defaulting to the data
+schema name), and returns a `TR.DataConnection`. The connection exchanges complete serialized
+snapshots: `load()` returns the starting snapshot or no value; `save(snapshot)` accepts complete
+committed snapshots in order and must propagate rejection; optional `subscribe(observer)` publishes
+complete replacement snapshots after load; optional `reset()` grants destructive recovery; optional
+`close()` synchronously releases connection-owned resources once the runtime has drained its queued
+saves; optional `referenceToken`/`resolveReference` grant the versioned entity-restoration
+capability navigation persistence uses (see _Tao Presentation and Navigation.md_). A query-driven
+connection additionally implements the `fill` half described under _The Http datasource_, and its
+provider marks itself `fills: true` so Tao checks bind it.
 
-Remote sync, authentication, permissions, migrations, transactions, aggregation, and
-provider-specific query features remain deferred. They require new provider families rather than
-leaking incremental or remote semantics into this full-snapshot protocol. The first such family has
-landed: a provider may additionally implement the query-fill half described under _The Http
-datasource_, which layers remote reads over the snapshot contract without changing it.
+`TR.testProvider` checks empty load, exact round trips, storage-key and provider instance
+boundaries, ordered replacement, and rejection behavior. Instances must be isolated or share one
+coherent stateless storage boundary. The shipped implementations pass that suite. Memory is
+process-local and instance-isolated; Local delegates its storage boundary to AsyncStorage;
+InstantDB syncs each storage key's snapshot through one deterministic keyed row in an InstantDB
+app, resolves its startup load from the SDK's own subscription (so an offline launch serves the
+local cache), and publishes remote replacement snapshots through `subscribe`.
+
+Authentication, permissions, migrations, transactions, aggregation, and provider-specific query
+features remain deferred. They require new provider families rather than leaking incremental or
+remote semantics into this full-snapshot protocol. The first such family has landed: the query-fill
+half layers remote reads over the snapshot contract without changing it, and last-snapshot-wins
+sync arrives through `subscribe` on the same terms.
 
 ## Queries
 
@@ -221,12 +246,12 @@ members are not part of the public contract.
 
 ## The Http datasource
 
-`Http` in `@tao/data` is the query-driven remote datasource: entities stay ordinary `data`
-declarations, and the provider translates live queries into HTTP requests. An app derives its own
-source from it and supplies an adapter; the configuration slot types its bridge in place:
+`Http` in `@tao/data/providers/http` is the query-driven remote datasource: entities stay ordinary
+`data` declarations, and the connection translates live queries into HTTP requests. An app derives
+its own source from it and supplies an adapter; the configuration slot types its bridge in place:
 
 ```tao
-use Http from @tao/data
+use Http from @tao/data/providers/http
 
 type HNSource is Http with {
    Adapter item is HNAdapter from ./HNAdapter.ts
@@ -358,10 +383,12 @@ renders its branch instead of the rest of its enclosing render block. A deleted 
 
 ## Deterministic provider-state tests
 
-Every Tao check receives a fresh instance of the shipped Memory provider in place of the launched
-app's datasource, and a clock held at a fixed instant. A snapshot-only configured provider cannot
+Every Tao check receives a fresh in-memory snapshot store in place of the launched app's
+datasource, and a clock held at a fixed instant. A snapshot-only configured provider cannot
 overwrite that isolation, so no check reads or mutates durable storage, and `(default now)` samples
-the held clock rather than wall-clock time.
+the held clock rather than wall-clock time. The runtime-owned configuration checks still run under
+test — an invalid `StorageKey` fails the check that mounts it rather than the first production
+mount.
 
 A fill-capable provider binds in a check anyway: fills are how a query-driven datasource has rows
 at all, and determinism is the running app variant's responsibility — a journey runs the variant

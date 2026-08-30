@@ -74,9 +74,27 @@ From the repository root:
 ./tao test "Apps/WordFlower/1 - Current"
 ./tao compile "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
 ./tao dev "Apps/WordFlower/1 - Current" --app WordFlower
+just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerInstantDB
 ```
 
-The first three commands are automated verification paths. The final command launches the Expo development path for interactive use.
+The first three commands are automated verification paths. The final two commands launch the Expo
+development path for interactive use.
+
+`WordFlowerInstantDB` is the experimental synced variant. It expects the repository's local
+InstantDB fixture at `http://localhost:9020`, using its seeded app ID. Start that fixture before
+launching the variant:
+
+```sh
+just start-local-instantdb
+just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerInstantDB
+```
+
+Stop the fixture with `just stop-local-instantdb`. Its Docker volumes are preserved, so the next
+start keeps the local database.
+
+The configured `localhost` endpoints work from web and the iOS Simulator. A physical device or
+Android emulator needs endpoints using an address from which it can reach the Mac. The ordinary
+`WordFlower` app continues to use device-local storage.
 
 Files may declare more than one app. `tao dev` discovers runnable apps under any path, and both
 `compile` and `dev` accept `--app <Name>`; without it they prompt when attached to an interactive

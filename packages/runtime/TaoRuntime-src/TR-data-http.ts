@@ -1,12 +1,9 @@
-import type { TaoDataProvider, TaoFillOps, TaoFillRequest, TaoQueryDescriptor } from './TR-data'
-import { MemoryProvider } from './TR-data-provider'
+import type { TaoQueryDescriptor } from './TR-data'
 
 /**
- * The Http datasource machinery behind `@tao/data`'s `Http` type. The stdlib piece is deliberately
- * a thin, honest machine — descriptor matching, staleness, and error surfacing — while every
- * API-specific truth (which query shape maps to which request, how JSON becomes rows) lives in the
- * app's adapter. A live query matching no declared shape fails loudly; it never silently
- * non-fetches.
+ * The adapter-authoring surface behind the package-owned `@tao/data/providers/http` datasource. An
+ * app declares each supported query shape in a sidecar through `TR.Http.adapter` and `TR.Http.on`;
+ * the provider implementation matching descriptors against those shapes lives with the package.
  */
 
 /** TaoHttpFillTools is what one matched shape's fill receives to land fetched rows. */
@@ -55,86 +52,3 @@ export const HttpAdapterControls = {
     return { fill, matches }
   },
 } as const
-
-/** HttpProviderFactory is the zero-argument factory `provider HttpProvider from ./Providers.ts` calls. */
-export function HttpProviderFactory(): TaoDataProvider {
-  return httpProvider({})
-}
-
-const NANOSECONDS_PER_MILLISECOND = 1e6
-
-function httpProvider(config: Readonly<Record<string, unknown>>): TaoDataProvider {
-  const adapter = unwrapConfigValue(config['Adapter']) as TaoHttpAdapter | undefined
-  const cacheForNs = unwrapConfigValue(config['CacheFor']) as number | undefined
-  const base = MemoryProvider()
-  return {
-    load: storageKey => base.load(storageKey),
-    persist: (storageKey, snapshot) => base.persist(storageKey, snapshot),
-    referenceToken: reference => base.referenceToken!(reference),
-    resolveReference: reference => base.resolveReference!(reference),
-    fill: (request, ops) => runAdapterFill(adapter, request, ops),
-    fillCacheMs: (cacheForNs ?? 0) / NANOSECONDS_PER_MILLISECOND,
-    withConfiguration: configured => httpProvider(configured),
-  }
-}
-
-async function runAdapterFill(
-  adapter: TaoHttpAdapter | undefined,
-  request: TaoFillRequest,
-  ops: TaoFillOps,
-): Promise<void> {
-  if (!adapter) {
-    throw new Error("An Http datasource requires an 'Adapter' declaring its supported query shapes.")
-  }
-  const { descriptor } = request
-  const shapes = adapter[descriptor.entity]
-  const shape = shapes?.find(candidate => shapeMatches(candidate.matches, descriptor))
-  if (!shape) {
-    throw new Error(
-      `The Http adapter declares no query shape matching ${describeDescriptor(descriptor)}. `
-        + (shapes?.length
-          ? `Declared shapes for '${descriptor.entity}': ${shapes.map(s => describeMatch(s.matches)).join('; ')}.`
-          : `It declares no shapes for '${descriptor.entity}' at all.`),
-    )
-  }
-  await shape.fill(descriptor, {
-    upsert: rows => ops.upsert(descriptor.entity, rows),
-    upsertInto: (entity, rows) => ops.upsert(entity, rows),
-  })
-}
-
-function shapeMatches(match: TaoHttpMatch, descriptor: TaoQueryDescriptor): boolean {
-  const expected = [match.where ?? []].flat().slice().sort()
-  const actual = Object.keys(descriptor.where).sort()
-  if (expected.length !== actual.length || expected.some((field, index) => field !== actual[index])) {
-    return false
-  }
-  if (match.orderBy !== undefined && match.orderBy !== descriptor.orderBy) {
-    return false
-  }
-  return match.orderDirection === undefined || match.orderDirection === descriptor.orderDirection
-}
-
-function describeDescriptor(descriptor: TaoQueryDescriptor): string {
-  const where = Object.keys(descriptor.where)
-  const parts = [
-    where.length ? `where ${where.join(', ')}` : 'no filters',
-    descriptor.orderBy ? `order by ${descriptor.orderBy} ${descriptor.orderDirection}` : 'no ordering',
-  ]
-  return `'${descriptor.entity}' (${parts.join(', ')})`
-}
-
-function describeMatch(match: TaoHttpMatch): string {
-  const where = [match.where ?? []].flat()
-  return [
-    where.length ? `where ${where.join(', ')}` : 'no filters',
-    match.orderBy ? `order by ${match.orderBy}` : 'no ordering',
-  ].join(', ')
-}
-
-function unwrapConfigValue(value: unknown): unknown {
-  if (typeof value === 'object' && value !== null && 'evaluate' in value) {
-    return (value as { evaluate(): { jsValue: unknown } }).evaluate().jsValue
-  }
-  return value
-}

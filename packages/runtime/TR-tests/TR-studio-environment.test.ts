@@ -1,6 +1,6 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
-import type { TaoDataProvider, TaoFillOps } from '../TaoRuntime-src/TR-data'
+import type { TaoDataConnection, TaoDataProvider, TaoDataProviderContext, TaoFillOps } from '../TaoRuntime-src/TR-data'
 import {
   capturedFixture,
   studioEnvironmentVersion,
@@ -21,6 +21,34 @@ function environment(overrides: Partial<TaoStudioEnvironment['network']> = {}): 
     network: { mode: 'online', ...overrides },
     scheme: inertScheme,
     version: studioEnvironmentVersion,
+  }
+}
+
+function context(storageKey: string, configuration: Record<string, unknown> = {}): TaoDataProviderContext {
+  return Object.freeze({
+    configuration: Object.freeze(configuration),
+    schema: { entities: {}, name: storageKey },
+    storageKey,
+  })
+}
+
+function memoryProvider(): TaoDataProvider & { loads(): number; saves(): number } {
+  const snapshots = new Map<string, string>()
+  let loads = 0
+  let saves = 0
+  return {
+    connect: ({ storageKey }) => ({
+      load: () => {
+        loads += 1
+        return snapshots.get(storageKey)
+      },
+      save: snapshot => {
+        saves += 1
+        snapshots.set(storageKey, snapshot)
+      },
+    }),
+    loads: () => loads,
+    saves: () => saves,
   }
 }
 
@@ -47,7 +75,7 @@ Describe('Studio isolated provider environment', () => {
       },
       schemaVersion: 1,
     })
-    const provider = TR.Studio.Environment.Provider(TR.DataProvider.Memory(), {
+    const provider = TR.Studio.Environment.Provider(memoryProvider(), {
       environment: environment(),
       seed: { snapshots: { Capture: snapshot }, version: studioStateSeedVersion },
     })
@@ -63,7 +91,7 @@ Describe('Studio isolated provider environment', () => {
         },
       },
       name: 'Capture',
-    }, provider)
+    }, provider.connect(context('Capture')))
     await schema.settle()
 
     Expect(capturedFixture([provider], [schema])).toEqual({
@@ -83,17 +111,7 @@ Describe('Studio isolated provider environment', () => {
   })
 
   Test('loads seeded snapshots, captures writes exactly, and never reaches durable persistence', async () => {
-    let durableLoads = 0
-    let durablePersists = 0
-    const durable: TaoDataProvider = {
-      load: () => {
-        durableLoads += 1
-        return 'durable'
-      },
-      persist: () => {
-        durablePersists += 1
-      },
-    }
+    const durable = memoryProvider()
     const provider = TR.Studio.Environment.Provider(durable, {
       environment: environment(),
       seed: {
@@ -102,10 +120,10 @@ Describe('Studio isolated provider environment', () => {
       },
     })
 
-    Expect(await provider.load('Notes')).toBe('{"rows":["seed"]}')
-    Expect(await provider.load('Other')).toBeUndefined()
-    await provider.persist('Notes', '{"rows":["edited"]}')
-    await provider.persist('Accounts', '{"rows":["ro"]}')
+    Expect(await provider.connect(context('Notes')).load()).toBe('{"rows":["seed"]}')
+    Expect(await provider.connect(context('Other')).load()).toBeUndefined()
+    await provider.connect(context('Notes')).save('{"rows":["edited"]}')
+    await provider.connect(context('Accounts')).save('{"rows":["ro"]}')
 
     Expect(provider.capture()).toEqual({
       snapshots: {
@@ -114,65 +132,70 @@ Describe('Studio isolated provider environment', () => {
       },
       version: studioStateSeedVersion,
     })
-    Expect(durableLoads).toBe(0)
-    Expect(durablePersists).toBe(0)
+    Expect(durable.loads()).toBe(0)
+    Expect(durable.saves()).toBe(0)
   })
 
   Test('keeps cells isolated even when they wrap the same configured provider and storage key', async () => {
-    const durable = TR.DataProvider.Memory()
+    const durable = memoryProvider()
     const first = TR.Studio.Environment.Provider(durable, { environment: environment() })
     const second = TR.Studio.Environment.Provider(durable, { environment: environment() })
 
-    await first.persist('Shared', 'first')
-    await second.persist('Shared', 'second')
+    await first.connect(context('Shared')).save('first')
+    await second.connect(context('Shared')).save('second')
 
-    Expect(await first.load('Shared')).toBe('first')
-    Expect(await second.load('Shared')).toBe('second')
-    Expect(await durable.load('Shared')).toBeUndefined()
+    Expect(await first.connect(context('Shared')).load()).toBe('first')
+    Expect(await second.connect(context('Shared')).load()).toBe('second')
+    Expect(await durable.connect(context('Shared')).load()).toBeUndefined()
   })
 
   Test('preserves configuration and fill cache behavior while sharing the cell snapshot overlay', async () => {
     const configurations: Readonly<Record<string, unknown>>[] = []
     const fills: string[] = []
-    const configuredProvider = (label: string): TaoDataProvider => ({
-      fill: async request => {
-        fills.push(`${label}:${request.descriptor.entity}`)
+    const base: TaoDataProvider = {
+      connect: ({ configuration }) => {
+        configurations.push(configuration)
+        return {
+          fill: async request => {
+            fills.push(`${String(configuration['label'])}:${request.descriptor.entity}`)
+          },
+          fillCacheMs: 250,
+          load: () => 'durable',
+          save: () => {},
+        }
       },
-      fillCacheMs: 250,
-      load: () => 'durable',
-      persist: () => {},
-      withConfiguration(config) {
-        configurations.push(config)
-        return configuredProvider(String(config['label']))
-      },
-    })
-    const provider = TR.Studio.Environment.Provider(configuredProvider('base'), {
+      fills: true,
+    }
+    const provider = TR.Studio.Environment.Provider(base, {
       environment: environment(),
     })
-    await provider.persist('Notes', 'cell')
-    const configured = provider.withConfiguration!({ label: 'configured' })
+    await provider.connect(context('Notes')).save('cell')
+    const configured = provider.connect(context('Notes', { label: 'configured' }))
 
     await configured.fill!(fillRequest('Story'), collectingOps())
 
-    Expect(configurations).toEqual([{ label: 'configured' }])
+    Expect(configurations).toEqual([{}, { label: 'configured' }])
     Expect(fills).toEqual(['configured:Story'])
     Expect(configured.fillCacheMs).toBe(250)
-    Expect(await configured.load('Notes')).toBe('cell')
+    Expect(await configured.load()).toBe('cell')
   })
 
   Test('delegates the exact fill descriptor and upsert operations', async () => {
     const upserts: Array<{ entity: string; rows: readonly Record<string, unknown>[] }> = []
     const base: TaoDataProvider = {
-      fill: async (request, ops) => {
-        Expect(request.descriptor).toEqual({ entity: 'Story', limit: 3, where: { Feed: 'front' } })
-        ops.upsert('Story', [{ Id: 1 }])
-      },
-      load: () => undefined,
-      persist: () => {},
+      connect: () => ({
+        fill: async (request, ops) => {
+          Expect(request.descriptor).toEqual({ entity: 'Story', limit: 3, where: { Feed: 'front' } })
+          ops.upsert('Story', [{ Id: 1 }])
+        },
+        load: () => undefined,
+        save: () => {},
+      }),
+      fills: true,
     }
     const provider = TR.Studio.Environment.Provider(base, { environment: environment() })
 
-    await provider.fill!({
+    await provider.connect(context('Stories')).fill!({
       descriptor: { entity: 'Story', limit: 3, where: { Feed: 'front' } },
     }, {
       upsert: (entity, rows) => upserts.push({ entity, rows }),
@@ -186,9 +209,10 @@ Describe('Studio isolated provider environment', () => {
     const provider = TR.Studio.Environment.Provider(fillProvider(entity => fills.push(entity)), {
       environment: environment({ latencyMs: 25 }),
     })
+    const connection = provider.connect(context('Stories'))
     TR.Clock.beginTest(1_000)
     try {
-      const pending = provider.fill!(fillRequest('Story'), collectingOps())
+      const pending = connection.fill!(fillRequest('Story'), collectingOps())
       TR.Clock.advance(24)
       await Promise.resolve()
       Expect(fills).toEqual([])
@@ -208,14 +232,14 @@ Describe('Studio isolated provider environment', () => {
     })
     const offline = TR.Studio.Environment.Provider(base, {
       environment: environment({ mode: 'offline' }),
-    })
+    }).connect(context('Stories'))
     await Expect(offline.fill!(fillRequest('Story'), collectingOps())).rejects.toBeInstanceOf(TaoStudioOfflineError)
 
     const failing = TR.Studio.Environment.Provider(base, {
       environment: environment({
         failures: [{ entity: 'Story', message: 'Declared outage', occurrence: 2 }],
       }),
-    })
+    }).connect(context('Stories'))
     await failing.fill!(fillRequest('Story'), collectingOps())
     await Expect(failing.fill!(fillRequest('Story'), collectingOps())).rejects.toBeInstanceOf(
       TaoStudioDeclaredFillError,
@@ -230,8 +254,8 @@ Describe('Studio isolated provider environment', () => {
     const options = {
       environment: environment({ failures: [{ message: 'First fill fails', occurrence: 1 }] }),
     }
-    const first = TR.Studio.Environment.Provider(base, options)
-    const second = TR.Studio.Environment.Provider(base, options)
+    const first = TR.Studio.Environment.Provider(base, options).connect(context('Stories'))
+    const second = TR.Studio.Environment.Provider(base, options).connect(context('Stories'))
 
     await Expect(first.fill!(fillRequest('Story'), collectingOps())).rejects.toThrow('First fill fails')
     await Expect(second.fill!(fillRequest('Story'), collectingOps())).rejects.toThrow('First fill fails')
@@ -253,9 +277,12 @@ Describe('Studio isolated provider environment', () => {
 
 function fillProvider(fill: (entity: string) => void): TaoDataProvider {
   return {
-    fill: async request => fill(request.descriptor.entity),
-    load: () => undefined,
-    persist: () => {},
+    connect: (): TaoDataConnection => ({
+      fill: async request => fill(request.descriptor.entity),
+      load: () => undefined,
+      save: () => {},
+    }),
+    fills: true,
   }
 }
 
