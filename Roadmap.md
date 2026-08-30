@@ -9,6 +9,12 @@ reaches it — first MVP, then Revolution — are owned by `Docs/Roadmap/Tao Rev
 (what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
 app feature and Tao test proves each capability).
 
+## Ro STACK
+
+- [ ] Rename UI to Scene
+- [ ] Upgrade all dependencies of e.g expo/react-native/expo-router/etc
+- [ ] Deep links and navigation persistence
+
 ## Documentation cleanup
 
 Two scoped passes over the repository's own records. Both are bookkeeping, not language work, and

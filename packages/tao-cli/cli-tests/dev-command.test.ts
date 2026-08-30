@@ -140,6 +140,10 @@ Describe('Tao dev app discovery and selection', () => {
       )
       const input = terminalStream()
       const output = terminalStream()
+      let written = ''
+      output.on('data', chunk => {
+        written += chunk.toString()
+      })
       input.end('2')
       const runs: string[] = []
 
@@ -155,6 +159,9 @@ Describe('Tao dev app discovery and selection', () => {
 
       Expect(exitCode).toBe(0)
       Expect(runs).toEqual(['First', 'Second'])
+      // Quitting closes the dashboard's alternate screen, which restores the stale selector;
+      // the exit line is what tells the user the CLI actually finished.
+      Expect(stripAnsi(written)).toContain('Exited Tao dev.')
     } finally {
       await FS.remove(root)
     }

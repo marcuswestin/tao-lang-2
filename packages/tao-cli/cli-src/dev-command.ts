@@ -1,5 +1,5 @@
 import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-dev-loop'
-import { Errors, FS, Switch } from '@shared'
+import { Errors, FS, HCI, Switch } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
 import { selectTaoDevApp, type TaoDevSelectionResult } from './dev-app-selection'
@@ -22,7 +22,7 @@ export async function runTaoDev(
   const runLoop = options.runLoop ?? runDevLoop
   let current = await initialSelection(target, options)
   if (current.kind !== 'selected') {
-    return current.kind === 'exit' ? current.exitCode : 0
+    return exitTaoDev(current.kind === 'exit' ? current.exitCode : 0, options)
   }
   let currentApp = current.app
 
@@ -44,9 +44,16 @@ export async function runTaoDev(
       },
     })
     if (exitCode !== undefined) {
-      return exitCode
+      return exitTaoDev(exitCode, options)
     }
   }
+}
+
+/** exitTaoDev announces the exit; closing the dev-loop dashboard restores the primary screen, which
+ * still shows the stale app selector, so a silent exit reads as returning to app selection. */
+function exitTaoDev(exitCode: number, options: TaoDevCommandOptions): number {
+  HCI.writeLine('Exited Tao dev.', options)
+  return exitCode
 }
 
 async function initialSelection(
