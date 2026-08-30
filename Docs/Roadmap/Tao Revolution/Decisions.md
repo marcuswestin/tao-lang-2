@@ -96,7 +96,7 @@ Title text (required "Name this recipe")        // an entity field
 Servings number (default 4)                     // an entity field
 action FetchRecipe(Link text) returns …         // a parameter — the same shape
 view Status(Message text, Tone default Neutral)
-ui CookScreen(Recipe, Meal?)                    // a bare name takes its same-named type
+view CookScreen(Recipe, Meal?)                  // a bare name takes its same-named type
 ```
 
 - **`:` binds a value to a name.** It appears at call sites and in literals, and nowhere else:
@@ -204,8 +204,8 @@ data Accounts / Account with {
   "ml"`), never as a word for it. A case prints as its own name and translates like any other copy.
   This is the same `type X is …` head as every other type, so the inline form (`is one of Metric,
   Imperial`) works wherever a type goes. It replaces the nominal `enum Name { Cases }`.
-- **A case is a value, a case-test target, and a dialogue answer** — the three roles the retired
-  `enum`'s cases filled, which the new form must fill identically:
+- **A case is a value, a case-test target, and a responding view's answer** — the three roles the
+  retired `enum`'s cases filled, which the new form must fill identically:
 
 ```swift
 type Course is one of Breakfast, Lunch, Dinner
@@ -216,7 +216,7 @@ create Meal { Course: Dinner }               //    including as a field's value
 
 when Recipe.Course is Dinner { … }           // 2. a case-test target, beside yes/no fields
 
-dialogue Confirm() responds ConfirmResult {  // 3. a dialogue's typed answer
+view Confirm() responds ConfirmResult {      // 3. a responding view's typed answer (§9)
    action Yes() { respond Confirmed }
 }
 ```
@@ -663,7 +663,7 @@ link SharedRecipeLink "/shared/{SharedRecipe}" -> {
    present SharedRecipeScreen(SharedRecipe) as root
 }
 
-ui SharedRecipeScreen(SharedRecipe) { … }   // takes the projection, never the entity — public by construction
+view SharedRecipeScreen(SharedRecipe) { … } // takes the projection, never the entity — public by construction
 ```
 
 ---
@@ -859,7 +859,7 @@ action Slugify(Title text) returns text { … }    // no Title: not discoverable
   body is a second intent:
 
 ```swift
-ui RecipeScreen(Recipe) {
+view RecipeScreen(Recipe) {
    command Favorite = FavoriteRecipe(Recipe) with {
       Label when Recipe is Favorite { yes -> "Remove from favorites", no -> "Favorite" }
       Icon  when Recipe is Favorite { yes -> "heart.fill", no -> "heart" }
@@ -875,14 +875,19 @@ ui RecipeScreen(Recipe) {
 
 - **Command members are capitalized** — `Label`, `Icon`, `Key`, `Enabled when` — and `Label` defaults
   to the intent's `Title`.
-- **Commands nest inside the `ui` they act on**, closing over its parameters (`Recipe`, above), so
+- **Commands nest inside the `view` they act on**, closing over its parameters (`Recipe`, above), so
   they take no parameters of their own. App-wide commands sit on the app the same way:
   `command New = CreateRecipe with { Icon "plus", Key primary + "n" }` — with no argument bound, the
   surface prompts for `CreateRecipe`'s required `Title`.
+- **Commands scope to focus, never to a declaration kind.** A command declared in a view is enabled
+  while the nearest presented instance of that view holds focus — there is no separate screen kind
+  to attach it to (§9), so command lifetime is the presentation's, and lifecycle language throughout
+  this document reads "the presentation", never "the `ui`".
 - **Surfaces list commands; a command never names its surface.** `Toolbar { … }` and `menu Name
-  { … }` inside a `ui`; `Menu { … }` (the OS menu bar), `Rail { … }`, and `Palette all` on the app.
-  A screen's command listed in the app's `Menu` (`RecipeScreen.Favorite`) is enabled while such a
-  screen is focused and runs against that screen's row — which is why the OS menu is tied to windows.
+  { … }` inside a `view`; `Menu { … }` (the OS menu bar), `Rail { … }`, and `Palette all` on the app.
+  A view's command listed in the app's `Menu` (`RecipeScreen.Favorite`) is enabled while a presented
+  instance of that view holds focus and runs against that presentation's row — which is why the OS
+  menu is tied to windows.
   `Palette all` lists every intent with a `Title`, resolved against what is on screen — the in-app
   twin of Spotlight running intents. A command renders as its own button with `Button(Favorite)`.
 
@@ -1056,26 +1061,56 @@ function FirstOwner(Household is Household) returns Account {
 
 ## 9. UI
 
-- **Four declaration kinds**: a screen with navigation identity, a reusable leaf visual, a wrapper
-  that accepts caller content through named slots, and a modal that returns a typed answer:
+- **One renderable declaration kind: `view`.** A screen, a reusable leaf, a content-accepting
+  wrapper, and a modal that answers are all the same declaration. Nothing about a view's role is
+  written on its head, because every distinction a kind could carry is either read off the body or
+  belongs to the call site:
 
 ```swift
-ui RecipeScreen(Recipe) { … }                          // navigable — has a link
-file view RecipeCard(Recipe) { … }                     // a reusable leaf, no navigation identity
-frame Section(Title text) { render Col [card] { Text(Title) [sectionTitle]; @@content } }
-file dialogue NewRecipeSheet(Household) responds Recipe { … }   // returns a typed answer
+view RecipeScreen(Recipe) { … }                        // a link presents it (§10) — nothing marks that here
+file view RecipeCard(Recipe) { … }                     // a reusable leaf
+view Section(Title text) { render Col [card] { Text(Title) [sectionTitle]; @@content } }
+view Centered() { render Col [screen, content center center] { @@content } }
+file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a typed value
 ```
 
-- **Every declaration's parameter list is parenthesized, including an empty one** — `ui
+- **Presentation is a property of the call site, never the declaration.** A view composes inline in
+  a render tree, or `nav` presents it — `present X(…) as sheet | window | root | menu | toast`,
+  `reveal X(…) in @slot` (§10) — with the mode chosen where the presenting happens. No keyword
+  marks a view navigable, modal, or reusable.
+- **Capabilities are inferred from the declaration, never declared.** A view accepts caller content
+  iff its body places `@@content`; it offers named render slots iff its body declares them; it
+  returns a typed answer iff its head declares `responds T`. The `responds` clause survives the
+  `dialogue` kind it arrived with.
+- **One body grammar.** State, entity queries, actions, commands, aliases, tags, and render are
+  legal in any view body — there is no statelessness ladder, so a stateful content-accepting
+  wrapper (a collapsible section) is expressible.
+- **No arrangement-only category.** A wrapper that only positions caller content (`Centered`) and
+  one that owns content around it (`Section`) are indistinguishable to the language. If a future
+  rule ever needs the distinction, it returns as a property derived from the render tree, never as
+  a keyword (`Docs/Roadmap/Deferred Tao language decisions.md`).
+
+**Amended by the unified view tranche.** This section originally decided five renderable kinds —
+`ui` (navigable), `view` (reusable leaf), `frame` (content-owning wrapper), `layout`
+(arrangement-only wrapper), and `dialogue` (typed answer) — with capability and presentation read
+off the keyword. Every distinction the kinds encoded is derivable from the declaration body
+(`@@content`, slot declarations, `responds T`) or belongs to the site that presents the view, so
+the kinds priced a second copy of information the compiler already has, and their statelessness
+ladder forbade legitimate combinations (a stateful wrapper). The keywords `ui`, `frame`, `layout`,
+and `dialogue` retire with nothing replacing them — no marker, no modifier — and the primitive
+types `visual`, `presentable`, `ui`, `frame`, and `layout` collapse into the single primitive
+`view` (`nav`, `datasource`, and `app` are untouched). A `public destination` marker for
+package-exported views was considered and deferred (`Docs/Roadmap/Deferred Tao language
+decisions.md`).
+
+- **Every declaration's parameter list is parenthesized, including an empty one** — `view
   RecipeLibrary()`, `action Add()` — so a declaration mirrors the call site that invokes it.
-- **Parameter types are inferred from the type name** — `ui RecipeScreen(Recipe)` — not restated. A
-  stated type is juxtaposed and its traits trail, exactly as in a field: `view Status(Message text,
-  Tone default Neutral)`, `ui CookScreen(Recipe, Meal?)` (§2).
+- **Parameter types are inferred from the type name** — `view RecipeScreen(Recipe)` — not restated.
+  A stated type is juxtaposed and its traits trail, exactly as in a field: `view Status(Message
+  text, Tone default Neutral)`, `view CookScreen(Recipe, Meal?)` (§2).
 - **Empty argument lists on _containers_ are omitted**: `Col [page]`, not `Col()`. The render tree is
   the primary shape of the code and the parentheses carry nothing there, so this is the one place the
   mirroring rule yields.
-- `layout` is a declaration kind alongside the four above: a wrapper that positions caller content
-  without owning it — `layout Centered() { render Col [screen, content center center] { @@content } }`.
 - **`render` introduces the visual tree**, and the visible hierarchy is the primary shape of the code:
 
 ```swift
@@ -1210,8 +1245,10 @@ service name and reached its declarations through it (`time.Interval(1.s)`, `aut
 package binds nothing of its own: `use X from @pkg` imports declarations by name, as every other
 import in the language does, so the spelling is `use Interval from @tao/time` and `Interval(1.s)`.
 Implementing the service form would have needed a second `use` form plus a package-as-namespace
-value kind, and the segment names of the packages that already exist — `ui`, `nav`, `data` — are Tao
-keywords, so the shape does not generalize to the packages it would first apply to. A package that
+value kind, and the segment names of the packages that already exist — `ui`, `nav`, `data` — were
+Tao keywords at the time (`nav` and `data` still are; the unified view amendment above later retired
+`ui` as a keyword, and the `@ui/` folder name deliberately survives it), so the shape does not
+generalize to the packages it would first apply to. A package that
 wants a namespace declares a type or a value and exports it under a name.
 
 - **`loop` repeats content over a collection with the singular row name**:
@@ -1322,6 +1359,17 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   so arriving somewhere can set the context that place is read in.
 - Restoration needs no per-link clause: C's `restore while Row is available` is already the guard on
   the parameter, and a window's fallback is already the presentation-mode rule.
+- **A destination is a derived subset, not a syntax.** The places the `Restore` policy reaches — a
+  view presented `as window` or `as root`, mounted in a nav pane, slot, or `Initial`, or named in a
+  `link` body — are the app's _destinations_: a word for spec prose and diagnostics only, with no
+  surface marker (§9). A destination's parameters must serialize, and that requirement is inferred
+  entirely from use — the diagnostic lands at the usage site ("CookScreen cannot be presented as a
+  window: parameter `Undo action` does not serialize"), never at the declaration, because the
+  declaration is not wrong; the placement is.
+- **A responding presentation is never restorable.** A view presented while its `responds T` answer
+  is awaited does not survive relaunch — the asking context is gone, so restoring the question alone
+  would be a lie. This is consistent with the default exclusions below and holds even when a
+  responding view is presented `as window`.
 - **A link resolves without an account when its parameters make that possible** — all projections or
   secrets (§4). No `public` marker exists on links or screens.
 - **Links wait and win.** A link whose target is not mounted yet runs when it is, so a shared link
@@ -1527,9 +1575,9 @@ design SkilletDesign {
 - **No reference marker.** A bare name in a clause list resolves to a style, text style, or design
   value; clause keywords are a closed, reserved set, so a style may not be named `pad` and the
   validator says so at the declaration.
-- **`patterns { }` is not carried forward.** A named arrangement with slots is the `layout`
-  declaration kind (§9), and a row pattern like the source designs' `Line` is a `layout` plus element
-  defaults. If a demo finds a need `layout` cannot meet, it returns.
+- **`patterns { }` is not carried forward.** A named arrangement with slots is an ordinary `view`
+  placing `@@content` (§9), and a row pattern like the source designs' `Line` is such a view plus
+  element defaults. If a demo finds a need a view cannot meet, it returns.
 - **`screens { }` names the size classes** — the block is not called `sizes`, which holds size
   values. No pixel count or device name appears in a screen; the use is `when Screen is narrow`, and
   the block desugars to §8's predicate-case `when` over `Screen.Width`.
@@ -1708,7 +1756,7 @@ when do FetchRecipe(Link) {
 - **`progress` is opt-in**; declaring it changes the emitted TypeScript type and exposes a `0..1`
   value the UI binds like any other (`Progress(Value: FetchRecipe.Progress)`).
 - **Cancellation is never declared**, because it can never be false: every sidecar receives a
-  `signal`, which fires when `runs latest` supersedes the call, when the owning `ui` is dismissed,
+  `signal`, which fires when `runs latest` supersedes the call, when the owning presentation is dismissed,
   and on an explicit `cancel FetchRecipe`.
 
 ### The two authoring modes
@@ -1971,7 +2019,8 @@ case; `[Role in Owner, Cook]` because `|` is the type-union operator; `Key prima
 | Nav / variant bindings | `nav X = …` / `app X = …`                   |
 
 (The source table's `Line` row-pattern and `sizes { }` size-class rows are superseded by §13:
-patterns are retired in favour of `layout`, and the size-class block is `screens { }`.)
+patterns are retired in favour of ordinary content-accepting views, and the size-class block is
+`screens { }`.)
 
 ---
 

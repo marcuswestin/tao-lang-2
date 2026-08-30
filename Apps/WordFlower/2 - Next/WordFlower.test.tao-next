@@ -33,4 +33,14 @@ test "WordFlower app shell" {
          text "Writing session"
          text "10 words"
          text "Build development"
-}  }  }
+   }  }
+   test "collapses and expands the build details in the stateful wrapper" {
+      run WordFlower
+      press "Settings"
+      expect text "Build development"
+      // While the collapsed branch is off, the caller's content does not mount.
+      press #collapseDetails
+      expect missing text "Build development"
+      press #expandDetails
+      expect text "Build development"
+}  }

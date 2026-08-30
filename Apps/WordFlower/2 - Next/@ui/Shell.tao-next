@@ -3,7 +3,7 @@ use Col, FormButton, Row, Text from @tao/ui
 
 // The screens the app shell mounts directly.
 workspace
-ui Settings() {
+view Settings() {
    render Scroller() [screen] {
       Col() [width max 720, centered, gap 10] {
          Toolbar() {
@@ -11,14 +11,16 @@ ui Settings() {
          }
          Card(Title: "Writing session") {
             WordBadge(SessionGoal)
-            Text("Build { BuildStamp }") [body] // a typed injected value, not a render
+            Collapsible() {
+               Text("Build { BuildStamp }") [body] // a typed injected value, not a render
+            }
             @actions FormButton("Reset to signed out") {
                #resetSignedOut
                on press -> { replace SignedOutNav in app }
 }  }  }  }  }
 
 workspace
-ui SignedOut() {
+view SignedOut() {
    render Col() [screen, centered] {
       Text("Signed out") [title]
 }  }
@@ -31,18 +33,17 @@ let SessionGoal is number = 10
 // expression are the sidecar's named exports, and the ascribed type is the contract they must meet.
 let BuildStamp is text = BuildStamp() from ./Shell.ts
 
-// Content acceptance belongs to the kind. A `view` is a leaf and accepts none; a `layout` and a
-// `frame` accept caller content and choose where it lands with `@@content`.
-// The simplest case: a layout places caller content directly.
-layout Toolbar() {
+// Content acceptance is inferred from the body, never declared: a view accepts caller content iff
+// it places `@@content`. The simplest case places caller content directly.
+view Toolbar() {
    render Row() [gap 8, content right] {
       @@content
 }  }
 
-// A frame surrounds caller content with its own fixed siblings. Putting `@@content` inside an
+// A view surrounds caller content with its own fixed siblings. Putting `@@content` inside an
 // explicit inner host means caller layout applies to the caller's children rather than to the
-// frame's own structure. `@actions` is a named slot with a default, so callers may omit it.
-frame Card(Title text) {
+// wrapper's own structure. `@actions` is a named slot with a default, so callers may omit it.
+view Card(Title text) {
    @actions = empty
    render Col() [gap 8, pad 12, panel] {
       Row() [content spread center] {
@@ -53,6 +54,26 @@ frame Card(Title text) {
          @@content
 }  }  }
 
+// A stateful content-accepting wrapper, which the retired frame/layout statelessness ladder could
+// not express. `@@content` placement may be conditional: at most one placement renders, and while
+// its branch is off the caller's content does not mount.
+view Collapsible() {
+   state Expanded = true
+   render Col() [gap 6] {
+      when Expanded {
+         true -> {
+            #collapseDetails
+            FormButton("Hide details") {
+               on press -> { set Expanded = false }
+            }
+            @@content
+         }
+         otherwise -> {
+            #expandDetails
+            FormButton("Show details") {
+               on press -> { set Expanded = true }
+}  }  }  }  }
+
 // `TR`, `RN`, and `process` are always in scope inside injected TypeScript. The inject list names
 // every additional binding received from Tao: no `_ViewProps`, no `_tao`, and no compiler-prefixed
 // name of any kind. Each entry is `<Name> <value>`, and a bare name is shorthand for binding a
@@ -62,7 +83,7 @@ frame Card(Title text) {
 // Three ambient channels are exposed, which is what a non-stdlib implementation needs to cover its
 // cases: `@@content` is caller content, `@@layout` is the layout resolved for this occurrence
 // including the parent direction it lays out against, and `@@tag` is the call site's test tag.
-// Everything else Tao propagates today — navigation, dialogue, app, caller inheritance — stays
+// Everything else Tao propagates today — navigation, response, app, caller inheritance — stays
 // private and travels on its own, so a hand-written implementation never touches it.
 view WordBadge(Total number) {
    render inject Total, Suffix " words", Layout @@layout, Tag @@tag ```ts
@@ -70,14 +91,14 @@ view WordBadge(Total number) {
    ```
 }
 
-// A TypeScript-backed container is a `layout` like any other, so it takes the content channel too.
-// The value of `render inject` is the view's root element: Tao wraps nothing around it. Applying
-// `Layout` and `Tag` is therefore the implementation's job, as is rendering `Content` exactly once,
-// and Tao checks none of it.
+// A TypeScript-backed container accepts caller content the same way: naming `@@content` in its
+// inject list is the placement that makes it content-accepting. The value of `render inject` is the
+// view's root element: Tao wraps nothing around it. Applying `Layout` and `Tag` is therefore the
+// implementation's job, as is rendering `Content` exactly once, and Tao checks none of it.
 //
 // `Content` is opaque: it may be placed anywhere, but it is not a collection to inspect, map over,
 // or take apart. The compiled shape of caller content is not a public interface.
-layout Scroller() {
+view Scroller() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({
         children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
