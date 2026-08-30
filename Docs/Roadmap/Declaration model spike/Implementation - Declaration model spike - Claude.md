@@ -127,7 +127,7 @@ export default function StackKind(): NavKind<StackNavConfig> { ... }
 The `.tao` declaration emits a `.d.ts` for its own config shape; the sidecar imports it and implements
 against it. Tao owns the data contract, TypeScript owns the behavior, `tsc` checks the join
 statically, and `TR.testNavKind` still checks it dynamically. That is strictly more guarantee than the
-current inline `` implement inject nav ```ts …``` `` form can offer, and it is what makes third-party
+current inline ` implement inject nav ```ts …``` ` form can offer, and it is what makes third-party
 declarations practical rather than merely permitted.
 
 ## What already exists
