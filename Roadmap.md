@@ -11,8 +11,8 @@ app feature and Tao test proves each capability).
 
 ## Ro STACK
 
-- [ ] Rename UI to Scene
-- [ ] Upgrade all dependencies of e.g expo/react-native/expo-router/etc
+- [x] Rename UI to Scene
+- [x] Upgrade all dependencies of e.g expo/react-native/expo-router/etc
 - [ ] Deep links and navigation persistence
 
 ## Documentation cleanup
@@ -77,14 +77,15 @@ tests written in Tao, green in Current, for every construct introduced.
   - Filters, watch and CI output, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
 - [ ] Add the Tao design system MVP
   - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Docs/Roadmap/Add Tao design system MVP/`.
-- [ ] Add beautiful app defaults
-  - Polished default text, input, and button styles, seeded accent, neutral palette, app-shell content frame, and empty/error/loading surfaces.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
-- [ ] Finish the device experience
-  - `tao dev` now owns discovery, app selection, and switching. Remaining: file watching across imports, iOS device LAN support, and Android/web parity where practical.
-- [ ] Add production and staging runtime targets
-  - Build profiles, environment handling, runtime manifest boundaries, secrets policy, and Expo build expectations.
+- [ ] Build Tao Studio v1
+  - The studio product's core loop: live editing chassis with source ↔ preview identity, semantic
+    visual editing through the source-action patch bus, scene examples rendered in parallel, a
+    named-state library, and the environment matrix (viewports, network simulation, scheme toggle).
+    The `feat/studio` branch holds the prototype as reference; agent instructions:
+    `Docs/Roadmap/Tao Studio/Prompt - Tao Studio v1.md`. Absorbs the Ro's-stack simulation-mode item.
+- [ ] Implement secrets
 - [ ] Polish the IDE MVP
   - Syntax, diagnostics, formatting, source actions, go-to-definition and references, and live preview once the runtime and test flow are stable.
 - [ ] Widen the HTTP datasource
@@ -122,7 +123,7 @@ tests written in Tao, green in Current, for every construct introduced.
 
 Product and codebase backlog, unordered.
 
-- [ ] Add simulation mode: local datasources with simulated network delays, saved library states, and demo renders.
+- [ ] Add simulation mode: local datasources with simulated network delays, saved library states, and demo renders. Absorbed into Tao Studio v1 (`Docs/Roadmap/Tao Studio/Prompt - Tao Studio v1.md`).
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
 - [ ] Allow only one project definition per project root; scope workspace package lookup to that root, have the IDE extension manage one workspace per project folder, and stop requiring a Git repo at the project root.
