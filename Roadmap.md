@@ -14,6 +14,8 @@ app feature and Tao test proves each capability).
 - [x] Rename UI to Scene
 - [x] Upgrade all dependencies of e.g expo/react-native/expo-router/etc
 - [ ] Deep links and navigation persistence
+- [ ] Instructions to keep track of all dev env/process issues along the way, and then list them when done implementing with suggested solutions.
+  - [ ] Ditto for if there are clear improvement opportunities that you discover while working or implementing. In short, we want to always improve our dev env/process to be the best supportive env for us, tao devs and agents, as we can, and always improving as we go.
 
 ## Documentation cleanup
 
@@ -158,6 +160,10 @@ Product and codebase backlog, unordered.
     render Foo()                  // red, padded
     render Foo() [pad 0, bg none] // caller clears the declared default
     ```
+- [ ] Spike: implement the declared concurrency policy (`runs single`, `runs latest`) from
+  `Decisions.md` §8 — grammar, validator, compiler, runtime `.Running` state, cancellation.
+  Deliberately separate from the AI-in-apps work, which consumes it (`generate … runs latest`)
+  but must not decide it. Context: `Docs/Roadmap/AI in Tao apps.md`.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
 - [ ] Remove magical strings.
@@ -180,6 +186,7 @@ Product and codebase backlog, unordered.
 ## Records
 
 - `Apps/WordFlower/README.md` — the implementation process and the four app tiers.
+- `Docs/Roadmap/AI in Tao apps.md` — AI-in-apps exploration with recorded direction: the `generate` surface, platform-provided models first, the `Sees` prompt boundary, scripted-model testing, and the implementation sequence.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
