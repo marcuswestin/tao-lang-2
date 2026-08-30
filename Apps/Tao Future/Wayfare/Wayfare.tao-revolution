@@ -126,7 +126,7 @@ app WayfarePreview = Wayfare with {
 
 // -- Settings ------------------------------------------------------------------------------------------
 
-ui SettingsScreen() {
+view SettingsScreen() {
    Title "Settings"
 
    command DeleteAccount {

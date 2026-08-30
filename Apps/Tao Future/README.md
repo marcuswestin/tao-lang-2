@@ -20,6 +20,12 @@ they disagree with `Decisions.md`, the decisions win — known deltas include `i
 the design-block structure. Consolidating them to the decided dialect is
 step 3 of `Docs/Roadmap/Tao Revolution/Process.md`.
 
+One decision group is already consolidated: the unified view kind (`Decisions.md` §9 amendment).
+Every renderable declaration here reads `view`; the retired `ui`/`frame`/`layout`/`dialogue` heads
+were rewritten when that tranche landed, with capabilities left to body inference (`@@content`,
+`@name = empty` slots, `responds T`). The design blocks' `patterns { }` entries still await the
+step-3 design consolidation.
+
 ## How these apps drive implementation
 
 - **One source tree per app, no tiers.** Only WordFlower carries the Current/Next/MVP/Revolution

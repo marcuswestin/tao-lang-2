@@ -3,7 +3,7 @@
 // A document with `PrivateTo` set is readable by that person only. Nothing in this screen filters by it —
 // the access rule does — so the list a viewer sees IS the list they may see.
 
-ui DocumentsScreen() {
+view DocumentsScreen() {
    Title "Documents"
    Toolbar { AddDocument [primary] }
    query TripDocuments from MyTrip.Documents { order by Kind, AddedAt }
@@ -39,7 +39,7 @@ ui DocumentsScreen() {
                            if can delete Document { Button(Icon: "trash", Label: "Remove { Document.Title }") [quiet, @trailing] { on press -> delete Document } }
 }  }  }  }  }  }  }  }  }
 
-file dialogue NewDocumentSheet(Trip) responds Document {
+file view NewDocumentSheet(Trip) responds Document {
    draft New = Document for new { Trip, AddedBy: Me }
    state OnlyMe = no
    action Add() runs single {

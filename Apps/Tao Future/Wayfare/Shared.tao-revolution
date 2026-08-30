@@ -15,7 +15,7 @@ guard default {
 }
 
 // -- Frames --------------------------------------------------------------------------------------------------
-frame Section(Title text) {
+view Section(Title text) {
    @actions = empty
    render Col [gap sm] {
       Row [content spread center, gap sm] {
@@ -25,7 +25,7 @@ frame Section(Title text) {
       Col [gap xs] { @@content }
 }  }
 
-frame EmptyState(Icon icon, Title text, Body text) {
+view EmptyState(Icon icon, Title text, Body text) {
    render Col [pattern EmptyState] {
       Icon(Icon) [@icon]
       Text(Title) [@title]
@@ -84,7 +84,7 @@ view SignInPanel() {
 }  }
 
 // -- The one question -----------------------------------------------------------------------------------------
-dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
+view Confirm(Question text, Body text, Verb text) responds yes / no {
    render Col(Label: Question) [card, width max 480, gap md] {
       Text(Question) [sectionTitle]
       Text(Body) [body]
@@ -94,6 +94,6 @@ dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
          Button(Verb) [destructive] { on press -> respond yes }
 }  }  }
 
-ui Notice(Message text) {
+view Notice(Message text) {
    render Text(Message) [toast]
 }
