@@ -16,7 +16,7 @@ these.
 to a property or named slot: a view accepts opaque caller content iff its body places `@@content`.
 A layout clause is ambient on every view occurrence and is exposed to an injected implementation
 through `@@layout`; neither content nor layout is a user-declared property or named slot.
-(Originally content acceptance belonged to the declaration *kind* — `view` a leaf, `layout` and
+(Originally content acceptance belonged to the declaration _kind_ — `view` a leaf, `layout` and
 `frame` content-accepting. The unified view tranche kept this resolution's substance and moved the
 distinction from the keyword to body inference.)
 

@@ -21,11 +21,9 @@ const responseValidationMessages = {
     `Ask of ${view} has multiple arguments that match parameter '${parameter}' by type.`,
   duplicateParameterType: (view: string, parameter: string) =>
     `View ${view} has more than one parameter with the same type near '${parameter}'.`,
-  duplicateArgumentType: (view: string) =>
-    `Ask of ${view} has more than one argument with the same exact type.`,
+  duplicateArgumentType: (view: string) => `Ask of ${view} has more than one argument with the same exact type.`,
   unknownNamedArgument: (view: string, name: string) => `View ${view} has no parameter named '${name}'.`,
-  duplicateNamedArgument: (view: string, name: string) =>
-    `Ask of ${view} provides parameter '${name}' more than once.`,
+  duplicateNamedArgument: (view: string, name: string) => `Ask of ${view} provides parameter '${name}' more than once.`,
   namedArgumentType: (view: string, name: string, expected: string, actual: string) =>
     `Labeled argument '${name}:' of ${view} expects ${expected}, got ${actual}.`,
 } as const

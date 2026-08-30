@@ -20,11 +20,9 @@ const viewValidationMessages = {
   loopSelectInline: '`on select` requires an inline action block.',
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
-  callerContentCount: (name: string) =>
-    `View '${name}' may place caller content at most once with @@content.`,
+  callerContentCount: (name: string) => `View '${name}' may place caller content at most once with @@content.`,
   callerContentPlacement: '@@content is only available inside the render tree of a view.',
-  leafContent: (name: string) =>
-    `View '${name}' places no @@content and cannot accept unnamed caller content.`,
+  leafContent: (name: string) => `View '${name}' places no @@content and cannot accept unnamed caller content.`,
   renderSlotDeclarationPlacement: 'A render slot must be declared directly in a view body.',
   duplicateRenderSlot: (name: string) => `Render slot '${name}' is declared more than once in this view.`,
   renderSlotPlacementCount: (name: string) =>

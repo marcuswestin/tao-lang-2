@@ -4,8 +4,8 @@ import { configurationValidationMessages } from '../validator-src/validators/con
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
 import { configuredValueValidationMessages } from '../validator-src/validators/configured-values-validator'
 import { dataValidationMessages } from '../validator-src/validators/data-validator'
-import { ResponsesValidator } from '../validator-src/validators/responses-validator'
 import { navigationValidationMessages } from '../validator-src/validators/navigation-validator'
+import { ResponsesValidator } from '../validator-src/validators/responses-validator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {

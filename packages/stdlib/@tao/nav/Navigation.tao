@@ -2,7 +2,6 @@
 // runtime implementation through the same public mechanism a third-party package uses. Copy a
 // declaration, rename it, and swap the implementation without changing the compiler or language.
 // Anything an app can present is a `view`; `nav` refines it, so a mounted nav fills the same slots.
-
 // A nav declares its configuration contract in Tao. Property names are ordinary capitalized
 // identifiers, and `@key` declares the common shape accepted by every keyed item.
 //
