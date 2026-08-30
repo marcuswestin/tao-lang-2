@@ -166,7 +166,8 @@ public
 view DatePicker(Value time, Change action(time), Label text) {
    render inject Value, Change, Label, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('DatePicker', Layout)
-      const host = TR.Hosts.DateTimePicker()
+      const os = RN.Platform?.OS
+      const host = os === 'ios' || os === 'android' ? TR.Hosts.DateTimePicker() : undefined
       if (!host) {
         return TR.Element(RN.Text, { testID: Tag }, `${Label}: ${new Date(Value).toISOString().slice(0, 10)}`)
       }

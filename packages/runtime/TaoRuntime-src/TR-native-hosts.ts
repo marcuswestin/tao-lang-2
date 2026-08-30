@@ -13,12 +13,22 @@ export type HostComponent = React.ComponentType<any>
 
 type Host = Record<string, unknown> | undefined
 
+// Metro resolves `require` calls statically, so each optional module gets its own literal require
+// here; the lookup stays lazy and a module that fails to load resolves to no host.
+const hostLoaders: Record<string, () => Record<string, unknown>> = {
+  '@react-native-community/datetimepicker': () => require('@react-native-community/datetimepicker'),
+  '@react-native-community/slider': () => require('@react-native-community/slider'),
+  '@react-native-picker/picker': () => require('@react-native-picker/picker'),
+  '@react-native-segmented-control/segmented-control': () =>
+    require('@react-native-segmented-control/segmented-control'),
+}
+
 const cache = new Map<string, Host>()
 
 function host(moduleName: string): Host {
   if (!cache.has(moduleName)) {
     try {
-      cache.set(moduleName, require(moduleName) as Record<string, unknown>)
+      cache.set(moduleName, hostLoaders[moduleName]?.())
     } catch {
       cache.set(moduleName, undefined)
     }

@@ -13,6 +13,9 @@
     },
     "web": {
       "bundler": "metro"
+    },
+    "experiments": {
+      "autolinkingModuleResolution": true
     }
   }
 }
