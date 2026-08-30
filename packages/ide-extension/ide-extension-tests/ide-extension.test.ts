@@ -289,6 +289,11 @@ function applyEdits(document: AST.Document, edits: readonly Langium.TextEdit[]):
   return text
 }
 
+/** LSP 3.18 allows MarkupContent diagnostic messages; these assertions compare plain text. */
+function diagnosticMessageText(message: string | { value: string }): string {
+  return typeof message === 'string' ? message : message.value
+}
+
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
   const rootDir = await mkTestDir('tao-ide-lsp-')
   try {
@@ -303,7 +308,7 @@ async function validateWithLanguageServerServices(source: string): Promise<strin
       validation: true,
     })
 
-    return (document.diagnostics ?? []).map(diagnostic => diagnostic.message)
+    return (document.diagnostics ?? []).map(diagnostic => diagnosticMessageText(diagnostic.message))
   } finally {
     await FS.remove(rootDir)
   }
@@ -331,7 +336,9 @@ async function validateFilesWithLanguageServerServices(sources: Record<string, s
       validation: true,
     })
 
-    return documents.flatMap(document => (document.diagnostics ?? []).map(diagnostic => diagnostic.message))
+    return documents.flatMap(document =>
+      (document.diagnostics ?? []).map(diagnostic => diagnosticMessageText(diagnostic.message))
+    )
   } finally {
     await FS.remove(rootDir)
   }
@@ -358,7 +365,7 @@ async function validateOnDiskFileWithLanguageServerServices(
       validation: true,
     })
 
-    return (document!.diagnostics ?? []).map(diagnostic => diagnostic.message)
+    return (document!.diagnostics ?? []).map(diagnostic => diagnosticMessageText(diagnostic.message))
   } finally {
     await FS.remove(rootDir)
   }

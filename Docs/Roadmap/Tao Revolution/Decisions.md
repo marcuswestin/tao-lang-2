@@ -310,7 +310,7 @@ Public yes / Private no (default Public)     // the yes pole wins only when it i
 
 **Without an explicit `(default …)` the `no` state is the default**, which is why a row that should
 begin in the `yes` state says so at creation: `create Timer { Household, Step, StartedBy: Me,
-  EndsAt: now + Step.Timer, Running }`. Naming the bare field in a literal sets its `yes` pole; the
+EndsAt: now + Step.Timer, Running }`. Naming the bare field in a literal sets its `yes` pole; the
 same field followed by `no` sets the other explicitly — `{ Happy no }` — which only matters when
 overriding a `(default yes)`.
 
@@ -1432,7 +1432,7 @@ let Me = Account                 // module-visible; every screen reads Me, tests
 ```
 
 The live root then gates on it as ordinary data: `Navigator when Me { none -> WelcomeNav,
-  otherwise -> … }`. Nothing about identity is a keyword.
+otherwise -> … }`. Nothing about identity is a keyword.
 
 - **The datasource is a `Cloud { … }` value** carrying write behaviour, conflict model, delete
   retention, and an `Offline { … }` block:
