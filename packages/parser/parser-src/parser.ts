@@ -396,7 +396,10 @@ async function loadReferencedDocuments(
       referencedDocuments.push(await documentFromFilePath(context, siblingPath))
     }
   }
-  for (const useStatement of ast.statements.filter(AST.isUseStatement)) {
+  const importingStatements = ast.statements.filter(statement =>
+    AST.isUseStatement(statement) || AST.isUsePackageStatement(statement)
+  )
+  for (const useStatement of importingStatements) {
     const candidatePaths = await context.packages.candidateFilePaths(useStatement, {
       fromFilePath: document.uri.path,
     })

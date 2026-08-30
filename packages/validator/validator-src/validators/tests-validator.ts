@@ -9,6 +9,7 @@ const supportedInputSelectors = ['label', 'placeholder'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
+  unnamedTest: 'A test declares a sentence, the declarations it exercises, or both.',
   advanceDuration: '`advance` takes a literal duration, so a check reads as a fixed amount of time.',
   advanceNegative: '`advance` cannot move the clock backwards.',
   testPlacement: 'Test declarations are only allowed at file level or inside another test.',
@@ -82,6 +83,9 @@ function validateAdvanceDuration(step: AST.AdvanceStep, ctx: ValidationContext):
 
 // A test is either a group of nested tests or a leaf journey of steps, never a mix.
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
+  if (AST.testDisplayName(test) === '') {
+    ctx.error(testValidationMessages.unnamedTest, test)
+  }
   const owner = test.$container
   if (!AST.isTaoFile(owner) && !AST.isTestDeclaration(blockOwner(test))) {
     ctx.error(testValidationMessages.testPlacement, test)
@@ -90,7 +94,7 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
   if (nested.length > 0) {
     for (const statement of test.block.statements) {
       if (!AST.isTestDeclaration(statement)) {
-        ctx.error(testValidationMessages.testBlock(test.name), statement)
+        ctx.error(testValidationMessages.testBlock(AST.testDisplayName(test)), statement)
       }
     }
     return
@@ -101,19 +105,19 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
 function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): void {
   for (const statement of check.block.statements) {
     if (!AST.isCheckStep(statement)) {
-      ctx.error(testValidationMessages.checkBlock(check.name), statement)
+      ctx.error(testValidationMessages.checkBlock(AST.testDisplayName(check)), statement)
     }
   }
   const runSteps = check.block.statements.filter(AST.isRunStep)
   if (runSteps.length === 0) {
-    ctx.error(testValidationMessages.missingRun(check.name), check)
+    ctx.error(testValidationMessages.missingRun(AST.testDisplayName(check)), check)
     return
   }
   for (const run of runSteps) {
     validateRun(run, ctx)
   }
   for (const run of runSteps.slice(1)) {
-    ctx.error(testValidationMessages.duplicateRun(check.name), run)
+    ctx.error(testValidationMessages.duplicateRun(AST.testDisplayName(check)), run)
   }
 
   let hasRun = false

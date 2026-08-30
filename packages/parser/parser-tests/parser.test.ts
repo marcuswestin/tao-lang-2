@@ -4,6 +4,29 @@ import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
 Describe('parser: core language syntax', () => {
+  Test('parses namespace imports and pass-through view aliases', async () => {
+    // The namespace targets are unresolved in a standalone parse; only the syntax is under test.
+    const result = await testParseSyntax(`
+      use package @widgets
+      use package @tao/nav as navs
+      public view Button = widgets.Button
+    `)
+    const [derived, renamed] = result.entry.ast.statements.filter(AST.isUsePackageStatement)
+    Expect.Is(derived, AST.isUsePackageStatement)
+    Expect(derived.importPath).toBe('@widgets')
+    Expect(derived.name).toBeUndefined()
+    Expect(AST.packageNamespaceName(derived)).toBe('widgets')
+    Expect.Is(renamed, AST.isUsePackageStatement)
+    Expect(renamed.name).toBe('navs')
+    Expect(AST.packageNamespaceName(renamed)).toBe('navs')
+    const alias = result.entry.ast.statements.find(AST.isViewDeclaration)
+    Expect.Is(alias, AST.isViewDeclaration)
+    Expect(alias.parameterList).toBeUndefined()
+    Expect.Is(alias.aliasTarget, AST.isPackageMemberReference)
+    Expect(alias.aliasTarget.namespace.$refText).toBe('widgets')
+    Expect(alias.aliasTarget.member.$refText).toBe('Button')
+  })
+
   Test('parses layout declarations and child view invocations', async () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
@@ -172,7 +195,7 @@ Describe('parser: core language syntax', () => {
     Expect.Is(mainViewParameter.inlineType?.type, AST.isPrimitiveTypeReference)
     Expect(mainViewParameter.inlineType.type.primitive).toBe('text')
 
-    const [localAlias, textRender, statRender] = mainView.block.statements
+    const [localAlias, textRender, statRender] = mainView.block!.statements
     Expect.Is(localAlias, AST.isAliasDeclaration)
     Expect.Is(textRender, AST.isRenderStatement)
     Expect.Is(statRender, AST.isRenderStatement)
@@ -234,7 +257,7 @@ Describe('parser: core language syntax', () => {
     )
     Expect.Is(mainView, AST.isViewDeclaration)
 
-    const [countState, addStep, addFive, resetRender, inlineRender] = mainView.block.statements
+    const [countState, addStep, addFive, resetRender, inlineRender] = mainView.block!.statements
     Expect.Is(countState, AST.isStateDeclaration)
     Expect.Is(addStep, AST.isActionDeclaration)
     Expect.Is(addFive, AST.isActionDeclaration)

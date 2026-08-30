@@ -1,6 +1,7 @@
 grammar TaoViews
 
 import "./blocks"
+import "./imports"
 import "./expressions"
 import "./injections"
 import "./layout"
@@ -20,8 +21,12 @@ DialogueDeclaration:
     visibility=DeclarationVisibility? 'dialogue' name=ID parameterList=ParameterList
     'responds' response=[TypeDeclaration:ID] block=Block;
 
+// A view either declares its own parameters and body, or passes through to a package member:
+// `public view Button = native.Button`. The alias publishes the target under this name; its
+// interface is the target's.
 ViewDeclaration:
-    visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList block=Block;
+    visibility=DeclarationVisibility? 'view' name=ID
+    (parameterList=ParameterList block=Block | '=' aliasTarget=PackageMemberReference);
 
 LayoutDeclaration:
     visibility=DeclarationVisibility? 'layout' name=ID parameterList=ParameterList block=Block;

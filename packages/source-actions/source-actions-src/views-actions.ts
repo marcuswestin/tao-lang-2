@@ -18,9 +18,13 @@ export function moveViewRendersLast(document: AST.Document): string | undefined 
 
   let text = document.textDocument.getText()
   for (const view of viewsToReorder) {
+    const block = view.block
+    if (!block) {
+      continue
+    }
     const statements = AST.blockStatements(view)
-    const regionStart = statementRegionStart(text, view.block, statements[0]!.$cstNode!.offset)
-    const { slices, end } = statementSlices(text, statements, regionStart, blockCloseBraceOffset(text, view.block))
+    const regionStart = statementRegionStart(text, block, statements[0]!.$cstNode!.offset)
+    const { slices, end } = statementSlices(text, statements, regionStart, blockCloseBraceOffset(text, block))
     const renderSlices = slices.filter(slice => AST.isRenderStatement(slice.statement))
     const otherSlices = slices.filter(slice => !AST.isRenderStatement(slice.statement))
     const reordered = [...otherSlices, ...renderSlices].map(sliceText).join('\n')

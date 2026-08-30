@@ -6,6 +6,7 @@ import { sliceText, type StatementSlice, type TextPiece } from './text-slices'
 export function synthesizeImportSection(
   file: AST.TaoFile,
   useSlices: readonly StatementSlice<AST.UseStatement>[],
+  usePackageSlices: readonly StatementSlice<AST.UsePackageStatement>[] = [],
 ): string {
   const usedNames = ASTUtils.referencedNames(file)
   const groups = new Map<string, { names: Set<string>; leading: string[] }>()
@@ -25,9 +26,27 @@ export function synthesizeImportSection(
     groups.set(source, group)
   }
 
-  return [...groups.entries()]
+  const lines = new Map<string, { text: string; leading: string[] }>()
+  for (const [source, group] of groups) {
+    lines.set(source, { text: useStatementText([...group.names].sort(), source), leading: group.leading })
+  }
+  // A namespace import sorts by the same source ranking; its text is its own canonical rendering.
+  for (const slice of usePackageSlices) {
+    const statement = slice.statement
+    const source = statement.importPath ?? ''
+    const asClause = statement.name ? ` as ${statement.name}` : ''
+    const text = `use package ${source}${asClause}`
+    const existing = lines.get(source)
+    if (existing) {
+      existing.text = `${existing.text}\n${text}`
+    } else {
+      lines.set(source, { text, leading: slice.leading === '' ? [] : [slice.leading] })
+    }
+  }
+
+  return [...lines.entries()]
     .sort(([a], [b]) => compareImportSources(a, b))
-    .map(([source, group]) => [...group.leading, useStatementText([...group.names].sort(), source)].join('\n'))
+    .map(([, line]) => [...line.leading, line.text].join('\n'))
     .join('\n')
 }
 

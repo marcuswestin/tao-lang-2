@@ -102,6 +102,11 @@ export const ViewsCompiler = {
 } as const
 
 function ViewDeclaration(renderable: AST.VisualDeclaration): Compiled {
+  // A pass-through alias has no body of its own: the imported target is bound under the alias's
+  // name by the module's import bindings, so there is nothing to emit here.
+  if (AST.isViewDeclaration(renderable) && renderable.aliasTarget) {
+    return gen.noop()
+  }
   const parameterList = Compile.ViewParameterList(renderable)
   return gen`
     ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {

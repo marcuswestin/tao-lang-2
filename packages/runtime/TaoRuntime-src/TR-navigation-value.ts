@@ -54,11 +54,24 @@ export abstract class RuntimeNavigationValue implements Subscription {
     return false
   }
 
-  presentOverlay(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
+  /**
+   * ownsWindowSurface says this navigator renders a native surface that must receive true window
+   * bounds — the app host then leaves the scrollable content frame to the navigator's own screens.
+   */
+  ownsWindowSurface(): boolean {
+    return false
+  }
+
+  presentOverlay(
+    presentable: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+    options: { sheet?: boolean } = {},
+  ): void {
     this.overlayEntries.push({
       arguments: { ...arguments_ },
       instanceId: this.nextOverlayEntryId++,
       presentable,
+      ...(options.sheet ? { sheet: true } : {}),
     })
     this.emit()
   }

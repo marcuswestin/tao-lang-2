@@ -217,7 +217,9 @@ type ViewOwnedBlock = AST.Block
 
 function blocksOwnedByView(view: AST.VisualDeclaration): ViewOwnedBlock[] {
   const blocks: ViewOwnedBlock[] = []
-  collectRenderChildBlocks(view.block, blocks)
+  if (view.block) {
+    collectRenderChildBlocks(view.block, blocks)
+  }
   return blocks
 }
 

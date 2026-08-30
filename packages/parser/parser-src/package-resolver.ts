@@ -10,15 +10,18 @@ export type PackageFileResolveRequest = {
   fromFilePath: string
 }
 
+/** ImportingStatement is any statement that names an import path to resolve against packages. */
+export type ImportingStatement = AST.UseStatement | AST.UsePackageStatement
+
 /** PackageResolver resolves declarations and files reachable through Tao use statements. */
 export type PackageResolver = {
   intrinsicFilePaths(): Promise<readonly string[]>
   collectTargetDeclarations(
-    useStatement: AST.UseStatement,
+    useStatement: ImportingStatement,
     request: PackageDeclarationResolveRequest,
   ): readonly AST.Declaration[]
   candidateFilePaths(
-    useStatement: AST.UseStatement,
+    useStatement: ImportingStatement,
     request: PackageFileResolveRequest,
   ): Promise<readonly string[]>
 }

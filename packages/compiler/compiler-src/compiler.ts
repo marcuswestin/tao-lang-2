@@ -471,6 +471,49 @@ function resolveImports(
       scopeBindings.set(binding, binding)
     }
   }
+  // A view alias imports its target under a private local name; the alias's own name is then bound
+  // and exported by the ordinary scope machinery, so consumers never see the indirection.
+  for (const declaration of file.statements.filter(AST.isViewDeclaration)) {
+    const aliasTarget = declaration.aliasTarget
+    if (!aliasTarget) {
+      continue
+    }
+    const namespaceName = aliasTarget.namespace.$refText
+    const namespaceStatement = file.statements
+      .filter(AST.isUsePackageStatement)
+      .find(statement => AST.packageNamespaceName(statement) === namespaceName)
+    if (!namespaceStatement) {
+      continue
+    }
+    const resolution = Packages.resolve(packagesContext, {
+      importPath: namespaceStatement.importPath,
+      fromFilePath: filePath,
+    })
+    if (resolution.relation === 'invalid') {
+      continue
+    }
+    const memberName = aliasTarget.member.$refText
+    const target = [...sourceByPath.values()].filter(candidate =>
+      Packages.targetMatches(resolution, {
+        filePath: candidate.path,
+        workspaceFilePaths: sourcePaths,
+      })
+    ).find(candidate =>
+      candidate.ast.statements.some(statement =>
+        declarationEmitsRuntimeBinding(statement)
+        && statement.name === memberName
+        && Packages.declarationIsImportableFromUse(statement, resolution)
+      )
+    )
+    if (!target) {
+      continue
+    }
+    const localBinding = `__tao_package_${namespaceName}_${memberName}`
+    const names = bySource.get(target.path) ?? new Set<string>()
+    names.add(`${memberName} as ${localBinding}`)
+    bySource.set(target.path, names)
+    scopeBindings.set(declaration.name, localBinding)
+  }
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
     const resolution = Packages.resolve(packagesContext, {
       importPath: useStatement.importPath,

@@ -16,6 +16,8 @@ export type DialogueOccurrenceState = TaoDialogueOccurrence & {
 export type OverlayEntry = Omit<PresentableEntry, 'presentable'> & {
   dialogue?: DialogueOccurrenceState
   presentable: TaoPresentable | TaoDialogue
+  /** A sheet is presented by the platform's modal host rather than as another overlay layer. */
+  sheet?: boolean
 }
 
 export type Subscription = {

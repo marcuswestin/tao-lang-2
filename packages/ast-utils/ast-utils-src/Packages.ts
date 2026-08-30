@@ -176,7 +176,11 @@ export namespace Packages {
     return resolveRelativePath(importPath, context, request)
   }
 
-  function resolveUse(context: Context, useStatement: AST.UseStatement, fromFilePath: string): Resolution {
+  function resolveUse(
+    context: Context,
+    useStatement: AST.UseStatement | AST.UsePackageStatement,
+    fromFilePath: string,
+  ): Resolution {
     return resolve(context, {
       importPath: useStatement.importPath,
       fromFilePath,

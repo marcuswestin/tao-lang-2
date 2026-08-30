@@ -141,7 +141,7 @@ Describe('minimal Tao parser', () => {
     const labelParameter = AST.parametersOf(mainView)[0]
     Expect.Is(labelParameter, AST.isParameterDeclaration)
 
-    const [viewGreetingAlias, labelAlias, render] = mainView.block.statements
+    const [viewGreetingAlias, labelAlias, render] = mainView.block!.statements
     Expect.Is(viewGreetingAlias, AST.isAliasDeclaration)
     Expect.Is(labelAlias, AST.isAliasDeclaration)
     Expect.Is(render, AST.isRenderStatement)

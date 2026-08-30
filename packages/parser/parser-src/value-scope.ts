@@ -63,6 +63,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
       return this.createUseImportScope(context.container)
     }
+    if (context.property === 'namespace' && AST.isPackageMemberReference(context.container)) {
+      return this.createPackageNamespaceScope(context.container)
+    }
+    if (context.property === 'member' && AST.isPackageMemberReference(context.container)) {
+      return this.createPackageMemberScope(context.container)
+    }
     if (context.property === 'view' && AST.isRender(context.container)) {
       return this.createViewScope(context.container)
     }
@@ -352,6 +358,29 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
   }
 
+  /** A namespace name resolves only against this file's own use-package statements. */
+  private createPackageNamespaceScope(reference: AST.PackageMemberReference): Langium.Scope {
+    const root = AST.findRoot(reference)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const statements = root.statements.filter(AST.isUsePackageStatement)
+    const descriptions = statements.flatMap(statement => {
+      const name = AST.packageNamespaceName(statement)
+      return name ? [this.descriptions.createDescription(statement, name, AST.getDocument(statement))] : []
+    })
+    return this.createScope(descriptions)
+  }
+
+  /** A member resolves against what the namespace's package exports to this file. */
+  private createPackageMemberScope(reference: AST.PackageMemberReference): Langium.Scope {
+    const statement = reference.namespace.ref
+    if (!AST.isUsePackageStatement(statement)) {
+      return this.createScopeForNodes([])
+    }
+    return this.createScopeForNodes(this.collectTargetDeclarations(statement))
+  }
+
   private importedCaseSetCases(node: AST.Node): AST.CaseSetCase[] {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
@@ -433,7 +462,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return declarations
   }
 
-  private collectTargetDeclarations(useStatement: AST.UseStatement, currentPath?: string): AST.Declaration[] {
+  private collectTargetDeclarations(
+    useStatement: AST.UseStatement | AST.UsePackageStatement,
+    currentPath?: string,
+  ): AST.Declaration[] {
     const path = currentPath ?? AST.getDocument(useStatement).uri.path
     const allFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)

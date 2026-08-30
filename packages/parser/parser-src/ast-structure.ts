@@ -4,7 +4,7 @@ import * as AST from './parserASTExport'
 /** DeclarationNamespace identifies the independent declaration table a name occupies. */
 export type DeclarationNamespace = 'type' | 'value'
 
-const resolvedUseTargets = new WeakMap<AST.UseStatement, readonly AST.Declaration[]>()
+const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 
 /** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
 export function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
@@ -38,10 +38,49 @@ export function declarationKey(declaration: AST.Declaration): string {
 
 /** rememberUseTargets records every declaration visible through a use target before one Langium ref is chosen. */
 export function rememberUseTargets(
-  useStatement: AST.UseStatement,
+  useStatement: AST.UseStatement | AST.UsePackageStatement,
   declarations: readonly AST.Declaration[],
 ): void {
   resolvedUseTargets.set(useStatement, declarations)
+}
+
+/** testDisplayName returns a test's sentence, falling back to the dependencies it declares. */
+export function testDisplayName(test: AST.TestDeclaration): string {
+  if (test.name) {
+    return test.name
+  }
+  const dependencies = test.dependencies.map(reference => reference.$refText).filter(name => name.length > 0)
+  return dependencies.join(', ')
+}
+
+/** packageNamespaceName returns the name a use-package statement binds, derived from its path. */
+export function packageNamespaceName(statement: AST.UsePackageStatement): string | undefined {
+  if (statement.name) {
+    return statement.name
+  }
+  const segments = (statement.importPath ?? '').split('/').filter(segment =>
+    segment.length > 0 && segment !== '.' && segment !== '..'
+  )
+  const last = segments[segments.length - 1]
+  if (!last) {
+    return undefined
+  }
+  const name = last.startsWith('@') ? last.slice(1) : last
+  return /^[_a-zA-Z][a-zA-Z0-9_]*$/.test(name) ? name : undefined
+}
+
+/** viewAliasTarget resolves a view alias to its eventual non-alias target, guarding against cycles. */
+export function viewAliasTarget(declaration: AST.ViewDeclaration): AST.Declaration | undefined {
+  const seen = new Set<AST.ViewDeclaration>()
+  let current: AST.Declaration | undefined = declaration
+  while (AST.isViewDeclaration(current) && current.aliasTarget) {
+    if (seen.has(current)) {
+      return undefined
+    }
+    seen.add(current)
+    current = current.aliasTarget.member.ref
+  }
+  return current === declaration ? undefined : current
 }
 
 /** resolvedImportedDeclarations returns every requested declaration, preserving type/value namespace peers. */
@@ -505,6 +544,11 @@ export function caseSetOwningCase(caseSetCase: AST.CaseSetCase): AST.TypeDeclara
 
 /** parametersOf returns the parameters declared by a parameterized declaration. */
 export function parametersOf(declaration: AST.ParameterizedDeclaration): AST.ParameterDeclaration[] {
+  // A view alias has no parameter list of its own; its interface is its target's.
+  if (AST.isViewDeclaration(declaration) && declaration.aliasTarget) {
+    const target = viewAliasTarget(declaration)
+    return target && AST.isParameterizedDeclaration(target) ? parametersOf(target as AST.ParameterizedDeclaration) : []
+  }
   return declaration.parameterList?.parameters ?? []
 }
 

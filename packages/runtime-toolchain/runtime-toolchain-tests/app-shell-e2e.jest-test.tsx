@@ -56,10 +56,12 @@ Describe('Expo runtime', () => {
     const safeAreaMock = safeAreaContextTestMock()
     safeAreaMock.setSafeAreaInsetsForTests({ bottom: 5, left: 2, right: 3, top: 7 })
     try {
+      // The app host composes AppSurfaceFrame inside AppShell around every navigator that does not
+      // hand the window to a native surface; this renders that same composition directly.
       const screen = render(createElement(
         TR.AppShell,
         null,
-        createElement(RN.Text, null, 'Shell content'),
+        createElement(TR.AppSurfaceFrame, null, createElement(RN.Text, null, 'Shell content')),
       ))
       const scrollView = screen.UNSAFE_getByType(RN.ScrollView)
       const keyboardView = screen.UNSAFE_getByType(RN.KeyboardAvoidingView)

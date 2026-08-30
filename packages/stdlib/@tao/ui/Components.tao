@@ -1,0 +1,31 @@
+use package ./native
+
+// `@tao/ui` publishes the platform-native set: each name is a pass-through alias to the native
+// implementation, so a new app is native by default with no ceremony, and an app that wants a
+// different look imports another implementation package without changing any call site.
+//
+// The clause-honoring wireframe versions of these live in `@tao/ui/basic`, which is what a design
+// styles up: `use Button from @tao/ui/basic`.
+public
+view Button = native.Button
+
+public
+view FormButton = native.FormButton
+
+public
+view Switch = native.Switch
+
+public
+view Slider = native.Slider
+
+public
+view Picker = native.Picker
+
+public
+view SegmentedControl = native.SegmentedControl
+
+public
+view DatePicker = native.DatePicker
+
+public
+view Spinner = native.Spinner

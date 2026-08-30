@@ -1,0 +1,55 @@
+// The wireframe tier: minimally-styled implementations that honor every Tao clause, the base a
+// design styles up with element defaults. An app opts down deliberately with
+// `use Button from @tao/ui/basic`; the bare `@tao/ui` names pass through to the native set.
+// A tappable title, fully receptive to layout clauses and design bundles.
+public
+view Button(Title text, Press action(), Disabled boolean default false) {
+   render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Pressable(
+        { title: Title, action: Press, layout: Layout, tag: Tag, disabled: Disabled },
+        { nativeProps: { accessibilityRole: 'button', accessibilityState: { disabled: Disabled } } },
+      )
+   ```
+}
+
+// The form button with its busy state, honoring every clause a design or call site applies.
+public
+view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false) {
+   render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
+      const effectiveDisabled = Disabled || Submitting
+      return TR.Views.Pressable(
+        {
+          layout: Layout,
+          tag: Tag,
+          title: Submitting ? 'Saving…' : Title,
+          action: Press,
+          disabled: effectiveDisabled,
+        },
+        {
+          nativeProps: {
+            accessibilityLabel: Title,
+            accessibilityRole: 'button',
+            accessibilityState: { busy: Submitting, disabled: effectiveDisabled },
+            disabled: effectiveDisabled,
+            style: {
+              alignItems: 'center',
+              backgroundColor: effectiveDisabled ? '#9aa49d' : '#2f6b4f',
+              borderRadius: 8,
+              minHeight: 44,
+              paddingHorizontal: 16,
+              paddingVertical: 11,
+            },
+            testID: Id || undefined,
+          },
+        },
+      )
+   ```
+}
+
+// The wireframe spinner, honoring layout clauses where the native one renders OS chrome.
+public
+view Spinner() {
+   render inject Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Spinner({ layout: Layout, tag: Tag })
+   ```
+}

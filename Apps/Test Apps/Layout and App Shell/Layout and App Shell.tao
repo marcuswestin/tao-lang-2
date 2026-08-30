@@ -1,5 +1,8 @@
 use StackNav from @tao/nav
-use Box, Button, Col, Panes, Row, ScrollView, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
+use Box, Col, Panes, Row, ScrollView, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
+// This app exercises layout clauses on a control, so it binds the tier that honors them rather than
+// the platform-native default, which renders the OS's own chrome.
+use Button from @tao/ui/basic
 
 app LayoutAndAppShell {
    Name "Layout and App Shell"

@@ -1,0 +1,13 @@
+use Col, Text from @tao/ui
+
+// A stand-in implementation package: the shape @tao/ui's native subpackage has, in miniature.
+public
+view Badge(Label text) {
+   render Col() {
+      Text("Badge: { Label }")
+}  }
+
+public
+view Tagline(Value text) {
+   render Text("Tagline: { Value }")
+}

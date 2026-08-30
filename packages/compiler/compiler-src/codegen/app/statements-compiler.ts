@@ -55,6 +55,7 @@ export const StatementsCompiler = {
       TestDeclaration: Compile.TestDeclaration,
       TypeDeclaration: Compile.TypeDeclaration,
       UiDeclaration: Compile.UiDeclaration,
+      UsePackageStatement: Compile.UsePackageStatement,
       UseStatement: Compile.UseStatement,
       ViewDeclaration: Compile.ViewDeclaration,
       ViewRender: Compile.ViewRender,
