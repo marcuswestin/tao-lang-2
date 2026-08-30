@@ -1,9 +1,9 @@
 import { Describe, Test } from '@shared/test'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { unitsValidationMessages } from '../validator-src/validators/units-validator'
-import { accepts, app, rejects, stubLayout, stubView } from './test-validate'
+import { accepts, app, rejects, stubContainer, stubView } from './test-validate'
 
-const runtimeViews = `${stubLayout('Stack')}${stubView('Text', 'Value text')}`
+const runtimeViews = `${stubContainer('Stack')}${stubView('Text', 'Value text')}`
 
 function unitApp(declarations: string): string {
   return `${declarations}\n${app('render Text("Ready")', runtimeViews)}`

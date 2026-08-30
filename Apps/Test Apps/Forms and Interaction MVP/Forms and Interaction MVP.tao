@@ -11,7 +11,7 @@ function SubmittedLabel(Title text) returns text {
    return "Submitted: { Title }"
 }
 
-ui MainView() {
+view MainView() {
    state Draft = ""
    state Submitted = ""
    state NamedChange = ""

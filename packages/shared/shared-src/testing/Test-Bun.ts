@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, test } from 'bun:test'
 import { type JestApi, setTestRuntime } from './Test'
 
-export { app, fence, stubLayout, stubView, tsFence } from './TaoFixtures'
+export { app, fence, stubContainer, stubView, tsFence } from './TaoFixtures'
 export {
   AfterAll,
   AfterEach,

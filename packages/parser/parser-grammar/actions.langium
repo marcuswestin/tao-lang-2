@@ -28,7 +28,7 @@ AsyncActionStatement:
     'async' block=ActionBlock;
 
 AskStatement:
-    'let' name=ID '=' 'ask' dialogue=[DialogueDeclaration:ID] '(' argumentList=ArgumentList? ')';
+    'let' name=ID '=' 'ask' view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')';
 
 RespondStatement:
     'respond' case=[CaseSetCase:ID]?;

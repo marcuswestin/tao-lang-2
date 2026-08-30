@@ -90,19 +90,19 @@ export const ActionsCompiler = {
     return gen`await TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
   },
 
-  /** AskStatement suspends its action and binds the response owned by this dialogue occurrence. */
+  /** AskStatement suspends its action and binds the response owned by this presented occurrence. */
   AskStatement(statement: AST.AskStatement): Compiled {
-    const dialogue = resolveRef(statement.dialogue)
-    const resolved = ASTUtils.resolveArgumentBindings(dialogue, statement)
-    Assert(resolved.diagnostics.length === 0, 'validated dialogue ask has no binding diagnostics')
+    const view = resolveRef(statement.view)
+    const resolved = ASTUtils.resolveArgumentBindings(view, statement)
+    Assert(resolved.diagnostics.length === 0, 'validated ask has no binding diagnostics')
     return gen`${gen.scopeName(statement)} = await TR.Navigation.Ask(
       _ViewProps.__tao,
-      ${Compile.DialogueValue(dialogue)},
+      ${Compile.ViewValue(view)},
       { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
     )`
   },
 
-  /** RespondStatement settles only the dialogue occurrence inherited by this render tree. */
+  /** RespondStatement settles only the responding occurrence inherited by this render tree. */
   RespondStatement(statement: AST.RespondStatement): Compiled {
     const response = statement.case?.ref
     return gen`TR.Navigation.Respond(

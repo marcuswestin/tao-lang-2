@@ -473,7 +473,7 @@ Describe('removeUnusedImports', () => {
         'Main.tao': `
         use Documents from ./Schema.tao
 
-        workspace ui Editor(Document) {
+        workspace view Editor(Document) {
           render Empty()
         }
         view Empty() {
@@ -506,7 +506,7 @@ Describe('removeUnusedImports', () => {
           Navigator { Initial Home }
         }
 
-        ui Home() {
+        view Home() {
           render Empty()
         }
 
@@ -518,7 +518,7 @@ Describe('removeUnusedImports', () => {
       `,
         'Navigation.tao': `
         public type Navigator is nav with {
-          Initial ui
+          Initial view
 
           nav TestNavKind from ./TestNav.ts
         }
@@ -610,14 +610,14 @@ Describe('moveRendersLast', () => {
     }\n`)
   })
 
-  Test('moves render statements to the end of ui and dialogue bodies', async () => {
+  Test('moves render statements to the end of plain and responds-declaring view bodies', async () => {
     const document = await parseDocument(`
       type Answer is one of Confirmed
-      ui Home() {
+      view Home() {
          render Text(Greeting)
          let Greeting = "Home"
       }
-      dialogue Confirm() responds Answer {
+      view Confirm() responds Answer {
          render Text(Prompt)
          let Prompt = "Continue?"
       }
@@ -627,12 +627,12 @@ Describe('moveRendersLast', () => {
       Text.stripIndent(`
       type Answer is one of Confirmed
 
-      ui Home() {
+      view Home() {
          let Greeting = "Home"
          render Text(Greeting)
       }
 
-      dialogue Confirm() responds Answer {
+      view Confirm() responds Answer {
          let Prompt = "Continue?"
          render Text(Prompt)
       }

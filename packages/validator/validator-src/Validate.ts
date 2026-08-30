@@ -13,7 +13,7 @@ import {
 } from './validators/configured-values-validator'
 import { dataValidationChecks, validateDataFile } from './validators/data-validator'
 import { DesignValidator } from './validators/design-validator'
-import { DialogueValidator } from './validators/dialogue-validator'
+import { ResponsesValidator } from './validators/responses-validator'
 import { ExpressionsValidator } from './validators/expressions-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
@@ -51,7 +51,7 @@ const nodeValidationChecks = NodeValidation.compile(
     configurationValidationChecks,
     completenessValidationChecks,
     preludeValidationChecks,
-    DialogueValidator.checks,
+    ResponsesValidator.checks,
     navigationValidationChecks,
     unitsValidationChecks,
     bridgeValidationChecks,

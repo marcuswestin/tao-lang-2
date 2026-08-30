@@ -9,7 +9,7 @@ import { sliceText, statementSlices } from './text-slices'
 export function moveViewRendersLast(document: AST.Document): string | undefined {
   const file = document.parseResult.value
   const viewsToReorder = AST.streamAllContents(file)
-    .filter(AST.isVisualDeclaration)
+    .filter(AST.isViewDeclaration)
     .filter(needsRenderMove)
     .sort((a, b) => AST.blockStatementOf(b, 0).$cstNode!.offset - AST.blockStatementOf(a, 0).$cstNode!.offset)
   if (viewsToReorder.length === 0) {
@@ -50,7 +50,7 @@ function blockCloseBraceOffset(text: string, block: AST.Block): number {
   return closeOffset === -1 ? blockEnd : closeOffset
 }
 
-function needsRenderMove(view: AST.VisualDeclaration): boolean {
+function needsRenderMove(view: AST.ViewDeclaration): boolean {
   const statements = AST.blockStatements(view)
   const renderIndex = statements.findIndex(AST.isRenderStatement)
   return statements.filter(AST.isRenderStatement).length === 1

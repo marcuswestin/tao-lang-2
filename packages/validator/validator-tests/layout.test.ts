@@ -1,6 +1,6 @@
 import { Describe, Test } from '@shared/test'
 import { LayoutValidator } from '../validator-src/validators/layout-validator'
-import { accepts, app, fence, rejects, stubLayout, tsFence } from './test-validate'
+import { accepts, app, fence, rejects, stubContainer, tsFence } from './test-validate'
 
 const messages = LayoutValidator.messages
 
@@ -126,5 +126,5 @@ Describe('validator: layout clauses', () => {
 })
 
 function layoutApp(clause: string): string {
-  return app(`render Col()[${clause}]`, stubLayout('Col'))
+  return app(`render Col()[${clause}]`, stubContainer('Col'))
 }

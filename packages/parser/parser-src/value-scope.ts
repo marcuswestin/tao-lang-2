@@ -48,11 +48,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (isConfigurationTargetReference) {
       return this.createConfigurationDeclarationScope(container)
     }
-    if (context.property === 'ui' && AST.isContextualPresentStatement(context.container)) {
-      return this.createUiScope(context.container)
+    if (context.property === 'view' && AST.isContextualPresentStatement(context.container)) {
+      return this.createPresentedViewScope(context.container)
     }
-    if (context.property === 'dialogue' && AST.isAskStatement(context.container)) {
-      return this.createDialogueScope(context.container)
+    if (context.property === 'view' && AST.isAskStatement(context.container)) {
+      return this.createAskedViewScope(context.container)
     }
     if (context.property === 'case' && AST.isRespondStatement(context.container)) {
       return this.createResponseCaseScope(context.container)
@@ -186,17 +186,18 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  private createUiScope(node: AST.ContextualPresentStatement): Langium.Scope {
-    return this.createDeclarationScope(node, AST.isUiDeclaration)
+  private createPresentedViewScope(node: AST.ContextualPresentStatement): Langium.Scope {
+    return this.createDeclarationScope(node, AST.isViewDeclaration)
   }
 
-  private createDialogueScope(node: AST.AskStatement): Langium.Scope {
-    return this.createDeclarationScope(node, AST.isDialogueDeclaration)
+  private createAskedViewScope(node: AST.AskStatement): Langium.Scope {
+    return this.createDeclarationScope(node, AST.isViewDeclaration)
   }
 
   private createResponseCaseScope(node: AST.RespondStatement): Langium.Scope {
-    const dialogue = AST.findOwningView(node)
-    const response = AST.isDialogueDeclaration(dialogue) ? dialogue.response.ref : undefined
+    // `respond` answers with a case of the owning view's `responds` type.
+    const owner = AST.findOwningView(node)
+    const response = AST.isViewDeclaration(owner) ? owner.response?.ref : undefined
     return this.createScopeForNodes(response ? AST.caseSetCasesOf(response) : [])
   }
 
@@ -211,14 +212,14 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createViewScope(render: AST.Render): Langium.Scope {
-    return this.createDeclarationScope(render, AST.isRenderableDeclaration)
+    return this.createDeclarationScope(render, AST.isViewDeclaration)
   }
 
   private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
     if (!use.render) {
       const owner = AST.findOwningView(use)
       return this.createScopeForNodes(
-        AST.isFrameDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [],
+        AST.isViewDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [],
       )
     }
 
@@ -232,12 +233,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
     // Resolve by the invocation's source name without touching its `.ref` while this slot itself
     // is linking. The ordinary render reference is linked independently by the same visible set.
-    const frames = [
-      ...root.statements.filter(AST.isFrameDeclaration),
-      ...this.importedDeclarations(use, AST.isFrameDeclaration),
+    const views = [
+      ...root.statements.filter(AST.isViewDeclaration),
+      ...this.importedDeclarations(use, AST.isViewDeclaration),
     ]
-    const frame = frames.find(candidate => candidate.name === targetName)
-    return this.createScopeForNodes(frame ? AST.renderSlotDeclarationsOf(frame) : [])
+    const target = views.find(candidate => candidate.name === targetName)
+    return this.createScopeForNodes(target ? AST.renderSlotDeclarationsOf(target) : [])
   }
 
   private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {

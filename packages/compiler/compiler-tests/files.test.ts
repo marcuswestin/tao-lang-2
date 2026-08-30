@@ -63,11 +63,11 @@ Describe('compiler: files and packages', () => {
             Navigator CustomStack
             Datasource SnapshotStore { StorageKey "demo" }
           }
-          ui Home() { render inject ${tsFence} return null ${fence} }
+          view Home() { render inject ${tsFence} return null ${fence} }
         `,
         'Packages/@custom/Constructs.tao': `
           public type CustomStack is nav with {
-            Initial ui
+            Initial view
             nav TestNavImpl from ./TestNavImpl.ts
           }
           public nav CustomStack = CustomStack { Initial PackageHome }
@@ -75,7 +75,7 @@ Describe('compiler: files and packages', () => {
             StorageKey text
             provider TestProviderImpl from ./TestProviderImpl.ts
           }
-          ui PackageHome() { render inject ${tsFence} return null ${fence} }
+          view PackageHome() { render inject ${tsFence} return null ${fence} }
         `,
         'Packages/@custom/TestNavImpl.ts': navSidecar('TestNavImpl'),
         'Packages/@custom/TestProviderImpl.ts': providerSidecar('TestProviderImpl'),
@@ -171,22 +171,21 @@ Describe('compiler: files and packages', () => {
             Navigator SidecarStack { Initial Home }
             Datasource SidecarStore { StorageKey "demo" }
           }
-          ui Home() { render inject ${tsFence} return null ${fence} }
+          view Home() { render inject ${tsFence} return null ${fence} }
         `,
         'Constructs.tao': `
-          public type Presentable is ui | nav
           public type SidecarStack is nav with {
-            Initial ui
+            Initial view
             nav SidecarStack from ./SidecarStack.ts
           }
           public type SidecarSlot is nav with {
-            Initial Presentable
+            Initial view
             nav SlotNav from ./NavKinds.ts
           }
           public type SidecarSelection is nav with {
             Initial key
             Display text
-            @key { Label text Content Presentable }
+            @key { Label text Content view }
             nav SelectionNav from ./NavKinds.ts
           }
           public type SidecarCustom is nav with {
@@ -236,7 +235,8 @@ Describe('compiler: files and packages', () => {
         Expect(declarations.code).toContain("import type TR from '@runtime/TR'")
         const declarationText = declarations.code.replace(/\s+/g, ' ')
         Expect(declarationText).toContain(
-          'export type SidecarStackConfig = Readonly<{ readonly initial: TR.Presentable }>',
+          'export type SidecarStackConfig = Readonly<{ '
+            + 'readonly initial: TR.Presentable | TR.NavigationValue }>',
         )
         Expect(declarationText).toContain(
           'export type SidecarStoreConfig = Readonly<{ readonly "StorageKey": TR.Value<string> }>',
@@ -256,7 +256,8 @@ Describe('compiler: files and packages', () => {
           'export type SidecarCustomConfig = Readonly<Record<string, unknown>>',
         )
         Expect(module.code.replace(/\s+/g, ' ')).toContain(
-          'export type SidecarStackConfig = Readonly<{ readonly initial: TR.Presentable }>',
+          'export type SidecarStackConfig = Readonly<{ '
+            + 'readonly initial: TR.Presentable | TR.NavigationValue }>',
         )
       },
     )
@@ -335,7 +336,7 @@ Describe('compiler: files and packages', () => {
           use StackNav from @tao/nav
           use Root from ./
           workspace nav ResetNav = StackNav { Initial Home }
-          ui Home() {
+          view Home() {
             action Reset() { replace ResetNav in Root }
             render Empty()
           }
@@ -568,11 +569,11 @@ Describe('compiler: files and packages', () => {
             Name "Collision"
             Navigator AStack { Initial Home }
           }
-          ui Home() { render inject ${tsFence} return null ${fence} }
+          view Home() { render inject ${tsFence} return null ${fence} }
         `,
         'liba/Views.tao': `
           public type AStack is nav with {
-            Initial ui
+            Initial view
             nav Implementation from ./Implementation.ts
           }
         `,
@@ -585,7 +586,7 @@ Describe('compiler: files and packages', () => {
         `,
         'libb/Views.tao': `
           public type BStack is nav with {
-            Initial ui
+            Initial view
             nav Implementation from ./Implementation.ts
           }
         `,

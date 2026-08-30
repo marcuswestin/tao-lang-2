@@ -43,4 +43,5 @@ test "WordFlower app shell" {
       expect missing text "Build development"
       press #expandDetails
       expect text "Build development"
-}  }
+   }
+}

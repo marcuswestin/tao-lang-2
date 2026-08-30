@@ -13,7 +13,7 @@ Describe('minimal Tao parser', () => {
         'Main.tao': `
           use CustomData, CustomNav from @custom
 
-          ui Home() { }
+          view Home() { }
           let MainNav = CustomNav {
             Initial Home
           }
@@ -27,7 +27,7 @@ Describe('minimal Tao parser', () => {
         `,
         'Packages/@custom/Constructs.tao': `
           public type CustomNav is nav with {
-            Initial ui
+            Initial view
             nav TestNavKind from ./TestNav.ts
           }
           public type CustomData is datasource with {
@@ -109,7 +109,7 @@ Describe('minimal Tao parser', () => {
     const parseResult = await testParseCode(`
       let Greeting = "File"
 
-      layout Stack() {
+      view Stack() {
         render inject Content @@content \`\`\`ts
           return <>{Content}</>
         \`\`\`
@@ -197,7 +197,7 @@ Describe('minimal Tao parser', () => {
           Text(Greeting)
         }
       }
-      workspace layout Stack() {
+      workspace view Stack() {
         render inject Content @@content \`\`\`ts
           return <>{Content}</>
         \`\`\`
@@ -265,18 +265,18 @@ Describe('minimal Tao parser', () => {
       file let FileTitle = "File"
       package let PackageTitle = "Package"
       workspace view ProjectView() { }
-      public layout PublishedStack() { }
+      public view PublishedStack() { }
     `)
 
-    const [fileAlias, packageAlias, projectView, publishedLayout] = parseResult.entry.ast.statements
+    const [fileAlias, packageAlias, projectView, publishedView] = parseResult.entry.ast.statements
     Expect.Is(fileAlias, AST.isAliasDeclaration)
     Expect.Is(packageAlias, AST.isAliasDeclaration)
     Expect.Is(projectView, AST.isViewDeclaration)
-    Expect.Is(publishedLayout, AST.isLayoutDeclaration)
+    Expect.Is(publishedView, AST.isViewDeclaration)
     Expect(fileAlias.visibility).toBe('file')
     Expect(packageAlias.visibility).toBe('package')
     Expect(projectView.visibility).toBe('workspace')
-    Expect(publishedLayout.visibility).toBe('public')
+    Expect(publishedView.visibility).toBe('public')
   })
 
   Test('keeps workspace visibility scoped out of stdlib imports', () => {

@@ -20,7 +20,7 @@ type NamedFileValueDeclaration =
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.FunctionDeclaration
-  | AST.VisualDeclaration
+  | AST.ViewDeclaration
 type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
 type NamedDeclaration = NamedValueDeclaration | NamedTypeDeclaration
 
@@ -49,7 +49,7 @@ export const AliasesValidator = {
     [AST.ParameterDeclaration.$type]: reportReservedRuntimeName,
     [AST.EntityQueryDeclaration.$type]: reportReservedRuntimeName,
     [AST.CaseSetCase.$type]: reportReservedRuntimeName,
-    [AST.VisualDeclaration.$type]: [reportReservedRuntimeName, validateVisualDeclaration],
+    [AST.ViewDeclaration.$type]: [reportReservedRuntimeName, validateViewDeclaration],
     [AST.StateDeclaration.$type]: reportReservedRuntimeName,
     [AST.TypeDeclaration.$type]: reportReservedRuntimeName,
     [AST.ValueReference.$type]: reportLocalValueReferenceOrder,
@@ -72,8 +72,8 @@ function validateFile(file: AST.TaoFile, ctx: ValidationContext): void {
   reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
 }
 
-function validateVisualDeclaration(view: AST.VisualDeclaration, ctx: ValidationContext, file: AST.TaoFile): void {
-  const fileRenderables = file.statements.filter(AST.isVisualDeclaration)
+function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationContext, file: AST.TaoFile): void {
+  const fileRenderables = file.statements.filter(AST.isViewDeclaration)
   const parameters = AST.parametersOf(view)
   reportNameConflicts(parameters, visibleDeclarations(fileRenderables), ctx)
   for (const block of blocksOwnedByView(view)) {
@@ -183,7 +183,7 @@ function isInvalidAliasInitializerReferenceOrder(
   reference: ValueReferenceLike,
   alias: AST.AliasDeclaration,
 ): declaration is AST.ValueDeclaration {
-  if (AST.isConfiguredValue(alias.value) && AST.isUiDeclaration(declaration)) {
+  if (AST.isConfiguredValue(alias.value) && AST.isViewDeclaration(declaration)) {
     return false
   }
   return isInitializerReferenceOrderSensitive(declaration, alias)
@@ -215,7 +215,7 @@ function isInvalidLocalValueReferenceOrder(
 
 type ViewOwnedBlock = AST.Block
 
-function blocksOwnedByView(view: AST.VisualDeclaration): ViewOwnedBlock[] {
+function blocksOwnedByView(view: AST.ViewDeclaration): ViewOwnedBlock[] {
   const blocks: ViewOwnedBlock[] = []
   if (view.block) {
     collectRenderChildBlocks(view.block, blocks)
@@ -258,5 +258,5 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isFunctionDeclaration(node)
-    || AST.isVisualDeclaration(node)
+    || AST.isViewDeclaration(node)
 }

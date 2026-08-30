@@ -14,7 +14,6 @@ import {
 import { disableNativeNavigationSurfaces } from './TR-navigation-native-tabs'
 import {
   type Evaluable,
-  RuntimeDialogue,
   RuntimePresentable,
 } from './TR-navigation-presentables'
 import {
@@ -35,8 +34,6 @@ export type TaoPresentableDefinition = {
   name: string
   render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode
 }
-
-export type TaoDialogueDefinition = TaoPresentableDefinition
 
 export type TaoSelectionNavItemDefinition = {
   content: TaoPresentable | TaoNavigationValue
@@ -179,14 +176,9 @@ export const NavigationControls = {
     return mountConfiguredNavigation(configured)
   },
 
-  /** UI creates a first-class presentation descriptor for one Tao ui declaration. */
-  UI(definition: TaoPresentableDefinition): TaoPresentable {
+  /** View creates the first-class presentation descriptor for one Tao view declaration. */
+  View(definition: TaoPresentableDefinition): TaoPresentable {
     return new RuntimePresentable(definition)
-  },
-
-  /** Dialogue creates a descriptor whose independently asked occurrences own their resolvers. */
-  Dialogue(definition: TaoDialogueDefinition): TaoDialogue {
-    return new RuntimeDialogue(definition)
   },
 
   /** App creates a lazy, resettable process-local app navigation definition. */
@@ -249,26 +241,26 @@ export const NavigationControls = {
     app.presentToast(key, duration, presentable, arguments_)
   },
 
-  /** Ask stacks a fresh dialogue occurrence above the nearest enclosing navigation container. */
+  /** Ask stacks a fresh responding occurrence above the nearest enclosing navigation container. */
   Ask(
     taoProps: TaoProps | undefined,
-    dialogue: TaoDialogue,
+    view: TaoPresentable,
     arguments_: TaoNavigationArguments,
   ): Promise<Evaluable> {
     const navigation = TaoPropsControls.navigationInChain(taoProps)
     if (!navigation) {
-      throw new Error(`Cannot ask ${dialogue.name}: no enclosing navigation target.`)
+      throw new Error(`Cannot ask ${view.name}: no enclosing navigation target.`)
     }
-    return navigation.ask(dialogue, arguments_)
+    return navigation.ask(view, arguments_)
   },
 
-  /** Respond settles only the dialogue occurrence inherited by the responding render tree. */
+  /** Respond settles only the asked occurrence inherited by the responding render tree. */
   Respond(taoProps: TaoProps | undefined, value?: Evaluable): void {
-    const dialogue = TaoPropsControls.dialogueInChain(taoProps)
-    if (!dialogue) {
-      throw new Error('Cannot respond: no enclosing dialogue occurrence.')
+    const response = TaoPropsControls.responseInChain(taoProps)
+    if (!response) {
+      throw new Error('Cannot respond: no enclosing ask occurrence.')
     }
-    dialogue.respond(value)
+    response.respond(value)
   },
 
   /** Dismiss delegates to the nearest enclosing navigation container. */
@@ -339,7 +331,6 @@ export const NavigationControls = {
 } as const
 
 export type TaoPresentable = RuntimePresentable
-export type TaoDialogue = RuntimeDialogue
 export type TaoNavigationValue = RuntimeNavigationValue
 export type TaoRuntimeApp = RuntimeAppDefinition
 

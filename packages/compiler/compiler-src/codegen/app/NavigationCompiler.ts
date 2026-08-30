@@ -9,14 +9,14 @@ import { appDefinitionReference } from './app-compiler'
 export const NavigationCompiler = {
   /** ContextualPresentStatement presents content through a nav or a keyed transient toast through its app. */
   ContextualPresentStatement(presentation: AST.ContextualPresentStatement): Compiled {
-    const ui = resolveRef(presentation.ui)
-    const resolved = ASTUtils.resolveArgumentBindings(ui, presentation)
-    Assert(resolved.diagnostics.length === 0, 'validated ui presentation has no binding diagnostics')
+    const view = resolveRef(presentation.view)
+    const resolved = ASTUtils.resolveArgumentBindings(view, presentation)
+    Assert(resolved.diagnostics.length === 0, 'validated presentation has no binding diagnostics')
     const toast = presentation.mode?.kind === 'toast' ? presentation.mode.toast : undefined
     if (toast) {
       return gen`TR.Navigation.PresentToast(
         _ViewProps.__tao,
-        ${Compile.UiValue(ui)},
+        ${Compile.ViewValue(view)},
         { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
         {
           key: ${Compile.Expression(toast.key)},
@@ -31,7 +31,7 @@ export const NavigationCompiler = {
     return gen`TR.Navigation.${runtimeMethod}(
       _ViewProps.__tao,
       ${presentation.target ? compileNavigationTarget(presentation.target) : 'undefined'},
-      ${Compile.UiValue(ui)},
+      ${Compile.ViewValue(view)},
       { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },${sheet ? '\n      { sheet: true },' : ''}
     )`
   },

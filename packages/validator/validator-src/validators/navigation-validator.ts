@@ -27,20 +27,20 @@ export const navigationValidationMessages = {
     `Presentation of ${destination} provides parameter '${name}' more than once.`,
   namedArgumentType: (destination: string, name: string, expected: string, actual: string) =>
     `Labeled argument '${name}:' of destination ${destination} expects ${expected}, got ${actual}.`,
-  presentationContext: 'Contextual presentation is allowed only inside a ui declaration.',
-  toastContext: 'Toast presentation is allowed only inside a rendered declaration.',
+  presentationContext: 'Contextual presentation is allowed only inside a view declaration.',
+  toastContext: 'Toast presentation is allowed only inside a view declaration.',
   toastTarget: 'Toast presentation is app-level and does not accept `in`.',
   toastKeyType: (actual: string) => `Toast Key expects text, got ${actual}.`,
   toastDurationType: (actual: string) => `Toast Duration expects duration, got ${actual}.`,
   toastDurationNegative: 'Toast Duration cannot be negative.',
-  activationContext: 'Selection activation is allowed only inside a ui declaration.',
+  activationContext: 'Selection activation is allowed only inside a view declaration.',
   strictTargetDeclaration: (name: string) =>
     `Strict app target '${name}' must name an app declaration, not an app variant.`,
   unknownSelection: (app: string, key: string) => `App ${app} navigator has no selection item named '@${key}'.`,
   ...configuredValueValidationMessages,
   presentationTarget: (actual: string) => `Presentation target expects nav, got ${actual}.`,
-  dismissContext: '`dismiss` is allowed only inside a ui declaration.',
-  replaceContext: '`replace` is allowed only inside a visual declaration.',
+  dismissContext: '`dismiss` is allowed only inside a view declaration.',
+  replaceContext: '`replace` is allowed only inside a view declaration.',
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
   unknownAuxiliary: (app: string, key: string) => `App ${app} has no auxiliary navigator named '@${key}'.`,
 } as const
@@ -54,7 +54,7 @@ export const navigationValidationChecks = {
     }
   },
   [AST.SelectionActivateStatement.$type]: (activation, ctx, file) => {
-    if (!AST.isUiDeclaration(AST.findOwningView(activation))) {
+    if (!AST.findOwningView(activation)) {
       ctx.error(navigationValidationMessages.activationContext, activation)
     }
     const app = activation.app?.ref
@@ -299,7 +299,7 @@ function validatePresentationMode(
   ctx: ValidationContext,
 ): void {
   const owningView = AST.findOwningView(presentation)
-  if (toast ? !owningView : !AST.isUiDeclaration(owningView)) {
+  if (!owningView) {
     ctx.error(
       toast ? navigationValidationMessages.toastContext : navigationValidationMessages.presentationContext,
       presentation,
@@ -330,11 +330,11 @@ function validatePresentationArguments(
   presentation: AST.ContextualPresentStatement,
   ctx: ValidationContext,
 ): void {
-  const ui = presentation.ui.ref
-  if (ui) {
-    const resolved = ASTUtils.resolveArgumentBindings(ui, presentation)
+  const view = presentation.view.ref
+  if (view) {
+    const resolved = ASTUtils.resolveArgumentBindings(view, presentation)
     for (const diagnostic of resolved.diagnostics) {
-      reportBindingDiagnostic(ui, diagnostic, presentation, ctx)
+      reportBindingDiagnostic(view, diagnostic, presentation, ctx)
     }
   }
 }
@@ -380,7 +380,7 @@ function negativeNumberLiteral(expression: AST.Expression): boolean {
 }
 
 function reportBindingDiagnostic(
-  view: AST.VisualDeclaration,
+  view: AST.ViewDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
   presentation: AST.ContextualPresentStatement,
   ctx: ValidationContext,

@@ -82,11 +82,11 @@ NamedTypeReference:
 
 PrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'list' | 'action' | 'design'
-    | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
+    | 'view' | 'nav' | 'datasource' | 'app';
 
 NonListPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'action' | 'design'
-    | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
+    | 'view' | 'nav' | 'datasource' | 'app';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

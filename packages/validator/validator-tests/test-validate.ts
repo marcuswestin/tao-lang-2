@@ -3,7 +3,7 @@ import { Expect, mkTestDir, stubView, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 
-export { app, fence, stubLayout, stubView, tsFence } from '@shared/test'
+export { app, fence, stubContainer, stubView, tsFence } from '@shared/test'
 
 export type ValidatedFiles = Awaited<ReturnType<typeof Workspace.validate>>
 

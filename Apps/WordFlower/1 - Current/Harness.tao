@@ -30,7 +30,7 @@ nav HarnessNavigator = SlotNav {
    Initial StackByNav
 }
 
-ui HarnessHome() {
+view HarnessHome() {
    render Col() {
       Text("Harness home marker")
       FormButton("Open deterministic detail") {
@@ -40,17 +40,17 @@ ui HarnessHome() {
          on press -> { present HarnessSlot() in HarnessNavigator }
 }  }  }
 
-ui HarnessDetail() {
+view HarnessDetail() {
    render Col() {
       Text("Harness detail marker")
       FormButton("Reset foundation app") {
          // `replace <nav> in <App>` swaps the app's root content; it is the only root operation an
-         // app accepts, it names the app declaration, and it is valid only inside a visual
+         // app accepts, it names the app declaration, and it is valid only inside a view
          // declaration.
          on press -> { replace HarnessNavigator in WordFlowerNavHarness }
 }  }  }
 
-ui HarnessSlot() {
+view HarnessSlot() {
    render Col() {
       Text("Harness slot marker")
       FormButton("Restore initial stack") {

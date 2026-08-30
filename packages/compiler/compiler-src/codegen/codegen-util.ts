@@ -26,7 +26,7 @@ type GenBlock = {
     options?: GenListOptions,
   ): Compiled
   (
-    owner: AST.Render | AST.VisualDeclaration,
+    owner: AST.Render | AST.ViewDeclaration,
     compileStatement: (statement: AST.Statement) => GenValue,
     options?: GenListOptions,
   ): Compiled

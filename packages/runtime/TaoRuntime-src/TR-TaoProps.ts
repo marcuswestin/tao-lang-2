@@ -19,8 +19,8 @@ export type TaoProps = TaoLayoutProps & {
   callerProps?: TaoProps
   /** navigation is private Tao metadata for nearest-container presentation and dismissal. */
   navigation?: TaoNavigationValue
-  /** dialogue is private occurrence-owned response metadata inherited by nested generated views. */
-  dialogue?: TaoDialogueOccurrence
+  /** response is private occurrence-owned ask metadata inherited by nested generated views. */
+  response?: TaoResponseOccurrence
   /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
   designSpec?: TaoDesignSpec
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
@@ -28,10 +28,10 @@ export type TaoProps = TaoLayoutProps & {
 }
 
 /** TaoAmbientContext is navigation-owned context propagated independently of layout caller props. */
-export type TaoAmbientContext = Pick<TaoProps, 'app' | 'dialogue' | 'navigation'>
+export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'response'>
 
-/** TaoDialogueOccurrence settles exactly one independently asked dialogue. */
-export type TaoDialogueOccurrence = {
+/** TaoResponseOccurrence settles exactly one independently asked view. */
+export type TaoResponseOccurrence = {
   respond(value?: { evaluate(): { jsValue: unknown } }): void
 }
 
@@ -65,7 +65,7 @@ type MergedTaoViewProps = {
 export const TaoPropsControls = {
   ambientContext,
   appInChain,
-  dialogueInChain,
+  responseInChain,
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
@@ -76,11 +76,11 @@ export const TaoPropsControls = {
 /** Copies only ambient presentation context from a generated caller-props chain. */
 function ambientContext(props: TaoProps | undefined): TaoAmbientContext {
   const app = appInChain(props)
-  const dialogue = dialogueInChain(props)
+  const response = responseInChain(props)
   const navigation = navigationInChain(props)
   return {
     ...(app ? { app } : {}),
-    ...(dialogue ? { dialogue } : {}),
+    ...(response ? { response } : {}),
     ...(navigation ? { navigation } : {}),
   }
 }
@@ -99,12 +99,12 @@ function appInChain(
   return appInChain(props.callerProps, matches)
 }
 
-/** Finds the nearest independently asked dialogue occurrence through generated caller props. */
-function dialogueInChain(props: TaoProps | undefined): TaoDialogueOccurrence | undefined {
+/** Finds the nearest independently asked occurrence through generated caller props. */
+function responseInChain(props: TaoProps | undefined): TaoResponseOccurrence | undefined {
   if (!props) {
     return undefined
   }
-  return props.dialogue ?? dialogueInChain(props.callerProps)
+  return props.response ?? responseInChain(props.callerProps)
 }
 
 /** Finds the nearest enclosing navigation metadata through generated view caller props. */

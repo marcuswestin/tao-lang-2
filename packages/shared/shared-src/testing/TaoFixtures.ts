@@ -24,12 +24,12 @@ export function stubView(name: string, parameters = ''): string {
   `
 }
 
-/** stubLayout returns a renderable Tao layout fixture with an injected no-op implementation. */
-export function stubLayout(name: string, parameters = ''): string {
+/** stubContainer returns a content-accepting Tao view fixture with an injected no-op implementation. */
+export function stubContainer(name: string, parameters = ''): string {
   return `
-    layout ${name}(${parameters}) {
-      render inject ${tsFence}
-        return null
+    view ${name}(${parameters}) {
+      render inject Content @@content ${tsFence}
+        return Content
       ${fence}
     }
   `

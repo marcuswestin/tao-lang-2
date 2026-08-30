@@ -1,6 +1,5 @@
 import React from 'react'
 import type {
-  TaoDialogue,
   TaoNavDescriptor,
   TaoNavigationArguments,
   TaoNavigationPatch,
@@ -8,7 +7,7 @@ import type {
   TaoPresentable,
 } from './TR-navigation'
 import { type Evaluable, RuntimeNavigationResult } from './TR-navigation-presentables'
-import type { DialogueOccurrenceState, OverlayEntry, Subscription } from './TR-navigation-state'
+import type { OverlayEntry, ResponseOccurrenceState, Subscription } from './TR-navigation-state'
 import { NavigationSurface } from './TR-navigation-surfaces'
 import type { TaoProps } from './TR-TaoProps'
 
@@ -76,19 +75,19 @@ export abstract class RuntimeNavigationValue implements Subscription {
     this.emit()
   }
 
-  ask(dialogue: TaoDialogue, arguments_: TaoNavigationArguments): Promise<Evaluable> {
+  ask(view: TaoPresentable, arguments_: TaoNavigationArguments): Promise<Evaluable> {
     return new Promise(resolve => {
       let entry: OverlayEntry
-      const occurrence: DialogueOccurrenceState = {
+      const occurrence: ResponseOccurrenceState = {
         resolve,
-        respond: value => this.settleDialogue(entry, value),
+        respond: value => this.settleResponse(entry, value),
         settled: false,
       }
       entry = {
         arguments: { ...arguments_ },
-        dialogue: occurrence,
+        response: occurrence,
         instanceId: this.nextOverlayEntryId++,
-        presentable: dialogue,
+        presentable: view,
       }
       this.overlayEntries.push(entry)
       this.emit()
@@ -106,9 +105,9 @@ export abstract class RuntimeNavigationValue implements Subscription {
 
   reset(): void {
     for (const entry of this.overlayEntries) {
-      if (entry.dialogue && !entry.dialogue.settled) {
-        entry.dialogue.settled = true
-        entry.dialogue.resolve(new RuntimeNavigationResult(null))
+      if (entry.response && !entry.response.settled) {
+        entry.response.settled = true
+        entry.response.resolve(new RuntimeNavigationResult(null))
       }
     }
     this.overlayEntries = []
@@ -134,8 +133,8 @@ export abstract class RuntimeNavigationValue implements Subscription {
       return false
     }
     const entry = this.overlayEntries[this.overlayEntries.length - 1]!
-    if (entry.dialogue) {
-      this.settleDialogue(entry)
+    if (entry.response) {
+      this.settleResponse(entry)
       return true
     }
     this.overlayEntries.pop()
@@ -143,8 +142,8 @@ export abstract class RuntimeNavigationValue implements Subscription {
     return true
   }
 
-  private settleDialogue(entry: OverlayEntry, value?: Evaluable): void {
-    const occurrence = entry.dialogue
+  private settleResponse(entry: OverlayEntry, value?: Evaluable): void {
+    const occurrence = entry.response
     if (!occurrence || occurrence.settled) {
       return
     }

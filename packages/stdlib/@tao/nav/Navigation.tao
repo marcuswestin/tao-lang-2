@@ -1,9 +1,7 @@
 // The navigation stdlib is self-hosted: every nav ships as an ordinary Tao declaration bound to a
 // runtime implementation through the same public mechanism a third-party package uses. Copy a
 // declaration, rename it, and swap the implementation without changing the compiler or language.
-// Anything an app can present. `ui` and `nav` are closed roles; the union is the capability.
-public
-type Presentable is ui | nav
+// Anything an app can present is a `view`; `nav` refines it, so a mounted nav fills the same slots.
 
 // A nav declares its configuration contract in Tao. Property names are ordinary capitalized
 // identifiers, and `@key` declares the common shape accepted by every keyed item.
@@ -26,14 +24,14 @@ type Presentable is ui | nav
 // Common conformance is shared, while stack, slot, and selection each add their profile assertions.
 public
 type StackNav is nav with {
-   Initial ui // the argument-free entry seeded at mount; nav-in-stack entries stay deferred
+   Initial view // the argument-free entry seeded at mount; nav-in-stack entries stay deferred
 
    nav StackNavKind from ./NavKinds.ts
 }
 
 public
 type SlotNav is nav with {
-   Initial Presentable
+   Initial view
 
    nav SlotNavKind from ./NavKinds.ts
 }
@@ -45,7 +43,7 @@ type SelectionNav is nav with {
    @key {
       Label text
       Icon text is ""
-      Content Presentable
+      Content view
    }
 
    nav SelectionNavKind from ./NavKinds.ts

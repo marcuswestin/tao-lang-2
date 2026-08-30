@@ -4,19 +4,19 @@ import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './tes
 
 registerRuntimeE2ELifecycle()
 
-Describe('frame content runtime', () => {
-  Test('renders unnamed content, named fills, explicit ambient channels, and frame intrinsic layout', async () => {
+Describe('view content runtime', () => {
+  Test('renders unnamed content, named fills, explicit ambient channels, and no implicit occurrence layout', async () => {
     await testCompileApp(
       `
         use Col, FormButton, Row, Text from @tao/ui
 
-        layout Toolbar() {
+        view Toolbar() {
           render Row() [gap 8, content right] {
             @@content
           }
         }
 
-        frame Card(Title text) {
+        view Card(Title text) {
           @actions = empty
 
           render Col() [gap 8, pad 12] {
@@ -36,7 +36,7 @@ Describe('frame content runtime', () => {
           \`\`\`
         }
 
-        layout Scroller() {
+        view Scroller() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({
               children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
@@ -85,25 +85,25 @@ Describe('frame content runtime', () => {
         Expect(screen.getByTestId('scroller')).toBeDefined()
         Expect(RN.StyleSheet.flatten(screen.getByTestId('wordBadge').props.style)).toMatchObject({ marginTop: 5 })
 
-        const frameRootStyles = screen.UNSAFE_getAllByType(RN.View)
+        const cardRootStyles = screen.UNSAFE_getAllByType(RN.View)
           .map(view => RN.StyleSheet.flatten(view.props.style))
-          .filter(style => style?.gap === 8 && style?.padding === 12 && style?.flexShrink === 0)
-        const claimedFrameStyle = frameRootStyles.find(style => style?.flexGrow === 2)
-        const defaultFrameStyle = frameRootStyles.find(style => style?.flexGrow === 0)
+          .filter(style => style?.gap === 8 && style?.padding === 12)
+        const claimedCardStyle = cardRootStyles.find(style => style?.flexGrow === 2)
+        const defaultCardStyle = cardRootStyles.find(style => style?.flexGrow === 1)
 
-        Expect(claimedFrameStyle).toMatchObject({
+        Expect(claimedCardStyle).toMatchObject({
           alignSelf: 'stretch',
           flexDirection: 'column',
           flexGrow: 2,
-          flexShrink: 0,
           gap: 8,
           padding: 12,
         })
-        Expect(defaultFrameStyle).toMatchObject({
+        Expect(claimedCardStyle?.flexShrink).toBeUndefined()
+        Expect(defaultCardStyle).toMatchObject({
           alignSelf: 'stretch',
-          flexGrow: 0,
-          flexShrink: 0,
+          flexGrow: 1,
         })
+        Expect(defaultCardStyle?.flexShrink).toBeUndefined()
       },
     )
   })

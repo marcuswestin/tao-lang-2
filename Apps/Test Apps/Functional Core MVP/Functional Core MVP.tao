@@ -25,7 +25,7 @@ function PresenceLabel(Present boolean) returns text {
       otherwise -> "Missing{ none }"
 }  }
 
-ui MainView() {
+view MainView() {
    state Count = 2
    state Visible = true
    state AsyncStarted = false

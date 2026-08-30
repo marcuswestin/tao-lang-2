@@ -14,12 +14,7 @@ export type TaoType =
       | 'duration'
       | 'none'
       | 'design'
-      | 'visual'
-      | 'presentable'
       | 'view'
-      | 'layout'
-      | 'frame'
-      | 'ui'
       | 'nav'
       | 'datasource'
       | 'app'
@@ -193,11 +188,7 @@ export class Type {
     return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
       TypeDeclaration: declaration => Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? []),
       ActionDeclaration: typeOfParameterizedDeclaration,
-      DialogueDeclaration: typeOfParameterizedDeclaration,
-      FrameDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
-      LayoutDeclaration: typeOfParameterizedDeclaration,
-      UiDeclaration: typeOfParameterizedDeclaration,
       ViewDeclaration: typeOfParameterizedDeclaration,
       undefined: unresolvedType,
     })
@@ -712,13 +703,10 @@ function primitiveFamilyIsAssignable(actual: TaoType, expected: TaoType): boolea
   if (actual.primitive === expected.primitive) {
     return true
   }
+  // The primitive lattice mirrors the Prelude's `is` chain: `nav` refines `view`, and nothing else
+  // refines anything.
   const parents: Partial<Record<Extract<TaoType, { kind: 'primitive' }>['primitive'], string>> = {
-    presentable: 'visual',
-    view: 'visual',
-    layout: 'visual',
-    frame: 'visual',
-    ui: 'presentable',
-    nav: 'presentable',
+    nav: 'view',
   }
   let current: string | undefined = actual.primitive
   while (current) {
@@ -914,8 +902,8 @@ class TypeResolutionContext {
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
       AskStatement: ask =>
-        ask.dialogue.ref?.response.ref
-          ? { kind: 'enum', declaration: ask.dialogue.ref.response.ref }
+        ask.view.ref?.response?.ref
+          ? { kind: 'enum', declaration: ask.view.ref.response.ref }
           : unresolvedType(),
       CasePayload: () => primitiveType('text'),
       EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
@@ -928,7 +916,7 @@ class TypeResolutionContext {
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
       StateDeclaration: state => this.stateDeclarationType(state),
-      UiDeclaration: () => primitiveType('ui'),
+      ViewDeclaration: () => primitiveType('view'),
       undefined: unresolvedType,
     })
   }
@@ -1137,13 +1125,8 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),
     design: () => ({ kind: 'primitive', primitive: 'design' }),
-    visual: () => ({ kind: 'primitive', primitive: 'visual' }),
-    presentable: () => ({ kind: 'primitive', primitive: 'presentable' }),
     view: () => ({ kind: 'primitive', primitive: 'view' }),
-    layout: () => ({ kind: 'primitive', primitive: 'layout' }),
-    frame: () => ({ kind: 'primitive', primitive: 'frame' }),
     nav: () => ({ kind: 'primitive', primitive: 'nav' }),
-    ui: () => ({ kind: 'primitive', primitive: 'ui' }),
     datasource: () => ({ kind: 'primitive', primitive: 'datasource' }),
     app: () => ({ kind: 'primitive', primitive: 'app' }),
   })

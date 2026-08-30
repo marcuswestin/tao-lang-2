@@ -4,7 +4,7 @@ import { configurationValidationMessages } from '../validator-src/validators/con
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
 import { configuredValueValidationMessages } from '../validator-src/validators/configured-values-validator'
 import { dataValidationMessages } from '../validator-src/validators/data-validator'
-import { DialogueValidator } from '../validator-src/validators/dialogue-validator'
+import { ResponsesValidator } from '../validator-src/validators/responses-validator'
 import { navigationValidationMessages } from '../validator-src/validators/navigation-validator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
@@ -12,7 +12,7 @@ import {
   accepts,
   app,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
 } from './test-validate'
 
@@ -40,7 +40,7 @@ Describe('validator: declaration contracts', () => {
     'infers bare app slot blocks from the slot name and primitive role',
     accepts(`
       public type Navigator is nav with {
-        Initial ui
+        Initial view
         ${implementation('nav')}
       }
       public type Datasource is datasource with {
@@ -52,7 +52,7 @@ Describe('validator: declaration contracts', () => {
         Navigator { Initial Home }
         Datasource { StorageKey "demo" }
       }
-      ui Home() { render Empty() }
+      view Home() { render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -62,7 +62,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         app Demo { Name "Demo" Navigator { Initial Home } }
-        ui Home() { render Empty() }
+        view Home() { render Empty() }
         ${stubView('Empty')}
       `,
       configuredItemValidationMessages.inferredConstructorContext,
@@ -75,7 +75,7 @@ Describe('validator: declaration contracts', () => {
       `
         use StackNav from @tao/nav
         app Demo { Name "Demo" Navigator StackNav { Initial Detail } }
-        ui Detail(Label text) { render Empty() }
+        view Detail(Label text) { render Empty() }
         ${stubView('Empty')}
       `,
       completenessValidationMessages.incomplete('Detail', ['Label']),
@@ -108,13 +108,12 @@ Describe('validator: declaration contracts', () => {
   Test(
     'accepts arbitrary self-hosted declaration contracts without shipped-name tables',
     accepts(`
-      public type Presentable is ui | nav
       public type Carousel is nav with {
         Initial key
         Display text
         @key {
           Label text
-          Content Presentable
+          Content view
         }
         ${implementation('nav')}
       }
@@ -122,7 +121,7 @@ Describe('validator: declaration contracts', () => {
         StorageKey text
         ${implementation('provider')}
       }
-      ui Home() { render Empty() }
+      view Home() { render Empty() }
       let Main = Carousel {
         Initial @home
         Display "tabs"
@@ -176,7 +175,7 @@ Describe('validator: declaration contracts', () => {
     [
       'keyed item properties of the wrong union type',
       'Initial @home Display "tabs" @home { Label "Home" Content "not presentable" }',
-      navigationValidationMessages.configurationType('Content', 'ui | nav', 'text'),
+      navigationValidationMessages.configurationType('Content', 'view', 'text'),
     ],
     [
       'unknown keyed item properties',
@@ -207,8 +206,8 @@ Describe('validator: declaration contracts', () => {
       let NavigationAlias = BaseNavigation
       let PatchedNavigation = NavigationAlias with { Initial Other }
       app Demo { Name "Demo" Navigator PatchedNavigation }
-      ui Home() { render Empty() }
-      ui Other() { render Empty() }
+      view Home() { render Empty() }
+      view Other() { render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -221,7 +220,7 @@ Describe('validator: declaration contracts', () => {
       let Plain = 5
       let Patched = Plain with { X: 1 }
       app Demo { Name "Demo" Navigator StackNav { Initial Home } }
-      ui Home() { render Empty() }
+      view Home() { render Empty() }
       ${stubView('Empty')}
     `,
       navigationValidationMessages.patchTarget('Plain'),
@@ -236,7 +235,7 @@ Describe('validator: declaration contracts', () => {
       type HiddenNav is nav with { ${implementation('nav')} }
       let Hidden = HiddenNav { }
       app Demo { Name "Demo" Navigator Hidden }
-      ui Home() { render Empty() }
+      view Home() { render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -254,7 +253,7 @@ Describe('validator: declaration contracts', () => {
     ],
     [
       'duplicate keyed item blocks',
-      `public type Duplicate is nav with { @key { Label text } @key { Content ui } ${implementation('nav')} }`,
+      `public type Duplicate is nav with { @key { Label text } @key { Content view } ${implementation('nav')} }`,
       configurationValidationMessages.duplicateKey,
     ],
     [
@@ -300,22 +299,31 @@ Describe('validator: declaration contracts', () => {
     Test(`rejects ${name}`, rejects(source, message))
   }
 
-  const dialogueCases: ReadonlyArray<readonly [name: string, action: string, message: string]> = [
+  const responseCases: ReadonlyArray<readonly [name: string, action: string, message: string]> = [
     [
       'asks with missing arguments',
       'let Result = ask ConfirmClose()',
-      DialogueValidator.messages.missingArgument('ConfirmClose', 'Title'),
+      ResponsesValidator.messages.missingArgument('ConfirmClose', 'Title'),
     ],
     [
       'duplicate ask result bindings',
       'let Result = ask ConfirmClose("Draft") let Result = ask ConfirmClose("Again")',
-      DialogueValidator.messages.duplicateResult('Result'),
+      ResponsesValidator.messages.duplicateResult('Result'),
     ],
-    ['responses outside dialogues', 'respond', DialogueValidator.messages.responseContext],
+    [
+      'asks that target a view without responds',
+      'let Result = ask Empty()',
+      ResponsesValidator.messages.askTarget('Empty'),
+    ],
+    [
+      'responses outside responds-declaring views',
+      'respond',
+      ResponsesValidator.messages.responseContext,
+    ],
   ]
 
-  for (const [name, action, message] of dialogueCases) {
-    Test(`rejects ${name}`, rejects(dialogueApp(action), message))
+  for (const [name, action, message] of responseCases) {
+    Test(`rejects ${name}`, rejects(responseApp(action), message))
   }
 
   Test(
@@ -324,14 +332,14 @@ Describe('validator: declaration contracts', () => {
       `
       use StackNav from @tao/nav
       app OverlayApp { Name "Overlay" Navigator StackNav { Initial Home } }
-      ui Home() {
+      view Home() {
         action Open() { present Detail() as overlay in Detail }
         render Empty()
       }
-      ui Detail() { render Empty() }
+      view Detail() { render Empty() }
       ${stubView('Empty')}
     `,
-      navigationValidationMessages.presentationTarget('ui'),
+      navigationValidationMessages.presentationTarget('view'),
     ),
   )
 
@@ -363,9 +371,27 @@ Describe('validator: declaration contracts', () => {
   }
 
   Test(
-    'rejects target-only selection activation outside ui actions',
+    'rejects target-only selection activation outside view declarations',
     rejects(
       `
+      use SelectionNav from @tao/nav
+      let MainNavigation = SelectionNav {
+        Initial @workspace
+        Display "tabs"
+        @workspace { Label "Workspace" Content Home }
+      }
+      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      action Activate() { present SelectionApp@workspace }
+      view Home() { render Empty() }
+      ${stubView('Empty')}
+    `,
+      navigationValidationMessages.activationContext,
+    ),
+  )
+
+  Test(
+    'accepts selection activation inside any view declaration',
+    accepts(`
       use SelectionNav from @tao/nav
       let MainNavigation = SelectionNav {
         Initial @workspace
@@ -378,21 +404,19 @@ Describe('validator: declaration contracts', () => {
         render Empty()
       }
       ${stubView('Empty')}
-    `,
-      navigationValidationMessages.activationContext,
-    ),
+    `),
   )
 
   Test(
-    'rejects replacement outside visual declaration actions',
+    'rejects replacement outside view declarations',
     rejects(
       `
       use StackNav from @tao/nav
       let SignedOutNav = StackNav { Initial SignedOut }
       app ReplaceApp { Name "Replace" Navigator StackNav { Initial Home } }
       action Reset() { replace SignedOutNav in ReplaceApp }
-      ui Home() { render Empty() }
-      ui SignedOut() { render Empty() }
+      view Home() { render Empty() }
+      view SignedOut() { render Empty() }
       ${stubView('Empty')}
     `,
       navigationValidationMessages.replaceContext,
@@ -469,13 +493,13 @@ Describe('validator: declaration contracts', () => {
         @window SlotNav { Initial Detail }
       }
       let StrictVariant = StrictApp with { Name "Strict variant" }
-      ui Home() {
+      view Home() {
         action Activate() { present StrictVariant@workspace }
         action Open() { present Detail() in StrictVariant@window }
         action Reset() { replace ResetNav in StrictVariant }
         render Empty()
       }
-      ui Detail() { render Empty() }
+      view Detail() { render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -504,7 +528,7 @@ Describe('validator: declaration contracts', () => {
     [
       'content of the wrong type',
       'Initial @home Display "tabs" @home { Label "Home" Content "not presentable" }',
-      navigationValidationMessages.configurationType('Content', 'ui | nav', 'text'),
+      navigationValidationMessages.configurationType('Content', 'view', 'text'),
     ],
     [
       'unknown keyed item properties',
@@ -639,26 +663,25 @@ function implementation(protocol: 'nav' | 'provider'): string {
 
 function carouselApp(configuration: string): string {
   return `
-    public type Presentable is ui | nav
     public type Carousel is nav with {
       Initial key
       Display text
-      @key { Label text Content Presentable }
+      @key { Label text Content view }
       ${implementation('nav')}
     }
-    ui Home() { render Empty() }
+    view Home() { render Empty() }
     let Navigation = Carousel { ${configuration} }
     app Demo { Name "Demo" Navigator Navigation }
     ${stubView('Empty')}
   `
 }
 
-function dialogueApp(action: string): string {
+function responseApp(action: string): string {
   return `
     type ConfirmResult is one of Confirmed
     app Demo { view Editor }
     view Editor() { action Broken() { ${action} } render Empty() }
-    dialogue ConfirmClose(Title text) responds ConfirmResult { render Empty() }
+    view ConfirmClose(Title text) responds ConfirmResult { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -668,8 +691,8 @@ function toastApp(statement: string): string {
     use StackNav from @tao/nav
     let Target = StackNav { Initial Home }
     app ToastApp { Name "Toast" Navigator Target }
-    ui Home() { action Present() { ${statement} } render Empty() }
-    ui Saved() { render Empty() }
+    view Home() { action Present() { ${statement} } render Empty() }
+    view Saved() { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -685,9 +708,9 @@ function selectionVariantApp(variants: string, selection: string): string {
     }
     app SelectionApp { Name "Selection" Navigator MainNavigation }
     ${variants}
-    ui Home() { action Activate() { present SelectionApp@${selection} } render Empty() }
-    ui Settings() { render Empty() }
-    ui Other() { render Empty() }
+    view Home() { action Activate() { present SelectionApp@${selection} } render Empty() }
+    view Settings() { render Empty() }
+    view Other() { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -697,7 +720,7 @@ function selectionNavApp(configuration: string): string {
     use SelectionNav from @tao/nav
     let Navigation = SelectionNav { ${configuration} }
     app SelectionApp { Name "Selection" Navigator Navigation }
-    ui Home() { render Empty() }
+    view Home() { render Empty() }
     ${stubView('Empty')}
   `
 }
@@ -705,14 +728,14 @@ function selectionNavApp(configuration: string): string {
 function queryApp(body: string, declarations = ''): string {
   return `
     ${declarations}
-    ${app(`render Col() { ${body} }`, `${stubLayout('Col')}${stubView('Text', 'Value text')}`)}
+    ${app(`render Col() { ${body} }`, `${stubContainer('Col')}${stubView('Text', 'Value text')}`)}
   `
 }
 
 function taggedLoopApp(body: string): string {
   return app(
     `render Col() { ${body} }`,
-    `${stubLayout('Col')}${stubView('Text', 'Value text')}`,
+    `${stubContainer('Col')}${stubView('Text', 'Value text')}`,
   )
 }
 
@@ -722,7 +745,7 @@ function collectionApp(body: string): string {
     ${
     app(
       `query Items { } render Stack() { ${body} }`,
-      `${stubLayout('Stack')}${stubView('Text', 'Value text')}`,
+      `${stubContainer('Stack')}${stubView('Text', 'Value text')}`,
     )
   }
   `
@@ -742,7 +765,7 @@ function unresolvedValue(name: string): string {
 function primitiveAppValueSpellings(): string {
   return `
     public type TestStack is nav with {
-      Initial ui
+      Initial view
       ${implementation('nav')}
     }
     workspace type CompleteTestStack is TestStack with { Initial is Home }
@@ -768,7 +791,7 @@ function primitiveAppValueSpellings(): string {
       Navigator LetWithNavigation
     }
 
-    ui Home() { render Empty() }
+    view Home() { render Empty() }
     ${stubView('Empty')}
   `
 }

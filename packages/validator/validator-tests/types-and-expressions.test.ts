@@ -11,7 +11,7 @@ import {
   accepts,
   app,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
   testValidateCodeWithErrors,
   validationErrorMessages,
@@ -353,7 +353,7 @@ Describe('validator: types and expressions', () => {
         let Ada = FullNamePerson { Name: "Ada", FamilyName }
       `,
       'render Stack() { Text(OuterName) Text(Ada.Name) Text(Ada.LastName) }',
-      `${stubLayout('Stack')}${stubView('Text', 'Value text')}`,
+      `${stubContainer('Stack')}${stubView('Text', 'Value text')}`,
     )),
   )
 
@@ -541,7 +541,7 @@ function caseScopeApp(body: string, declarations = ''): string {
       query Workspaces { }
       render Col() { ${body} }
     }
-    ${stubLayout('Col')}
+    ${stubContainer('Col')}
     ${stubView('Text', 'Value text')}
   `
 }

@@ -298,7 +298,7 @@ Describe('validator: use and imports', () => {
           use Col from @tao/ui
           use AppLet, MyApp from ./
           workspace nav ResetNav = StackNav { Initial Helper }
-          workspace ui Helper() {
+          workspace view Helper() {
             action Reset() { replace ResetNav in MyApp }
             render Col() { }
           }

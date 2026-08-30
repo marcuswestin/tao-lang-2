@@ -5,7 +5,7 @@ import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './tes
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
-  Test('forwards content layout through custom layout wrappers', async () => {
+  Test('forwards content layout through wrapper views', async () => {
     await testCompileApp(
       `
         app WrapperLayout {
@@ -14,7 +14,7 @@ Describe('Expo runtime', () => {
 
         use Col, Text from @tao/ui
 
-        layout Screen() {
+        view Screen() {
             render Col(){
                 Text("Wrapped center")
                 @@content
@@ -46,7 +46,7 @@ Describe('Expo runtime', () => {
 
         use Col, Row, Text from @tao/ui
 
-        layout Card() {
+        view Card() {
             render Col(){
                 render Row(){
                     Text("Nested render layout")
@@ -71,7 +71,7 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('lets caller layout override custom layout wrapper root layout', async () => {
+  Test('lets caller layout override wrapper view root layout', async () => {
     await testCompileApp(
       `
         app WrapperLayoutOverride {
@@ -80,7 +80,7 @@ Describe('Expo runtime', () => {
 
         use Row, Text from @tao/ui
 
-        layout Screen() {
+        view Screen() {
             render Row()[gap 12, content spread center] {
                 Text("Wrapped gap")
                 @@content
@@ -136,7 +136,7 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('applies axis-relative fill through custom layout root layout clauses', async () => {
+  Test('applies axis-relative fill through wrapper view root layout clauses', async () => {
     await testCompileApp(
       `
         app WrapperLayoutFill {
@@ -145,7 +145,7 @@ Describe('Expo runtime', () => {
 
         use Box, Row, Text from @tao/ui
 
-        layout Screen() {
+        view Screen() {
             render Box()[fill] {
                 Text("Root fill")
                 @@content
@@ -174,14 +174,14 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('does not apply stdlib layout identity to local stdlib-named layouts', async () => {
+  Test('does not apply stdlib layout identity to local stdlib-named views', async () => {
     await testCompileApp(
       `
         app LocalRowIdentity {
             view MainView
         }
 
-        layout Row() {
+        view Row() {
             render inject Content @@content, Layout @@layout \`\`\`ts
                 return TR.Views.View({ children: Content, layout: Layout })
             \`\`\`

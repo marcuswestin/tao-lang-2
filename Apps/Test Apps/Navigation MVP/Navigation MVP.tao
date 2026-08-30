@@ -8,7 +8,7 @@ app NavigationMVPApp {
 }  }
 
 workspace
-ui Home() {
+view Home() {
    state Visits = 0
    action CountVisit() {
       set Visits += 1
@@ -31,7 +31,7 @@ ui Home() {
 }  }  }
 
 workspace
-ui Detail(Name text) {
+view Detail(Name text) {
    render Col() [gap 10, pad 16] {
       Text("Detail")
       Text(Name)

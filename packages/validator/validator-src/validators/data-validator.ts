@@ -228,10 +228,10 @@ function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: Va
     return
   }
   const owner = block.$container
-  const directView = AST.isVisualDeclaration(owner)
+  const directView = AST.isViewDeclaration(owner)
   const directRootRender = AST.isRender(owner)
     && AST.isBlock(owner.$container)
-    && AST.isVisualDeclaration(owner.$container.$container)
+    && AST.isViewDeclaration(owner.$container.$container)
   if (!directView && !directRootRender) {
     ctx.error(dataValidationMessages.currentQueryPlacement, query)
   }

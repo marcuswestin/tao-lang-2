@@ -3,7 +3,7 @@ use ProjectNotice from @copy
 use ProjectWidget from @copy/widgets
 
 workspace
-ui MainView() {
+view MainView() {
    render Stack() {
       Text(CardTitle)
       Text(SiblingFileTitle)
@@ -13,7 +13,7 @@ ui MainView() {
       ProjectWidget()
 }  }
 
-layout Stack() {
+view Stack() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
    ```

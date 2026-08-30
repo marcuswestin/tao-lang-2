@@ -10,7 +10,7 @@ Describe('parser: adaptive layout', () => {
       view MainView() {
         render Column() [width max 720]
       }
-      layout Column() {
+      view Column() {
         render inject \`\`\`ts return null \`\`\`
       }
     `)

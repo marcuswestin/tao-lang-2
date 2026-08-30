@@ -1,6 +1,6 @@
 import { Packages } from '@ast-utils'
 import { FS } from '@shared'
-import { app, Describe, Expect, stubLayout, stubView, Test, withTaoFiles } from '@shared/test'
+import { app, Describe, Expect, stubContainer, stubView, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import { TestCompiler as Compiler } from './test-compile'
 
@@ -11,7 +11,7 @@ Describe('compiler: language lowering', () => {
   Test('compiles bare app slot blocks through their inferred declaration identities', async () => {
     const compiled = await Compiler.compileCode(`
       public type Navigator is nav with {
-        Initial ui
+        Initial view
         nav TestNavImpl from ./TestNavImpl.ts
       }
       public type Datasource is datasource with {
@@ -23,7 +23,7 @@ Describe('compiler: language lowering', () => {
         Navigator { Initial Home }
         Datasource { StorageKey "demo" }
       }
-      ui Home() { render inject ${tsFence} return null ${fence} }
+      view Home() { render inject ${tsFence} return null ${fence} }
     `)
 
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_Navigator, {')
@@ -59,7 +59,7 @@ Describe('compiler: language lowering', () => {
       let Product = ReusableApp {
         Navigator StackNav { Initial Home }
       }
-      ui Home() { render Empty() }
+      view Home() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -131,12 +131,12 @@ Describe('compiler: language lowering', () => {
         Navigator StackNav { Initial Main }
         Datasource Local { StorageKey "WordFlowerData" }
       }
-      ui Main() {
+      view Main() {
         query Workspaces { }
         action Add() { create Workspace { Name: "Home" } }
         render Text("Main")
       }
-      ui Detail(Workspace) {
+      view Detail(Workspace) {
         action AddDocument() { create Document { Title: "Draft", Workspace } }
         render Col() {
           Text("Detail")
@@ -145,13 +145,13 @@ Describe('compiler: language lowering', () => {
           loop Drafts / Draft { Text(Draft.Title) }
         }
       }
-      ui Editor(Document) {
+      view Editor(Document) {
         action Finish() { update Document { Final } }
         action Reopen() { update Document { Draft } }
         render Text("Editor")
       }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
-      layout Col() { render inject ${tsFence} return null ${fence} }
+      view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
     `)
 
     Expect(compiled.code).toContain("name: 'Data'")
@@ -205,7 +205,7 @@ Describe('compiler: language lowering', () => {
             Text("Child") [width fill, margin bottom 4]
           }
         `,
-        `${stubLayout('Col')}${stubView('Text', 'Value text')}`,
+        `${stubContainer('Col')}${stubView('Text', 'Value text')}`,
       ),
     )
 
@@ -247,7 +247,7 @@ Describe('compiler: language lowering', () => {
         Navigator StackNav { Initial MainView }
         Datasource Memory { }
       }
-      ui MainView() {
+      view MainView() {
         action Add() { create __proto__ { __proto__: "safe" } }
         render Text("Ready")
       }
@@ -258,7 +258,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).not.toContain('"__proto__":')
   })
 
-  Test('compiles configured apps, first-class ui, strict targets, dismiss, and replacement', async () => {
+  Test('compiles configured apps, first-class views, strict targets, dismiss, and replacement', async () => {
     const compiled = await Compiler.compileCode(
       `
       use SelectionNav, SlotNav, StackNav from @tao/nav
@@ -273,13 +273,13 @@ Describe('compiler: language lowering', () => {
         @window SlotNav { Initial Detail }
       }
       let NavigationVariant = NavigationApp with { Name "Navigation Variant" }
-      ui Home() {
+      view Home() {
         action Open() { present Detail() in NavigationApp@window }
         action OpenOverlay() { present Detail() as overlay in NavigationApp@window }
         action Activate() { present NavigationApp@workspace }
         render Empty()
       }
-      ui Detail() {
+      view Detail() {
         action Close() { dismiss }
         action Reset() { replace ResetNavigator in NavigationApp }
         render Empty()
@@ -314,7 +314,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('<TR.Navigation.AppHost')
   })
 
-  Test('compiles dialogue asks and responses through an async-compatible action chain', async () => {
+  Test('compiles responds-view asks and responses through an async-compatible action chain', async () => {
     const compiled = await Compiler.compileCode(`
       type ConfirmResult is one of Confirmed
       app DialogueApp { view Editor }
@@ -325,7 +325,7 @@ Describe('compiler: language lowering', () => {
         }
         render Empty()
       }
-      dialogue ConfirmClose(Title text) responds ConfirmResult {
+      view ConfirmClose(Title text) responds ConfirmResult {
         action Confirm() { respond Confirmed }
         action Cancel() { respond }
         render Empty()
@@ -333,7 +333,7 @@ Describe('compiler: language lowering', () => {
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
-    Expect(compiled.code).toContain('TR.Navigation.Dialogue({')
+    Expect(compiled.code).toContain('TR.Navigation.View({')
     Expect(compiled.code).toContain('await TR.Navigation.Ask(')
     Expect(compiled.code).toContain('TR.Navigation.Respond(')
     Expect(compiled.code).toContain('TR.Action(async')
@@ -345,12 +345,12 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       app ToastApp { Name "Toast" Navigator StackNav { Initial Home } }
-      ui Home() { render Editor() }
+      view Home() { render Editor() }
       view Editor() {
         action Save() { present Saved() as toast (Key: "document-saved", Duration: 3.s) }
         render Empty()
       }
-      ui Saved() { render Empty() }
+      view Saved() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -373,11 +373,11 @@ Describe('compiler: language lowering', () => {
         @settings { Label "Settings" Content SettingsStack }
       }
       app SelectionApp { Name "Selection" Navigator MainNavigation }
-      ui Home() {
+      view Home() {
         action Activate() { present SelectionApp@settings }
         render Empty()
       }
-      ui Settings() { render Empty() }
+      view Settings() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -399,7 +399,7 @@ Describe('compiler: language lowering', () => {
         @home { Label "Home" Content Home }
       }
       app SelectionApp { Name "Selection" Navigator MainNavigation }
-      ui Home() { render Empty() }
+      view Home() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -418,15 +418,15 @@ Describe('compiler: language lowering', () => {
         @other { Label "Other" Content Other }
       }
       app SelectionApp { Name "Selection" Navigator MainNav }
-      ui Home() { render Empty() }
-      ui Other() { render Empty() }
+      view Home() { render Empty() }
+      view Other() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
     Expect(compiled.code).toContain('TR.Navigation.Patch(_Scope.MainNavBase.evaluate(), {')
     Expect(compiled.code).toContain('"@other": {')
     Expect(compiled.code).toContain('"Label": TR.Value("Other")')
-    Expect(compiled.code).toContain('"Content": TR.Navigation.UI({')
+    Expect(compiled.code).toContain('"Content": TR.Navigation.View({')
   })
 
   Test('compiles typed dynamic action arguments in source order', async () => {
@@ -617,7 +617,7 @@ Describe('compiler: language lowering', () => {
 function primitiveAppValueSpellings(): string {
   return `
     public type TestStack is nav with {
-      Initial ui
+      Initial view
       nav TestNavImpl from ./TestNavImpl.ts
     }
     workspace type CompleteTestStack is TestStack with { Initial is Home }
@@ -643,7 +643,7 @@ function primitiveAppValueSpellings(): string {
       Navigator LetWithNavigation
     }
 
-    ui Home() { render Empty() }
+    view Home() { render Empty() }
     view Empty() { render inject ${tsFence} return null ${fence} }
   `
 }

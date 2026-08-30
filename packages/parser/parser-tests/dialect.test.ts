@@ -138,7 +138,7 @@ Describe('parser: decided dialect', () => {
     parses(`
       view Panel() { }
       let Fallback = "stand-in for a nav value"
-      ui Home() {
+      view Home() {
         render Panel() {
           on press -> { present @workspace }
           on change -> { replace Fallback in app }

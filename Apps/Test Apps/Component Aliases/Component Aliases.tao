@@ -16,7 +16,7 @@ view Badge = widgets.Badge
 
 view Renamed = widgets.Tagline
 
-ui MainView() {
+view MainView() {
    render Col() [gap 6] {
       Text("Component Aliases")
       Badge("shipped")

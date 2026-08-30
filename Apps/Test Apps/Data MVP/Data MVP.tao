@@ -29,7 +29,7 @@ data Tasks / Task {
    order by Title
 }
 
-ui MainView() {
+view MainView() {
    state WorkspaceDraft = ""
    state TaskDraft = ""
    query Workspaces { }

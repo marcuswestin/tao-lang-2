@@ -53,12 +53,7 @@ function registerPrimitiveTypes(typir: TaoTypirServices): void {
     .finish()
   typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'design' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'visual' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'presentable' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'view' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'layout' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'frame' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'ui' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'nav' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'datasource' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'app' }).finish()
@@ -155,7 +150,7 @@ function inferValueReference(
     ParameterDeclaration: parameter =>
       TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
     StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
-    UiDeclaration: () => TypeSystemHelpers.taoPrimitiveType('ui', typir) ?? InferenceRuleNotApplicable,
+    ViewDeclaration: () => TypeSystemHelpers.taoPrimitiveType('view', typir) ?? InferenceRuleNotApplicable,
   })
 }
 

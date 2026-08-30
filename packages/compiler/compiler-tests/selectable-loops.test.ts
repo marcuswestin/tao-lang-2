@@ -14,7 +14,7 @@ Describe('compiler: selectable loops', () => {
           }
         }
       }
-      layout Stack() { render inject \`\`\`ts return null \`\`\` }
+      view Stack() { render inject Content @@content \`\`\`ts return Content \`\`\` }
       view Text(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `)
 
@@ -37,7 +37,7 @@ Describe('compiler: selectable loops', () => {
           loop ["One"] / Row { Text(Row) }
         }
       }
-      layout Stack() { render inject \`\`\`ts return null \`\`\` }
+      view Stack() { render inject Content @@content \`\`\`ts return Content \`\`\` }
       view Text(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `)
 

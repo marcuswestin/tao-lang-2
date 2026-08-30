@@ -1,7 +1,7 @@
 import React from 'react'
 import type { TaoNavigationValue } from './TR-navigation'
 import { backNavigation } from './TR-navigation-registry'
-import type { DialogueOccurrenceState, OverlayEntry } from './TR-navigation-state'
+import type { OverlayEntry, ResponseOccurrenceState } from './TR-navigation-state'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
@@ -50,9 +50,9 @@ const overlayLayerStyle = {
 const hiddenNavigationLevelStyle = { display: 'none' } as const
 const visibleOverlayLevelStyle = { flex: 1 } as const
 
-// A dialogue is modal: it dims what it covers and sits centred over it, rather than rendering as
+// An asked view is modal: it dims what it covers and sits centred over it, rather than rendering as
 // another full-bleed layer on top of the content it is supposed to interrupt.
-const dialogueScrimStyle = {
+const askScrimStyle = {
   alignItems: 'center',
   backgroundColor: 'rgba(0, 0, 0, 0.45)',
   bottom: 0,
@@ -64,7 +64,7 @@ const dialogueScrimStyle = {
   top: 0,
 } as const
 
-const dialogueSurfaceStyle = {
+const askSurfaceStyle = {
   backgroundColor: '#ffffff',
   borderRadius: 12,
   elevation: 8,
@@ -146,13 +146,13 @@ export function NavigationSurface(props: {
       children: props.overlays.map((entry, index) => {
         const content = entry.presentable.render(
           entry.arguments,
-          entry.dialogue
-            ? dialogueProps(props.taoProps, props.navigation, entry.dialogue)
+          entry.response
+            ? askProps(props.taoProps, props.navigation, entry.response)
             : navigationProps(props.taoProps, props.navigation),
         )
         return React.createElement(NavigationLevel, {
-          children: entry.dialogue
-            ? modalDialogue(content)
+          children: entry.response
+            ? modalAsk(content)
             : entry.sheet
             ? modalSheet(content, props.navigation, index === props.overlays.length - 1)
             : content,
@@ -173,13 +173,13 @@ export function NavigationSurface(props: {
   )
 }
 
-/** modalDialogue centres one dialogue on a dimming scrim, which is what makes it read as modal. */
-function modalDialogue(content: React.ReactNode): React.ReactNode {
+/** modalAsk centres one asked view on a dimming scrim, which is what makes it read as modal. */
+function modalAsk(content: React.ReactNode): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   return React.createElement(
     runtime.View,
-    { style: dialogueScrimStyle },
-    React.createElement(runtime.View, { style: dialogueSurfaceStyle }, content),
+    { style: askScrimStyle },
+    React.createElement(runtime.View, { style: askSurfaceStyle }, content),
   )
 }
 
@@ -187,10 +187,10 @@ export function navigationProps(props: TaoProps | undefined, navigation: TaoNavi
   return { ...props, navigation }
 }
 
-function dialogueProps(
+function askProps(
   props: TaoProps | undefined,
   navigation: TaoNavigationValue,
-  dialogue: DialogueOccurrenceState,
+  response: ResponseOccurrenceState,
 ): TaoProps {
-  return { ...props, dialogue, navigation }
+  return { ...props, navigation, response }
 }

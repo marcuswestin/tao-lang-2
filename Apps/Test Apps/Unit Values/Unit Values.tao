@@ -18,7 +18,7 @@ function Doubled(Length duration) returns duration {
    return Length * 2
 }
 
-ui MainView() {
+view MainView() {
    let Wait = 220.ms
    let Half = 30.seconds
    let Whole = 1.minute
