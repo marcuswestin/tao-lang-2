@@ -49,15 +49,8 @@ function AppShellComponent(props: AppShellProps): React.JSX.Element {
 function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContextModule }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const platformOS = RN.Platform?.OS ?? 'web'
-  const insets = props.SafeAreaContext.useSafeAreaInsets()
   // Subscribing to dev mode re-renders the frame on every change, including layout-bounds toggles.
   const devMode = Dev.useMode()
-  const contentPadding = {
-    paddingBottom: appFramePadding + insets.bottom,
-    paddingLeft: appFramePadding + insets.left,
-    paddingRight: appFramePadding + insets.right,
-    paddingTop: appFramePadding + insets.top,
-  }
 
   return React.createElement(
     RN.KeyboardAvoidingView,
@@ -68,22 +61,53 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
     React.createElement(
       DataLoadRecoveryBoundary,
       null,
-      React.createElement(
-        RN.ScrollView,
-        {
-          contentContainerStyle: [contentStyle, contentPadding],
-          keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
-          keyboardShouldPersistTaps: 'handled',
-          style: rootStyle,
-        },
-        React.createElement(
-          ParentDirectionContext.Provider,
-          { direction: ParentDirectionContext.defaultProps.parentDirection },
-          appRootChildren(props.children, devMode),
-        ),
-      ),
+      appRootChildren(props.children, devMode),
     ),
     devMode.enabled ? React.createElement(DevMenu) : null,
+  )
+}
+
+/**
+ * AppSurfaceFrame is the safe-area-padded scrollable frame around one full-screen content surface.
+ * The app host applies it around its navigator, and a navigator that hands the window to a native
+ * surface (the platform tab bar) applies it inside each of its screens instead — a native surface
+ * must own true window bounds, and an enclosing scroll frame would push its bar offscreen.
+ */
+export function AppSurfaceFrame(props: {
+  children?: React.ReactNode
+  /** Inside a native screen the platform supplies the safe-area and bar insets itself. */
+  nativeInsets?: boolean
+}): React.JSX.Element {
+  const RN = requireReactNativeRuntime()
+  const platformOS = RN.Platform?.OS ?? 'web'
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const contentPadding = props.nativeInsets
+    ? {
+      paddingBottom: appFramePadding,
+      paddingLeft: appFramePadding,
+      paddingRight: appFramePadding,
+      paddingTop: appFramePadding,
+    }
+    : {
+      paddingBottom: appFramePadding + insets.bottom,
+      paddingLeft: appFramePadding + insets.left,
+      paddingRight: appFramePadding + insets.right,
+      paddingTop: appFramePadding + insets.top,
+    }
+  return React.createElement(
+    RN.ScrollView,
+    {
+      ...(props.nativeInsets ? { contentInsetAdjustmentBehavior: 'automatic' } : {}),
+      contentContainerStyle: [contentStyle, contentPadding],
+      keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
+      keyboardShouldPersistTaps: 'handled',
+      style: rootStyle,
+    },
+    React.createElement(
+      ParentDirectionContext.Provider,
+      { direction: ParentDirectionContext.defaultProps.parentDirection },
+      props.children,
+    ),
   )
 }
 

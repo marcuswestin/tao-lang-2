@@ -1,4 +1,5 @@
 import React from 'react'
+import { AppSurfaceFrame } from './TR-app-shell'
 import type {
   TaoNavDescriptor,
   TaoNavigationArguments,
@@ -10,7 +11,7 @@ import type {
   TaoSlotNavConfiguration,
   TaoStackNavConfiguration,
 } from './TR-navigation'
-import { renderNativeSelectionTabs } from './TR-navigation-native-tabs'
+import { nativeSelectionTabsAvailable, renderNativeSelectionTabs } from './TR-navigation-native-tabs'
 import type { PresentableEntry } from './TR-navigation-state'
 import { navigationHostStyle, NavigationLevel, navigationProps } from './TR-navigation-surfaces'
 import { RuntimeNavigationValue } from './TR-navigation-value'
@@ -346,14 +347,29 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     })
   }
 
+  /**
+   * ownsWindowSurface: the native tab controller must receive true window bounds, so the app
+   * host's scroll frame moves inside each tab (see itemEntryLevels) whenever the bar is native.
+   */
+  override ownsWindowSurface(): boolean {
+    return String(this.descriptor.config.display.evaluate().jsValue) === 'automatic'
+      && nativeSelectionTabsAvailable()
+  }
+
   /** itemEntryLevels renders one tab's entry stack; only the top entry is visible within the tab. */
   private itemEntryLevels(item: SelectionItemState, taoProps?: TaoProps): React.ReactNode {
-    return item.entries.map((entry, index) =>
-      React.createElement(NavigationLevel, {
-        children: renderPresentable(entry.presentable, entry.arguments, navigationProps(taoProps, this)),
-        hidden: index !== item.entries.length - 1,
-        key: `${item.key}-${entry.instanceId}`,
-      })
+    // Each tab carries its own content frame: the navigator owns the window, so the safe-area
+    // scroll frame the app host would normally provide renders inside the native screen instead.
+    return React.createElement(
+      AppSurfaceFrame,
+      { nativeInsets: true },
+      item.entries.map((entry, index) =>
+        React.createElement(NavigationLevel, {
+          children: renderPresentable(entry.presentable, entry.arguments, navigationProps(taoProps, this)),
+          hidden: index !== item.entries.length - 1,
+          key: `${item.key}-${entry.instanceId}`,
+        })
+      ),
     )
   }
 

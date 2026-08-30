@@ -45,11 +45,27 @@ function nativeTabsModule(): NativeTabsModule | undefined {
       cachedModule = screens.BottomTabs && screens.BottomTabsScreen
         ? { BottomTabs: screens.BottomTabs, BottomTabsScreen: screens.BottomTabsScreen }
         : null
-    } catch {
+      if (!cachedModule) {
+        console.warn('[tao] native tabs unavailable: react-native-screens has no BottomTabs export')
+      }
+    } catch (error) {
+      console.warn(`[tao] native tabs unavailable: ${String(error)}`)
       cachedModule = null
     }
   }
   return cachedModule ?? undefined
+}
+
+/** nativeSelectionTabsAvailable says whether the platform tab surface can render here at all. */
+export function nativeSelectionTabsAvailable(): boolean {
+  if (!nativeSurfacesEnabled) {
+    return false
+  }
+  const os = requireReactNativeRuntime().Platform?.OS
+  if (os !== 'ios' && os !== 'android') {
+    return false
+  }
+  return nativeTabsModule() !== undefined
 }
 
 /**
@@ -62,17 +78,11 @@ export function renderNativeSelectionTabs(options: {
   activeKey: string
   onActivate: (key: string) => void
 }): React.ReactNode | undefined {
-  if (!nativeSurfacesEnabled) {
+  if (!nativeSelectionTabsAvailable()) {
     return undefined
   }
   const os = requireReactNativeRuntime().Platform?.OS
-  if (os !== 'ios' && os !== 'android') {
-    return undefined
-  }
-  const module = nativeTabsModule()
-  if (!module) {
-    return undefined
-  }
+  const module = nativeTabsModule()!
   return React.createElement(
     module.BottomTabs,
     {

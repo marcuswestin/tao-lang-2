@@ -1,6 +1,6 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
-import { AppShell } from './TR-app-shell'
+import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import {
   DataControls,
   DataProviderControls,
@@ -367,6 +367,9 @@ class TR {
 
   /** AppShell wraps generated app roots in Tao's safe default app frame. */
   static readonly AppShell = AppShell
+
+  /** AppSurfaceFrame is the safe-area scroll frame the app host puts around one content surface. */
+  static readonly AppSurfaceFrame = AppSurfaceFrame
 
   /** Dev exposes public Tao runtime development-only diagnostic controls. */
   static readonly Dev = DevControls
