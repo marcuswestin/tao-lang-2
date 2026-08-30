@@ -25,6 +25,9 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
   /** onNewAstNode handles AST-instance-specific type creation. */
   onNewAstNode(node: AST.Node, typir: TaoTypirServices): void {
     if (AST.isTypeDefinition(node)) {
+      if (AST.isTypeDeclaration(node) && node.aliasTarget) {
+        return
+      }
       const nominalType = TypeSystemHelpers.ensurePrimitive(TypeSystemHelpers.typirTypeDefinitionName(node), typir)
       const baseType = typirBaseTypeForDefinition(node, typir)
       if (nominalType && baseType && nominalType.getName() !== baseType.getName()) {
@@ -53,12 +56,7 @@ function registerPrimitiveTypes(typir: TaoTypirServices): void {
     .finish()
   typir.factory.Primitives.create({ primitiveName: 'item' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'design' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'visual' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'presentable' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'view' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'layout' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'frame' }).finish()
-  typir.factory.Primitives.create({ primitiveName: 'ui' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'nav' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'datasource' }).finish()
   typir.factory.Primitives.create({ primitiveName: 'app' }).finish()
@@ -106,9 +104,6 @@ function registerAstInferenceRules(typir: TaoTypirServices): void {
     MemberAccessExpression: (node) =>
       TypeSystemHelpers.taoType(Type.ofMemberAccess(node), typir)
         ?? InferenceRuleNotApplicable,
-    TypedInjectionExpression: (node) =>
-      TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
-        ?? InferenceRuleNotApplicable,
     TypedConstructor: (node) =>
       TypeSystemHelpers.taoType(Type.ofConstructorReference(node.type), typir)
         ?? InferenceRuleNotApplicable,
@@ -136,6 +131,7 @@ function inferValueReference(
   }
   return Switch.type(target, {
     ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
+    CommandDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
     AliasDeclaration: alias =>
       TypeSystemHelpers.taoType(Type.ofValueDeclaration(alias), typir) ?? InferenceRuleNotApplicable,
     AppDeclaration: declaration =>
@@ -158,7 +154,7 @@ function inferValueReference(
     ParameterDeclaration: parameter =>
       TypeSystemHelpers.taoType(Type.ofParameter(parameter), typir) ?? InferenceRuleNotApplicable,
     StateDeclaration: state => TypeSystemHelpers.safeInferType(typir, state) ?? InferenceRuleNotApplicable,
-    UiDeclaration: () => TypeSystemHelpers.taoPrimitiveType('ui', typir) ?? InferenceRuleNotApplicable,
+    ViewDeclaration: () => TypeSystemHelpers.taoPrimitiveType('view', typir) ?? InferenceRuleNotApplicable,
   })
 }
 
@@ -168,7 +164,14 @@ function typirBaseTypeForDefinition(
 ): TypirType | undefined {
   return Switch.type(definition, {
     ParameterTypeDeclaration: declaration => typirTypeForTypeExpression(declaration.type, typir),
-    TypeDeclaration: declaration => typirTypeForTypeExpression(declaration.type, typir),
+    TypeDeclaration: declaration => {
+      const target = declaration.aliasTarget?.member.ref
+      return AST.isTypeDeclaration(target)
+        ? TypeSystemHelpers.taoType(Type.ofDefinition(target), typir)
+        : declaration.type
+        ? typirTypeForTypeExpression(declaration.type, typir)
+        : undefined
+    },
     TypeProperty: property => {
       if (property.type) {
         return TypeSystemHelpers.taoPrimitiveType(property.type, typir)

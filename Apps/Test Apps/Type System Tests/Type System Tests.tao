@@ -56,7 +56,8 @@ let Team = [
 }  }
 ]
 
-ui Demo() {
+view Demo() {
+   Title "Type System Tests"
    let OuterScopeLabel = ScopeLabel
    render Stack() {
       let ScopeLabel = "Nested scope label"
@@ -81,7 +82,7 @@ ui Demo() {
       TextValue(ScopeLabel)
 }  }
 
-layout Stack() {
+view Stack() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
    ```

@@ -3,12 +3,7 @@ import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
 import { Errors, FS, HCI, Platform } from '@shared'
 import type { Command as BaseCommand } from 'commander'
-import { runCompile } from './compile-command'
-import { runCompletionInstall, writeCompletionInstallResult } from './completion-command'
-import { runTaoDev } from './dev-command'
 import type { InPlace } from './in-place-files'
-import { runCheck, runFix, runFmt } from './source-commands'
-import { runTestCommand } from './test-command'
 
 type InPlaceLabels = {
   /** changed labels per-file and summary output, e.g. `formatted`. */
@@ -51,6 +46,8 @@ function createCommands(): Command {
     .description('Discover and run Tao apps in the interactive development loop.')
     .action(async (path: string, options: { app?: string }) => {
       try {
+        // Command implementations load lazily so completion and help paths stay fast.
+        const { runTaoDev } = await import('./dev-command')
         Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app }))
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
@@ -65,6 +62,7 @@ function createCommands(): Command {
     .description('Compile a Tao app into the local runtime package.')
     .action(async (appPath: string, options: { app?: string }) => {
       try {
+        const { runCompile } = await import('./compile-command')
         const compiled = await runCompile(appPath, { appName: options.app })
         HCI.writeSuccess(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}\n`)
       } catch (error) {
@@ -78,7 +76,12 @@ function createCommands(): Command {
     .argument('[paths...]', 'Tao files or directories to format. Defaults to the current directory.')
     .description('Format .tao files in place.')
     .action(async (paths: string[]) => {
-      await runInPlaceCommand(paths, runFmt, { changed: 'formatted', changedLine: 'Formatted', failedVerb: 'format' })
+      const { runFmt } = await import('./source-commands')
+      await runInPlaceCommand(paths, runFmt, {
+        changed: 'formatted',
+        changedLine: 'Formatted',
+        failedVerb: 'format',
+      })
     })
 
   commands
@@ -86,7 +89,12 @@ function createCommands(): Command {
     .argument('[paths...]', 'Tao files or directories to fix. Defaults to the current directory.')
     .description('Apply all Tao source fixes in place: renders last, organized use statements, formatting.')
     .action(async (paths: string[]) => {
-      await runInPlaceCommand(paths, runFix, { changed: 'fixed', changedLine: 'Fixed', failedVerb: 'fix' })
+      const { runFix } = await import('./source-commands')
+      await runInPlaceCommand(paths, runFix, {
+        changed: 'fixed',
+        changedLine: 'Fixed',
+        failedVerb: 'fix',
+      })
     })
 
   commands
@@ -94,6 +102,7 @@ function createCommands(): Command {
     .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
     .description('Check .tao files for the full canonical source form without writing.')
     .action(async (paths: string[]) => {
+      const { runCheck } = await import('./source-commands')
       await runInPlaceCommand(paths, runCheck, {
         changed: 'noncanonical',
         changedLine: 'Needs fixes',
@@ -107,6 +116,7 @@ function createCommands(): Command {
     .argument('[path]', 'Tao test file or directory to search. Defaults to the current directory.', '.')
     .description('Run Tao tests declared in .tao files at or under a path.')
     .action(async (path: string) => {
+      const { runTestCommand } = await import('./test-command')
       await runTestCommand(path)
     })
 
@@ -118,6 +128,7 @@ function createCommands(): Command {
     .description('Add the tao completion hook to your shell startup file.')
     .action(async (options: { shell?: string }) => {
       try {
+        const { runCompletionInstall, writeCompletionInstallResult } = await import('./completion-command')
         writeCompletionInstallResult(await runCompletionInstall({ shell: options.shell }))
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
@@ -154,10 +165,10 @@ async function runInPlaceCommand(
 
     writeChangedResults(changed, labels)
     for (const result of errored) {
-      HCI.writeErrorLine(`Failed to ${labels.failedVerb} ${displayPath(result.path)}: ${result.error}`)
+      HCI.writeErrorLine(`Failed to ${labels.failedVerb} ${FS.displayPath(result.path)}: ${result.error}`)
     }
     if (results.length === 0) {
-      HCI.writeLine(`No .tao files found under ${roots.map(displayPath).join(', ')}`)
+      HCI.writeLine(`No .tao files found under ${roots.map(FS.displayPath).join(', ')}`)
       return
     }
 
@@ -177,16 +188,11 @@ async function runInPlaceCommand(
 
 function writeChangedResults(results: readonly InPlace.Result[], labels: InPlaceLabels): void {
   for (const result of results) {
-    const line = `${labels.changedLine} ${displayPath(result.path)}`
+    const line = `${labels.changedLine} ${FS.displayPath(result.path)}`
     if (labels.failOnChanged) {
       HCI.writeErrorLine(line)
     } else {
       HCI.writeSuccess(`${line}\n`)
     }
   }
-}
-
-function displayPath(path: string): string {
-  const relative = FS.relativePath(FS.resolvePath('.'), path)
-  return relative === '' ? '.' : relative
 }

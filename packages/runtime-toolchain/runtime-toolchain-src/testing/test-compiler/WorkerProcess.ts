@@ -3,6 +3,11 @@ import { Protocol } from './Protocol'
 import { TestCompiler } from './TestCompiler'
 import type * as TestCompilerTypes from './TestCompiler'
 
+// Contexts are shared per runRoot so one run's requests reuse compiled app modules. Declared
+// before the top-level `await main()` entry call: bindings below it stay uninitialized while
+// the session loop runs.
+const contextsByRunRoot = new Map<string, TestCompilerTypes.Context>()
+
 await main()
 
 async function main(): Promise<void> {
@@ -42,6 +47,7 @@ async function compileInput(input: TestCompilerTypes.Worker.Input): Promise<Test
   return await Switch.kind<TestCompilerTypes.Worker.Input, Promise<TestCompilerTypes.Worker.Output>>(input, {
     app: compileApp,
     testPlan: compileTestPlan,
+    validate: validateTestFile,
   })
 }
 
@@ -55,13 +61,31 @@ async function compileApp(input: TestCompilerTypes.Worker.AppInput): Promise<Tes
 async function compileTestPlan(
   input: TestCompilerTypes.Worker.TestPlanInput,
 ): Promise<TestCompilerTypes.Worker.TestPlanOutput> {
-  const context: TestCompilerTypes.Context = {
-    appModulePaths: new Map<string, string>(),
-    runRoot: input.runRoot,
+  const options: TestCompilerTypes.CompileFileOptions = {
+    context: contextForRunRoot(input.runRoot),
+    skipValidation: input.skipValidation,
   }
-  const options: TestCompilerTypes.CompileFileOptions = { context }
   return {
     file: await TestCompiler.compileTestFile(input.testFilePath, options),
     kind: 'testPlan',
   }
+}
+
+async function validateTestFile(
+  input: TestCompilerTypes.Worker.ValidateInput,
+): Promise<TestCompilerTypes.Worker.ValidateOutput> {
+  return {
+    errors: await TestCompiler.validateTestFile(input.testFilePath),
+    kind: 'validate',
+  }
+}
+
+function contextForRunRoot(runRoot: string): TestCompilerTypes.Context {
+  const existing = contextsByRunRoot.get(runRoot)
+  if (existing !== undefined) {
+    return existing
+  }
+  const created: TestCompilerTypes.Context = { appModulePaths: new Map<string, string>(), runRoot }
+  contextsByRunRoot.set(runRoot, created)
+  return created
 }

@@ -49,6 +49,8 @@ export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext)
   )
   const referencedNames = ASTUtils.referencedNames(file)
   const previouslyImportedNames = new Set<string>()
+  const workspaceFiles = uniqueWorkspaceFiles(ctx.workspaceFiles)
+  const workspaceFilePaths = new Set(workspaceFiles.map(workspaceFilePath))
   for (const useStatement of useStatements) {
     reportDuplicateImports(useStatement, ctx)
     reportUnusedImports(useStatement, ctx, referencedNames)
@@ -57,6 +59,8 @@ export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext)
       fromFilePath,
       localDeclarationNames,
       previouslyImportedNames,
+      workspaceFilePaths,
+      workspaceFiles,
     })
   }
   reportUseStatementsOutOfSection(file, ctx)
@@ -67,10 +71,13 @@ type ValidateUseStatementOptions = {
   fromFilePath: string
   localDeclarationNames: ReadonlySet<string>
   previouslyImportedNames: Set<string>
+  workspaceFilePaths: ReadonlySet<string>
+  workspaceFiles: readonly AST.TaoFile[]
 }
 
 function validateUseStatement(useStatement: AST.UseStatement, options: ValidateUseStatementOptions): void {
-  const { ctx, fromFilePath, localDeclarationNames, previouslyImportedNames } = options
+  const { ctx, fromFilePath, localDeclarationNames, previouslyImportedNames, workspaceFilePaths, workspaceFiles } =
+    options
   const resolution = Packages.resolve(ctx.packagesContext, {
     importPath: useStatement.importPath,
     fromFilePath,
@@ -80,8 +87,6 @@ function validateUseStatement(useStatement: AST.UseStatement, options: ValidateU
     return
   }
 
-  const workspaceFiles = uniqueWorkspaceFiles(ctx.workspaceFiles)
-  const workspaceFilePaths = new Set(workspaceFiles.map(workspaceFilePath))
   const targetFiles = workspaceFiles.filter(file => {
     return Packages.targetMatches(resolution, {
       filePath: workspaceFilePath(file),

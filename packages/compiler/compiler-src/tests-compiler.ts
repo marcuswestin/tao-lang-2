@@ -1,3 +1,4 @@
+import { ASTUtils, Units } from '@ast-utils'
 import { AST, type ParseResult } from '@parser'
 import { Assert, type DiagnosticRange, Diagnostics, Switch } from '@shared'
 import type { ValidationResult } from '@validator'
@@ -87,6 +88,32 @@ type TaoTestBackStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestAdvanceStep moves the held clock forward by a duration in milliseconds. */
+type TaoTestAdvanceStep = {
+  kind: 'advance'
+  milliseconds: number
+  source: TaoTestSourceLocation
+}
+
+type TaoTestNavigationTitleExpectation = {
+  kind: 'expectNavigationTitle'
+  source: TaoTestSourceLocation
+  title: string
+}
+
+type TaoTestToolbarCommandExpectation = {
+  enabled: boolean
+  kind: 'expectToolbarCommand'
+  label: string
+  source: TaoTestSourceLocation
+}
+
+type TaoTestToolbarCommandPress = {
+  kind: 'pressToolbarCommand'
+  label: string
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestSelectStep scopes nested operations to one 1-based tagged loop row. */
 type TaoTestSelectStep = {
   kind: 'select'
@@ -98,13 +125,17 @@ type TaoTestSelectStep = {
 
 /** TaoTestStep declares one ordered v0 Tao test operation after the run step. */
 type TaoTestStep =
+  | TaoTestAdvanceStep
   | TaoTestBackStep
   | TaoTestEnterStep
   | TaoTestExpectation
   | TaoTestCheckboxStateExpectation
   | TaoTestExpectationGroupStep
+  | TaoTestNavigationTitleExpectation
   | TaoTestInputValueExpectation
   | TaoTestPressStep
+  | TaoTestToolbarCommandExpectation
+  | TaoTestToolbarCommandPress
   | TaoTestSelectStep
   | TaoTestSubmitStep
 
@@ -141,7 +172,7 @@ export function compileTestPlan(input: TaoTestPlanInput, _context: CompilerConte
 
 function compileSuite(suite: AST.TestDeclaration): TaoTestSuite {
   return {
-    name: suite.name,
+    name: AST.testDisplayName(suite),
     source: sourceLocation(suite),
     checks: suite.block.statements.filter(AST.isTestDeclaration).map(compileCheck),
   }
@@ -152,7 +183,7 @@ function compileCheck(check: AST.TestDeclaration): TaoTestCheck {
   Assert.defined(run, 'validated check has one run step', { checkName: check.name })
   const steps = check.block.statements.filter(AST.isCheckStep).filter(isRunnableTestStep).map(compileStep)
   return {
-    name: check.name,
+    name: AST.testDisplayName(check),
     source: sourceLocation(check),
     run: compileRun(run),
     steps,
@@ -191,6 +222,7 @@ function compileInputValueExpectation(expectation: AST.ExpectInputValueStep): Ta
 
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
+    AdvanceStep: compileAdvanceStep,
     BackTestStep: compileBackTestStep,
     EnterTextStep: compileEnterTextStep,
     ExpectCheckboxStateStep: step => ({
@@ -209,8 +241,24 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
     }),
     ExpectTextStep: compileExpectation,
     ExpectGroupStep: step => compileExpectationGroup(step, undefined),
+    ExpectNavigationTitleStep: step => ({
+      kind: 'expectNavigationTitle',
+      source: sourceLocation(step),
+      title: literalText(step.value),
+    }),
     ExpectScopeStep: step => compileExpectationGroup(step, tagName(step.tag)),
+    ExpectToolbarCommandStep: step => ({
+      enabled: step.state === 'enabled',
+      kind: 'expectToolbarCommand',
+      label: literalText(step.value),
+      source: sourceLocation(step),
+    }),
     PressTextStep: compilePressTextStep,
+    PressToolbarCommandStep: step => ({
+      kind: 'pressToolbarCommand',
+      label: literalText(step.value),
+      source: sourceLocation(step),
+    }),
     TagPressStep: step => ({
       kind: 'press',
       selector: 'tag',
@@ -235,8 +283,21 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   })
 }
 
+function literalText(expression: AST.Expression): string {
+  if (!AST.isStringLiteral(expression)) {
+    throw new Error('Validated navigation chrome test step must use literal text.')
+  }
+  return expression.value
+}
+
 function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {
   return { kind: 'back', source: sourceLocation(step) }
+}
+
+function compileAdvanceStep(step: AST.AdvanceStep): TaoTestAdvanceStep {
+  const nanoseconds = ASTUtils.literalDurationOf(step.duration)
+  Assert.defined(nanoseconds, 'validated advance step names a literal duration')
+  return { kind: 'advance', milliseconds: Units.baseToMilliseconds(nanoseconds), source: sourceLocation(step) }
 }
 
 function compileExpectationGroup(

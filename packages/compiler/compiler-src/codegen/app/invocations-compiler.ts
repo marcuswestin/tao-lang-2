@@ -66,7 +66,7 @@ export default {
 
   /** RenderWithSlots scopes call-site setup once and separates named fills from unnamed content. */
   RenderWithSlots(
-    view: AST.RenderableDeclaration,
+    view: AST.ViewDeclaration,
     renderArguments: Compiled,
     taoProps: Compiled,
     block: AST.Block,

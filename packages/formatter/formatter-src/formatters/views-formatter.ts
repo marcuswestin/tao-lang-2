@@ -3,24 +3,8 @@ import type { FormatHandlers, NodeFormat } from '../formatting'
 
 export default {
   TagStatement() {},
-  /** ViewDeclaration formats a `view Name parameters` view header. */
+  /** ViewDeclaration formats a `view Name parameters` header with its optional responds clause. */
   ViewDeclaration: ViewDeclaration,
-
-  /** LayoutDeclaration formats a `layout Name parameters` view header. */
-  LayoutDeclaration: ViewDeclaration,
-
-  /** FrameDeclaration formats a `frame Name parameters` view header. */
-  FrameDeclaration: ViewDeclaration,
-
-  /** UiDeclaration formats a first-class presentation declaration. */
-  UiDeclaration: ViewDeclaration,
-
-  /** DialogueDeclaration formats its parameters and response enum header. */
-  DialogueDeclaration(f) {
-    ViewDeclaration(f)
-    f.oneSpaceBefore('responds')
-    f.oneSpaceAfter('responds')
-  },
 
   /** RenderStatement formats `render` view and injection targets. */
   RenderStatement(f) {
@@ -39,7 +23,7 @@ export default {
     f.oneSpaceBeforeProperty('layoutClause')
   },
 
-  /** RenderSlotDeclaration formats the optional `@name = empty` frame contract. */
+  /** RenderSlotDeclaration formats the optional `@name = empty` slot contract. */
   RenderSlotDeclaration(f) {
     f.oneSpaceAround('=')
   },
@@ -69,8 +53,12 @@ export default {
   LayoutNumberLiteral() {},
 } satisfies Partial<FormatHandlers>
 
-function ViewDeclaration(f: NodeFormat<AST.VisualDeclaration>): void {
+function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.visibilityOnOwnLine()
-  f.oneSpaceAfter('view', 'layout', 'frame', 'ui', 'dialogue')
+  f.oneSpaceAfter('view')
   f.noSpaceBefore('(')
+  f.oneSpaceBefore('responds')
+  f.oneSpaceAfter('responds')
+  // The pass-through alias form: `view Name = ns.Member`.
+  f.oneSpaceAround('=')
 }

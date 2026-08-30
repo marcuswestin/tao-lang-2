@@ -19,6 +19,11 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
         // through its singular entity name (`Document`). Keep the owning `Documents` import too.
         names.add(target.name)
       }
+      if (AST.isCaseSetCase(target)) {
+        // Importing a one-of type also imports its cases. A case reference therefore uses the
+        // owning type import even when the type name never appears separately in source.
+        names.add(AST.caseSetOwningCase(target).name)
+      }
     }
     if (AST.isNamedTypeReference(node)) {
       names.add(node.root)

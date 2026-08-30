@@ -1,0 +1,38 @@
+use StackNav from @tao/nav
+use Col, Text from @tao/ui
+
+app UnitValues {
+   Name "Unit Values"
+   Navigator StackNav {
+      Initial MainView
+}  }
+
+// `.unit` on a number constructs a value of that unit's family, and `.unit` on a value of the family
+// reads it back as a number, so the two round-trip through the family's fixed ratios.
+function ReadBack(Wait duration) returns number {
+   return Wait.s
+}
+
+// Scaling by a bare number keeps the family, so this returns a duration rather than a number.
+function Doubled(Length duration) returns duration {
+   return Length * 2
+}
+
+view MainView() {
+   Title "Unit Values"
+   let Wait = 220.ms
+   let Half = 30.seconds
+   let Whole = 1.minute
+   render Col() {
+      Text("Read back: { ReadBack(Wait) }")
+      Text("Long aliases agree: { Half + Half == Whole }")
+      // Dividing two durations cancels the family and yields the plain ratio between them.
+      Text("Ratio: { 1.h / 15.min }")
+      Text("Doubled: { Doubled(90.s).min }")
+      Text("Sum: { (1.min + 30.s).s }")
+      Text("Difference: { (1.min - 15.s).s }")
+      Text("Clock under an hour: { (5.min + 9.s).Clock }")
+      Text("Clock from an hour up: { (1.h + 2.min + 3.s).Clock }")
+      Text("Clock at zero: { (0.s).Clock }")
+      Text("Clock below zero: { (0.s - 1.s).Clock }")
+}  }

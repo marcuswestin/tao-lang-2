@@ -12,7 +12,8 @@ view CounterButton(Title text, Press action()) {
       on press Press
 }  }
 
-ui MainView() {
+view MainView() {
+   Title "State Action MVP"
    state Count = 0
    let DisplayCount = Count
    action SetZero() {

@@ -21,7 +21,7 @@ guard default {
 
 // -- Frames --------------------------------------------------------------------------------------------------
 
-frame Section(Title text) {
+view Section(Title text) {
    @actions = empty
    render Col [gap sm] {
       Row [content spread center, gap sm] {
@@ -31,7 +31,7 @@ frame Section(Title text) {
       Col [gap xs] { @@content }
 }  }
 
-frame EmptyState(Icon icon, Title text, Body text) {
+view EmptyState(Icon icon, Title text, Body text) {
    render Col [pattern EmptyState] {
       Icon(Icon) [@icon]
       Text(Title) [@title]
@@ -81,14 +81,18 @@ view HearthItemRow(Item) {
 // carries the entity's own `required` copy — "Say what needs doing" is written once, on the data — and an
 // abandoned capture never syncs to the whole home.
 
-command AddSomething {
+folder
+action AddSomethingIntent() {
+   Title "Add something"
+   present QuickCapture(MyHome) as sheet
+}
+command AddSomething = AddSomethingIntent() with {
    Label "Add something"
    Icon "plus"
    Key "cmd+n"
-   does { present QuickCapture(MyHome) as sheet }
 }
 
-ui QuickCapture(Home) {
+view QuickCapture(Home) {
    Title "Add something"
    draft New = HearthItem for new { CreatedBy: Me }
    query Lists from Home.Lists { }
@@ -116,7 +120,7 @@ ui QuickCapture(Home) {
 
 // -- The one question -----------------------------------------------------------------------------------------
 
-dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
+view Confirm(Question text, Body text, Verb text) responds yes / no {
    render Col(Label: Question) [card, width max 480, gap md] {
       Text(Question) [sectionTitle]
       Text(Body) [body]
@@ -126,20 +130,24 @@ dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
          Button(Verb) [destructive] { on press -> respond yes }
 }  }  }
 
-ui Notice(Message text) {
+view Notice(Message text) {
    render Text(Message) [toast]
 }
 
 // -- Find anything ---------------------------------------------------------------------------------------------
 
-command FindAnything {
+folder
+action FindAnythingIntent() {
+   Title "Find anything"
+   present FindSheet() as palette
+}
+command FindAnything = FindAnythingIntent() with {
    Label "Find anything"
    Icon "magnifyingglass"
    Key "cmd+k"
-   does { present FindSheet() as palette }
 }
 
-ui FindSheet() {
+view FindSheet() {
    Title "Find anything"
    Search Query
    query Hits from MyHome.Lists.Items {

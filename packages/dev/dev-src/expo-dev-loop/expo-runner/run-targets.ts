@@ -6,6 +6,7 @@ import { DevLoopTUI } from '../DevLoopTUI'
 import { Android } from './android'
 import { ExpoConfig } from './expo-config'
 import { ExpoMetro } from './metro'
+import { openPhysicalDevice } from './physical-device'
 
 type IosSimulator = {
   name: string
@@ -22,6 +23,7 @@ type SimctlDevicesJson = {
 export const ExpoTargets = {
   openAndroid,
   openIosSimulator,
+  openPhysicalDevice,
   openPreparedAndroid,
   openStartupTargets,
   openWeb,

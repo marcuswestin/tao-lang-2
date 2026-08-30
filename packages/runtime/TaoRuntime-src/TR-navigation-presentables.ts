@@ -1,18 +1,18 @@
 import type React from 'react'
 import type {
-  TaoDialogueDefinition,
   TaoNavigationArguments,
   TaoPresentableDefinition,
 } from './TR-navigation'
+import type { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import type { TaoProps } from './TR-TaoProps'
 
 export type Evaluable = {
   evaluate(): { jsValue: unknown }
 }
 
-/** RuntimePresentable is an evaluable UI descriptor used by aliases and configured navs. */
+/** RuntimePresentable is the evaluable view descriptor used by every presentation and ask site. */
 export class RuntimePresentable {
-  readonly kind = 'ui'
+  readonly kind = 'view'
 
   constructor(readonly definition: TaoPresentableDefinition) {}
 
@@ -24,23 +24,12 @@ export class RuntimePresentable {
     return this
   }
 
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode {
-    return this.definition.render(arguments_, taoProps)
-  }
-}
-
-/** RuntimeDialogue is a declaration descriptor; each ask creates separate mutable occurrence state. */
-export class RuntimeDialogue {
-  readonly kind = 'dialogue'
-
-  constructor(readonly definition: TaoDialogueDefinition) {}
-
-  get name(): string {
-    return this.definition.name
-  }
-
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode {
-    return this.definition.render(arguments_, taoProps)
+  render(
+    arguments_: TaoNavigationArguments,
+    taoProps?: TaoProps,
+    host?: RuntimeHostReadChannel,
+  ): React.ReactNode {
+    return this.definition.render(arguments_, taoProps, host)
   }
 }
 

@@ -14,53 +14,98 @@ const WORKER_PATH = FS.resolvePath(
   RuntimeToolchainPaths.packageRoot,
 )
 
-/** Worker compiles Tao runtime test inputs outside the Jest process. */
+/** Worker compiles Tao runtime test inputs outside the calling process. */
 export const Worker = {
   compileApp,
   compileTestPlan,
+  createSession,
   stop,
 } as const
 
-let session: Session | undefined
+/** CompileTestPlanOptions configures one worker test-plan compilation request. */
+export type CompileTestPlanOptions = {
+  runRoot?: string
+  skipValidation?: boolean
+}
+
+/** WorkerSession owns one Tao test compiler process; its requests run serially in that process. */
+export class WorkerSession {
+  private readonly session = new Session()
+
+  /** compileApp compiles one Tao app into a runtime test app module. */
+  async compileApp(
+    appPath: string,
+    options: TestCompiler.CompileAppOptions,
+  ): Promise<TestCompiler.Worker.AppOutput['app']> {
+    const output = await this.session.request({
+      appName: options.appName,
+      appPath,
+      kind: 'app',
+      runtimePackageRoot: options.runtimePackageRoot,
+    })
+    return Switch.kind<TestCompiler.Worker.Output, TestCompiler.Worker.AppOutput['app']>(output, {
+      app: appOutput => appOutput.app,
+      testPlan: unexpectedOutput('app compilation'),
+      validate: unexpectedOutput('app compilation'),
+    })
+  }
+
+  /** compileTestPlan compiles one Tao test file into precompiled runtime suites. */
+  async compileTestPlan(testFilePath: string, options: CompileTestPlanOptions = {}): Promise<TestCompiler.File> {
+    const runRoot = options.runRoot ?? FS.resolvePath(
+      `_gen_tao-app-test/tao-test-plan/${TestRunId.create()}`,
+      RuntimeToolchainPaths.packageRoot,
+    )
+    const output = await this.session.request({
+      kind: 'testPlan',
+      runRoot,
+      skipValidation: options.skipValidation,
+      testFilePath,
+    })
+    return Switch.kind<TestCompiler.Worker.Output, TestCompiler.File>(output, {
+      app: unexpectedOutput('Tao test-plan compilation'),
+      testPlan: testPlanOutput => testPlanOutput.file,
+      validate: unexpectedOutput('Tao test-plan compilation'),
+    })
+  }
+
+  /** validateTestFile validates one Tao test file and returns its validation errors. */
+  async validateTestFile(testFilePath: string): Promise<TestCompiler.ValidationError[]> {
+    const output = await this.session.request({ kind: 'validate', testFilePath })
+    return Switch.kind<TestCompiler.Worker.Output, TestCompiler.ValidationError[]>(output, {
+      app: unexpectedOutput('Tao test validation'),
+      testPlan: unexpectedOutput('Tao test validation'),
+      validate: validateOutput => validateOutput.errors,
+    })
+  }
+
+  /** stop ends the worker process and rejects any pending requests. */
+  async stop(): Promise<void> {
+    await this.session.stop()
+  }
+}
+
+let sharedSession: WorkerSession | undefined
+
+function createSession(): WorkerSession {
+  return new WorkerSession()
+}
 
 async function compileApp(
   appPath: string,
   options: TestCompiler.CompileAppOptions,
 ): Promise<TestCompiler.Worker.AppOutput['app']> {
-  const output = await runWorker({
-    appName: options.appName,
-    appPath,
-    kind: 'app',
-    runtimePackageRoot: options.runtimePackageRoot,
-  })
-  return Switch.kind<TestCompiler.Worker.Output, TestCompiler.Worker.AppOutput['app']>(output, {
-    app: appOutput => appOutput.app,
-    testPlan: testPlanOutput => {
-      throw new Error(`Test compiler worker returned ${testPlanOutput.kind} for app compilation.`)
-    },
-  })
+  return await workerSession().compileApp(appPath, options)
 }
 
 async function compileTestPlan(testFilePath: string): Promise<TestCompiler.File> {
-  const runRoot = FS.resolvePath(
-    `_gen_tao-app-test/tao-test-plan/${TestRunId.create()}`,
-    RuntimeToolchainPaths.packageRoot,
-  )
-  const output = await runWorker({
-    kind: 'testPlan',
-    runRoot,
-    testFilePath,
-  })
-  return Switch.kind<TestCompiler.Worker.Output, TestCompiler.File>(output, {
-    app: appOutput => {
-      throw new Error(`Test compiler worker returned ${appOutput.kind} for Tao test-plan compilation.`)
-    },
-    testPlan: testPlanOutput => testPlanOutput.file,
-  })
+  return await workerSession().compileTestPlan(testFilePath)
 }
 
-async function runWorker(input: TestCompiler.Worker.Input): Promise<TestCompiler.Worker.Output> {
-  return await workerSession().request(input)
+function unexpectedOutput(requestDescription: string): (output: TestCompiler.Worker.Output) => never {
+  return output => {
+    throw new Error(`Test compiler worker returned ${output.kind} for ${requestDescription}.`)
+  }
 }
 
 async function bunPath(): Promise<string> {
@@ -68,14 +113,14 @@ async function bunPath(): Promise<string> {
   return await FS.isFile(devenvBun) ? devenvBun : 'bun'
 }
 
-function workerSession(): Session {
-  session ??= new Session()
-  return session
+function workerSession(): WorkerSession {
+  sharedSession ??= new WorkerSession()
+  return sharedSession
 }
 
 async function stop(): Promise<void> {
-  const activeSession = session
-  session = undefined
+  const activeSession = sharedSession
+  sharedSession = undefined
   await activeSession?.stop()
 }
 

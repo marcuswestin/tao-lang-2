@@ -16,15 +16,19 @@ type RecipeDraft is {
 action FetchRecipe(Link text) returns RecipeDraft = inject "./FetchRecipe.ts"
 
 // App-wide, mounted on the navigator.
-command ImportRecipe {
+folder
+action ImportRecipeIntent() {
+   Title "Import from a link"
+   // Visibility follows permission to create a Recipe in MyKitchen.Recipes, resolved by the store.
+   present ImportSheet() as sheet
+}
+command ImportRecipe = ImportRecipeIntent() with {
    Label "Import from a link"
    Icon "link"
    Key "cmd+shift+n"
-   Available when can create Recipe in MyKitchen.Recipes
-   does { present ImportSheet() as sheet }
 }
 
-file ui ImportSheet() {
+file view ImportSheet() {
    Title "Import from a link"
    state Link = ""
 

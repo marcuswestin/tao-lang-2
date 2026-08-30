@@ -47,7 +47,7 @@ export type ActionInvocationPair = RenderInvocationPair
 /** ResolvedRenderInvocation declares the semantic shape of a render invocation. */
 export type ResolvedRenderInvocation = {
   render: AST.Render
-  view?: AST.RenderableDeclaration
+  view?: AST.ViewDeclaration
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
   eventPairs: RenderEventBindingPair[]
@@ -115,7 +115,7 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
 
 function resolveRenderEventBindings(
   render: AST.Render,
-  view: AST.RenderableDeclaration,
+  view: AST.ViewDeclaration,
   argumentPairs: readonly RenderInvocationPair[],
 ): {
   pairs: RenderEventBindingPair[]
@@ -180,7 +180,7 @@ function resolveRenderEventBindings(
 
 function resolveImplicitChangeBinding(
   render: AST.Render,
-  view: AST.RenderableDeclaration,
+  view: AST.ViewDeclaration,
   { argumentPairs, eventPairs, diagnostics }: {
     argumentPairs: readonly RenderInvocationPair[]
     eventPairs: readonly RenderEventBindingPair[]
@@ -232,18 +232,22 @@ function eventParameterName(event: AST.EventName): string {
   return `${event[0]!.toUpperCase()}${event.slice(1)}`
 }
 
+const changeEventPayloads: readonly string[] = ['text', 'boolean', 'number', 'time', 'duration']
+
 function parameterSupportsEvent(parameter: AST.ParameterDeclaration, event: AST.EventName): boolean {
   const type = Type.ofParameter(parameter)
   if (type.kind !== 'primitive' || type.primitive !== 'action') {
     return false
   }
   if (event === 'change') {
+    // A change reports one scalar the control produced: text from a field, a boolean from a switch,
+    // a number from a slider, a time from a date picker, a duration from a length control.
     const input = type.parameters[0]
     return type.parameters.length === 1
       && input !== undefined
       && !input.optional
       && input.type.kind === 'primitive'
-      && (input.type.primitive === 'text' || input.type.primitive === 'boolean')
+      && changeEventPayloads.includes(input.type.primitive)
       && input.type.nominal === undefined
   }
   return type.parameters.length === 0

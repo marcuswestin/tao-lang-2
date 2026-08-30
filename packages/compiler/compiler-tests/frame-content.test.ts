@@ -7,14 +7,14 @@ const fence = '```'
 Describe('compiler: frame content and render injection channels', () => {
   Test('separates unnamed content and named frame fills without a native wrapper', async () => {
     const compiled = await Compiler.compileCode(`
-      frame Card() {
+      view Card() {
         @actions = empty
         render Col() {
           @actions
           @@content
         }
       }
-      layout Col() {
+      view Col() {
         render inject Content @@content, Layout @@layout, Tag @@tag ${tsFence}
           return <RN.View>{Content}</RN.View>
         ${fence}
@@ -37,7 +37,7 @@ Describe('compiler: frame content and render injection channels', () => {
     Expect(compiled.code).toContain('_ViewProps.__taoSlots?.["@actions"] ?? null')
     Expect(compiled.code).toContain('"@actions": <_Scope.Button')
     Expect(compiled.code).toContain('return <_Scope.Card')
-    Expect(compiled.code).toContain('layout: TR.Layout.create([["hug"], ["rigid"]])')
+    Expect(compiled.code).toContain('layout: undefined')
     Expect(compiled.code).toContain('designSpec: TR.Design.Spec([["claim",2]])')
     Expect(compiled.code).toContain('{_ViewProps.children}')
     Expect(compiled.code).toContain('testTag: "resetSignedOut"')
@@ -45,7 +45,7 @@ Describe('compiler: frame content and render injection channels', () => {
 
   Test('passes only explicitly named Tao and ambient values into render fences', async () => {
     const compiled = await Compiler.compileCode(`
-      layout Native() {
+      view Native() {
         render inject Content @@content, Layout @@layout, Tag @@tag ${tsFence}
           return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
         ${fence}

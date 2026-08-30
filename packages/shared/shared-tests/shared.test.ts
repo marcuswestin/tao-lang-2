@@ -625,9 +625,7 @@ async function withCapturedRuntimeOutput<T>(run: () => Promise<T>) {
   }
 }
 
-function stripAnsi(value: string): string {
-  return value.replace(/\u001b\[[0-9;]+m/g, '')
-}
+const stripAnsi = Text.stripAnsi
 
 function isString(value: unknown): value is string {
   return typeof value === 'string'

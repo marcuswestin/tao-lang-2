@@ -4,16 +4,17 @@
   "type": "module",
   "module": "dev-src/dev.ts",
   "dependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
+    "@commander-js/extra-typings": "^15.0.0",
     "better-opn": "^3.0.2",
-    "chokidar": "^4.0.3",
-    "commander": "^14.0.0",
-    "ink": "^7.1.0",
-    "react": "^19.2.7",
-    "tao-shared": "workspace:*"
+    "chokidar": "^5.0.0",
+    "commander": "^15.0.0",
+    "ink": "^7.1.1",
+    "react": "^19.2.8",
+    "tao-shared": "workspace:*",
+    "wrap-ansi": "^10.0.1"
   },
   "devDependencies": {
-    "@types/react": "^19.2.17",
+    "@types/react": "^19.2.18",
     "tao-formatter": "workspace:*",
     "tao-workspace": "workspace:*"
   }

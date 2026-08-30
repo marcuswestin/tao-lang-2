@@ -24,8 +24,12 @@ const androidAdbMissingMessage = 'Android adb CLI not found. Run direnv allow so
 export const Android = {
   ensureEmulator,
   ensureExpoGo,
+  ensureExpoGoOnSerial,
+  listPhysicalDevices,
   openExpoGo,
+  openExpoGoOnSerial,
   prepareAvailableExpoGo,
+  reverseMetroPort,
 }
 
 async function ensureEmulator(): Promise<void> {
@@ -87,7 +91,11 @@ async function ensureEmulator(): Promise<void> {
 
 async function ensureExpoGo(): Promise<void> {
   await requireCommand('adb', androidAdbMissingMessage)
-  const serial = await requireBootedEmulator()
+  await ensureExpoGoOnSerial(await requireBootedEmulator())
+}
+
+async function ensureExpoGoOnSerial(serial: string): Promise<void> {
+  await requireCommand('adb', androidAdbMissingMessage)
   if (await isPackageInstalled(serial, EXPO_GO_APP_ID)) {
     DevLoopTUI.logDevLoop('dev', `Expo Go is already installed on ${serial}.`)
     return
@@ -99,6 +107,12 @@ async function ensureExpoGo(): Promise<void> {
     args: ['-s', serial, 'install', '-r', '-d', '--user', EXPO_ADB_USER, apkPath],
     stdio: 'inherit',
   })
+}
+
+/** listPhysicalDevices returns adb serials that are not emulators. */
+async function listPhysicalDevices(): Promise<string[]> {
+  await requireCommand('adb', androidAdbMissingMessage)
+  return (await listAdbDevices()).filter(serial => !serial.startsWith('emulator-'))
 }
 
 async function prepareAvailableExpoGo(): Promise<boolean> {
@@ -190,13 +204,17 @@ function preferredAvdName(avds: readonly string[]): string {
   return avdName
 }
 
-async function findRunningEmulator(): Promise<string | undefined> {
+async function listAdbDevices(): Promise<string[]> {
   const result = await CLI.mustRun('adb', { args: ['devices'] })
   return result.stdout
     .split(/\r?\n/)
     .map(line => line.trim().split(/\s+/))
-    .find(([serial, state]) => serial?.startsWith('emulator-') && state === 'device')
-    ?.[0]
+    .filter(([serial, state]) => serial !== undefined && serial !== 'List' && state === 'device')
+    .map(([serial]) => serial!)
+}
+
+async function findRunningEmulator(): Promise<string | undefined> {
+  return (await listAdbDevices()).find(serial => serial.startsWith('emulator-'))
 }
 
 async function isEmulatorBooted(serial: string): Promise<boolean> {
@@ -296,6 +314,10 @@ async function openExpoGoWhenMetroIsReady(url: string = ExpoConfig.EXPO_GO_URL):
   await ExpoMetro.waitForMetro()
   const serial = await requireBootedEmulator()
   await reverseMetroPort(serial)
+  await openExpoGoOnSerial(serial, url)
+}
+
+async function openExpoGoOnSerial(serial: string, url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
   DevLoopTUI.logDevLoop('dev', `Opening ${url} on ${serial}.`)
   await CLI.mustRun('adb', {
     args: [
@@ -315,8 +337,9 @@ async function openExpoGoWhenMetroIsReady(url: string = ExpoConfig.EXPO_GO_URL):
   })
 }
 
-async function reverseMetroPort(serial: string): Promise<void> {
-  await CLI.mustRun('adb', {
+async function reverseMetroPort(serial: string): Promise<boolean> {
+  const result = await CLI.run('adb', {
     args: ['-s', serial, 'reverse', `tcp:${ExpoConfig.EXPO_PORT}`, `tcp:${ExpoConfig.EXPO_PORT}`],
   })
+  return result.error === undefined && result.exitCode === 0
 }

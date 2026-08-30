@@ -17,7 +17,7 @@ Describe('parser: selectable loops', () => {
           }
         }
       }
-      layout Stack() { }
+      view Stack() { render inject Content @@content \`\`\`ts return Content \`\`\` }
       view Text(Value text) { }
     `)
 

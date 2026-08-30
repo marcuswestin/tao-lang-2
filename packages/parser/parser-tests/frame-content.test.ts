@@ -3,17 +3,17 @@ import { Describe, Expect, Test } from '@shared/test'
 import { AST } from '../parser-src/parser'
 import { parseCodeWithErrors, testParseCode } from './test-parse'
 
-Describe('parser: frame content and render injection channels', () => {
-  Test('parses and links frame slots at declaration and call sites', async () => {
+Describe('parser: view content and render injection channels', () => {
+  Test('parses and links view slots at declaration and call sites', async () => {
     const parsed = await testParseCode(`
-      frame Card() {
+      view Card() {
         @actions = empty
         render Col() {
           @actions
           @@content
         }
       }
-      layout Col() {
+      view Col() {
         render inject Content @@content \`\`\`ts return Content \`\`\`
       }
       view Button() {
@@ -30,13 +30,13 @@ Describe('parser: frame content and render injection channels', () => {
       }
     `)
 
-    const frame = parsed.entry.ast.statements[0]
-    Expect.Is(frame, AST.isFrameDeclaration)
-    const declaration = AST.blockStatementOf(frame, 0)
+    const cardView = parsed.entry.ast.statements[0]
+    Expect.Is(cardView, AST.isViewDeclaration)
+    const declaration = AST.blockStatementOf(cardView, 0)
     Expect.Is(declaration, AST.isRenderSlotDeclaration)
     Expect(declaration.name).toBe('@actions')
 
-    const root = AST.blockStatementOf(frame, 1)
+    const root = AST.blockStatementOf(cardView, 1)
     Expect.Is(root, AST.isRenderStatement)
     const placement = root.block?.statements[0]
     Expect.Is(placement, AST.isRenderSlotUse)
@@ -56,15 +56,15 @@ Describe('parser: frame content and render injection channels', () => {
 
   Test('parses explicit content, layout, and tag injection channels', async () => {
     const parsed = await testParseCode(`
-      layout Native() {
+      view Native() {
         render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
           return null
         \`\`\`
       }
     `)
-    const layout = parsed.entry.ast.statements[0]
-    Expect.Is(layout, AST.isLayoutDeclaration)
-    const render = AST.blockStatementOf(layout, 0)
+    const native = parsed.entry.ast.statements[0]
+    Expect.Is(native, AST.isViewDeclaration)
+    const render = AST.blockStatementOf(native, 0)
     Expect.Is(render, AST.isRenderStatement)
     Expect.Is(render.injection, AST.isInjection)
     const channels = AST.injectionArgumentsOf(render.injection)
@@ -73,13 +73,13 @@ Describe('parser: frame content and render injection channels', () => {
     Expect(channels).toEqual(['@@content', '@@layout', '@@tag'])
   })
 
-  Test('reports an unresolved fill against the invoked frame slot scope', async () => {
+  Test('reports an unresolved fill against the invoked view slot scope', async () => {
     const parsed = await parseCodeWithErrors(`
-      frame Card() {
+      view Card() {
         @actions = empty
         render Col() { @actions @@content }
       }
-      layout Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
+      view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
       view Button() { render inject \`\`\`ts return null \`\`\` }
       view Main() { render Card() { @missing Button() } }
     `)

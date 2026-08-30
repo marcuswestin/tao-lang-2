@@ -5,6 +5,7 @@ import type {
   TaoNavigationValue,
   TaoPresentable,
 } from './TR-navigation'
+import type { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import { type Evaluable, RuntimePresentable } from './TR-navigation-presentables'
 import { RuntimeNavigationValue } from './TR-navigation-value'
 import type { TaoProps } from './TR-TaoProps'
@@ -82,8 +83,9 @@ export function renderPresentable(
   value: TaoPresentable | TaoNavigationValue,
   arguments_: TaoNavigationArguments,
   taoProps?: TaoProps,
+  host?: RuntimeHostReadChannel,
 ): React.ReactNode {
   return isNavigation(value)
-    ? value.render(taoProps)
-    : value.render(arguments_, taoProps)
+    ? value.render(taoProps, host)
+    : value.render(arguments_, taoProps, host)
 }

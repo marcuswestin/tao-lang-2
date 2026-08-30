@@ -1,0 +1,15 @@
+// Http is the query-driven remote datasource: entities stay ordinary `data` declarations, and the
+// connection is offered each live query's descriptor (entity, equality filters, ordering, limit),
+// fetches through the app's Adapter, and upserts rows by each entity's `(unique)` field. The store
+// keeps evaluating every query locally over its rows, so a fill may land a superset. Fill lifecycle
+// surfaces per query as `loading`, `refreshing`, `stale`, and `error`; `CacheFor` suppresses
+// re-fills of a descriptor filled within the window. The Adapter declares the query shapes the API
+// actually supports (`TR.Http.adapter` / `TR.Http.on`); a live query matching no declared shape
+// fails loudly rather than silently fetching nothing.
+public
+type Http is datasource with {
+   Adapter item
+   CacheFor duration is 0.ms
+
+   provider HttpProvider from ./Http.ts
+}

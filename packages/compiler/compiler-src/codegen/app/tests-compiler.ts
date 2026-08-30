@@ -17,6 +17,11 @@ export default {
     return gen.noop()
   },
 
+  /** AdvanceStep compiles only into test-plan IR. */
+  AdvanceStep(_advance: AST.AdvanceStep): Compiled {
+    return gen.noop()
+  },
+
   /** PressTextStep compiles to no generated app output. */
   PressTextStep(_press: AST.PressTextStep): Compiled {
     return gen.noop()
@@ -72,6 +77,18 @@ export default {
   },
 
   ExpectScopeStep(): Compiled {
+    return gen.noop()
+  },
+
+  ExpectNavigationTitleStep(): Compiled {
+    return gen.noop()
+  },
+
+  ExpectToolbarCommandStep(): Compiled {
+    return gen.noop()
+  },
+
+  PressToolbarCommandStep(): Compiled {
     return gen.noop()
   },
 } as const

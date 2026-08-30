@@ -1,0 +1,15 @@
+// The pasteboard keeps the most recently read text as ordinary reactive state. Value is none until
+// Read completes; Copy does not change it because the system pasteboard may change independently.
+public
+type Pasteboard is {
+   Value text?
+   Copy action(text)
+   Read action()
+}
+
+// `Clipboard()` constructs one pasteboard value. Expo's module and result shapes remain behind the
+// TypeScript boundary; the Tao contract exposes only text and actions.
+public
+function Clipboard() returns Pasteboard {
+   return Clipboard() from ./Clipboard.ts
+}

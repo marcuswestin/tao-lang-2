@@ -118,7 +118,7 @@ export default {
 
 /**
  * collapseClosingBraces merges runs of consecutive closing-delimiter-only lines onto one line at the
- * outermost (last) delimiter's indentation, with two spaces between delimiters, per `Spec/Tao Packages.md`.
+ * outermost (last) delimiter's indentation, with two spaces between delimiters, per `Docs/Spec/Tao Packages.md`.
  * Lines inside inject TS fences and block comments are left untouched. Runs as a text post-pass
  * because each block-like node formats its own closing delimiter and Langium indentation is always
  * block-local.

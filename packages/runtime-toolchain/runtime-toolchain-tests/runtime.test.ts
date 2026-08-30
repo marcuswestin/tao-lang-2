@@ -186,11 +186,11 @@ Describe('Tao runtime app generation', () => {
             Name "Sidecar App"
             Navigator SidecarStack { Initial Home }
           }
-          ui Home() { render inject \`\`\`ts return null \`\`\` }
+          view Home() { render inject \`\`\`ts return null \`\`\` }
         `,
         'Constructs.tao': `
           public type SidecarStack is nav with {
-            Initial ui
+            Initial view
             nav SidecarStack from ./SidecarStack.ts
           }
         `,

@@ -7,9 +7,8 @@ export const TaoPropsCompiler = {
   /** RenderTaoProps compiles the __tao prop fragment for a render invocation. */
   RenderTaoProps(render: AST.Render): Compiled {
     const designSpec = render.layoutClause ? Compile.DesignSpec(render.layoutClause) : gen`undefined`
-    const layout = AST.isFrameDeclaration(render.view?.ref)
-      ? gen`TR.Layout.create([["hug"], ["rigid"]])`
-      : gen`undefined`
+    // Every view occurrence takes the same defaults; layout comes only from the call site's clauses.
+    const layout = gen`undefined`
     const testTag = AST.testTagForRender(render)
     return Switch.type(render, {
       RenderStatement: renderStatement =>
@@ -26,7 +25,7 @@ function compileTaoPropsForRenderStatement(
   render: AST.RenderStatement,
 ): Compiled {
   const inheritsCallerProps = AST.isBlock(render.$container)
-    && AST.isVisualDeclaration(render.$container.$container)
+    && AST.isViewDeclaration(render.$container.$container)
   const callerProps = inheritsCallerProps ? gen`, _ViewProps.__tao` : gen``
   return gen` __tao={TR.TaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}, designSpec: ${designSpec}${
     testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''

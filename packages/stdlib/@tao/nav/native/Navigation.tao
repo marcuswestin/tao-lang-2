@@ -1,0 +1,28 @@
+// Platform navigation and chrome. The runtime keeps Tao's reducer and occurrence identities as the
+// source of truth; native hosts render transitions, headers, gestures, and automatic tab bars.
+public
+type StackNav is nav with {
+   Initial view
+
+   nav StackNavKind from ./NavKinds.ts
+}
+
+public
+type SlotNav is nav with {
+   Initial view
+
+   nav SlotNavKind from ./NavKinds.ts
+}
+
+public
+type SelectionNav is nav with {
+   Initial key
+   Display text
+   @key {
+      Label text
+      Icon text is ""
+      Content view
+   }
+
+   nav SelectionNavKind from ./NavKinds.ts
+}

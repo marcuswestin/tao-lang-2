@@ -78,6 +78,10 @@ export default {
     f.oneSpaceAfter('order', 'by')
   },
 
+  LimitClause(f) {
+    f.oneSpaceAfter('limit')
+  },
+
   CreateStatement(f) {
     f.oneSpaceAfter('create')
   },

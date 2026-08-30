@@ -1,0 +1,221 @@
+import React from 'react'
+import { AppSurfaceFrame } from './TR-app-shell'
+import { NavigationCommandButton } from './TR-navigation-command-button'
+import {
+  type RuntimeHostReadChannel,
+  type TaoNavigationCommand,
+  useHostSlotSnapshot,
+} from './TR-navigation-host-slots'
+import type { RuntimeStackNav } from './TR-navigation-mounts'
+import type { PresentableEntry } from './TR-navigation-state'
+import { NavigationLevel } from './TR-navigation-surfaces'
+import { renderPresentable } from './TR-navigation-values'
+import { requireReactNativeRuntime } from './TR-react-native'
+import type { TaoProps } from './TR-TaoProps'
+import { Views } from './TR-views'
+
+type HostEntry = PresentableEntry & { host: RuntimeHostReadChannel }
+
+/** BasicStackSurface is the deterministic portable stack chrome and web fallback. */
+export function BasicStackSurface(props: {
+  entries: readonly HostEntry[]
+  navigation: RuntimeStackNav
+  taoProps?: TaoProps
+}): React.JSX.Element {
+  const runtime = requireReactNativeRuntime()
+  return React.createElement(runtime.View, {
+    children: props.entries.map((entry, index) =>
+      React.createElement(BasicStackLevel, {
+        entry,
+        hidden: index !== props.entries.length - 1,
+        key: entry.instanceId,
+        navigation: props.navigation,
+        taoProps: props.taoProps,
+      })
+    ),
+    style: stackStyle,
+  })
+}
+
+function BasicStackLevel(props: {
+  entry: HostEntry
+  hidden: boolean
+  navigation: RuntimeStackNav
+  taoProps?: TaoProps
+}): React.JSX.Element {
+  const slots = useHostSlotSnapshot(props.entry.host)
+  const observable = !props.hidden && props.taoProps?.navigationHostActive !== false
+  useDocumentTitle(observable ? slots.title : undefined)
+  const runtime = requireReactNativeRuntime()
+  return React.createElement(NavigationLevel, {
+    fill: true,
+    hidden: props.hidden,
+    children: React.createElement(runtime.View, {
+      children: [
+        React.createElement(runtime.View, {
+          children: [
+            observable && props.navigation.depth > 1
+              ? React.cloneElement(
+                Views.Pressable(
+                  { action: { invoke: () => props.navigation.back() }, title: 'Back' },
+                  { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },
+                ),
+                { key: 'back' },
+              )
+              : null,
+            React.createElement(runtime.Text, {
+              accessibilityRole: 'header',
+              children: slots.title ?? '',
+              key: 'title',
+              testID: observable ? navigationTitleTestId : undefined,
+            }),
+            React.createElement(BasicToolbar, { commands: slots.toolbar, key: 'toolbar', observable }),
+          ],
+          key: 'header',
+          style: headerStyle,
+        }),
+        React.createElement(
+          AppSurfaceFrame,
+          { key: 'content' },
+          renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
+        ),
+      ],
+      style: stackStyle,
+    }),
+  })
+}
+
+function BasicToolbar(props: {
+  commands: readonly TaoNavigationCommand[]
+  observable: boolean
+}): React.JSX.Element | null {
+  const [expanded, setExpanded] = React.useState(false)
+  const runtime = requireReactNativeRuntime()
+  if (props.commands.length === 0) {
+    return null
+  }
+  const direct = props.commands.slice(0, directToolbarCapacity)
+  const overflow = props.commands.slice(directToolbarCapacity)
+  return React.createElement(runtime.View, {
+    accessibilityRole: 'toolbar',
+    children: [
+      ...direct.map(command => commandButton(command, props.observable)),
+      overflow.length > 0
+        ? React.cloneElement(
+          Views.Pressable(
+            { action: { invoke: () => setExpanded(value => !value) }, title: 'More' },
+            { nativeProps: { accessibilityLabel: 'More', accessibilityRole: 'button' } },
+          ),
+          { key: 'more' },
+        )
+        : null,
+      expanded && overflow.length > 0
+        ? React.createElement(BasicOverflowMenu, {
+          commands: overflow,
+          key: 'overflow',
+          observable: props.observable,
+          onClose: () => setExpanded(false),
+        })
+        : null,
+    ],
+    style: toolbarStyle,
+  })
+}
+
+function BasicOverflowMenu(props: {
+  commands: readonly TaoNavigationCommand[]
+  observable: boolean
+  onClose(): void
+}): React.JSX.Element {
+  const runtime = requireReactNativeRuntime()
+  const content = React.createElement(runtime.View, {
+    accessibilityRole: 'menu',
+    children: props.commands.map(command =>
+      React.createElement(NavigationCommandButton, {
+        command: props.observable ? command : { ...command, enabled: false },
+        key: command.identity,
+        onInvoke: props.onClose,
+        role: 'menuitem',
+        testID: props.observable ? navigationCommandTestId(command.label) : undefined,
+      })
+    ),
+    style: overflowStyle,
+  })
+  if (!runtime.Modal) {
+    return content
+  }
+  return React.createElement(
+    runtime.Modal,
+    { animationType: 'fade', onRequestClose: props.onClose, transparent: true, visible: true },
+    React.createElement(
+      runtime.View,
+      { style: overflowPortalStyle },
+      React.createElement(runtime.Pressable, {
+        accessibilityLabel: 'Dismiss command menu',
+        accessibilityRole: 'button',
+        onPress: props.onClose,
+        style: overflowBackdropStyle,
+      }),
+      content,
+    ),
+  )
+}
+
+function commandButton(
+  command: TaoNavigationCommand,
+  observable: boolean,
+  beforeInvoke?: () => void,
+): React.JSX.Element {
+  const focusedCommand = observable ? command : { ...command, enabled: false }
+  return React.createElement(NavigationCommandButton, {
+    command: focusedCommand,
+    key: command.identity,
+    onInvoke: beforeInvoke,
+    testID: observable ? navigationCommandTestId(command.label) : undefined,
+  })
+}
+
+// The portable/mobile host reserves two stable header actions; the ordered trailing suffix uses More.
+export const directToolbarCapacity = 2
+
+function useDocumentTitle(title: string | undefined): void {
+  React.useEffect(() => {
+    const document_ = (globalThis as { document?: { title: string } }).document
+    if (!document_ || title === undefined) {
+      return
+    }
+    const previous = document_.title
+    document_.title = title
+    return () => {
+      if (document_.title === title) {
+        document_.title = previous
+      }
+    }
+  }, [title])
+}
+
+export const navigationTitleTestId = '__tao_navigation_title'
+export const navigationCommandTestId = (label: string): string => `__tao_navigation_command:${label}`
+
+const headerStyle = {
+  alignItems: 'center',
+  borderBottomColor: '#d0d0d0',
+  borderBottomWidth: 1,
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  minHeight: 48,
+  paddingHorizontal: 12,
+} as const
+const overflowBackdropStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const
+const overflowPortalStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const
+const overflowStyle = {
+  backgroundColor: '#ffffff',
+  borderRadius: 10,
+  elevation: 8,
+  padding: 8,
+  position: 'absolute',
+  right: 12,
+  top: 56,
+} as const
+const stackStyle = { flex: 1 } as const
+const toolbarStyle = { alignItems: 'center', flexDirection: 'row' } as const

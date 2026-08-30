@@ -5,15 +5,17 @@ import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalC
 import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
+  accepts,
   app,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
   testValidateCode,
   testValidateCodeWithErrors,
+  validationErrorMessages,
 } from './test-validate'
 
-const runtimeViews = `${stubLayout('Stack')}${stubView('Text', 'Value text')}`
+const runtimeViews = `${stubContainer('Stack')}${stubView('Text', 'Value text')}`
 
 function functionalApp(body: string, declarations = ''): string {
   return `${declarations}\n${app(body, runtimeViews)}`
@@ -41,6 +43,31 @@ Describe('validator: functional core', () => {
       FunctionalCoreValidator.messages.interpolationPart,
     ),
   )
+
+  Test(
+    'accepts optional scalar values in string interpolation',
+    accepts(
+      functionalApp(
+        'render Text(Label(ResultValue))',
+        `type Result is { Value text? }
+         let ResultValue = Result { Value "Ready" }
+         function Label(ResultValue Result) returns text { return "{ ResultValue.Value }" }`,
+      ),
+    ),
+  )
+
+  Test('does not stack an interpolation error on an unresolved optional type', async () => {
+    const result = await testValidateCodeWithErrors(
+      functionalApp(
+        'render Text(Label(ResultValue))',
+        `type Result is { Value Broken? }
+         let ResultValue = Result { }
+         function Label(ResultValue Result) returns text { return "{ ResultValue.Value }" }`,
+      ),
+    )
+
+    Expect(validationErrorMessages(result)).not.toContain(FunctionalCoreValidator.messages.interpolationPart)
+  })
 
   Test(
     'rejects when rendering with an unsupported subject type',
@@ -149,6 +176,36 @@ Describe('validator: functional core', () => {
         ${runtimeViews}
       `,
       FunctionalCoreValidator.messages.invalidCasePayload,
+    ),
+  )
+
+  Test(
+    'accepts the advisory refreshing and stale cases on query subjects',
+    accepts(`
+      data Documents / Document { Final yes / Draft no }
+      view Main() {
+        query Documents { }
+        render Stack(){
+          guard Documents { loading -> { Text("Loading") } }
+          if Documents is refreshing { Text("Refreshing") }
+          when Documents { stale -> { Text("Stale") } otherwise -> { Text("Ready") } }
+        }
+      }
+      ${runtimeViews}
+    `),
+  )
+
+  Test(
+    'rejects the advisory refreshing case on entity subjects',
+    rejects(
+      `
+        data Documents / Document { Final yes / Draft no }
+        view Main(Document) {
+          render Stack(){ guard Document { refreshing -> { Text("Wrong") } } }
+        }
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.invalidCase('refreshing', 'an entity subject'),
     ),
   )
 

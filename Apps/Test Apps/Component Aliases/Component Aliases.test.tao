@@ -1,0 +1,10 @@
+use ComponentAliases from ./
+
+test "Component aliases" {
+   test "renders package members through pass-through aliases" {
+      run ComponentAliases
+      expect {
+         text "Component Aliases"
+         text "Badge: shipped"
+         text "Tagline: aliases keep the target's interface"
+}  }  }

@@ -84,14 +84,14 @@ Describe('Tao formatter configurable declarations', () => {
   Test(
     'formats declaration-owned nav and datasource contracts with injected implementations',
     formats(
-      `public type CustomNav is nav with{Initial ui @key{Label text Content Presentable}nav CustomNavKind from ./CustomNav.ts}\npublic type CustomData is datasource with{StorageKey text provider CustomData from ./CustomData.ts}`,
+      `public type CustomNav is nav with{Initial view @key{Label text Content view}nav CustomNavKind from ./CustomNav.ts}\npublic type CustomData is datasource with{StorageKey text provider CustomData from ./CustomData.ts}`,
       `
         public
         type CustomNav is nav with {
-           Initial ui
+           Initial view
            @key {
               Label text
-              Content Presentable
+              Content view
            }
 
            nav CustomNavKind from ./CustomNav.ts
@@ -429,6 +429,24 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
+    'formats query order and limit clauses',
+    formats(
+      `view Main(Workspace){render Col(){query Drafts from Workspace.Documents{order   by   Ordering desc\nlimit   20}\nloop Drafts/Document{Text(Document.Title)}}}`,
+      `
+        view Main(Workspace) {
+           render Col() {
+              query Drafts from Workspace.Documents {
+                 order by Ordering desc
+                 limit 20
+              }
+              loop Drafts / Document {
+                 Text(Document.Title)
+        }  }  }
+      `,
+    ),
+  )
+
+  Test(
     'collapses deep closing brace runs onto one line at the outermost indentation',
     formats(
       `view MainView(){render Stack() {Text("a") {Text("b") {Text("c")}}}}`,
@@ -584,11 +602,11 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
-    'formats dialogue declarations, asks, and explicit or bare responses',
+    'formats responds-view declarations, asks, and explicit or bare responses',
     formats(
-      `dialogue Confirm(Title text) responds ConfirmResult{action Close(){respond Confirmed} action Cancel(){respond} render Empty()} view Editor(){action Close(){let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,
+      `view Confirm(Title text)responds ConfirmResult{action Close(){respond Confirmed} action Cancel(){respond} render Empty()} view Editor(){action Close(){let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,
       `
-        dialogue Confirm(Title text) responds ConfirmResult {
+        view Confirm(Title text) responds ConfirmResult {
            action Close() {
               respond Confirmed
            }
@@ -626,11 +644,11 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'formats keyed app toast presentation with canonical modifiers',
     formats(
-      `view Main(){action Save(){present Saved( )as toast( Key : "document-saved" ,Duration:3)}}`,
+      `view Main(){action Save(){present Saved( )as toast( Key : "document-saved" ,Duration:3.s)}}`,
       `
         view Main() {
            action Save() {
-              present Saved() as toast (Key: "document-saved", Duration: 3)
+              present Saved() as toast (Key: "document-saved", Duration: 3.s)
         }  }
       `,
     ),

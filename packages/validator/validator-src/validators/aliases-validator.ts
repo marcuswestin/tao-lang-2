@@ -1,6 +1,6 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { DeclarationOrder } from '../DeclarationOrder'
+import { DeclarationOrder, type ValueReferenceLike } from '../DeclarationOrder'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
@@ -9,6 +9,7 @@ type NamedValueDeclaration =
   | AST.ParameterDeclaration
   | AST.StateDeclaration
   | AST.EntityQueryDeclaration
+  | AST.CommandDeclaration
   | AST.ForStatement
   | AST.AskStatement
   | AST.CasePayload
@@ -20,10 +21,9 @@ type NamedFileValueDeclaration =
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.FunctionDeclaration
-  | AST.VisualDeclaration
+  | AST.ViewDeclaration
 type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
 type NamedDeclaration = NamedValueDeclaration | NamedTypeDeclaration
-type ValueReferenceLike = AST.ValueReference | AST.RefinementExpression | AST.MemberAccessExpression
 
 /** aliasValidationMessages declares name and immutable-binding reference diagnostics. */
 const aliasValidationMessages = {
@@ -40,6 +40,7 @@ const aliasValidationMessages = {
 export const AliasesValidator = {
   checks: {
     [AST.ActionDeclaration.$type]: reportReservedRuntimeName,
+    [AST.CommandDeclaration.$type]: reportReservedRuntimeName,
     [AST.AliasDeclaration.$type]: [reportReservedRuntimeName, reportAliasAscription, reportAliasReferenceOrder],
     [AST.AppDeclaration.$type]: reportReservedRuntimeName,
     [AST.NavDeclaration.$type]: reportReservedRuntimeName,
@@ -50,7 +51,7 @@ export const AliasesValidator = {
     [AST.ParameterDeclaration.$type]: reportReservedRuntimeName,
     [AST.EntityQueryDeclaration.$type]: reportReservedRuntimeName,
     [AST.CaseSetCase.$type]: reportReservedRuntimeName,
-    [AST.VisualDeclaration.$type]: [reportReservedRuntimeName, validateVisualDeclaration],
+    [AST.ViewDeclaration.$type]: [reportReservedRuntimeName, validateViewDeclaration],
     [AST.StateDeclaration.$type]: reportReservedRuntimeName,
     [AST.TypeDeclaration.$type]: reportReservedRuntimeName,
     [AST.ValueReference.$type]: reportLocalValueReferenceOrder,
@@ -73,8 +74,8 @@ function validateFile(file: AST.TaoFile, ctx: ValidationContext): void {
   reportDuplicateNames(fileTypeDeclarations, new Map(), ctx)
 }
 
-function validateVisualDeclaration(view: AST.VisualDeclaration, ctx: ValidationContext, file: AST.TaoFile): void {
-  const fileRenderables = file.statements.filter(AST.isVisualDeclaration)
+function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationContext, file: AST.TaoFile): void {
+  const fileRenderables = file.statements.filter(AST.isViewDeclaration)
   const parameters = AST.parametersOf(view)
   reportNameConflicts(parameters, visibleDeclarations(fileRenderables), ctx)
   for (const block of blocksOwnedByView(view)) {
@@ -143,6 +144,9 @@ function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<str
 
 function reportAliasReferenceOrder(alias: AST.AliasDeclaration, ctx: ValidationContext): void {
   for (const reference of aliasValueReferences(alias)) {
+    if (AST.findOwningFromExpression(reference)) {
+      continue
+    }
     const target = reference.target.ref
     if (AST.isValueDeclaration(target) && isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
       ctx.error(
@@ -171,7 +175,7 @@ function aliasValueReferences(alias: AST.AliasDeclaration): ValueReferenceLike[]
   ) {
     return [alias.value]
   }
-  return AST.streamAllContents(alias.value).filter(isValueReferenceLike)
+  return AST.streamAllContents(alias.value).filter(DeclarationOrder.isValueReferenceLike)
 }
 
 function isReferenceInAliasOrStateInitializer(reference: ValueReferenceLike): boolean {
@@ -184,7 +188,7 @@ function isInvalidAliasInitializerReferenceOrder(
   reference: ValueReferenceLike,
   alias: AST.AliasDeclaration,
 ): declaration is AST.ValueDeclaration {
-  if (AST.isConfiguredValue(alias.value) && AST.isUiDeclaration(declaration)) {
+  if (AST.isConfiguredValue(alias.value) && AST.isViewDeclaration(declaration)) {
     return false
   }
   return isInitializerReferenceOrderSensitive(declaration, alias)
@@ -216,9 +220,11 @@ function isInvalidLocalValueReferenceOrder(
 
 type ViewOwnedBlock = AST.Block
 
-function blocksOwnedByView(view: AST.VisualDeclaration): ViewOwnedBlock[] {
+function blocksOwnedByView(view: AST.ViewDeclaration): ViewOwnedBlock[] {
   const blocks: ViewOwnedBlock[] = []
-  collectRenderChildBlocks(view.block, blocks)
+  if (view.block) {
+    collectRenderChildBlocks(view.block, blocks)
+  }
   return blocks
 }
 
@@ -235,8 +241,7 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
       collectRenderChildBlocks(statement.otherwise.block, blocks)
     }
     if (AST.isGuardRenderStatement(statement)) {
-      const branches = statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
-      for (const branch of branches) {
+      for (const branch of ASTUtils.guardBranches(statement)) {
         if (branch.block) {
           collectRenderChildBlocks(branch.block, blocks)
         }
@@ -251,10 +256,6 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
   }
 }
 
-function isValueReferenceLike(node: AST.Node): node is ValueReferenceLike {
-  return AST.isValueReference(node) || AST.isRefinementExpression(node) || AST.isMemberAccessExpression(node)
-}
-
 function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclaration {
   return AST.isActionDeclaration(node)
     || AST.isAliasDeclaration(node)
@@ -262,5 +263,5 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isFunctionDeclaration(node)
-    || AST.isVisualDeclaration(node)
+    || AST.isViewDeclaration(node)
 }

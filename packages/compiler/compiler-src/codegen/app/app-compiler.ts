@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
@@ -60,7 +60,8 @@ function compileAppValue(app: AST.AppValueDeclaration): Compiled {
   const name = configuration.get('Name')
   const datasource = configuration.get('Datasource')
   const design = configuration.get('Design')
-  const root = rootAppValue(app)
+  const root = ASTUtils.rootAppValue(app)
+  Assert.defined(root, 'validated app derivation is acyclic')
   const definition = { name: `_TaoAppDefinition_${app.name}` }
   const rootDeclaration = root === app
     ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)})`
@@ -243,24 +244,6 @@ function compileAppProperty(
 
 function compileAppPropertySource(value: AppPropertySource): Compiled {
   return AST.isExpression(value) ? Compile.Expression(value) : Compile.ConfigurationValue(value)
-}
-
-function rootAppValue(
-  declaration: AST.AppValueDeclaration,
-  seen: Set<AST.AppValueDeclaration> = new Set(),
-): AST.AppValueDeclaration {
-  Assert(!seen.has(declaration), 'validated app derivation is acyclic')
-  seen.add(declaration)
-  if (AST.isAppDeclaration(declaration) && declaration.block) {
-    return declaration
-  }
-  const expression = declaration.value
-  if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
-    const target = resolveRef(expression.target)
-    Assert.is(target, AST.isAppValueDeclaration, 'validated app base resolves an app value')
-    return rootAppValue(target, seen)
-  }
-  return declaration
 }
 
 function rootAuxiliaryNavigators(root: AST.AppValueDeclaration): AST.AppAuxiliaryNavigator[] {

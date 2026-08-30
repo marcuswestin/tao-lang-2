@@ -5,7 +5,7 @@ import React from 'react'
 import { type ColumnLayout, DashboardGrid, type TerminalSize } from '../cli/DashboardGrid'
 import { OutputText } from '../cli/OutputText'
 
-type DevLoopControlKey = 'a' | 'c' | 'd' | 'e' | 'f' | 'i' | 'q' | 'r' | 's' | 't' | 'v' | 'w'
+type DevLoopControlKey = 'a' | 'c' | 'd' | 'e' | 'f' | 'i' | 'p' | 'q' | 'r' | 's' | 't' | 'v' | 'w'
 
 type DevLoopControl = {
   key: DevLoopControlKey
@@ -35,12 +35,14 @@ type DevLoopOutputState = {
 }
 
 type DevLoopOutputHandle = {
-  stop: (options?: { printFailure?: boolean }) => Promise<void>
+  stop: () => Promise<void>
 }
 
 const DEV_LOOP_LINE_LIMIT = 120
-const DEV_LOOP_MIN_COLUMN_WIDTH = 28
+const DEV_LOOP_TARGET_COLUMN_WIDTH = 48
+const DEV_LOOP_ADAPTIVE_COLUMN_WIDTHS = [40, 32, 28] as const
 const DEV_LOOP_RENDER_INTERVAL_MS = 250
+const DEV_LOOP_PANE_CHROME_WIDTH = 4
 const ROW_GAP = 1
 const DEV_LOOP_STREAM_ORDER = [
   'dev',
@@ -58,7 +60,8 @@ const DEV_LOOP_STREAM_ORDER = [
 
 const DEV_LOOP_CONTROLS: DevLoopControl[] = [
   { key: 'q', label: 'quit' },
-  { key: 'd', label: 'reload dev process' },
+  { key: 'd', label: 'open connected device' },
+  { key: 'p', label: 'reload dev process' },
   { key: 'r', label: 'recompile and reload Expo app' },
   { key: 'w', label: 'open web' },
   { key: 'i', label: 'open iOS simulator' },
@@ -80,6 +83,8 @@ let activeDevLoopOutput: {
 /** DevLoopTUI owns interactive output for the dev loop. */
 export const DevLoopTUI = {
   askConfirm,
+  clearFailure,
+  dashboardLayout: devLoopDashboardLayout,
   devLoopOutputHandler,
   logDevLoop,
   printDevLoopControls,
@@ -142,7 +147,7 @@ function startDevLoopOutput(): DevLoopOutputHandle | undefined {
   return { stop: stopDevLoopOutput }
 }
 
-async function stopDevLoopOutput(options: { printFailure?: boolean } = {}): Promise<void> {
+async function stopDevLoopOutput(): Promise<void> {
   const activeOutput = activeDevLoopOutput
   activeDevLoopOutput = undefined
   if (activeOutput?.renderTimeout !== undefined) {
@@ -151,7 +156,9 @@ async function stopDevLoopOutput(options: { printFailure?: boolean } = {}): Prom
   activeOutput?.app.rerender(React.createElement(DevLoopOutputDashboard, { state: activeOutput.state }))
   await activeOutput?.app.waitUntilRenderFlush()
   activeOutput?.app.unmount()
-  if (options.printFailure && activeOutput?.state.failure) {
+  // Any failure still recorded — from startup or a later watch-time recompile — outlives the
+  // alternate screen; a stream that recovered has already cleared its record.
+  if (activeOutput?.state.failure) {
     const { message, streamName } = activeOutput.state.failure
     fallbackLog(streamName, message, 'error')
   }
@@ -162,6 +169,13 @@ function recordFailure(streamName: string, message: string): void {
   logDevLoop(streamName, message, 'error')
   if (activeDevLoopOutput !== undefined) {
     activeDevLoopOutput.state.failure = { message, streamName }
+  }
+}
+
+/** clearFailure retires a stream's recorded failure once a later run of it succeeds. */
+function clearFailure(streamName: string): void {
+  if (activeDevLoopOutput?.state.failure?.streamName === streamName) {
+    activeDevLoopOutput.state.failure = undefined
   }
 }
 
@@ -212,13 +226,14 @@ function formatDevLoopControl(control: DevLoopControl): string {
 function DevLoopOutputDashboard(props: { state: DevLoopOutputState }): React.ReactElement {
   const size = useWindowSize()
   const streams = orderedDevLoopStreams(props.state)
-  const layout = devLoopDashboardLayout(size, streams.length)
+  const footerLines = footerOutputLines(props.state, size.columns)
+  const layout = devLoopDashboardLayout(size, streams.length, footerLines.length)
 
   return React.createElement(
     Box,
-    { flexDirection: 'column', height: DashboardGrid.availableRows(size), overflow: 'hidden' },
+    { flexDirection: 'column', height: DashboardGrid.availableRows(size) },
     React.createElement(DashboardGrid<DevLoopOutputStream>, {
-      height: DashboardGrid.availableRows(size) - 1,
+      height: Math.max(1, DashboardGrid.availableRows(size) - footerLines.length),
       items: streams,
       layout,
       renderItem: (stream, isLast) =>
@@ -231,7 +246,7 @@ function DevLoopOutputDashboard(props: { state: DevLoopOutputState }): React.Rea
         }),
       width: size.columns,
     }),
-    React.createElement(DevLoopControlsFooter, { state: props.state, width: size.columns }),
+    React.createElement(DevLoopControlsFooter, { lines: footerLines, width: size.columns }),
   )
 }
 
@@ -241,7 +256,8 @@ function DevLoopOutputColumn(props: {
   stream: DevLoopOutputStream
   width: number
 }): React.ReactElement {
-  const lines = visibleDevLoopLines(props.stream).slice(-props.lineLimit)
+  const contentWidth = Math.max(1, props.width - DEV_LOOP_PANE_CHROME_WIDTH)
+  const lines = wrapDevLoopLines(visibleDevLoopLines(props.stream), contentWidth).slice(-props.lineLimit)
   return React.createElement(
     Box,
     {
@@ -250,47 +266,106 @@ function DevLoopOutputColumn(props: {
       flexDirection: 'column',
       height: props.lineLimit + 3,
       marginRight: props.isLast ? 0 : DashboardGrid.COLUMN_GAP,
-      overflow: 'hidden',
       paddingX: 1,
       width: props.width,
     },
-    React.createElement(Text, { bold: true, color: props.stream.name === 'dev' ? 'cyan' : 'white' }, props.stream.name),
+    React.createElement(
+      Text,
+      { bold: true, color: props.stream.name === 'dev' ? 'cyan' : 'white', wrap: 'wrap' },
+      props.stream.name,
+    ),
     ...lines.map((line, index) =>
       React.createElement(
         Text,
-        { color: devLoopLineColor(line.kind), key: index, wrap: 'truncate-end' },
+        { color: devLoopLineColor(line.kind), key: index, wrap: 'wrap' },
         line.text,
       )
     ),
   )
 }
 
-function DevLoopControlsFooter(props: { state: DevLoopOutputState; width: number }): React.ReactElement {
-  const text = props.state.prompt
-    ?? DEV_LOOP_CONTROLS.map(control => `${control.key} ${control.label}`).join(' | ')
+function DevLoopControlsFooter(props: { lines: readonly string[]; width: number }): React.ReactElement {
   return React.createElement(
     Box,
-    { height: 1, overflow: 'hidden', width: props.width },
-    React.createElement(Text, { color: 'gray', wrap: 'truncate-end' }, text),
+    { flexDirection: 'column', height: props.lines.length, width: props.width },
+    ...props.lines.map((line, index) => React.createElement(Text, { color: 'gray', key: index, wrap: 'wrap' }, line)),
   )
 }
 
-function devLoopDashboardLayout(size: TerminalSize, streamCount: number): ColumnLayout {
+function footerOutputLines(state: DevLoopOutputState, width: number): string[] {
+  const text = state.prompt
+    ?? DEV_LOOP_CONTROLS.map(control => `${control.key} ${control.label}`).join(' | ')
+  return OutputText.wrapLine(text, Math.max(1, width))
+}
+
+function wrapDevLoopLines(lines: readonly DevLoopOutputLine[], width: number): DevLoopOutputLine[] {
+  return lines.flatMap(line => OutputText.wrapLine(line.text, width).map(text => ({ kind: line.kind, text })))
+}
+
+function devLoopDashboardLayout(
+  size: TerminalSize,
+  streamCount: number,
+  footerRows = 1,
+): ColumnLayout {
   const count = Math.max(1, streamCount)
-  const layout = DashboardGrid.columnLayout({
-    size,
-    itemCount: count,
-    targetColumnWidth: DEV_LOOP_MIN_COLUMN_WIDTH,
-    lineLimit: DEV_LOOP_LINE_LIMIT,
-    rowGap: ROW_GAP,
-  })
-  const rowCount = Math.ceil(count / layout.columnsPerRow)
-  const availableHeight = Math.max(1, DashboardGrid.availableRows(size) - 1)
-  const columnHeight = Math.floor((availableHeight - Math.max(0, rowCount - 1) * ROW_GAP) / Math.max(1, rowCount))
+  const paneRows = Math.max(1, DashboardGrid.availableRows(size) - footerRows)
+  const preferred = fitDevLoopLayout(
+    DashboardGrid.columnLayout({
+      size,
+      itemCount: count,
+      maxColumnsPerRow: 2,
+      targetColumnWidth: DEV_LOOP_TARGET_COLUMN_WIDTH,
+      lineLimit: DEV_LOOP_LINE_LIMIT,
+      rowGap: ROW_GAP,
+    }),
+    count,
+    paneRows,
+  )
+  if (preferred.lineLimit >= 1 && DashboardGrid.layoutHeight(preferred, count) <= paneRows) {
+    return preferred
+  }
+
+  for (const targetColumnWidth of DEV_LOOP_ADAPTIVE_COLUMN_WIDTHS) {
+    const layout = fitDevLoopLayout(
+      DashboardGrid.columnLayout({
+        size,
+        itemCount: count,
+        maxColumnsPerRow: 2,
+        targetColumnWidth,
+        lineLimit: DEV_LOOP_LINE_LIMIT,
+        rowGap: 0,
+      }),
+      count,
+      paneRows,
+    )
+    if (layout.lineLimit >= 1 && DashboardGrid.layoutHeight(layout, count) <= paneRows) {
+      return layout
+    }
+  }
+
+  return fitDevLoopLayout(
+    DashboardGrid.columnLayout({
+      size,
+      itemCount: count,
+      maxColumnsPerRow: 2,
+      targetColumnWidth: DEV_LOOP_ADAPTIVE_COLUMN_WIDTHS.at(-1)!,
+      lineLimit: DEV_LOOP_LINE_LIMIT,
+      rowGap: 0,
+    }),
+    count,
+    paneRows,
+  )
+}
+
+function fitDevLoopLayout(layout: ColumnLayout, streamCount: number, paneRows: number): ColumnLayout {
+  const rowCount = Math.max(1, Math.ceil(streamCount / layout.columnsPerRow))
+  const columnHeight = Math.floor(
+    (paneRows - Math.max(0, rowCount - 1) * layout.rowGap) / rowCount,
+  )
   return {
     ...layout,
     lineLimit: Math.min(DEV_LOOP_LINE_LIMIT, Math.max(1, columnHeight - DashboardGrid.MIN_COLUMN_HEIGHT)),
-    rowGap: rowCount > 1 ? 0 : ROW_GAP,
+    rowGap: rowCount > 1 ? 0 : layout.rowGap,
   }
 }
 

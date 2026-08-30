@@ -23,7 +23,7 @@ Describe('parser: minimal design declarations', () => {
       view Main() {
         render Col() [constrained]
       }
-      layout Col() { }
+      view Col() { }
     `)
 
     const design = parsed.entry.ast.statements.find(AST.isDesignDeclaration)

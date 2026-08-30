@@ -270,6 +270,7 @@ function diagnosticsForDocuments(documents: readonly AST.Document[]): Diagnostic
     ...document.parseResult.parserErrors.map(error => parserDiagnostic(error, document)),
     ...document.references
       .filter(reference => reference.error !== undefined)
+      .filter(reference => !bridgesToATypeScriptExport(reference))
       .map(reference => referenceDiagnostic(reference, document)),
   ]))
 }
@@ -292,6 +293,24 @@ function parserDiagnostic(error: ParserError, document?: AST.Document): Diagnost
     severity: 'error',
     source: 'parser',
   }
+}
+
+/**
+ * The head name of a bridged expression names a TypeScript export (Decisions §15), so it is not
+ * expected to resolve in Tao scope and an unresolved reference there is not a linking error. Its
+ * arguments are ordinary Tao values and still have to resolve, so only the head is exempt.
+ */
+function bridgesToATypeScriptExport(reference: AST.Document['references'][number]): boolean {
+  const info = reference.error?.info
+  const container = info?.container
+  if (!container || !AST.isFromExpression(container.$container)) {
+    return false
+  }
+  const bridged = container.$container.expression
+  if (AST.isFunctionCallExpression(container)) {
+    return container === bridged && info.property === 'function'
+  }
+  return AST.isValueReference(container) && container === bridged && info.property === 'target'
 }
 
 function referenceDiagnostic(reference: AST.Document['references'][number], document: AST.Document): Diagnostic {
@@ -339,6 +358,8 @@ function isParsedFile(file: ParsedFile | undefined): file is ParsedFile {
 
 async function loadReachableDocuments(context: ParserContext, entryDocument: AST.Document): Promise<AST.Document[]> {
   const documents = new Map<string, AST.Document>()
+  // Sibling scans are memoized per directory for this load only; files may change between runs.
+  const siblingScans: SiblingScanCache = new Map()
   const intrinsicDocuments = await Promise.all(
     (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path)),
   )
@@ -351,7 +372,7 @@ async function loadReachableDocuments(context: ParserContext, entryDocument: AST
       continue
     }
     documents.set(currentPath, document)
-    queue.push(...await loadReferencedDocuments(context, document, documents))
+    queue.push(...await loadReferencedDocuments(context, document, documents, siblingScans))
   }
 
   return [...documents.values()]
@@ -361,6 +382,7 @@ async function loadReferencedDocuments(
   context: ParserContext,
   document: AST.Document,
   loadedDocuments: ReadonlyMap<string, AST.Document>,
+  siblingScans: SiblingScanCache,
 ): Promise<AST.Document[]> {
   const ast = document.parseResult.value
   if (ast === undefined) {
@@ -369,12 +391,15 @@ async function loadReferencedDocuments(
   const referencedDocuments: AST.Document[] = []
   // A sibling may carry `folder` declarations this file reaches without naming them in a `use`,
   // so the whole folder is loaded rather than only what the imports point at.
-  for (const siblingPath of await siblingTaoFilePaths(document.uri.path)) {
+  for (const siblingPath of await siblingTaoFilePaths(document.uri.path, siblingScans)) {
     if (!loadedDocuments.has(siblingPath)) {
       referencedDocuments.push(await documentFromFilePath(context, siblingPath))
     }
   }
-  for (const useStatement of ast.statements.filter(AST.isUseStatement)) {
+  const importingStatements = ast.statements.filter(statement =>
+    AST.isUseStatement(statement) || AST.isUsePackageStatement(statement)
+  )
+  for (const useStatement of importingStatements) {
     const candidatePaths = await context.packages.candidateFilePaths(useStatement, {
       fromFilePath: document.uri.path,
     })
@@ -391,15 +416,26 @@ async function loadReferencedDocuments(
 // does not use the marker keeps exactly the document set its `use` statements describe.
 const folderDeclarationPattern = /^[ \t]*folder[ \t\r\n]/m
 
-async function siblingTaoFilePaths(filePath: string): Promise<string[]> {
+/** SiblingScanCache memoizes one load's per-directory folder-sibling scans. */
+type SiblingScanCache = Map<string, Promise<string[]>>
+
+async function siblingTaoFilePaths(filePath: string, siblingScans: SiblingScanCache): Promise<string[]> {
   const directory = FS.dirname(filePath)
+  let scan = siblingScans.get(directory)
+  if (!scan) {
+    scan = folderSiblingPathsIn(directory)
+    siblingScans.set(directory, scan)
+  }
+  return (await scan).filter(path => path !== filePath)
+}
+
+async function folderSiblingPathsIn(directory: string): Promise<string[]> {
   if (!await FS.isDirectory(directory)) {
     return []
   }
   const candidates = (await FS.listDir(directory))
     .filter(name => FS.extname(name) === '.tao' && !name.endsWith('.test.tao'))
     .map(name => FS.resolvePath(name, directory))
-    .filter(path => path !== filePath)
   const paths: string[] = []
   for (const path of candidates) {
     if (folderDeclarationPattern.test(await FS.readText(path))) {

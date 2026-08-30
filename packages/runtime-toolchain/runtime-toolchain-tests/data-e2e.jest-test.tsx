@@ -5,6 +5,7 @@ import { act, fireEventAsync, render, waitFor } from '@testing-library/react-nat
 import { createElement, type ReactElement, useState } from 'react'
 import * as RN from 'react-native'
 import { InstantDBProvider } from '../../stdlib/@tao/data/providers/instantdb/InstantDB'
+import { MemoryProvider } from '../../stdlib/@tao/data/providers/memory/Memory'
 import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileFiles } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
@@ -38,7 +39,8 @@ Describe('Expo runtime', () => {
           use Notes from ./Data.tao
           use Text from @tao/ui
 
-          workspace ui Main() {
+          workspace view Main() {
+            Title "Notes"
             query Notes { }
             render Text("Notes: { Notes.Count }")
           }
@@ -185,18 +187,74 @@ Describe('Expo runtime', () => {
     Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error).toBe('')
     Expect(stored).toBeUndefined()
   })
+
+  Test('offers destructive reset for a corrupt snapshot and wipes through connection.reset', async () => {
+    let stored: string | undefined = '{"formatVersion":99}'
+    let resets = 0
+    const connection: TR.DataConnection = {
+      load: () => stored,
+      reset: () => {
+        resets += 1
+        stored = undefined
+      },
+      save: snapshot => {
+        stored = snapshot
+      },
+    }
+    const schema = TR.Data.Schema({
+      name: 'CorruptResetData',
+      schemaVersion: 1,
+      entities: {
+        Note: { collection: 'Notes', fields: { Title: { kind: 'text' } } },
+      },
+    }, connection)
+    await TR.Data.Settle(schema)
+
+    const screen = render(createElement(TR.AppShell, null, createElement(RN.Text, null, 'App content')))
+
+    ExpectScreen(screen).toHaveText("Couldn't load app data")
+    await fireEventAsync.press(screen.getByLabelText('Reset app data and reload'))
+    await TR.Data.Settle(schema)
+
+    Expect(resets).toBe(1)
+    Expect(screen.queryByLabelText('App data load failure')).toBeNull()
+    Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error).toBe('')
+  })
+
+  Test('recovers a corrupt snapshot destructively even when the connection has no reset', async () => {
+    let stored: string | undefined = '{"formatVersion":99}'
+    const connection: TR.DataConnection = {
+      load: () => stored,
+      save: snapshot => {
+        stored = snapshot
+      },
+    }
+    const schema = TR.Data.Schema({
+      name: 'CorruptOverwriteData',
+      schemaVersion: 1,
+      entities: {
+        Note: { collection: 'Notes', fields: { Title: { kind: 'text' } } },
+      },
+    }, connection)
+    await TR.Data.Settle(schema)
+
+    const screen = render(createElement(TR.AppShell, null, createElement(RN.Text, null, 'App content')))
+
+    ExpectScreen(screen).toHaveText("Couldn't load app data")
+    // Without reset, recovery overwrites the corrupt row with an empty envelope and reloads it.
+    await fireEventAsync.press(screen.getByLabelText('Reset app data and reload'))
+    await TR.Data.Settle(schema)
+
+    Expect(screen.queryByLabelText('App data load failure')).toBeNull()
+    Expect(stored).toContain('"formatVersion":1')
+    const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
+    Expect(rows).toHaveLength(0)
+    Expect(rows.Error).toBe('')
+  })
 })
 
 function memoryProvider(): TR.DataProvider {
-  const snapshots = new Map<string, string>()
-  return {
-    connect: ({ storageKey }) => ({
-      load: () => snapshots.get(storageKey),
-      save: snapshot => {
-        snapshots.set(storageKey, snapshot)
-      },
-    }),
-  }
+  return MemoryProvider()
 }
 
 function providerConnection(provider: TR.DataProvider, storageKey: string): TR.DataConnection {

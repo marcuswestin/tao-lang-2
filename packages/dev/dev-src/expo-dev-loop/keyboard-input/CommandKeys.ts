@@ -44,7 +44,8 @@ const COMMAND_HANDLERS = {
       'recompile and reload Expo app',
       () => Run.recompileAndReload(context.repoRoot, context.appPath, context.appName),
     ),
-  d: context => context.restart(),
+  d: () => CommandRunner.runNonInteractiveCommand('open Expo device', ExpoRunner.openPhysicalDevice),
+  p: context => context.restart(),
   w: () => CommandRunner.runNonInteractiveCommand('open Expo web', ExpoRunner.openWeb),
   i: () => CommandRunner.runNonInteractiveCommand('open Expo iOS', ExpoRunner.openIosSimulator),
   c: context =>

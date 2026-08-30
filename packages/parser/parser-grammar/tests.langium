@@ -3,15 +3,21 @@ grammar TaoTests
 import "./app"
 import "./blocks"
 import "./data"
+import "./visibility"
 import "./terminals"
 
 entry TestsGrammarEntrypoint:
     TestDeclaration;
 
+// A test declares what it exercises before what it asserts: `test Button "Handles press" { … }`,
+// or `test Button { test "…" { … } }` for a group. Visibility lets a package publish its suite, so
+// another implementation can be held to the same journeys.
 TestDeclaration:
-    'test' name=STRING block=Block;
+    visibility=DeclarationVisibility? 'test'
+    (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
+    name=STRING? block=Block;
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -22,8 +28,17 @@ PressTextStep:
 TagPressStep:
     'press' tag=TagOrHexColor;
 
+PressToolbarCommandStep:
+    'press' surface=ID 'command' value=Expression;
+
 ExpectTextStep:
     'expect' missing?='missing'? selector=TestSelector text=STRING;
+
+ExpectNavigationTitleStep:
+    'expect' 'navigation' subject=ID value=Expression;
+
+ExpectToolbarCommandStep:
+    'expect' surface=ID 'command' value=Expression state=('enabled' | 'disabled');
 
 ExpectCheckboxStateStep:
     'expect' 'checkbox' tag=TagOrHexColor state=('checked' | 'unchecked');
@@ -64,6 +79,11 @@ SelectStep:
 
 BackTestStep:
     {infer BackTestStep} 'back';
+
+// Every check holds the clock still, so a journey over anything that ticks is deterministic.
+// `advance` moves it by a duration, firing every callback that falls due, in order.
+AdvanceStep:
+    'advance' duration=Expression;
 
 TestSelector returns string:
     'text' | 'label' | 'placeholder';

@@ -3,7 +3,7 @@
   "include": [
     "stdlib-src/**/*",
     "stdlib-tests/**/*",
-    "@tao/**/*.ts"
+    "@tao/data/**/*.ts"
   ],
   "compilerOptions": {
     "allowImportingTsExtensions": true,

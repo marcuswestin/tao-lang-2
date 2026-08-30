@@ -76,7 +76,7 @@ export async function directoriesUnder(inputPath: string, options: DirectoriesUn
   const directories = new Set<string>()
   for (const filePath of await filesUnder(root)) {
     let directoryPath = FS.dirname(filePath)
-    while (pathIsWithinOrEqual(directoryPath, root) && directoryPath !== root) {
+    while (FS.pathIsWithin(directoryPath, root) && directoryPath !== root) {
       if (directoryMatches(FS.relativePath(root, directoryPath), directoryPath, options)) {
         directories.add(directoryPath)
       }
@@ -97,7 +97,7 @@ function gitFilesUnder(gitRoot: string, root: string, options: FilesUnderOptions
   const relativeRoot = FS.relativePath(gitRoot, root)
   const pathspecs = pathspecsUnder(relativeRoot, filePathspecs(options))
   return gitListFiles(gitRoot, pathspecs)
-    .filter(path => pathIsWithinOrEqual(path, root))
+    .filter(path => FS.pathIsWithin(path, root))
     .filter(path => fileMatchesOptions(path, FS.relativePath(root, path), options))
 }
 
@@ -181,11 +181,6 @@ function pathIncludesExcludedDirectory(path: string, excludeDirectoryNames: read
   }
   return path.split('/').slice(0, -1)
     .some(segment => excludeDirectoryNames.some(excludedName => excludedName.toLowerCase() === segment.toLowerCase()))
-}
-
-function pathIsWithinOrEqual(path: string, root: string): boolean {
-  const relative = FS.relativePath(root, path)
-  return relative === '' || (!relative.startsWith('..') && relative !== '..')
 }
 
 function restoreInputPath(path: string, realRoot: string, inputRoot: string): string {

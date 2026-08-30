@@ -1,6 +1,14 @@
 import { jest } from '@jest/globals'
 import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import TR from '@runtime/TR'
+import { navigationTitleTestId } from '@runtime/TR-navigation-basic-stack'
+import {
+  navigationCommandIconTestId,
+  overrideNavigationCommandIconForTest,
+} from '@runtime/TR-navigation-command-button'
+import { RuntimeHostReadChannel } from '@runtime/TR-navigation-host-slots'
+import { overrideNativeNavigationModuleForTest } from '@runtime/TR-navigation-native-hosts'
+import { NativeStackSurface, NativeToolbar } from '@runtime/TR-navigation-native-stack'
 import * as TaoReactNative from '@runtime/TR-react-native'
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
@@ -21,6 +29,41 @@ function configuredStack(name: string, initial: TR.Presentable): TR.NavigationVa
     TR.Navigation.Declaration(name, TR.NavKind.Stack()),
     { Initial: initial },
   ))
+}
+
+function configuredBasicStack(
+  name: string,
+  initial: TR.Presentable | TR.NavigationValue,
+  slots: { Title?: TR.Evaluable; Toolbar?: readonly TR.NavigationCommand[] } = {},
+): TR.NavigationValue {
+  return TR.Navigation.Mount(TR.Navigation.Configure(
+    TR.Navigation.Declaration(name, TR.NavKind.Basic.Stack()),
+    { Initial: initial, ...slots },
+  ))
+}
+
+function navigationCommand(definition: {
+  enabled?: boolean
+  icon?: string
+  invoke(): unknown
+  label: string
+}): ReturnType<typeof TR.Navigation.Command> {
+  return TR.Navigation.Command({
+    action: TR.Action(definition.invoke),
+    arguments: [],
+    enabled: () => TR.Value(definition.enabled ?? true),
+    ...(definition.icon ? { icon: () => TR.Value(definition.icon) } : {}),
+    label: () => TR.Value(definition.label),
+    name: definition.label,
+  })
+}
+
+function restoreGlobalProperty(name: string, descriptor: PropertyDescriptor | undefined): void {
+  if (descriptor) {
+    Object.defineProperty(globalThis, name, descriptor)
+  } else {
+    Reflect.deleteProperty(globalThis, name)
+  }
 }
 
 function configuredSlot(
@@ -77,7 +120,8 @@ Describe('Expo runtime', () => {
           use Col, FormButton, Text from @tao/ui
           use NestedStack from ./
 
-          workspace ui Home() {
+          workspace view Home() {
+            Title "Home"
             action Open() { present Detail() in NestedStack }
             render Col() {
               Text("Home")
@@ -85,7 +129,7 @@ Describe('Expo runtime', () => {
             }
           }
 
-          ui Detail() { render Text("Stable detail") }
+          view Detail() { Title "Detail" render Text("Stable detail") }
         `,
       },
       screen => {
@@ -122,13 +166,13 @@ Describe('Expo runtime', () => {
     })
 
     try {
-      const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
-      const windowRoot = TR.Navigation.UI({
+      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+      const windowRoot = TR.Navigation.View({
         name: 'Window root',
         render: () => createElement(RN.Text, null, 'Window root'),
       })
-      const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
-      const notice = TR.Navigation.UI({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
+      const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+      const notice = TR.Navigation.View({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
       const stack = configuredStack('HardwareBackTest', home)
       const window = configuredSlot('HardwareBackWindow', windowRoot)
       const app = TR.Navigation.App({
@@ -163,6 +207,182 @@ Describe('Expo runtime', () => {
     }
   })
 
+  Test('keeps one visible Back affordance above a covered depth-two stack', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+    const notice = TR.Navigation.View({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
+    const stack = configuredBasicStack('Covered stack', home)
+    const app = TR.Navigation.App({ name: 'Covered stack app', navigator: () => stack, auxiliaries: () => ({}) })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    act(() => stack.present(detail, {}))
+    act(() => stack.presentOverlay(notice, {}))
+    ExpectScreen(screen).toHaveText('Notice')
+    Expect(screen.getAllByLabelText('Back')).toHaveLength(1)
+
+    fireEvent.press(screen.getByLabelText('Back'))
+    Expect(screen.queryByText('Notice')).toBeNull()
+    ExpectScreen(screen).toHaveText('Detail')
+    Expect(screen.getAllByLabelText('Back')).toHaveLength(1)
+  })
+
+  Test('centralizes same-URL web history and reduces auxiliary overlays before navigator entries', () => {
+    const popListeners = new Set<(event: { state?: unknown }) => void>()
+    const pushes: unknown[] = []
+    const replacements: unknown[] = []
+    const goes: number[] = []
+    const previousHistory = Object.getOwnPropertyDescriptor(globalThis, 'history')
+    const previousAdd = Object.getOwnPropertyDescriptor(globalThis, 'addEventListener')
+    const previousRemove = Object.getOwnPropertyDescriptor(globalThis, 'removeEventListener')
+    Object.defineProperty(globalThis, 'history', {
+      configurable: true,
+      value: {
+        go: (delta: number) => goes.push(delta),
+        pushState: (state: unknown, unused: string) => {
+          Expect(unused).toBe('')
+          pushes.push(state)
+        },
+        replaceState: (state: unknown, unused: string) => {
+          Expect(unused).toBe('')
+          replacements.push(state)
+        },
+      },
+    })
+    Object.defineProperty(globalThis, 'addEventListener', {
+      configurable: true,
+      value: (name: string, listener: (event: { state?: unknown }) => void) => {
+        if (name === 'popstate') {
+          popListeners.add(listener)
+        }
+      },
+    })
+    Object.defineProperty(globalThis, 'removeEventListener', {
+      configurable: true,
+      value: (name: string, listener: (event: { state?: unknown }) => void) => {
+        if (name === 'popstate') {
+          popListeners.delete(listener)
+        }
+      },
+    })
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Modal: RN.Modal,
+      Platform: { OS: 'web' },
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+    try {
+      const home = TR.Navigation.View({ name: 'Web home', render: () => createElement(RN.Text, null, 'Web home') })
+      const detail = TR.Navigation.View({
+        name: 'Web detail',
+        render: () => createElement(RN.Text, null, 'Web detail'),
+      })
+      const secondDetail = TR.Navigation.View({
+        name: 'Web second detail',
+        render: () => createElement(RN.Text, null, 'Web second detail'),
+      })
+      const thirdDetail = TR.Navigation.View({
+        name: 'Web third detail',
+        render: () => createElement(RN.Text, null, 'Web third detail'),
+      })
+      const windowRoot = TR.Navigation.View({
+        name: 'Web window',
+        render: () => createElement(RN.Text, null, 'Web window'),
+      })
+      const notice = TR.Navigation.View({
+        name: 'Web notice',
+        render: () => createElement(RN.Text, null, 'Web notice'),
+      })
+      const stack = configuredBasicStack('Web stack', home)
+      const window = configuredSlot('Web auxiliary', windowRoot)
+      const app = TR.Navigation.App({
+        name: 'Web app',
+        navigator: () => stack,
+        auxiliaries: () => ({ window }),
+      })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+      Expect(popListeners.size).toBe(1)
+      Expect(replacements.length).toBeGreaterThan(0)
+
+      act(() => TR.Navigation.PresentIn(undefined, stack, detail, {}))
+      act(() => TR.Navigation.PresentOverlay(undefined, window, notice, {}))
+      Expect(pushes).toHaveLength(2)
+      ExpectScreen(screen).toHaveText('Web detail')
+      ExpectScreen(screen).toHaveText('Web notice')
+
+      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 1 } }))
+      Expect(screen.queryByText('Web notice')).toBeNull()
+      ExpectScreen(screen).toHaveText('Web detail')
+      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 0 } }))
+      Expect(screen.queryByText('Web detail')).toBeNull()
+      ExpectScreen(screen).toHaveText('Web home')
+
+      act(() => TR.Navigation.PresentIn(undefined, stack, detail, {}))
+      act(() => TR.Navigation.PresentIn(undefined, stack, secondDetail, {}))
+      act(() => TR.Navigation.PresentIn(undefined, stack, thirdDetail, {}))
+      act(() => app.back())
+      act(() => app.back())
+      Expect(goes).toEqual([-1, -1])
+      ExpectScreen(screen).toHaveText('Web detail')
+      // Both delayed popstates correspond to the two programmatic moves above. Neither may
+      // reduce the still-retained first detail after Tao has already handled those Backs.
+      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 2 } }))
+      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 1 } }))
+      ExpectScreen(screen).toHaveText('Web detail')
+      // Forward cannot restore a popped occurrence yet, but it must never dispatch another Back.
+      // The adapter rejects the cursor move and suppresses the corrective popstate.
+      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 2 } }))
+      Expect(goes).toEqual([-1, -1, -1])
+      ExpectScreen(screen).toHaveText('Web detail')
+      act(() => popListeners.values().next().value!({ state: { __taoNavigationDepth: 1 } }))
+      ExpectScreen(screen).toHaveText('Web detail')
+
+      const otherHome = TR.Navigation.View({
+        name: 'Other web home',
+        render: () => createElement(RN.Text, null, 'Other web home'),
+      })
+      const otherDetail = TR.Navigation.View({
+        name: 'Other web detail',
+        render: () => createElement(RN.Text, null, 'Other web detail'),
+      })
+      const otherStack = configuredBasicStack('Other web stack', otherHome)
+      const otherApp = TR.Navigation.App({
+        name: 'Other web app',
+        navigator: () => otherStack,
+        auxiliaries: () => ({}),
+      })
+      const pushesBeforeOtherHost = pushes.length
+      const otherScreen = render(createElement(TR.Navigation.AppHost, { app: otherApp }))
+      Expect(popListeners.size).toBe(2)
+
+      // Only the most recently mounted host owns browser entries. The retained host still updates
+      // semantically, then resumes ownership at its current depth when the active host unmounts.
+      act(() => stack.present(secondDetail, {}))
+      Expect(pushes).toHaveLength(pushesBeforeOtherHost)
+      act(() => otherStack.present(otherDetail, {}))
+      Expect(pushes).toHaveLength(pushesBeforeOtherHost + 1)
+      otherScreen.unmount()
+      Expect(popListeners.size).toBe(1)
+      act(() => stack.present(thirdDetail, {}))
+      Expect(pushes).toHaveLength(pushesBeforeOtherHost + 2)
+
+      Expect(popListeners.size).toBe(1)
+      screen.unmount()
+      Expect(popListeners.size).toBe(0)
+    } finally {
+      restoreRuntime.mockRestore()
+      restoreGlobalProperty('history', previousHistory)
+      restoreGlobalProperty('addEventListener', previousAdd)
+      restoreGlobalProperty('removeEventListener', previousRemove)
+    }
+  })
+
   Test('layers stacked StackNav overlays absolutely and preserves covered overlay state', () => {
     function StatefulOverlay(): ReactElement {
       const [count, setCount] = useState(0)
@@ -177,9 +397,9 @@ Describe('Expo runtime', () => {
       )
     }
 
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
-    const first = TR.Navigation.UI({ name: 'First overlay', render: () => createElement(StatefulOverlay) })
-    const second = TR.Navigation.UI({
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+    const first = TR.Navigation.View({ name: 'First overlay', render: () => createElement(StatefulOverlay) })
+    const second = TR.Navigation.View({
       name: 'Second overlay',
       render: () => createElement(RN.Text, null, 'Second overlay'),
     })
@@ -221,10 +441,10 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Home')
   })
 
-  Test('stacks independent dialogue occurrences and settles only their own suspended asks', async () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+  Test('stacks independent asked view occurrences and settles only their own suspended asks', async () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
     const occurrenceProps = new Map<string, TR.TaoProps | undefined>()
-    const dialogue = TR.Navigation.Dialogue({
+    const confirm = TR.Navigation.View({
       name: 'Confirm',
       render: (arguments_, taoProps) => {
         const title = String(arguments_['Title']?.evaluate().jsValue)
@@ -239,9 +459,9 @@ Describe('Expo runtime', () => {
         )
       },
     })
-    const stack = configuredStack('DialogueHostStack', home)
+    const stack = configuredStack('AskHostStack', home)
     const app = TR.Navigation.App({
-      name: 'Dialogue Host App',
+      name: 'Ask Host App',
       navigator: () => stack,
       auxiliaries: () => ({}),
     })
@@ -252,12 +472,12 @@ Describe('Expo runtime', () => {
     act(() => {
       first = TR.Navigation.Ask(
         { navigation: stack },
-        dialogue,
+        confirm,
         { Result: TR.Value('first'), Title: TR.Value('First') },
       )
       second = TR.Navigation.Ask(
         { navigation: stack },
-        dialogue,
+        confirm,
         { Result: TR.Value('second'), Title: TR.Value('Second') },
       )
     })
@@ -279,9 +499,9 @@ Describe('Expo runtime', () => {
   Test('replaces keyed app toasts, coexists across keys, restarts expiry, and ignores Back', () => {
     jest.useFakeTimers()
     try {
-      const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
       const toast = (name: string, text: string) =>
-        TR.Navigation.UI({ name, render: () => createElement(RN.Text, null, text) })
+        TR.Navigation.View({ name, render: () => createElement(RN.Text, null, text) })
       const first = toast('First saved', 'First saved')
       const replacement = toast('Replacement saved', 'Replacement saved')
       const other = toast('Other notice', 'Other notice')
@@ -291,13 +511,15 @@ Describe('Expo runtime', () => {
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
       const taoProps: TR.TaoProps = { app }
 
+      // A toast duration is a Tao duration, carried in the family's base unit of nanoseconds.
+      const seconds = (count: number) => TR.Value(count * 1e9)
       act(() => {
         TR.Navigation.PresentToast(taoProps, first, {}, {
-          duration: TR.Value(3),
+          duration: seconds(3),
           key: TR.Value('saved'),
         })
         TR.Navigation.PresentToast(taoProps, other, {}, {
-          duration: TR.Value(10),
+          duration: seconds(10),
           key: TR.Value('other'),
         })
       })
@@ -317,7 +539,7 @@ Describe('Expo runtime', () => {
       act(() => {
         jest.advanceTimersByTime(2_000)
         TR.Navigation.PresentToast(taoProps, replacement, {}, {
-          duration: TR.Value(3),
+          duration: seconds(3),
           key: TR.Value('saved'),
         })
       })
@@ -333,7 +555,7 @@ Describe('Expo runtime', () => {
 
       act(() => {
         TR.Navigation.PresentToast(taoProps, zero, {}, {
-          duration: TR.Value(0),
+          duration: seconds(0),
           key: TR.Value('zero'),
         })
       })
@@ -346,15 +568,15 @@ Describe('Expo runtime', () => {
   })
 
   Test('resolves contextual overlays to a SlotNav and dismisses its overlay stack before content', () => {
-    const first = TR.Navigation.UI({
+    const first = TR.Navigation.View({
       name: 'Slot overlay one',
       render: () => createElement(RN.Text, null, 'Slot overlay one'),
     })
-    const second = TR.Navigation.UI({
+    const second = TR.Navigation.View({
       name: 'Slot overlay two',
       render: () => createElement(RN.Text, null, 'Slot overlay two'),
     })
-    const home = TR.Navigation.UI({
+    const home = TR.Navigation.View({
       name: 'Slot home',
       render: (_arguments, taoProps) =>
         createElement(RN.Pressable, {
@@ -408,7 +630,7 @@ Describe('Expo runtime', () => {
       })
     }
 
-    const detail = TR.Navigation.UI({
+    const detail = TR.Navigation.View({
       name: 'Nested detail',
       render: (_arguments, taoProps) =>
         createElement(GeneratedViewBoundary, {
@@ -417,7 +639,7 @@ Describe('Expo runtime', () => {
           label: 'Dismiss nested detail',
         }),
     })
-    const overlay = TR.Navigation.UI({
+    const overlay = TR.Navigation.View({
       name: 'Nested overlay',
       render: (_arguments, taoProps) =>
         createElement(
@@ -431,7 +653,7 @@ Describe('Expo runtime', () => {
           }),
         ),
     })
-    const home = TR.Navigation.UI({
+    const home = TR.Navigation.View({
       name: 'Nested home',
       render: (_arguments, taoProps) =>
         createElement(
@@ -483,7 +705,7 @@ Describe('Expo runtime', () => {
 
         type ConfirmResult is one of Confirmed
 
-        ui Home() { render Wrapper()[gap 9] }
+        view Home() { Title "Home" render Wrapper()[gap 9] }
 
         view Wrapper() {
           render Col() {
@@ -499,15 +721,15 @@ Describe('Expo runtime', () => {
           }
           render Col() {
             Text(Status)
-            Button("Open nested dialogue") { on press Open }
+            Button("Open nested ask") { on press Open }
           }
         }
 
-        dialogue Confirm() responds ConfirmResult {
+        view Confirm() responds ConfirmResult {
           action ConfirmIt() { respond Confirmed }
           render Col() {
-            Text("Nested dialogue")
-            Button("Confirm nested dialogue") { on press ConfirmIt }
+            Text("Nested ask")
+            Button("Confirm nested ask") { on press ConfirmIt }
           }
         }
       `,
@@ -518,12 +740,12 @@ Describe('Expo runtime', () => {
         })
         Expect(gapNineViews).toHaveLength(1)
 
-        fireEvent.press(screen.getByText('Open nested dialogue'))
+        fireEvent.press(screen.getByText('Open nested ask'))
         await act(async () => {})
-        ExpectScreen(screen).toHaveText('Nested dialogue')
-        fireEvent.press(screen.getByText('Confirm nested dialogue'))
+        ExpectScreen(screen).toHaveText('Nested ask')
+        fireEvent.press(screen.getByText('Confirm nested ask'))
         await act(async () => {})
-        Expect(screen.queryByText('Nested dialogue')).toBeNull()
+        Expect(screen.queryByText('Nested ask')).toBeNull()
         ExpectScreen(screen).toHaveText('Confirmed')
       },
     )
@@ -549,8 +771,8 @@ Describe('Expo runtime', () => {
       )
     }
 
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(Home) })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(Home) })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
     stack = configuredStack('RuntimeNavigationHostTest', home)
     const app = TR.Navigation.App({
       name: 'Runtime Navigation Host App',
@@ -586,8 +808,8 @@ Describe('Expo runtime', () => {
       )
     }
 
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(StatefulHome) })
-    const settings = TR.Navigation.UI({
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(StatefulHome) })
+    const settings = TR.Navigation.View({
       name: 'Settings',
       render: () => createElement(RN.Text, null, 'Settings content'),
     })
@@ -636,7 +858,8 @@ Describe('Expo runtime', () => {
         @window SlotNav { Initial WindowRoot }
       }
 
-      workspace ui Home() {
+      workspace view Home() {
+        Title "${label} home"
         action Open() {
           present Notice() in SharedGeneratedApp@window
         }
@@ -646,11 +869,11 @@ Describe('Expo runtime', () => {
         }
       }
 
-      workspace ui Notice() {
+      workspace view Notice() {
         render Text("${label} notice")
       }
 
-      workspace ui WindowRoot() {
+      workspace view WindowRoot() {
         render Text("${label} window")
       }
     `
@@ -693,18 +916,18 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        ui Home() { render Editor() }
+        view Home() { Title "Home" render Editor() }
 
         view Editor() {
           action Save() {
-            present SavedToast() as toast (Key: "saved", Duration: 1)
+            present SavedToast() as toast (Key: "saved", Duration: 1.s)
           }
           render Col() {
             FormButton("Save") { on press Save }
           }
         }
 
-        ui SavedToast() { render Text("Saved") }
+        view SavedToast() { render Text("Saved") }
       `,
       async screen => {
         jest.useFakeTimers()
@@ -717,6 +940,397 @@ Describe('Expo runtime', () => {
         } finally {
           jest.useRealTimers()
         }
+      },
+    )
+  })
+
+  Test('publishes reactive direct-view chrome with icons and deterministic Basic overflow', () => {
+    function Descendant(): ReactElement {
+      TR.Navigation.UseHostSlots(undefined, { Title: () => TR.Value('Descendant must not publish') })
+      return createElement(RN.Text, null, 'Descendant')
+    }
+
+    function Chrome(props: { host?: TR.HostReadChannel }): ReactElement {
+      const [count, setCount] = useState(0)
+      const [enabled, setEnabled] = useState(false)
+      const [title, setTitle] = useState('Document')
+      const commands = [
+        navigationCommand({ icon: 'checkmark', invoke: () => setCount(count + 1), label: 'First' }),
+        navigationCommand({ enabled, invoke: () => setCount(count + 1), label: 'Second' }),
+        navigationCommand({ invoke: () => setCount(count + 1), label: 'Third' }),
+        navigationCommand({ invoke: () => setCount(count + 1), label: 'Fourth' }),
+      ]
+      TR.Navigation.UseHostSlots(props.host, {
+        Title: () => TR.Value(title),
+        Toolbar: () => commands,
+      })
+      return createElement(
+        RN.View,
+        null,
+        createElement(RN.Text, null, `Count ${count}`),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Add ten',
+          accessibilityRole: 'button',
+          onPress: () => setCount(count + 10),
+        }),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Enable second',
+          accessibilityRole: 'button',
+          onPress: () => setEnabled(true),
+        }),
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Rename',
+          accessibilityRole: 'button',
+          onPress: () => setTitle('Updated document'),
+        }),
+        createElement(Descendant),
+      )
+    }
+
+    const home = TR.Navigation.View({
+      name: 'Chrome',
+      render: (_arguments, _taoProps, host) => createElement(Chrome, { host }),
+    })
+    const stack = configuredBasicStack('Basic chrome', home)
+    const app = TR.Navigation.App({ name: 'Basic chrome app', navigator: () => stack, auxiliaries: () => ({}) })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Document')
+    Expect(screen.getByTestId(navigationCommandIconTestId('checkmark'))).toBeDefined()
+    Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
+    Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: true })
+    Expect(screen.queryByLabelText('Third')).toBeNull()
+    fireEvent.press(screen.getByLabelText('More'))
+    Expect(screen.getAllByRole('button').map(button => button.props.accessibilityLabel)).toEqual([
+      'First',
+      'Second',
+      'More',
+      'Dismiss command menu',
+      'Add ten',
+      'Enable second',
+      'Rename',
+    ])
+    Expect(screen.getAllByRole('menuitem').map(item => item.props.accessibilityLabel)).toEqual([
+      'Third',
+      'Fourth',
+    ])
+
+    fireEvent.press(screen.getByLabelText('Third'))
+    Expect(screen.queryByLabelText('Third')).toBeNull()
+    fireEvent.press(screen.getByLabelText('First'))
+    ExpectScreen(screen).toHaveText('Count 2')
+    fireEvent.press(screen.getByLabelText('Add ten'))
+    fireEvent.press(screen.getByLabelText('First'))
+    ExpectScreen(screen).toHaveText('Count 13')
+    fireEvent.press(screen.getByLabelText('Enable second'))
+    Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: false })
+    fireEvent.press(screen.getByLabelText('Rename'))
+    Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Updated document')
+  })
+
+  Test('renders native toolbar icons and keeps its trailing command suffix behind More', () => {
+    const invoked: string[] = []
+    const commands = [
+      navigationCommand({ icon: 'safari', invoke: () => invoked.push('First'), label: 'First' }).read(),
+      navigationCommand({ invoke: () => invoked.push('Second'), label: 'Second' }).read(),
+      navigationCommand({ invoke: () => invoked.push('Third'), label: 'Third' }).read(),
+      navigationCommand({ enabled: false, invoke: () => invoked.push('Fourth'), label: 'Fourth' }).read(),
+    ]
+    const FakeFontAwesome = Object.assign(
+      (props: { name: string; testID: string }) =>
+        createElement(RN.Text, { testID: props.testID }, `FontAwesome:${props.name}`),
+      { hasIcon: (name: string) => name === 'safari' },
+    )
+    const restoreIcon = overrideNavigationCommandIconForTest(FakeFontAwesome)
+    try {
+      const screen = render(createElement(NativeToolbar, { commands }))
+
+      const safariIcon = screen.getByTestId(navigationCommandIconTestId('safari'))
+      Expect(safariIcon.props.children).toBe('FontAwesome:safari')
+      Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
+      Expect(screen.queryByLabelText('Third')).toBeNull()
+      fireEvent.press(screen.getByLabelText('More'))
+      Expect(screen.getAllByRole('menuitem').map(item => item.props.accessibilityLabel)).toEqual([
+        'Third',
+        'Fourth',
+      ])
+      Expect(screen.getByLabelText('Fourth').props.accessibilityState).toEqual({ disabled: true })
+      fireEvent.press(screen.getByLabelText('Fourth'))
+      Expect(invoked).toEqual([])
+      fireEvent.press(screen.getByLabelText('Third'))
+      Expect(invoked).toEqual(['Third'])
+      Expect(screen.queryByLabelText('Third')).toBeNull()
+      fireEvent.press(screen.getByLabelText('More'))
+      Expect(screen.getAllByRole('menuitem')).toHaveLength(2)
+      screen.rerender(createElement(NativeToolbar, { commands: commands.slice(0, 2) }))
+      Expect(screen.queryByLabelText('More')).toBeNull()
+      Expect(screen.queryAllByRole('menuitem')).toHaveLength(0)
+    } finally {
+      restoreIcon()
+    }
+  })
+
+  Test('adapts native stack entries to pinned screenId and headerConfig props', () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Modal: RN.Modal,
+      Platform: { OS: 'ios' },
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+    const itemProps: Array<Record<string, any>> = []
+    const restoreNative = overrideNativeNavigationModuleForTest({
+      ScreenStack: props => createElement(RN.View, null, props.children),
+      ScreenStackHeaderRightView: props => createElement(RN.View, { testID: 'native-right' }, props.children),
+      ScreenStackItem: props => {
+        itemProps.push(props)
+        return createElement(RN.View, null, props.children, props.headerConfig.children)
+      },
+    })
+    try {
+      const host = new RuntimeHostReadChannel()
+      host.publish({
+        title: 'Native title',
+        toolbar: [navigationCommand({ invoke: () => undefined, label: 'Native command' }).read()],
+      })
+      const home = TR.Navigation.View({
+        name: 'Native home',
+        render: () => createElement(RN.Text, null, 'Native content'),
+      })
+      const stack = configuredStack('Native adapter', home)
+      const screen = render(createElement(NativeStackSurface, {
+        entries: [
+          { arguments: {}, host, instanceId: 41, presentable: home },
+          { arguments: {}, host, instanceId: 42, presentable: home },
+        ],
+        navigation: stack as any,
+      }))
+
+      Expect(screen.getAllByText('Native content')).toHaveLength(2)
+      Expect(screen.getByTestId('native-right')).toBeDefined()
+      Expect(itemProps).toHaveLength(2)
+      Expect(itemProps[0]?.['screenId']).toBe('41')
+      Expect(itemProps[1]?.['screenId']).toBe('42')
+      Expect(itemProps.map(props => props['activityState'])).toEqual([2, 2])
+      Expect(itemProps[0]?.['headerConfig'].title).toBe('Native title')
+      Expect(itemProps[0]?.['headerConfig'].children).toBeDefined()
+    } finally {
+      restoreNative()
+      restoreRuntime.mockRestore()
+    }
+  })
+
+  Test('lets only the active selected Stack own chrome selectors and the web document title', () => {
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: { title: 'Host title' } })
+    try {
+      const titledView = (name: string, title: string) =>
+        TR.Navigation.View({
+          name,
+          render: (_arguments, _taoProps, host) => {
+            TR.Navigation.UseHostSlots(host, { Title: () => TR.Value(title) })
+            return createElement(RN.Text, null, `${name} content`)
+          },
+        })
+      const homeStack = configuredBasicStack('Home stack', titledView('Home', 'Home title'))
+      const settingsStack = configuredBasicStack('Settings stack', titledView('Settings', 'Settings title'))
+      const wrapper = (name: string, stack: TR.NavigationValue) =>
+        TR.Navigation.View({
+          name,
+          render: (_arguments, taoProps) => stack.render(TR.TaoContext(taoProps)),
+        })
+      const selection = configuredSelection({
+        display: TR.Value('tabs'),
+        initial: 'home',
+        items: {
+          home: { content: wrapper('Home wrapper', homeStack), label: TR.Value('Home') },
+          settings: { content: wrapper('Settings wrapper', settingsStack), label: TR.Value('Settings') },
+        },
+        name: 'Titled selection',
+      })
+      const app = TR.Navigation.App({ name: 'Titled app', navigator: () => selection, auxiliaries: () => ({}) })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+      Expect(screen.getAllByTestId(navigationTitleTestId)).toHaveLength(1)
+      Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Home title')
+      Expect((globalThis as unknown as { document: { title: string } }).document.title).toBe('Home title')
+      fireEvent.press(screen.getByText('Settings'))
+      Expect(screen.getAllByTestId(navigationTitleTestId)).toHaveLength(1)
+      Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Settings title')
+      Expect((globalThis as unknown as { document: { title: string } }).document.title).toBe('Settings title')
+      screen.unmount()
+      Expect((globalThis as unknown as { document: { title: string } }).document.title).toBe('Host title')
+    } finally {
+      if (previousDocument) {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      } else {
+        Reflect.deleteProperty(globalThis, 'document')
+      }
+    }
+  })
+
+  Test('publishes configured Title and Toolbar when a nav is itself a Stack entry', () => {
+    let invoked = 0
+    let nested: TR.NavigationValue
+    const detail = TR.Navigation.View({
+      name: 'Nested detail',
+      render: () => createElement(RN.Text, null, 'Nested detail'),
+    })
+    const nestedHome = TR.Navigation.View({
+      name: 'Nested home',
+      render: () =>
+        createElement(
+          RN.View,
+          null,
+          createElement(RN.Text, null, 'Nested content'),
+          createElement(RN.Pressable, {
+            accessibilityLabel: 'Open nested detail',
+            onPress: () => nested.present(detail, {}),
+          }),
+        ),
+    })
+    nested = configuredBasicStack('Nested', nestedHome, {
+      Title: TR.Value('Nested navigation'),
+      Toolbar: [navigationCommand({ invoke: () => invoked += 1, label: 'Refresh' })],
+    })
+    const outer = configuredBasicStack('Outer', nested)
+    const app = TR.Navigation.App({ name: 'Nested nav app', navigator: () => outer, auxiliaries: () => ({}) })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    ExpectScreen(screen).toHaveText('Nested navigation')
+    ExpectScreen(screen).toHaveText('Nested content')
+    fireEvent.press(screen.getByLabelText('Refresh'))
+    Expect(invoked).toBe(1)
+    fireEvent.press(screen.getByLabelText('Open nested detail'))
+    ExpectScreen(screen).toHaveText('Nested detail')
+    Expect(screen.getAllByLabelText('Back')).toHaveLength(1)
+    fireEvent.press(screen.getByLabelText('Back'))
+    ExpectScreen(screen).toHaveText('Nested content')
+  })
+
+  Test('removes underlying command focus while an auxiliary overlay owns interaction', () => {
+    let invoked = 0
+    const home = TR.Navigation.View({
+      name: 'Focused home',
+      render: (_arguments, _taoProps, host) => {
+        TR.Navigation.UseHostSlots(host, {
+          Title: () => TR.Value('Focused title'),
+          Toolbar: () => [navigationCommand({ invoke: () => invoked += 1, label: 'Save' })],
+        })
+        return createElement(RN.Text, null, `Invoked ${invoked}`)
+      },
+    })
+    const windowRoot = TR.Navigation.View({
+      name: 'Window root',
+      render: () => createElement(RN.Text, null, 'Window root'),
+    })
+    const notice = TR.Navigation.View({
+      name: 'Notice',
+      render: () => createElement(RN.Text, null, 'Notice'),
+    })
+    const stack = configuredBasicStack('Focused stack', home)
+    const window = configuredSlot('Focused window', windowRoot)
+    const app = TR.Navigation.App({
+      name: 'Focus app',
+      navigator: () => stack,
+      auxiliaries: () => ({ window }),
+    })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    Expect(screen.getByTestId(navigationTitleTestId)).toBeDefined()
+    fireEvent.press(screen.getByLabelText('Save'))
+    Expect(invoked).toBe(1)
+    act(() => TR.Navigation.PresentOverlay(undefined, window, notice, {}))
+    ExpectScreen(screen).toHaveText('Notice')
+    Expect(screen.queryByTestId(navigationTitleTestId)).toBeNull()
+    Expect(screen.getByLabelText('Save').props.accessibilityState).toEqual({ disabled: true })
+    fireEvent.press(screen.getByLabelText('Save'))
+    Expect(invoked).toBe(1)
+    act(() => app.back())
+    Expect(screen.getByTestId(navigationTitleTestId)).toBeDefined()
+  })
+
+  Test('preserves auxiliary defocus through the active SelectionNav item', () => {
+    let invoked = 0
+    const home = TR.Navigation.View({
+      name: 'Selected home',
+      render: (_arguments, _taoProps, host) => {
+        TR.Navigation.UseHostSlots(host, {
+          Title: () => TR.Value('Selected title'),
+          Toolbar: () => [navigationCommand({ invoke: () => invoked += 1, label: 'Selected save' })],
+        })
+        return createElement(RN.Text, null, 'Selected content')
+      },
+    })
+    const homeStack = configuredBasicStack('Selected stack', home)
+    const wrapper = TR.Navigation.View({
+      name: 'Selected wrapper',
+      render: (_arguments, taoProps) => homeStack.render(TR.TaoContext(taoProps)),
+    })
+    const selection = configuredSelection({
+      display: TR.Value('tabs'),
+      initial: 'home',
+      items: { home: { content: wrapper, label: TR.Value('Home') } },
+      name: 'Selected navigation',
+    })
+    const windowRoot = TR.Navigation.View({
+      name: 'Window root',
+      render: () => createElement(RN.Text, null, 'Window root'),
+    })
+    const notice = TR.Navigation.View({
+      name: 'Selection notice',
+      render: () => createElement(RN.Text, null, 'Selection notice'),
+    })
+    const window = configuredSlot('Selection window', windowRoot)
+    const app = TR.Navigation.App({
+      name: 'Selection focus app',
+      navigator: () => selection,
+      auxiliaries: () => ({ window }),
+    })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+    Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Selected title')
+    fireEvent.press(screen.getByLabelText('Selected save'))
+    Expect(invoked).toBe(1)
+    act(() => window.presentOverlay(notice, {}))
+    ExpectScreen(screen).toHaveText('Selection notice')
+    Expect(screen.queryByTestId(navigationTitleTestId)).toBeNull()
+    Expect(screen.getByLabelText('Selected save').props.accessibilityState).toEqual({ disabled: true })
+    fireEvent.press(screen.getByLabelText('Selected save'))
+    Expect(invoked).toBe(1)
+  })
+
+  Test('publishes inherited view slots from a configured SlotNav presented in a StackNav', async () => {
+    await testCompileApp(
+      `
+        use SlotNav, StackNav from @tao/nav
+        use Text from @tao/ui
+
+        nav Nested = SlotNav {
+          Initial Inner
+          Title "Nested slot title"
+          Toolbar { Refresh }
+        }
+
+        action Refresh() { Title "Refresh" }
+
+        app NestedSlotApp {
+          Name "Nested slot"
+          Navigator StackNav { Initial Nested }
+        }
+
+        view Inner() { render Text("Inner") }
+      `,
+      screen => {
+        Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Nested slot title')
+        ExpectScreen(screen).toHaveText('Inner')
+        fireEvent.press(screen.getByLabelText('Refresh'))
       },
     )
   })

@@ -15,6 +15,12 @@ StateDeclaration:
 ActionDeclaration:
     visibility=DeclarationVisibility? 'action' name=ID parameterList=ParameterList block=ActionBlock;
 
+// A command binds one intent invocation into a zero-argument, focus-scoped action value. Its
+// affordance members are declaration-slot fills so they share the same reactive expression shape.
+CommandDeclaration:
+    'command' name=ID '=' action=[ActionDeclaration:ID] '(' argumentList=ArgumentList? ')'
+    ('with' metadata=DeclarationSlotBlock)?;
+
 ActionExpression:
     ('action' | '->') block=ActionBlock;
 
@@ -22,13 +28,13 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement;
+    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 AsyncActionStatement:
     'async' block=ActionBlock;
 
 AskStatement:
-    'let' name=ID '=' 'ask' dialogue=[DialogueDeclaration:ID] '(' argumentList=ArgumentList? ')';
+    'let' name=ID '=' 'ask' view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')';
 
 RespondStatement:
     'respond' case=[CaseSetCase:ID]?;

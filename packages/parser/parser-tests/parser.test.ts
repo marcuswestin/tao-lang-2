@@ -4,7 +4,30 @@ import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
 Describe('parser: core language syntax', () => {
-  Test('parses layout declarations and child view invocations', async () => {
+  Test('parses namespace imports and pass-through view aliases', async () => {
+    // The namespace targets are unresolved in a standalone parse; only the syntax is under test.
+    const result = await testParseSyntax(`
+      use package @widgets
+      use package @tao/nav as navs
+      public view Button = widgets.Button
+    `)
+    const [derived, renamed] = result.entry.ast.statements.filter(AST.isUsePackageStatement)
+    Expect.Is(derived, AST.isUsePackageStatement)
+    Expect(derived.importPath).toBe('@widgets')
+    Expect(derived.name).toBeUndefined()
+    Expect(AST.packageNamespaceName(derived)).toBe('widgets')
+    Expect.Is(renamed, AST.isUsePackageStatement)
+    Expect(renamed.name).toBe('navs')
+    Expect(AST.packageNamespaceName(renamed)).toBe('navs')
+    const alias = result.entry.ast.statements.find(AST.isViewDeclaration)
+    Expect.Is(alias, AST.isViewDeclaration)
+    Expect(alias.parameterList).toBeUndefined()
+    Expect.Is(alias.aliasTarget, AST.isPackageMemberReference)
+    Expect(alias.aliasTarget.namespace.$refText).toBe('widgets')
+    Expect(alias.aliasTarget.member.$refText).toBe('Button')
+  })
+
+  Test('parses content-accepting view declarations and child view invocations', async () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
       view MainView() {
@@ -14,7 +37,7 @@ Describe('parser: core language syntax', () => {
           Text("Literal")
         }
       }
-      layout Stack() {
+      view Stack() {
         render inject Content @@content \`\`\`ts
           return <>{Content}</>
         \`\`\`
@@ -25,8 +48,11 @@ Describe('parser: core language syntax', () => {
         \`\`\`
       }
     `)
-    const layout = parseResult.entry.ast.statements.find(AST.isLayoutDeclaration)
-    Expect.Is(layout, AST.isLayoutDeclaration)
+    const stack = parseResult.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Stack'
+    )
+    Expect.Is(stack, AST.isViewDeclaration)
+    Expect(AST.viewPlacesCallerContent(stack)).toBe(true)
     const mainView = parseResult.entry.ast.statements.find(statement =>
       AST.isViewDeclaration(statement) && statement.name === 'MainView'
     )
@@ -82,9 +108,9 @@ Describe('parser: core language syntax', () => {
           Text("Label") [width fill, height fill, aligned center, centered]
         }
       }
-      layout Col() {
-        render inject \`\`\`ts
-          return null
+      view Col() {
+        render inject Content @@content \`\`\`ts
+          return Content
         \`\`\`
       }
       view Text(Value text) {
@@ -127,7 +153,7 @@ Describe('parser: core language syntax', () => {
       view MainView() {
         render Col()[]
       }
-      layout Col() {
+      view Col() {
         render inject \`\`\`ts
           return null
         \`\`\`
@@ -172,7 +198,7 @@ Describe('parser: core language syntax', () => {
     Expect.Is(mainViewParameter.inlineType?.type, AST.isPrimitiveTypeReference)
     Expect(mainViewParameter.inlineType.type.primitive).toBe('text')
 
-    const [localAlias, textRender, statRender] = mainView.block.statements
+    const [localAlias, textRender, statRender] = mainView.block!.statements
     Expect.Is(localAlias, AST.isAliasDeclaration)
     Expect.Is(textRender, AST.isRenderStatement)
     Expect.Is(statRender, AST.isRenderStatement)
@@ -234,7 +260,7 @@ Describe('parser: core language syntax', () => {
     )
     Expect.Is(mainView, AST.isViewDeclaration)
 
-    const [countState, addStep, addFive, resetRender, inlineRender] = mainView.block.statements
+    const [countState, addStep, addFive, resetRender, inlineRender] = mainView.block!.statements
     Expect.Is(countState, AST.isStateDeclaration)
     Expect.Is(addStep, AST.isActionDeclaration)
     Expect.Is(addFive, AST.isActionDeclaration)
@@ -353,7 +379,7 @@ Describe('parser: core language syntax', () => {
           }
         }
       }
-      layout Col() { render inject \`\`\`ts return null \`\`\` }
+      view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
       view Input() { render inject \`\`\`ts return null \`\`\` }
       view Button() { render inject \`\`\`ts return null \`\`\` }
       view Text(Value text) { render inject \`\`\`ts return null \`\`\` }
@@ -458,7 +484,7 @@ Describe('parser: core language syntax', () => {
           loop Drafts / Draft { Text(Draft.Title) }
         }
       }
-      layout Col() { render inject \`\`\`ts return null \`\`\` }
+      view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
       view Text(Value text) { render inject \`\`\`ts return null \`\`\` }
     `)
 
@@ -496,10 +522,10 @@ Describe('parser: core language syntax', () => {
     Expect(Type.ofValueDeclaration(loop).kind).toBe('entity')
   })
 
-  Test('parses configured apps, ui declarations, and contextual presentation', async () => {
+  Test('parses configured apps, view declarations, and contextual presentation', async () => {
     const parseResult = await testParseCode(`
       public type StackNav is nav with {
-        Initial ui
+        Initial view
         nav TestNavKind from ./TestNav.ts
       }
       public type Local is datasource with {
@@ -515,23 +541,23 @@ Describe('parser: core language syntax', () => {
           StorageKey "NotesData"
         }
       }
-      ui Home() {
+      view Home() {
         action Open() { present Detail() as overlay }
-        action Toast() { present Detail() as toast (Key: "saved", Duration: 3) }
+        action Toast() { present Detail() as toast (Key: "saved", Duration: 3.s) }
         action Activate() { present Notes@home }
         render inject \`\`\`ts return null \`\`\`
       }
-      ui Detail() {
+      view Detail() {
         action Close() { dismiss }
         render inject \`\`\`ts return null \`\`\`
       }
     `)
     const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
     const home = parseResult.entry.ast.statements.find(statement =>
-      AST.isUiDeclaration(statement) && statement.name === 'Home'
+      AST.isViewDeclaration(statement) && statement.name === 'Home'
     )
     Expect.Is(app, AST.isAppDeclaration)
-    Expect.Is(home, AST.isUiDeclaration)
+    Expect.Is(home, AST.isViewDeclaration)
     Expect(AST.blockStatements(app).some(statement => AST.isAppProperty(statement) && statement.name === 'Navigator'))
       .toBe(true)
     const presentations = AST.streamAllContents(home).filter(AST.isContextualPresentStatement)
@@ -542,8 +568,10 @@ Describe('parser: core language syntax', () => {
     Expect(toast.mode?.kind).toBe('toast')
     Expect.Is(toast.mode?.toast?.key, AST.isStringLiteral)
     Expect(toast.mode.toast.key.value).toBe('saved')
-    Expect.Is(toast.mode.toast.duration, AST.isNumberLiteral)
-    Expect(toast.mode.toast.duration.value).toBe(3)
+    Expect.Is(toast.mode.toast.duration, AST.isPostfixMemberAccess)
+    Expect(toast.mode.toast.duration.member).toBe('s')
+    Expect.Is(toast.mode.toast.duration.receiver, AST.isNumberLiteral)
+    Expect(toast.mode.toast.duration.receiver.value).toBe(3)
     const activation = AST.streamAllContents(home).find(AST.isSelectionActivateStatement)
     Expect.Is(activation, AST.isSelectionActivateStatement)
     Expect(activation.app?.ref).toBe(app)
@@ -553,11 +581,11 @@ Describe('parser: core language syntax', () => {
   Test('parses an app auxiliary navigator as one app statement before a following declaration', async () => {
     const parseResult = await testParseCode(`
       public type StackNav is nav with {
-        Initial ui
+        Initial view
         nav TestNavKind from ./TestNav.ts
       }
       public type SlotNav is nav with {
-        Initial ui
+        Initial view
         nav TestNavKind from ./TestNav.ts
       }
       app SharedGeneratedApp {
@@ -566,8 +594,8 @@ Describe('parser: core language syntax', () => {
         @window SlotNav { Initial WindowRoot }
       }
       let AfterApp = "after"
-      ui Home() { }
-      ui WindowRoot() { }
+      view Home() { }
+      view WindowRoot() { }
     `)
 
     const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
@@ -620,7 +648,7 @@ Describe('parser: core language syntax', () => {
         Navigator { Initial Home }
         Datasource { StorageKey "NotesData" }
       }
-      ui Home() { }
+      view Home() { }
     `)
 
     Expect(parseResult.diagnostics).toEqual([])
@@ -647,7 +675,7 @@ Describe('parser: core language syntax', () => {
         Display text
         @key {
           Label text
-          Content ui
+          Content view
         }
         nav TestNavKind from ./TestNav.ts
       }
@@ -655,7 +683,7 @@ Describe('parser: core language syntax', () => {
         StorageKey text
         provider CustomData from ./CustomData.ts
       }
-      ui Home() { }
+      view Home() { }
       let Main = CustomNav {
         Initial @home
         Display "tabs"
@@ -673,7 +701,7 @@ Describe('parser: core language syntax', () => {
     const [nav, datasource, home, main, store] = parseResult.entry.ast.statements
     Expect.Is(nav, AST.isTypeDeclaration)
     Expect.Is(datasource, AST.isTypeDeclaration)
-    Expect.Is(home, AST.isUiDeclaration)
+    Expect.Is(home, AST.isViewDeclaration)
     Expect.Is(main, AST.isAliasDeclaration)
     Expect.Is(store, AST.isAliasDeclaration)
     Expect(nav.visibility).toBe('public')
@@ -765,7 +793,7 @@ Describe('parser: core language syntax', () => {
     Expect.Is(card.block?.entries[0]?.value, AST.isStringLiteral)
   })
 
-  Test('parses dialogue asks and explicit or absent responses as occurrence-owned action statements', async () => {
+  Test('parses view asks and explicit or absent responses as occurrence-owned action statements', async () => {
     const parseResult = await testParseSyntax(`
       type ConfirmResult is one of Confirmed
       view Editor() {
@@ -775,21 +803,23 @@ Describe('parser: core language syntax', () => {
         }
         render inject \`\`\`ts return null \`\`\`
       }
-      dialogue ConfirmClose(Title text) responds ConfirmResult {
+      view ConfirmClose(Title text) responds ConfirmResult {
         action Confirm() { respond Confirmed }
         action Cancel() { respond }
         render inject \`\`\`ts return null \`\`\`
       }
     `)
 
-    const dialogue = parseResult.entry.ast.statements.find(AST.isDialogueDeclaration)
+    const confirmClose = parseResult.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'ConfirmClose'
+    )
     const ask = AST.streamAllContents(parseResult.entry.ast).find(AST.isAskStatement)
     const responses = AST.streamAllContents(parseResult.entry.ast).filter(AST.isRespondStatement)
-    Expect.Is(dialogue, AST.isDialogueDeclaration)
+    Expect.Is(confirmClose, AST.isViewDeclaration)
     Expect.Is(ask, AST.isAskStatement)
-    Expect(dialogue.response.ref?.name).toBe('ConfirmResult')
+    Expect(confirmClose.response?.ref?.name).toBe('ConfirmResult')
     Expect(ask.name).toBe('Result')
-    Expect(ask.dialogue.ref).toBe(dialogue)
+    Expect(ask.view.ref).toBe(confirmClose)
     Expect(AST.argumentsOf(ask)).toHaveLength(1)
     Expect(responses).toHaveLength(2)
     Expect(responses[0]?.case?.ref?.name).toBe('Confirmed')

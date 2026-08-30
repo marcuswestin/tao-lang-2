@@ -1,3 +1,4 @@
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type NodeValidationCheck, type NodeValidationChecks } from '../node-validation'
@@ -8,6 +9,9 @@ const supportedInputSelectors = ['label', 'placeholder'] as const
 
 /** testValidationMessages declares structural diagnostics for Tao test declarations. */
 export const testValidationMessages = {
+  unnamedTest: 'A test declares a sentence, the declarations it exercises, or both.',
+  advanceDuration: '`advance` takes a literal duration, so a check reads as a fixed amount of time.',
+  advanceNegative: '`advance` cannot move the clock backwards.',
   testPlacement: 'Test declarations are only allowed at file level or inside another test.',
   testBlock: (name: string) => `Only nested tests are allowed in test '${name}'.`,
   checkBlock: (name: string) =>
@@ -19,6 +23,7 @@ export const testValidationMessages = {
   submitPlacement: 'Submit steps are only allowed inside test blocks.',
   expectationPlacement: 'Expectations are only allowed inside test blocks.',
   backPlacement: 'Back steps are only allowed inside test blocks.',
+  advancePlacement: 'Advance steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
   inputSelector: (selector: string) =>
@@ -29,6 +34,9 @@ export const testValidationMessages = {
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
   selectIndex: 'Tagged loop row selection uses a 1-based index greater than zero.',
   selectBlock: 'A select block may contain test steps but cannot start another app.',
+  navigationValueType: (actual: string) => `Navigation and toolbar test values expect text, got ${actual}.`,
+  navigationValueLiteral: 'Navigation and toolbar test values must be text literals.',
+  navigationVocabulary: (expected: string) => `Expected '${expected}' in this navigation test step.`,
 } as const
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
@@ -38,6 +46,7 @@ const validateInputExpectationPlacement = validateStepPlacement(testValidationMe
 const validateSubmitPlacement = validateStepPlacement(testValidationMessages.submitPlacement)
 const validateExpectationPlacement = validateStepPlacement(testValidationMessages.expectationPlacement)
 const validateBackPlacement = validateStepPlacement(testValidationMessages.backPlacement)
+const validateAdvancePlacement = validateStepPlacement(testValidationMessages.advancePlacement)
 
 /** testValidationChecks validates v0 Tao test declarations and steps. */
 export const testValidationChecks = {
@@ -45,6 +54,7 @@ export const testValidationChecks = {
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
+  [AST.PressToolbarCommandStep.$type]: [validatePressPlacement, validateNavigationVocabulary, validateNavigationValue],
   [AST.EnterTextStep.$type]: [validateEnterPlacement, validateSelector],
   [AST.TagEnterStep.$type]: validateEnterPlacement,
   [AST.ExpectInputValueStep.$type]: [validateInputExpectationPlacement, validateInputSelector],
@@ -55,12 +65,41 @@ export const testValidationChecks = {
   [AST.TagSubmitStep.$type]: validateSubmitPlacement,
   [AST.SelectStep.$type]: validateSelect,
   [AST.BackTestStep.$type]: validateBackPlacement,
+  [AST.AdvanceStep.$type]: [validateAdvancePlacement, validateAdvanceDuration],
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
+  [AST.ExpectNavigationTitleStep.$type]: [
+    validateExpectationPlacement,
+    validateNavigationVocabulary,
+    validateNavigationValue,
+  ],
+  [AST.ExpectToolbarCommandStep.$type]: [
+    validateExpectationPlacement,
+    validateNavigationVocabulary,
+    validateNavigationValue,
+  ],
 } satisfies NodeValidationChecks
+
+/**
+ * The clock a check holds moves by a stated amount, so `advance` folds its duration at compile time
+ * rather than evaluating a runtime value that a journey could not read back.
+ */
+function validateAdvanceDuration(step: AST.AdvanceStep, ctx: ValidationContext): void {
+  const nanoseconds = ASTUtils.literalDurationOf(step.duration)
+  if (nanoseconds === undefined) {
+    ctx.error(testValidationMessages.advanceDuration, step)
+    return
+  }
+  if (nanoseconds < 0) {
+    ctx.error(testValidationMessages.advanceNegative, step)
+  }
+}
 
 // A test is either a group of nested tests or a leaf journey of steps, never a mix.
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
+  if (AST.testDisplayName(test) === '') {
+    ctx.error(testValidationMessages.unnamedTest, test)
+  }
   const owner = test.$container
   if (!AST.isTaoFile(owner) && !AST.isTestDeclaration(blockOwner(test))) {
     ctx.error(testValidationMessages.testPlacement, test)
@@ -69,7 +108,7 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
   if (nested.length > 0) {
     for (const statement of test.block.statements) {
       if (!AST.isTestDeclaration(statement)) {
-        ctx.error(testValidationMessages.testBlock(test.name), statement)
+        ctx.error(testValidationMessages.testBlock(AST.testDisplayName(test)), statement)
       }
     }
     return
@@ -80,19 +119,19 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
 function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): void {
   for (const statement of check.block.statements) {
     if (!AST.isCheckStep(statement)) {
-      ctx.error(testValidationMessages.checkBlock(check.name), statement)
+      ctx.error(testValidationMessages.checkBlock(AST.testDisplayName(check)), statement)
     }
   }
   const runSteps = check.block.statements.filter(AST.isRunStep)
   if (runSteps.length === 0) {
-    ctx.error(testValidationMessages.missingRun(check.name), check)
+    ctx.error(testValidationMessages.missingRun(AST.testDisplayName(check)), check)
     return
   }
   for (const run of runSteps) {
     validateRun(run, ctx)
   }
   for (const run of runSteps.slice(1)) {
-    ctx.error(testValidationMessages.duplicateRun(check.name), run)
+    ctx.error(testValidationMessages.duplicateRun(AST.testDisplayName(check)), run)
   }
 
   let hasRun = false
@@ -104,13 +143,17 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       TagInputValueExpectation: checkStepOrder,
       ExpectCheckboxStateStep: checkStepOrder,
       ExpectTextStep: checkStepOrder,
+      ExpectNavigationTitleStep: checkStepOrder,
+      ExpectToolbarCommandStep: checkStepOrder,
       ExpectGroupStep: checkStepOrder,
       ExpectScopeStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       TagPressStep: checkStepOrder,
+      PressToolbarCommandStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
       },
+      AdvanceStep: checkStepOrder,
       SubmitInputStep: checkStepOrder,
       TagSubmitStep: checkStepOrder,
       SelectStep: checkStepOrder,
@@ -126,18 +169,51 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.TagInputValueExpectation
       | AST.ExpectCheckboxStateStep
       | AST.ExpectTextStep
+      | AST.ExpectNavigationTitleStep
+      | AST.ExpectToolbarCommandStep
       | AST.ExpectGroupStep
       | AST.ExpectScopeStep
       | AST.PressTextStep
       | AST.TagPressStep
+      | AST.PressToolbarCommandStep
       | AST.SubmitInputStep
       | AST.TagSubmitStep
       | AST.SelectStep
-      | AST.BackTestStep,
+      | AST.BackTestStep
+      | AST.AdvanceStep,
   ): void {
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
     }
+  }
+}
+
+function validateNavigationValue(
+  step: AST.ExpectNavigationTitleStep | AST.ExpectToolbarCommandStep | AST.PressToolbarCommandStep,
+  ctx: ValidationContext,
+): void {
+  if (!AST.isStringLiteral(step.value)) {
+    const actual = Type.ofExpression(step.value)
+    if (actual.kind === 'primitive' && actual.primitive === 'text') {
+      ctx.error(testValidationMessages.navigationValueLiteral, step.value)
+      return
+    }
+  }
+  const actual = Type.ofExpression(step.value)
+  const expected: ASTUtils.TaoType = { kind: 'primitive', primitive: 'text' }
+  if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+    ctx.error(testValidationMessages.navigationValueType(Type.displayName(actual)), step.value)
+  }
+}
+
+function validateNavigationVocabulary(
+  step: AST.ExpectNavigationTitleStep | AST.ExpectToolbarCommandStep | AST.PressToolbarCommandStep,
+  ctx: ValidationContext,
+): void {
+  const actual = AST.isExpectNavigationTitleStep(step) ? step.subject : step.surface
+  const expected = AST.isExpectNavigationTitleStep(step) ? 'title' : 'toolbar'
+  if (actual !== expected) {
+    ctx.error(testValidationMessages.navigationVocabulary(expected), step)
   }
 }
 

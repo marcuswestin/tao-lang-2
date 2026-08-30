@@ -13,14 +13,64 @@ export const ActionsCompiler = {
   /** ActionDeclaration compiles a named Tao action into a runtime action value. */
   ActionDeclaration(action: AST.ActionDeclaration): Compiled {
     const parameters = actionParameters(action)
+    const metadata = [
+      { property: 'title', fill: AST.declarationSlotFillNamed(action, 'Title') },
+      { property: 'description', fill: AST.declarationSlotFillNamed(action, 'Description') },
+      { property: 'summary', fill: AST.declarationSlotFillNamed(action, 'Summary') },
+    ].filter((entry): entry is { property: string; fill: AST.DeclarationSlotFill & { value: AST.Expression } } =>
+      entry.fill?.value !== undefined
+    )
     return gen`
       ${gen.scopeName(action)} = TR.Action(async (${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
         return TR.BlockScope(_Scope, async _Scope => {
           ${gen.list(parameters, Compile.ActionParameterBinding)}
           ${Compile.ActionBlockBody(action.block)}
         })
-      })
+      }${
+      metadata.length > 0
+        ? gen`, {
+        ${
+          gen.list(metadata, entry =>
+            gen`${entry.property}: (${
+              gen.join(parameters, Compile.ActionRuntimeParameter)
+            }) => TR.BlockScope(_Scope, _Scope => {
+            ${gen.list(parameters, Compile.ActionParameterBinding)}
+            return ${Compile.Expression(entry.fill.value)}
+          }),`)
+        }
+      }`
+        : ''
+    })
     `
+  },
+
+  /** CommandDeclaration binds an intent call and live occurrence metadata for host-owned chrome. */
+  CommandDeclaration(command: AST.CommandDeclaration): Compiled {
+    const action = resolveRef(command.action)
+    const resolved = ASTUtils.resolveArgumentBindings(action, command)
+    Assert(resolved.diagnostics.length === 0, 'validated command has no binding diagnostics')
+    const parameters = AST.parametersOf(action)
+    const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
+    const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
+    const arguments_ = parameters.slice(0, lastProvidedIndex + 1).map(parameter => {
+      const argument = argumentsByParameter.get(parameter)
+      return argument ? Compile.Argument(argument) : gen`undefined`
+    })
+    const fill = (name: string) => command.metadata?.fills.find(candidate => candidate.name === name)?.value
+    const label = fill('Label')
+    const icon = fill('Icon')
+    const key = fill('Key')
+    const enabled = fill('Enabled')
+    return gen`${gen.scopeName(command)} = TR.Navigation.Command({
+      action: { evaluate: () => ${gen.scopeName(action)}.evaluate() },
+      arguments: [${gen.join(arguments_, argument => argument)}],
+      intentTitle: () => TR.ActionTitle(${gen.scopeName(action)}, [${gen.join(arguments_, argument => argument)}]),
+      name: ${gen.jsLiteral(command.name)},
+      ${label ? gen`label: () => ${Compile.Expression(label)},` : gen.noop()}
+      ${icon ? gen`icon: () => ${Compile.Expression(icon)},` : gen.noop()}
+      ${key ? gen`key: () => ${Compile.Expression(key)},` : gen.noop()}
+      ${enabled ? gen`enabled: () => ${Compile.Expression(enabled)},` : gen.noop()}
+    })`
   },
 
   /** ActionExpression compiles an inline Tao action into a runtime action value. */
@@ -58,6 +108,7 @@ export const ActionsCompiler = {
       AskStatement: Compile.AskStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
+      DeclarationSlotFill: Compile.DeclarationSlotFill,
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
@@ -76,6 +127,11 @@ export const ActionsCompiler = {
     return gen.list(block?.statements ?? [], Compile.ActionStatement)
   },
 
+  /** DeclarationSlotFill is metadata consumed by its owning action or view compiler. */
+  DeclarationSlotFill(): Compiled {
+    return gen.noop()
+  },
+
   /** AsyncActionStatement launches an isolated action sub-block without delaying its caller. */
   AsyncActionStatement(statement: AST.AsyncActionStatement): Compiled {
     return gen`TR.Async(() =>
@@ -90,19 +146,19 @@ export const ActionsCompiler = {
     return gen`await TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
   },
 
-  /** AskStatement suspends its action and binds the response owned by this dialogue occurrence. */
+  /** AskStatement suspends its action and binds the response owned by this presented occurrence. */
   AskStatement(statement: AST.AskStatement): Compiled {
-    const dialogue = resolveRef(statement.dialogue)
-    const resolved = ASTUtils.resolveArgumentBindings(dialogue, statement)
-    Assert(resolved.diagnostics.length === 0, 'validated dialogue ask has no binding diagnostics')
+    const view = resolveRef(statement.view)
+    const resolved = ASTUtils.resolveArgumentBindings(view, statement)
+    Assert(resolved.diagnostics.length === 0, 'validated ask has no binding diagnostics')
     return gen`${gen.scopeName(statement)} = await TR.Navigation.Ask(
       _ViewProps.__tao,
-      ${Compile.DialogueValue(dialogue)},
+      ${Compile.ViewValue(view)},
       { ${gen.list(resolved.pairs, Compile.NavigationArgument)} },
     )`
   },
 
-  /** RespondStatement settles only the dialogue occurrence inherited by this render tree. */
+  /** RespondStatement settles only the responding occurrence inherited by this render tree. */
   RespondStatement(statement: AST.RespondStatement): Compiled {
     const response = statement.case?.ref
     return gen`TR.Navigation.Respond(
@@ -129,7 +185,7 @@ export const ActionsCompiler = {
     return gen`if (await TR.GuardAction(${Compile.Expression(statement.subject)}, [
       ${
       gen.list(
-        guardActionBranches(statement),
+        ASTUtils.guardBranches(statement),
         branch =>
           gen`[${gen.jsLiteral(branch.case)}, async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => {
           ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
@@ -149,10 +205,6 @@ export const ActionsCompiler = {
     )`
   },
 } as const
-
-function guardActionBranches(statement: AST.GuardActionStatement): AST.GuardActionBranch[] {
-  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
-}
 
 function actionParameters(action: AST.ActionDeclaration): ActionParameter[] {
   return AST.parametersOf(action).map((parameter, index) => ({ index, parameter }))

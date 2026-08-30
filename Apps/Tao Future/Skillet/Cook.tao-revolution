@@ -2,7 +2,7 @@
 // takes the screen. One step at a time, big enough to read from across the counter, with the recipe's
 // own timers running.
 
-ui CookScreen(Recipe, Meal (optional)) {
+view CookScreen(Recipe, Meal (optional)) {
    Title "Cooking { Recipe.Title }"
    Toolbar { Close }
    state StepNumber = 1
@@ -24,18 +24,27 @@ ui CookScreen(Recipe, Meal (optional)) {
    on key "left" Previous
 
    // A window needs its own close, because a full-screen presentation has no frame to supply one.
-   command Close { Label "Close"; Icon "xmark"; Key "escape"; does { dismiss } }
-   command Finish {
+   action CloseIntent() {
+      Title "Close"
+      dismiss
+   }
+   command Close = CloseIntent() with {
+      Label "Close"
+      Icon "xmark"
+      Key "escape"
+   }
+   action FinishIntent() runs single {
+      Title "Done cooking"
+      if Meal is not none { update Meal { Cooked } }
+      // Stopping every timer this recipe left running is the automation's cue to cancel its
+      // notification; nothing here schedules or cancels an alert by hand.
+      update MyTimers { Stopped }
+      dismiss
+   }
+   command Finish = FinishIntent() with {
       Label "Done cooking"
       Icon "checkmark"
-      runs single
-      does {
-         if Meal is not none { update Meal { Cooked } }
-         // Stopping every timer this recipe left running is the automation's cue to cancel its
-         // notification; nothing here schedules or cancels an alert by hand.
-         update MyTimers { Stopped }
-         dismiss
-   }  }
+   }
 
    render Panes [screen, gap xl] {
       guard Recipe // first, so both panes may read it

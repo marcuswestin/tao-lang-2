@@ -2,6 +2,7 @@ grammar TaoTypes
 
 import "./visibility"
 import "./expressions"
+import "./imports"
 import "./terminals"
 
 entry TypesGrammarEntrypoint:
@@ -12,7 +13,8 @@ PrimitiveDeclaration:
     'primitive' name=PrimitiveType ('is' base=PrimitiveType)? ('with' slots=ItemTypeExpression)?;
 
 TypeDeclaration:
-    visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;
+    visibility=DeclarationVisibility? 'type' name=ID
+    ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference);
 
 TypeExpression:
     DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
@@ -81,12 +83,12 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'item' | 'list' | 'action' | 'design'
-    | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
+    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'list' | 'action' | 'design'
+    | 'view' | 'nav' | 'datasource' | 'app';
 
 NonListPrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'item' | 'action' | 'design'
-    | 'visual' | 'presentable' | 'view' | 'layout' | 'frame' | 'ui' | 'nav' | 'datasource' | 'app';
+    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'action' | 'design'
+    | 'view' | 'nav' | 'datasource' | 'app';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

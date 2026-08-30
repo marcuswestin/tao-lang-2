@@ -22,18 +22,18 @@ export const configuredValueValidationMessages = {
     `${type} item '${key}' has no configuration slot named '${name}'.`,
   keyedItemMissing: (type: string, key: string, name: string) => `${type} item '${key}' requires '${name}'.`,
   constructorBlock: (name: string) => `${name} configuration requires a block.`,
+  configurationBlock: (type: string, name: string) =>
+    `${type} configuration '${name}' expects a value expression, not a reference block.`,
+  toolbarReference: 'Toolbar entries must reference actions.',
+  toolbarArguments: (name: string) => `Toolbar action '${name}' must be invokable without arguments.`,
+  toolbarTitle: (name: string) => `Action '${name}' must fill Title before it can appear in Toolbar.`,
+  duplicateToolbarReference: (name: string) => `Toolbar references action '${name}' more than once.`,
 } as const
 
 export const configuredValueValidationChecks = {
   [AST.ConfiguredValue.$type]: validateConfiguredValue,
   [AST.InferredConfigurationConstructor.$type]: (value, ctx) => {
-    const owner = value.$container
-    const inferredName = AST.isAliasDeclaration(owner)
-      ? owner.name
-      : AST.isAppProperty(owner)
-      ? owner.name
-      : undefined
-    const declaration = inferredName ? Type.visibleDeclaration(value, inferredName) : undefined
+    const declaration = Type.inferredConfigurationDeclaration(value)
     if (declaration && AST.isConfigurableDeclaration(declaration)) {
       validateConfigurationBlock(value.block, declaration, ctx, { requireConstructorProperties: true })
     }
@@ -212,7 +212,7 @@ function validateConfigurationEntries(
       validateKeyedConfigurationItem(entry, state.typeName, state.keyedContract, ctx)
       continue
     }
-    if (!entry.name || !entry.value) {
+    if (!entry.name) {
       continue
     }
     const property = state.propertiesByName.get(entry.name)
@@ -224,7 +224,45 @@ function validateConfigurationEntries(
       ctx.error(configuredValueValidationMessages.duplicateConfiguration(state.typeName, entry.name), entry)
     }
     state.entries.set(entry.name, entry)
+    if (entry.block) {
+      if (entry.name === 'Toolbar') {
+        validateToolbarReferenceBlock(entry.block, ctx)
+      } else {
+        ctx.error(configuredValueValidationMessages.configurationBlock(state.typeName, entry.name), entry.block)
+      }
+      continue
+    }
+    if (!entry.value) {
+      continue
+    }
     validateConfiguredProperty(entry.value, property, entry, ctx)
+  }
+}
+
+function validateToolbarReferenceBlock(block: AST.ConfigurationBlock, ctx: ValidationContext): void {
+  const seen = new Set<AST.ActionDeclaration>()
+  for (const entry of block.entries) {
+    const reference = entry.reference?.ref
+    if (!reference) {
+      if (!entry.reference) {
+        ctx.error(configuredValueValidationMessages.toolbarReference, entry)
+      }
+      continue
+    }
+    if (!AST.isActionDeclaration(reference)) {
+      ctx.error(configuredValueValidationMessages.toolbarReference, entry)
+      continue
+    }
+    if (seen.has(reference)) {
+      ctx.error(configuredValueValidationMessages.duplicateToolbarReference(reference.name), entry)
+    }
+    seen.add(reference)
+    if (AST.parametersOf(reference).some(parameter => parameter.defaultValue === undefined)) {
+      ctx.error(configuredValueValidationMessages.toolbarArguments(reference.name), entry)
+    }
+    if (!AST.declarationSlotFillNamed(reference, 'Title')) {
+      ctx.error(configuredValueValidationMessages.toolbarTitle(reference.name), entry)
+    }
   }
 }
 

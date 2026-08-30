@@ -7,8 +7,8 @@ This folder also defines **the implementation process** for Tao language work. A
 This README owns the **tranche mechanics** only — the four versions and their validation. The
 program-level process (the sequence toward MVP and Revolution, the coverage matrix, and the role of
 the `Apps/Tao Future/` demo apps, which carry no tiers and instead graduate files as capabilities
-land) is owned by `Roadmap/Tao Revolution/Process.md`. The decided language itself is
-`Roadmap/Tao Revolution/Decisions.md`. Two rules from there bind work here: **MVP is a subset of
+land) is owned by `Docs/Roadmap/Tao Revolution/Process.md`. The decided language itself is
+`Docs/Roadmap/Tao Revolution/Decisions.md`. Two rules from there bind work here: **MVP is a subset of
 Revolution by omission, never by respelling**, and **a capability exists only if a real feature in
 one of the four apps forces it**.
 
@@ -61,7 +61,7 @@ If reflecting a Next decision reveals a **contradiction** — the decision canno
 ## Version contents
 
 - **`1 - Current/`** — the executable app sources and journey sidecars. `WordFlower.tao` remains the repository's canonical compile entry and fixed-point fixture for parser/validator/formatter tests; the directory as a whole exercises the implemented language surface.
-- **`2 - Next/`** — the sprint contract directory; the `WordFlower.tao-next` header lists the full tranche. A tranche may carry a flat `@tao-next/` scratch package while it develops a self-hosted stdlib contract. At absorption those declarations graduate into `packages/stdlib/tao`, imports return to their real stdlib paths, and the scratch package is deleted before the directory byte-identity gate arms.
+- **`2 - Next/`** — the sprint contract directory; the `WordFlower.tao-next` header lists the full tranche. A tranche may carry a flat `@tao-next/` scratch package while it develops a self-hosted stdlib contract. At absorption those declarations graduate into `packages/stdlib/@tao`, imports return to their real stdlib paths, and the scratch package is deleted before the directory byte-identity gate arms.
 - **`3 - MVP/WordFlower.tao-mvp`** + test + `Justfile` — the full MVP target: three-level related data, every navigation family, dialogues with `ask`/`respond`, snapshots, `with` app variants, design tokens, a remote provider, functions, and the typed injection escape hatch. Its `Justfile` demonstrates every `tao` CLI capability the MVP release intends to ship.
 - **`4 - Revolution/WordFlower.tao-revolution`** + test + `Justfile` — intended functionality that is explicitly _not_ part of the MVP release, plus a TODO list at the top of the app file naming intended capabilities that do not yet have expressible syntax. Its `Justfile` demonstrates the CLI surface intended beyond the MVP.
 
@@ -101,4 +101,4 @@ Files may declare more than one app. `tao dev` discovers runnable apps under any
 terminal and fail with the available names in noninteractive environments. They never select by
 filename or source order.
 
-Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The implemented navigation contract is `Spec/Tao Presentation and Navigation.md`; unimplemented navigation work is tracked in `Roadmap/Add navigation and routing MVP/Follow-ups - Add navigation and routing MVP.md`.
+Focused feature coverage lives in `Apps/Test Apps/*` and the owning package tests; WordFlower stays a real product and should never accumulate demo-only surface. The implemented navigation contract is `Docs/Spec/Tao Presentation and Navigation.md`; unimplemented navigation work is tracked in `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - Add navigation and routing MVP.md`.

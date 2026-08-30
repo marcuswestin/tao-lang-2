@@ -1,7 +1,8 @@
+import { beforeEach } from '@jest/globals'
 import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import TR from '@runtime/TR'
-import { FS, Text } from '@shared'
-import { AfterAll, AfterEach, Expect, mkTestDir } from '@shared/test'
+import { FS } from '@shared'
+import { AfterAll, AfterEach, Expect, withTaoFiles } from '@shared/test'
 import { cleanup } from '@testing-library/react-native'
 
 /** compileAndRenderApp exposes the shared runtime compile/render helper to local Jest tests. */
@@ -14,6 +15,10 @@ type RuntimeScreensAssertions = (screens: Readonly<Record<string, RuntimeScreen>
 
 /** registerRuntimeE2ELifecycle registers shared compiler and render cleanup for a runtime E2E suite. */
 export function registerRuntimeE2ELifecycle(): void {
+  beforeEach(() => {
+    TR.Navigation.beginTest()
+  })
+
   AfterAll(async () => {
     await RuntimeTesting.stopTestCompiler()
   })
@@ -47,18 +52,13 @@ export async function testCompileApps(
   appNames: readonly string[],
   testsFunction: RuntimeScreensAssertions,
 ): Promise<void> {
-  const appDir = await mkTestDir('tao-runtime-e2e-multi-')
-  const appPath = FS.resolvePath('App.tao', appDir)
-  try {
-    await FS.writeText(appPath, Text.stripIndent(source))
+  await withTaoFiles('tao-runtime-e2e-multi-', { 'App.tao': source }, async paths => {
     const screens: Record<string, RuntimeScreen> = {}
     for (const appName of appNames) {
-      screens[appName] = await RuntimeTesting.compileAndRenderApp(appPath, { appName })
+      screens[appName] = await RuntimeTesting.compileAndRenderApp(paths['App.tao'], { appName })
     }
     await testsFunction(screens)
-  } finally {
-    await FS.remove(appDir)
-  }
+  })
 }
 
 /** testCompileFiles compiles temporary Tao files, renders the entry file, and runs screen assertions. */
@@ -67,17 +67,9 @@ export async function testCompileFiles(
   files: RuntimeFiles,
   testsFunction: RuntimeScreenAssertions,
 ): Promise<void> {
-  const appDir = await mkTestDir('tao-runtime-e2e-')
-  const appPath = FS.resolvePath(entryFile, appDir)
-
-  try {
-    for (const [relativePath, source] of Object.entries(files)) {
-      await FS.writeText(FS.resolvePath(relativePath, appDir), Text.stripIndent(source))
-    }
-    const screen = await RuntimeTesting.compileAndRenderApp(appPath)
+  await withTaoFiles('tao-runtime-e2e-', files, async (_paths, rootDir) => {
+    const screen = await RuntimeTesting.compileAndRenderApp(FS.resolvePath(entryFile, rootDir))
 
     await testsFunction(screen)
-  } finally {
-    await FS.remove(appDir)
-  }
+  })
 }

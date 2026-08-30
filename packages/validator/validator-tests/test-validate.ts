@@ -1,40 +1,9 @@
 import { Diagnostics, FS, Text } from '@shared'
-import { Expect, fence, mkTestDir, tsFence, withTaoFiles } from '@shared/test'
+import { Expect, mkTestDir, stubView, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Validator, { type ValidationResult } from '../validator-src/validator'
 
-export { fence, tsFence }
-
-/** app wraps a MainView body using the current mandatory declaration parameter-list shape. */
-export function app(body: string, extra = ''): string {
-  return `
-    app MyApp { view MainView }
-    view MainView() { ${body} }
-    ${extra}
-  `
-}
-
-/** stubView returns a no-op view fixture using a parenthesized parameter list. */
-export function stubView(name: string, parameters = ''): string {
-  return `
-    view ${name}(${parameters}) {
-      render inject ${tsFence}
-        return null
-      ${fence}
-    }
-  `
-}
-
-/** stubLayout returns a no-op layout fixture using a parenthesized parameter list. */
-export function stubLayout(name: string, parameters = ''): string {
-  return `
-    layout ${name}(${parameters}) {
-      render inject ${tsFence}
-        return null
-      ${fence}
-    }
-  `
-}
+export { app, fence, stubContainer, stubView, tsFence } from '@shared/test'
 
 export type ValidatedFiles = Awaited<ReturnType<typeof Workspace.validate>>
 
@@ -51,6 +20,50 @@ export async function withValidatedFiles<
   await withTaoFiles('tao-validator-', files, async paths => {
     await testFunction(await Workspace.validate(paths[entryFile]))
   })
+}
+
+export type TaoFiles = Record<string, string>
+type FilesCheck = (result: ValidatedFiles) => Promise<void> | void
+
+/** checksFiles returns a test callback that validates a multi-file workspace and runs one check. */
+export function checksFiles(files: TaoFiles, check: FilesCheck, entryFile = 'Main.tao'): () => Promise<void> {
+  return async () => await withValidatedFiles(entryFile, files, check)
+}
+
+/** acceptsFiles returns a test callback that requires a multi-file workspace to validate cleanly. */
+export function acceptsFiles(files: TaoFiles): () => Promise<void> {
+  return acceptsFilesFrom('Main.tao', files)
+}
+
+/** acceptsFilesFrom is acceptsFiles with an explicit entry file. */
+export function acceptsFilesFrom(entryFile: string, files: TaoFiles): () => Promise<void> {
+  return checksFiles(files, result => {
+    Expect(validationErrorMessages(result)).toEqual([])
+  }, entryFile)
+}
+
+/** rejectsFiles returns a test callback that requires errors containing every message. */
+export function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
+  return rejectsFilesFrom('Main.tao', files, ...messages)
+}
+
+/** rejectsFilesFrom is rejectsFiles with an explicit entry file. */
+export function rejectsFilesFrom(
+  entryFile: string,
+  files: TaoFiles,
+  ...messages: readonly string[]
+): () => Promise<void> {
+  return checksFiles(files, result => {
+    const errors = validationErrorMessages(result).join('\n')
+    for (const message of messages) {
+      Expect(errors).toContain(message)
+    }
+  }, entryFile)
+}
+
+/** visibleView returns a workspace-visible no-op view fixture. */
+export function visibleView(name: string, parameters = ''): string {
+  return stubView(name, parameters).replace('view ', 'workspace view ')
 }
 
 export async function withValidationParse<T>(

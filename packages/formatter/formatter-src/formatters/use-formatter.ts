@@ -7,4 +7,16 @@ export default {
     f.oneSpaceAround('from')
     f.commaSpacedList()
   },
+
+  /** UsePackageStatement formats `use package path as name` spacing. */
+  UsePackageStatement(f) {
+    f.oneSpaceAfter('use', 'package')
+    f.oneSpaceAround('as')
+  },
+
+  /** PackageMemberReference keeps `ns.Member` tight around its dot. */
+  PackageMemberReference(f) {
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+  },
 } satisfies Partial<FormatHandlers>

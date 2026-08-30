@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, setReactNativeDevModeForTest, Test } from '@shared/test'
 import type { TaoLayout, TaoLayoutEntry } from '../TaoRuntime-src/TR-layout'
 import { configuredStack } from './TR-navigation-test-fixtures'
 
@@ -69,6 +69,37 @@ Describe('TR.Action', () => {
     TR.Do(action, 3)
 
     Expect(calls).toEqual([3])
+  })
+
+  Test('preserves reactive intent metadata for one bound invocation', () => {
+    const action = TR.Action((_name: TR.Value<string>) => undefined, {
+      description: name => TR.Value(`Describe ${name.jsValue}`),
+      summary: name => TR.Value(`Summarize ${name.jsValue}`),
+      title: name => TR.Value(`Title ${name.jsValue}`),
+    })
+    const arguments_: [TR.Value<string>] = [TR.Value('draft')]
+
+    Expect(TR.ActionTitle(action, arguments_)?.evaluate().jsValue).toBe('Title draft')
+    Expect(TR.ActionDescription(action, arguments_)?.evaluate().jsValue).toBe('Describe draft')
+    Expect(TR.ActionSummary(action, arguments_)?.evaluate().jsValue).toBe('Summarize draft')
+  })
+
+  Test('unwraps bridged action arguments and forwards asynchronous completion', async () => {
+    const calls: string[] = []
+    const action = TR.BridgedAction<[TR.Value<string>]>(async value => {
+      await Promise.resolve()
+      calls.push(value)
+    })
+
+    await TR.Do(action, TR.Value('https://example.com/story'))
+
+    Expect(calls).toEqual(['https://example.com/story'])
+
+    const synchronous = TR.BridgedAction<[TR.Value<string>]>(value => {
+      calls.push(`sync:${value}`)
+    })
+    synchronous.evaluate().jsValue.invoke(TR.Value('local'))
+    Expect(calls).toEqual(['https://example.com/story', 'sync:local'])
   })
 })
 
@@ -441,21 +472,21 @@ Describe('TR.TaoProps', () => {
     Expect(TR.TaoProps({}, undefined)).toEqual({})
   })
 
-  Test('copies ambient app, dialogue, and navigation context without carrying layout props', () => {
-    const home = TR.Navigation.UI({ name: 'Ambient home', render: () => null })
+  Test('copies ambient app, response, and navigation context without carrying layout props', () => {
+    const home = TR.Navigation.View({ name: 'Ambient home', render: () => null })
     const navigation = configuredStack('Ambient stack', home)
     const app = TR.Navigation.App({
       name: 'Ambient app',
       navigator: () => navigation,
       auxiliaries: () => ({}),
     })
-    const dialogue = { respond: () => {} }
+    const response = { respond: () => {} }
 
     Expect(TR.TaoContext({
       layout: TR.Layout.create([['gap', 9]]),
       testTag: 'outer',
-      callerProps: { app, dialogue, navigation },
-    })).toEqual({ app, dialogue, navigation })
+      callerProps: { app, navigation, response },
+    })).toEqual({ app, navigation, response })
   })
 })
 
@@ -501,19 +532,3 @@ Describe('TR.Dev', () => {
     }
   })
 })
-
-function setReactNativeDevModeForTest(value: boolean): () => void {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, '__DEV__')
-  Object.defineProperty(globalThis, '__DEV__', {
-    configurable: true,
-    value,
-    writable: true,
-  })
-  return () => {
-    if (descriptor) {
-      Object.defineProperty(globalThis, '__DEV__', descriptor)
-      return
-    }
-    delete (globalThis as { __DEV__?: unknown }).__DEV__
-  }
-}

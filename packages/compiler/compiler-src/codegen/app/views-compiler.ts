@@ -8,24 +8,13 @@ export const ViewsCompiler = {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
   ViewDeclaration,
 
-  /** LayoutDeclaration compiles a Tao layout declaration into a runtime component. */
-  LayoutDeclaration: ViewDeclaration,
-
-  /** FrameDeclaration compiles a caller-content frame into a runtime component. */
-  FrameDeclaration: ViewDeclaration,
-
-  /** UiDeclaration compiles presentation content through the same component body lowering as views. */
-  UiDeclaration: ViewDeclaration,
-
-  /** DialogueDeclaration compiles response content through the shared component lowering. */
-  DialogueDeclaration: ViewDeclaration,
-
   /** ViewParameterList compiles Tao view parameters into generated React props. */
-  ViewParameterList(renderable: AST.VisualDeclaration): Compiled {
+  ViewParameterList(renderable: AST.ViewDeclaration): Compiled {
     const parameters = AST.parametersOf(renderable)
     return gen`{
       ${gen.list(parameters, Compile.ParameterDeclaration)}
       __tao?: TR.TaoProps
+      __taoHost?: TR.HostReadChannel
       __taoSlots?: Readonly<Record<string, React.ReactNode>>
       children?: React.ReactNode
     }`
@@ -101,14 +90,44 @@ export const ViewsCompiler = {
   },
 } as const
 
-function ViewDeclaration(renderable: AST.VisualDeclaration): Compiled {
+function ViewDeclaration(renderable: AST.ViewDeclaration): Compiled {
+  // A pass-through alias has no body of its own: the imported target is bound under the alias's
+  // name by the module's import bindings, so there is nothing to emit here.
+  if (renderable.aliasTarget) {
+    return gen.noop()
+  }
   const parameterList = Compile.ViewParameterList(renderable)
+  const statements = renderable.block?.statements ?? []
+  const renderIndex = statements.findIndex(AST.isRenderStatement)
+  const setupStatements = renderIndex < 0 ? statements : statements.slice(0, renderIndex)
+  const renderStatements = renderIndex < 0 ? [] : statements.slice(renderIndex)
+  const hostSlotFills = AST.declarationSlotFillsOf(renderable)
+  const hostSlots = hostSlotFills.length > 0
+    ? gen`TR.Navigation.UseHostSlots(_ViewProps.__taoHost, {
+      ${gen.list(hostSlotFills, compileHostSlotFill)}
+    })`
+    : gen.noop()
   return gen`
     ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
-        ${gen.block(renderable, Compile.Statement)}
+        ${gen.list(setupStatements, Compile.Statement)}
+        ${hostSlots}
+        ${gen.list(renderStatements, Compile.Statement)}
       })
     }
   `
+}
+
+/** Host-slot names are declaration-family vocabulary; codegen forwards the effective fills verbatim. */
+function compileHostSlotFill(fill: AST.DeclarationSlotFill): Compiled {
+  if (fill.value) {
+    return gen`${gen.jsLiteral(fill.name)}: () => ${Compile.Expression(fill.value)},`
+  }
+  const references = fill.block?.references
+    .map(reference => reference.ref)
+    .filter(AST.isCommandDeclaration) ?? []
+  return gen`${gen.jsLiteral(fill.name)}: () => [
+    ${gen.join(references, reference => gen`${gen.scopeName(reference)}`)}
+  ],`
 }

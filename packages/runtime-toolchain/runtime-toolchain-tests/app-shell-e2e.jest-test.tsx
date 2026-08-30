@@ -21,7 +21,8 @@ Describe('Expo runtime', () => {
       .map(view => RN.StyleSheet.flatten(view.props.style))
       .filter(Boolean)
 
-    ExpectScreen(screen).toHaveText('Layout and app shell')
+    Expect(screen.getAllByText('Layout and app shell')).toHaveLength(2)
+    Expect(screen.getByRole('header').props.children).toBe('Layout and app shell')
     ExpectScreen(screen).toHaveText('This screen should sit inside the default Tao app shell.')
     ExpectScreen(screen).toHaveText('Safe default app frame')
     ExpectScreen(screen).toHaveText('Primary action')
@@ -56,10 +57,12 @@ Describe('Expo runtime', () => {
     const safeAreaMock = safeAreaContextTestMock()
     safeAreaMock.setSafeAreaInsetsForTests({ bottom: 5, left: 2, right: 3, top: 7 })
     try {
+      // The app host composes AppSurfaceFrame inside AppShell around every navigator that does not
+      // hand the window to a native surface; this renders that same composition directly.
       const screen = render(createElement(
         TR.AppShell,
         null,
-        createElement(RN.Text, null, 'Shell content'),
+        createElement(TR.AppSurfaceFrame, null, createElement(RN.Text, null, 'Shell content')),
       ))
       const scrollView = screen.UNSAFE_getByType(RN.ScrollView)
       const keyboardView = screen.UNSAFE_getByType(RN.KeyboardAvoidingView)
@@ -102,14 +105,14 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('provides default Tao props to app root injected layouts', async () => {
+  Test('provides default Tao props to app root injected views', async () => {
     await testCompileApp(
       `
         app RootInjectedLayoutDirectionApp {
             view MainView
         }
 
-        layout Screen() {
+        view Screen() {
             render inject Content @@content, Layout @@layout \`\`\`ts
                 return TR.Views.View(
                   { children: Content, layout: Layout },

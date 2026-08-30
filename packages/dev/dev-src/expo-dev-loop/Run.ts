@@ -78,12 +78,13 @@ async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise
       onOutput: DevLoopTUI.devLoopOutputHandler('compile'),
     })
     if (result.exitCode !== 0 || result.error !== undefined) {
-      DevLoopTUI.recordFailure('compile', formatDevLoopFailure(new Errors.CommandExecutionError(result)))
+      DevLoopTUI.recordFailure('compile', formatCommandOutput(result) ?? Errors.formatForLog(result.error))
       return false
     }
     if (!result.stdout.trim()) {
       DevLoopTUI.logDevLoop('compile', 'compiled')
     }
+    DevLoopTUI.clearFailure('compile')
     return true
   } catch (error) {
     DevLoopTUI.recordFailure('compile', formatDevLoopFailure(error))
@@ -91,14 +92,20 @@ async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise
   }
 }
 
+/** formatCommandOutput extracts the child process output that explains a failed dev command. */
+function formatCommandOutput(result: { stderr: string; stdout: string }): string | undefined {
+  const commandOutput = [result.stderr, result.stdout]
+    .map(output => OutputText.stripAnsi(output).trim())
+    .filter(output => output.length > 0)
+  return commandOutput.length > 0 ? commandOutput.join('\n') : undefined
+}
+
 /** formatDevLoopFailure favors the child process output that explains a failed dev command. */
 function formatDevLoopFailure(error: unknown): string {
   if (error instanceof Errors.CommandExecutionError) {
-    const commandOutput = [error.result.stderr, error.result.stdout]
-      .map(output => OutputText.stripAnsi(output).trim())
-      .filter(output => output.length > 0)
-    if (commandOutput.length > 0) {
-      return commandOutput.join('\n')
+    const commandOutput = formatCommandOutput(error.result)
+    if (commandOutput !== undefined) {
+      return commandOutput
     }
   }
   return Errors.formatForLog(error)
@@ -123,7 +130,7 @@ async function recompileAndReload(repoRoot: string, appPath: string, appName?: s
 /** Run provides dev-loop subprocess helpers. */
 const Run = {
   compileApp,
-  failureDiagnostics: { format: formatDevLoopFailure },
+  formatFailure: formatDevLoopFailure,
   recompileAndReload,
   runJust,
   runTests,

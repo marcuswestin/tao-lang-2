@@ -12,34 +12,15 @@ import { useValidationMessages, validateVisibleDeclarations } from '../validator
 import {
   accepts,
   app,
+  checksFiles,
   rejects,
+  rejectsFiles,
   stubView,
   testValidateCodeWithErrors,
-  type ValidatedFiles,
   validationErrorMessages,
-  withValidatedFiles,
+  visibleView,
   withValidationParse,
 } from './test-validate'
-
-type TaoFiles = Record<string, string>
-type FilesCheck = (result: ValidatedFiles) => Promise<void> | void
-
-function checksFiles(files: TaoFiles, check: FilesCheck): () => Promise<void> {
-  return async () => await withValidatedFiles('Main.tao', files, check)
-}
-
-function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
-  return checksFiles(files, result => {
-    const errors = validationErrorMessages(result).join('\n')
-    for (const message of messages) {
-      Expect(errors).toContain(message)
-    }
-  })
-}
-
-function visibleView(name: string, parameters = ''): string {
-  return stubView(name, parameters).replace('view ', 'workspace view ')
-}
 
 function stubApp(extra = ''): string {
   return app('render Fixture()', `${stubView('Fixture')}\n${extra}`)
@@ -95,14 +76,10 @@ Describe('validator: workspace structure', () => {
         'boolean',
         'list',
         'time',
+        'duration',
         'action',
         'design',
-        'visual',
-        'presentable',
         'view',
-        'layout',
-        'frame',
-        'ui',
         'nav',
         'datasource',
         'app',
@@ -122,15 +99,20 @@ Describe('validator: workspace structure', () => {
     rejects('primitive text', preludeValidationMessages.location),
   )
 
+  Test(
+    'reports cyclic user primitive inheritance without aborting validation',
+    rejects('primitive view is nav', preludeValidationMessages.location),
+  )
+
   Test('does not report duplicate visible declarations for repeated LSP document instances', async () => {
     const parserContext = Parser.createContext()
     const uri = Langium.URI.file('/__tao__/Views.tao')
     const documentOne = parserContext.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'public layout Box() { }',
+      'public view Box() { }',
       uri,
     )
     const documentTwo = parserContext.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'public layout Box() { }',
+      'public view Box() { }',
       uri,
     )
     const diagnostics = Validation.collectDiagnostics()

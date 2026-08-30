@@ -3,9 +3,10 @@ import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { AppValidator } from '../validator-src/validators/app-validator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
+  accepts,
   fence,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
   testValidateCodeWithErrors,
   tsFence,
@@ -145,19 +146,30 @@ Describe('validator: apps and views', () => {
     ),
   )
 
-  Test('rejects state and action declarations in layouts and render blocks', async () => {
-    const layoutResult = await testValidateCodeWithErrors(`
+  Test(
+    'accepts state, query, and action declarations in a content-accepting view body',
+    accepts(`
+      data Workspaces / Workspace { Name text }
       app MyApp { view MainView }
       view MainView() {
-        render Stack()
+        render Stack() {
+          Text("hi")
+        }
       }
-      layout Stack() {
+      view Stack() {
         state Count = 0
-        render inject ${tsFence}
-          return null
-        ${fence}
+        query Workspaces { }
+        action AddOne() { set Count += 1 }
+        render Col() {
+          @@content
+        }
       }
-    `)
+      ${stubContainer('Col')}
+      ${stubView('Text', 'Value text')}
+    `),
+  )
+
+  Test('rejects state and action declarations in render child blocks', async () => {
     const renderBlockResult = await testValidateCodeWithErrors(`
       app MyApp { view MainView }
       ${stubView('Text', 'Value text')}
@@ -168,7 +180,6 @@ Describe('validator: apps and views', () => {
       }
     `)
 
-    Expect(validationErrorMessages(layoutResult)).toContain(ViewsValidator.messages.layoutBody)
     Expect(validationErrorMessages(renderBlockResult)).toContain(ViewsValidator.messages.renderBlock)
   })
 
@@ -309,7 +320,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      ${stubLayout('Stack')}
+      ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
@@ -328,7 +339,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      ${stubLayout('Stack')}
+      ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
@@ -347,7 +358,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      ${stubLayout('Stack')}
+      ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
@@ -368,7 +379,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       app MyApp { view MainView }
-      ${stubLayout('Stack')}
+      ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
         render Stack(){
@@ -395,7 +406,7 @@ Describe('validator: apps and views', () => {
           Text("two")
         }
       }
-      layout Col() { render inject ${tsFence} return null ${fence} }
+      view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
     `,
       ViewsValidator.messages.duplicateTag('#same'),

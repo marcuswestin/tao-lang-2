@@ -57,7 +57,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -88,7 +88,7 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('applies typed defaults for functions, views, layouts, and actions', async () => {
+  Test('applies typed defaults for functions, views, and actions', async () => {
     await testCompileApp(
       `
         app DefaultsApp {
@@ -116,7 +116,7 @@ Describe('Expo runtime', () => {
           render Text(Title)
         }
 
-        layout Stack(Gap number default 8) {
+        view Stack(Gap number default 8) {
           render inject Gap, Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({
               children: <><RN.Text>{\`Gap \${Gap}\`}</RN.Text>{Content}</>,
@@ -163,7 +163,8 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        workspace ui Home(Title text default "Welcome home") {
+        workspace view Home(Title text default "Welcome home") {
+          Title Title
           render Text(Title)
         }
 
@@ -174,7 +175,8 @@ Describe('Expo runtime', () => {
         }
       `,
       screen => {
-        ExpectScreen(screen).toHaveText('Welcome home')
+        Expect(screen.getAllByText('Welcome home')).toHaveLength(2)
+        Expect(screen.getByRole('header').props.children).toBe('Welcome home')
       },
     )
   })
@@ -200,7 +202,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -314,7 +316,8 @@ Describe('Expo runtime', () => {
 
         let Basic = Profile { Name: "Ada" }
 
-        ui Home() {
+        view Home() {
+          Title "Home"
           render Stack() {
             Text("Mounted reusable app")
             when (Basic.Subtitle == none) {
@@ -324,7 +327,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -366,7 +369,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -418,7 +421,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -539,7 +542,7 @@ Describe('Expo runtime', () => {
             }
         }
 
-        layout Stack() {
+        view Stack() {
             render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
                 return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
             \`\`\`

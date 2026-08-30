@@ -20,7 +20,7 @@ without erasing compatible coverage:
 - Functional Core covers parenthesized block-bodied functions, explicit `return`, and non-blocking
   `async { ... }`; WordFlower and package tests additionally prove inferred return types.
 - Layout and App Shell covers `width max`, `Panes`, and `ScrollView`. WordFlower and package tests
-  own `frame`, intrinsic `@@content`, optional single-fill named slots, named design bundles, and
+  own `@@content` placement, optional single-fill named slots, named design bundles, and
   direct-clause precedence.
 - Runtime Stdlib covers `Image`, `Spinner`, and `Progress`; Forms and Interaction owns `Checkbox`,
   and Layout and App Shell owns `ScrollView`. Collection rendering remains language-owned through
@@ -31,16 +31,43 @@ without erasing compatible coverage:
   `let Name is Type = Value`, primitive app/nav/datasource value heads, and the settled `with`
   construction-versus-value-derivation rules.
 - Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
-- All `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declarations use a
-  parenthesized parameter list, including `()`.
+- Component Aliases covers `use package` namespace imports and pass-through view aliases
+  (`public view Badge = widgets.Badge`), the mechanism `@tao/ui` uses to publish implementations.
+- Native Components covers `@tao/ui`'s published components — Button, Switch, Slider, Picker,
+  SegmentedControl, DatePicker, Spinner — resolving to their platform-native implementations,
+  exercised through the behavior every implementation must share.
+- Sheet Presentation covers `present X as sheet`, the platform-hosted modal presentation.
+- Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
+  dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
+  feature, and package tests own the diagnostics.
+- Ticking Clock covers `@tao/time`: a held ticker, live derivation over it, `Stop`/`Start`/`Running`,
+  and the `advance` step that drives the clock a check holds.
+- Device Kit covers the first `@tao/device` contracts: semantic Haptic playback, reactive Clipboard
+  reads and writes, and opening the system Share sheet through deterministic native-module fakes.
+- All `view`, `action`, and `function` declarations use a parenthesized parameter list,
+  including `()`.
+- Every `StackNav` destination fills its own `Title`. Navigation MVP keeps the bare `@tao/nav`
+  native-default import, while Basic Navigation proves that explicit `@tao/nav/basic` renders the
+  same title and toolbar command contract deterministically.
 
 ## Navigation MVP
 
 Exercise app-mounted navigation: presentation, covered-entry state preservation, and back behavior.
 
-**Belongs here:** an `app` with `Name` and a configured `Navigator StackNav { Initial <ui> }`; `ui` declarations with typed parameters; `present Detail(Name: "…")` with required parentheses; a covered entry that stays mounted and hidden and restores its state when revealed; the accessible Back control, native back, and the test `back` step through the same reducer.
+**Belongs here:** an `app` with `Name` and a configured `Navigator StackNav { Initial <view> }`; presented `view` declarations with typed parameters; `present Detail(Name: "…")` with required parentheses; a covered entry that stays mounted and hidden and restores its state when revealed; the accessible Back control, native back, and the test `back` step through the same reducer.
 
 **Does not belong here:** selection, split, overlays, toasts, windows, restoration, routes, or transition policy; target-resolution and argument diagnostics; WordFlower product behavior.
+
+## Basic Navigation
+
+Exercise the portable navigation kit explicitly, independently of the native-default package root.
+
+**Belongs here:** `StackNav` from `@tao/nav/basic`; the same required `Title` and optional `Toolbar`
+slots as native StackNav; intent-title label defaulting; host command invocation; deterministic basic
+chrome assertions.
+
+**Does not belong here:** native adapter appearance or transitions; other navigation families;
+diagnostics; product behavior.
 
 ## Forms and Interaction MVP
 
@@ -72,7 +99,7 @@ Exercise bracketed layout clauses and the default app-shell baseline.
 
 **Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
 
-**Does not belong here:** visual style clauses; `frame`, `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
+**Does not belong here:** visual style clauses; `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 
 ## Package Access
 
@@ -97,6 +124,57 @@ Exercise view-local state, actions, and reactive rerendering.
 **Belongs here:** `state` declarations; named actions with parameters; `action()` -typed view parameters; inline `on press -> { }` handlers and named action references; `set`, compound `set`, and `do`; state-derived immutable bindings.
 
 **Does not belong here:** placement or type diagnostics; input, submit, and non-press events, which belong to Forms and Interaction MVP; control flow, data, navigation, or custom types.
+
+## Unit Values
+
+Exercise unit values (Decisions §2) through the one family the language registers.
+
+**Belongs here:** `.unit` on a number and on a unit value; canonical units and their long singular and plural aliases; equality after normalization; dimensional arithmetic — duration ± duration, duration × number, duration ÷ duration; the `.Clock` reading and its boundaries at an hour and at zero.
+
+**Does not belong here:** the ticking clock and live derivation, which WordFlower's focused writing session owns; unit diagnostics, which are package tests; families beyond `duration`, which are not registered until a feature forces one.
+
+## Ticking Clock
+
+Exercise the ticking clock (Decisions §9) and the deterministic clock a check holds.
+
+**Belongs here:** `Interval(Every)` held as view-local state; `Tick.Value` as a live reading; `let` derivations that recompute per tick; `do Tick.Stop()` and `do Tick.Start()`; `Tick.Running`; `advance <duration>` moving the clock and firing due ticks in order; the compact `when Subject Yes / not No` form.
+
+**Does not belong here:** unit construction and conversion, which Unit Values owns; the product shape of a writing session, which WordFlower owns; toast expiry, which WordFlower's documents journey proves.
+
+## Device Kit
+
+Exercise the frozen-language `@tao/device` binding pattern through Haptic, Clipboard, and Share.
+
+**Belongs here:** parameterized action fields on sidecar-built values; semantic haptic cases; a
+Clipboard read updating reactive `Value`; Clipboard copy followed by read; opening Share with text;
+deterministic native-module substitutes owned by the runtime test harness.
+
+**Does not belong here:** Location, permissions, declared failures, `when do` outcomes, raw
+Vibration, vendor enums or result objects, or app-authored native bindings.
+
+## Component Aliases
+
+Exercise namespace imports and pass-through view aliases, the mechanism behind component kits.
+
+**Belongs here:** `use package @pkg [as name]`; a derived namespace name and an `as` rename; `public view Name = ns.Member` publishing a package member under the file's own name; a same-named alias proving the namespace avoids shadowing; call sites binding through the alias to the target's parameters.
+
+**Does not belong here:** namespace-import diagnostics (duplicate namespaces, unresolvable packages, non-view targets), which are package tests; the stdlib's own native components, which `@tao/ui` and its conformance suite own.
+
+## Native Components
+
+Exercise `@tao/ui`'s published components against their platform-native implementations.
+
+**Belongs here:** importing from bare `@tao/ui` and getting the native set; pressing a native button by its title; a disabled native button; a switch, slider, picker, segmented control, and date picker reporting their values through actions; the portable rendering each falls back to where its platform host is absent; behavior that must hold identically whichever implementation is bound.
+
+**Does not belong here:** the alias mechanism itself, which Component Aliases owns; per-implementation appearance, which is not assertable from a journey; navigation surfaces, which the nav layer owns.
+
+## Sheet Presentation
+
+Exercise `present X as sheet`, the platform's own modal presentation.
+
+**Belongs here:** presenting a view as a sheet; dismissing one from inside with `dismiss`; dismissing one with Back; a sheet behaving as an overlay does for every navigation operation.
+
+**Does not belong here:** overlays and toasts, which WordFlower and the navigation tests own; the platform chrome a sheet is hosted in, which is not assertable from a journey.
 
 ## Type System Tests
 

@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Diagnostics, FS } from '@shared'
 import type Workspace from '@workspace'
 import type { RuntimeApp } from '../RuntimeApp'
 import { TestRunId } from '../test-run-id'
@@ -28,6 +28,7 @@ let workspaceModule: WorkspaceModule | undefined
 export const TestCompiler = {
   compileApp,
   compileTestFile,
+  validateTestFile,
   Worker: CompilerWorker,
 } as const
 
@@ -86,12 +87,18 @@ namespace TestCompiler {
     files: File[]
   }
 
+  /** ValidationError declares validation error messages for one file of a Tao test run. */
+  export type ValidationError = {
+    path: string
+    messages: readonly string[]
+  }
+
   export namespace Worker {
-    /** Input declares requests sent from Jest to the compiler worker. */
-    export type Input = AppInput | TestPlanInput
+    /** Input declares requests sent from a harness to the compiler worker. */
+    export type Input = AppInput | TestPlanInput | ValidateInput
 
     /** Output declares responses returned from the compiler worker. */
-    export type Output = AppOutput | TestPlanOutput
+    export type Output = AppOutput | TestPlanOutput | ValidateOutput
 
     export type AppInput = CompileAppOptions & {
       appPath: string
@@ -101,6 +108,12 @@ namespace TestCompiler {
     export type TestPlanInput = {
       kind: 'testPlan'
       runRoot: string
+      skipValidation?: boolean
+      testFilePath: string
+    }
+
+    export type ValidateInput = {
+      kind: 'validate'
       testFilePath: string
     }
 
@@ -112,6 +125,11 @@ namespace TestCompiler {
     export type TestPlanOutput = {
       file: File
       kind: 'testPlan'
+    }
+
+    export type ValidateOutput = {
+      errors: ValidationError[]
+      kind: 'validate'
     }
 
     export type Request = {
@@ -140,6 +158,7 @@ export type Suite = TestCompiler.Suite
 export type File = TestCompiler.File
 export type Manifest = TestCompiler.Manifest
 export type ValidationOptions = TestCompiler.ValidationOptions
+export type ValidationError = TestCompiler.ValidationError
 export type CompileAppOptions = TestCompiler.CompileAppOptions
 export type CompileFileOptions = TestCompiler.CompileFileOptions
 
@@ -148,8 +167,10 @@ export namespace Worker {
   export type Output = TestCompiler.Worker.Output
   export type AppInput = TestCompiler.Worker.AppInput
   export type TestPlanInput = TestCompiler.Worker.TestPlanInput
+  export type ValidateInput = TestCompiler.Worker.ValidateInput
   export type AppOutput = TestCompiler.Worker.AppOutput
   export type TestPlanOutput = TestCompiler.Worker.TestPlanOutput
+  export type ValidateOutput = TestCompiler.Worker.ValidateOutput
   export type Request = TestCompiler.Worker.Request
   export type Response = TestCompiler.Worker.Response
   export type LineBuffer = TestCompiler.Worker.LineBuffer
@@ -171,6 +192,19 @@ async function compileTestFile(
     skipValidation: options.skipValidation,
   })
   return await fileForPlan(plan, options.context)
+}
+
+async function validateTestFile(testFilePath: string): Promise<TestCompiler.ValidationError[]> {
+  const entryPath = FS.resolvePath(testFilePath)
+  const validation = await (await workspace().shared(FS.dirname(entryPath))).validate(entryPath)
+  const messagesByPath = new Map<string, string[]>()
+  for (const diagnostic of Diagnostics.errors(validation.diagnostics)) {
+    const path = diagnostic.filePath ?? entryPath
+    const messages = messagesByPath.get(path) ?? []
+    messages.push(diagnostic.message)
+    messagesByPath.set(path, messages)
+  }
+  return [...messagesByPath].map(([path, messages]) => ({ messages, path }))
 }
 
 function runtime(): RuntimeModule['default'] {

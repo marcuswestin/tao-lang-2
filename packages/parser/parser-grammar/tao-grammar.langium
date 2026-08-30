@@ -17,4 +17,4 @@ import "./types"
 import "./terminals"
 
 entry TaoFile:
-    statements+=Statement*;
+    statements+=ParsedStatement*;

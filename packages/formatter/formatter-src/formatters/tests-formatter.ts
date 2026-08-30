@@ -21,6 +21,11 @@ export default {
     f.oneSpaceAfter('press')
   },
 
+  PressToolbarCommandStep(f) {
+    f.oneSpaceAfter('press', 'command')
+    f.oneSpaceBefore('command')
+  },
+
   /** EnterTextStep formats `enter "value" into <selector> "target"`. */
   EnterTextStep(f) {
     f.oneSpaceAfter('enter', 'into')
@@ -54,6 +59,17 @@ export default {
   ExpectTextStep(f) {
     f.oneSpaceAfter('expect', 'missing')
     f.oneSpaceBetweenProperties('selector', 'text')
+  },
+
+  ExpectNavigationTitleStep(f) {
+    f.oneSpaceAfter('expect', 'navigation')
+    f.oneSpaceBetweenProperties('subject', 'value')
+  },
+
+  ExpectToolbarCommandStep(f) {
+    f.oneSpaceAfter('expect', 'command')
+    f.oneSpaceBefore('command')
+    f.oneSpaceBeforeProperty('state')
   },
 
   /** ExpectCheckboxStateStep formats tag-only checked-state assertions. */
@@ -93,4 +109,9 @@ export default {
 
   /** BackTestStep has no operands. */
   BackTestStep() {},
+
+  /** AdvanceStep spaces its duration after the keyword. */
+  AdvanceStep(f) {
+    f.oneSpaceAfter('advance')
+  },
 } satisfies Partial<FormatHandlers>

@@ -23,9 +23,3 @@ export async function createProjectContext<ServicesT extends WorkspaceServices>(
     services: createServices(packagesContext),
   }
 }
-
-/** pathIsWithin returns whether `path` is inside `directoryPath`. */
-export function pathIsWithin(path: string, directoryPath: string): boolean {
-  const relative = FS.relativePath(directoryPath, path)
-  return relative === '' || (!relative.startsWith('..') && relative !== '..')
-}

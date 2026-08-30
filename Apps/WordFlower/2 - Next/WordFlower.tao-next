@@ -11,10 +11,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // The contract is now a DIRECTORY. Every mapped source and test file here is part of it:
 //
 //   WordFlower       this entry file — project, apps, navigation, datasources, variants, shell
-//   Data             the data catalog
 //   Design           the minimal design system — implemented last, see that file
-//   ui/              the workspace and document areas, with their behavior journeys
-//   nav/             the deterministic navigation harness, with its behavior journey
+//   @ui/             the workspace, document, and focus-session areas
+//   @nav/            the navigation values and the deterministic harness navigator
+//   @data/           the data catalog
 //   *.test           the behavior journeys, each beside what it exercises
 //
 // Declarations carry the narrowest visibility that works. A file-private declaration carries no
@@ -23,8 +23,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // those keep an explicit `use`. `ui` and `nav` are separate folders, so what they publish across a
 // boundary is `workspace` and is imported by path.
 //
-// The tranche's scratch Prelude and `@tao/text` contracts graduated to `packages/stdlib/@tao` and
-// `packages/stdlib/@tao/text` respectively; their `@tao-next/` copies are intentionally absent at
+// Each tranche's scratch contracts graduate before its boundary: the Prelude and `@tao/text` to
+// `packages/stdlib/@tao` and
+// `packages/stdlib/@tao/text`, and this tranche's `duration` primitive and `@tao/time` to the
+// Prelude and `packages/stdlib/@tao/time`. Their `@tao-next/` copies are intentionally absent at
 // this absorbed boundary.
 //
 // The absorption gates must compare `1 - Current` and `2 - Next` as whole directories: the same
@@ -71,18 +73,16 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   specification of a given clause wins: `[screen, claim 2, width max 720]` reads left to right.
 //   After same-clause replacement, validation rejects a resolved clause set whose remaining clauses
 //   are semantically incompatible; source order never makes incompatible clause categories valid
-// - Rendering and presentability are orthogonal core roles. `visual` is their common rendering
-//   root; `presentable` refines it, and `ui` and `nav` refine `presentable`. `view`, `layout`, and
-//   `frame` refine `visual` without becoming presentable. Content acceptance belongs intrinsically
-//   to the declaration kind, not to a property or slot: `view` is a leaf, while `layout` and `frame`
-//   accept caller content and place it with `@@content`. A TypeScript-backed container therefore
-//   declares itself a `layout`. A layout clause is ambient on every visual occurrence, so nothing
-//   declares it and no user name collides with it. `packages/stdlib/tao/Prelude.tao` pins this
-//   hierarchy
-// - A frame declares an optional named content slot with `@name = empty`. The name is in the frame's
+// - [Superseded by UNIFIED VIEW below.] This tranche introduced the kind hierarchy — `visual` and
+//   `presentable` roles, `ui`/`nav` refining `presentable`, `view`/`layout`/`frame` refining
+//   `visual`, content acceptance belonging to the kind — that the unified view tranche later
+//   collapsed into the one `view` primitive. What survives unchanged: a layout clause is ambient on
+//   every view occurrence, so nothing declares it and no user name collides with it, and
+//   `packages/stdlib/@tao/Prelude.tao` pins the primitives
+// - A view declares an optional named content slot with `@name = empty`. The name is in the view's
 //   slot namespace, `empty` contributes no rendered node, and a caller fills it at most once with
-//   `@name <visual>`. A filled slot is opaque visual content placed exactly where `@name` occurs in
-//   the frame render body; `Card` and its `@actions` call site exercise the complete contract
+//   `@name <view>`. A filled slot is opaque visual content placed exactly where `@name` occurs in
+//   the declaring render body; `Card` and its `@actions` call site exercise the complete contract
 // - An injection has no compiler-prefixed names. `TR`, `RN`, and `process` are always in scope in
 //   injected TypeScript; the inject list explicitly names every additional Tao-provided binding.
 //   Each entry is `<Name> <value>` over any expression, and a bare name binds a property under its
@@ -90,16 +90,16 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `render inject Total, Suffix " words", Content @@content, Layout @@layout, Tag @@tag`.
 //   This retires the implicit `_ViewProps` bag and is implemented across Tao, stdlib included. The
 //   ambient channels are exactly `@@content`, `@@layout` — which carries the parent
-//   direction the occurrence lays out against — and `@@tag`; navigation, dialogue, app, and caller
+//   direction the occurrence lays out against — and `@@tag`; navigation, response, app, and caller
 //   inheritance stay private and never reach a hand-written implementation
 // - The value of `render inject` is the view's root element and Tao wraps nothing around it, which
 //   is already the emitted behavior. Applying `Layout` and `Tag`, and rendering `Content` exactly
 //   once, are the implementation's responsibility and are not checked
-// - Every `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declaration has a
-//   parenthesized parameter list, including `()` when empty, mirroring its call sites:
-//   `view WordCountLabel(Value text)`, `action SaveDocument()`, `ui Settings()`. Omitting the list
-//   is invalid. A `function` has a block body and hands its result back with `return`, so early
-//   returns are available; `returns <type>` is optional and inferred when omitted
+// - Every `view`, `action`, and `function` declaration has a parenthesized parameter list,
+//   including `()` when empty, mirroring its call sites: `view WordCountLabel(Value text)`,
+//   `action SaveDocument()`, `view Settings()`. Omitting the list is invalid. A `function` has a
+//   block body and hands its result back with `return`, so early returns are available;
+//   `returns <type>` is optional and inferred when omitted
 // - `let X is Type = value` ascribes a binding: `is` narrows, `=` binds. It keeps aligned `let`
 //   columns and preserves `Name is Type` order rather than inverting to type-first
 // - List types always name their element type as `list of T`; bare `list` is invalid in type
@@ -107,7 +107,6 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - `type Name is one of Cases` declares a nominal type in the ordinary type system, and each case is a
 //   value of that type. One-case enums are valid; `ConfirmResult` deliberately uses `none` for
 //   dismissal rather than declaring a second case
-// - `inject <type>` produces a typed value outside render position
 // - `optional <Name> <type>` declares an item field that may be absent
 // - `expect checkbox <selector> checked|unchecked` joins the test vocabulary, since a two-state
 //   control cannot be asserted through visible text
@@ -116,6 +115,142 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `TagOrHexColor: /#[A-Za-z0-9_]+/`. AST context distinguishes tag and design-token positions.
 //   The validator requires tags to match `#[A-Za-z_][A-Za-z0-9_]*` and design color values to match
 //   CSS hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively
+//
+// FOCUSED WRITING. This tranche gives WordFlower a focused writing session — pick a length, write
+// until the clock runs out, pause and resume, or stop early — and with it the first capability cut
+// from the Current ↔ MVP gap: unit values (Decisions §2) and the ticking clock (§9), reached
+// through the expression-position TypeScript boundary (§15) and proved under a controllable test
+// clock (§16).
+//
+// Earlier tranches' decisions are recorded in `Docs/Spec/` and `Docs/Roadmap/Tao Revolution/Decisions.md`;
+// this header lists only what this tranche decides:
+// - Unit values (§2): `.unit` on a number constructs a typed value and `.unit` on a typed value
+//   reads it back as a number in that unit, so `10.min`, `1.s`, and `220.ms` construct durations
+//   and `Wait.s` reads one. A value belongs to one family with a canonical base and fixed ratios.
+//   The mechanism is generic; `duration` — `ms`, `s`, `min`, `h`, `d`, `wk`, with §2's long singular
+//   and plural aliases — is the only family this tranche registers. Equality normalizes
+//   (`60.s == 1.min`); a cross-family read is a compile error; arithmetic is dimensional: duration
+//   ± duration → duration, duration × number → duration, duration ÷ duration → number, and anything
+//   else is a compile error, except that a unit value compares against the bare literal `0`
+// - Calendar arithmetic (§2): `now` is an ordinary expression anywhere, not only a `time` default;
+//   `time − time → duration` and `time + duration → time`
+// - `duration` is a primitive type in the Prelude, used wherever a type goes: a parameter
+//   `Length duration`, a `returns duration`, a `state` or `let` holding one
+// - `.Clock` reads a duration as clock text: whole seconds, `m:ss` under an hour and `h:mm:ss` from
+//   an hour up, and `0:00` for zero or negative
+// - `@tao/time` (§9): `use Interval from @tao/time` imports its declarations by name, like every
+//   other package, and `Interval(Every)` constructs a reactive ticker that starts when the view
+//   holding it mounts and stops when that view unmounts. `Tick.Value` is the time as of the latest
+//   tick, `Tick.Running` whether it ticks, and `do Tick.Stop()` and `do Tick.Start()` control it.
+//   No clock grammar enters the language. This amends Decisions §9 and §11, which sketched a
+//   lowercase service import (`use time from @tao/time`, `time.Interval(1.s)`): a package binding
+//   would need a second `use` form and a package-as-namespace value, and the segment names of the
+//   packages that already exist — `ui`, `nav`, `data` — were Tao keywords when this was decided
+//   (`nav` and `data` still are; UNIFIED VIEW below retires `ui`), so the shape does not
+//   generalize to the packages it would first apply to
+// - A `let` over a ticker is a live derivation: `let Left = EndsAt - Tick.Value` recomputes on
+//   every tick, and every display that reads it re-renders
+// - `<expression> from <path>` (§15) in expression position, binding loosest: the expression is a
+//   name or a call to one, that head name is the sidecar's named export, and any arguments are
+//   ordinary Tao expressions. An arbitrary expression to the left would leave every name in it
+//   ambiguous between Tao scope and module scope; §15's own examples all name the export as the
+//   head. This is how `@tao/time` binds its runtime. Value-position `inject <type> … ```ts` retires
+//   with it — `@tao/text` and `BuildStamp` migrate — while `render inject` stays as the view
+//   authoring mode
+// - The compact two-outcome `when <boolean> <Yes> / not <No>` (§8) is the value form a display of
+//   `Left` needs: `when Left > 0 Left.Clock / not "Time's up"`
+// - A toast's `Duration` is a duration: `present … as toast (Key: "…", Duration: 3.s)`
+// - Tests (§16): every test starts from a fresh, fixed clock, and `advance <duration>` moves it,
+//   firing every interval tick that falls due, in order, so a ticking journey is deterministic.
+//   Toast expiry is thereby testable and is proved in the documents journey
+//
+// UNIFIED VIEW. This tranche collapses the renderable declaration kinds into the single `view`
+// kind, implementing the unified view amendment to `Docs/Roadmap/Tao Revolution/Decisions.md`
+// (§2, §8, §9, §10, §13).
+//
+// This tranche decides:
+// - One renderable declaration kind: `view`. The keywords `ui`, `frame`, `layout`, and `dialogue`
+//   retire with nothing replacing them — no marker, no modifier, no new kind. A view declares a
+//   parameterized body or passes through with `view X = pkg.Member`, and may declare `responds T`;
+//   the clause survives the retired `dialogue` kind
+// - Presentation is a property of the call site, never the declaration. A view composes inline in
+//   a render tree, or is presented (`present X(…) as overlay | sheet | toast`, `present X(…) in
+//   <nav>`, `ask X(…)`), with the mode chosen where the presenting happens. Presenting, dismissing,
+//   replacing, and selection activation are legal in any view body, which is why `WorkspaceRow`
+//   and `DraftRow` now open their own subjects instead of receiving an `Open action()`
+// - Capabilities are inferred from the declaration, never declared. A view accepts caller content
+//   iff its body places `@@content` — in its render tree, or by naming the `@@content` channel in
+//   its `render inject` list; it offers named render slots iff its body declares them with
+//   `@name = empty`; it answers `ask` iff it declares `responds T`, and `respond` is legal only in
+//   a view that does
+// - `@@content` placement is at most once, and a placement may be conditional: while its branch is
+//   off, the caller's content does not mount. Passing child content to a view that places no
+//   `@@content` remains the leaf-content error, now inferred from the body rather than the kind
+// - One body grammar. State, entity queries, actions, aliases, tags, slots, and render are legal
+//   in any view body; the frame/layout statelessness ladder is deleted. `Collapsible` is the
+//   stateful content-accepting wrapper the ladder forbade
+// - The primitive types `visual`, `presentable`, `ui`, `frame`, and `layout` collapse into the
+//   single primitive `view`; `nav` now refines `view`, and `datasource` and `app` are untouched.
+//   Everything that accepted a presentable — `Initial`, `Content`, `present`, `replace` — accepts
+//   a view, and every view is a value, so the stdlib's `Presentable` union type retires
+// - The frame-only occurrence layout default (`hug`/`rigid`) retires with the kind: a view
+//   occurrence takes only the clauses written at its call site, the same for every view
+// - Restorability is usage-derived. No serialization boundary ships in this tranche, so nothing
+//   here validates it yet; the decision that matters now is its direction — the requirement and
+//   its diagnostic belong to the usage site, never the declaration — which is why an ephemeral
+//   presentation may take a non-serializable parameter: `SavedToast` receives the revert `action`
+//   for the very save it announces
+// - [Superseded by HOST-READ VIEW SLOTS AND NATIVE NAV KIT below.] This tranche originally deferred
+//   command focus scoping and restoration together. The host-read tranche now lands the minimal
+//   focused command vertical forced by `Toolbar`; restoration policy remains a later tranche
+//
+// HOST-READ VIEW SLOTS AND NATIVE NAV KIT. This tranche gives every view a typed, reactive way to
+// describe itself to the host that directly presents it, then makes native navigation the standard
+// kit while retaining an explicit deterministic basic implementation.
+//
+// This tranche decides:
+// - `Title` and `Toolbar` are optional supplied slots on primitive `view`, declared by the Prelude
+//   rather than compiler-owned vocabulary. `nav is view` inherits them; stdlib hosts name only the
+//   slots in their fixed read-set. A view fills
+//   one with an ordinary capitalized body member (`Title Workspace.Name`, `Toolbar { Save }`); no
+//   declaration modifier or content-side metadata keyword is introduced
+// - Slot values are live expressions over that presented occurrence's parameters, reads, and state.
+//   The host updates its chrome when a value changes. It reads only the directly presented view:
+//   descendants never bubble values, wrappers fill their own slots, and a presenter cannot override
+//   a fill at a call site
+// - Every `StackNav` entry, both `Initial` and later pushes, reads `Title` and `Toolbar` and requires
+//   `Title`. `present … as window` has that same contract, including its full-screen fallback.
+//   `Toolbar` remains optional. `SlotNav`, `SelectionNav`, `SplitNav`, and sheet, root, menu, and toast
+//   presentations read neither slot. Missing required fills are diagnosed at the placement, because
+//   the view itself remains valid in a host that does not require them
+// - An `action` or `transaction` is an intent when it supplies `Title`; no `intent` keyword exists.
+//   A `command` is a focused reference to an intent, never a second behavior body. It may supply
+//   `Label`, `Icon`, `Key`, and boolean `Enabled`; each takes an ordinary reactive expression and
+//   `Label` defaults to the intent's `Title`. A command
+//   nested in a view closes over that occurrence and remains active while its nearest presented
+//   occurrence holds focus. This tranche implements the action metadata, bound command, `Icon`,
+//   reactive `Enabled`, label default, and `Toolbar` listing that WordFlower and HNReader force; broader
+//   menus, rails, palettes, assistants, and restoration remain later work
+// - Native toolbars use trailing platform controls and basic/web toolbars use styled Tao controls.
+//   Commands retain source order. The current mobile/basic policy keeps the first two controls
+//   direct and moves the trailing suffix into a `More` affordance in the same order; a future wider
+//   host may expose more direct controls without reordering them. It never clips, drops, or silently
+//   disables commands
+// - `@tao/nav` mirrors `@tao/ui`: `native/` owns platform navigation and chrome, `basic/` owns the
+//   portable clause-honoring rendering, and the package root publishes native by default. Native and
+//   basic implementations of a family expose the same configuration, behavior, and host read-set
+// - A configurable type may transparently publish another package member with
+//   `public type StackNav = native.StackNav`. This is a pass-through, not nominal derivation: the
+//   alias preserves the target declaration's identity, inferred interface, primitive family,
+//   configuration contract, host read-set, and runtime implementation
+// - Product code keeps bare `@tao/nav` imports. The deterministic navigation harness imports
+//   `@tao/nav/basic` explicitly. Under behavior tests or on a target without the native host, a native
+//   kind uses the same synchronous semantic reducer and basic host surface; focused native adapter
+//   tests exercise platform options, transitions, and callbacks separately
+// - Journeys observe host-owned chrome rather than matching duplicate body text:
+//   `expect navigation title "WordFlower"` asserts the directly presented title,
+//   `expect toolbar command "Save workspace" enabled|disabled` asserts a visible command state, and
+//   `press toolbar command "Save workspace"` invokes that command through the host surface
 project {
    name "WordFlower"
    remote none

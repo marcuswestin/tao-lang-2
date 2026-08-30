@@ -9,6 +9,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Create agent worktrees with Worktrunk so its blocking setup runs before the harness starts. In other linked worktrees, `./agent` reuses the primary checkout's pinned devenv profile; if it reports no profile, run `direnv allow` and `direnv exec . ./agent setup`.
 - Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common repository workflows; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely. Resolve routine implementation choices from repository evidence.
+- Never mention Claude or any other agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages (no AI `Co-Authored-By` trailers).
 - Language work usually crosses parser, validator, formatter or source actions, compiler, and runtime; `packages/AGENTS.md` owns those boundaries.
 
 ## Safety
@@ -20,12 +21,14 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Guidance
 
-- `Roadmap/Tao Revolution/` owns the language target and program: `Decisions.md` is the decided language, `Process.md` the sequence toward MVP and Revolution, `Coverage.md` the capability-to-test map. Where older documents disagree with `Decisions.md`, the decisions win.
+- `Docs/` holds the written material: `Spec/` the implemented contract, `Roadmap/` the plans, and
+  `Tutorials/` the learning material. `Docs/README.md` says what belongs in each.
+- `Docs/Roadmap/Tao Revolution/` owns the language target and program: `Decisions.md` is the decided language, `Process.md` the sequence toward MVP and Revolution, `Coverage.md` the capability-to-test map. Where older documents disagree with `Decisions.md`, the decisions win.
 - `Apps/WordFlower/README.md` owns the tranche mechanics. Language work proceeds in tranches: decisions are settled in `2 - Next`, implemented into `1 - Current` slice by slice with behavior tests written in Tao. Current never leads; it follows Next.
 - `Apps/Tao Future/README.md` owns the post-MVP demo apps (Skillet, Hearth, Wayfare): tier-less specs whose files graduate from `.tao-revolution` to `.tao` as tranches land. Do not edit them outside consolidation or a decision amendment.
 - Read `packages/AGENTS.md` before editing `packages/`.
 - Read `Apps/Test Apps/AGENTS.md` before editing test apps.
-- Read active roadmap documents for planned work. `Roadmap/Archive/` is frozen; do not update archived documents unless Ro explicitly asks. Other `Roadmap/` documents remain live.
+- Read active roadmap documents for planned work. `Docs/Roadmap/Archive/` is frozen; do not update archived documents unless Ro explicitly asks. Other `Docs/Roadmap/` documents remain live.
 
 ## Validation
 

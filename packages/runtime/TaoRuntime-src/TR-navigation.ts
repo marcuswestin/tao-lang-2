@@ -12,8 +12,17 @@ import {
   resolveNavigationTarget,
 } from './TR-navigation-configuration'
 import {
+  type RuntimeHostReadChannel,
+  RuntimeNavigationCommand,
+  type TaoCommandAction,
+  type TaoCommandDefinition,
+  type TaoHostSlotValues,
+  type TaoNavHostSlotConfiguration,
+  useHostSlots,
+} from './TR-navigation-host-slots'
+import { disableNativeNavigationSurfaces } from './TR-navigation-native-hosts'
+import {
   type Evaluable,
-  RuntimeDialogue,
   RuntimePresentable,
 } from './TR-navigation-presentables'
 import {
@@ -32,10 +41,12 @@ export type TaoNavigationArguments = Record<string, Evaluable>
 
 export type TaoPresentableDefinition = {
   name: string
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode
+  render(
+    arguments_: TaoNavigationArguments,
+    taoProps?: TaoProps,
+    host?: RuntimeHostReadChannel,
+  ): React.ReactNode
 }
-
-export type TaoDialogueDefinition = TaoPresentableDefinition
 
 export type TaoSelectionNavItemDefinition = {
   content: TaoPresentable | TaoNavigationValue
@@ -72,6 +83,11 @@ type TaoToastPresentationOptions = {
 }
 
 export type TaoNavKindProfile = 'selection' | 'slot' | 'stack'
+export type TaoNavHostSlot = 'Title' | 'Toolbar'
+export type TaoNavHostSlotContract = Readonly<{
+  reads: readonly TaoNavHostSlot[]
+  requires: readonly TaoNavHostSlot[]
+}>
 
 export type TaoNavDeclaration = Readonly<{
   identity: symbol
@@ -85,15 +101,18 @@ export type TaoImplementedNavDeclaration =
   }>
 
 export type TaoStackNavConfiguration = Readonly<{
-  initial: TaoPresentable
+  hostSlots?: TaoNavHostSlotConfiguration
+  initial: TaoPresentable | TaoNavigationValue
 }>
 
 export type TaoSlotNavConfiguration = Readonly<{
+  hostSlots?: TaoNavHostSlotConfiguration
   initial: TaoPresentable | TaoNavigationValue
 }>
 
 export type TaoSelectionNavConfiguration = Readonly<{
   display: Evaluable
+  hostSlots?: TaoNavHostSlotConfiguration
   initial: string
   items: Readonly<Record<string, Readonly<TaoSelectionNavItemDefinition>>>
 }>
@@ -133,6 +152,8 @@ export type TaoNavKind<
   ProfileT extends TaoNavKindProfile = TaoNavKindProfile,
   ConfigurationT extends object = object,
 > = Readonly<{
+  hostSlots: TaoNavHostSlotContract
+  protocolVersion: 2
   profile: ProfileT
   activate(mount: TaoNavMount<ProfileT, ConfigurationT>, key: string): boolean
   back(mount: TaoNavMount<ProfileT, ConfigurationT>): boolean
@@ -178,14 +199,27 @@ export const NavigationControls = {
     return mountConfiguredNavigation(configured)
   },
 
-  /** UI creates a first-class presentation descriptor for one Tao ui declaration. */
-  UI(definition: TaoPresentableDefinition): TaoPresentable {
+  /** View creates the first-class presentation descriptor for one Tao view declaration. */
+  View(definition: TaoPresentableDefinition): TaoPresentable {
     return new RuntimePresentable(definition)
   },
 
-  /** Dialogue creates a descriptor whose independently asked occurrences own their resolvers. */
-  Dialogue(definition: TaoDialogueDefinition): TaoDialogue {
-    return new RuntimeDialogue(definition)
+  /** Command binds one intent invocation and its live chrome metadata to the declaring view occurrence. */
+  Command(definition: TaoCommandDefinition): RuntimeNavigationCommand {
+    return new RuntimeNavigationCommand(definition)
+  },
+
+  /** CommandReference adapts one validated reference-block action without owning the slot vocabulary. */
+  CommandReference(name: string, resolveAction: () => TaoCommandAction): RuntimeNavigationCommand {
+    const lazyAction: TaoCommandAction = {
+      evaluate: () => resolveAction().evaluate(),
+    }
+    return new RuntimeNavigationCommand({ action: lazyAction, arguments: [], name })
+  },
+
+  /** UseHostSlots publishes only the fills of the directly presented generated view. */
+  UseHostSlots(host: RuntimeHostReadChannel | undefined, values: TaoHostSlotValues): void {
+    useHostSlots(host, values)
   },
 
   /** App creates a lazy, resettable process-local app navigation definition. */
@@ -216,12 +250,14 @@ export const NavigationControls = {
     target: TaoNavigationInput | undefined,
     presentable: TaoPresentable,
     arguments_: TaoNavigationArguments,
+    options: { sheet?: boolean } = {},
   ): void {
     const navigation = resolveNavigationTarget(taoProps, target)
     if (!navigation) {
-      throw new Error(`Cannot present ${presentable.name} as overlay: no enclosing or explicit navigation target.`)
+      const mode = options.sheet ? 'sheet' : 'overlay'
+      throw new Error(`Cannot present ${presentable.name} as ${mode}: no enclosing or explicit navigation target.`)
     }
-    navigation.presentOverlay(presentable, arguments_)
+    navigation.presentOverlay(presentable, arguments_, options)
   },
 
   /** PresentToast replaces one app-owned key and restarts its transient expiry. */
@@ -241,31 +277,31 @@ export const NavigationControls = {
       throw new Error(`Cannot present ${presentable.name} as toast: Key must evaluate to text.`)
     }
     if (typeof duration !== 'number' || !Number.isFinite(duration) || duration < 0) {
-      throw new Error(`Cannot present ${presentable.name} as toast: Duration must be a finite non-negative number.`)
+      throw new Error(`Cannot present ${presentable.name} as toast: Duration must be a finite non-negative duration.`)
     }
     app.presentToast(key, duration, presentable, arguments_)
   },
 
-  /** Ask stacks a fresh dialogue occurrence above the nearest enclosing navigation container. */
+  /** Ask stacks a fresh responding occurrence above the nearest enclosing navigation container. */
   Ask(
     taoProps: TaoProps | undefined,
-    dialogue: TaoDialogue,
+    view: TaoPresentable,
     arguments_: TaoNavigationArguments,
   ): Promise<Evaluable> {
     const navigation = TaoPropsControls.navigationInChain(taoProps)
     if (!navigation) {
-      throw new Error(`Cannot ask ${dialogue.name}: no enclosing navigation target.`)
+      throw new Error(`Cannot ask ${view.name}: no enclosing navigation target.`)
     }
-    return navigation.ask(dialogue, arguments_)
+    return navigation.ask(view, arguments_)
   },
 
-  /** Respond settles only the dialogue occurrence inherited by the responding render tree. */
+  /** Respond settles only the asked occurrence inherited by the responding render tree. */
   Respond(taoProps: TaoProps | undefined, value?: Evaluable): void {
-    const dialogue = TaoPropsControls.dialogueInChain(taoProps)
-    if (!dialogue) {
-      throw new Error('Cannot respond: no enclosing dialogue occurrence.')
+    const response = TaoPropsControls.responseInChain(taoProps)
+    if (!response) {
+      throw new Error('Cannot respond: no enclosing ask occurrence.')
     }
-    dialogue.respond(value)
+    response.respond(value)
   },
 
   /** Dismiss delegates to the nearest enclosing navigation container. */
@@ -299,9 +335,17 @@ export const NavigationControls = {
 
   /** PatchConfigured merge-copies immutable descriptor configuration without mounting it. */
   PatchConfigured(configured: TaoConfiguredNavigation, patch: Record<string, unknown>): TaoConfiguredNavigation {
+    const baseHostSlots = recordValue(configured.config['__taoHostSlots'])
+    const patchHostSlots = recordValue(patch['__taoHostSlots'])
     return NavigationControls.Configure(
       configured.declaration,
-      { ...configured.config, ...patch },
+      {
+        ...configured.config,
+        ...patch,
+        ...(patchHostSlots
+          ? { '__taoHostSlots': { ...baseHostSlots, ...patchHostSlots } }
+          : {}),
+      },
     )
   },
 
@@ -329,14 +373,22 @@ export const NavigationControls = {
 
   /** beginTest resets cached generated navigation and apps before each Tao behavior check. */
   beginTest(): void {
+    // Checks run the deterministic JS surfaces; a native tab bar has no host under the harness.
+    disableNativeNavigationSurfaces()
     resetNavigationRuntime()
   },
 } as const
 
+function recordValue(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : undefined
+}
+
 export type TaoPresentable = RuntimePresentable
-export type TaoDialogue = RuntimeDialogue
 export type TaoNavigationValue = RuntimeNavigationValue
 export type TaoRuntimeApp = RuntimeAppDefinition
+export type { RuntimeHostReadChannel, RuntimeNavigationCommand, TaoNavHostSlotConfiguration }
 
 function resolveStrictAppTarget(
   taoProps: TaoProps | undefined,

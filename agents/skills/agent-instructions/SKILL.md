@@ -16,5 +16,5 @@ description: >-
 - Keep canonical agent sources under `agents/`: project skills in `agents/skills/` and reusable profiles in `agents/subagents/`.
 - Keep `.claude/CLAUDE.md` as the root-instruction include. Point `.agents/skills`, `.codex/skills`, and `.claude/skills` at `agents/skills`; point `.rulesync/subagents` at `agents/subagents`.
 - Generate tool-specific subagent adapters with `./agent setup`. Do not edit or commit generated `.codex/agents/` or `.claude/agents/` files.
-- After edits, search active code and docs for removed names, paths, commands, and duplicated ownership. Keep `Roadmap/Archive/` frozen after merge unless Ro explicitly asks; other `Roadmap/` documents remain live.
+- After edits, search active code and docs for removed names, paths, commands, and duplicated ownership. Keep `Docs/Roadmap/Archive/` frozen after merge unless Ro explicitly asks; other `Docs/Roadmap/` documents remain live.
 - Run `./agent verify` after instruction or automation changes.

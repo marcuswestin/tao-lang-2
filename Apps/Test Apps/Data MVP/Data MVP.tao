@@ -29,7 +29,8 @@ data Tasks / Task {
    order by Title
 }
 
-ui MainView() {
+view MainView() {
+   Title "Data MVP"
    state WorkspaceDraft = ""
    state TaskDraft = ""
    query Workspaces { }

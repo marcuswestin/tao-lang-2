@@ -1,5 +1,7 @@
+import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
 import { resolveDataWriteBindings } from './data-write-bindings'
+import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
   resolveActionInvocation,
@@ -12,14 +14,17 @@ import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
 import { Type } from './Type'
+import { literalDurationOf, Units } from './Units'
 
-export { Packages, Type }
+export { Packages, Type, Units }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  guardBranches,
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,
+  literalDurationOf,
   referencedNames,
   resolveActionInvocation,
   resolveArgumentBindings,
@@ -28,6 +33,7 @@ export const ASTUtils = {
   resolveFunctionInvocation,
   resolveItemPropertyBindings,
   resolveRenderInvocation,
+  rootAppValue,
 } as const
 
 export namespace ASTUtils {
@@ -52,4 +58,6 @@ export namespace ASTUtils {
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
   export type TaoType = import('./Type').TaoType
+  export type UnitFamily = import('./Units').UnitFamily
+  export type UnitReading = import('./Units').UnitReading
 }

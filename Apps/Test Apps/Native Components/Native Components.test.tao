@@ -1,0 +1,86 @@
+use Button, DatePicker, Picker, SegmentedControl, Slider, Spinner, Switch from @tao/ui
+use NativeComponents from ./
+
+// The behavior every implementation of these components must share. Each test declares the
+// component it exercises, so the suite reads as a contract: swap the implementation behind
+// `@tao/ui` and these journeys must still pass, without asserting anything about appearance.
+test Button "Button behavior" {
+   test "renders its title and reports each press" {
+      run NativeComponents
+
+      expect text "Count: 0"
+      press "Add one"
+      press "Add one"
+      expect text "Count: 2"
+   }
+   test "renders a disabled button without reporting presses" {
+      run NativeComponents
+
+      expect text "Never"
+      press "Never"
+      expect text "Count: 0"
+   }
+}
+
+test Switch "Switch behavior" {
+   test "renders its label and reports each change" {
+      run NativeComponents
+      expect {
+         text "Enabled"
+         text "Off"
+      }
+      press #enabled
+      expect text "On"
+   }
+}
+
+test Slider "Slider behavior" {
+   test "renders its label and reports each change" {
+      run NativeComponents
+
+      expect text "Volume: 0"
+      press label "Increase Volume"
+      expect text "Volume: 1"
+      press label "Increase Volume"
+      expect text "Volume: 2"
+      press label "Decrease Volume"
+      expect text "Volume: 1"
+   }
+}
+
+test Picker "Picker behavior" {
+   test "renders its options and reports the chosen one" {
+      run NativeComponents
+
+      expect text "Aisle: Produce"
+      select #aisle[1] {
+         press "Bakery"
+      }
+      expect text "Aisle: Bakery"
+   }
+}
+
+test SegmentedControl "Segmented control behavior" {
+   test "renders its options and reports the chosen one" {
+      run NativeComponents
+
+      expect text "View: List"
+      select #view[1] {
+         press "Grid"
+      }
+      expect text "View: Grid"
+   }
+}
+
+test DatePicker, Spinner "Date picker and spinner behavior" {
+   test "renders both and reports each day change where the platform host is absent" {
+      run NativeComponents
+
+      // Every check holds the clock at a fixed instant, so the degraded reading is deterministic.
+      expect text "Day: 2026-01-01"
+      press label "Next Day"
+      expect text "Day: 2026-01-02"
+      press label "Previous Day"
+      expect text "Day: 2026-01-01"
+   }
+}

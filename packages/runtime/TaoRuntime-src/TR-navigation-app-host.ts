@@ -1,4 +1,5 @@
 import React from 'react'
+import { AppSurfaceFrame } from './TR-app-shell'
 import { DataControls } from './TR-data'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import {
@@ -8,6 +9,7 @@ import {
 } from './TR-navigation-registry'
 import type { Subscription } from './TR-navigation-state'
 import { NavigationBackAffordance, navigationHostStyle } from './TR-navigation-surfaces'
+import { useWebNavigationHistory } from './TR-navigation-web-history'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
@@ -22,20 +24,36 @@ export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   }
   React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
   usePlatformBack(props.app)
+  useWebNavigationHistory(props.app)
   const runtime = requireReactNativeRuntime()
   const appTaoProps = { ...props.__tao, app: props.app }
+  const focusedAuxiliary = auxiliaries.findLast(auxiliary => auxiliary.historyDepth() > 0)
+  const navigatorTaoProps = {
+    ...appTaoProps,
+    navigationHostActive: focusedAuxiliary === undefined,
+  }
   const toasts = props.app.renderToasts(appTaoProps)
+  // A navigator that hands the window to a native surface gets true window bounds; every other
+  // navigator renders inside the app's safe-area scroll frame, exactly as before.
+  const content = React.createElement(
+    React.Fragment,
+    { key: 'levels' },
+    props.app.canGoBack && (focusedAuxiliary !== undefined || !navigator.ownsBackAffordance())
+      ? React.createElement(NavigationBackAffordance, { target: props.app })
+      : null,
+    navigator.render(navigatorTaoProps),
+    ...auxiliaries.map(auxiliary =>
+      auxiliary.render({
+        ...appTaoProps,
+        navigationHostActive: auxiliary === focusedAuxiliary,
+      })
+    ),
+  )
   return React.createElement(runtime.View, {
     children: [
-      React.createElement(
-        React.Fragment,
-        { key: 'content' },
-        props.app.canGoBack
-          ? React.createElement(NavigationBackAffordance, { target: props.app })
-          : null,
-        navigator.render(appTaoProps),
-        ...auxiliaries.map(auxiliary => auxiliary.render(appTaoProps)),
-      ),
+      navigator.ownsWindowSurface()
+        ? content
+        : React.createElement(AppSurfaceFrame, { key: 'content' }, content),
       React.Children.count(toasts) > 0
         ? React.createElement(runtime.View, {
           children: toasts,

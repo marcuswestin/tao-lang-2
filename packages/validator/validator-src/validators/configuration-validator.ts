@@ -139,7 +139,7 @@ function validatePrimitiveValue(
     return
   }
   if (declaration.block) {
-    const required = AST.primitiveSlots(ctx.workspaceFiles, primitive)
+    const required = AST.primitiveOwnSlots(ctx.workspaceFiles, primitive)
       .filter(Type.propertyRequiresValue)
       .map(property => property.name)
     if (required.length > 0) {
@@ -173,9 +173,9 @@ function validateConfigurationPropertyDefault(
 }
 
 function ownTypeSlots(declaration: AST.TypeDeclaration): AST.ItemTypeExpression | undefined {
-  return AST.isDerivedTypeExpression(declaration.type)
+  return declaration.type && AST.isDerivedTypeExpression(declaration.type)
     ? declaration.type.slots
-    : AST.isItemTypeExpression(declaration.type)
+    : declaration.type && AST.isItemTypeExpression(declaration.type)
     ? declaration.type
     : undefined
 }

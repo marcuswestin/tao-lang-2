@@ -4,7 +4,7 @@ import * as AST from './parserASTExport'
 /** DeclarationNamespace identifies the independent declaration table a name occupies. */
 export type DeclarationNamespace = 'type' | 'value'
 
-const resolvedUseTargets = new WeakMap<AST.UseStatement, readonly AST.Declaration[]>()
+const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 
 /** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
 export function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
@@ -23,12 +23,38 @@ export function primitiveDeclaration(
     .find(declaration => declaration.name === name)
 }
 
-/** primitiveSlots returns the pinned supplied-slot contract for one parsed primitive. */
-export function primitiveSlots(
+/** primitiveOwnSlots returns only the slots written directly on one parsed primitive. */
+export function primitiveOwnSlots(
   files: readonly AST.TaoFile[],
   name: AST.PrimitiveType,
 ): readonly AST.TypeProperty[] {
   return primitiveDeclaration(files, name)?.slots?.properties ?? []
+}
+
+/** primitiveSlots returns the effective inherited supplied-slot contract for one parsed primitive. */
+export function primitiveSlots(
+  files: readonly AST.TaoFile[],
+  name: AST.PrimitiveType,
+  seen: Set<AST.PrimitiveType> = new Set(),
+): readonly AST.TypeProperty[] {
+  if (seen.has(name)) {
+    return []
+  }
+  seen.add(name)
+  const declaration = primitiveDeclaration(files, name)
+  if (!declaration) {
+    return []
+  }
+  const inherited = declaration.base ? [...primitiveSlots(files, declaration.base, seen)] : []
+  for (const property of declaration.slots?.properties ?? []) {
+    const previous = inherited.findIndex(candidate => candidate.name === property.name)
+    if (previous === -1) {
+      inherited.push(property)
+    } else {
+      inherited[previous] = property
+    }
+  }
+  return inherited
 }
 
 /** declarationKey returns a namespace-qualified key suitable for collision checks. */
@@ -38,10 +64,84 @@ export function declarationKey(declaration: AST.Declaration): string {
 
 /** rememberUseTargets records every declaration visible through a use target before one Langium ref is chosen. */
 export function rememberUseTargets(
-  useStatement: AST.UseStatement,
+  useStatement: AST.UseStatement | AST.UsePackageStatement,
   declarations: readonly AST.Declaration[],
 ): void {
   resolvedUseTargets.set(useStatement, declarations)
+}
+
+/** testDisplayName returns a test's sentence, falling back to the dependencies it declares. */
+export function testDisplayName(test: AST.TestDeclaration): string {
+  if (test.name) {
+    return test.name
+  }
+  const dependencies = test.dependencies.map(reference => reference.$refText).filter(name => name.length > 0)
+  return dependencies.join(', ')
+}
+
+/** packageNamespaceName returns the name a use-package statement binds, derived from its path. */
+export function packageNamespaceName(statement: AST.UsePackageStatement): string | undefined {
+  if (statement.name) {
+    return statement.name
+  }
+  const segments = (statement.importPath ?? '').split('/').filter(segment =>
+    segment.length > 0 && segment !== '.' && segment !== '..'
+  )
+  const last = segments[segments.length - 1]
+  if (!last) {
+    return undefined
+  }
+  const name = last.startsWith('@') ? last.slice(1) : last
+  return /^[_a-zA-Z][a-zA-Z0-9_]*$/.test(name) ? name : undefined
+}
+
+/** viewAliasTarget resolves a view alias to its eventual non-alias target, guarding against cycles. */
+export function viewAliasTarget(declaration: AST.ViewDeclaration): AST.Declaration | undefined {
+  const seen = new Set<AST.ViewDeclaration>()
+  let current: AST.Declaration | undefined = declaration
+  while (AST.isViewDeclaration(current) && current.aliasTarget) {
+    if (seen.has(current)) {
+      return undefined
+    }
+    seen.add(current)
+    current = current.aliasTarget.member.ref
+  }
+  return current === declaration ? undefined : current
+}
+
+export type ConfigurableTypeAliasResolution =
+  | { kind: 'target'; target: AST.TypeDeclaration }
+  | { kind: 'invalid'; target: AST.Declaration }
+  | { kind: 'cycle' }
+  | { kind: 'unresolved' }
+
+/** configurableTypeAliasResolution follows a transparent alias while preserving its terminal state. */
+export function configurableTypeAliasResolution(
+  declaration: AST.TypeDeclaration,
+): ConfigurableTypeAliasResolution {
+  const seen = new Set<AST.TypeDeclaration>()
+  let current: AST.Declaration | undefined = declaration
+  while (AST.isTypeDeclaration(current) && current.aliasTarget) {
+    if (seen.has(current)) {
+      return { kind: 'cycle' }
+    }
+    seen.add(current)
+    current = current.aliasTarget.member.ref
+    if (!current) {
+      return { kind: 'unresolved' }
+    }
+  }
+  return AST.isTypeDeclaration(current)
+    ? { kind: 'target', target: current }
+    : { kind: 'invalid', target: current }
+}
+
+/** configurableTypeAliasTarget resolves a transparent package-member type alias, guarding cycles. */
+export function configurableTypeAliasTarget(
+  declaration: AST.TypeDeclaration,
+): AST.TypeDeclaration | undefined {
+  const resolution = configurableTypeAliasResolution(declaration)
+  return resolution.kind === 'target' ? resolution.target : undefined
 }
 
 /** resolvedImportedDeclarations returns every requested declaration, preserving type/value namespace peers. */
@@ -55,6 +155,7 @@ export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AS
 type ArgumentListOwner =
   | AST.Render
   | AST.DoStatement
+  | AST.CommandDeclaration
   | AST.FunctionCallExpression
   | AST.ContextualPresentStatement
   | AST.AskStatement
@@ -121,7 +222,7 @@ export function importableValueDeclarationsInFile(
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
-  | AST.UiDeclaration
+  | AST.ViewDeclaration
   | AST.CaseSetCase
 > {
   return [
@@ -133,13 +234,48 @@ export function importableValueDeclarationsInFile(
 /** valueDeclarationsOwnedByBlock returns value declarations owned directly by `block`. */
 export function valueDeclarationsOwnedByBlock(
   block: AST.Block,
-): Array<AST.AliasDeclaration | AST.StateDeclaration | AST.EntityQueryDeclaration | AST.ActionDeclaration> {
+): Array<
+  | AST.AliasDeclaration
+  | AST.StateDeclaration
+  | AST.EntityQueryDeclaration
+  | AST.ActionDeclaration
+  | AST.CommandDeclaration
+> {
   return [
     ...block.statements.filter(AST.isAliasDeclaration),
     ...block.statements.filter(AST.isStateDeclaration),
     ...block.statements.filter(AST.isEntityQueryDeclaration),
     ...block.statements.filter(AST.isActionDeclaration),
+    ...block.statements.filter(AST.isCommandDeclaration),
   ]
+}
+
+/** declarationSlotFillsOf returns the supplied-slot fills written directly in a declaration body. */
+export function declarationSlotFillsOf(
+  declaration: AST.ViewDeclaration | AST.ActionDeclaration,
+): AST.DeclarationSlotFill[] {
+  return declaration.block?.statements.filter(AST.isDeclarationSlotFill) ?? []
+}
+
+/** declarationSlotFillNamed returns a declaration's direct fill for one supplied slot. */
+export function declarationSlotFillNamed(
+  declaration: AST.ViewDeclaration | AST.ActionDeclaration,
+  name: string,
+): AST.DeclarationSlotFill | undefined {
+  return declarationSlotFillsOf(declaration).find(fill => fill.name === name)
+}
+
+/** commandsOf returns the commands declared directly by one view occurrence shape. */
+export function commandsOf(view: AST.ViewDeclaration): AST.CommandDeclaration[] {
+  return view.block?.statements.filter(AST.isCommandDeclaration) ?? []
+}
+
+/** commandOwningView returns the view whose direct body declares a command. */
+export function commandOwningView(command: AST.CommandDeclaration): AST.ViewDeclaration | undefined {
+  const block = command.$container
+  return AST.isBlock(block) && AST.isViewDeclaration(block.$container) && block.$container.block === block
+    ? block.$container
+    : undefined
 }
 
 /** askDeclarationsOwnedByActionBlock returns dialogue results introduced directly by one action block. */
@@ -232,7 +368,7 @@ export function isImportableValueDeclaration(
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
-  | AST.UiDeclaration
+  | AST.ViewDeclaration
 {
   return AST.isAliasDeclaration(node)
     || AST.isActionDeclaration(node)
@@ -240,7 +376,7 @@ export function isImportableValueDeclaration(
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)
-    || AST.isUiDeclaration(node)
+    || AST.isViewDeclaration(node)
 }
 
 /** ConfigurableDeclaration is an ordinary type whose primitive family is app, nav, or datasource. */
@@ -263,6 +399,13 @@ export function configurationPrimitiveOf(
     return undefined
   }
   seen.add(declaration)
+  if (declaration.aliasTarget) {
+    const target = declaration.aliasTarget.member.ref
+    return AST.isTypeDeclaration(target) ? configurationPrimitiveOf(target, seen) : undefined
+  }
+  if (!declaration.type) {
+    return undefined
+  }
   return configurationPrimitiveOfTypeExpression(declaration.type, seen)
 }
 
@@ -311,17 +454,35 @@ function configurationPrimitiveOfTypeExpression(
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
+  return visibleFileDeclarations(node, AST.isTypeDeclaration).find(declaration => declaration.name === name)
+}
+
+/** visibleFileDeclarations returns a file's own and use-imported declarations matching `guard`. */
+export function visibleFileDeclarations<DeclarationT extends AST.Node>(
+  node: AST.Node,
+  guard: (candidate: unknown) => candidate is DeclarationT,
+): DeclarationT[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
-    return undefined
+    return []
   }
-  return [
-    ...root.statements.filter(AST.isTypeDeclaration),
-    ...root.statements
-      .filter(AST.isUseStatement)
-      .flatMap(resolvedImportedDeclarations)
-      .filter(AST.isTypeDeclaration),
-  ].find(declaration => declaration.name === name)
+  const declarations: DeclarationT[] = []
+  for (const statement of root.statements) {
+    if (guard(statement)) {
+      declarations.push(statement)
+    }
+  }
+  for (const statement of root.statements) {
+    if (!AST.isUseStatement(statement)) {
+      continue
+    }
+    for (const declaration of resolvedImportedDeclarations(statement)) {
+      if (guard(declaration)) {
+        declarations.push(declaration)
+      }
+    }
+  }
+  return declarations
 }
 
 function effectiveConfigurationProperties(
@@ -332,6 +493,10 @@ function effectiveConfigurationProperties(
     return []
   }
   seen.add(declaration)
+  if (declaration.aliasTarget) {
+    const target = declaration.aliasTarget.member.ref
+    return AST.isTypeDeclaration(target) ? effectiveConfigurationProperties(target, seen) : []
+  }
   const base = baseTypeDeclarationOf(declaration)
   const properties = base ? [...effectiveConfigurationProperties(base, seen)] : []
   for (const property of itemTypeExpressionOf(declaration)?.properties ?? []) {
@@ -356,6 +521,12 @@ function configurationMetadataOf<KeyT extends 'keys' | 'implementations'>(
     return undefined as never
   }
   seen.add(declaration)
+  if (declaration.aliasTarget) {
+    const target = declaration.aliasTarget.member.ref
+    return (AST.isTypeDeclaration(target)
+      ? configurationMetadataOf(target, key, seen)
+      : undefined) as never
+  }
   const own = itemTypeExpressionOf(declaration)?.[key][0]
   if (own) {
     return own as never
@@ -365,15 +536,20 @@ function configurationMetadataOf<KeyT extends 'keys' | 'implementations'>(
 }
 
 function itemTypeExpressionOf(declaration: AST.TypeDeclaration): AST.ItemTypeExpression | undefined {
-  return AST.isDerivedTypeExpression(declaration.type)
+  return declaration.type && AST.isDerivedTypeExpression(declaration.type)
     ? declaration.type.slots
-    : AST.isItemTypeExpression(declaration.type)
+    : declaration.type && AST.isItemTypeExpression(declaration.type)
     ? declaration.type
     : undefined
 }
 
 function baseTypeDeclarationOf(declaration: AST.TypeDeclaration): AST.TypeDeclaration | undefined {
   const type = declaration.type
+  if (!type) {
+    return declaration.aliasTarget?.member.ref && AST.isTypeDeclaration(declaration.aliasTarget.member.ref)
+      ? declaration.aliasTarget.member.ref
+      : undefined
+  }
   const base = AST.isDerivedTypeExpression(type) ? type.base : type
   if (!AST.isNamedTypeReference(base) || base.members.length > 0) {
     return undefined
@@ -472,7 +648,7 @@ export function appValueDeclarationsInFile(file: AST.TaoFile): AST.AppValueDecla
 
 /** caseSetCasesOf returns the cases a type declaration introduces, when it heads a closed case set. */
 export function caseSetCasesOf(declaration: AST.TypeDeclaration): AST.CaseSetCase[] {
-  return AST.isCaseSetTypeExpression(declaration.type) ? declaration.type.cases : []
+  return declaration.type && AST.isCaseSetTypeExpression(declaration.type) ? declaration.type.cases : []
 }
 
 /** caseSetCaseName returns a case's source-facing name, whether written bare or as a text literal. */
@@ -487,6 +663,11 @@ export function caseSetOwningCase(caseSetCase: AST.CaseSetCase): AST.TypeDeclara
 
 /** parametersOf returns the parameters declared by a parameterized declaration. */
 export function parametersOf(declaration: AST.ParameterizedDeclaration): AST.ParameterDeclaration[] {
+  // A view alias has no parameter list of its own; its interface is its target's.
+  if (AST.isViewDeclaration(declaration) && declaration.aliasTarget) {
+    const target = viewAliasTarget(declaration)
+    return target && AST.isParameterizedDeclaration(target) ? parametersOf(target as AST.ParameterizedDeclaration) : []
+  }
   return declaration.parameterList?.parameters ?? []
 }
 
@@ -513,7 +694,7 @@ export function argumentsOf(node: ArgumentListOwner): AST.Argument[] {
 
 /** injectionArgumentsOf returns the arguments declared by a statement, render, or typed-value injection. */
 export function injectionArgumentsOf(
-  injection: AST.Injection | AST.TypedInjectionExpression,
+  injection: AST.Injection,
 ): AST.InjectionArgument[] {
   return injection.argumentList?.arguments ?? []
 }
@@ -528,9 +709,30 @@ export function statementsOf(block: AST.Block | undefined): AST.Statement[] {
   return block?.statements || []
 }
 
-/** renderSlotDeclarationsOf returns the direct named visual slots owned by one frame. */
-export function renderSlotDeclarationsOf(frame: AST.FrameDeclaration): AST.RenderSlotDeclaration[] {
-  return frame.block.statements.filter(AST.isRenderSlotDeclaration)
+/** renderSlotDeclarationsOf returns the direct named visual slots owned by one view. */
+export function renderSlotDeclarationsOf(view: AST.ViewDeclaration): AST.RenderSlotDeclaration[] {
+  return view.block?.statements.filter(AST.isRenderSlotDeclaration) ?? []
+}
+
+/**
+ * viewPlacesCallerContent reports whether a view's body places `@@content` — in its render tree or
+ * by naming the channel in a render injection — which is the placement that makes the view accept
+ * unnamed caller content. Content acceptance is inferred from the body, never declared.
+ */
+export function viewPlacesCallerContent(view: AST.ViewDeclaration): boolean {
+  if (!view.block) {
+    const target = viewAliasTarget(view)
+    return AST.isViewDeclaration(target) ? viewPlacesCallerContent(target) : false
+  }
+  for (const node of streamAllContents(view.block)) {
+    if (AST.isCallerContentStatement(node)) {
+      return true
+    }
+    if (AST.isRenderAmbientChannel(node) && node.channel === '@@content') {
+      return true
+    }
+  }
+  return false
 }
 
 /** renderSlotUsesOf returns direct slot placements or fills from one render block. */
@@ -629,9 +831,31 @@ export function blockStatements(owner: AST.BlockStatementOwner): readonly AST.Ow
   return (owner.block?.statements || []) as readonly AST.OwnedBlockStatement[]
 }
 
+/**
+ * whenExpressionOutcomes returns the values a `when` can produce and whether they cover the subject.
+ * The block form is total by construction; the compact form covers both poles only when it declares
+ * a negative branch, and otherwise contributes absence (Decisions §8).
+ */
+export function whenExpressionOutcomes(
+  expression: AST.WhenExpression,
+): { values: AST.Expression[]; total: boolean } {
+  if (expression.positive) {
+    const negative = expression.negative
+    return {
+      values: negative ? [expression.positive, negative] : [expression.positive],
+      total: negative !== undefined,
+    }
+  }
+  const otherwise = expression.otherwise
+  return {
+    values: [...expression.branches.map(branch => branch.value), ...(otherwise ? [otherwise.value] : [])],
+    total: true,
+  }
+}
+
 /** findOwningView returns the renderable declaration that owns `node`, if any. */
-export function findOwningView(node: AST.Node): AST.VisualDeclaration | undefined {
-  return findAncestor(node, AST.isVisualDeclaration)
+export function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
+  return findAncestor(node, AST.isViewDeclaration)
 }
 
 /** findOwningAction returns the action declaration that owns `node`, if any. */
@@ -657,6 +881,11 @@ export function findOwningAlias(node: AST.Node): AST.AliasDeclaration | undefine
 /** findOwningState returns the state declaration that owns `node`, if any. */
 export function findOwningState(node: AST.Node): AST.StateDeclaration | undefined {
   return findAncestor(node, AST.isStateDeclaration)
+}
+
+/** findOwningFromExpression returns the bridge expression whose names denote module exports. */
+export function findOwningFromExpression(node: AST.Node): AST.FromExpression | undefined {
+  return findAncestor(node, AST.isFromExpression)
 }
 
 function findAncestor<NodeT extends AST.Node>(node: AST.Node, predicate: NodePredicate<NodeT>): NodeT | undefined {

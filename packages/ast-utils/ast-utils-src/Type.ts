@@ -1,5 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import { type UnitFamily, Units } from './Units'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
 export type TaoType =
@@ -10,14 +11,10 @@ export type TaoType =
       | 'number'
       | 'boolean'
       | 'time'
+      | 'duration'
       | 'none'
       | 'design'
-      | 'visual'
-      | 'presentable'
       | 'view'
-      | 'layout'
-      | 'frame'
-      | 'ui'
       | 'nav'
       | 'datasource'
       | 'app'
@@ -92,11 +89,6 @@ export class Type {
     })
   }
 
-  /** constructorReferenceName returns the source-facing name of a typed constructor's type prefix. */
-  static constructorReferenceName(type: AST.ConstructablePrimitiveTypeReference): string {
-    return Type.referenceName(type)
-  }
-
   static definitionName(type: AST.TypeDefinition): string {
     return Switch.type(type, {
       TypeDeclaration: declaration => declaration.name,
@@ -128,7 +120,7 @@ export class Type {
           ? `list of ${Type.displayName(type.element)}`
           : 'list',
       item: type => type.nominal ? Type.definitionName(type.nominal) : type.kind,
-      entity: type => dataEntityName(type.entity),
+      entity: type => Type.dataEntityName(type.entity),
       enum: type => type.declaration.name,
       union: type => type.members.map(Type.displayName).join(' | '),
     })
@@ -196,11 +188,7 @@ export class Type {
     return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
       TypeDeclaration: declaration => Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? []),
       ActionDeclaration: typeOfParameterizedDeclaration,
-      DialogueDeclaration: typeOfParameterizedDeclaration,
-      FrameDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
-      LayoutDeclaration: typeOfParameterizedDeclaration,
-      UiDeclaration: typeOfParameterizedDeclaration,
       ViewDeclaration: typeOfParameterizedDeclaration,
       undefined: unresolvedType,
     })
@@ -208,17 +196,22 @@ export class Type {
 
   /** ofInferredConfiguration resolves a bare block from its same-name declaration context. */
   static ofInferredConfiguration(value: AST.InferredConfigurationConstructor): TaoType {
+    const declaration = Type.inferredConfigurationDeclaration(value)
+    return declaration ? Type.ofDefinition(declaration) : unresolvedType()
+  }
+
+  /** inferredConfigurationDeclaration resolves a bare block's same-name visible type declaration
+   * from its alias or app-property owner. */
+  static inferredConfigurationDeclaration(
+    value: AST.InferredConfigurationConstructor,
+  ): AST.TypeDeclaration | undefined {
     const owner = value.$container
     const name = AST.isAliasDeclaration(owner)
       ? owner.name
       : AST.isAppProperty(owner)
       ? owner.name
       : undefined
-    if (!name) {
-      return unresolvedType()
-    }
-    const declaration = visibleTypeDeclaration(value, name)
-    return declaration ? Type.ofDefinition(declaration) : unresolvedType()
+    return name ? visibleTypeDeclaration(value, name) : undefined
   }
 
   /** ofValue resolves an ordinary expression or configured runtime value. */
@@ -339,7 +332,7 @@ export class Type {
   /** entityOfReference resolves a top-level entity's singular type name. */
   static entityOfReference(reference: AST.NamedTypeReference): DataEntityDefinition | undefined {
     return reference.members.length === 0
-      ? visibleEntityDataDeclarations(reference).find(entity => entity.singularName === reference.root)
+      ? Type.visibleDataEntities(reference).find(entity => entity.singularName === reference.root)
       : undefined
   }
 
@@ -381,10 +374,33 @@ export class Type {
           : `${type.kind}:${type.primitive}`,
       list: type => `list:${type.element ? Type.identityKey(type.element) ?? 'unresolved' : 'unknown'}`,
       item: type => type.kind,
-      entity: type => `entity:${AST.getDocument(type.entity).uri.path}#${dataEntityName(type.entity)}`,
+      entity: type => `entity:${AST.getDocument(type.entity).uri.path}#${Type.dataEntityName(type.entity)}`,
       enum: type => `enum:${AST.getDocument(type.declaration).uri.path}#${type.declaration.name}`,
       union: type => `union:${type.members.map(member => Type.identityKey(member) ?? 'unresolved').join('|')}`,
     })
+  }
+
+  /** unitFamilyOf returns the unit family a resolved type belongs to, if it is a unit value. */
+  static unitFamilyOf(type: TaoType): UnitFamily | undefined {
+    return primitiveUnitFamily(type)
+  }
+
+  /**
+   * unitMemberType resolves one member read on a unit value: a unit of the family reads back as a
+   * number, and a declared reading has its own type.
+   */
+  static unitMemberType(family: UnitFamily, member: string): TaoType | undefined {
+    if (Units.readingOf(family, member)) {
+      return primitiveType('text')
+    }
+    return Units.ratioToBase(family, member) === undefined ? undefined : primitiveType('number')
+  }
+
+  /** dimensionalResult returns the type an operator yields over unit values, or none when illegal. */
+  static dimensionalResult(left: TaoType, operator: string, right: TaoType): TaoType | undefined {
+    return left.kind === 'unresolved' || right.kind === 'unresolved'
+      ? { kind: 'unresolved' }
+      : dimensionalResultType(left, operator, right)
   }
 
   /** ofMemberAccess resolves the static type reached by a member access expression. */
@@ -470,16 +486,7 @@ export class Type {
 
   /** visibleDataEntities returns local plus use-imported catalog declarations for a node. */
   static visibleDataEntities(node: AST.Node): AST.EntityDataDeclaration[] {
-    const root = AST.findRoot(node)
-    if (!AST.isTaoFile(root)) {
-      return []
-    }
-    return [
-      ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...root.statements
-        .filter(AST.isUseStatement)
-        .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
-    ]
+    return AST.visibleFileDeclarations(node, AST.isEntityDataDeclaration)
   }
 
   /** dataFieldType resolves the value type stored by a schema field. */
@@ -528,6 +535,58 @@ function inferredParameterNameFromNamedType(type: AST.NamedTypeReference): strin
 
 function isUnresolvedType(type: TaoType): type is Extract<TaoType, { kind: 'unresolved' }> {
   return type.kind === 'unresolved'
+}
+
+/** unitFamilyOfPrimitive returns the unit family a primitive type names, if it is one. */
+export function unitFamilyOfPrimitive(primitive: string): UnitFamily | undefined {
+  return Units.isFamily(primitive) ? primitive : undefined
+}
+
+/**
+ * Dimensional analysis (Decisions §2): a unit value added to or subtracted from its own family stays
+ * in it, scaling by a bare number stays in it, dividing two of a family yields a number, and the
+ * calendar pairs relate `time` and `duration`. Everything else is rejected by the validator.
+ */
+function dimensionalResultType(
+  left: TaoType,
+  operator: string,
+  right: TaoType,
+): TaoType | undefined {
+  const leftFamily = primitiveUnitFamily(left)
+  const rightFamily = primitiveUnitFamily(right)
+  const leftIsTime = isPrimitiveNamed(left, 'time')
+  const rightIsTime = isPrimitiveNamed(right, 'time')
+  if (leftIsTime && rightIsTime) {
+    return operator === '-' ? primitiveType('duration') : undefined
+  }
+  if (leftIsTime && rightFamily === 'duration') {
+    return operator === '+' || operator === '-' ? primitiveType('time') : undefined
+  }
+  if (!leftFamily && !rightFamily) {
+    return undefined
+  }
+  if (leftFamily && leftFamily === rightFamily) {
+    return operator === '+' || operator === '-'
+      ? primitiveType(leftFamily)
+      : operator === '/'
+      ? primitiveType('number')
+      : undefined
+  }
+  if (leftFamily && isPrimitiveNamed(right, 'number')) {
+    return operator === '*' || operator === '/' ? primitiveType(leftFamily) : undefined
+  }
+  if (rightFamily && isPrimitiveNamed(left, 'number')) {
+    return operator === '*' ? primitiveType(rightFamily) : undefined
+  }
+  return undefined
+}
+
+function primitiveUnitFamily(type: TaoType): UnitFamily | undefined {
+  return isPrimitiveKind(type) ? unitFamilyOfPrimitive(type.primitive) : undefined
+}
+
+function isPrimitiveNamed(type: TaoType, primitive: string): boolean {
+  return isPrimitiveKind(type) && type.primitive === primitive
 }
 
 function isPrimitiveKind(type: TaoType): type is Extract<TaoType, { kind: 'primitive' }> {
@@ -644,13 +703,10 @@ function primitiveFamilyIsAssignable(actual: TaoType, expected: TaoType): boolea
   if (actual.primitive === expected.primitive) {
     return true
   }
+  // The primitive lattice mirrors the Prelude's `is` chain: `nav` refines `view`, and nothing else
+  // refines anything.
   const parents: Partial<Record<Extract<TaoType, { kind: 'primitive' }>['primitive'], string>> = {
-    presentable: 'visual',
-    view: 'visual',
-    layout: 'visual',
-    frame: 'visual',
-    ui: 'presentable',
-    nav: 'presentable',
+    nav: 'view',
   }
   let current: string | undefined = actual.primitive
   while (current) {
@@ -749,7 +805,9 @@ class TypeResolutionContext {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
       NowExpression: () => primitiveType('time'),
-      PostfixMemberAccess: () => unresolvedType(),
+      // A bridged value has no Tao expression to read a type from; its declaration states one.
+      FromExpression: () => unresolvedType(),
+      PostfixMemberAccess: access => this.postfixMemberAccessType(access),
       BooleanLiteral: () => primitiveType('boolean'),
       CaseTestExpression: () => primitiveType('boolean'),
       ConfigurationConstructor: value => Type.ofConfiguredValue(value),
@@ -771,11 +829,36 @@ class TypeResolutionContext {
       NoneLiteral: () => primitiveType('none'),
       NumberLiteral: () => primitiveType('number'),
       StringLiteral: () => primitiveType('text'),
-      TypedInjectionExpression: injection => this.ofReference(injection.type),
       TypedConstructor: constructor => this.ofConstructorReference(constructor.type),
-      UnaryExpression: unary => unary.operator === 'not' ? primitiveType('boolean') : primitiveType('number'),
+      UnaryExpression: unary => this.unaryExpressionType(unary),
       ValueReference: reference => this.ofValueDeclaration(reference.target.ref),
     })
+  }
+
+  /**
+   * A postfix member on a number constructs a unit value of that unit's family, and the same member
+   * on a value of the family reads it back as a number. A family may also expose named readings.
+   */
+  private postfixMemberAccessType(access: AST.PostfixMemberAccess): TaoType {
+    const receiver = this.ofExpression(access.receiver)
+    if (!isPrimitiveKind(receiver)) {
+      return unresolvedType()
+    }
+    if (receiver.primitive === 'number') {
+      const family = Units.familyOf(access.member)
+      return family ? primitiveType(family) : unresolvedType()
+    }
+    const family = unitFamilyOfPrimitive(receiver.primitive)
+    return family ? Type.unitMemberType(family, access.member) ?? unresolvedType() : unresolvedType()
+  }
+
+  /** Negating a unit value keeps its family; every other unary result is fixed by its operator. */
+  private unaryExpressionType(expression: AST.UnaryExpression): TaoType {
+    if (expression.operator === 'not') {
+      return primitiveType('boolean')
+    }
+    const operand = this.ofExpression(expression.operand)
+    return primitiveUnitFamily(operand) ? operand : primitiveType('number')
   }
 
   private binaryExpressionType(expression: AST.BinaryExpression): TaoType {
@@ -783,14 +866,17 @@ class TypeResolutionContext {
       return primitiveType('boolean')
     }
     const left = this.ofExpression(expression.left)
-    return expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text'
-      ? primitiveType('text')
-      : primitiveType('number')
+    if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text') {
+      return primitiveType('text')
+    }
+    const right = this.ofExpression(expression.right)
+    return dimensionalResultType(left, expression.operator, right) ?? primitiveType('number')
   }
 
   private whenExpressionType(expression: AST.WhenExpression): TaoType {
-    const values = [...expression.branches.map(branch => branch.value), expression.otherwise.value]
-    return Type.commonType(values.map(value => this.ofExpression(value))) ?? unresolvedType()
+    const outcomes = AST.whenExpressionOutcomes(expression)
+    const types = outcomes.values.map(value => this.ofExpression(value))
+    return Type.commonType(outcomes.total ? types : [...types, primitiveType('none')]) ?? unresolvedType()
   }
 
   private listLiteralType(list: AST.ListLiteral): TaoType {
@@ -813,11 +899,12 @@ class TypeResolutionContext {
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: declaration => this.ofAction(declaration),
+      CommandDeclaration: () => actionType([]),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
       AskStatement: ask =>
-        ask.dialogue.ref?.response.ref
-          ? { kind: 'enum', declaration: ask.dialogue.ref.response.ref }
+        ask.view.ref?.response?.ref
+          ? { kind: 'enum', declaration: ask.view.ref.response.ref }
           : unresolvedType(),
       CasePayload: () => primitiveType('text'),
       EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
@@ -830,7 +917,7 @@ class TypeResolutionContext {
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
       StateDeclaration: state => this.stateDeclarationType(state),
-      UiDeclaration: () => primitiveType('ui'),
+      ViewDeclaration: () => primitiveType('view'),
       undefined: unresolvedType,
     })
   }
@@ -917,6 +1004,15 @@ class TypeResolutionContext {
         current = primitiveType('number')
         continue
       }
+      const family = primitiveUnitFamily(current)
+      if (family) {
+        const memberType = Type.unitMemberType(family, member)
+        if (!memberType) {
+          return unresolvedType()
+        }
+        current = memberType
+        continue
+      }
       if (current.kind === 'entity') {
         if (member === 'Id') {
           current = primitiveType('text')
@@ -950,7 +1046,15 @@ class TypeResolutionContext {
     try {
       return Switch.type(definition, {
         ParameterTypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
-        TypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
+        TypeDeclaration: declaration => {
+          const target = declaration.aliasTarget?.member.ref
+          if (AST.isTypeDeclaration(target)) {
+            return this.ofDefinition(target)
+          }
+          return declaration.type
+            ? withNominal(this.ofTypeExpression(declaration.type), declaration)
+            : unresolvedType()
+        },
         TypeProperty: property => this.typePropertyType(property),
       })
     } finally {
@@ -1024,18 +1128,14 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     number: () => ({ kind: 'primitive', primitive: 'number' }),
     boolean: () => ({ kind: 'primitive', primitive: 'boolean' }),
     time: () => ({ kind: 'primitive', primitive: 'time' }),
+    duration: () => ({ kind: 'primitive', primitive: 'duration' }),
     action: () => actionType([]),
     none: () => ({ kind: 'primitive', primitive: 'none' }),
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),
     design: () => ({ kind: 'primitive', primitive: 'design' }),
-    visual: () => ({ kind: 'primitive', primitive: 'visual' }),
-    presentable: () => ({ kind: 'primitive', primitive: 'presentable' }),
     view: () => ({ kind: 'primitive', primitive: 'view' }),
-    layout: () => ({ kind: 'primitive', primitive: 'layout' }),
-    frame: () => ({ kind: 'primitive', primitive: 'frame' }),
     nav: () => ({ kind: 'primitive', primitive: 'nav' }),
-    ui: () => ({ kind: 'primitive', primitive: 'ui' }),
     datasource: () => ({ kind: 'primitive', primitive: 'datasource' }),
     app: () => ({ kind: 'primitive', primitive: 'app' }),
   })
@@ -1047,10 +1147,6 @@ function actionType(parameters: readonly TaoActionParameter[]): TaoType {
 
 function definitionIdentityName(type: AST.TypeDefinition): string {
   return `${AST.getDocument(type).uri.path}#${Type.definitionName(type)}`
-}
-
-function dataEntityName(entity: DataEntityDefinition): string {
-  return entity.singularName
 }
 
 function unresolvedType(): TaoType {
@@ -1115,7 +1211,14 @@ function nominalChain(
 function parentTypeDefinition(definition: AST.TypeDefinition): AST.TypeDefinition | undefined {
   return Switch.type(definition, {
     ParameterTypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type),
-    TypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type),
+    TypeDeclaration: declaration => {
+      const target = declaration.aliasTarget?.member.ref
+      return AST.isTypeDeclaration(target)
+        ? target
+        : declaration.type
+        ? parentDefinitionOfExpression(declaration.type)
+        : undefined
+    },
     TypeProperty: property =>
       property.type
         ? namedParentDefinition(property.type)
@@ -1134,50 +1237,13 @@ function namedParentDefinition(type: AST.TypeExpression): AST.TypeDefinition | u
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
-  const root = AST.findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return undefined
-  }
-  return typeDeclarationsInFile(root).find(type => type.name === name)
-}
-
-function visibleEntityDataDeclarations(node: AST.Node): AST.EntityDataDeclaration[] {
-  const root = AST.findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return []
-  }
-  return [
-    ...root.statements.filter(AST.isEntityDataDeclaration),
-    ...root.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isEntityDataDeclaration)),
-  ]
-}
-
-function typeDeclarationsInFile(file: AST.TaoFile): AST.TypeDeclaration[] {
-  return [
-    ...file.statements.filter(AST.isTypeDeclaration),
-    ...file.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isTypeDeclaration)),
-  ]
+  return AST.visibleFileDeclarations(node, AST.isTypeDeclaration).find(type => type.name === name)
 }
 
 function visibleParameterizedDeclaration(node: AST.Node, name: string): AST.ParameterizedDeclaration | undefined {
-  const root = AST.findRoot(node)
-  if (!AST.isTaoFile(root)) {
-    return undefined
-  }
-  return parameterizedDeclarationsInFile(root).find(declaration => declaration.name === name)
-}
-
-function parameterizedDeclarationsInFile(file: AST.TaoFile): AST.ParameterizedDeclaration[] {
-  return [
-    ...file.statements.filter(AST.isParameterizedDeclaration),
-    ...file.statements
-      .filter(AST.isUseStatement)
-      .flatMap(useStatement => AST.resolvedImportedDeclarations(useStatement).filter(AST.isParameterizedDeclaration)),
-  ]
+  return AST.visibleFileDeclarations(node, AST.isParameterizedDeclaration).find(declaration =>
+    declaration.name === name
+  )
 }
 
 function owningTypePropertyDefinition(property: AST.TypeProperty): AST.TypeDefinition | undefined {

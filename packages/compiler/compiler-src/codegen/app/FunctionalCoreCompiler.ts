@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
@@ -128,7 +128,7 @@ export const FunctionalCoreCompiler = {
       {TR.GuardRender(${Compile.Expression(statement.subject)}, [
         ${
       gen.list(
-        guardRenderBranches(statement),
+        ASTUtils.guardBranches(statement),
         branch =>
           gen`[${gen.jsLiteral(branch.case)}, _TaoCasePayload => TR.BlockScope(_Scope, _Scope => {
           ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
@@ -173,10 +173,6 @@ export const FunctionalCoreCompiler = {
       })`
   },
 } as const
-
-function guardRenderBranches(statement: AST.GuardRenderStatement): AST.GuardRenderBranch[] {
-  return statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
-}
 
 function functionRuntimeParameterName(index: number): Compiled {
   return gen.Name({ name: `_TaoFunctionArg${index}` })

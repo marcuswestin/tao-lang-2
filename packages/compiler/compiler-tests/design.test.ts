@@ -21,7 +21,8 @@ Describe('compiler: minimal design', () => {
         Design Theme
       }
 
-      ui Main() {
+      view Main() {
+        Title "Main"
         render Surface() [screen, compact, gap 16, claim 2, width max 720, centered]
       }
 
@@ -49,7 +50,7 @@ Describe('compiler: minimal design', () => {
         use StackNav from @tao/nav
         use Theme from ./Theme
         app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-        ui Main() { render Surface() [panel] }
+        view Main() { Title "Main" render Surface() [panel] }
         view Surface() { render inject \`\`\`ts return null \`\`\` }
       `,
       'Theme.tao': `

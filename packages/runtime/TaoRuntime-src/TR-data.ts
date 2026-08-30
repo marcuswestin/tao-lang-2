@@ -10,6 +10,7 @@ import {
   registerDataSchema,
   revision as dataRevision,
   setTestStatus as setDataTestStatus,
+  settleAllDataSchemas,
   subscribeAll as subscribeToAllData,
 } from './TR-data-registry'
 import { RuntimeDataSchema } from './TR-data-schema'
@@ -32,6 +33,7 @@ export type TaoDataField = {
   kind: DataPrimitive | 'relation'
   onDelete?: RelationDeleteBehavior
   relation?: string
+  unique?: boolean
 }
 
 export type TaoDataEntity = {
@@ -59,10 +61,35 @@ export type TaoQueryFilter = {
 export type TaoQueryPlan = {
   entity: string
   filters: TaoQueryFilter[]
+  limit?: number
   order?: {
     direction: 'asc' | 'desc'
     field: string
   }
+}
+
+/** TaoQueryDescriptor is the serializable shape of one active query offered to a fill connection. */
+export type TaoQueryDescriptor = {
+  entity: string
+  limit?: number
+  orderBy?: string
+  orderDirection?: 'asc' | 'desc'
+  where: Record<string, TaoDescriptorValue>
+}
+
+/**
+ * TaoDescriptorValue carries an equality filter's plain value. A related row travels as a plain
+ * snapshot of its scalar fields, so an adapter reads `where.Story.HnId` without holding a handle.
+ */
+export type TaoDescriptorValue = boolean | number | string | Readonly<Record<string, unknown>>
+
+export type TaoFillRequest = {
+  descriptor: TaoQueryDescriptor
+}
+
+export type TaoFillOps = {
+  /** upsert lands fetched rows in the store, matching existing rows by the entity's unique field. */
+  upsert(entity: string, rows: readonly Record<string, unknown>[]): void
 }
 
 /**
@@ -72,7 +99,8 @@ export type TaoQueryPlan = {
  * - load returns one starting snapshot or undefined for an empty mount.
  * - save receives every committed snapshot in call order and must propagate rejection.
  * - subscribe, when present, publishes complete replacement snapshots after load.
- * - close, when present, synchronously releases connection-owned resources and must not throw.
+ * - close, when present, synchronously releases connection-owned resources and must not throw;
+ *   the runtime calls it only after the connection's queued saves settle.
  *
  * The runtime owns schema validation, queries, identity, defaults, relationships, status, and
  * notifications. Providers own persistence and transport only. A provider must either isolate its
@@ -81,6 +109,15 @@ export type TaoQueryPlan = {
  */
 export type TaoDataConnection = {
   close?(): void
+  /**
+   * fill is the remote half of a query-driven connection: the schema offers each activated query
+   * descriptor, and the connection fetches and upserts rows. The store keeps evaluating every
+   * query locally over its rows; a fill may land a superset. Rejections become the query's failed
+   * state (`stale` over cached rows, `error` over none), never a thrown render.
+   */
+  fill?(request: TaoFillRequest, ops: TaoFillOps): Promise<void>
+  /** fillCacheMs suppresses re-fills of a descriptor filled within the window (default 0: always). */
+  fillCacheMs?: number
   load(): Promise<string | undefined> | string | undefined
   /** reset is optional because remote providers may not permit destructive recovery. */
   reset?(): Promise<void> | void
@@ -104,6 +141,14 @@ export type TaoDataProviderContext = Readonly<{
 /** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
   connect(context: TaoDataProviderContext): TaoDataConnection
+  /**
+   * fills marks a query-driven provider whose connections offer fill. Tao behavior tests keep the
+   * fresh test Memory store for snapshot providers but bind a fill-capable provider anyway: fills
+   * are how a query-driven datasource has any rows at all, and determinism is the running app
+   * variant's responsibility — a test runs the variant whose adapter is a deterministic stub,
+   * never the network (Decisions §11, §16).
+   */
+  fills?: true
 }
 
 export type TaoDataProviderFactory = () => TaoDataProvider
@@ -127,10 +172,12 @@ export type TaoConfiguredDatasource = Readonly<{
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
-  const signature = configuredDatasourceSignature(source)
+  // The app root reconstructs the configured value per render, so the effect re-runs on each
+  // render's fresh `config` object and BindConfigured compares evaluated configuration values to
+  // make an unchanged rebind a cheap no-op.
   React.useLayoutEffect(() => {
     DataControls.BindConfigured(schema, source)
-  }, [schema, source.declaration, signature])
+  }, [schema, source.declaration, source.config])
 }
 
 /** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
@@ -142,9 +189,26 @@ export function evaluatedDatasourceConfiguration(
   ))
 }
 
-/** configuredDatasourceSignature is stable across equivalent values reconstructed during React renders. */
-export function configuredDatasourceSignature(source: TaoConfiguredDatasource): string {
-  return JSON.stringify(sortConfigurationValue(evaluatedDatasourceConfiguration(source)))
+/**
+ * configurationValuesEqual compares evaluated configuration values so equivalent values
+ * reconstructed during React renders do not rebind. Plain values compare structurally; anything
+ * else — an adapter object's fill functions, for instance — compares by identity, so swapping a
+ * variant's adapter rebinds even when the shapes serialize alike.
+ */
+export function configurationValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, index) => configurationValuesEqual(value, right[index]))
+  }
+  if (isRecord(left) && isRecord(right)) {
+    const names = Object.keys(left)
+    return names.length === Object.keys(right).length
+      && names.every(name => name in right && configurationValuesEqual(left[name], right[name]))
+  }
+  return false
 }
 
 function evaluatedConfigurationValue(value: unknown): unknown {
@@ -157,19 +221,6 @@ function evaluatedConfigurationValue(value: unknown): unknown {
   if (isRecord(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([name, nested]) => [name, evaluatedConfigurationValue(nested)]),
-    )
-  }
-  return value
-}
-
-function sortConfigurationValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortConfigurationValue)
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
-        .map(([name, nested]) => [name, sortConfigurationValue(nested)]),
     )
   }
   return value
@@ -237,6 +288,17 @@ export const DataControls = {
 
   Query(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
     React.useSyncExternalStore(schema.subscribe, schema.snapshot, schema.snapshot)
+    // A fill-capable provider is offered each live query's descriptor: on mount, and again
+    // whenever the descriptor itself changes (a different row, order, or limit).
+    const activationKey = schema.queryActivationKey(plan)
+    const livePlan = React.useRef(plan)
+    livePlan.current = plan
+    React.useEffect(() => {
+      if (activationKey === undefined) {
+        return
+      }
+      return schema.activateQuery(livePlan.current)
+    }, [schema, activationKey])
     return value(schema.query(plan))
   },
 
@@ -280,6 +342,12 @@ export const DataControls = {
   /** Settle waits for the active provider load and every save enqueued before this call. */
   async Settle(schema: RuntimeDataSchema): Promise<void> {
     await schema.settle()
+  },
+
+  /** SettleAll waits out every schema's load, in-flight query fills, and queued saves — the test
+   * harness's determinism point between steps. */
+  async SettleAll(): Promise<void> {
+    await settleAllDataSchemas()
   },
 
   /** subscribeAll is the app/navigation seam for rerendering entity-valued screens after data changes. */

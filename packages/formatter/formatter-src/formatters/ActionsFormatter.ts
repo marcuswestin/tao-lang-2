@@ -23,6 +23,33 @@ export const ActionsFormatter = {
     f.noSpaceBefore('(')
   },
 
+  /** CommandDeclaration formats one bound intent and its optional affordance metadata. */
+  CommandDeclaration(f) {
+    f.oneSpaceAfter('command')
+    f.oneSpaceAround('=')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+    f.oneSpaceAround('with')
+  },
+
+  /** DeclarationSlotBlock formats command metadata as one member per line. */
+  DeclarationSlotBlock(f) {
+    f.indentedBraceBlock(f.node.fills)
+    f.lineSeparatedList(f.node.fills)
+  },
+
+  /** DeclarationSlotFill separates the slot name from its expression or reference block. */
+  DeclarationSlotFill(f) {
+    f.oneSpaceBeforeProperty('value', 'block')
+  },
+
+  /** DeclarationSlotReferenceBlock formats referenced commands as an indented list. */
+  DeclarationSlotReferenceBlock(f) {
+    f.oneSpaceBeforeProperty('references')
+    f.oneSpaceBefore('}')
+  },
+
   /** ActionExpression formats inline action bodies. */
   ActionExpression() {},
 

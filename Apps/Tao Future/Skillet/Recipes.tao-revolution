@@ -1,24 +1,35 @@
 // The library, one recipe, its editor, and sharing.
 
 // App-wide: mounted on the navigator, so ⌘N works from every tab. It closes over app-wide handles only.
-command NewRecipe {
+action NewRecipeIntent() runs single {
+   Title "New recipe"
+   // Visibility follows permission to create a Recipe in MyKitchen.Recipes, resolved by the store.
+   // No row yet, so a draft. It commits once, so an abandoned "New recipe" never syncs to the whole
+   // kitchen.
+   let Recipe = ask NewRecipeSheet(MyKitchen)
+   stop if Recipe is none
+   open RecipeLink(Recipe)
+}
+command NewRecipe = NewRecipeIntent() with {
    Label "New recipe"
    Icon "plus"
    Key "cmd+n"
-   Available when can create Recipe in MyKitchen.Recipes
-   runs single
-   does {
-      // No row yet, so a draft. It commits once, so an abandoned "New recipe" never syncs to the whole
-      // kitchen.
-      let Recipe = ask NewRecipeSheet(MyKitchen)
-      stop if Recipe is none
-      open RecipeLink(Recipe)
-}  }
+}
 
-ui RecipeLibrary() {
+view RecipeLibrary() {
    Title "Recipes"
    Search Query
-   Toolbar { NewRecipe [primary], ImportRecipe }
+   command NewRecipe = NewRecipeIntent() with {
+      Label "New recipe"
+      Icon "plus"
+      Key "cmd+n"
+   }
+   command ImportRecipe = ImportRecipeIntent() with {
+      Label "Import from a link"
+      Icon "link"
+      Key "cmd+shift+n"
+   }
+   Toolbar { NewRecipe ImportRecipe }
    state OnlyFavorites = no
    query Recipes from MyKitchen.Recipes {
       search Query in Title, Notes, Ingredients.Name
@@ -56,63 +67,85 @@ file view RecipeCard(Recipe) {
             if Recipe is Shared { Icon("link", Label: "Shared") [muted] }
 }  }  }  }
 
-ui NoRecipeSelected() {
+view NoRecipeSelected() {
    render EmptyState(Icon: "book", Title: "Pick a recipe", Body: "Your library stays here while a recipe opens beside it, or on the next screen.")
 }
 
-ui RecipeScreen(Recipe) {
+view RecipeScreen(Recipe) {
    Title Recipe.Title
-   Toolbar { Cook [primary], Plan, Share, Delete }
+   Toolbar { Cook Plan Share Delete }
    // Who else has this open. Two cooks in one kitchen is the ordinary case, not an edge case.
    presence Others on Recipe
 
-   command Cook {
+   action CookIntent() {
+      Title "Cook"
+      open CookLink(Recipe)
+   }
+   command Cook = CookIntent() with {
       Label "Cook"
       Icon "flame"
       Key "cmd+r"
-      Enabled when Recipe.Steps is not empty // shown, but not pressable, until there is something to cook
-      does { open CookLink(Recipe) }
+      Enabled Recipe.Steps is not empty
    }
-   command Plan {
+   action PlanIntent() {
+      Title "Plan"
+      present PlanMeal(Recipe: Recipe) as sheet
+   }
+   command Plan = PlanIntent() with {
       Label "Plan"
       Icon "calendar.badge.plus"
-      does { present PlanMeal(Recipe: Recipe) as sheet }
    }
-   command Favorite {
+   action FavoriteIntent() {
+      Title "Favorite"
+      // Visibility follows permission to change Recipe, resolved by the store.
+      toggle Recipe.Favorite
+   }
+   command Favorite = FavoriteIntent() with {
       Label if Recipe is Favorite then "Remove from favorites" else "Favorite"
       Icon if Recipe is Favorite then "heart.fill" else "heart"
-      Available when can change Recipe
-      does { toggle Recipe.Favorite }
    }
-   command Edit {
+   action EditIntent() {
+      Title "Edit"
+      // Visibility follows permission to change Recipe, resolved by the store.
+      present RecipeEditor(Recipe) as sheet
+   }
+   command Edit = EditIntent() with {
       Label "Edit"
       Icon "pencil"
       Key "cmd+e"
-      Available when can change Recipe
-      does { present RecipeEditor(Recipe) as sheet }
    }
-   command Share {
+   action ShareIntent() {
+      Title "Share"
+      // Visibility follows permission to change Recipe, resolved by the store.
+      present ShareRecipe(Recipe) as sheet
+   }
+   command Share = ShareIntent() with {
       Label if Recipe is Shared then "Manage link" else "Share recipe"
       Icon "square.and.arrow.up"
-      Available when can change Recipe
-      does { present ShareRecipe(Recipe) as sheet }
    }
-   command Delete {
+   action DeleteIntent() runs single {
+      Title "Delete recipe"
+      // Store-derived delete permission controls visibility. The delete effect and explicit
+      // confirmation carry the destructive intent; the command adds no separate role marker.
+      stop unless ask Confirm("Delete { Recipe.Title }?", Body: "This removes it for everyone who cooks here.", Verb: "Delete")
+      delete Recipe
+      dismiss
+   }
+   command Delete = DeleteIntent() with {
       Label "Delete recipe"
       Icon "trash"
-      Intent destructive
-      Available when can delete Recipe
-      runs single
-      does {
-         stop unless ask Confirm("Delete { Recipe.Title }?", Body: "This removes it for everyone who cooks here.", Verb: "Delete")
-         delete Recipe
-         dismiss
-   }  }
+   }
 
    render ScrollView [screen] {
       guard Recipe // loading, missing, unauthorized, and rejected all fall to `guard default`
       Col [page, width max 900] {
          Image(Recipe.Photo, Description: Recipe.Title) [height 260, radius lg, fit cover]
+         Row [content right center, gap xs, wrap] {
+            Button(Cook)
+            Button(Plan)
+            Button(Share)
+            Button(Delete)
+         }
 
          Row [content left center, gap xs] {
             Text("{ Recipe.Servings } servings") [chip]
@@ -144,7 +177,7 @@ ui RecipeScreen(Recipe) {
 }  }  }  }
 
 // Creating: a draft, because the row does not exist yet.
-file dialogue NewRecipeSheet(Household) responds Recipe {
+file view NewRecipeSheet(Household) responds Recipe {
    draft New = Recipe for new { Household, Course: Dinner, Servings: 4 }
    action Add() runs single {
       when save New {
@@ -167,10 +200,17 @@ file dialogue NewRecipeSheet(Household) responds Recipe {
 
 // Editing: the row exists and its fields stand on their own, so every input writes through. There is no
 // save button, no dirty state, and nothing to discard.
-file ui RecipeEditor(Recipe) {
+file view RecipeEditor(Recipe) {
    Title "Edit recipe"
-   Toolbar { Done [primary] }
-   command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
+   action DoneIntent() {
+      Title "Done"
+      dismiss
+   }
+   command Done = DoneIntent() with {
+      Label "Done"
+      Icon "checkmark"
+      Key "escape"
+   }
 
    render ScrollView [pad lg] {
       Col [width max 720, gap lg] {
@@ -211,11 +251,12 @@ file ui RecipeEditor(Recipe) {
          }  }  }
 
          Section("Notes") { TextInput(Value: Recipe.Notes, Label: "Notes", Lines: 4) }
+         Row [content right center] { Button(Done) [primary] }
 }  }  }
 
 // -- Sharing --------------------------------------------------------------------------------------------------
 
-file ui ShareRecipe(Recipe) {
+file view ShareRecipe(Recipe) {
    Title "Share recipe"
    action Start() runs single {
       when StartSharing(Recipe) { done -> SharedRecipe { share SharedRecipeLink(SharedRecipe); dismiss } }
@@ -249,7 +290,7 @@ file ui ShareRecipe(Recipe) {
 
 // The public face of a recipe. `SharedRecipe` is a different, read-only type: the private fields are
 // not absent by convention, they are not in the type.
-public ui SharedRecipeScreen(SharedRecipe) {
+public view SharedRecipeScreen(SharedRecipe) {
    Title SharedRecipe.Title
    render ScrollView [screen] {
       guard SharedRecipe

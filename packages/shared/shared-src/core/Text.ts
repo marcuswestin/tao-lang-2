@@ -21,6 +21,11 @@ export function indentLines(text: string, spaces: number, options: IndentLinesOp
     .join('\n')
 }
 
+/** stripAnsi removes ANSI CSI escape sequences (colors, cursor, and erase controls) from terminal output. */
+export function stripAnsi(text: string): string {
+  return text.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '')
+}
+
 /** escapeRegExp escapes regular-expression metacharacters in literal text. */
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

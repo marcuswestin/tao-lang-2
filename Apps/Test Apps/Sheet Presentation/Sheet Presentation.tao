@@ -1,0 +1,43 @@
+use StackNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+app SheetPresentation {
+   Name "Sheet Presentation"
+   Navigator StackNav {
+      Initial MainView
+}  }
+
+// `as sheet` presents through the platform's own modal host — a page sheet on iOS, a modal window
+// on Android — while Back and `dismiss` stay the operations they are for any other presentation.
+view MainView() {
+   Title "Sheet Presentation"
+   render Col() [gap 8] {
+      Text("Sheet Presentation")
+
+      #openSheet
+      Button("Open sheet") {
+         on press -> { present DetailSheet() as sheet }
+}  }  }
+
+view DetailSheet() {
+   render Col() [gap 8] {
+      Text("Sheet content")
+
+      #openCover
+      Button("Open cover") {
+         on press -> { present CoverOverlay() as overlay }
+      }
+
+      #closeSheet
+      Button("Close") {
+         on press -> { dismiss }
+}  }  }
+
+view CoverOverlay() {
+   render Col() [gap 8] {
+      Text("Cover content")
+
+      #closeCover
+      Button("Close cover") {
+         on press -> { dismiss }
+}  }  }

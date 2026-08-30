@@ -9,14 +9,14 @@ const fence = '```'
 Describe('validator: frame content and render injection channels', () => {
   Test('accepts one caller-content placement and one optional named-slot fill', async () => {
     await testValidateCode(`
-      frame Card() {
+      view Card() {
         @actions = empty
         render Col() {
           @actions
           @@content
         }
       }
-      layout Col() {
+      view Col() {
         render inject Content @@content ${tsFence} return Content ${fence}
       }
       view Label() {
@@ -37,24 +37,41 @@ Describe('validator: frame content and render injection channels', () => {
     `)
   })
 
-  Test('requires exactly one caller-content placement in Tao-authored containers', async () => {
+  Test('accepts a single conditional caller-content placement', async () => {
+    await testValidateCode(`
+      view Card(Open boolean) {
+        render Col() {
+          when Open {
+            true -> { @@content }
+            otherwise -> { Leaf() }
+          }
+        }
+      }
+      view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
+      view Leaf() { render inject ${tsFence} return null ${fence} }
+      view Main() {
+        render Card(true) { Leaf() }
+      }
+    `)
+  })
+
+  Test('limits caller content to at most one placement', async () => {
     const result = await testValidateCodeWithErrors(`
-      layout EmptyLayout() { render Leaf() }
-      frame RepeatedFrame() {
+      view RepeatedView() {
         render Col() { @@content @@content }
       }
       view Leaf() { render inject ${tsFence} return null ${fence} }
-      layout Col() { render inject Content @@content ${tsFence} return Content ${fence} }
+      view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
     `)
 
     const messages = validationErrorMessages(result)
-    Expect(messages).toContain(ViewsValidator.messages.callerContentCount('EmptyLayout'))
-    Expect(messages).toContain(ViewsValidator.messages.callerContentCount('RepeatedFrame'))
+    Expect(messages).toContain(ViewsValidator.messages.callerContentCount('RepeatedView'))
   })
 
-  Test('keeps view, ui, and dialogue invocation blocks leaf-only', async () => {
+  Test('keeps views without a caller-content placement leaf-only', async () => {
     const result = await testValidateCodeWithErrors(`
       view Leaf() { render inject ${tsFence} return null ${fence} }
+      view LeafWrap() { render Leaf() }
       view Main() { render Leaf() { Leaf() } }
     `)
 
@@ -63,12 +80,12 @@ Describe('validator: frame content and render injection channels', () => {
 
   Test('rejects duplicate slot declarations, placements, and fills', async () => {
     const result = await testValidateCodeWithErrors(`
-      frame Card() {
+      view Card() {
         @actions = empty
         @actions = empty
         render Col() { @actions @actions @@content }
       }
-      layout Col() { render inject Content @@content ${tsFence} return Content ${fence} }
+      view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
       view Button() { render inject ${tsFence} return null ${fence} }
       view Main() {
         render Card() { @actions Button() @actions Button() }
@@ -81,16 +98,21 @@ Describe('validator: frame content and render injection channels', () => {
     Expect(messages).toContain(ViewsValidator.messages.duplicateRenderSlotFill('@actions'))
   })
 
-  Test('limits ambient channels to render inject and content to container implementations', async () => {
-    const result = await testValidateCodeWithErrors(`
-      let Build = inject text Layout @@layout ${tsFence} return "build" ${fence}
-      view Leaf() {
+  Test('limits ambient channels to render inject implementations', async () => {
+    const stray = await testValidateCodeWithErrors(`
+      view Stray() {
+        inject Layout @@layout ${tsFence} return null ${fence}
+        render Leaf()
+      }
+      view Leaf() { render inject ${tsFence} return null ${fence} }
+    `)
+    const contentInject = await testValidateCode(`
+      view Wrapper() {
         render inject Content @@content ${tsFence} return Content ${fence}
       }
     `)
 
-    const messages = validationErrorMessages(result)
-    Expect(messages).toContain(injectionValidationMessages.ambientRenderOnly)
-    Expect(messages).toContain(injectionValidationMessages.contentOwner)
+    Expect(validationErrorMessages(stray)).toContain(injectionValidationMessages.ambientRenderOnly)
+    Expect(validationErrorMessages(contentInject)).toEqual([])
   })
 })

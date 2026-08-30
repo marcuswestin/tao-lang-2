@@ -1,17 +1,17 @@
-import {
+import { type JestApi, setTestRuntime, type TestRuntime } from './Test'
+
+export { app, fence, stubContainer, stubView, tsFence } from './TaoFixtures'
+export {
   AfterAll,
   AfterEach,
   Describe,
   Expect,
   Jest,
-  type JestApi,
   mkTestDir,
-  setTestRuntime,
+  setReactNativeDevModeForTest,
   Test,
-  type TestRuntime,
   withTaoFiles,
 } from './Test'
-export { app, fence, stubLayout, stubView, tsFence } from './TaoFixtures'
 
 const testGlobals = globalThis as unknown as Partial<TestRuntime>
 
@@ -23,8 +23,6 @@ setTestRuntime({
   jest: getJest(),
   test: getTestRuntime('test'),
 })
-
-export { AfterAll, AfterEach, Describe, Expect, Jest, mkTestDir, Test, withTaoFiles }
 
 function getTestRuntime<Key extends keyof Omit<TestRuntime, 'jest'>>(key: Key): TestRuntime[Key] {
   const value = testGlobals[key]

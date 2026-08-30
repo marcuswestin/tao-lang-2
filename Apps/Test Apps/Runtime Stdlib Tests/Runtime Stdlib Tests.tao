@@ -9,7 +9,8 @@ app RuntimeStdlibTests {
 
 let LaunchCount = 3
 
-ui MainView() {
+view MainView() {
+   Title "Runtime Stdlib Tests"
    action Ignore() { }
    render Stack() {
       Text("Runtime stdlib smoke")

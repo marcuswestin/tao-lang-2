@@ -31,7 +31,6 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   let watcher: DevFileWatcher | undefined
   let finished = false
   let cleanupStarted = false
-  let printFailure = false
   let exitLoop!: (outcome: DevLoopOutcome) => void
 
   const done = new Promise<DevLoopOutcome>(resolve => {
@@ -83,7 +82,6 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   }
 
   expoServer.onUnexpectedExit(message => {
-    printFailure = true
     DevLoopTUI.recordFailure('expo', message)
     void finish({ kind: 'exit', exitCode: 1 })
   })
@@ -97,6 +95,12 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
 
   try {
     DevLoopTUI.logDevLoop('dev', `Tao dev app: ${appPath}`)
+    // Key input starts before the first compile so q and Ctrl-C work during startup, not only
+    // once Metro is ready.
+    Commands.printControls()
+    if (!keyInput.start()) {
+      DevLoopTUI.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
+    }
     const initialCompileSucceeded = await Run.compileApp({
       repoRoot,
       appPath,
@@ -108,7 +112,6 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
       return await done
     }
     if (!initialCompileSucceeded) {
-      printFailure = true
       return { kind: 'exit', exitCode: 1 }
     }
     watcher = new DevFileWatcher(appPath, shouldRunParserGen => {
@@ -128,20 +131,15 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     if (shouldStop()) {
       return await done
     }
-    Commands.printControls()
-    if (!keyInput.start()) {
-      DevLoopTUI.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
-    }
     void ExpoRunner.openStartupTargets(shouldStop)
     return await done
   } catch (error) {
-    printFailure = true
-    DevLoopTUI.recordFailure('dev', Run.failureDiagnostics.format(error))
+    DevLoopTUI.recordFailure('dev', Run.formatFailure(error))
     throw error
   } finally {
     removeSigint()
     removeSigterm()
     await cleanup()
-    await output?.stop({ printFailure })
+    await output?.stop()
   }
 }

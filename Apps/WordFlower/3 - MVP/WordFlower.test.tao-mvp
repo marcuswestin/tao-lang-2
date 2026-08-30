@@ -77,15 +77,45 @@ test "WordFlower full target" {
       expect text "It began at sea."
    }
 
-   test "preserves workspace and document CRUD through lifecycle states" {
+   test "runs a focused writing session down under a controlled clock" {
       run WordFlower
       enter "Novel" into #workspaceName
       submit #workspaceName
       select #workspaces[1] {
          press #openWorkspace
       }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] {
+         press #openDocument
+      }
+      press #startFocus
+      expect text "25:00"
+      advance 1.s
+      expect text "24:59"
+      press #pauseFocus
+      advance 5.min
+      expect text "24:59" // paused: the tick is stopped, so the reading is frozen
+      press #resumeFocus
+      advance 1.min
+      expect text "23:59" // resumed: the paused time was not lost
+      press #stopFocus
+      expect missing text "23:59"
+   }
+
+   test "preserves workspace and document CRUD through lifecycle states" {
+      run WordFlower
+      expect navigation title "WordFlower"
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      expect navigation title "Novel"
       enter "Renamed novel" into #workspaceTitle
-      press #saveWorkspace
+      expect toolbar command "Save workspace" enabled
+      press toolbar command "Save workspace"
+      expect navigation title "Renamed novel"
       expect text "Workspace: Renamed novel"
       press #addDocument
       expect text "Document title is required"
@@ -180,10 +210,13 @@ test "WordFlower remote data" {
 test "WordFlower navigation foundation" {
    test "native back uses the semantic reducer" {
       run WordFlowerFoundationTest
+      expect navigation title "Navigation foundation"
       expect text "Foundation home marker"
       press text "Open deterministic detail"
+      expect navigation title "Foundation detail"
       expect text "Foundation detail marker"
       back
+      expect navigation title "Navigation foundation"
       expect text "Foundation home marker"
       expect missing text "Foundation detail marker"
    }

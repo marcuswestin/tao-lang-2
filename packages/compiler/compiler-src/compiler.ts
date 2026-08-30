@@ -3,11 +3,16 @@ import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import {
+  configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
   configurationSidecarBindingName,
   isRuntimeConfigurableDeclaration,
+  isTransparentConfigurableAlias,
 } from './codegen/app/configuration-compiler'
 import {
+  bridgeBindingName,
+  bridgedExpressionsOf,
+  bridgeExportName,
   type InlineInjection,
   inlineInjectionsOf,
   withInlineInjectionBindings,
@@ -38,7 +43,7 @@ type DataCatalogPlan = {
 }
 
 type PlannedSidecar = {
-  declaration: AST.ConfigurableDeclaration
+  binding: string
   exportName: string
   sourcePath: string
   relativePath: string
@@ -229,15 +234,10 @@ function planOutputPaths(
         usedOutputPaths,
       )
     const sidecarPathBySourcePath = new Map<string, string>()
-    const sidecars = declarations.flatMap(declaration => {
-      const implementation = AST.configurationImplementationOf(declaration)
-      const sidecarPath = implementation?.path
-      if (implementation === undefined || sidecarPath === undefined) {
-        return []
-      }
-      // A derived declaration reuses its base's implementation, which an imported file may own,
-      // so the sidecar resolves against the file that declares it rather than this one.
-      const sourcePath = FS.resolvePath(sidecarPath, FS.dirname(AST.getDocument(implementation).uri.path))
+    // A sidecar is named relative to the file that declares it, which an imported file may own, so
+    // every path resolves against its own declaring document rather than this one.
+    const planSidecar = (node: AST.Node, path: string, exportName: string, binding: string): PlannedSidecar => {
+      const sourcePath = FS.resolvePath(path, FS.dirname(AST.getDocument(node).uri.path))
       let relativePath = sidecarPathBySourcePath.get(sourcePath)
       if (relativePath === undefined) {
         relativePath = reserveOutputPath(
@@ -246,8 +246,28 @@ function planOutputPaths(
         )
         sidecarPathBySourcePath.set(sourcePath, relativePath)
       }
-      return [{ declaration, exportName: implementation.exportName, sourcePath, relativePath }]
-    })
+      return { binding, exportName, sourcePath, relativePath }
+    }
+    const sidecars = [
+      ...declarations.flatMap(declaration => {
+        if (isTransparentConfigurableAlias(declaration)) {
+          return []
+        }
+        const implementation = AST.configurationImplementationOf(declaration)
+        const sidecarPath = implementation?.path
+        return implementation === undefined || sidecarPath === undefined
+          ? []
+          : [planSidecar(
+            implementation,
+            sidecarPath,
+            implementation.exportName,
+            configurationSidecarBindingName(declaration),
+          )]
+      }),
+      ...bridgedExpressionsOf(file.ast).map(bridge =>
+        planSidecar(bridge, bridge.path, bridgeExportName(bridge), bridgeBindingName(bridge))
+      ),
+    ]
     bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars })
   }
   return { bySourcePath, modulePathBySourcePath }
@@ -272,11 +292,12 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = [
     ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
+    ...configurationAliasImportLines(file, planned.modulePath, outputPaths),
     ...planned.injections.map(injection =>
       `import ${injection.binding} from '${relativeImportPath(planned.modulePath, injection.relativePath)}'`
     ),
     ...planned.sidecars.map(sidecar =>
-      `import { ${sidecar.exportName} as ${configurationSidecarBindingName(sidecar.declaration)} } from '${
+      `import { ${sidecar.exportName} as ${sidecar.binding} } from '${
         relativeImportPath(planned.modulePath, sidecar.relativePath)
       }'`
     ),
@@ -322,7 +343,10 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     : [{
       sourcePath: file.path,
       relativePath: planned.declarationsPath,
-      code: RuntimeGen.ConfigurationDeclarations(file.ast),
+      code: RuntimeGen.ConfigurationDeclarations(
+        file.ast,
+        configurationAliasImportLines(file, planned.declarationsPath, outputPaths),
+      ),
     }]
   const injections: CompiledFile[] = planned.injections.map(injection => ({
     sourcePath: file.path,
@@ -336,7 +360,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     if (!FS.existsSync(FS.dirname(sidecar.sourcePath))) {
       continue
     }
-    Assert(FS.existsSync(sidecar.sourcePath), 'validated configuration sidecar exists', {
+    Assert(FS.existsSync(sidecar.sourcePath), 'validated sidecar exists', {
       sourcePath: sidecar.sourcePath,
     })
     copiedSidecars.set(sidecar.relativePath, {
@@ -346,6 +370,30 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     })
   }
   return [module, ...injections, ...declarations, ...copiedSidecars.values()]
+}
+
+function configurationAliasImportLines(
+  file: ParsedFile,
+  currentOutputPath: string,
+  outputPaths: PlannedOutputs,
+): string[] {
+  const importLines = file.ast.statements.filter(isTransparentConfigurableAlias).flatMap(declaration => {
+    const target = declaration.aliasTarget?.member.ref
+    if (!target || !AST.isTypeDeclaration(target)) {
+      return []
+    }
+    const targetSourcePath = AST.getDocument(target).uri.path
+    const targetOutputPath = outputPaths.modulePathBySourcePath.get(targetSourcePath)
+    if (!targetOutputPath) {
+      return []
+    }
+    const targetType = `${target.name}Config`
+    const localType = configurationAliasTargetTypeBindingName(declaration)
+    return [
+      `import type { ${targetType} as ${localType} } from '${relativeImportPath(currentOutputPath, targetOutputPath)}'`,
+    ]
+  })
+  return [...new Set(importLines)]
 }
 
 function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {
@@ -456,6 +504,67 @@ function resolveImports(
       scopeBindings.set(binding, binding)
     }
   }
+  // A transparent view or configurable-type alias imports its target under a private local name;
+  // the alias's own exported binding points at that exact value, preserving declaration identity.
+  for (
+    const declaration of file.statements.filter(statement =>
+      AST.isViewDeclaration(statement) || isTransparentConfigurableAlias(statement)
+    )
+  ) {
+    const aliasTarget = declaration.aliasTarget
+    if (!aliasTarget) {
+      continue
+    }
+    const namespaceName = aliasTarget.namespace.$refText
+    const namespaceStatement = file.statements
+      .filter(AST.isUsePackageStatement)
+      .find(statement => AST.packageNamespaceName(statement) === namespaceName)
+    if (!namespaceStatement) {
+      continue
+    }
+    const resolution = Packages.resolve(packagesContext, {
+      importPath: namespaceStatement.importPath,
+      fromFilePath: filePath,
+    })
+    if (resolution.relation === 'invalid') {
+      continue
+    }
+    const memberName = aliasTarget.member.$refText
+    const target = [...sourceByPath.values()].filter(candidate =>
+      Packages.targetMatches(resolution, {
+        filePath: candidate.path,
+        workspaceFilePaths: sourcePaths,
+      })
+    ).find(candidate =>
+      candidate.ast.statements.some(statement =>
+        declarationEmitsRuntimeBinding(statement)
+        && statement.name === memberName
+        && Packages.declarationIsImportableFromUse(statement, resolution)
+      )
+    )
+    if (!target) {
+      continue
+    }
+    const targetDeclaration = target.ast.statements.find(statement =>
+      declarationEmitsRuntimeBinding(statement)
+      && statement.name === memberName
+      && Packages.declarationIsImportableFromUse(statement, resolution)
+    )
+    if (!targetDeclaration) {
+      continue
+    }
+    const targetBinding = isRuntimeConfigurableDeclaration(targetDeclaration)
+      ? configurationRuntimeBindingName(targetDeclaration)
+      : memberName
+    const aliasBinding = isRuntimeConfigurableDeclaration(declaration)
+      ? configurationRuntimeBindingName(declaration)
+      : declaration.name
+    const localBinding = `__tao_package_${namespaceName}_${memberName}`
+    const names = bySource.get(target.path) ?? new Set<string>()
+    names.add(`${targetBinding} as ${localBinding}`)
+    bySource.set(target.path, names)
+    scopeBindings.set(aliasBinding, localBinding)
+  }
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
     const resolution = Packages.resolve(packagesContext, {
       importPath: useStatement.importPath,
@@ -471,30 +580,26 @@ function resolveImports(
       })
     )
     for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
-      const target = targets.find(candidate =>
-        candidate.ast.statements.some(statement =>
+      for (const target of targets) {
+        const declarations = target.ast.statements.filter(statement =>
           declarationEmitsRuntimeBinding(statement)
           && statement.name === importedName
           && Packages.declarationIsImportableFromUse(statement, resolution)
         )
-      )
-      if (!target) {
-        continue
+        if (declarations.length === 0) {
+          continue
+        }
+        const names = bySource.get(target.path) ?? new Set<string>()
+        for (const declaration of declarations) {
+          const binding = isRuntimeConfigurableDeclaration(declaration)
+            ? configurationRuntimeBindingName(declaration)
+            : importedName
+          names.add(binding)
+          scopeBindings.set(binding, binding)
+        }
+        bySource.set(target.path, names)
+        break
       }
-      const names = bySource.get(target.path) ?? new Set<string>()
-      const declarations = target.ast.statements.filter(statement =>
-        declarationEmitsRuntimeBinding(statement)
-        && statement.name === importedName
-        && Packages.declarationIsImportableFromUse(statement, resolution)
-      )
-      for (const declaration of declarations) {
-        const binding = isRuntimeConfigurableDeclaration(declaration)
-          ? configurationRuntimeBindingName(declaration)
-          : importedName
-        names.add(binding)
-        scopeBindings.set(binding, binding)
-      }
-      bySource.set(target.path, names)
     }
   }
   return { bySource, scopeBindings }

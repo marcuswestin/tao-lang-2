@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { navigationCommandTestId, navigationTitleTestId } from '@runtime/TR-navigation-basic-stack'
 import { Switch } from '@shared/core'
 import { act, fireEvent, within } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
@@ -22,9 +23,13 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   try {
     TR.Data.beginTest()
     TR.Navigation.beginTest()
+    // Every check starts from the same instant and moves only when the journey says so.
+    TR.Clock.beginTest()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
+    await settleData()
     for (const step of check.steps) {
       await runStep(screen, step)
+      await settleData()
     }
   } catch (error) {
     throw new Error(
@@ -32,6 +37,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
     )
   } finally {
     screen?.unmount()
+    TR.Clock.endTest()
     TR.Data.endTest()
   }
 }
@@ -42,15 +48,78 @@ async function runStep(
   resolveScope: ScopeResolver = () => undefined,
 ): Promise<void> {
   await Switch.kind<TestCompiler.Step, void | Promise<void>>(step, {
+    advance: advance => advanceStep(advance),
     back: back => backStep(back),
     enter: enter => enterStep(screen, enter, resolveScope()),
     expect: expectation => assertExpectation(screen, expectation, resolveScope()),
     expectCheckboxState: expectation => assertCheckboxState(screen, expectation, resolveScope()),
     expectGroup: expectation => assertExpectationGroup(screen, expectation, resolveScope()),
+    expectNavigationTitle: expectation => assertNavigationTitle(screen, expectation),
     expectInputValue: expectation => assertInputValue(screen, expectation, resolveScope()),
+    expectToolbarCommand: expectation => assertToolbarCommand(screen, expectation),
     press: press => pressStep(screen, press, resolveScope()),
+    pressToolbarCommand: press => pressToolbarCommandStep(screen, press),
     select: select => selectStep(screen, select, resolveScope),
     submit: submit => submitStep(screen, submit, resolveScope()),
+  })
+}
+
+function assertNavigationTitle(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'expectNavigationTitle' }>,
+): void {
+  const title = screen.queryByTestId(navigationTitleTestId)
+  if (!title || title.props.children !== step.title) {
+    throw new Error(
+      `${formatStep(step)} expected ${JSON.stringify(step.title)}, got ${JSON.stringify(title?.props.children)}.\n${
+        formatSource(step.source)
+      }`,
+    )
+  }
+}
+
+function assertToolbarCommand(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'expectToolbarCommand' }>,
+): void {
+  const commands = screen.queryAllByTestId(navigationCommandTestId(step.label))
+  if (commands.length !== 1) {
+    throw new Error(
+      `${formatStep(step)} expected exactly one visible toolbar command, got ${commands.length}.\n${
+        formatSource(step.source)
+      }`,
+    )
+  }
+  const command = commands[0]!
+  const disabled = command.props.accessibilityState?.disabled === true
+  if (disabled === step.enabled) {
+    throw new Error(`${formatStep(step)} observed the opposite enabled state.\n${formatSource(step.source)}`)
+  }
+}
+
+async function pressToolbarCommandStep(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'pressToolbarCommand' }>,
+): Promise<void> {
+  const commands = screen.queryAllByTestId(navigationCommandTestId(step.label))
+  if (commands.length !== 1) {
+    throw new Error(
+      `${formatStep(step)} expected exactly one visible toolbar command, got ${commands.length}.\n${
+        formatSource(step.source)
+      }`,
+    )
+  }
+  const command = commands[0]!
+  if (command.props.accessibilityState?.disabled === true) {
+    throw new Error(`${formatStep(step)} cannot press a disabled toolbar command.\n${formatSource(step.source)}`)
+  }
+  await dispatchInteraction(() => fireEvent.press(command))
+}
+
+/** advance moves the held clock, firing every ticker and timer that falls due, in order. */
+async function advanceStep(step: Extract<TestCompiler.Step, { kind: 'advance' }>): Promise<void> {
+  await act(async () => {
+    TR.Clock.advance(step.milliseconds)
   })
 }
 
@@ -66,7 +135,26 @@ async function pressStep(
   scope?: TestInstance,
 ): Promise<void> {
   const match = requireSingleMatch(screen, step, { target: step.text, description: 'pressable', scope })
+  // A person interacts with a control; the control decides what that means. A platform switch
+  // reports through `onValueChange` and has no press, so `press` drives it the same way, which is
+  // what keeps a native implementation and a JS one interchangeable under one journey.
+  const valueControl = valueChangingNode(match)
+  if (valueControl) {
+    await dispatchInteraction(() => fireEvent(valueControl, 'valueChange', valueControl.props['value'] !== true))
+    return
+  }
   await dispatchInteraction(() => fireEvent.press(match))
+}
+
+/** valueChangingNode returns a value-reporting control with no press of its own, if this is one. */
+function valueChangingNode(root: TestInstance): TestInstance | undefined {
+  const candidates = [root, ...root.findAll((node: TestInstance) => node !== root)].filter(node =>
+    typeof node.props['onValueChange'] === 'function'
+  )
+  const pressable = [root, ...root.findAll((node: TestInstance) => node !== root)].some(node =>
+    typeof node.props['onPress'] === 'function'
+  )
+  return pressable ? undefined : candidates[0]
 }
 
 async function enterStep(
@@ -91,6 +179,13 @@ async function submitStep(
 async function dispatchInteraction(dispatch: () => void): Promise<void> {
   dispatch()
   await act(async () => {})
+}
+
+/** settleData waits out data loads, query fills, and saves so assertions read a quiet store. */
+async function settleData(): Promise<void> {
+  await act(async () => {
+    await TR.Data.SettleAll()
+  })
 }
 
 function assertExpectation(
@@ -222,6 +317,7 @@ function selectedRow(
 
 function formatStep(step: TestCompiler.Step): string {
   return Switch.kind<TestCompiler.Step, string>(step, {
+    advance: advance => `advance ${advance.milliseconds}ms`,
     back: () => 'back',
     enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
     expect: expectation =>
@@ -231,9 +327,13 @@ function formatStep(step: TestCompiler.Step): string {
     expectCheckboxState: expectation =>
       `expect checkbox #${expectation.tag} ${expectation.checked ? 'checked' : 'unchecked'}`,
     expectGroup: expectation => expectation.scopeTag ? `expect #${expectation.scopeTag} { … }` : 'expect { … }',
+    expectNavigationTitle: expectation => `expect navigation title "${expectation.title}"`,
     expectInputValue: expectation =>
       `expect input ${expectation.selector} "${expectation.target}" value "${expectation.value}"`,
+    expectToolbarCommand: expectation =>
+      `expect toolbar command "${expectation.label}" ${expectation.enabled ? 'enabled' : 'disabled'}`,
     press: press => `press ${press.selector} "${press.text}"`,
+    pressToolbarCommand: press => `press toolbar command "${press.label}"`,
     select: select => `select #${select.tag}[${select.index}] { … }`,
     submit: submit => `submit ${submit.selector} "${submit.target}"`,
   })

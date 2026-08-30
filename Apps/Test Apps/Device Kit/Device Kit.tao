@@ -1,0 +1,50 @@
+use Clipboard from @tao/device/clipboard
+use Haptic, HapticKind from @tao/device/haptic
+use Share from @tao/device/share
+use StackNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+app DeviceKit {
+   Name "Device Kit"
+   Navigator StackNav {
+      Initial MainView
+}  }
+
+view MainView() {
+   Title "Device Kit"
+   state Feedback = Haptic()
+   state Pasteboard = Clipboard()
+   state Sharing = Share()
+   state Status = "Ready"
+   action PlaySuccess() {
+      do Feedback.Play(Success)
+      set Status = "Haptic requested"
+   }
+   action CopyText() {
+      do Pasteboard.Copy("Copied from Tao")
+      set Status = "Copy complete"
+   }
+   action ReadText() {
+      do Pasteboard.Read()
+      set Status = "Read complete"
+   }
+   action ShareText() {
+      do Sharing.Open("Shared from Tao")
+      set Status = "Share complete"
+   }
+   render Col() [gap 8, pad 12] {
+      Text("Device Kit")
+      Text("Status: { Status }")
+      Text("Clipboard: { Pasteboard.Value }")
+      Button("Play success haptic") {
+         on press PlaySuccess
+      }
+      Button("Copy text") {
+         on press CopyText
+      }
+      Button("Read clipboard") {
+         on press ReadText
+      }
+      Button("Share text") {
+         on press ShareText
+}  }  }

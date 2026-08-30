@@ -1,5 +1,5 @@
 public
-layout Box() {
+view Box() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
@@ -9,7 +9,7 @@ layout Box() {
 }
 
 public
-layout Stack() {
+view Stack() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',
@@ -19,7 +19,7 @@ layout Stack() {
 }
 
 public
-layout Col() {
+view Col() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',
@@ -29,7 +29,7 @@ layout Col() {
 }
 
 public
-layout Row() {
+view Row() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
@@ -39,7 +39,7 @@ layout Row() {
 }
 
 public
-layout WrappingRow() {
+view WrappingRow() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
@@ -50,7 +50,7 @@ layout WrappingRow() {
 }
 
 public
-layout Panes() {
+view Panes() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Panes({ children: Content, layout: Layout, tag: Tag }, {
         layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
@@ -59,7 +59,7 @@ layout Panes() {
 }
 
 public
-layout ScrollView() {
+view ScrollView() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.ScrollView({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',
@@ -93,13 +93,6 @@ view Checkbox(Value boolean, Change action(boolean), Label text, Disabled boolea
         disabled: Disabled,
         onChange: value => Change.invoke(TR.Value(value)),
       })
-   ```
-}
-
-public
-view Spinner() {
-   render inject Layout @@layout, Tag @@tag ```ts
-      return TR.Views.Spinner({ layout: Layout, tag: Tag })
    ```
 }
 
@@ -151,16 +144,6 @@ view Number(Value number) {
 }
 
 public
-view Button(Title text, Press action()) {
-   render inject Title, Press, Layout @@layout, Tag @@tag ```ts
-      return TR.Views.Pressable(
-        { title: Title, action: Press, layout: Layout, tag: Tag },
-        { nativeProps: { accessibilityRole: 'button' } },
-      )
-   ```
-}
-
-public
 view TextInput(Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false) {
    render inject Value, Change, Submit, Label, Placeholder, Id, Disabled, Layout @@layout, Tag @@tag ```ts
       return TR.Views.TextInput(
@@ -174,39 +157,6 @@ view TextInput(Value text, Change action(text), Submit action(), Label text, Pla
           disabled: Disabled,
           onChange: value => Change.invoke(TR.Value(value)),
           onSubmit: () => Submit.invoke(),
-        },
-      )
-   ```
-}
-
-public
-view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false) {
-   render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
-      const effectiveDisabled = Disabled || Submitting
-      return TR.Views.Pressable(
-        {
-          layout: Layout,
-          tag: Tag,
-          title: Submitting ? 'Saving…' : Title,
-          action: Press,
-          disabled: effectiveDisabled,
-        },
-        {
-          nativeProps: {
-            accessibilityLabel: Title,
-            accessibilityRole: 'button',
-            accessibilityState: { busy: Submitting, disabled: effectiveDisabled },
-            disabled: effectiveDisabled,
-            style: {
-              alignItems: 'center',
-              backgroundColor: effectiveDisabled ? '#9aa49d' : '#2f6b4f',
-              borderRadius: 8,
-              minHeight: 44,
-              paddingHorizontal: 16,
-              paddingVertical: 11,
-            },
-            testID: Id || undefined,
-          },
         },
       )
    ```

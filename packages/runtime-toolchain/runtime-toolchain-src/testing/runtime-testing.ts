@@ -59,6 +59,7 @@ export namespace RuntimeTesting {
     export type File = TestCompilerTypes.File
     export type Manifest = TestCompilerTypes.Manifest
     export type ValidationOptions = TestCompilerTypes.ValidationOptions
+    export type ValidationError = TestCompilerTypes.ValidationError
     export type CompileAppOptions = TestCompilerTypes.CompileAppOptions
     export type CompileFileOptions = TestCompilerTypes.CompileFileOptions
 

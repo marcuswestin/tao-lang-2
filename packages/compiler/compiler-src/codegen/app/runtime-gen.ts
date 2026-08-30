@@ -24,8 +24,8 @@ export default {
   },
 
   /** ConfigurationDeclarations emits the sidecar-facing declaration companion for one Tao file. */
-  ConfigurationDeclarations(taoFile: AST.TaoFile): string {
-    return Langium.toString(Compile.ConfigurationDeclarations(taoFile))
+  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = []): string {
+    return Langium.toString(Compile.ConfigurationDeclarations(taoFile, importLines))
   },
 
   /** ConfigurationTypes emits sidecar-facing contracts inside one generated runtime module. */

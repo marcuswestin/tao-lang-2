@@ -7,48 +7,19 @@ import { injectionValidationMessages } from '../validator-src/validators/injecti
 import { useValidationMessages } from '../validator-src/validators/use-validator'
 import {
   accepts,
+  acceptsFiles,
+  acceptsFilesFrom,
   app,
+  checksFiles,
   fence,
+  rejectsFiles,
+  rejectsFilesFrom,
   stubView,
+  type TaoFiles,
   tsFence,
-  type ValidatedFiles,
   validationErrorMessages,
-  withValidatedFiles,
+  visibleView,
 } from './test-validate'
-
-type TaoFiles = Record<string, string>
-type FilesCheck = (result: ValidatedFiles) => Promise<void> | void
-
-function checksFiles(files: TaoFiles, check: FilesCheck, entryFile = 'Main.tao'): () => Promise<void> {
-  return async () => await withValidatedFiles(entryFile, files, check)
-}
-
-function acceptsFiles(files: TaoFiles): () => Promise<void> {
-  return acceptsFilesFrom('Main.tao', files)
-}
-
-function acceptsFilesFrom(entryFile: string, files: TaoFiles): () => Promise<void> {
-  return checksFiles(files, result => {
-    Expect(validationErrorMessages(result)).toEqual([])
-  }, entryFile)
-}
-
-function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
-  return rejectsFilesFrom('Main.tao', files, ...messages)
-}
-
-function rejectsFilesFrom(entryFile: string, files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
-  return checksFiles(files, result => {
-    const errors = validationErrorMessages(result).join('\n')
-    for (const message of messages) {
-      Expect(errors).toContain(message)
-    }
-  }, entryFile)
-}
-
-function visibleView(name: string, parameters = ''): string {
-  return stubView(name, parameters).replace('view ', 'workspace view ')
-}
 
 function importingApp(imports: string, body = 'render Text("Hello")', extra = ''): string {
   return `${imports}\n${app(body, extra)}`
@@ -327,7 +298,8 @@ Describe('validator: use and imports', () => {
           use Col from @tao/ui
           use AppLet, MyApp from ./
           workspace nav ResetNav = StackNav { Initial Helper }
-          workspace ui Helper() {
+          workspace view Helper() {
+            Title "Helper"
             action Reset() { replace ResetNav in MyApp }
             render Col() { }
           }
@@ -437,6 +409,27 @@ Describe('validator: use organization', () => {
         Expect(validationErrorMessages(result)).toEqual([])
         Expect(
           result.diagnostics.some(diagnostic => diagnostic.message === useValidationMessages.unusedImport('Name')),
+        ).toBe(false)
+      },
+    ),
+  )
+
+  Test(
+    'treats an imported one-of type as used when one of its cases is referenced',
+    checksFiles(
+      {
+        'Main.tao': importingApp(
+          'use Mood from ./Mood.tao',
+          'render Text("Ready")',
+          `let Current = Happy
+           ${stubView('Text', 'Value text')}`,
+        ),
+        'Mood.tao': 'workspace type Mood is one of Happy, Sad',
+      },
+      result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+        Expect(
+          result.diagnostics.some(diagnostic => diagnostic.message === useValidationMessages.unusedImport('Mood')),
         ).toBe(false)
       },
     ),

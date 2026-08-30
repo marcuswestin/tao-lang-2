@@ -13,7 +13,8 @@ export const ExpoConfig = {
   EXPO_START_ARGS: [
     'expo',
     'start',
-    '--localhost',
+    '--host',
+    'lan',
     '--port',
     EXPO_PORT.toString(),
   ],

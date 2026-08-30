@@ -12,13 +12,14 @@ export const StatementsCompiler = {
       AppDeclaration: Compile.App,
       ActionDeclaration: Compile.ActionDeclaration,
       AsyncActionStatement: Compile.AsyncActionStatement,
+      AdvanceStep: Compile.AdvanceStep,
       BackTestStep: Compile.BackTestStep,
+      CommandDeclaration: Compile.CommandDeclaration,
+      DeclarationSlotFill: Compile.DeclarationSlotFill,
       EntityDataDeclaration: Compile.EntityDataDeclaration,
       EntityQueryDeclaration: Compile.EntityQueryDeclaration,
-      FrameDeclaration: Compile.FrameDeclaration,
       DatasourceDeclaration: Compile.PrimitiveValueDeclaration,
       DesignDeclaration: Compile.DesignDeclaration,
-      DialogueDeclaration: Compile.DialogueDeclaration,
       EnterTextStep: Compile.EnterTextStep,
       TagEnterStep: Compile.TagEnterStep,
       EventHandler: Compile.EventHandler,
@@ -27,17 +28,19 @@ export const StatementsCompiler = {
       TagInputValueExpectation: Compile.TagInputValueExpectation,
       ExpectTextStep: Compile.ExpectTextStep,
       ExpectGroupStep: Compile.ExpectGroupStep,
+      ExpectNavigationTitleStep: Compile.ExpectNavigationTitleStep,
       ExpectScopeStep: Compile.ExpectScopeStep,
+      ExpectToolbarCommandStep: Compile.ExpectToolbarCommandStep,
       ForStatement: Compile.ForStatement,
       FunctionDeclaration: Compile.FunctionDeclaration,
       GuardRenderStatement: statement => Compile.GuardRenderStatement(statement, []),
       IfRenderStatement: Compile.IfRenderStatement,
       WhenRenderStatement: Compile.WhenRenderStatement,
       Injection: Compile.Injection,
-      LayoutDeclaration: Compile.LayoutDeclaration,
       LoopSelectHandler: Compile.LoopSelectHandler,
       NavDeclaration: Compile.PrimitiveValueDeclaration,
       PressTextStep: Compile.PressTextStep,
+      PressToolbarCommandStep: Compile.PressToolbarCommandStep,
       TagPressStep: Compile.TagPressStep,
       ProjectDeclaration: Compile.ProjectDeclaration,
       PrimitiveDeclaration: Compile.PrimitiveDeclaration,
@@ -53,7 +56,7 @@ export const StatementsCompiler = {
       TagStatement: Compile.TagStatement,
       TestDeclaration: Compile.TestDeclaration,
       TypeDeclaration: Compile.TypeDeclaration,
-      UiDeclaration: Compile.UiDeclaration,
+      UsePackageStatement: Compile.UsePackageStatement,
       UseStatement: Compile.UseStatement,
       ViewDeclaration: Compile.ViewDeclaration,
       ViewRender: Compile.ViewRender,
@@ -62,6 +65,9 @@ export const StatementsCompiler = {
 
   /** TypeDeclaration emits runtime code only for case sets and configurable types. */
   TypeDeclaration(declaration: AST.TypeDeclaration): Compiled {
+    if (declaration.aliasTarget) {
+      return gen.noop()
+    }
     if (AST.isCaseSetTypeExpression(declaration.type)) {
       return Compile.CaseSetDeclaration(declaration)
     }

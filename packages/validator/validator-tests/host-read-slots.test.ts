@@ -1,0 +1,425 @@
+import { Describe, stubView, Test } from '@shared/test'
+import { commandValidationMessages } from '../validator-src/validators/commands-validator'
+import { configuredValueValidationMessages } from '../validator-src/validators/configured-values-validator'
+import { declarationSlotValidationMessages } from '../validator-src/validators/declaration-slots-validator'
+import { navigationValidationMessages } from '../validator-src/validators/navigation-validator'
+import { testValidationMessages } from '../validator-src/validators/tests-validator'
+import { accepts, acceptsFiles, rejects } from './test-validate'
+
+const leaf = stubView('Leaf')
+
+Describe('validator: host-read slots and commands', () => {
+  Test(
+    'accepts reactive Title, a bound command, and Toolbar references',
+    accepts(`
+      ${leaf}
+      view Home(Name text) {
+        Title Name
+        action Save(Value text) { Title "Save" }
+        command SaveCommand = Save(Name) with {
+          Label when Name is empty "Create" / not "Save"
+          Icon "checkmark"
+          Enabled Name is empty
+        }
+        Toolbar { SaveCommand }
+        render Leaf()
+      }
+    `),
+  )
+
+  Test(
+    'accepts an action-ascribed bare export used by a command intent',
+    accepts(`
+      ${leaf}
+      let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts
+      action Open() {
+        Title "Open"
+        do OpenUrl("https://example.com")
+      }
+      view Home() {
+        Title "Home"
+        command OpenCommand = Open() with { Label "Open" }
+        Toolbar { OpenCommand }
+        render Leaf()
+      }
+    `),
+  )
+
+  Test(
+    'reports a semantic placement diagnostic for a command in an app body',
+    rejects(
+      `
+        ${leaf}
+        action Save() { Title "Save" }
+        app Demo {
+          command SaveCommand = Save()
+          view Leaf
+        }
+      `,
+      commandValidationMessages.placement,
+    ),
+  )
+
+  Test(
+    'rejects slot, metadata, and bound-action contract violations',
+    rejects(
+      `
+        ${leaf}
+        view Home() {
+          Title 1
+          Title "duplicate"
+          Unknown "value"
+          action Save(Value text) { }
+          command SaveCommand = Save() with {
+            Icon false
+            Mystery "x"
+            Enabled "yes"
+          }
+          Toolbar { SaveCommand SaveCommand }
+          render Leaf()
+        }
+      `,
+      declarationSlotValidationMessages.type('Title', 'text', 'number'),
+      declarationSlotValidationMessages.duplicate('view', 'Title'),
+      declarationSlotValidationMessages.unknown('view', 'Unknown'),
+      commandValidationMessages.metadataType('Icon', 'text', 'boolean'),
+      commandValidationMessages.metadataType('Enabled', 'boolean', 'text'),
+      commandValidationMessages.metadata('Mystery'),
+      commandValidationMessages.intentTitle('Save'),
+      declarationSlotValidationMessages.duplicateCommand('SaveCommand'),
+      "Action Save is missing argument for parameter 'Value'.",
+    ),
+  )
+
+  Test(
+    'requires text values for navigation and toolbar journey steps',
+    rejects(
+      `
+        ${leaf}
+        let ExpectedTitle = "Home"
+        app Demo { view Leaf }
+        test Demo "chrome" {
+          run Demo
+          expect navigation title ExpectedTitle
+          expect toolbar command false enabled
+          press toolbar command 2
+        }
+      `,
+      testValidationMessages.navigationValueLiteral,
+      testValidationMessages.navigationValueType('number'),
+      testValidationMessages.navigationValueType('boolean'),
+    ),
+  )
+
+  Test(
+    'propagates StackNav context through rendered views before contextual pushes',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        ${leaf}
+
+        nav Main = StackNav { Initial WorkspaceList }
+
+        view WorkspaceList() {
+          Title "Workspaces"
+          render WorkspaceRow()
+        }
+
+        view WorkspaceRow() {
+          action Open() { present WorkspaceDetail() }
+          render Leaf()
+        }
+
+        view WorkspaceDetail() {
+          render Leaf()
+        }
+      `,
+      navigationValidationMessages.missingHostTitle('WorkspaceDetail'),
+    ),
+  )
+
+  Test(
+    'does not impose the stdlib StackNav requirement on a same-named custom nav',
+    acceptsFiles({
+      'Main.tao': `
+        ${leaf}
+        type StackNav is nav with {
+          Initial view
+          nav StackNavKind from ./CustomNav.ts
+        }
+        nav Main = StackNav { Initial Untitled }
+        view Untitled() { render Leaf() }
+      `,
+      'CustomNav.ts': 'export const StackNavKind = {}',
+    }),
+  )
+
+  Test(
+    'inherits the stdlib StackNav requirement through nominal derivation',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        ${leaf}
+        type DerivedStack is StackNav with { }
+        nav Main = DerivedStack { Initial Untitled }
+        view Untitled() { render Leaf() }
+      `,
+      navigationValidationMessages.missingHostTitle('Untitled'),
+    ),
+  )
+
+  Test(
+    'accepts inherited view host slots on a configured nav value',
+    accepts(`
+      use StackNav from @tao/nav
+      ${leaf}
+      nav Main = StackNav {
+        Initial Home
+        Title "Main"
+        Toolbar []
+      }
+      view Home() {
+        Title "Home"
+        render Leaf()
+      }
+    `),
+  )
+
+  Test(
+    'rejects malformed configured-nav Toolbar reference blocks',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        ${leaf}
+        nav Main = StackNav {
+          Initial Home
+          Toolbar { Card, NeedsValue, Untitled, Ready, Ready }
+          Title { Ready }
+          Bogus { Ready }
+        }
+        action NeedsValue(Value text) { Title "Needs value" }
+        action Untitled() { }
+        action Ready() { Title "Ready" }
+        view Card() {
+          Title "Card"
+          render Leaf()
+        }
+        view Home() {
+          Title "Home"
+          render Leaf()
+        }
+      `,
+      configuredValueValidationMessages.toolbarReference,
+      configuredValueValidationMessages.toolbarArguments('NeedsValue'),
+      configuredValueValidationMessages.toolbarTitle('Untitled'),
+      configuredValueValidationMessages.duplicateToolbarReference('Ready'),
+      configuredValueValidationMessages.configurationBlock('StackNav', 'Title'),
+      configuredValueValidationMessages.unknownConfiguration('StackNav', 'Bogus'),
+    ),
+  )
+
+  Test(
+    'requires a nested configured nav to describe itself without bubbling a child title',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        ${leaf}
+        nav Child = StackNav { Initial ChildHome }
+        nav Parent = StackNav { Initial Child }
+        view ChildHome() {
+          Title "Child home"
+          render Leaf()
+        }
+      `,
+      navigationValidationMessages.missingNavHostTitle('Child'),
+    ),
+  )
+
+  Test(
+    'requires an inline nav used as Stack Initial to configure its own Title',
+    rejects(
+      `
+        use StackNav, SlotNav from @tao/nav
+        ${leaf}
+        nav Parent = StackNav {
+          Initial SlotNav { Initial Home }
+        }
+        view Home() {
+          Title "Home"
+          render Leaf()
+        }
+      `,
+      navigationValidationMessages.missingNavHostTitle('SlotNav'),
+    ),
+  )
+
+  Test(
+    'accepts inline and named-refined Stack destinations with occurrence-owned Titles',
+    accepts(`
+      use StackNav, SlotNav from @tao/nav
+      ${leaf}
+      nav ChildBase = SlotNav { Initial Home }
+      nav Child = ChildBase with { Title "Refined" }
+      nav InlineParent = StackNav {
+        Initial SlotNav { Initial Home, Title "Inline" }
+      }
+      nav RefinedParent = StackNav {
+        Initial Child
+      }
+      view Home() {
+        Title "Home"
+        render Leaf()
+      }
+    `),
+  )
+
+  Test(
+    'requires Title at a strict app auxiliary Stack presentation usage',
+    rejects(
+      strictAuxiliaryPresentation(''),
+      navigationValidationMessages.missingHostTitle('Untitled'),
+    ),
+  )
+
+  Test(
+    'accepts a titled destination presented into a strict app auxiliary Stack',
+    accepts(strictAuxiliaryPresentation('Title "Detail"')),
+  )
+
+  Test(
+    'propagates Stack reachability through a strict app auxiliary presentation',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        ${leaf}
+        app Demo {
+          Name "Demo"
+          Navigator StackNav { Initial Home }
+          @detail StackNav { Initial AuxiliaryRoot }
+        }
+        view Home() {
+          Title "Home"
+          action Open() { present ScreenA() in Demo@detail }
+          render Leaf()
+        }
+        view AuxiliaryRoot() {
+          Title "Auxiliary"
+          render Leaf()
+        }
+        view ScreenA() {
+          Title "First"
+          action Continue() { present ScreenB() }
+          render Leaf()
+        }
+        view ScreenB() {
+          render Leaf()
+        }
+      `,
+      navigationValidationMessages.missingHostTitle('ScreenB'),
+    ),
+  )
+
+  for (const mode of ['sheet', 'overlay'] as const) {
+    Test(
+      `does not require Title for a ${mode} presented into a Stack target`,
+      accepts(`
+        use StackNav from @tao/nav
+        ${leaf}
+        app Demo {
+          Name "Demo"
+          Navigator StackNav { Initial Home }
+          @detail StackNav { Initial AuxiliaryRoot }
+        }
+        view Home() {
+          Title "Home"
+          action Open() { present Modal() as ${mode} in Demo@detail }
+          render Leaf()
+        }
+        view AuxiliaryRoot() {
+          Title "Auxiliary"
+          render Leaf()
+        }
+        view Modal() { render Leaf() }
+      `),
+    )
+
+    Test(
+      `retains Stack push context inside a target-less ${mode}`,
+      rejects(
+        `
+          use StackNav from @tao/nav
+          ${leaf}
+          nav Main = StackNav { Initial Home }
+          view Home() {
+            Title "Home"
+            action Open() { present Modal() as ${mode} }
+            render Leaf()
+          }
+          view Modal() {
+            action Continue() { present Untitled() }
+            render Leaf()
+          }
+          view Untitled() { render Leaf() }
+        `,
+        navigationValidationMessages.missingHostTitle('Untitled'),
+      ),
+    )
+  }
+
+  Test(
+    'requires Title when a Stack refinement patch replaces Initial',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        ${leaf}
+        nav Base = StackNav { Initial Home }
+        nav Patched = Base with { Initial Untitled }
+        view Home() {
+          Title "Home"
+          render Leaf()
+        }
+        view Untitled() { render Leaf() }
+      `,
+      navigationValidationMessages.missingHostTitle('Untitled'),
+    ),
+  )
+
+  Test(
+    'requires Title through a view-typed Initial alias',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        ${leaf}
+        let Destination is view = Untitled
+        nav Main = StackNav { Initial Destination }
+        view Untitled() { render Leaf() }
+      `,
+      navigationValidationMessages.missingHostTitle('Untitled'),
+    ),
+  )
+})
+
+function strictAuxiliaryPresentation(detailTitle: string): string {
+  return `
+    use StackNav from @tao/nav
+    ${leaf}
+    app Demo {
+      Name "Demo"
+      Navigator StackNav { Initial Home }
+      @detail StackNav { Initial AuxiliaryRoot }
+    }
+    view Home() {
+      Title "Home"
+      action Open() { present Untitled() in Demo@detail }
+      render Leaf()
+    }
+    view AuxiliaryRoot() {
+      Title "Auxiliary"
+      render Leaf()
+    }
+    view Untitled() {
+      ${detailTitle}
+      render Leaf()
+    }
+  `
+}

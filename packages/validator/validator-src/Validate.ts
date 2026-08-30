@@ -4,6 +4,8 @@ import type { ValidationContext } from './validation'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
+import { bridgeValidationChecks } from './validators/bridge-validator'
+import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
 import { configurationValidationChecks } from './validators/configuration-validator'
 import {
@@ -11,8 +13,8 @@ import {
   validateConfiguredValuesFile,
 } from './validators/configured-values-validator'
 import { dataValidationChecks, validateDataFile } from './validators/data-validator'
+import { declarationSlotValidationChecks } from './validators/declaration-slots-validator'
 import { DesignValidator } from './validators/design-validator'
-import { DialogueValidator } from './validators/dialogue-validator'
 import { ExpressionsValidator } from './validators/expressions-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
@@ -21,9 +23,15 @@ import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
+import { ResponsesValidator } from './validators/responses-validator'
 import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
 import { typeValidationChecks } from './validators/types-validator'
+import { unitsValidationChecks } from './validators/units-validator'
+import {
+  usePackageValidationChecks,
+  validatePackageUseStatements,
+} from './validators/use-package-validator'
 import { validateUseStatements, validateVisibleDeclarations } from './validators/use-validator'
 import { ViewsValidator } from './validators/views-validator'
 
@@ -44,9 +52,14 @@ const nodeValidationChecks = NodeValidation.compile(
     DesignValidator.checks,
     configurationValidationChecks,
     completenessValidationChecks,
+    commandValidationChecks,
+    declarationSlotValidationChecks,
     preludeValidationChecks,
-    DialogueValidator.checks,
+    ResponsesValidator.checks,
     navigationValidationChecks,
+    unitsValidationChecks,
+    bridgeValidationChecks,
+    usePackageValidationChecks,
     configuredValueValidationChecks,
   ] satisfies readonly NodeValidationChecks[],
 )
@@ -65,6 +78,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   if (document.uri.scheme === 'file') {
     validateVisibleDeclarations(ctx, file)
     validateUseStatements(file, ctx)
+    validatePackageUseStatements(file, ctx)
   }
   return nodes
 }

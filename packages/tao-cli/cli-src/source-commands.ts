@@ -1,4 +1,4 @@
-import Formatter from '@formatter'
+import Formatter, { type FormatterSession } from '@formatter'
 import { FS } from '@shared'
 import SourceActions from '@source-actions'
 import Workspace from '@workspace'
@@ -21,7 +21,9 @@ export async function runFix(path: string, options: InPlace.PathOptions = {}): P
 /** runFmt formats every .tao file at or under `path` in place and returns per-file results. */
 export async function runFmt(path: string, options: InPlace.PathOptions = {}): Promise<InPlace.Result[]> {
   const root = FS.resolvePath(path, options.cwd)
-  return await inPlace.runOnTaoFiles(root, formatFile)
+  // One formatter session serves the whole run instead of building parser services per file.
+  const session = Formatter.createSession()
+  return await inPlace.runOnTaoFiles(root, filePath => formatFile(session, filePath))
 }
 
 async function runCanonicalSource(path: string, options: CanonicalSourceOptions): Promise<InPlace.Result[]> {
@@ -30,8 +32,8 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
   return await inPlace.runOnTaoFiles(root, filePath => canonicalizeFile(workspace, filePath, options))
 }
 
-async function formatFile(path: string): Promise<InPlace.Result> {
-  return await inPlace.processFile(path, () => Formatter.formatFile(path), { write: true })
+async function formatFile(session: FormatterSession, path: string): Promise<InPlace.Result> {
+  return await inPlace.processFile(path, () => session.formatFile(path), { write: true })
 }
 
 async function canonicalizeFile(

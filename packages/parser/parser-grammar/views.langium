@@ -1,6 +1,7 @@
 grammar TaoViews
 
 import "./blocks"
+import "./imports"
 import "./expressions"
 import "./injections"
 import "./layout"
@@ -8,48 +9,45 @@ import "./visibility"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
-    ViewDeclaration | LayoutDeclaration | FrameDeclaration | UiDeclaration | DialogueDeclaration;
+    ViewDeclaration;
 
 TagStatement:
     tag=TagOrHexColor;
 
-UiDeclaration:
-    visibility=DeclarationVisibility? 'ui' name=ID parameterList=ParameterList block=Block;
-
-DialogueDeclaration:
-    visibility=DeclarationVisibility? 'dialogue' name=ID parameterList=ParameterList
-    'responds' response=[TypeDeclaration:ID] block=Block;
-
+// The one renderable declaration kind. A view either declares its own parameters and body —
+// optionally promising a typed answer with `responds` — or passes through to a package member:
+// `public view Button = native.Button`. The alias publishes the target under this name; its
+// interface is the target's. Every other capability is inferred from the body: a view accepts
+// caller content iff it places `@@content`, and offers named render slots iff it declares them.
 ViewDeclaration:
-    visibility=DeclarationVisibility? 'view' name=ID parameterList=ParameterList block=Block;
+    visibility=DeclarationVisibility? 'view' name=ID
+    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])? block=ViewBlock
+        | '=' aliasTarget=PackageMemberReference);
 
-LayoutDeclaration:
-    visibility=DeclarationVisibility? 'layout' name=ID parameterList=ParameterList block=Block;
+// The source is context-sensitive here: bare supplied slots belong only to declaration bodies,
+// while nested render blocks retain the ordinary statement grammar. Returning Block preserves the
+// shared AST utilities and compiler boundary.
+ViewBlock returns Block:
+    '{' statements+=ViewStatement* '}';
 
-FrameDeclaration:
-    visibility=DeclarationVisibility? 'frame' name=ID parameterList=ParameterList block=Block;
-
-type RenderableDeclaration = ViewDeclaration | LayoutDeclaration | FrameDeclaration;
-type VisualDeclaration = RenderableDeclaration | UiDeclaration | DialogueDeclaration;
-
-// Frames own optional, single-fill visual holes. A use without a render value places the slot in
-// the frame implementation; a use with a render value fills that slot at one call site.
+// Views own optional, single-fill visual holes. A use without a render value places the slot in
+// the declaring view's implementation; a use with a render value fills that slot at one call site.
 RenderSlotDeclaration:
     name=USE_IMPORT_PATH '=' 'empty';
 
 RenderSlotUse:
     slot=[RenderSlotDeclaration:USE_IMPORT_PATH] render=ViewRender?;
 
-// Layouts and frames place their opaque unnamed caller content explicitly in their render tree.
+// A content-accepting view places its opaque unnamed caller content explicitly in its render tree.
 CallerContentStatement:
     {infer CallerContentStatement} '@@content';
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
-        | view=[RenderableDeclaration:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?);
+        | view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?);
 
 ViewRender:
-    view=[RenderableDeclaration:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?;
+    view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?;
 
 EventHandler:
     'on' event=EventName (action=ValueReference | '->' payload=CasePayload? block=ActionBlock);

@@ -123,10 +123,11 @@ function reportArity(invocation: AST.DoStatement, ctx: ValidationContext): void 
   }
 }
 
-function reportActionBindingDiagnostic(
+/** reportActionBindingDiagnostic shares named, typed, and arity diagnostics with bound commands. */
+export function reportActionBindingDiagnostic(
   action: AST.ActionDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
-  invocation: AST.DoStatement,
+  invocation: AST.DoStatement | AST.CommandDeclaration,
   ctx: ValidationContext,
 ): void {
   Switch.kind(diagnostic, {

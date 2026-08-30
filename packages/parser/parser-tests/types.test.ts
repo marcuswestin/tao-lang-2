@@ -109,7 +109,7 @@ Describe('parser: types', () => {
       type Profile is {
         Name text,
         Age,
-        Header ui is none,
+        Header view is none,
         implement is "./Profile.ts",
       }
       view MainView() { }

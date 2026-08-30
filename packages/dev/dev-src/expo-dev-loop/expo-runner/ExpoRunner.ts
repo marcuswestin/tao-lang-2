@@ -21,6 +21,7 @@ export const ExpoRunner = {
   ensureAndroidExpoGo: Android.ensureExpoGo,
   openAndroid: ExpoTargets.openAndroid,
   openIosSimulator: ExpoTargets.openIosSimulator,
+  openPhysicalDevice: ExpoTargets.openPhysicalDevice,
   openStartupTargets: ExpoTargets.openStartupTargets,
   openWeb: ExpoTargets.openWeb,
   portDiagnostics: {

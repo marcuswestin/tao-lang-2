@@ -1,0 +1,206 @@
+use Http from @tao/data/providers/http
+use StackNav from @tao/nav
+use Col, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
+
+project {
+   name "HNReader"
+   remote none
+   license MIT
+}
+
+// A read-only Hacker News reader over the query-driven Http datasource. Stories and comments are
+// ordinary entities; live queries activate fills, the adapter maps each declared query shape to an
+// Algolia API request, and the store the screens read stays the only source of truth.
+app HNReader {
+   Name "HNReader"
+   Navigator StackNav {
+      Initial FrontPage
+   }
+   Datasource HNSource { }
+   Design HNDesign
+}
+
+// The stub variant swaps only the adapter, so journeys exercise the real fill machinery — loading,
+// upsert-by-unique, relation resolution — deterministically, with no network.
+app HNReaderStub = HNReader with {
+   Name "HNReader Stub"
+   Datasource StubSource { }
+}
+
+type HNSource is Http with {
+   Adapter item is HNAdapter from ./HNAdapter.ts
+   CacheFor duration is 5.min
+}
+
+type StubSource is Http with {
+   Adapter item is StubAdapter from ./StubAdapter.ts
+}
+
+// The generic sidecar boundary supplies an action value; the Tao intent below owns product title,
+// availability, and command placement while this bridge owns only the external-application edge.
+let OpenUrl is action(text) = OpenUrl from ./OpenStoryLink.ts
+
+// Hacker News's warm paper and orange, tuned for reading: white story cards on the beige ground,
+// rank and bylines in the brand orange, ink sized for scanning titles and reading comments.
+design HNDesign {
+   paper #f6f6ef
+   card #ffffff
+   ink #21211c
+   inkMuted #82827a
+   accent #ff6600
+   accentDeep #c9560c
+   line #e7e7db
+   railInk #d9d2ba
+   snow #ffffff
+   screen [fill, content top stretch, bg paper]
+   header [pad 14, bg accent]
+   headerTitle [size 19, weight 800, fg snow]
+   feed [fill, content top stretch, pad 10, gap 8]
+   threadWrap [fill, content center top]
+   thread [claim 1, compress, width max 680, content top stretch, pad 10, gap 8]
+   rail [width 4, radius 2, bg railInk]
+   storyCard [pad 12, radius 10, bg card, border line]
+   rank [rigid, size 15, weight 700, fg accent]
+   storyTitle [size 16, weight 600, line 22, fg ink]
+   meta [size 13, line 18, fg inkMuted]
+   pageTitle [size 21, weight 700, line 27, fg ink]
+   commentCard [pad 12, radius 10, bg card, border line, gap 4]
+   author [size 13, weight 700, fg accentDeep]
+   commentText [size 15, line 21, fg ink]
+   notice [size 13, fg inkMuted]
+   problemTitle [size 16, weight 700, fg ink]
+   stateBox [content center, pad 24]
+}
+
+data Stories / Story {
+   HnId number (unique)
+   Title text
+   Url text (default "")
+   Score number
+   Author text
+   CommentCount number
+   // A story's front-page rank, or 0 for a story that reached the store some other way. Feeds over
+   // one entity share its rows, so a feed's query filters on its own materialized field.
+   Rank number (default 0)
+   Comments (owned)
+
+   order by Rank
+}
+
+data Comments / Comment {
+   Story
+   HnId number (unique)
+   Author text
+   Text text
+   Depth number
+   Ordering number
+
+   order by Ordering
+}
+
+view FrontPage() {
+   Title "Hacker News"
+   query Stories as TopStories {
+      where Rank >= 1
+      limit 30
+   }
+   render Col() [screen] {
+      Col() [header] {
+         Text("Hacker News") [headerTitle]
+      }
+      guard TopStories {
+         loading -> { Col() [stateBox] {
+            Spinner()
+         } }
+         error -> Message { Col() [stateBox, gap 6] {
+            Text("Couldn't reach Hacker News") [problemTitle]
+            Text(Message) [meta]
+         } }
+      }
+      if TopStories is refreshing {
+         Col() [pad 10] {
+            Text("Refreshing…") [notice]
+      }  }
+      if TopStories is stale {
+         Col() [pad 10] {
+            Text("Offline — showing cached stories") [notice]
+      }  }
+      ScrollView() {
+         Col() [feed] {
+            #stories
+            loop TopStories / Story {
+               StoryRow(Story)
+               on select -> { present StoryScreen(Story) }
+}  }  }  }  }
+
+view StoryRow(Story) {
+   render Row() [storyCard, gap 10] {
+      Text("{ Story.Rank }.") [rank]
+      Col() [gap 4, claim 1, compress] {
+         TextMultiline(Story.Title) [storyTitle]
+         Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
+}  }  }
+
+view StoryScreen(Story) {
+   Title Story.Title
+   action OpenStoryLink() {
+      Title "Open story"
+      do OpenUrl(Story.Url)
+   }
+   command Open = OpenStoryLink() with {
+      Icon "safari"
+      Enabled Story.Url is not empty
+   }
+   Toolbar { Open }
+   query Thread from Story.Comments { }
+   render Col() [screen] {
+      Col() [header] {
+         Text("Hacker News") [headerTitle]
+      }
+      ScrollView() {
+         Row() [threadWrap] {
+            Col() [thread] {
+               Col() [storyCard, gap 4] {
+                  TextMultiline(Story.Title) [pageTitle]
+                  Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
+               }
+               guard Thread {
+                  loading -> { Col() [stateBox] {
+                     Spinner()
+                  } }
+                  error -> Message { Col() [stateBox, gap 6] {
+                     Text("Couldn't load comments") [problemTitle]
+                     Text(Message) [meta]
+                  } }
+               }
+               when Thread {
+                  empty -> { Col() [pad 10] {
+                     Text("No comments yet") [notice]
+                  } }
+                  otherwise -> {
+                     #comments
+                     loop Thread / Comment {
+                        CommentRow(Comment)
+}  }  }  }  }  }  }  }
+
+// The store keeps the thread flat with a Depth per row (the adapter flattens the tree). One rail
+// renders per ancestor level, so replies indent under their parents with the thread lines drawn;
+// nesting past four levels aligns at the fourth.
+view CommentRow(Comment) {
+   render Row() [fill, gap 8] {
+      if Comment.Depth >= 1 {
+         Col() [rail] { }
+      }
+      if Comment.Depth >= 2 {
+         Col() [rail] { }
+      }
+      if Comment.Depth >= 3 {
+         Col() [rail] { }
+      }
+      if Comment.Depth >= 4 {
+         Col() [rail] { }
+      }
+      Col() [commentCard, claim 1, compress] {
+         Text(Comment.Author) [author]
+         TextMultiline(Comment.Text) [commentText]
+}  }  }

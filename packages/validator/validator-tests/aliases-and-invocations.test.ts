@@ -8,7 +8,7 @@ import {
   accepts,
   app,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
   testValidateCodeWithErrors,
   validationErrorMessages,
@@ -17,13 +17,14 @@ import {
 const aliasMessages = AliasesValidator.messages
 const invocationMessages = InvocationsValidator.messages
 const textView = stubView('Text', 'Value text')
-const stackLayout = stubLayout('Stack')
+const stackLayout = stubContainer('Stack')
 
 const eventViews = `
   ${stackLayout}
   ${stubView('Input', 'Value text, Change action(text), Submit action()')}
   ${stubView('BooleanInput', 'Value boolean, Change action(boolean)')}
   ${stubView('NumericInput', 'Value number, Change action(number)')}
+  ${stubView('ListInput', 'Value text, Change action(list of text)')}
   ${stubView('LabelButton', 'Press text')}
 `
 
@@ -201,9 +202,9 @@ Describe('validator: aliases and invocations', () => {
         invocationMessages.unexpectedEventPayload('submit'),
       ],
       [
-        'rejects change events with nonstandard parameter types',
-        eventApp('NumericInput(Value: 1) { on change -> Changed { } }'),
-        invocationMessages.unsupportedEvent('NumericInput', 'change', 'Change'),
+        'rejects change events whose payload is not one scalar',
+        eventApp('ListInput(Value: Draft) { on change -> Changed { } }'),
+        invocationMessages.unsupportedEvent('ListInput', 'change', 'Change'),
       ],
       [
         'rejects press events backed by non-action parameters',

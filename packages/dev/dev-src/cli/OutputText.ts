@@ -1,8 +1,9 @@
+import { Text } from '@shared'
+import wrapAnsi from 'wrap-ansi'
+
 type PendingLineBuffer = {
   pending: string
 }
-
-const ANSI_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g
 
 /** OutputText owns terminal-output normalization and small formatting helpers for dev-loop output. */
 export const OutputText = {
@@ -10,7 +11,14 @@ export const OutputText = {
   flushPendingLine,
   formatElapsed,
   sanitize,
-  stripAnsi,
+  stripAnsi: Text.stripAnsi,
+  /** wrapLine splits one output line to `width` so a dashboard pane can show it without clipping. */
+  wrapLine(text: string, width: number): string[] {
+    if (width <= 0 || text.length === 0) {
+      return [text]
+    }
+    return wrapAnsi(text, width, { hard: true, trim: false, wordWrap: false }).split('\n')
+  },
 }
 
 function appendCompleteLines(buffer: PendingLineBuffer, output: string, onLine: (line: string) => void): void {
@@ -37,11 +45,7 @@ function formatElapsed(elapsedMs: number): string {
 }
 
 function sanitize(output: string): string {
-  return stripAnsi(output)
+  return Text.stripAnsi(output)
     .replaceAll('\r\n', '\n')
     .replaceAll('\r', '')
-}
-
-function stripAnsi(text: string): string {
-  return text.replace(ANSI_PATTERN, '')
 }

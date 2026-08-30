@@ -1,0 +1,17 @@
+use UnitValues from ./
+
+test "Unit values" {
+   test "builds, reads back, converts, and renders durations" {
+      run UnitValues
+      expect {
+         text "Read back: 0.22"
+         text "Long aliases agree: true" // 30 seconds twice is one minute after normalizing
+         text "Ratio: 4"
+         text "Doubled: 3"
+         text "Sum: 90"
+         text "Difference: 45"
+         text "Clock under an hour: 5:09"
+         text "Clock from an hour up: 1:02:03"
+         text "Clock at zero: 0:00"
+         text "Clock below zero: 0:00"
+}  }  }

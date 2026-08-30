@@ -11,7 +11,8 @@ export class ExpoServer {
   private child?: CLI.StartedCommand
   private closeOutputAndLogPromise?: Promise<void>
   private logFile?: FS.FileHandle
-  private recentOutput = ''
+  private recentOutputChunks: string[] = []
+  private recentOutputLength = 0
   private unexpectedExit?: (message: string) => void
   private stopping = false
 
@@ -30,7 +31,7 @@ export class ExpoServer {
       cwd: this.runtimeRoot,
       env: ExpoConfig.EXPO_START_ENV,
       onOutput: (stream, chunk) => {
-        this.recentOutput = `${this.recentOutput}${String(chunk)}`.slice(-EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT)
+        this.appendRecentOutput(String(chunk))
         DevLoopTUI.writeDevLoopOutput('expo', stream, chunk)
         void this.logFile?.write(chunk)
       },
@@ -40,12 +41,12 @@ export class ExpoServer {
       if (!this.stopping) {
         const summary = `Expo exited with code=${exitCode} signal=${signal}. See ${logPath}.`
         DevLoopTUI.logDevLoop('dev', summary, 'warn')
-        this.unexpectedExit?.(formatExpoExitFailure(this.recentOutput, summary))
+        this.unexpectedExit?.(formatExpoExitFailure(this.recentOutput(), summary))
       }
     })
     this.child.onceError(error => {
       const message = `Failed to start Expo: ${error.message}`
-      this.recentOutput = `${this.recentOutput}\n${message}`.slice(-EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT)
+      this.appendRecentOutput(`\n${message}`)
       DevLoopTUI.logDevLoop('dev', message, 'error')
     })
     DevLoopTUI.logDevLoop('dev', `Expo log: ${logPath}`)
@@ -83,6 +84,22 @@ export class ExpoServer {
     const logFile = this.logFile
     this.logFile = undefined
     await logFile?.close()
+  }
+
+  /** appendRecentOutput keeps a bounded failure tail without recopying the buffer per chunk. */
+  private appendRecentOutput(chunk: string): void {
+    this.recentOutputChunks.push(chunk)
+    this.recentOutputLength += chunk.length
+    while (
+      this.recentOutputChunks.length > 1
+      && this.recentOutputLength - this.recentOutputChunks[0]!.length >= EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT
+    ) {
+      this.recentOutputLength -= this.recentOutputChunks.shift()!.length
+    }
+  }
+
+  private recentOutput(): string {
+    return this.recentOutputChunks.join('').slice(-EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT)
   }
 }
 

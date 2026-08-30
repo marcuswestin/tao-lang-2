@@ -18,52 +18,8 @@ Describe('@tao/data providers', () => {
   })
 
   Test('connects InstantDB with evaluated config and forwards snapshot reads, writes, and subscriptions', async () => {
-    type InstantSubscriptionResult = {
-      data?: { taoSnapshots: Array<{ Snapshot: string; StorageKey: string }> }
-      error?: unknown
-    }
-    let subscription: ((result: InstantSubscriptionResult) => void) | undefined
-    let initConfig: Record<string, unknown> | undefined
-    let shutdownCalls = 0
-    let unsubscribeCalls = 0
-    const transactions: unknown[] = []
-    const core = {
-      shutdown: () => {
-        shutdownCalls += 1
-      },
-      subscribeQuery: (_query: unknown, observer: (result: InstantSubscriptionResult) => void) => {
-        subscription = observer
-        return () => {
-          unsubscribeCalls += 1
-        }
-      },
-    }
-    const db = {
-      core,
-      queryOnce: async (_query: unknown) => ({ data: { taoSnapshots: [] }, pageInfo: {} }),
-      transact: async (transaction: unknown) => {
-        transactions.push(transaction)
-      },
-      tx: {
-        taoSnapshots: new Proxy({}, {
-          get: (_target, id) => ({
-            update: (fields: Record<string, unknown>) => ({ fields, id }),
-          }),
-        }),
-      },
-    }
-    const instantSDK = {
-      i: {
-        entity: (fields: unknown) => fields,
-        schema: (definition: unknown) => definition,
-        string: () => ({}),
-      },
-      init: (config: Record<string, unknown>) => {
-        initConfig = config
-        return { ...db, core }
-      },
-    }
-    const provider = InstantDBProvider(() => instantSDK as never)
+    const sdk = fakeInstantSDK()
+    const provider = InstantDBProvider(() => sdk.instantSDK as never)
     const connection = provider.connect({
       configuration: {
         ApiURI: ' http://localhost:9020 ',
@@ -83,40 +39,89 @@ Describe('@tao/data providers', () => {
       storageKey: 'OtherNotes',
     })
 
-    Expect(initConfig).toMatchObject({
+    Expect(sdk.initConfig).toMatchObject({
       apiURI: 'http://localhost:9020',
       appId: 'app-id',
       websocketURI: 'ws://localhost:9020/runtime/session',
     })
-    Expect(await connection.load()).toBeUndefined()
+
+    // The load resolves from the first subscribeQuery result — the SDK's local cache — instead of
+    // a queryOnce round-trip that hard-rejects offline.
+    const loading = connection.load() as Promise<string | undefined>
+    Expect(sdk.subscription).toBeDefined()
+    sdk.subscription?.({ data: { taoSnapshots: [] } })
+    Expect(await loading).toBeUndefined()
+
     await connection.save('{"snapshot":"saved"}')
-    Expect(transactions).toHaveLength(1)
-    Expect(transactions[0]).toMatchObject({
+    Expect(sdk.transactions).toHaveLength(1)
+    Expect(sdk.transactions[0]).toMatchObject({
       fields: { Snapshot: '{"snapshot":"saved"}', StorageKey: 'Notes' },
     })
-    Expect((transactions[0] as { id: string }).id).toMatch(
+    Expect((sdk.transactions[0] as { id: string }).id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     )
 
+    // A result arriving between load resolution and the runtime's subscribe replays on subscribe.
+    sdk.subscription?.({ data: { taoSnapshots: [{ Snapshot: 'missed', StorageKey: 'Notes' }] } })
     const snapshots: Array<string | undefined> = []
     const errors: unknown[] = []
     const stop = connection.subscribe!({
       error: error => errors.push(error),
       snapshot: snapshot => snapshots.push(snapshot),
     })
-    subscription?.({ data: { taoSnapshots: [{ Snapshot: 'remote', StorageKey: 'Notes' }] } })
+    sdk.subscription?.({ data: { taoSnapshots: [{ Snapshot: 'remote', StorageKey: 'Notes' }] } })
     const remoteError = new Error('offline')
-    subscription?.({ error: remoteError })
+    sdk.subscription?.({ error: remoteError })
     stop()
     connection.close?.()
 
-    Expect(snapshots).toEqual(['remote'])
+    Expect(snapshots).toEqual(['missed', 'remote'])
     Expect(errors).toEqual([remoteError])
-    Expect(unsubscribeCalls).toBe(1)
-    Expect(shutdownCalls).toBe(0)
+    Expect(sdk.unsubscribeCalls).toBe(1)
+    Expect(sdk.shutdownCalls).toBe(0)
     secondConnection.close?.()
     secondConnection.close?.()
-    Expect(shutdownCalls).toBe(1)
+    Expect(sdk.shutdownCalls).toBe(1)
+  })
+
+  Test('rejects the load when the first subscription result is an error or a key collision', async () => {
+    const sdk = fakeInstantSDK()
+    const provider = InstantDBProvider(() => sdk.instantSDK as never)
+    const connect = (storageKey: string): TR.DataConnection =>
+      provider.connect({
+        configuration: { AppId: 'app-id' },
+        schema: { entities: {}, name: 'InstantTest' },
+        storageKey,
+      })
+
+    const failing = connect('Notes').load() as Promise<string | undefined>
+    sdk.subscription?.({ error: { message: 'device is offline' } })
+    await Expect(failing).rejects.toThrow('device is offline')
+
+    const colliding = connect('Notes').load() as Promise<string | undefined>
+    sdk.subscription?.({ data: { taoSnapshots: [{ Snapshot: 'x', StorageKey: 'OtherKey' }] } })
+    await Expect(colliding).rejects.toThrow('deterministic snapshot key collision')
+  })
+
+  Test('counts core references across provider instances sharing one cached SDK core', () => {
+    // @instantdb caches one core per equivalent init config, so two datasource declarations with
+    // the same AppId hand their connections the same core object.
+    const sdk = fakeInstantSDK()
+    const context = {
+      configuration: { AppId: 'app-id' },
+      schema: { entities: {}, name: 'InstantTest' },
+      storageKey: 'Notes',
+    }
+    const first = InstantDBProvider(() => sdk.instantSDK as never).connect(context)
+    const second = InstantDBProvider(() => sdk.instantSDK as never).connect({
+      ...context,
+      storageKey: 'OtherNotes',
+    })
+
+    first.close?.()
+    Expect(sdk.shutdownCalls).toBe(0)
+    second.close?.()
+    Expect(sdk.shutdownCalls).toBe(1)
   })
 
   Test('validates required InstantDB config before loading the native SDK', () => {
@@ -136,6 +141,81 @@ Describe('@tao/data providers', () => {
     Expect(sdkLoads).toBe(0)
   })
 })
+
+type InstantSubscriptionResult = {
+  data?: { taoSnapshots: Array<{ Snapshot: string; StorageKey: string }> }
+  error?: unknown
+}
+
+/** fakeInstantSDK emulates the SDK boundary, including its one cached core per init config. */
+function fakeInstantSDK(): {
+  initConfig: Record<string, unknown> | undefined
+  instantSDK: unknown
+  shutdownCalls: number
+  subscription: ((result: InstantSubscriptionResult) => void) | undefined
+  transactions: unknown[]
+  unsubscribeCalls: number
+} {
+  const state = {
+    initConfig: undefined as Record<string, unknown> | undefined,
+    shutdownCalls: 0,
+    subscription: undefined as ((result: InstantSubscriptionResult) => void) | undefined,
+    transactions: [] as unknown[],
+    unsubscribeCalls: 0,
+  }
+  const core = {
+    shutdown: () => {
+      state.shutdownCalls += 1
+    },
+    subscribeQuery: (_query: unknown, observer: (result: InstantSubscriptionResult) => void) => {
+      state.subscription = observer
+      return () => {
+        state.unsubscribeCalls += 1
+      }
+    },
+  }
+  const instantSDK = {
+    i: {
+      entity: (fields: unknown) => fields,
+      schema: (definition: unknown) => definition,
+      string: () => ({}),
+    },
+    init: (config: Record<string, unknown>) => {
+      state.initConfig = config
+      return {
+        core,
+        transact: async (transaction: unknown) => {
+          state.transactions.push(transaction)
+        },
+        tx: {
+          taoSnapshots: new Proxy({}, {
+            get: (_target, id) => ({
+              update: (fields: Record<string, unknown>) => ({ fields, id }),
+            }),
+          }),
+        },
+      }
+    },
+  }
+  return {
+    get initConfig() {
+      return state.initConfig
+    },
+    instantSDK,
+    get shutdownCalls() {
+      return state.shutdownCalls
+    },
+    get subscription() {
+      return state.subscription
+    },
+    get transactions() {
+      return state.transactions
+    },
+    get unsubscribeCalls() {
+      return state.unsubscribeCalls
+    },
+  }
+}
 
 function rejectingProvider(): TR.DataProvider {
   return {

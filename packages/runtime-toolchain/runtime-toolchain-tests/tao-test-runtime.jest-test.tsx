@@ -27,7 +27,7 @@ Describe('Expo runtime', () => {
             Text("Repeated")
           }
         }
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -73,7 +73,7 @@ Describe('Expo runtime', () => {
             Number(Count)
           }
         }
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -132,7 +132,7 @@ Describe('Expo runtime', () => {
             Number(Count)
           }
         }
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -161,14 +161,14 @@ Describe('Expo runtime', () => {
 
   Test('lets Tao test steps answer an action suspended by ask', async () => {
     await withTaoFiles(
-      'tao-runtime-dialogue-test-plan-',
+      'tao-runtime-ask-test-plan-',
       {
         'Main.test.tao': `
-        use DialogueTestApp from ./
+        use AskTestApp from ./
 
-        test "Dialogue" {
+        test "Ask" {
           test "answers a suspended ask" {
-            run DialogueTestApp
+            run AskTestApp
             press text "Ask"
             expect text "Question"
             press text "Confirm"
@@ -182,12 +182,13 @@ Describe('Expo runtime', () => {
 
         type ConfirmResult is one of Confirmed
 
-        app DialogueTestApp {
-          Name "Dialogue test"
+        app AskTestApp {
+          Name "Ask test"
           Navigator StackNav { Initial Home }
         }
 
-        ui Home() {
+        view Home() {
+          Title "Home"
           state Status = "Ready"
           action AskForConfirmation() {
             let Result = ask Confirm()
@@ -199,7 +200,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        dialogue Confirm() responds ConfirmResult {
+        view Confirm() responds ConfirmResult {
           action ConfirmIt() { respond Confirmed }
           render Col() {
             Text("Question")
@@ -250,6 +251,48 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('rejects pressing a disabled toolbar command', async () => {
+    await withTaoFiles(
+      'tao-runtime-disabled-toolbar-test-plan-',
+      {
+        'Main.test.tao': `
+          use ToolbarApp from ./
+
+          test "Toolbar" {
+            test "disabled command cannot be pressed" {
+              run ToolbarApp
+              expect toolbar command "Save" disabled
+              press toolbar command "Save"
+            }
+          }
+        `,
+        'Main.tao': `
+          use StackNav from @tao/nav
+          use Text from @tao/ui
+
+          app ToolbarApp {
+            Name "Toolbar"
+            Navigator StackNav { Initial Home }
+          }
+
+          view Home() {
+            state CanSave = false
+            Title "Home"
+            action SaveDocument() { Title "Save" }
+            command Save = SaveDocument() with { Enabled CanSave }
+            Toolbar { Save }
+            render Text("Home")
+          }
+        `,
+      },
+      async paths => {
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /cannot press a disabled toolbar command/,
+        )
+      },
+    )
+  })
+
   Test('runs Tao enter and submit steps through label and placeholder selectors', async () => {
     await withTaoFiles(
       'tao-runtime-input-test-plan-',
@@ -285,7 +328,7 @@ Describe('Expo runtime', () => {
             Text(Status)
           }
         }
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`
@@ -361,7 +404,8 @@ Describe('Expo runtime', () => {
           Datasource Memory { }
         }
 
-        ui Main() {
+        view Main() {
+          Title "Main"
           state Draft = ""
           state Status = "Waiting"
           state Selection = "Nothing selected"
@@ -457,7 +501,8 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        workspace ui Home() {
+        workspace view Home() {
+          Title "Home"
           action Open() { present Detail() }
           render Stack(){
             Text("Home")
@@ -465,11 +510,12 @@ Describe('Expo runtime', () => {
           }
         }
 
-        workspace ui Detail() {
+        workspace view Detail() {
+          Title "Detail"
           render Text("Detail")
         }
 
-        layout Stack() {
+        view Stack() {
           render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
             return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
           \`\`\`

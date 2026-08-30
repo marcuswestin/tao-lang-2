@@ -3,11 +3,13 @@ use WordFlowerNavHarness, WordFlowerStackByLet, WordFlowerStackByLetWith, WordFl
 test "WordFlower navigation foundation" {
    test "native back uses the semantic reducer" {
       run WordFlowerNavHarness
-
+      expect navigation title "Navigation harness"
       expect text "Harness home marker"
       press "Open deterministic detail"
+      expect navigation title "Harness detail"
       expect text "Harness detail marker"
       back
+      expect navigation title "Navigation harness"
       expect text "Harness home marker"
       expect missing text "Harness detail marker"
    }
