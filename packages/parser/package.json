@@ -8,10 +8,10 @@
   },
   "dependencies": {
     "tao-shared": "workspace:*",
-    "langium": "~4.2.2",
-    "vscode-languageserver": "~9.0.1"
+    "langium": "~4.3.1",
+    "vscode-languageserver": "~10.0.1"
   },
   "devDependencies": {
-    "langium-cli": "^4.2.0"
+    "langium-cli": "^4.3.0"
   }
 }

@@ -6,12 +6,13 @@
     "packages/*"
   ],
   "overrides": {
-    "expo-constants": "18.0.14"
+    "expo-constants": "57.0.16",
+    "langium": "~4.3.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",
-    "rulesync": "14.0.1",
-    "typescript": "5.9.3"
+    "rulesync": "16.18.0",
+    "typescript": "7.0.2"
   }
 }
