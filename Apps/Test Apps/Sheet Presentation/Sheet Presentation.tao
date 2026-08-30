@@ -22,7 +22,21 @@ ui DetailSheet() {
    render Col() [gap 8] {
       Text("Sheet content")
 
+      #openCover
+      Button("Open cover") {
+         on press -> { present CoverOverlay() as overlay }
+      }
+
       #closeSheet
       Button("Close") {
+         on press -> { dismiss }
+}  }  }
+
+ui CoverOverlay() {
+   render Col() [gap 8] {
+      Text("Cover content")
+
+      #closeCover
+      Button("Close cover") {
          on press -> { dismiss }
 }  }  }

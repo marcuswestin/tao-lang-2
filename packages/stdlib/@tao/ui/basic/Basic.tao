@@ -45,3 +45,11 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
       )
    ```
 }
+
+// The wireframe spinner, honoring layout clauses where the native one renders OS chrome.
+public
+view Spinner() {
+   render inject Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Spinner({ layout: Layout, tag: Tag })
+   ```
+}

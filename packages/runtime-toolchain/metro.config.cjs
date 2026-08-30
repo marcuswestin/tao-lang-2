@@ -24,7 +24,26 @@ config.resolver.nodeModulesPaths = [
   ]),
 ]
 
+// The runtime requires each of these lazily and degrades when the module yields no component.
+// Metro resolves every literal require while bundling, so an omitted package would fail the build
+// before that degradation could run; resolving a missing optional host to Metro's empty module
+// keeps the bundle building and hands the runtime the "no host" case it already handles.
+const optionalHostModules = new Set([
+  '@react-native-community/datetimepicker',
+  '@react-native-community/slider',
+  '@react-native-picker/picker',
+  '@react-native-segmented-control/segmented-control',
+  'react-native-screens',
+])
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (optionalHostModules.has(moduleName)) {
+    try {
+      return context.resolveRequest(context, moduleName, platform)
+    } catch {
+      return { type: 'empty' }
+    }
+  }
   if (moduleName === '@runtime/TR') {
     return {
       type: 'sourceFile',

@@ -40,7 +40,8 @@ function nativeTabsModule(): NativeTabsModule | undefined {
   if (cachedModule === undefined) {
     try {
       // Lazy and optional: the runtime never hard-requires the native module, so environments
-      // without it (and packagers that exclude it) keep the JS surface.
+      // without it keep the JS surface. An install that omits the package still bundles, because
+      // the toolchain's metro config resolves missing optional hosts to Metro's empty module.
       const screens = require('react-native-screens') as Partial<NativeTabsModule>
       cachedModule = screens.BottomTabs && screens.BottomTabsScreen
         ? { BottomTabs: screens.BottomTabs, BottomTabsScreen: screens.BottomTabsScreen }

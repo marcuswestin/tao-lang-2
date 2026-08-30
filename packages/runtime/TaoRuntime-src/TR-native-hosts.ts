@@ -1,7 +1,10 @@
 /**
- * The platform hosts behind `@tao/ui/native`. Each is required lazily and optionally: a bundle that
- * excludes one, a platform that has none, and the Jest harness all keep working, because a missing
- * host resolves to `undefined` and the component that wanted it renders its portable equivalent.
+ * The platform hosts behind `@tao/ui/native`. Each is required lazily and optionally: a platform
+ * that has none, and the Jest harness, keep working because a missing host resolves to `undefined`
+ * and the component that wanted it renders its portable equivalent. An install that omits a host
+ * package works through the same path — Metro resolves literal requires at bundle time, so the
+ * toolchain's metro config resolves a missing optional host to Metro's empty module (see
+ * `optionalHostModules` in metro.config.cjs), which lands here as a module with no components.
  *
  * Nothing here is Tao semantics — these are the modules a native implementation reaches for.
  */

@@ -63,15 +63,34 @@ view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean 
    ```
 }
 
-// The platform's continuous value control. Without the host it degrades to a labeled readout, so a
-// value is still visible and a journey still passes.
+// The platform's continuous value control. Without the host it degrades to a stepped control that
+// still reports through `Change`, so one journey drives every implementation.
 public
 view Slider(Value number, Change action(number), Label text, Minimum number default 0, Maximum number default 1, Disabled boolean default false) {
    render inject Value, Change, Label, Minimum, Maximum, Disabled, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Slider', Layout)
       const host = TR.Hosts.Slider()
       if (!host) {
-        return TR.Element(RN.Text, { testID: Tag }, `${Label}: ${Value}`)
+        const step = (Maximum - Minimum) / 10
+        return TR.Element(
+          RN.View,
+          { style: { alignItems: 'center', flexDirection: 'row', gap: 8 }, testID: Tag },
+          TR.Element(RN.Button, {
+            accessibilityLabel: `Decrease ${Label}`,
+            disabled: Disabled,
+            key: 'decrease',
+            onPress: () => Change.invoke(TR.Value(Math.max(Minimum, Value - step))),
+            title: '−',
+          }),
+          TR.Element(RN.Text, { key: 'reading' }, `${Label}: ${Value}`),
+          TR.Element(RN.Button, {
+            accessibilityLabel: `Increase ${Label}`,
+            disabled: Disabled,
+            key: 'increase',
+            onPress: () => Change.invoke(TR.Value(Math.min(Maximum, Value + step))),
+            title: '+',
+          }),
+        )
       }
       return TR.Element(host, {
         accessibilityLabel: Label,
@@ -90,7 +109,13 @@ public
 view Spinner() {
    render inject Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Spinner', Layout)
-      return TR.Element(RN.ActivityIndicator, { accessibilityRole: 'progressbar', testID: Tag })
+      return TR.Element(RN.ActivityIndicator, {
+        accessibilityLabel: 'Loading',
+        accessibilityRole: 'progressbar',
+        accessibilityState: { busy: true },
+        animating: true,
+        testID: Tag,
+      })
    ```
 }
 
@@ -161,7 +186,8 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
 }
 
 // The platform's date picker. Its value is a `time`, so it composes with the rest of the language's
-// calendar arithmetic rather than carrying its own format.
+// calendar arithmetic rather than carrying its own format. Without the host it degrades to a
+// day-stepping control that still reports through `Change`.
 public
 view DatePicker(Value time, Change action(time), Label text) {
    render inject Value, Change, Label, Layout @@layout, Tag @@tag ```ts
@@ -169,7 +195,24 @@ view DatePicker(Value time, Change action(time), Label text) {
       const os = RN.Platform?.OS
       const host = os === 'ios' || os === 'android' ? TR.Hosts.DateTimePicker() : undefined
       if (!host) {
-        return TR.Element(RN.Text, { testID: Tag }, `${Label}: ${new Date(Value).toISOString().slice(0, 10)}`)
+        const day = 24 * 60 * 60 * 1000
+        return TR.Element(
+          RN.View,
+          { style: { alignItems: 'center', flexDirection: 'row', gap: 8 }, testID: Tag },
+          TR.Element(RN.Button, {
+            accessibilityLabel: `Previous ${Label}`,
+            key: 'previous',
+            onPress: () => Change.invoke(TR.Value(Value - day)),
+            title: '‹',
+          }),
+          TR.Element(RN.Text, { key: 'reading' }, `${Label}: ${new Date(Value).toISOString().slice(0, 10)}`),
+          TR.Element(RN.Button, {
+            accessibilityLabel: `Next ${Label}`,
+            key: 'next',
+            onPress: () => Change.invoke(TR.Value(Value + day)),
+            title: '›',
+          }),
+        )
       }
       return TR.Element(host, {
         accessibilityLabel: Label,

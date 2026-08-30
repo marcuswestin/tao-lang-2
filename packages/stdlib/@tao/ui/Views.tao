@@ -97,13 +97,6 @@ view Checkbox(Value boolean, Change action(boolean), Label text, Disabled boolea
 }
 
 public
-view Spinner() {
-   render inject Layout @@layout, Tag @@tag ```ts
-      return TR.Views.Spinner({ layout: Layout, tag: Tag })
-   ```
-}
-
-public
 view Progress(Value number) {
    render inject Value, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Progress({ layout: Layout, tag: Tag, value: Value })

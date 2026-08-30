@@ -13,7 +13,7 @@ type MetroConfig = {
   watchFolders: readonly string[]
 }
 
-type MetroResolution = { filePath: string; type: 'sourceFile' }
+type MetroResolution = { filePath: string; type: 'sourceFile' } | { type: 'empty' }
 
 type MetroResolutionContext = {
   originModulePath: string
@@ -61,6 +61,33 @@ Describe('Expo Metro configuration', () => {
       filePath: Repo.resolvePath('packages/shared/shared-src/core/shared-core.ts'),
       type: 'sourceFile',
     })
+  })
+
+  Test('resolves a missing optional host to the empty module instead of failing the bundle', () => {
+    const resolved: MetroResolution = { filePath: '/resolved/slider.js', type: 'sourceFile' }
+    const availableContext: MetroResolutionContext = {
+      originModulePath: Repo.resolvePath('packages/runtime/TaoRuntime-src/TR-native-hosts.ts'),
+      resolveRequest() {
+        return resolved
+      },
+    }
+    const missingContext: MetroResolutionContext = {
+      originModulePath: Repo.resolvePath('packages/runtime/TaoRuntime-src/TR-native-hosts.ts'),
+      resolveRequest() {
+        throw new Error('package not installed')
+      },
+    }
+
+    // An installed host resolves normally; an omitted one becomes the empty module the runtime
+    // already treats as "no host", so the documented degradation survives bundling.
+    Expect(config.resolver.resolveRequest(availableContext, '@react-native-community/slider', 'ios'))
+      .toBe(resolved)
+    Expect(config.resolver.resolveRequest(missingContext, '@react-native-community/slider', 'ios'))
+      .toEqual({ type: 'empty' })
+    Expect(config.resolver.resolveRequest(missingContext, 'react-native-screens', 'ios'))
+      .toEqual({ type: 'empty' })
+    // A module outside the optional set still fails loudly.
+    Expect(() => config.resolver.resolveRequest(missingContext, 'react', 'ios')).toThrow()
   })
 
   Test('delegates every other module to Metro resolution with its origin preserved', () => {

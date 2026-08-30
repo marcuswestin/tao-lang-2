@@ -35,10 +35,16 @@ test Switch "Switch behavior" {
 }
 
 test Slider "Slider behavior" {
-   test "renders its label and current value" {
+   test "renders its label and reports each change" {
       run NativeComponents
 
       expect text "Volume: 0"
+      press label "Increase Volume"
+      expect text "Volume: 1"
+      press label "Increase Volume"
+      expect text "Volume: 2"
+      press label "Decrease Volume"
+      expect text "Volume: 1"
    }
 }
 
@@ -66,11 +72,15 @@ test SegmentedControl "Segmented control behavior" {
    }
 }
 
-test DatePicker, Spinner "Date picker and spinner render" {
-   test "renders both where the platform host is absent" {
+test DatePicker, Spinner "Date picker and spinner behavior" {
+   test "renders both and reports each day change where the platform host is absent" {
       run NativeComponents
 
       // Every check holds the clock at a fixed instant, so the degraded reading is deterministic.
+      expect text "Day: 2026-01-01"
+      press label "Next Day"
+      expect text "Day: 2026-01-02"
+      press label "Previous Day"
       expect text "Day: 2026-01-01"
    }
 }

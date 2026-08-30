@@ -26,3 +26,6 @@ view SegmentedControl = native.SegmentedControl
 
 public
 view DatePicker = native.DatePicker
+
+public
+view Spinner = native.Spinner

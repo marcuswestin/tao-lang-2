@@ -18,4 +18,17 @@ test "Sheet presentation" {
       expect {
          missing text "Sheet content"
          text "Sheet Presentation"
+   }  }
+   test "hides a covered sheet and restores it when the cover dismisses" {
+      run SheetPresentation
+      press #openSheet
+      press #openCover
+      expect {
+         text "Cover content"
+         missing text "Sheet content"
+      }
+      press #closeCover
+      expect {
+         missing text "Cover content"
+         text "Sheet content"
 }  }  }
