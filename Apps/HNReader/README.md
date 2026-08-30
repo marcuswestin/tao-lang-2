@@ -38,7 +38,7 @@ exercising the real fill machinery.
 ## Two things to know before extending it
 
 - **`Rank` is the order the API returned, not news.ycombinator.com's ranking.** Algolia's
-  `search?tags=front_page` returns the front-page *set* ordered by points, so the rendered
+  `search?tags=front_page` returns the front-page _set_ ordered by points, so the rendered
   numbering approximates HN's rather than matching it. Exact parity needs Firebase's `topstories`
   for the ID order, which costs a request per story. What the field demonstrates either way is the
   rule it exists for: ordering the API owns and no stored field derives is materialized as data.

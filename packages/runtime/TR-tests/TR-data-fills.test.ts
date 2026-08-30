@@ -398,7 +398,7 @@ Describe('TR.Data query fills', () => {
     Expect(() => schema.upsertFromFill('Story', [{ HnId: 1, Nope: 'x' }]))
       .toThrow("has no fillable field 'Nope'")
     Expect(() => schema.upsertFromFill('Story', [{ HnId: 1, Title: 5, Rank: 1 }]))
-      .toThrow("expects text, got number")
+      .toThrow('expects text, got number')
     Expect(() => schema.upsertFromFill('Story', [{ HnId: 1, Rank: 1 }]))
       .toThrow("missing required field 'Title'")
     Expect(() => schema.upsertFromFill('Comment', [{ HnId: 1, Story: 'Story-1', Text: 'x', Ordering: 1, Depth: 0 }]))

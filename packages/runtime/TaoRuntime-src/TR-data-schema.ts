@@ -16,7 +16,6 @@ import {
   type RuntimeEntityMetadata,
 } from './TR-data-entity'
 import { DataLoadRecovery } from './TR-data-load-recovery'
-import { reportUnownedFailure } from './TR-errors'
 import {
   emptyData,
   envelope,
@@ -32,6 +31,7 @@ import {
   queryFilterValue,
   rowValues,
 } from './TR-data-values'
+import { reportUnownedFailure } from './TR-errors'
 import RuntimeSwitch from './TR-switch'
 import { Clock } from './TR-units'
 
