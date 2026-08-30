@@ -1,4 +1,4 @@
-use Documents, Workspace, Workspaces from @data
+use Documents, Workspaces from @data
 use WorkspaceNav from @nav
 use Join from @tao/text
 use Col, FormButton, Image, Panes, ScrollView, Spinner, Text, TextInput from @tao/ui

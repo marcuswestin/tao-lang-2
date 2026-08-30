@@ -1,7 +1,7 @@
 import { CLI, FS, Repo, Time } from '@shared'
 import { OutputText } from '../../cli/OutputText'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { ExpoConfig } from './expo-config'
+import type { ExpoSessionConfig } from './expo-config'
 
 const EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT = 32_000
 const EXPO_FAILURE_OUTPUT_LINE_LIMIT = 40
@@ -16,20 +16,28 @@ export class ExpoServer {
   private unexpectedExit?: (message: string) => void
   private stopping = false
 
-  constructor(private readonly runtimeRoot: string) {}
+  constructor(
+    private readonly runtimeRoot: string,
+    private readonly config: ExpoSessionConfig,
+    private readonly releasePortReservation: () => Promise<void>,
+  ) {}
 
   onUnexpectedExit(listener: (message: string) => void): void {
     this.unexpectedExit = listener
   }
 
   async start(): Promise<void> {
-    const logPath = Repo.resolvePath('.artifacts/dev/expo.log')
+    await this.releasePortReservation()
+    const logPath = Repo.resolvePath(this.config.EXPO_LOG_PATH)
     await FS.mkdir(FS.dirname(logPath))
     this.logFile = await FS.openAppend(logPath)
     this.child = CLI.start('bunx', {
-      args: ExpoConfig.EXPO_START_ARGS,
+      args: this.config.EXPO_START_ARGS,
       cwd: this.runtimeRoot,
-      env: ExpoConfig.EXPO_START_ENV,
+      env: {
+        ...this.config.EXPO_START_ENV,
+        TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: Repo.resolvePath(this.config.RUNTIME_TOOLCHAIN_PATH),
+      },
       onOutput: (stream, chunk) => {
         this.appendRecentOutput(String(chunk))
         DevLoopTUI.writeDevLoopOutput('expo', stream, chunk)
@@ -53,6 +61,7 @@ export class ExpoServer {
   }
 
   async stop(): Promise<void> {
+    await this.releasePortReservation()
     const child = this.child
     if (!child) {
       await this.closeLogFile()
@@ -61,7 +70,7 @@ export class ExpoServer {
     this.stopping = true
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGTERM')
-      await Promise.race([child.waitForClose(), Time.sleep(ExpoConfig.EXPO_STOP_TIMEOUT_MS)])
+      await Promise.race([child.waitForClose(), Time.sleep(this.config.EXPO_STOP_TIMEOUT_MS)])
       if (child.exitCode === null && child.signalCode === null) {
         child.kill('SIGKILL')
         await child.waitForClose()

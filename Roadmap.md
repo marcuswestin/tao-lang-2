@@ -148,7 +148,10 @@ Product and codebase backlog, unordered.
     exist, and Scheme is visibly inert until reactive design resolution exists.
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
-- [ ] Allow only one project definition per project root; scope workspace package lookup to that root, have the IDE extension manage one workspace per project folder, and stop requiring a Git repo at the project root.
+- [ ] Finish project-root ownership across tooling
+  - Studio now selects a folder owning exactly one project definition, scopes its workspace and package
+    lookup to that root, and runs multiple projects as separate concurrent sessions. Remaining: have the
+    IDE extension manage one workspace per project folder and stop requiring a Git repo at the project root.
 - [ ] Implement styling, and then all of `Docs/Spec/Tao Layout and UI.md`.
   - Consider declaration-level style defaults that a caller may override, and settle how the two
     merge — in particular how a caller clears a default rather than adding to it:
@@ -161,9 +164,9 @@ Product and codebase backlog, unordered.
     render Foo() [pad 0, bg none] // caller clears the declared default
     ```
 - [ ] Spike: implement the declared concurrency policy (`runs single`, `runs latest`) from
-  `Decisions.md` §8 — grammar, validator, compiler, runtime `.Running` state, cancellation.
-  Deliberately separate from the AI-in-apps work, which consumes it (`generate … runs latest`)
-  but must not decide it. Context: `Docs/Roadmap/AI in Tao apps.md`.
+      `Decisions.md` §8 — grammar, validator, compiler, runtime `.Running` state, cancellation.
+      Deliberately separate from the AI-in-apps work, which consumes it (`generate … runs latest`)
+      but must not decide it. Context: `Docs/Roadmap/AI in Tao apps.md`.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
 - [ ] Remove magical strings.

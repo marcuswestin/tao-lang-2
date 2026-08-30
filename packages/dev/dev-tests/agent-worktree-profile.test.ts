@@ -168,6 +168,24 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(source).not.toContain('command -v lockf')
     Expect(source).not.toContain('BUN_TMPDIR=')
   })
+
+  Test('repairs incomplete dependency graphs from repository-local Bun storage', async () => {
+    const source = await FS.readText(Repo.resolvePath('Justfile'))
+
+    Expect(source).toContain('BUN_CACHE_DIR := justfile_directory() + "/.artifacts/cache/bun"')
+    Expect(source).toContain('BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"')
+    Expect(source).toContain('TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile')
+    Expect(source).toContain('bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"')
+    Expect(source).toContain('require("expo/metro-config"); require("jest-expo/jest-preset")')
+  })
+
+  Test('keeps dprint caches out of developer home directories', async () => {
+    const source = await FS.readText(Repo.resolvePath('Justfile'))
+    const dprintCommands = source.split('\n').filter(line => line.trimStart().startsWith('dprint '))
+
+    Expect(dprintCommands.length).toBeGreaterThan(0)
+    Expect(dprintCommands.every(command => command.includes('--incremental=false'))).toBe(true)
+  })
 })
 
 async function createProfileFixture(testRoot: string, withPrimaryProfile: boolean): Promise<ProfileFixture> {

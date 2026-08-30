@@ -34,3 +34,10 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Run focused tests while working.
 - Run `./agent verify` as the final validation and before commits.
+
+## Developer environment feedback
+
+- During implementation, keep a task-local ledger of material developer-environment problems and credible improvement opportunities encountered in repository setup, dependencies, commands, tests, builds, generators, worktrees, permissions, performance, or diagnostics. For each item, retain the symptom and relevant command, evidence or likely cause, any workaround, and the plausible repository or host-environment improvement. Do not classify ordinary product-code failures or unsupported speculation as environment issues.
+- Keep the ledger in task context or ignored `.artifacts/` scratch state; do not add a tracked issue document unless Ro asks for one. Fix safe repository-owned workflow defects when they are within the task's authority and do not materially divert from its goal; otherwise preserve them as suggestions rather than silently expanding scope.
+- When work is delegated, every subagent must return its environment-ledger entries to the owning agent. The owning agent deduplicates entries across participants and carries them through compaction and final validation.
+- At the end of every implementation handoff, include a `Developer environment` summary that distinguishes issues fixed during the task, remaining repository improvement suggestions, and external or policy limitations. Give exact user steps for anything the agent could not complete, and say explicitly when no issues or suggestions were found.

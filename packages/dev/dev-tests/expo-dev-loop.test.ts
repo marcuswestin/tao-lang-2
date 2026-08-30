@@ -2,6 +2,7 @@ import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { OutputText } from '../dev-src/cli/OutputText'
 import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
+import { createExpoConfig } from '../dev-src/expo-dev-loop/expo-runner/expo-config'
 import { formatExpoExitFailure } from '../dev-src/expo-dev-loop/expo-runner/expo-server'
 import { ExpoRunner } from '../dev-src/expo-dev-loop/expo-runner/ExpoRunner'
 import { parseIfconfigIPv4, preferredLanIPv4 } from '../dev-src/expo-dev-loop/expo-runner/lan-host'
@@ -68,6 +69,50 @@ Describe('Expo dev-loop command helpers', () => {
 })
 
 Describe('Expo dev-loop port helpers', () => {
+  Test('derives every Expo endpoint and start argument from the session port', () => {
+    const config = createExpoConfig(49_152)
+
+    Expect(config.EXPO_PORT).toBe(49_152)
+    Expect(config.EXPO_ORIGIN).toBe('http://127.0.0.1:49152')
+    Expect(config.EXPO_GO_URL).toBe('exp://127.0.0.1:49152')
+    Expect(config.EXPO_LOG_PATH).toBe('.artifacts/dev/expo-49152.log')
+    Expect(config.EXPO_OPEN_URL).toBe('http://127.0.0.1:49152/_expo/open')
+    Expect(config.EXPO_STATUS_URL).toBe('http://127.0.0.1:49152/status')
+    Expect(config.EXPO_START_ARGS).toEqual([
+      'expo',
+      'start',
+      '--host',
+      'lan',
+      '--port',
+      '49152',
+    ])
+  })
+
+  Test('prefers 8081 when it is free', async () => {
+    const selected = await ExpoRunner.portDiagnostics.selectAvailable(8081, async port => port)
+
+    Expect(selected).toBe(8081)
+  })
+
+  Test('allocates another Expo port when 8081 is occupied', async () => {
+    const selected = await ExpoRunner.portDiagnostics.selectAvailable(
+      8081,
+      async port => port === 8081 ? undefined : 49_152,
+    )
+
+    Expect(selected).toBe(49_152)
+  })
+
+  Test('explains environments that prohibit local TCP listeners', () => {
+    const error = Object.assign(new Error('listen blocked'), { code: 'EPERM' })
+    const normalized = ExpoRunner.portDiagnostics.normalizeReservationError(error)
+
+    Expect(Errors.formatForUser(normalized)).toBe(
+      'This environment does not allow Studio to bind a local TCP port. '
+        + 'Run Studio in a terminal or development environment that permits listeners on 127.0.0.1.',
+    )
+  })
+
   Test('formats lsof field output for listening processes', () => {
     const listeners = ExpoRunner.portDiagnostics.formatLsofListeners({
       exitCode: 0,

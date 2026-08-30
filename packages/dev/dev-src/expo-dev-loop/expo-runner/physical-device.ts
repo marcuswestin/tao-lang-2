@@ -1,9 +1,9 @@
 import { CLI, Errors, FS } from '@shared'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { Android } from './android'
-import { ExpoConfig } from './expo-config'
+import { Android, type AndroidSession } from './android'
+import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
 import { detectLanIPv4 } from './lan-host'
-import { ExpoMetro } from './metro'
+import { ExpoMetro, type ExpoMetroSession } from './metro'
 
 const EXPO_GO_IOS_BUNDLE_ID = 'host.exp.Exponent'
 
@@ -32,8 +32,8 @@ export type IosPhysicalDevice = {
 }
 
 /** expoGoUrl builds the Expo Go deep link for a reachable Metro host. */
-export function expoGoUrl(host: string): string {
-  return `exp://${host}:${ExpoConfig.EXPO_PORT}`
+export function expoGoUrl(host: string, port: number = ExpoConfig.EXPO_PORT): string {
+  return `exp://${host}:${port}`
 }
 
 /** iosPhysicalDevicesFromDevicectl keeps physical iPhones and iPads from `devicectl` JSON. */
@@ -55,12 +55,16 @@ export function iosPhysicalDevicesFromDevicectl(payload: DevicectlList): IosPhys
 }
 
 /** openPhysicalDevice installs or opens Expo Go on every connected phone. */
-export async function openPhysicalDevice(): Promise<boolean> {
-  await ExpoMetro.waitForMetro()
+export async function openPhysicalDevice(
+  config: ExpoSessionConfig = ExpoConfig,
+  metro: ExpoMetroSession = ExpoMetro,
+  android: AndroidSession = Android,
+): Promise<boolean> {
+  await metro.waitForMetro()
   const host = await detectLanIPv4()
-  const lanUrl = expoGoUrl(host)
+  const lanUrl = expoGoUrl(host, config.EXPO_PORT)
   const iosDevices = await listIosPhysicalDevices()
-  const androidSerials = await listAndroidPhysicalDevices()
+  const androidSerials = await listAndroidPhysicalDevices(android)
   if (iosDevices.length === 0 && androidSerials.length === 0) {
     DevLoopTUI.logDevLoop(
       'dev',
@@ -72,7 +76,7 @@ export async function openPhysicalDevice(): Promise<boolean> {
 
   const opened = [
     ...await Promise.all(iosDevices.map(device => openIosExpoGo(device, lanUrl))),
-    ...await Promise.all(androidSerials.map(serial => openAndroidExpoGo(serial, lanUrl))),
+    ...await Promise.all(androidSerials.map(serial => openAndroidExpoGo(config, android, serial, lanUrl))),
   ]
   return opened.some(Boolean)
 }
@@ -94,9 +98,9 @@ async function listIosPhysicalDevices(): Promise<IosPhysicalDevice[]> {
   }
 }
 
-async function listAndroidPhysicalDevices(): Promise<string[]> {
+async function listAndroidPhysicalDevices(android: AndroidSession): Promise<string[]> {
   try {
-    return await Android.listPhysicalDevices()
+    return await android.listPhysicalDevices()
   } catch (error) {
     if (error instanceof Errors.UserInputError) {
       DevLoopTUI.logDevLoop('dev', Errors.formatForUser(error), 'warn')
@@ -132,12 +136,17 @@ async function openIosExpoGo(device: IosPhysicalDevice, url: string): Promise<bo
   return true
 }
 
-async function openAndroidExpoGo(serial: string, lanUrl: string): Promise<boolean> {
+async function openAndroidExpoGo(
+  config: ExpoSessionConfig,
+  android: AndroidSession,
+  serial: string,
+  lanUrl: string,
+): Promise<boolean> {
   try {
-    await Android.ensureExpoGoOnSerial(serial)
-    const reversed = await Android.reverseMetroPort(serial)
-    const url = reversed ? ExpoConfig.EXPO_GO_URL : lanUrl
-    await Android.openExpoGoOnSerial(serial, url)
+    await android.ensureExpoGoOnSerial(serial)
+    const reversed = await android.reverseMetroPort(serial)
+    const url = reversed ? config.EXPO_GO_URL : lanUrl
+    await android.openExpoGoOnSerial(serial, url)
     return true
   } catch (error) {
     DevLoopTUI.logDevLoop(

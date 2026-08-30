@@ -4,7 +4,8 @@ const nodePath = require('node:path')
 
 // Metro config loads as plain CJS, so keep these Node platform calls local.
 const config = getDefaultConfig(__dirname)
-const repositoryNodeModules = nodePath.resolve(__dirname, '..', '..', 'node_modules')
+const runtimeToolchainSourceRoot = process.env.TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT || __dirname
+const repositoryNodeModules = nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', 'node_modules')
 const installedNodeModules = nodeFs.realpathSync(repositoryNodeModules)
 
 // Worktrunk worktrees reuse the primary checkout's install through a root node_modules symlink.
@@ -47,13 +48,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === '@runtime/TR') {
     return {
       type: 'sourceFile',
-      filePath: nodePath.resolve(__dirname, '..', 'runtime', 'TaoRuntime-src', 'TR.ts'),
+      filePath: nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src', 'TR.ts'),
     }
   }
   if (moduleName === '@shared/core') {
     return {
       type: 'sourceFile',
-      filePath: nodePath.resolve(__dirname, '..', 'shared', 'shared-src', 'core', 'shared-core.ts'),
+      filePath: nodePath.resolve(runtimeToolchainSourceRoot, '..', 'shared', 'shared-src', 'core', 'shared-core.ts'),
     }
   }
 

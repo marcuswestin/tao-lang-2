@@ -1,4 +1,5 @@
 import { CLI, Errors, Time } from '@shared'
+import { createServer } from 'node:net'
 import { DevLoopTUI } from '../DevLoopTUI'
 
 const RELEASE_TIMEOUT_MS = 5_000
@@ -12,13 +13,103 @@ type Listener = {
 }
 
 type LsofListenerResult = Pick<CLI.CommandResult, 'error' | 'exitCode' | 'stderr' | 'stdout'>
+type PortProbe = (port: number) => Promise<number | undefined>
+
+export type PortReservation = {
+  port: number
+  release: () => Promise<void>
+}
 
 /** Ports groups TCP port inspection and release helpers. */
 export const Ports = {
   ensureFree,
+  findAvailable,
   formatKillCommand,
   formatListeners,
   formatLsofListeners,
+  normalizeReservationError,
+  reserveAvailable,
+  selectAvailable,
+}
+
+/** findAvailable returns the preferred port when possible, then asks the OS for a free port. */
+async function findAvailable(preferredPort: number): Promise<number> {
+  const reservation = await reserveAvailable(preferredPort)
+  await reservation.release()
+  return reservation.port
+}
+
+/** selectAvailable contains the preferred-then-ephemeral policy independently of TCP probing. */
+async function selectAvailable(preferredPort: number, probe: PortProbe): Promise<number> {
+  return await probe(preferredPort) ?? await requireEphemeralPort(probe)
+}
+
+/** reserveAvailable holds the selected port until its caller is ready to start the owning server. */
+async function reserveAvailable(preferredPort: number): Promise<PortReservation> {
+  return await reservePort(preferredPort) ?? await requireEphemeralReservation()
+}
+
+async function reservePort(port: number): Promise<PortReservation | undefined> {
+  return await new Promise<PortReservation | undefined>((resolve, reject) => {
+    const server = createServer()
+    server.unref()
+    server.once('error', error => {
+      if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+        resolve(undefined)
+      } else {
+        reject(normalizeReservationError(error))
+      }
+    })
+    server.listen({ exclusive: true, host: '127.0.0.1', port }, () => {
+      const address = server.address()
+      const availablePort = typeof address === 'object' && address !== null ? address.port : undefined
+      if (availablePort === undefined) {
+        server.close(error => error ? reject(error) : resolve(undefined))
+        return
+      }
+      let released = false
+      resolve({
+        port: availablePort,
+        async release() {
+          if (released) {
+            return
+          }
+          released = true
+          await new Promise<void>((resolveClose, rejectClose) => {
+            server.close(error => error ? rejectClose(error) : resolveClose())
+          })
+        },
+      })
+    })
+  })
+}
+
+/** normalizeReservationError explains host policies that prohibit local development servers. */
+function normalizeReservationError(error: Error): Error {
+  const code = (error as NodeJS.ErrnoException).code
+  if (code === 'EACCES' || code === 'EPERM') {
+    return new Errors.UserInputError(
+      'This environment does not allow Studio to bind a local TCP port. '
+        + 'Run Studio in a terminal or development environment that permits listeners on 127.0.0.1.',
+    )
+  }
+  return error
+}
+
+async function requireEphemeralReservation(): Promise<PortReservation> {
+  const reservation = await reservePort(0)
+  if (reservation === undefined) {
+    throw new Errors.UserInputError('Could not reserve a free Expo Metro port.')
+  }
+  return reservation
+}
+
+async function requireEphemeralPort(probe: PortProbe): Promise<number> {
+  const port = await probe(0)
+  if (port === undefined) {
+    throw new Errors.UserInputError('Could not allocate a free Expo Metro port.')
+  }
+  return port
 }
 
 /**

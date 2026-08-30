@@ -3,6 +3,8 @@ set quiet
 WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
 DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
+BUN_CACHE_DIR := justfile_directory() + "/.artifacts/cache/bun"
+BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
@@ -59,7 +61,9 @@ studio-package output_root=".artifacts/build/studio-native":
 
 # Install development dependencies
 deps:
-    bun install
+    mkdir -p "{{ BUN_CACHE_DIR }}" "{{ BUN_TMP_DIR }}"
+    TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile
+    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi
 
 # Run all tests, optionally filtered by test name
 test PATTERN="": _compile-word-flower-app
@@ -67,7 +71,7 @@ test PATTERN="": _compile-word-flower-app
 
 # Format code
 fmt: _parser-gen
-    dprint fmt
+    dprint fmt --incremental=false
     ./tao fmt
     just --fmt
 
@@ -117,6 +121,9 @@ verify: fix _compile-word-flower-app _parallel-verify-check
 
 _agent-config:
     bun run scripts/generate-agent-config.ts
+
+_dependency-health:
+    cd packages/runtime-toolchain && "{{ DEVENV_NODE }}" -e 'require("expo/metro-config"); require("jest-expo/jest-preset")'
 
 [parallel]
 _parallel-check: _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _bench-check _runtime-pack-check

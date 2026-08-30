@@ -73,6 +73,12 @@ export {
 } from './StudioDraftSync'
 
 export {
+  discoverStudioProjectRoots,
+  resolveStudioProjectRoot,
+  type StudioProjectRootResolution,
+} from './StudioProjectRoot'
+
+export {
   openStudioPreviewSession,
   type OpenStudioPreviewSessionOptions,
   type StudioPreviewSession,

@@ -3,9 +3,9 @@
 import { CLI, Errors, Platform, Time } from '@shared'
 import betterOpen from 'better-opn'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { Android } from './android'
-import { ExpoConfig } from './expo-config'
-import { ExpoMetro } from './metro'
+import { Android, type AndroidSession } from './android'
+import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
+import { ExpoMetro, type ExpoMetroSession } from './metro'
 import { openPhysicalDevice } from './physical-device'
 
 type IosSimulator = {
@@ -19,24 +19,42 @@ type SimctlDevicesJson = {
   devices?: Record<string, IosSimulator[]>
 }
 
-/** ExpoTargets opens Expo runtimes on supported local targets. */
-export const ExpoTargets = {
-  openAndroid,
-  openIosSimulator,
-  openPhysicalDevice,
-  openPreparedAndroid,
-  openStartupTargets,
-  openWeb,
+type ExpoTargetContext = {
+  android: AndroidSession
+  config: ExpoSessionConfig
+  metro: ExpoMetroSession
 }
 
+export type ExpoTargetsSession = ReturnType<typeof createExpoTargets>
+
+/** createExpoTargets binds Expo runtime launchers to one Expo session. */
+export function createExpoTargets(
+  config: ExpoSessionConfig,
+  metro: ExpoMetroSession,
+  android: AndroidSession,
+) {
+  const context = { android, config, metro }
+  return {
+    openAndroid: () => openAndroid(context),
+    openIosSimulator: (shouldStop?: () => boolean) => openIosSimulator(context, shouldStop),
+    openPhysicalDevice: () => openPhysicalDevice(config, metro, android),
+    openPreparedAndroid: (url?: string) => openPreparedAndroid(context, url),
+    openStartupTargets: (shouldStop?: () => boolean) => openStartupTargets(context, shouldStop),
+    openWeb: () => openWeb(context),
+  }
+}
+
+/** ExpoTargets is the ordinary dev loop's port-8081 target session. */
+export const ExpoTargets = createExpoTargets(ExpoConfig, ExpoMetro, Android)
+
 /** openAndroid asks Expo to open the current app on Android, launching an emulator when Expo can. */
-async function openAndroid(): Promise<boolean> {
+async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
   try {
-    await Android.ensureEmulator()
-    await Android.ensureExpoGo()
-    const endpoint = await ExpoMetro.expoOpenEndpoint('android')
-    await openPreparedAndroid(ExpoMetro.endpointUrl(endpoint))
-    DevLoopTUI.logDevLoop('dev', `opened Android${ExpoMetro.formatOpenedRuntime(endpoint)}`)
+    await context.android.ensureEmulator()
+    await context.android.ensureExpoGo()
+    const endpoint = await context.metro.expoOpenEndpoint('android')
+    await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
+    DevLoopTUI.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
     return true
   } catch (error) {
     DevLoopTUI.logDevLoop('dev', `Could not open Android: ${Errors.formatForUser(error)}`, 'warn')
@@ -45,18 +63,22 @@ async function openAndroid(): Promise<boolean> {
 }
 
 /** openWeb opens the current Expo app in a browser. */
-async function openWeb(): Promise<boolean> {
+async function openWeb(context: ExpoTargetContext): Promise<boolean> {
   return await openChromeWebUrl(
-    ExpoMetro.endpointUrl(await ExpoMetro.expoOpenEndpoint('web')) ?? ExpoConfig.EXPO_ORIGIN,
+    context,
+    context.metro.endpointUrl(await context.metro.expoOpenEndpoint('web')) ?? context.config.EXPO_ORIGIN,
   )
 }
 
 /** openIosSimulator asks Expo to open the current app on iOS, launching a simulator when Expo can. */
-async function openIosSimulator(shouldStop: () => boolean = () => false): Promise<boolean> {
-  const link = ExpoMetro.endpointUrl(await ExpoMetro.expoOpenEndpoint('ios'))
-    ?? await ExpoMetro.expoLink('ios')
-    ?? ExpoConfig.EXPO_GO_URL
-  const simulator = await ensureIosSimulator(shouldStop)
+async function openIosSimulator(
+  context: ExpoTargetContext,
+  shouldStop: () => boolean = () => false,
+): Promise<boolean> {
+  const link = context.metro.endpointUrl(await context.metro.expoOpenEndpoint('ios'))
+    ?? await context.metro.expoLink('ios')
+    ?? context.config.EXPO_GO_URL
+  const simulator = await ensureIosSimulator(context.config, shouldStop)
   if (!simulator) {
     return false
   }
@@ -77,11 +99,14 @@ async function openIosSimulator(shouldStop: () => boolean = () => false): Promis
 }
 
 /** openStartupTargets opens startup targets while keeping Android limited to already-available devices. */
-async function openStartupTargets(shouldStop: () => boolean = () => false): Promise<void> {
+async function openStartupTargets(
+  context: ExpoTargetContext,
+  shouldStop: () => boolean = () => false,
+): Promise<void> {
   await Promise.all(([
-    ['web', openWeb],
-    ['iOS', () => openIosSimulator(shouldStop)],
-    ['Android', openAvailableAndroid],
+    ['web', () => openWeb(context)],
+    ['iOS', () => openIosSimulator(context, shouldStop)],
+    ['Android', () => openAvailableAndroid(context)],
   ] as const).map(async ([label, open]) => {
     if (shouldStop()) {
       return
@@ -95,15 +120,15 @@ async function openStartupTargets(shouldStop: () => boolean = () => false): Prom
 }
 
 /** openPreparedAndroid opens the current Expo app on a prepared Android emulator. */
-async function openPreparedAndroid(url?: string): Promise<void> {
-  await Android.openExpoGo(url)
+async function openPreparedAndroid(context: ExpoTargetContext, url?: string): Promise<void> {
+  await context.android.openExpoGo(url)
 }
 
-async function openAvailableAndroid(): Promise<boolean> {
-  if (await Android.prepareAvailableExpoGo()) {
-    const endpoint = await ExpoMetro.expoOpenEndpoint('android')
-    await openPreparedAndroid(ExpoMetro.endpointUrl(endpoint))
-    DevLoopTUI.logDevLoop('dev', `opened Android${ExpoMetro.formatOpenedRuntime(endpoint)}`)
+async function openAvailableAndroid(context: ExpoTargetContext): Promise<boolean> {
+  if (await context.android.prepareAvailableExpoGo()) {
+    const endpoint = await context.metro.expoOpenEndpoint('android')
+    await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
+    DevLoopTUI.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
     return true
   }
   return false
@@ -114,7 +139,10 @@ async function commandExists(command: string): Promise<boolean> {
   return result.exitCode === 0 && result.error === undefined
 }
 
-async function ensureIosSimulator(shouldStop: () => boolean): Promise<IosSimulator | undefined> {
+async function ensureIosSimulator(
+  config: ExpoSessionConfig,
+  shouldStop: () => boolean,
+): Promise<IosSimulator | undefined> {
   if (!await commandExists('xcrun')) {
     DevLoopTUI.logDevLoop('dev', 'xcrun not found; skipping iOS Simulator launch.')
     return undefined
@@ -134,7 +162,7 @@ async function ensureIosSimulator(shouldStop: () => boolean): Promise<IosSimulat
   if (simulator.state !== 'Booted' && !await bootIosSimulator(simulator.udid)) {
     return undefined
   }
-  if (!await waitForIosSimulatorBoot(simulator.udid, shouldStop)) {
+  if (!await waitForIosSimulatorBoot(config, simulator.udid, shouldStop)) {
     if (!shouldStop()) {
       DevLoopTUI.logDevLoop('dev', `iOS Simulator did not finish booting: ${simulator.name}`, 'warn')
     }
@@ -207,8 +235,12 @@ async function bootIosSimulator(udid: string): Promise<boolean> {
   return false
 }
 
-async function waitForIosSimulatorBoot(udid: string, shouldStop: () => boolean): Promise<boolean> {
-  const deadline = Date.now() + ExpoConfig.IOS_BOOT_TIMEOUT_MS
+async function waitForIosSimulatorBoot(
+  config: ExpoSessionConfig,
+  udid: string,
+  shouldStop: () => boolean,
+): Promise<boolean> {
+  const deadline = Date.now() + config.IOS_BOOT_TIMEOUT_MS
   while (!shouldStop() && Date.now() < deadline) {
     const booted = (await listIosSimulators()).find(simulator =>
       simulator.udid === udid && simulator.state === 'Booted'
@@ -216,7 +248,7 @@ async function waitForIosSimulatorBoot(udid: string, shouldStop: () => boolean):
     if (booted) {
       return true
     }
-    await Time.sleep(ExpoConfig.IOS_BOOT_POLL_MS)
+    await Time.sleep(config.IOS_BOOT_POLL_MS)
   }
   return false
 }
@@ -229,15 +261,15 @@ function parseJson<T>(text: string): T | undefined {
   }
 }
 
-async function openChromeWebUrl(url: string): Promise<boolean> {
+async function openChromeWebUrl(context: ExpoTargetContext, url: string): Promise<boolean> {
   try {
-    await withChromeOpenEnv(() => betterOpen(url))
-    DevLoopTUI.logDevLoop('dev', `opened web in ${ExpoConfig.WEB_BROWSER_APP_NAME}`)
+    await withChromeOpenEnv(context.config, () => betterOpen(url))
+    DevLoopTUI.logDevLoop('dev', `opened web in ${context.config.WEB_BROWSER_APP_NAME}`)
     return true
   } catch (error) {
     DevLoopTUI.logDevLoop(
       'dev',
-      `Could not open web in ${ExpoConfig.WEB_BROWSER_APP_NAME}: ${Errors.formatForUser(error)}`,
+      `Could not open web in ${context.config.WEB_BROWSER_APP_NAME}: ${Errors.formatForUser(error)}`,
       'warn',
     )
     DevLoopTUI.logDevLoop('dev', `Open ${url} manually.`, 'warn')
@@ -245,12 +277,15 @@ async function openChromeWebUrl(url: string): Promise<boolean> {
   }
 }
 
-async function withChromeOpenEnv(fn: () => Promise<unknown> | unknown): Promise<void> {
+async function withChromeOpenEnv(
+  config: ExpoSessionConfig,
+  fn: () => Promise<unknown> | unknown,
+): Promise<void> {
   const env = Platform.runtimeProcess.env
   const previousBrowser = env['BROWSER']
   const previousOpenMatchHostOnly = env['OPEN_MATCH_HOST_ONLY']
   try {
-    env['BROWSER'] = ExpoConfig.WEB_BROWSER_APP_NAME
+    env['BROWSER'] = config.WEB_BROWSER_APP_NAME
     env['OPEN_MATCH_HOST_ONLY'] = 'true'
     await fn()
   } finally {

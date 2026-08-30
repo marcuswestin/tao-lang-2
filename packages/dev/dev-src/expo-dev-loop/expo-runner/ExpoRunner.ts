@@ -1,11 +1,16 @@
 import { CLI, Errors, Repo } from '@shared'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { Android } from './android'
-import { ExpoConfig } from './expo-config'
+import { createAndroid } from './android'
+import {
+  createExpoConfig,
+  ExpoConfig,
+  type ExpoSessionConfig,
+  PREFERRED_EXPO_PORT,
+} from './expo-config'
 import { ExpoServer } from './expo-server'
-import { ExpoMetro } from './metro'
+import { createExpoMetro } from './metro'
 import { Ports } from './Ports'
-import { ExpoTargets } from './run-targets'
+import { createExpoTargets } from './run-targets'
 
 type ExpoServerProcess = {
   onUnexpectedExit: (listener: (message: string) => void) => void
@@ -13,42 +18,83 @@ type ExpoServerProcess = {
   stop: () => Promise<void>
 }
 
-/** ExpoRunner is the public Expo runner facade for dev-loop callers. */
+export type ExpoRunnerSession = ReturnType<typeof createSessionFromConfig>
+
+/** createSession binds every Expo runner operation to one explicitly selected port. */
+function createSession(port: number = PREFERRED_EXPO_PORT): ExpoRunnerSession {
+  return createSessionFromConfig(createExpoConfig(port))
+}
+
+/** createSessionWithAvailablePort prefers 8081 and otherwise allocates an OS-selected free port. */
+async function createSessionWithAvailablePort(
+  preferredPort: number = PREFERRED_EXPO_PORT,
+): Promise<ExpoRunnerSession> {
+  const reservation = await Ports.reserveAvailable(preferredPort)
+  return createSessionFromConfig(createExpoConfig(reservation.port), reservation.release)
+}
+
+function createSessionFromConfig(
+  config: ExpoSessionConfig,
+  releasePortReservation: () => Promise<void> = async () => {},
+) {
+  const metro = createExpoMetro(config)
+  const android = createAndroid(config, metro)
+  const targets = createExpoTargets(config, metro, android)
+  return {
+    config,
+    createServer: (runtimeRoot: string) => createServer(runtimeRoot, config, releasePortReservation),
+    ensureMetroPortFree: metro.ensureMetroPortFree,
+    ensureAndroidEmulator: android.ensureEmulator,
+    ensureAndroidExpoGo: android.ensureExpoGo,
+    openAndroid: targets.openAndroid,
+    openIosSimulator: targets.openIosSimulator,
+    openPhysicalDevice: targets.openPhysicalDevice,
+    openStartupTargets: targets.openStartupTargets,
+    openWeb: targets.openWeb,
+    reloadExpoApps: metro.reloadExpoApps,
+    releasePortReservation,
+    startExpo: () => startExpo(config, targets.openPreparedAndroid),
+    waitForMetro: metro.waitForMetro,
+  }
+}
+
+const defaultSession = createSessionFromConfig(ExpoConfig)
+
+/** ExpoRunner is the public Expo runner facade; its direct methods retain the ordinary 8081 dev loop. */
 export const ExpoRunner = {
-  createServer,
-  ensureMetroPortFree: ExpoMetro.ensureMetroPortFree,
-  ensureAndroidEmulator: Android.ensureEmulator,
-  ensureAndroidExpoGo: Android.ensureExpoGo,
-  openAndroid: ExpoTargets.openAndroid,
-  openIosSimulator: ExpoTargets.openIosSimulator,
-  openPhysicalDevice: ExpoTargets.openPhysicalDevice,
-  openStartupTargets: ExpoTargets.openStartupTargets,
-  openWeb: ExpoTargets.openWeb,
+  ...defaultSession,
+  createSession,
+  createSessionWithAvailablePort,
   portDiagnostics: {
+    findAvailable: Ports.findAvailable,
     formatKillCommand: Ports.formatKillCommand,
     formatListeners: Ports.formatListeners,
     formatLsofListeners: Ports.formatLsofListeners,
+    normalizeReservationError: Ports.normalizeReservationError,
+    selectAvailable: Ports.selectAvailable,
   },
-  reloadExpoApps: ExpoMetro.reloadExpoApps,
-  startExpo,
-  waitForMetro: ExpoMetro.waitForMetro,
 }
 
 /** createServer creates an owned Expo CLI server process wrapper. */
-function createServer(runtimeRoot: string): ExpoServerProcess {
-  return new ExpoServer(runtimeRoot)
+function createServer(
+  runtimeRoot: string,
+  config: ExpoSessionConfig,
+  releasePortReservation: () => Promise<void>,
+): ExpoServerProcess {
+  return new ExpoServer(runtimeRoot, config, releasePortReservation)
 }
 
 /** startExpo starts the Expo runtime and opens it on Android once Metro is ready. */
-async function startExpo(): Promise<void> {
-  const runtimeToolchainRoot = Repo.resolvePath(ExpoConfig.RUNTIME_TOOLCHAIN_PATH)
-  void ExpoTargets.openPreparedAndroid().catch(error =>
-    DevLoopTUI.logDevLoop('dev', Errors.formatForUser(error), 'error')
-  )
+async function startExpo(
+  config: ExpoSessionConfig,
+  openPreparedAndroid: (url?: string) => Promise<void>,
+): Promise<void> {
+  const runtimeToolchainRoot = Repo.resolvePath(config.RUNTIME_TOOLCHAIN_PATH)
+  void openPreparedAndroid().catch(error => DevLoopTUI.logDevLoop('dev', Errors.formatForUser(error), 'error'))
   const result = await CLI.run('bunx', {
-    args: ExpoConfig.EXPO_START_ARGS,
+    args: config.EXPO_START_ARGS,
     cwd: runtimeToolchainRoot,
-    env: ExpoConfig.EXPO_START_ENV,
+    env: config.EXPO_START_ENV,
     onOutput: DevLoopTUI.devLoopOutputHandler('expo'),
   })
   if (result.error || result.exitCode !== 0) {

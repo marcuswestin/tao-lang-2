@@ -138,19 +138,27 @@ export namespace Packages {
     }
     if (await FS.isDirectory(resolvedRoot)) {
       for (const path of await Repo.directoriesUnder(resolvedRoot, { namePrefix: '@' })) {
-        record(path)
+        if (await containsTaoSource(path)) {
+          record(path)
+        }
       }
     }
     // A workspace is often rooted below the project — at one test sidecar's own folder, say — so a
     // package declared above that root is still in scope. Without this, whether `@data` resolves
     // would depend on which file the workspace happened to be opened for.
     for (const ancestor of await ancestorPackageDirectories(resolvedRoot)) {
-      record(ancestor)
+      if (await containsTaoSource(ancestor)) {
+        record(ancestor)
+      }
     }
     for (const paths of packages.values()) {
       paths.sort()
     }
     return { projectRoot: resolvedRoot, packages }
+  }
+
+  async function containsTaoSource(path: string): Promise<boolean> {
+    return (await Repo.filesUnder(path, { extensions: ['.tao'] })).length > 0
   }
 
   async function ancestorPackageDirectories(root: string): Promise<string[]> {

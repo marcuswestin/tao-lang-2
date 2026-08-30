@@ -19,6 +19,40 @@ Describe('Tao package discovery', () => {
     }
   })
 
+  Test('indexes only package directories containing Tao sources', async () => {
+    const root = await mkTestDir('tao-packages-source-eligibility-')
+    try {
+      await FS.writeText(FS.resolvePath('@current/nested/View.tao', root), '')
+      await FS.writeText(FS.resolvePath('@future/nested/View.tao-next', root), '')
+      await FS.writeText(FS.resolvePath('@notes/README.md', root), '')
+
+      const index = await Packages.createIndex(root)
+
+      Expect(index.packages.has('@current')).toBe(true)
+      Expect(index.packages.has('@future')).toBe(false)
+      Expect(index.packages.has('@notes')).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('indexes only eligible package directories beside ancestor roots', async () => {
+    const root = await mkTestDir('tao-packages-ancestor-eligibility-')
+    try {
+      const projectRoot = FS.resolvePath('project', root)
+      await FS.writeText(FS.resolvePath('Main.tao', projectRoot), '')
+      await FS.writeText(FS.resolvePath('@current/nested/View.tao', root), '')
+      await FS.writeText(FS.resolvePath('@future/nested/View.tao-next', root), '')
+
+      const index = await Packages.createIndex(projectRoot)
+
+      Expect(index.packages.has('@current')).toBe(true)
+      Expect(index.packages.has('@future')).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('skips hidden future-source directories during recursive package discovery', async () => {
     const root = await mkTestDir('tao-packages-sketches-')
     try {

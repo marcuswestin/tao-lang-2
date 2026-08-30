@@ -3,6 +3,7 @@
 import { Errors, HCI, Platform, Repo } from '@shared'
 import {
   openStudioPreviewSession,
+  resolveStudioProjectRoot,
   type StartedStudioFileWatcher,
   type StartedStudioServer,
   startStudioFileWatcher,
@@ -10,10 +11,10 @@ import {
   type StudioPreviewSession,
 } from '@studio'
 import betterOpen from 'better-opn'
-import { ExpoConfig } from '../expo-dev-loop/expo-runner/expo-config'
-import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
+import { ExpoRunner, type ExpoRunnerSession } from '../expo-dev-loop/expo-runner/ExpoRunner'
 import { StudioNative } from './StudioNative'
 import type { StartedStudioNative } from './StudioNative'
+import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from './StudioPreviewRuntime'
 
 export type StudioDevOptions = {
   appName?: string
@@ -28,10 +29,15 @@ export type StudioDevOptions = {
   projectRoot: string
 }
 
+/** StudioDev exposes narrow lifecycle seams for focused developer-tool tests. */
+export const StudioDev = {
+  testing: {
+    cleanup: cleanupStudioDev,
+  },
+}
+
 /** runStudioDev owns the local Studio server, file watcher, preview compiler, and Expo process. */
 export async function runStudioDev(options: StudioDevOptions): Promise<number> {
-  const previewRuntimeRoot = Repo.resolvePath(ExpoConfig.RUNTIME_TOOLCHAIN_PATH)
-  const expoServer = ExpoRunner.createServer(previewRuntimeRoot)
   let finish: ((exitCode: number) => void) | undefined
   const finished = new Promise<number>(resolve => {
     finish = resolve
@@ -45,32 +51,39 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   }
   const removeSigint = Platform.onProcessSignal('SIGINT', () => stop(130))
   const removeSigterm = Platform.onProcessSignal('SIGTERM', () => stop(143))
-  expoServer.onUnexpectedExit(() => stop(1))
+  let expo: ExpoRunnerSession | undefined
+  let expoServer: ReturnType<typeof ExpoRunner.createServer> | undefined
+  let previewRuntime: CreatedStudioPreviewRuntime | undefined
   let preview: StudioPreviewSession | undefined
   let native: StartedStudioNative | undefined
   let watcher: StartedStudioFileWatcher | undefined
   let server: StartedStudioServer | undefined
 
   try {
-    await ExpoRunner.ensureMetroPortFree()
+    const project = await resolveStudioProjectRoot(options.projectRoot)
+    HCI.logProcessInfo('studio', `Project: ${project.projectRoot}`)
+    expo = await ExpoRunner.createSessionWithAvailablePort()
+    const previewRuntimeSourceRoot = Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
+    previewRuntime = await StudioPreviewRuntime.create(previewRuntimeSourceRoot)
+    expoServer = expo.createServer(previewRuntime.root)
+    expoServer.onUnexpectedExit(() => stop(1))
     preview = await openStudioPreviewSession({
       appName: options.appName,
       entryPath: options.entryPath,
-      previewRuntimeRoot,
-      projectRoot: options.projectRoot,
+      previewRuntimeRoot: previewRuntime.root,
+      projectRoot: project.projectRoot,
     })
     watcher = await startStudioFileWatcher(preview.session)
     server = await startStudioServer(preview.session, {
-      allowedOrigins: [ExpoConfig.EXPO_ORIGIN],
+      allowedOrigins: [expo.config.EXPO_ORIGIN],
       hostname: options.hostname,
       port: options.port,
-      previewUrl: ExpoConfig.EXPO_ORIGIN,
+      previewUrl: expo.config.EXPO_ORIGIN,
     })
     await expoServer.start()
-    await ExpoRunner.waitForMetro(() => requestedStop)
+    await expo.waitForMetro(() => requestedStop)
     HCI.logProcessInfo('studio', `Studio: ${server.url}`)
-    HCI.logProcessInfo('studio', `Preview: ${ExpoConfig.EXPO_ORIGIN}`)
-    HCI.logProcessInfo('studio', `Project: ${preview.session.projectRoot}`)
+    HCI.logProcessInfo('studio', `Preview: ${expo.config.EXPO_ORIGIN}`)
     if (options.native && !requestedStop) {
       native = await StudioNative.start({
         artifactRoot: options.nativeArtifactRoot,
@@ -93,10 +106,28 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   } finally {
     removeSigint()
     removeSigterm()
-    await native?.stop()
-    await watcher?.close()
-    server?.stop()
-    await expoServer.stop()
-    await preview?.close()
+    await cleanupStudioDev([
+      () => native?.stop(),
+      () => watcher?.close(),
+      () => server?.stop(),
+      () => expoServer?.stop(),
+      () => preview?.close(),
+      () => expo?.releasePortReservation(),
+      () => previewRuntime?.close(),
+    ])
+  }
+}
+
+async function cleanupStudioDev(cleanups: ReadonlyArray<() => unknown | Promise<unknown>>): Promise<void> {
+  let firstError: unknown
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup()
+    } catch (error) {
+      firstError ??= error
+    }
+  }
+  if (firstError !== undefined) {
+    throw firstError
   }
 }

@@ -1,7 +1,7 @@
 import { CLI, Errors, FS, Platform, Repo, Text, Time } from '@shared'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { ExpoConfig } from './expo-config'
-import { ExpoMetro } from './metro'
+import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
+import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
 const EXPO_GO_APP_ID = 'host.exp.exponent'
 const EXPO_GO_SDK_VERSION = '54.0.0'
@@ -20,17 +20,24 @@ const EMULATOR_BOOT_TIMEOUT_MS = 180_000
 const EMULATOR_BOOT_POLL_MS = 2_000
 const androidAdbMissingMessage = 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.'
 
-/** Android groups Android emulator and Expo helpers. */
-export const Android = {
-  ensureEmulator,
-  ensureExpoGo,
-  ensureExpoGoOnSerial,
-  listPhysicalDevices,
-  openExpoGo,
-  openExpoGoOnSerial,
-  prepareAvailableExpoGo,
-  reverseMetroPort,
+export type AndroidSession = ReturnType<typeof createAndroid>
+
+/** createAndroid binds Android Expo helpers to one Expo session. */
+export function createAndroid(config: ExpoSessionConfig, metro: ExpoMetroSession = createExpoMetro(config)) {
+  return {
+    ensureEmulator,
+    ensureExpoGo,
+    ensureExpoGoOnSerial,
+    listPhysicalDevices,
+    openExpoGo: (url: string = config.EXPO_GO_URL) => openExpoGo(config, metro, url),
+    openExpoGoOnSerial: (serial: string, url: string = config.EXPO_GO_URL) => openExpoGoOnSerial(serial, url),
+    prepareAvailableExpoGo: () => prepareAvailableExpoGo(config),
+    reverseMetroPort: (serial: string) => reverseMetroPort(config, serial),
+  }
 }
+
+/** Android is the ordinary dev loop's port-8081 Android session. */
+export const Android = createAndroid(ExpoConfig, ExpoMetro)
 
 async function ensureEmulator(): Promise<void> {
   await requireCommand(
@@ -115,7 +122,7 @@ async function listPhysicalDevices(): Promise<string[]> {
   return (await listAdbDevices()).filter(serial => !serial.startsWith('emulator-'))
 }
 
-async function prepareAvailableExpoGo(): Promise<boolean> {
+async function prepareAvailableExpoGo(config: ExpoSessionConfig): Promise<boolean> {
   await requireCommand('adb', androidAdbMissingMessage)
   const serial = await findRunningEmulator()
   if (!serial || !await isEmulatorBooted(serial)) {
@@ -129,13 +136,17 @@ async function prepareAvailableExpoGo(): Promise<boolean> {
     )
     return false
   }
-  await reverseMetroPort(serial)
+  await reverseMetroPort(config, serial)
   return true
 }
 
 /** openExpoGo opens Expo Go on the booted Android emulator once Metro is ready. */
-async function openExpoGo(url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
-  await openExpoGoWhenMetroIsReady(url)
+async function openExpoGo(
+  config: ExpoSessionConfig,
+  metro: ExpoMetroSession,
+  url: string,
+): Promise<void> {
+  await openExpoGoWhenMetroIsReady(config, metro, url)
 }
 
 async function requireCommand(command: string, missingMessage: string): Promise<void> {
@@ -310,14 +321,18 @@ async function getExpoGoApkUrl(): Promise<string> {
   return url
 }
 
-async function openExpoGoWhenMetroIsReady(url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
-  await ExpoMetro.waitForMetro()
+async function openExpoGoWhenMetroIsReady(
+  config: ExpoSessionConfig,
+  metro: ExpoMetroSession,
+  url: string,
+): Promise<void> {
+  await metro.waitForMetro()
   const serial = await requireBootedEmulator()
-  await reverseMetroPort(serial)
+  await reverseMetroPort(config, serial)
   await openExpoGoOnSerial(serial, url)
 }
 
-async function openExpoGoOnSerial(serial: string, url: string = ExpoConfig.EXPO_GO_URL): Promise<void> {
+async function openExpoGoOnSerial(serial: string, url: string): Promise<void> {
   DevLoopTUI.logDevLoop('dev', `Opening ${url} on ${serial}.`)
   await CLI.mustRun('adb', {
     args: [
@@ -337,9 +352,9 @@ async function openExpoGoOnSerial(serial: string, url: string = ExpoConfig.EXPO_
   })
 }
 
-async function reverseMetroPort(serial: string): Promise<boolean> {
+async function reverseMetroPort(config: ExpoSessionConfig, serial: string): Promise<boolean> {
   const result = await CLI.run('adb', {
-    args: ['-s', serial, 'reverse', `tcp:${ExpoConfig.EXPO_PORT}`, `tcp:${ExpoConfig.EXPO_PORT}`],
+    args: ['-s', serial, 'reverse', `tcp:${config.EXPO_PORT}`, `tcp:${config.EXPO_PORT}`],
   })
   return result.error === undefined && result.exitCode === 0
 }

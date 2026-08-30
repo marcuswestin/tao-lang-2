@@ -1,7 +1,9 @@
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import type { CLI, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { StudioDev } from '../dev-src/studio/StudioDev'
 import { StudioNative } from '../dev-src/studio/StudioNative'
+import { StudioPreviewRuntime } from '../dev-src/studio/StudioPreviewRuntime'
 import { StudioSmoke } from '../dev-src/studio/StudioSmoke'
 
 Describe('Studio native wrapper foundation', () => {
@@ -83,6 +85,46 @@ Describe('Studio native wrapper foundation', () => {
 })
 
 Describe('Studio smoke resource isolation', () => {
+  Test('attempts every session cleanup after an earlier resource fails to close', async () => {
+    const cleaned: string[] = []
+
+    await Expect(StudioDev.testing.cleanup([
+      () => {
+        cleaned.push('watcher')
+        throw new Error('watcher close failed')
+      },
+      () => {
+        cleaned.push('metro')
+      },
+      () => {
+        cleaned.push('runtime')
+      },
+    ])).rejects.toThrow('watcher close failed')
+
+    Expect(cleaned).toEqual(['watcher', 'metro', 'runtime'])
+  })
+
+  Test('creates disjoint preview runtime roots backed by the installed toolchain', async () => {
+    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
+    const first = await StudioPreviewRuntime.create(sourceRoot)
+    const second = await StudioPreviewRuntime.create(sourceRoot)
+    try {
+      Expect(first.root === second.root).toBe(false)
+      Expect(await FS.readText(FS.resolvePath('index.ts', first.root))).toBe(
+        await FS.readText(FS.resolvePath('index.ts', sourceRoot)),
+      )
+      Expect(await FS.realPath(FS.resolvePath('node_modules', first.root))).toBe(
+        await FS.realPath(FS.resolvePath('node_modules', sourceRoot)),
+      )
+      Expect(await FS.readText(FS.resolvePath('metro.config.cjs', first.root))).toContain(
+        'TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT',
+      )
+    } finally {
+      await first.close()
+      await second.close()
+    }
+  })
+
   Test('allocates deterministic disjoint artifacts and ports by run, shard, and worker', () => {
     const first = StudioSmoke.resources({ runId: 'run-17', shardIndex: 2, workerIndex: 3 })
     const same = StudioSmoke.resources({ runId: 'run-17', shardIndex: 2, workerIndex: 3 })

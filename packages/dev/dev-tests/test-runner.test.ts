@@ -6,6 +6,14 @@ function suiteState(name: string, sleepSeconds = 0) {
 }
 
 Describe('test runner suite scheduling', () => {
+  Test('filtered Bun suites pass when another package owns the matching test', async () => {
+    const suites = await TestRunner.discoverTestSuites('one package only')
+    const devSuite = suites.find(suite => suite.name === 'dev')
+
+    Expect(devSuite?.args).toContain('--pass-with-no-tests')
+    Expect(devSuite?.args).toContain('--test-name-pattern=one package only')
+  })
+
   Test('a costly suite reserves the whole capacity before cheap suites start', async () => {
     const events: string[] = []
     const states = [suiteState('cheap-a'), suiteState('tao-apps', 0.1), suiteState('cheap-b')]

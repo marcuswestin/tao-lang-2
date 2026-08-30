@@ -194,7 +194,7 @@ function bunSuite(name: string, testFiles: string[], pattern: string): TestSuite
     ...testFiles,
     '--reporter=dot',
     ...(BUN_SUITE_ARGS.get(name) ?? []),
-    ...(pattern ? [`--test-name-pattern=${pattern}`] : []),
+    ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),
   ]
   return { name, command: 'bun', args, cwd: Shared.Repo.resolvePath() }
 }
