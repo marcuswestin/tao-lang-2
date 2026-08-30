@@ -94,6 +94,12 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
 
   try {
     DevLoopTUI.logDevLoop('dev', `Tao dev app: ${appPath}`)
+    // Key input starts before the first compile so q and Ctrl-C work during startup, not only
+    // once Metro is ready.
+    Commands.printControls()
+    if (!keyInput.start()) {
+      DevLoopTUI.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
+    }
     const initialCompileSucceeded = await Run.compileApp({
       repoRoot,
       appPath,
@@ -123,10 +129,6 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     }
     if (shouldStop()) {
       return await done
-    }
-    Commands.printControls()
-    if (!keyInput.start()) {
-      DevLoopTUI.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
     void ExpoRunner.openStartupTargets(shouldStop)
     return await done
