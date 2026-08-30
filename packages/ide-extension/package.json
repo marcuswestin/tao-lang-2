@@ -92,12 +92,12 @@
     "tao-shared": "workspace:*",
     "tao-source-actions": "workspace:*",
     "tao-workspace": "workspace:*",
-    "vscode-languageclient": "~9.0.1"
+    "vscode-languageclient": "~10.1.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.104.0",
     "@vscode/vsce": "^3.7.1",
-    "esbuild": "~0.25.5"
+    "esbuild": "~0.28.2"
   },
   "engines": {
     "vscode": "^1.104.0"

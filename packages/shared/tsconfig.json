@@ -5,6 +5,10 @@
     "shared-tests/**/*"
   ],
   "compilerOptions": {
+    "types": [
+      "node",
+      "bun"
+    ],
     "composite": false,
     "declaration": false,
     "incremental": false,
