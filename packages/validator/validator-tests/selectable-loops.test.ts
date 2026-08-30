@@ -1,8 +1,8 @@
 import { Describe, Test } from '@shared/test'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
-import { accepts, app, rejects, stubLayout, stubView } from './test-validate'
+import { accepts, app, rejects, stubContainer, stubView } from './test-validate'
 
-const renderables = `${stubLayout('Stack')}${stubView('Text', 'Value text')}`
+const renderables = `${stubContainer('Stack')}${stubView('Text', 'Value text')}`
 
 function selectableApp(loopBody: string, setup = ''): string {
   return app(

@@ -317,26 +317,20 @@ export const ExpressionsCompiler = {
       NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
-      UiDeclaration: ui => Compile.UiValue(ui),
+      ViewDeclaration: view => Compile.ViewValue(view),
     })
   },
 
-  /** UiValue creates a presentation descriptor without making `ui` embeddable as a child render. */
-  UiValue(ui: AST.UiDeclaration): Compiled {
-    return compileNavigationDescriptor('UI', ui)
-  },
-
-  /** DialogueValue creates the independently askable descriptor for one dialogue declaration. */
-  DialogueValue(dialogue: AST.DialogueDeclaration): Compiled {
-    return compileNavigationDescriptor('Dialogue', dialogue)
+  /** ViewValue creates the presentation descriptor a view evaluates to in value position. */
+  ViewValue(view: AST.ViewDeclaration): Compiled {
+    return compileNavigationDescriptor(view)
   },
 } as const
 
 function compileNavigationDescriptor(
-  kind: 'UI' | 'Dialogue',
-  declaration: AST.UiDeclaration | AST.DialogueDeclaration,
+  declaration: AST.ViewDeclaration,
 ): Compiled {
-  return gen`TR.Navigation.${kind}({
+  return gen`TR.Navigation.View({
       name: ${gen.jsLiteral(declaration.name)},
       render: (_NavigationArguments, _NavigationProps) =>
         <${gen.scopeName(declaration)}${
@@ -491,8 +485,8 @@ function compileConfigurationReference(value: AST.ConfigurationReference): Compi
   if (AST.isConfigurableDeclaration(target)) {
     return configureCall(target, gen`{}`) ?? gen`TR.Value({})`
   }
-  if (AST.isUiDeclaration(target)) {
-    return Compile.UiValue(target)
+  if (AST.isViewDeclaration(target)) {
+    return Compile.ViewValue(target)
   }
   if (
     AST.isAliasDeclaration(target)

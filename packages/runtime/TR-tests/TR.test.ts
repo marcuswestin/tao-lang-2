@@ -441,21 +441,21 @@ Describe('TR.TaoProps', () => {
     Expect(TR.TaoProps({}, undefined)).toEqual({})
   })
 
-  Test('copies ambient app, dialogue, and navigation context without carrying layout props', () => {
-    const home = TR.Navigation.UI({ name: 'Ambient home', render: () => null })
+  Test('copies ambient app, response, and navigation context without carrying layout props', () => {
+    const home = TR.Navigation.View({ name: 'Ambient home', render: () => null })
     const navigation = configuredStack('Ambient stack', home)
     const app = TR.Navigation.App({
       name: 'Ambient app',
       navigator: () => navigation,
       auxiliaries: () => ({}),
     })
-    const dialogue = { respond: () => {} }
+    const response = { respond: () => {} }
 
     Expect(TR.TaoContext({
       layout: TR.Layout.create([['gap', 9]]),
       testTag: 'outer',
-      callerProps: { app, dialogue, navigation },
-    })).toEqual({ app, dialogue, navigation })
+      callerProps: { app, navigation, response },
+    })).toEqual({ app, navigation, response })
   })
 })
 

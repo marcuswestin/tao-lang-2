@@ -1,16 +1,16 @@
 use Documents, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, FormButton, Panes, Progress, ScrollView, Spinner, Text, TextInput from @tao/ui
+use Checkbox, Col, FormButton, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
 
 // Shared values, types, and the typed-injection escape hatch.
 // This one-case enum is deliberate: `ConfirmResult` is a nominal type, `Confirmed` is its one
-// value, and a dismissed dialogue answers `none` rather than requiring a second enum case.
+// value, and a dismissed responder answers `none` rather than requiring a second enum case.
 type ConfirmResult is one of Confirmed
 
 // The document area: an availability-guarded entry, the editor itself, and the close conversation.
 // The presented entry guards entity availability; the editor below assumes an available document.
 workspace
-ui DocumentScreen(Document) {
+view DocumentScreen(Document) {
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -32,6 +32,8 @@ view DocumentEditor(Document) {
    state BodyDraft = Document.Body
    state ParagraphText = ""
    state SaveCount = 0
+   state PreviousTitle = ""
+   state PreviousBody = ""
    query Paragraphs from Document.Paragraphs { }
    action SetBodyDraft(Value text) {
       set BodyDraft = Value
@@ -43,13 +45,24 @@ view DocumentEditor(Document) {
    }  }
    action SaveDocument() {
       guard TitleDraft empty
+      set PreviousTitle = Document.Title
+      set PreviousBody = Document.Body
       update Document {
          Title: TitleDraft
          Body: BodyDraft
       }
       set SaveCount += 1
-      // A keyed toast replaces the previous occurrence with the same key instead of stacking.
-      present SavedToast() as toast (Key: "document-saved", Duration: 3.s)
+      // A keyed toast replaces the previous occurrence with the same key instead of stacking. An
+      // ephemeral presentation may take a non-serializable parameter: the toast receives the revert
+      // action for the very save it announces, reading the values captured above.
+      present SavedToast(Revert: -> {
+         update Document {
+            Title: PreviousTitle
+            Body: PreviousBody
+         }
+         set TitleDraft = PreviousTitle
+         set BodyDraft = PreviousBody
+      }) as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
       guard ParagraphText empty
@@ -64,7 +77,7 @@ view DocumentEditor(Document) {
       set ParagraphText = ""
    }
    action CloseDocument() {
-      // `ask` suspends this action until the dialogue responds; a bare `respond` answers none.
+      // `ask` suspends this action until the presented view responds; a bare `respond` answers none.
       let Result = ask ConfirmCloseDialogue(Document)
       if Result is Confirmed {
          dismiss
@@ -130,13 +143,19 @@ view DocumentEditor(Document) {
                Text(Paragraph.Text) [body]
 }  }  }  }  }
 
-ui SavedToast() {
-   render Text("Saved") [body]
-}
+view SavedToast(Revert action()) {
+   render Row() [gap 6] {
+      Text("Saved") [body]
 
-// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none. Each
-// ask is an independent stacked occurrence. Back or plain dismissal answers none before removal.
-dialogue ConfirmCloseDialogue(Document) responds ConfirmResult {
+      #revertSave
+      FormButton("Revert") {
+         on press Revert
+}  }  }
+
+// A view with `responds T` is presented for a typed answer; `ask` resumes with the response or
+// none. Each ask is an independent stacked occurrence. Back or plain dismissal answers none before
+// removal.
+view ConfirmCloseDialogue(Document) responds ConfirmResult {
    render Col() [gap 6, pad 10] {
       Text("Close { Document.Title }?") [title]
 

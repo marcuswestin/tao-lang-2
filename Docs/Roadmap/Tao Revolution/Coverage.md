@@ -29,6 +29,8 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Undo derivation (§8)                             | WordFlower · document edits                                 | Post-MVP | —                        |
 | Conditionals, ternary, check/guard (§8)          | WordFlower · everywhere; ternary: focused-writing mode      | MVP      | partially in Current[^2] |
 | Ticking clock — @tao/time (§9)                   | **WordFlower · focused-writing mode** (X-minute free write) | **MVP**  | in Current               |
+| Unified view kind, inferred capabilities (§9)    | WordFlower · everywhere; stateful wrapper: settings details | MVP      | in Current[^4]           |
+| Ephemeral non-serializable parameters (§9, §10)  | WordFlower · revert-save toast action                       | MVP      | in Current               |
 | Layout, render, clause lists (§9)                | WordFlower · all screens                                    | MVP      | in Current               |
 | Conditional styling incl. states (§9)            | WordFlower · editor chrome                                  | MVP      | pending                  |
 | Grid over loop, cell min (§9)                    | Skillet · recipe cards                                      | Post-MVP | —                        |
@@ -61,6 +63,11 @@ it (`Docs/Roadmap/Focused writing tranche/`).
 
 [^3]: `<expression> from <path>` is in Current and is how both stdlib packages bind their runtimes.
     Declared failures (`fails`), `progress`, and the emitted bridge metadata module are not.
+
+[^4]: The unified view tranche: one `view` kind with content acceptance, slots, and `responds`
+    inferred from the declaration; the `Collapsible` stateful wrapper proves the deleted
+    statelessness ladder, and its conditional `@@content` placement proves the at-most-once rule.
+    Usage-site serializability validation waits for a serialization boundary (§10 restoration).
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP
     check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this

@@ -25,6 +25,12 @@ primitive names.
 **Blocks:** nothing today. Blocks any primitive gaining a slot without a compiler change — which is
 the whole point of writing the prelude in Tao.
 
+The unified view tranche shrank the pinned set — `visual`, `presentable`, `ui`, `layout`, and
+`frame` collapsed into the one `view` primitive, and `nav` now refines `view` — by editing the same
+hardcoded lists this follow-up wants derived from the prelude (`prelude-validator.ts`,
+`TypeSystemHelpers.primitiveTypes`, `Type.ts`'s parent map). The hardcoding was not deepened, and
+the collapse makes the eventual inversion smaller.
+
 ## FOLLOW-DECL-002: Filter defaulted slots in configurable completeness
 
 `completeness-validator.ts` filters defaulted slots for visual declarations

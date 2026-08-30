@@ -61,7 +61,7 @@ app ChatApp {
    }
 }
 
-ui ThreadListUi() {
+view ThreadListUi() {
    query Messages { }
 
    render Col() {
@@ -74,7 +74,7 @@ ui ThreadListUi() {
    }
 }
 
-ui ThreadUi(Message) {
+view ThreadUi(Message) {
    render Col() {
       Text(Message.Text)
       FormButton("Open another occurrence") {
@@ -87,7 +87,7 @@ ui ThreadUi(Message) {
 The project `id` is an opaque, immutable value chosen by the developer and checked into the project declaration. `tao create <id>` uses its new directory name as the ID. For an existing project, `tao project id <id> [path]` creates and persists a missing ID; repeating it with the same value preserves the existing declaration. The ID travels with clones and published artifacts and does not change when the project later moves, gains a remote, or advances to another commit. A fork that becomes an independent Tao project runs `tao project id <new-id> [path] --replace`. Required dependencies retain their own project IDs; lockfile revisions select code but do not alter declaration identity. Ordinary checking, compiling, formatting, and launching never invent or modify identity as a side effect.
 
 The top-level data declaration supplies singular and plural values. The UI presents first-class
-`ui` values; `StackNav` owns the corresponding native transition.
+view values; `StackNav` owns the corresponding native transition.
 
 ## Using packages and publishing projects
 

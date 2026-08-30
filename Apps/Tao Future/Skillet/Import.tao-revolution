@@ -24,7 +24,7 @@ command ImportRecipe {
    does { present ImportSheet() as sheet }
 }
 
-file ui ImportSheet() {
+file view ImportSheet() {
    Title "Import from a link"
    state Link = ""
 

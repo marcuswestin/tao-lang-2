@@ -12,11 +12,13 @@ these.
 
 ## Q1 — Do children and layout become slots? — Resolved
 
-**Resolved by `Apps/WordFlower/2 - Next`: no.** Content acceptance belongs intrinsically to the
-declaration kind: `view` is a leaf, while `layout` and `frame` accept opaque caller content and place
-it through `@@content`. A layout clause is ambient on every visual occurrence and is exposed to an
-injected implementation through `@@layout`; neither content nor layout is a user-declared property
-or named slot.
+**Resolved by `Apps/WordFlower/2 - Next`: no.** Content acceptance belongs to the declaration, not
+to a property or named slot: a view accepts opaque caller content iff its body places `@@content`.
+A layout clause is ambient on every view occurrence and is exposed to an injected implementation
+through `@@layout`; neither content nor layout is a user-declared property or named slot.
+(Originally content acceptance belonged to the declaration _kind_ — `view` a leaf, `layout` and
+`frame` content-accepting. The unified view tranche kept this resolution's substance and moved the
+distinction from the keyword to body inference.)
 
 The exploration below is retained as the superseded alternative that motivated the decision.
 

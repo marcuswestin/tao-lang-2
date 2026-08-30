@@ -8,20 +8,8 @@ export const ViewsCompiler = {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
   ViewDeclaration,
 
-  /** LayoutDeclaration compiles a Tao layout declaration into a runtime component. */
-  LayoutDeclaration: ViewDeclaration,
-
-  /** FrameDeclaration compiles a caller-content frame into a runtime component. */
-  FrameDeclaration: ViewDeclaration,
-
-  /** UiDeclaration compiles presentation content through the same component body lowering as views. */
-  UiDeclaration: ViewDeclaration,
-
-  /** DialogueDeclaration compiles response content through the shared component lowering. */
-  DialogueDeclaration: ViewDeclaration,
-
   /** ViewParameterList compiles Tao view parameters into generated React props. */
-  ViewParameterList(renderable: AST.VisualDeclaration): Compiled {
+  ViewParameterList(renderable: AST.ViewDeclaration): Compiled {
     const parameters = AST.parametersOf(renderable)
     return gen`{
       ${gen.list(parameters, Compile.ParameterDeclaration)}
@@ -101,10 +89,10 @@ export const ViewsCompiler = {
   },
 } as const
 
-function ViewDeclaration(renderable: AST.VisualDeclaration): Compiled {
+function ViewDeclaration(renderable: AST.ViewDeclaration): Compiled {
   // A pass-through alias has no body of its own: the imported target is bound under the alias's
   // name by the module's import bindings, so there is nothing to emit here.
-  if (AST.isViewDeclaration(renderable) && renderable.aliasTarget) {
+  if (renderable.aliasTarget) {
     return gen.noop()
   }
   const parameterList = Compile.ViewParameterList(renderable)

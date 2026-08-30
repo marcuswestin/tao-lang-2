@@ -2,17 +2,18 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo has `view`, `ui`, `layout`, and `frame` declarations,
-explicit `render` roots, unnamed `@@content`, optional single-fill named frame slots, runtime-backed
-controls and containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`,
-`gap`, `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and
-`centered`. It also implements `width max`, adaptive `Panes`, and the first flat-token design terms
-and named clause bundles. Render arguments are always parenthesized, and a spec remains a distinct
-following clause: `render View(args) [spec] { children }`. Tags, layout, and design style merge into
-an existing concrete native root and add no wrapper node. Compatible material beyond that first
-contract remains future direction in this document. The old repo
-implemented most of this layout contract with older spellings; this document keeps the behavior that
-still fits and uses the current public `view`, `ui`, `content`, and `@@content` names.
+Current implementation status: this repo has the single `view` declaration kind, explicit `render`
+roots, unnamed `@@content`, optional single-fill named render slots, runtime-backed controls and
+containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`, `gap`,
+`pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
+It also implements `width max`, adaptive `Panes`, and the first flat-token design terms and named
+clause bundles. Render arguments are always parenthesized, and a spec remains a distinct following
+clause: `render View(args) [spec] { children }`. Tags, layout, and design style merge into an
+existing concrete native root and add no wrapper node. Compatible material beyond that first
+contract remains future direction in this document. The old repo implemented most of this layout
+contract with older spellings and a multi-kind declaration surface (`ui`, `frame`, `layout`,
+`dialogue`); the unified view tranche collapsed those into `view`, and this document uses the
+current public `view`, `content`, and `@@content` names.
 
 ## Layout Introduction
 
@@ -26,38 +27,42 @@ Visual entries describe appearance in the same brackets:
 
 `Row() [content spread center, background black, border white, radius 2, shadow gray]`
 
-### UI Kinds
+### The One View Kind
 
-The implemented core hierarchy separates rendering from presentation. `visual` is the common
-rendering root; `presentable` refines `visual`; `ui` and `nav` refine `presentable`; and `view`,
-`layout`, and `frame` refine `visual` without thereby becoming presentable. A `nav` is consequently
-visual in the type hierarchy but is not a render-bearing declaration and cannot be embedded as an
-ordinary child.
+Tao has a single renderable declaration kind: `view`. A screen, a reusable leaf, a
+content-accepting wrapper, and a modal that answers with a typed value are all `view`
+declarations. Nothing about a view's role is written on its head; every distinction is inferred
+from the body or chosen at the call site:
 
-There are three render-bearing visual declaration kinds in Tao:
+- A view accepts unnamed caller content iff its body places `@@content` — in its render tree, or by
+  naming the `@@content` channel in its `render inject` list. Passing child content to a view that
+  places no `@@content` is a validation error.
+- A view offers named render slots iff its body declares them with `@name = empty`.
+- A view answers `ask` iff its head declares `responds <Type>`.
+- How a view appears — composed inline, presented as an overlay, sheet, or toast, presented into a
+  nav, or asked for a response — is a property of each call site, never of the declaration. See
+  `Tao Presentation and Navigation.md`.
 
-- A `frame` container receives arbitrary content, sizes itself to `hug` that content, and resists compressing when space is tight. It is used inside object-like UI such as buttons, chips, icons-with-labels, and similar pieces.
-- A `layout` container receives arbitrary content, expands into available space, and can compress when space gets tight. It is used for app regions like headers, lists, panes, and screens.
-- A `view` decides its own content instead of receiving arbitrary content, renders content on screen, and handles user interactions. While `frame` and `layout` are about arrangement, `view` is about actually displaying things on the screen.
+One body grammar covers every view: state, entity queries, actions, aliases, tags, slot
+declarations, and one trailing `render` are legal in any view body, so a stateful
+content-accepting wrapper (a collapsible section) is an ordinary view.
 
-`frame`, `layout`, and `view` declarations can all take typed value parameters. `frame` and `layout` are additionally specialized by caller content, named render slots, and combined specs. Containers may paint backgrounds, borders, shadows, and other visual styles when their spec requests them.
+In the type system, `view` is the one renderable primitive, and `nav` refines it
+(`primitive nav is view`). A `nav` is a package-configured presentation kind that binds its
+runtime behavior through `nav <Export> from <path>`; it is not a render-bearing declaration and
+cannot be embedded as an ordinary render child. A configured nav may be mounted as an app
+navigator, a genuine app auxiliary, or content of another nav — anywhere a view-typed
+configuration slot accepts it.
 
-Presentation adds separate declaration roles without changing these visual roles:
+There is deliberately no arrangement-only category: a wrapper that only positions caller content
+and one that owns content around it are indistinguishable to the language. A view occurrence takes
+only the layout clauses written at its call site — no declaration kind implies a sizing default.
 
-- `ui` is presentable content whose visual body follows the same render rules as a `view`.
-- `dialogue` is response-demanding content whose body follows the same render rules.
-- `nav` is a package-configured presentation kind and binds its runtime behavior through
-  `nav <Export> from <path>`; it is not a render-bearing visual declaration. A configured nav may be
-  mounted only as an app navigator, a genuine app auxiliary, or content of another nav. Rendering a
-  nav inside a `view` or `ui` is a validation error.
-
-See `Tao Presentation and Navigation.md` for presentation behavior.
-
-#### UI Containers: `frame` and `layout`
+#### Stdlib Containers
 
 Tao provides common core containers:
 
-Flexible `layout` containers:
+Flexible containers:
 
 - `Col`: lays out its content vertically with flexible height
 - `Row`: lays out its content horizontally on a single line with flexible width
@@ -68,14 +73,14 @@ Hugging containers:
 - `Stack`: hugs its content and lays it out top-to-bottom
 - `Box`: hugs its content and lays it out horizontally
 
-All five ship today as `layout` declarations. The separate `frame` role is implemented for
-intrinsically hugging, rigid containers that place caller content with `@@content`.
+All five ship today as content-accepting `view` declarations whose injected implementations carry
+the sizing defaults named above.
 
 UI containers usually do not paint pixels themselves. Instead, they focus on how visible content is arranged and sized.
 
-#### UI Elements: `view`
+#### Stdlib Elements
 
-Tao provides common `view` UI elements and view-like stdlib components. They are automatically styled according to your app's design system.
+Tao provides common leaf UI elements as stdlib views. They are automatically styled according to your app's design system.
 
 Basic content UI elements:
 
@@ -135,22 +140,21 @@ introduces no stdlib `List` or function-typed row slot.
 
 Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces use
 `present X() as overlay`, which layers above the nearest nav or an explicit `in` target. Every nav
-owns that overlay layer. Response-demanding conversations are dialogues invoked with `ask`; see
-`Tao Presentation and Navigation.md`. Raw visual portals and general in-layout layering remain a
-separate deferred design question.
+owns that overlay layer. Response-demanding conversations are views declaring `responds`, invoked
+with `ask`; see `Tao Presentation and Navigation.md`. Raw visual portals and general in-layout
+layering remain a separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
-The first named-slot contract is implemented. A `frame` declares an
-optional named content slot with `@name = empty`. A caller may fill it at most once with
-`@name <visual>`. The filled value is opaque visual content and renders exactly where the frame body
-places `@name`; `empty` contributes no node. Parameterized, repeatable, and required slots remain
-future work.
+The first named-slot contract is implemented. Any view may declare an optional named content slot
+with `@name = empty`. A caller may fill it at most once with `@name <view>`. The filled value is
+opaque visual content and renders exactly where the declaring body places `@name`; `empty`
+contributes no node. Parameterized, repeatable, and required slots remain future work.
 
 ```tao
 use Col, FormButton, Row, Text from @tao/ui
 
-frame Card(Title text) {
+view Card(Title text) {
    @actions = empty
 
    render Col() [gap 8, pad 12] {
@@ -172,12 +176,15 @@ Card("Draft") {
 }
 ```
 
-### Rendering Arbitrary Content in `frame` and `layout`
+### Rendering Arbitrary Content
 
-When `frame` and `layout` UI render, they get to choose where to render it using `@@content`:
+A view that accepts caller content chooses where to render it using `@@content`. Placing
+`@@content` is what makes the view content-accepting; it may appear at most once, and the
+placement may sit under a `when` or `if` branch, so a wrapper can withhold its caller's content
+while collapsed:
 
 ```tao
-frame Card() {
+view Card() {
    @title = empty
 
    render Stack() [content top stretch, gap 8, pad 16, background white, radius 2, shadow gray] {
@@ -213,7 +220,7 @@ Properties, unnamed render children, and named render slots are distinct channel
 - An explicit property constructor such as `User CurrentUser` binds a public declaration property.
 - Ordinary render expressions in a caller content block remain children. They are never consumed as properties solely because their types match.
 - `@name` fills a named render slot.
-- `@@content` places unnamed children inside a `frame` or `layout` implementation.
+- `@@content` places unnamed children inside a content-accepting view implementation.
 - Keyed navigation entries bind the configured nav declaration's direct `@key { ... }` contract;
   they are not visual render slots or an implicit `Items` property.
 
@@ -228,7 +235,7 @@ contract. A declaration without the contract rejects keyed entries. A render dec
 Only a targetable keyed entry creates an owner-qualified target such as `WordFlower@home`. A render slot never becomes a navigation target merely because it uses `@`.
 
 ```tao
-frame UserCard() {
+view UserCard() {
    User User
    @actions = empty
 
@@ -357,7 +364,7 @@ Or, if we want to:
 ### Example: App Shell
 
 ```tao
-layout AppShell() {
+view AppShell() {
    render Col() [fill, content top stretch, gap 12, pad 16] {
       Header() [hug]
       Row() [fill, gap 16] {
@@ -370,12 +377,12 @@ layout AppShell() {
 
 Here, the outer `Col` fills the screen. The header hugs its content. The body row fills the remaining space. The sidebar keeps a fixed width and resists compression. The main pane fills the row's width at runtime.
 
-### Example: Framed Content
+### Example: Wrapped Content
 
-`frame` and `layout` receive unnamed caller content through `@@content`.
+A content-accepting view receives unnamed caller content through `@@content`.
 
 ```tao
-frame Card() {
+view Card() {
    render Stack() [content top stretch, gap 8, pad 16] {
       @@content
    }
@@ -394,7 +401,7 @@ The caller writes the content. The `Card` decides where that content goes.
 Caller container layout, such as `gap` and `content`, applies at the explicit container that directly contains `@@content`.
 
 ```tao
-layout ToolbarArea() {
+view ToolbarArea() {
    render Row() [content spread center, gap 12] {
       @@content
    }
@@ -413,7 +420,7 @@ ToolbarArea() [gap 8] {
 If the declaration has fixed siblings and caller content, put `@@content` inside an explicit inner host when caller layout should affect only caller content:
 
 ```tao
-frame LabeledSection(Label text) {
+view LabeledSection(Label text) {
    render Stack() [gap 12, pad 16] {
       Text(Label)
 
@@ -494,7 +501,7 @@ Most normal layout should stay inside its bounds. If content is larger than its 
 Use a real scrolling view when the user should scroll:
 
 ```tao
-layout FeedPage() {
+view FeedPage() {
    render Col() [fill] {
       Header()
       ScrollView() [fill] {

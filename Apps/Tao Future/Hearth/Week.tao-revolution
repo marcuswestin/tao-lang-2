@@ -2,7 +2,7 @@
 
 phrase WeekTitle(Day date) = "Week of { Day.Short }"
 
-ui WeekScreen() {
+view WeekScreen() {
    Title WeekTitle(WeekStart)
    Toolbar { AddSomething [primary], ThisWeek }
    state WeekStart = StartOfWeek(today in MyHome.TimeZone)

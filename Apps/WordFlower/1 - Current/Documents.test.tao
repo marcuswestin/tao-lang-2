@@ -39,6 +39,38 @@ test "WordFlower documents" {
       advance 3.s
       expect missing text "Saved" // its duration has elapsed
    }
+   test "reverts the last save from the toast's action parameter" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Draft the intro" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      enter "Polish the intro" into #editDocumentTitle
+      enter "First line" into #editDocumentBody
+      press #saveDocument
+      expect text "Saved title: Polish the intro"
+      enter "Ship the intro" into #editDocumentTitle
+      enter "Second line" into #editDocumentBody
+      press #saveDocument
+      expect {
+         text "Saved title: Ship the intro"
+         text "Saved body: Second line"
+      }
+      // The toast carries the revert action for the save it announces — an ephemeral presentation
+      // taking a non-serializable parameter.
+      press #revertSave
+      expect {
+         text "Saved title: Polish the intro"
+         text "Saved body: First line"
+      }
+      expect #editDocumentTitle input value "Polish the intro"
+   }
    test "marks a document final through the checkbox" {
       run WordFlower
       enter "Home" into #workspaceName

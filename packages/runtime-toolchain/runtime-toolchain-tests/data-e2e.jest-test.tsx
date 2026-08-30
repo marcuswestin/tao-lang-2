@@ -33,7 +33,7 @@ Describe('Expo runtime', () => {
           use Notes from ./Data.tao
           use Text from @tao/ui
 
-          workspace ui Main() {
+          workspace view Main() {
             query Notes { }
             render Text("Notes: { Notes.Count }")
           }

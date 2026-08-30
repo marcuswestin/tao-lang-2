@@ -5,13 +5,13 @@
 // because the person beside you may be editing the same stop — which is why drafts carry a `conflict`
 // outcome at all.
 
-ui NoStopSelected() {
+view NoStopSelected() {
    render EmptyState(Icon: "signpost.right", Title: "Pick a stop", Body: "Its details open here, beside the day.")
 }
 
 // -- One day ---------------------------------------------------------------------------------------------------
 
-ui DayPlan(Day) {
+view DayPlan(Day) {
    Title if Day.Title is empty then Day.Date.Long else Day.Title
    Toolbar { AddStop [primary] }
    query DayStops from Day.Stops { }
@@ -63,7 +63,7 @@ ui DayPlan(Day) {
 
 // Creating: a draft, because the row does not exist yet. It commits once, so an abandoned stop never
 // syncs to the whole trip.
-file dialogue NewStopSheet(Day) responds Stop {
+file view NewStopSheet(Day) responds Stop {
    draft New = Stop for new { Day, Kind: Visit }
    action Add() runs single { when save New { saved -> Stop { respond Stop } } }
    render Col [card, width max 520, gap md] {
@@ -88,7 +88,7 @@ file dialogue NewStopSheet(Day) responds Stop {
 // the screen — so walking away loses nothing and there is no discard-changes dialogue. If a co-traveler
 // changed the stop meanwhile, `save` answers `conflict` and the choice is a person's, field by field.
 
-ui StopDetails(Stop) {
+view StopDetails(Stop) {
    Title Stop.Title
    Toolbar { SaveStop [primary], ToggleVisited, DeleteStop }
    draft Mine = Stop from Stop
@@ -170,7 +170,7 @@ ui StopDetails(Stop) {
 // one row per field where the draft and the row now disagree — my value beside theirs, with a control that
 // takes theirs into the draft field by field. It reads the row live, so a third edit mid-decision updates
 // the comparison in place; saving again runs the same outcomes.
-file ui ResolveStopConflict(Mine draft of Stop) {
+file view ResolveStopConflict(Mine draft of Stop) {
    Title "Someone else changed this stop"
    action Resolve() runs single {
       when save Mine {
@@ -191,7 +191,7 @@ file ui ResolveStopConflict(Mine draft of Stop) {
 
 // -- Today ------------------------------------------------------------------------------------------------------
 
-ui TodayScreen() {
+view TodayScreen() {
    Title "Today"
    render ScrollView [screen] {
       guard Me signed out -> { Text("Sign in to see today's plan.") [body]; SignInPanel }

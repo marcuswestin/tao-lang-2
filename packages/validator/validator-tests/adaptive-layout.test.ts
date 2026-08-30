@@ -1,11 +1,11 @@
 import { Describe, Test } from '@shared/test'
 import { LayoutValidator } from '../validator-src/validators/layout-validator'
-import { accepts, app, rejects, stubLayout } from './test-validate'
+import { accepts, app, rejects, stubContainer } from './test-validate'
 
 const messages = LayoutValidator.messages
 
 function adaptiveLayoutApp(clause: string): string {
-  return app(`render Column() [${clause}]`, stubLayout('Column'))
+  return app(`render Column() [${clause}]`, stubContainer('Column'))
 }
 
 Describe('validator: adaptive layout', () => {

@@ -9,7 +9,7 @@ app SheetPresentation {
 
 // `as sheet` presents through the platform's own modal host — a page sheet on iOS, a modal window
 // on Android — while Back and `dismiss` stay the operations they are for any other presentation.
-ui MainView() {
+view MainView() {
    render Col() [gap 8] {
       Text("Sheet Presentation")
 
@@ -18,7 +18,7 @@ ui MainView() {
          on press -> { present DetailSheet() as sheet }
 }  }  }
 
-ui DetailSheet() {
+view DetailSheet() {
    render Col() [gap 8] {
       Text("Sheet content")
 
@@ -32,7 +32,7 @@ ui DetailSheet() {
          on press -> { dismiss }
 }  }  }
 
-ui CoverOverlay() {
+view CoverOverlay() {
    render Col() [gap 8] {
       Text("Cover content")
 

@@ -1,5 +1,5 @@
 public
-layout Box() {
+view Box() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
@@ -9,7 +9,7 @@ layout Box() {
 }
 
 public
-layout Stack() {
+view Stack() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',
@@ -19,7 +19,7 @@ layout Stack() {
 }
 
 public
-layout Col() {
+view Col() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',
@@ -29,7 +29,7 @@ layout Col() {
 }
 
 public
-layout Row() {
+view Row() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
@@ -39,7 +39,7 @@ layout Row() {
 }
 
 public
-layout WrappingRow() {
+view WrappingRow() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'row',
@@ -50,7 +50,7 @@ layout WrappingRow() {
 }
 
 public
-layout Panes() {
+view Panes() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Panes({ children: Content, layout: Layout, tag: Tag }, {
         layout: TR.Layout.create([['content', 'top', 'stretch'], ['fill']]),
@@ -59,7 +59,7 @@ layout Panes() {
 }
 
 public
-layout ScrollView() {
+view ScrollView() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.ScrollView({ children: Content, layout: Layout, tag: Tag }, {
         direction: 'column',

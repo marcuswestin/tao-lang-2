@@ -72,7 +72,7 @@ Describe('functional core formatter', () => {
   Test(
     'formats parameter defaults with a space before default',
     formats(
-      `function Label(Value text default"Save") returns text{return Value}\nview Main(Title text default"Welcome"){action Submit(Message text default"Saved"){}render Card()}\nlayout Card(Gap number default 8){render inject \`\`\`ts\nreturn null\n\`\`\`}`,
+      `function Label(Value text default"Save") returns text{return Value}\nview Main(Title text default"Welcome"){action Submit(Message text default"Saved"){}render Card()}\nview Card(Gap number default 8){render inject \`\`\`ts\nreturn null\n\`\`\`}`,
       `
         function Label(Value text default "Save") returns text {
            return Value
@@ -83,7 +83,7 @@ Describe('functional core formatter', () => {
            render Card()
         }
 
-        layout Card(Gap number default 8) {
+        view Card(Gap number default 8) {
            render inject \`\`\`ts
               return null
            \`\`\`

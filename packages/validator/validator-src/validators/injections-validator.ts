@@ -7,7 +7,6 @@ import type { ValidationContext } from '../validation'
 export const injectionValidationMessages = {
   duplicateArgument: (name: string) => `Inject argument '${name}' is declared more than once.`,
   ambientRenderOnly: 'Ambient render channels are only available to a render inject implementation.',
-  contentOwner: '@@content is only available to a layout or frame implementation.',
 } as const
 
 /** injectionValidationChecks validates inject argument declarations. */
@@ -45,12 +44,6 @@ function validateAmbientChannels(
     if (!isRenderInjection) {
       ctx.error(injectionValidationMessages.ambientRenderOnly, ambient)
       continue
-    }
-    if (ambient.channel === '@@content') {
-      const owner = AST.findOwningView(injection)
-      if (!AST.isLayoutDeclaration(owner) && !AST.isFrameDeclaration(owner)) {
-        ctx.error(injectionValidationMessages.contentOwner, ambient)
-      }
     }
   }
 }

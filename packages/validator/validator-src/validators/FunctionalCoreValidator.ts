@@ -393,7 +393,7 @@ function validateRenderControlPlacement(
     if (AST.isRender(current)) {
       return
     }
-    if (AST.isRenderableDeclaration(current)) {
+    if (AST.isViewDeclaration(current)) {
       break
     }
     current = current.$container

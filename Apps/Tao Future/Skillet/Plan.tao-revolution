@@ -2,7 +2,7 @@
 
 phrase WeekTitle(Day date) = "Week of { Day.Short }"
 
-ui WeekPlan() {
+view WeekPlan() {
    Title WeekTitle(WeekStart)
    Toolbar { AddMeal [primary], ShopThisWeek, ThisWeek }
    state WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
@@ -101,7 +101,7 @@ file view MealRow(Meal) {
 }  }  }
 
 // Planning a meal from either direction: from a day, or from a recipe. No row yet, so a draft.
-ui PlanMeal(Recipe (optional), Day date (optional)) {
+view PlanMeal(Recipe (optional), Day date (optional)) {
    Title "Add a meal"
    draft New = Meal for new {
       Household: MyKitchen
@@ -124,7 +124,7 @@ ui PlanMeal(Recipe (optional), Day date (optional)) {
          guard Recipes
          if Recipes is empty { EmptyState(Icon: "book", Title: "No recipes yet", Body: "Add a recipe first, then plan it.") }
          #pickRecipe
-         List(Recipes as Option, Selected: New.Recipe) [height 260] { Text(Option.Title) [body] } // `as Option`: the ui's own `Recipe` stays visible
+         List(Recipes as Option, Selected: New.Recipe) [height 260] { Text(Option.Title) [body] } // `as Option`: the view's own `Recipe` stays visible
       } else {
          Text(Recipe.Title) [sectionTitle]
       }
@@ -141,7 +141,7 @@ ui PlanMeal(Recipe (optional), Day date (optional)) {
 }  }  }
 
 // Changing a planned meal: the row exists, so every input writes through.
-ui MealScreen(Meal) {
+view MealScreen(Meal) {
    Title Meal.Recipe.Title
    Toolbar { Done [primary] }
    command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }

@@ -35,7 +35,7 @@ function reportIncomplete(
 }
 
 function incompleteSuppliedSlots(declaration: AST.NamedDeclaration | undefined): string[] {
-  if (AST.isVisualDeclaration(declaration)) {
+  if (AST.isViewDeclaration(declaration)) {
     return AST.parametersOf(declaration)
       .filter(parameter => parameter.defaultValue === undefined)
       .map(Type.parameterName)

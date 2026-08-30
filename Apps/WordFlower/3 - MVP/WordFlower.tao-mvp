@@ -30,8 +30,9 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 // - The universal app shell applies safe-area and keyboard insets without a source-level opt-in.
 // - Property-function syntax must settle type-level addition and override plus the identity,
 //   equality, capture, and anonymous-expression consequences of per-value behavior.
-// - Design grows beyond flat tokens and clause bundles into recipes, variants, states, patterns,
-//   rules, and platform blocks only when corresponding MVP code exercises each form.
+// - Design grows beyond flat tokens and clause bundles into recipes, variants, states, rules, and
+//   platform blocks only when corresponding MVP code exercises each form; `patterns` is retired in
+//   favour of content-accepting views (Decisions §13).
 // - Concurrency-policy vocabulary, asset literals, and route/restoration policy remain MVP design
 //   work and must enter a future Next contract as executable code before implementation.
 //
@@ -164,7 +165,7 @@ let StarterPrompt = WritingPrompt {
    StarterTags
 }
 
-// One-case enums are nominal types; a dismissed dialogue answers `none`.
+// One-case enums are nominal types; a dismissed responder answers `none`.
 type ConfirmResult is one of Confirmed
 
 data Workspaces / Workspace {
@@ -212,7 +213,7 @@ function GoalFraction(Count number) {
 
 let BuildStamp is text = BuildStamp() from ./Shell.ts
 
-frame Card(Title text) {
+view Card(Title text) {
    @actions = empty
 
    render Col() [gap 8, pad 12, panel] {
@@ -226,7 +227,7 @@ frame Card(Title text) {
    }
 }
 
-layout Scroller() {
+view Scroller() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({
         children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
@@ -250,7 +251,7 @@ view TagSummary(Tags PromptTags) {
    render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
 }
 
-ui WorkspaceList() {
+view WorkspaceList() {
    state WorkspaceName = ""
    query Workspaces { }
    action AddWorkspace() {
@@ -322,7 +323,7 @@ ui WorkspaceList() {
 
 // Presented above the nearest enclosing nav. An explicit `in <target>` would override that contextual
 // scope. Every nav's overlay entries stack above covered content while preserving its mounted state.
-ui WorkspaceNameNotice() {
+view WorkspaceNameNotice() {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name")
       #dismissNotice
@@ -333,7 +334,7 @@ ui WorkspaceNameNotice() {
 }
 
 workspace
-ui WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
+view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    let SectionLabel = "Drafts"
@@ -455,7 +456,7 @@ ui WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named e
    }
 }
 
-ui WorkspaceChooser() {
+view WorkspaceChooser() {
    query Workspaces { }
    render Col() [screen, gap 10] {
       Text("Choose a workspace")
@@ -477,7 +478,7 @@ function WorkspaceSplit(Workspace) returns nav {
 
       // Direct keys bind to Panes. The nested dynamic selection starts its own key namespace.
       @files {
-         // A ui with bound arguments is a presentable value; it renders only when the nav mounts it.
+         // A view with bound arguments is a presentable value; it renders only when the nav mounts it.
          Content SlotNav { Initial FileTree(Workspace) }
          Title "Files"
          IdealSize 280
@@ -503,12 +504,12 @@ function WorkspaceSplit(Workspace) returns nav {
    }
 }
 
-ui EmptyInspector() {
+view EmptyInspector() {
    render Text("No inspector selected")
 }
 
 workspace
-ui FileTree(Workspace) {
+view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap 6, pad 10] {
       Text(Workspace.Name)
@@ -550,7 +551,7 @@ ui FileTree(Workspace) {
 
 // The pane-level entry guards entity availability; the editor below assumes an available document.
 workspace
-ui DocumentScreen(Document) {
+view DocumentScreen(Document) {
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -599,7 +600,7 @@ view DocumentEditor(Document) {
       set ParagraphText = ""
    }
    action CloseDocument() {
-      // `ask` suspends the action until the dialogue responds; a bare `respond` answers none.
+      // `ask` suspends the action until the presented view responds; a bare `respond` answers none.
       let Result = ask ConfirmCloseDialogue(Document)
       // `when` is always exhaustive, so a one-sided test uses `if`, which never takes `else`.
       if Result is Confirmed { dismiss }
@@ -675,11 +676,11 @@ view DocumentEditor(Document) {
    }
 }
 
-ui ParagraphInspector(Paragraph) {
+view ParagraphInspector(Paragraph) {
    render Text("{ Paragraph.Document.Title } - { Paragraph.Text }")
 }
 
-ui DocumentInfo(Document) {
+view DocumentInfo(Document) {
    render Col() [gap 6, pad 10] {
       Text(Document.Title)
       Text("{ Document.Paragraphs.Count } paragraphs")
@@ -690,7 +691,7 @@ ui DocumentInfo(Document) {
    }
 }
 
-ui DocumentSnapshot(Snapshot Document.Snapshot) {
+view DocumentSnapshot(Snapshot Document.Snapshot) {
    render Col() [gap 6, pad 10] {
       Text("Captured version")
       Text(Snapshot.Title)
@@ -752,12 +753,12 @@ file view FocusSession() {
                on press -> { do Start(SessionMinutes.min) }
 }  }  }  }  }
 
-ui SavedToast() {
+view SavedToast() {
    render Text("Saved")
 }
 
-// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none.
-dialogue ConfirmCloseDialogue(Document) responds ConfirmResult {
+// A view with `responds T` is presented for a typed answer; `ask` resumes with the response or none.
+view ConfirmCloseDialogue(Document) responds ConfirmResult {
    render Col() [gap 6, pad 10] {
       Text("Close { Document.Title }?")
       #confirmClose
@@ -771,7 +772,7 @@ dialogue ConfirmCloseDialogue(Document) responds ConfirmResult {
    }
 }
 
-ui Settings() {
+view Settings() {
    render Scroller() [screen] {
       Col() [width max 720, centered, gap 10] {
          Text("Settings") [title]
@@ -780,7 +781,7 @@ ui Settings() {
             Text("Build { BuildStamp }") [body]
             @actions FormButton("Reset to signed out") {
                #resetSignedOut
-               // From a visual declaration, `replace` is the only root operation an app host accepts.
+               // From a view declaration, `replace` is the only root operation an app host accepts.
                on press -> { replace SignedOutNav in WordFlower }
             }
          }
@@ -788,7 +789,7 @@ ui Settings() {
    }
 }
 
-ui SignedOut() {
+view SignedOut() {
    render Text("Signed out")
 }
 
@@ -837,7 +838,7 @@ let WordFlowerDeclarationLetWith = app with {
    Navigator FoundationStackLetWith
 }
 
-ui FoundationHome() {
+view FoundationHome() {
    render Col() {
       Text("Foundation home marker")
       FormButton("Open deterministic detail") {
@@ -849,7 +850,7 @@ ui FoundationHome() {
    }
 }
 
-ui FoundationDetail() {
+view FoundationDetail() {
    render Col() {
       Text("Foundation detail marker")
       FormButton("Reset foundation app") {
@@ -858,7 +859,7 @@ ui FoundationDetail() {
    }
 }
 
-ui FoundationSlot() {
+view FoundationSlot() {
    render Col() {
       Text("Foundation slot marker")
       FormButton("Restore initial stack") {

@@ -84,14 +84,14 @@ Describe('Tao formatter configurable declarations', () => {
   Test(
     'formats declaration-owned nav and datasource contracts with injected implementations',
     formats(
-      `public type CustomNav is nav with{Initial ui @key{Label text Content Presentable}nav CustomNavKind from ./CustomNav.ts}\npublic type CustomData is datasource with{StorageKey text provider CustomData from ./CustomData.ts}`,
+      `public type CustomNav is nav with{Initial view @key{Label text Content view}nav CustomNavKind from ./CustomNav.ts}\npublic type CustomData is datasource with{StorageKey text provider CustomData from ./CustomData.ts}`,
       `
         public
         type CustomNav is nav with {
-           Initial ui
+           Initial view
            @key {
               Label text
-              Content Presentable
+              Content view
            }
 
            nav CustomNavKind from ./CustomNav.ts
@@ -602,11 +602,11 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
-    'formats dialogue declarations, asks, and explicit or bare responses',
+    'formats responds-view declarations, asks, and explicit or bare responses',
     formats(
-      `dialogue Confirm(Title text) responds ConfirmResult{action Close(){respond Confirmed} action Cancel(){respond} render Empty()} view Editor(){action Close(){let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,
+      `view Confirm(Title text)responds ConfirmResult{action Close(){respond Confirmed} action Cancel(){respond} render Empty()} view Editor(){action Close(){let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,
       `
-        dialogue Confirm(Title text) responds ConfirmResult {
+        view Confirm(Title text) responds ConfirmResult {
            action Close() {
               respond Confirmed
            }

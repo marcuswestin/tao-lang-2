@@ -208,7 +208,7 @@ Describe('Tao AST invocation resolution', () => {
           Tile("Open", 1)
         }
       }
-      layout Stack() {
+      view Stack() {
         render inject Content @@content \`\`\`ts
           return <>{Content}</>
         \`\`\`

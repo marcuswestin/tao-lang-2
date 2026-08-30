@@ -24,6 +24,7 @@ ShorthandInjectionArgument:
     value=ValueReference;
 
 // These channels are parsed broadly enough for validators to report context-specific placement.
-// Only render injections may consume them, and only layouts/frames may consume caller content.
+// Only render injections may consume them; naming `@@content` is the placement that makes the
+// owning view content-accepting.
 RenderAmbientChannel:
     channel=('@@content' | '@@layout' | '@@tag');

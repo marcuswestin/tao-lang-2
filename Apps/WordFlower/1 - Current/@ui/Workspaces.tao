@@ -19,10 +19,10 @@ type WritingPrompt is {
    PromptSubtitle text? // an item field may be absent; reading it yields `none`
 }
 
-// The workspace area. `ui` is content that can enter the app's presentation tree; `view` stays
-// embeddable content. Presenting a `ui` is the whole navigation contract.
+// The workspace area. Every renderable declaration is a `view`; whether one composes inline in a
+// render tree or enters the presentation tree is decided at each use site, never on the head.
 workspace
-ui WorkspaceList() {
+view WorkspaceList() {
    state WorkspaceName = ""
    query Workspaces { }
    action AddWorkspace() {
@@ -74,11 +74,11 @@ ui WorkspaceList() {
 
          #workspaces
          loop Workspaces / Workspace {
-            WorkspaceRow(Workspace, Open: -> { present WorkspaceDetail(Workspace) })
+            WorkspaceRow(Workspace)
 }  }  }  }
 
 // Presented above the nearest nav; overlays stack above content and are dismissible.
-ui WorkspaceNameNotice() {
+view WorkspaceNameNotice() {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name") [body]
 
@@ -87,7 +87,7 @@ ui WorkspaceNameNotice() {
          on press -> { dismiss }
 }  }  }
 
-ui WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
+view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    query Drafts from Workspace.Documents {
@@ -153,7 +153,7 @@ ui WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named en
                // A tagged list can be selected by 1-based row index: #drafts[INDEX] { press #edit }
                #drafts
                loop Drafts / Document {
-                  DraftRow(Document, Open: -> { present DocumentScreen(Document) })
+                  DraftRow(Document)
             }  }
             Col() [gap 6] {
                Text("Finished") [title]
@@ -165,7 +165,7 @@ ui WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named en
 }  }  }  }  }  }
 
 workspace
-ui WorkspaceChooser() {
+view WorkspaceChooser() {
    query Workspaces { }
    render Col() [screen, width max 720, centered, gap 10] {
       Text("Choose a workspace") [title]
@@ -178,7 +178,7 @@ ui WorkspaceChooser() {
          on select -> { present WorkspaceDocuments(Workspace) in WorkspaceNav }
 }  }  }
 
-ui WorkspaceDocuments(Workspace) {
+view WorkspaceDocuments(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [screen, width max 720, centered, gap 10] {
       Text("Documents in { Workspace.Name }") [title]
@@ -219,14 +219,15 @@ view NoWorkspacesYet() {
       TagSummary(StarterPrompt.PromptTags)
 }  }
 
-// One row of the workspace library. Presenting belongs to a `ui`, so opening arrives as an action.
-view WorkspaceRow(Workspace, Open action()) {
+// One row of the workspace library. Presenting is legal in any view body, so the row opens its own
+// workspace instead of receiving an `Open action()` from the screen that lists it.
+view WorkspaceRow(Workspace) {
    render Col() [gap 6, pad 10] {
       Text(Workspace.Name) [body]
 
       #openWorkspace
       FormButton("Open workspace") {
-         on press Open
+         on press -> { present WorkspaceDetail(Workspace) }
       }
 
       #deleteWorkspace
@@ -235,13 +236,13 @@ view WorkspaceRow(Workspace, Open action()) {
 }  }  }
 
 // One unfinished document: open it, finish it, or discard it.
-view DraftRow(Document, Open action()) {
+view DraftRow(Document) {
    render Col() [gap 6, pad 10] {
       Text(Document.Title) [body]
 
       #edit
       FormButton("Open document") {
-         on press Open
+         on press -> { present DocumentScreen(Document) }
       }
 
       #finish

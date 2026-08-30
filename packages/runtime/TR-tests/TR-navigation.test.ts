@@ -47,8 +47,8 @@ Describe('TR.Navigation', () => {
 
     const kind = TR.NavKind.Stack()
     const declaration = TR.NavKind.Declaration('ThirdPartyStack')
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
     const descriptor: TR.NavDescriptor<'stack', TR.StackNavConfiguration> = kind.configure(
       declaration,
       { initial: home },
@@ -69,8 +69,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('mounts declaration-owned descriptors per app occurrence and resolves explicit nested targets', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
     const stackDeclaration = TR.Navigation.Declaration('CopiedStack', TR.NavKind.Stack())
     const slotDeclaration = TR.Navigation.Declaration('CopiedSlot', TR.NavKind.Slot())
     const nestedStack = TR.Navigation.Configure(stackDeclaration, { Initial: home })
@@ -99,8 +99,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('composes declaration-owned navs, app targets, nav overlays, dismiss, and replacement', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
     const stack = configuredStack('Main', home)
     const slot = configuredSlot('Slot', stack)
     const window = configuredSlot('Window', home)
@@ -127,8 +127,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('hosts overlays directly on every configured navigation value', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const notice = TR.Navigation.UI({ name: 'Notice', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const notice = TR.Navigation.View({ name: 'Notice', render: () => null })
     const stack = configuredStack('Stack', home)
     const slot = configuredSlot('Slot', stack)
 
@@ -146,8 +146,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('owns keyed transient toasts at app scope without participating in Back', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const saved = TR.Navigation.UI({ name: 'Saved', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const saved = TR.Navigation.View({ name: 'Saved', render: () => null })
     const stack = configuredStack('Toast host', home)
     const app = TR.Navigation.App({ name: 'Toast App', navigator: () => stack, auxiliaries: () => ({}) })
     const taoProps: TR.TaoProps = { app }
@@ -185,10 +185,10 @@ Describe('TR.Navigation', () => {
     TR.Navigation.beginTest()
   })
 
-  Test('stacks independent dialogue asks and resolves back or dismiss as none', async () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const confirm = TR.Navigation.Dialogue({ name: 'Confirm', render: () => null })
-    const stack = configuredStack('Dialogue host', home)
+  Test('stacks independent asks and resolves back or dismiss as none', async () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const confirm = TR.Navigation.View({ name: 'Confirm', render: () => null })
+    const stack = configuredStack('Ask host', home)
     const taoProps: TR.TaoProps = { navigation: stack }
 
     const first = TR.Navigation.Ask(taoProps, confirm, { Title: TR.Value('First') })
@@ -205,8 +205,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('activates keyed selection items without adding navigation history', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const settings = TR.Navigation.UI({ name: 'Settings', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Settings', render: () => null })
     const homeStack = configuredStack('Home stack', home)
     const settingsStack = configuredStack('Settings stack', settings)
     const selection = configuredSelection({
@@ -243,8 +243,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('patches configured navigation into an independent value without mutating its base', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
     const base = configuredStack('Base stack', home)
     const patched = TR.Navigation.Patch(base, { Initial: detail })
 
@@ -291,9 +291,9 @@ Describe('TR.Navigation', () => {
   })
 
   Test('resolves the nearest navigation through nested caller props', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
-    const overlay = TR.Navigation.UI({ name: 'Overlay', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
+    const overlay = TR.Navigation.View({ name: 'Overlay', render: () => null })
     const outer = configuredStack('Outer', home)
     const nearest = configuredStack('Nearest', home)
     const nestedProps: TR.TaoProps = {
@@ -317,8 +317,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('keeps same-named generated app definitions isolated by identity and resets both', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
     const firstRoot = configuredStack('First root', home)
     const secondRoot = configuredStack('Second root', home)
     const firstWindow = configuredSlot('First window', home)
@@ -349,8 +349,8 @@ Describe('TR.Navigation', () => {
   })
 
   Test('resolves strict targets to an enclosing app variant by declaration identity', () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => null })
-    const settings = TR.Navigation.UI({ name: 'Settings', render: () => null })
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Settings', render: () => null })
     const replacement = configuredStack('Signed out', home)
     const variantSelection = configuredSelection({
       display: TR.Value('drawer'),

@@ -20,7 +20,7 @@ without erasing compatible coverage:
 - Functional Core covers parenthesized block-bodied functions, explicit `return`, and non-blocking
   `async { ... }`; WordFlower and package tests additionally prove inferred return types.
 - Layout and App Shell covers `width max`, `Panes`, and `ScrollView`. WordFlower and package tests
-  own `frame`, intrinsic `@@content`, optional single-fill named slots, named design bundles, and
+  own `@@content` placement, optional single-fill named slots, named design bundles, and
   direct-clause precedence.
 - Runtime Stdlib covers `Image`, `Spinner`, and `Progress`; Forms and Interaction owns `Checkbox`,
   and Layout and App Shell owns `ScrollView`. Collection rendering remains language-owned through
@@ -42,14 +42,14 @@ without erasing compatible coverage:
   feature, and package tests own the diagnostics.
 - Ticking Clock covers `@tao/time`: a held ticker, live derivation over it, `Stop`/`Start`/`Running`,
   and the `advance` step that drives the clock a check holds.
-- All `ui`, `view`, `layout`, `frame`, `dialogue`, `action`, and `function` declarations use a
-  parenthesized parameter list, including `()`.
+- All `view`, `action`, and `function` declarations use a parenthesized parameter list,
+  including `()`.
 
 ## Navigation MVP
 
 Exercise app-mounted navigation: presentation, covered-entry state preservation, and back behavior.
 
-**Belongs here:** an `app` with `Name` and a configured `Navigator StackNav { Initial <ui> }`; `ui` declarations with typed parameters; `present Detail(Name: "…")` with required parentheses; a covered entry that stays mounted and hidden and restores its state when revealed; the accessible Back control, native back, and the test `back` step through the same reducer.
+**Belongs here:** an `app` with `Name` and a configured `Navigator StackNav { Initial <view> }`; presented `view` declarations with typed parameters; `present Detail(Name: "…")` with required parentheses; a covered entry that stays mounted and hidden and restores its state when revealed; the accessible Back control, native back, and the test `back` step through the same reducer.
 
 **Does not belong here:** selection, split, overlays, toasts, windows, restoration, routes, or transition policy; target-resolution and argument diagnostics; WordFlower product behavior.
 
@@ -83,7 +83,7 @@ Exercise bracketed layout clauses and the default app-shell baseline.
 
 **Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
 
-**Does not belong here:** visual style clauses; `frame`, `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
+**Does not belong here:** visual style clauses; `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 
 ## Package Access
 
@@ -145,7 +145,7 @@ Exercise `@tao/ui`'s published components against their platform-native implemen
 
 Exercise `present X as sheet`, the platform's own modal presentation.
 
-**Belongs here:** presenting a `ui` as a sheet; dismissing one from inside with `dismiss`; dismissing one with Back; a sheet behaving as an overlay does for every navigation operation.
+**Belongs here:** presenting a view as a sheet; dismissing one from inside with `dismiss`; dismissing one with Back; a sheet behaving as an overlay does for every navigation operation.
 
 **Does not belong here:** overlays and toasts, which WordFlower and the navigation tests own; the platform chrome a sheet is hosted in, which is not assertable from a journey.
 

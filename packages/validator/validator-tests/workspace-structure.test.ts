@@ -79,12 +79,7 @@ Describe('validator: workspace structure', () => {
         'duration',
         'action',
         'design',
-        'visual',
-        'presentable',
         'view',
-        'layout',
-        'frame',
-        'ui',
         'nav',
         'datasource',
         'app',
@@ -108,11 +103,11 @@ Describe('validator: workspace structure', () => {
     const parserContext = Parser.createContext()
     const uri = Langium.URI.file('/__tao__/Views.tao')
     const documentOne = parserContext.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'public layout Box() { }',
+      'public view Box() { }',
       uri,
     )
     const documentTwo = parserContext.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      'public layout Box() { }',
+      'public view Box() { }',
       uri,
     )
     const diagnostics = Validation.collectDiagnostics()

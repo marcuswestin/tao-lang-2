@@ -18,8 +18,8 @@ use every, Interval from @tao/time
 // additions below, and it stays in sync with every decision settled in `../2 - Next`.
 //
 // Beyond MVP, this file expresses: project identity and external dependencies; locally renamed
-// imports; the full design system (raw tokens, semantic tokens, recipes, patterns, rules, platform
-// blocks); closed unions with `match`; string-valued enums; longhand declaration-property blocks
+// imports; the full design system (raw tokens, semantic tokens, recipes, rules, platform blocks —
+// `patterns` retired for content-accepting views, Decisions §13); closed unions with `match`; string-valued enums; longhand declaration-property blocks
 // and `default` properties; case-valued and unit-typed state; optional self-referential relations;
 // query field selection; time and lifecycle automation; presentation results and presentation
 // serialization with migration; platform-conditional declarations; the `unsafe ts` native
@@ -295,7 +295,7 @@ let StarterPrompt = WritingPrompt {
    StarterTags
 }
 
-// One-case enums are nominal types; a dismissed dialogue answers `none`.
+// One-case enums are nominal types; a dismissed responder answers `none`.
 type ConfirmResult is one of Confirmed
 
 // A case set may carry text-literal cases, spelled as the literal a person types.
@@ -357,7 +357,7 @@ function GoalFraction(Count number) {
    return Count / ParagraphGoal
 }
 
-frame Card(Title text) {
+view Card(Title text) {
    @actions = empty
 
    render Col() [gap 8, pad 12, panel] {
@@ -371,7 +371,7 @@ frame Card(Title text) {
    }
 }
 
-layout Scroller() {
+view Scroller() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
       return TR.Views.View({
         children: <RN.ScrollView contentContainerStyle={{ flexGrow: 1 }}>{Content}</RN.ScrollView>,
@@ -395,7 +395,7 @@ view TagSummary(Tags PromptTags) {
    render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
 }
 
-ui WorkspaceList() {
+view WorkspaceList() {
    state WorkspaceName = ""
    query Workspaces { }
    action AddWorkspace() {
@@ -471,7 +471,7 @@ ui WorkspaceList() {
 
 // Presented above the nearest enclosing nav; `in <target>` would override that contextual scope.
 // Overlays stack above its content while covered entries stay mounted and hidden.
-ui WorkspaceNameNotice() {
+view WorkspaceNameNotice() {
    render Col() [gap 6, pad 10] {
       Text("A workspace needs a name")
       #dismissNotice
@@ -482,7 +482,7 @@ ui WorkspaceNameNotice() {
 }
 
 workspace
-ui WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
+view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    let SectionLabel = "Drafts"
@@ -604,7 +604,7 @@ ui WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named e
    }
 }
 
-ui WorkspaceChooser() {
+view WorkspaceChooser() {
    query Workspaces { }
    render Col() [screen, gap 10] {
       Text("Choose a workspace")
@@ -626,7 +626,7 @@ function WorkspaceSplit(Workspace) returns nav {
 
       // Direct keys bind to Panes. The nested DynamicSelectionNav starts its own key namespace.
       @files {
-         // A ui with bound arguments is a presentable value; it renders only when the nav mounts it.
+         // A view with bound arguments is a presentable value; it renders only when the nav mounts it.
          Content SlotNav { Initial FileTree(Workspace) }
          Title "Files"
          IdealSize 280
@@ -652,12 +652,12 @@ function WorkspaceSplit(Workspace) returns nav {
    }
 }
 
-ui EmptyInspector() {
+view EmptyInspector() {
    render Text("Select a paragraph")
 }
 
 workspace
-ui FileTree(Workspace) {
+view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap 6, pad 10] {
       Text(Workspace.Name)
@@ -699,7 +699,7 @@ ui FileTree(Workspace) {
 
 // The pane-level entry guards entity availability; the editor below assumes an available document.
 workspace
-ui DocumentScreen(Document) {
+view DocumentScreen(Document) {
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -747,7 +747,7 @@ view DocumentEditor(Document) {
       set ParagraphText = ""
    }
    action CloseDocument() {
-      // `ask` suspends the action until the dialogue responds; a bare `respond` answers none.
+      // `ask` suspends the action until the presented view responds; a bare `respond` answers none.
       let Result = ask ConfirmCloseDialogue(Document)
       // `when` is always exhaustive, so a one-sided test uses `if`, which never takes `else`.
       if Result is Confirmed { dismiss }
@@ -823,11 +823,11 @@ view DocumentEditor(Document) {
    }
 }
 
-ui ParagraphInspector(Paragraph) {
+view ParagraphInspector(Paragraph) {
    render Text("{ Paragraph.Document.Title } - { Paragraph.Text }")
 }
 
-ui DocumentInfo(Document) {
+view DocumentInfo(Document) {
    render Col() [gap 6, pad 10] {
       Text(Document.Title)
       Text("{ Document.Paragraphs.Count } paragraphs")
@@ -838,7 +838,7 @@ ui DocumentInfo(Document) {
    }
 }
 
-ui DocumentSnapshot(Snapshot Document.Snapshot) {
+view DocumentSnapshot(Snapshot Document.Snapshot) {
    render Col() [gap 6, pad 10] {
       Text("Captured version")
       Text(Snapshot.Title)
@@ -900,12 +900,12 @@ file view FocusSession() {
                on press -> { do Start(SessionMinutes.min) }
 }  }  }  }  }
 
-ui SavedToast() {
+view SavedToast() {
    render Text("Saved")
 }
 
-// A dialogue is a ui presented for a typed answer; `ask` resumes with the response or none.
-dialogue ConfirmCloseDialogue(Document) responds ConfirmResult {
+// A view with `responds T` is presented for a typed answer; `ask` resumes with the response or none.
+view ConfirmCloseDialogue(Document) responds ConfirmResult {
    render Col() [gap 6, pad 10] {
       Text("Close { Document.Title }?")
       #confirmClose
@@ -919,7 +919,7 @@ dialogue ConfirmCloseDialogue(Document) responds ConfirmResult {
    }
 }
 
-ui Settings() {
+view Settings() {
    render Scroller() [screen] {
       Col() [width max 720, centered, gap 10] {
          Text("Settings") [title]
@@ -928,7 +928,7 @@ ui Settings() {
             Text("Build { BuildStamp }") [body]
             @actions FormButton("Reset to signed out") {
                #resetSignedOut
-               // From a visual declaration, `replace` is the only root operation an app host accepts.
+               // From a view declaration, `replace` is the only root operation an app host accepts.
                on press -> { replace SignedOutNav in WordFlower }
             }
          }
@@ -936,7 +936,7 @@ ui Settings() {
    }
 }
 
-ui SignedOut() {
+view SignedOut() {
    render Text("Signed out")
 }
 
@@ -985,7 +985,7 @@ let WordFlowerDeclarationLetWith = app with {
    Navigator FoundationStackLetWith
 }
 
-ui FoundationHome() {
+view FoundationHome() {
    render Col() {
       Text("Foundation home marker")
       FormButton("Open deterministic detail") {
@@ -997,7 +997,7 @@ ui FoundationHome() {
    }
 }
 
-ui FoundationDetail() {
+view FoundationDetail() {
    render Col() {
       Text("Foundation detail marker")
       FormButton("Reset foundation app") {
@@ -1006,7 +1006,7 @@ ui FoundationDetail() {
    }
 }
 
-ui FoundationSlot() {
+view FoundationSlot() {
    render Col() {
       Text("Foundation slot marker")
       FormButton("Restore initial stack") {
@@ -1019,10 +1019,10 @@ ui FoundationSlot() {
 // Capabilities beyond the MVP release
 // ---------------------------------------------------------------------------------------------
 
-// A `frame` wraps caller content. `@@content` places the unnamed children the caller passed, and a
-// named slot declares its own default so callers may omit it.
+// A content-accepting view wraps caller content. `@@content` places the unnamed children the
+// caller passed, and a named slot declares its own default so callers may omit it.
 public
-frame DocumentCard(Title text) {
+view DocumentCard(Title text) {
    @actions = empty
 
    render Col() [gap sm, pad md, bg bg.canvas, border subtle, radius md] {
@@ -1054,7 +1054,7 @@ view ParagraphLine() {
 // TODO: windowing or virtualization for very large loop-owned collections remains Revolution work;
 // its syntax is deliberately unnamed until it can extend the settled language-owned `loop` surface.
 workspace
-ui ReadingView(Document) {
+view ReadingView(Document) {
    state Focused/Unfocused // case-valued state shorthand needs no initializer
    query Paragraphs from Document.Paragraphs { Text } // queries may select the fields they read
    action SetReadingFinished(Value boolean) {
@@ -1092,7 +1092,7 @@ ui ReadingView(Document) {
 // Duration above intentionally takes a plain number of seconds.
 // A publishing flow: string-valued enum arguments, and a presentation that answers with a result.
 workspace
-ui ExportPanel(Document) {
+view ExportPanel(Document) {
    state Format = ExportFormat."markdown"
    state Countdown 30.seconds // typed state initialized without `=`
 
@@ -1116,17 +1116,17 @@ ui ExportPanel(Document) {
    }
 }
 
-ui ExportProgress(Document, Format ExportFormat) {
+view ExportProgress(Document, Format ExportFormat) {
    render Text("Exporting { Document.Title } as { Format }…")
 }
 
-ui ExportFailure(Message text) {
+view ExportFailure(Message text) {
    render Text("Export failed: { Message }")
 }
 
 // Automation: time, and app lifecycle. Autosave runs on a schedule rather than on every keystroke.
 workspace
-ui AutosaveController(Document) {
+view AutosaveController(Document) {
    state SecondsSinceSave = 0
 
    on every 1.second -> {
@@ -1146,7 +1146,7 @@ state SavedPresentation = serialize presentation WordFlower
 
 on app restore -> {
    let Restored = deserialize presentation SavedPresentation
-   // Invoking a ui always needs parentheses; presenting an already-constructed presentable value
+   // Invoking a view always needs parentheses; presenting an already-constructed presentable value
    // does not, exactly as with `present Occurrence { ... }` and target-only `present App@key`.
    present Restored
 }

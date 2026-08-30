@@ -40,7 +40,7 @@ Describe('parser: functional core', () => {
           }
         }
       }
-      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
@@ -113,7 +113,7 @@ Describe('parser: functional core', () => {
           if Document.Final is Draft { Text("Draft") }
         }
       }
-      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
@@ -191,15 +191,19 @@ Describe('parser: functional core', () => {
         action Submit(Message text default "Saved") { }
         render Card()
       }
-      layout Card(Gap number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Card(Gap number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
     const label = result.entry.ast.statements.find(statement => AST.isFunctionDeclaration(statement))
-    const main = result.entry.ast.statements.find(statement => AST.isViewDeclaration(statement))
-    const card = result.entry.ast.statements.find(statement => AST.isLayoutDeclaration(statement))
+    const main = result.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Main'
+    )
+    const card = result.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Card'
+    )
     Expect.Is(label, AST.isFunctionDeclaration)
     Expect.Is(main, AST.isViewDeclaration)
-    Expect.Is(card, AST.isLayoutDeclaration)
+    Expect.Is(card, AST.isViewDeclaration)
     const submit = AST.blockStatementOf(main, { find: AST.isActionDeclaration })
     Expect.Is(submit, AST.isActionDeclaration)
 
@@ -213,9 +217,8 @@ Describe('parser: functional core', () => {
     const result = await testParseCode(`
       type Response is one of Done
       view Empty() { render inject \`\`\`ts\nreturn null\n\`\`\` }
-      layout Stack() { render Empty() }
-      ui Shell() { render Empty() }
-      dialogue Confirm() responds Response { render Empty() }
+      view Stack() { render Empty() }
+      view Confirm() responds Response { render Empty() }
       action Save() { }
       function Label() { return "Label" }
     `)
@@ -223,7 +226,6 @@ Describe('parser: functional core', () => {
     Expect(declarations.map(declaration => declaration.name)).toEqual([
       'Empty',
       'Stack',
-      'Shell',
       'Confirm',
       'Save',
       'Label',
@@ -234,9 +236,7 @@ Describe('parser: functional core', () => {
   Test('requires parenthesized parameter lists on every parameterized declaration', async () => {
     const omitted = [
       'view Main { }',
-      'layout Stack { }',
-      'ui Shell { }',
-      'type Response is one of Done dialogue Confirm responds Response { }',
+      'type Response is one of Done view Confirm responds Response { }',
       'action Save { }',
       'function Label { return "Label" }',
     ]

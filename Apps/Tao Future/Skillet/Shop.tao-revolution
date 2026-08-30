@@ -1,7 +1,7 @@
 // The shopping list. Lines arrive from the plan and from typing; the same ingredient across a week is
 // one line you tick once.
 
-ui ShoppingList() {
+view ShoppingList() {
    Title "Shop"
    Toolbar { ClearTheBought }
    state NewItem = ""

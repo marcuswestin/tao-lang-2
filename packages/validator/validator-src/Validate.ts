@@ -13,7 +13,6 @@ import {
 } from './validators/configured-values-validator'
 import { dataValidationChecks, validateDataFile } from './validators/data-validator'
 import { DesignValidator } from './validators/design-validator'
-import { DialogueValidator } from './validators/dialogue-validator'
 import { ExpressionsValidator } from './validators/expressions-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
@@ -22,6 +21,7 @@ import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
+import { ResponsesValidator } from './validators/responses-validator'
 import { StateValidator } from './validators/StateValidator'
 import { testValidationChecks } from './validators/tests-validator'
 import { typeValidationChecks } from './validators/types-validator'
@@ -51,7 +51,7 @@ const nodeValidationChecks = NodeValidation.compile(
     configurationValidationChecks,
     completenessValidationChecks,
     preludeValidationChecks,
-    DialogueValidator.checks,
+    ResponsesValidator.checks,
     navigationValidationChecks,
     unitsValidationChecks,
     bridgeValidationChecks,

@@ -15,7 +15,7 @@ command NewRecipe {
       open RecipeLink(Recipe)
 }  }
 
-ui RecipeLibrary() {
+view RecipeLibrary() {
    Title "Recipes"
    Search Query
    Toolbar { NewRecipe [primary], ImportRecipe }
@@ -56,11 +56,11 @@ file view RecipeCard(Recipe) {
             if Recipe is Shared { Icon("link", Label: "Shared") [muted] }
 }  }  }  }
 
-ui NoRecipeSelected() {
+view NoRecipeSelected() {
    render EmptyState(Icon: "book", Title: "Pick a recipe", Body: "Your library stays here while a recipe opens beside it, or on the next screen.")
 }
 
-ui RecipeScreen(Recipe) {
+view RecipeScreen(Recipe) {
    Title Recipe.Title
    Toolbar { Cook [primary], Plan, Share, Delete }
    // Who else has this open. Two cooks in one kitchen is the ordinary case, not an edge case.
@@ -144,7 +144,7 @@ ui RecipeScreen(Recipe) {
 }  }  }  }
 
 // Creating: a draft, because the row does not exist yet.
-file dialogue NewRecipeSheet(Household) responds Recipe {
+file view NewRecipeSheet(Household) responds Recipe {
    draft New = Recipe for new { Household, Course: Dinner, Servings: 4 }
    action Add() runs single {
       when save New {
@@ -167,7 +167,7 @@ file dialogue NewRecipeSheet(Household) responds Recipe {
 
 // Editing: the row exists and its fields stand on their own, so every input writes through. There is no
 // save button, no dirty state, and nothing to discard.
-file ui RecipeEditor(Recipe) {
+file view RecipeEditor(Recipe) {
    Title "Edit recipe"
    Toolbar { Done [primary] }
    command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
@@ -215,7 +215,7 @@ file ui RecipeEditor(Recipe) {
 
 // -- Sharing --------------------------------------------------------------------------------------------------
 
-file ui ShareRecipe(Recipe) {
+file view ShareRecipe(Recipe) {
    Title "Share recipe"
    action Start() runs single {
       when StartSharing(Recipe) { done -> SharedRecipe { share SharedRecipeLink(SharedRecipe); dismiss } }
@@ -249,7 +249,7 @@ file ui ShareRecipe(Recipe) {
 
 // The public face of a recipe. `SharedRecipe` is a different, read-only type: the private fields are
 // not absent by convention, they are not in the type.
-public ui SharedRecipeScreen(SharedRecipe) {
+public view SharedRecipeScreen(SharedRecipe) {
    Title SharedRecipe.Title
    render ScrollView [screen] {
       guard SharedRecipe

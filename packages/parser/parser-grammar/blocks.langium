@@ -29,7 +29,7 @@ AppBlockDiagnosticStatement:
     Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep | StateDeclaration | EntityQueryDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 Declaration:
-    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | LayoutDeclaration | FrameDeclaration | UiDeclaration | DialogueDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration;
+    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration;
@@ -37,10 +37,10 @@ type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePa
 // View statements are the declarations and render sites accepted by view/layout bodies.
 type ViewStatement = AliasDeclaration | StateDeclaration | EntityQueryDeclaration | ActionDeclaration | TagStatement | Render | RenderSlotDeclaration | RenderSlotUse | CallerContentStatement | EventHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement;
-type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | VisualDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
-type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | VisualDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
-type ParameterizedDeclaration = VisualDeclaration | ActionDeclaration | FunctionDeclaration;
-type BlockStatementOwner = AppDeclaration | ProjectDeclaration | VisualDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;
+type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
+type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
+type ParameterizedDeclaration = ViewDeclaration | ActionDeclaration | FunctionDeclaration;
+type BlockStatementOwner = AppDeclaration | ProjectDeclaration | ViewDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;
 type CaseDeclaration = CaseSetCase | EntityDataField;
 // OwnedBlockStatement includes test steps and other context-only statements for generic block traversal.
 type OwnedBlockStatement = ActionStatement | AppStatement | ProjectStatement | Statement;

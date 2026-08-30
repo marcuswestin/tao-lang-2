@@ -104,14 +104,14 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('provides default Tao props to app root injected layouts', async () => {
+  Test('provides default Tao props to app root injected views', async () => {
     await testCompileApp(
       `
         app RootInjectedLayoutDirectionApp {
             view MainView
         }
 
-        layout Screen() {
+        view Screen() {
             render inject Content @@content, Layout @@layout \`\`\`ts
                 return TR.Views.View(
                   { children: Content, layout: Layout },

@@ -77,7 +77,7 @@ Describe('Expo runtime', () => {
           use Col, FormButton, Text from @tao/ui
           use NestedStack from ./
 
-          workspace ui Home() {
+          workspace view Home() {
             action Open() { present Detail() in NestedStack }
             render Col() {
               Text("Home")
@@ -85,7 +85,7 @@ Describe('Expo runtime', () => {
             }
           }
 
-          ui Detail() { render Text("Stable detail") }
+          view Detail() { render Text("Stable detail") }
         `,
       },
       screen => {
@@ -122,13 +122,13 @@ Describe('Expo runtime', () => {
     })
 
     try {
-      const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
-      const windowRoot = TR.Navigation.UI({
+      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+      const windowRoot = TR.Navigation.View({
         name: 'Window root',
         render: () => createElement(RN.Text, null, 'Window root'),
       })
-      const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
-      const notice = TR.Navigation.UI({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
+      const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+      const notice = TR.Navigation.View({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
       const stack = configuredStack('HardwareBackTest', home)
       const window = configuredSlot('HardwareBackWindow', windowRoot)
       const app = TR.Navigation.App({
@@ -177,9 +177,9 @@ Describe('Expo runtime', () => {
       )
     }
 
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
-    const first = TR.Navigation.UI({ name: 'First overlay', render: () => createElement(StatefulOverlay) })
-    const second = TR.Navigation.UI({
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+    const first = TR.Navigation.View({ name: 'First overlay', render: () => createElement(StatefulOverlay) })
+    const second = TR.Navigation.View({
       name: 'Second overlay',
       render: () => createElement(RN.Text, null, 'Second overlay'),
     })
@@ -221,10 +221,10 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Home')
   })
 
-  Test('stacks independent dialogue occurrences and settles only their own suspended asks', async () => {
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+  Test('stacks independent asked view occurrences and settles only their own suspended asks', async () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
     const occurrenceProps = new Map<string, TR.TaoProps | undefined>()
-    const dialogue = TR.Navigation.Dialogue({
+    const confirm = TR.Navigation.View({
       name: 'Confirm',
       render: (arguments_, taoProps) => {
         const title = String(arguments_['Title']?.evaluate().jsValue)
@@ -239,9 +239,9 @@ Describe('Expo runtime', () => {
         )
       },
     })
-    const stack = configuredStack('DialogueHostStack', home)
+    const stack = configuredStack('AskHostStack', home)
     const app = TR.Navigation.App({
-      name: 'Dialogue Host App',
+      name: 'Ask Host App',
       navigator: () => stack,
       auxiliaries: () => ({}),
     })
@@ -252,12 +252,12 @@ Describe('Expo runtime', () => {
     act(() => {
       first = TR.Navigation.Ask(
         { navigation: stack },
-        dialogue,
+        confirm,
         { Result: TR.Value('first'), Title: TR.Value('First') },
       )
       second = TR.Navigation.Ask(
         { navigation: stack },
-        dialogue,
+        confirm,
         { Result: TR.Value('second'), Title: TR.Value('Second') },
       )
     })
@@ -279,9 +279,9 @@ Describe('Expo runtime', () => {
   Test('replaces keyed app toasts, coexists across keys, restarts expiry, and ignores Back', () => {
     jest.useFakeTimers()
     try {
-      const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
       const toast = (name: string, text: string) =>
-        TR.Navigation.UI({ name, render: () => createElement(RN.Text, null, text) })
+        TR.Navigation.View({ name, render: () => createElement(RN.Text, null, text) })
       const first = toast('First saved', 'First saved')
       const replacement = toast('Replacement saved', 'Replacement saved')
       const other = toast('Other notice', 'Other notice')
@@ -348,15 +348,15 @@ Describe('Expo runtime', () => {
   })
 
   Test('resolves contextual overlays to a SlotNav and dismisses its overlay stack before content', () => {
-    const first = TR.Navigation.UI({
+    const first = TR.Navigation.View({
       name: 'Slot overlay one',
       render: () => createElement(RN.Text, null, 'Slot overlay one'),
     })
-    const second = TR.Navigation.UI({
+    const second = TR.Navigation.View({
       name: 'Slot overlay two',
       render: () => createElement(RN.Text, null, 'Slot overlay two'),
     })
-    const home = TR.Navigation.UI({
+    const home = TR.Navigation.View({
       name: 'Slot home',
       render: (_arguments, taoProps) =>
         createElement(RN.Pressable, {
@@ -410,7 +410,7 @@ Describe('Expo runtime', () => {
       })
     }
 
-    const detail = TR.Navigation.UI({
+    const detail = TR.Navigation.View({
       name: 'Nested detail',
       render: (_arguments, taoProps) =>
         createElement(GeneratedViewBoundary, {
@@ -419,7 +419,7 @@ Describe('Expo runtime', () => {
           label: 'Dismiss nested detail',
         }),
     })
-    const overlay = TR.Navigation.UI({
+    const overlay = TR.Navigation.View({
       name: 'Nested overlay',
       render: (_arguments, taoProps) =>
         createElement(
@@ -433,7 +433,7 @@ Describe('Expo runtime', () => {
           }),
         ),
     })
-    const home = TR.Navigation.UI({
+    const home = TR.Navigation.View({
       name: 'Nested home',
       render: (_arguments, taoProps) =>
         createElement(
@@ -485,7 +485,7 @@ Describe('Expo runtime', () => {
 
         type ConfirmResult is one of Confirmed
 
-        ui Home() { render Wrapper()[gap 9] }
+        view Home() { render Wrapper()[gap 9] }
 
         view Wrapper() {
           render Col() {
@@ -501,15 +501,15 @@ Describe('Expo runtime', () => {
           }
           render Col() {
             Text(Status)
-            Button("Open nested dialogue") { on press Open }
+            Button("Open nested ask") { on press Open }
           }
         }
 
-        dialogue Confirm() responds ConfirmResult {
+        view Confirm() responds ConfirmResult {
           action ConfirmIt() { respond Confirmed }
           render Col() {
-            Text("Nested dialogue")
-            Button("Confirm nested dialogue") { on press ConfirmIt }
+            Text("Nested ask")
+            Button("Confirm nested ask") { on press ConfirmIt }
           }
         }
       `,
@@ -520,12 +520,12 @@ Describe('Expo runtime', () => {
         })
         Expect(gapNineViews).toHaveLength(1)
 
-        fireEvent.press(screen.getByText('Open nested dialogue'))
+        fireEvent.press(screen.getByText('Open nested ask'))
         await act(async () => {})
-        ExpectScreen(screen).toHaveText('Nested dialogue')
-        fireEvent.press(screen.getByText('Confirm nested dialogue'))
+        ExpectScreen(screen).toHaveText('Nested ask')
+        fireEvent.press(screen.getByText('Confirm nested ask'))
         await act(async () => {})
-        Expect(screen.queryByText('Nested dialogue')).toBeNull()
+        Expect(screen.queryByText('Nested ask')).toBeNull()
         ExpectScreen(screen).toHaveText('Confirmed')
       },
     )
@@ -551,8 +551,8 @@ Describe('Expo runtime', () => {
       )
     }
 
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(Home) })
-    const detail = TR.Navigation.UI({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(Home) })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
     stack = configuredStack('RuntimeNavigationHostTest', home)
     const app = TR.Navigation.App({
       name: 'Runtime Navigation Host App',
@@ -588,8 +588,8 @@ Describe('Expo runtime', () => {
       )
     }
 
-    const home = TR.Navigation.UI({ name: 'Home', render: () => createElement(StatefulHome) })
-    const settings = TR.Navigation.UI({
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(StatefulHome) })
+    const settings = TR.Navigation.View({
       name: 'Settings',
       render: () => createElement(RN.Text, null, 'Settings content'),
     })
@@ -638,7 +638,7 @@ Describe('Expo runtime', () => {
         @window SlotNav { Initial WindowRoot }
       }
 
-      workspace ui Home() {
+      workspace view Home() {
         action Open() {
           present Notice() in SharedGeneratedApp@window
         }
@@ -648,11 +648,11 @@ Describe('Expo runtime', () => {
         }
       }
 
-      workspace ui Notice() {
+      workspace view Notice() {
         render Text("${label} notice")
       }
 
-      workspace ui WindowRoot() {
+      workspace view WindowRoot() {
         render Text("${label} window")
       }
     `
@@ -695,7 +695,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        ui Home() { render Editor() }
+        view Home() { render Editor() }
 
         view Editor() {
           action Save() {
@@ -706,7 +706,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        ui SavedToast() { render Text("Saved") }
+        view SavedToast() { render Text("Saved") }
       `,
       async screen => {
         jest.useFakeTimers()

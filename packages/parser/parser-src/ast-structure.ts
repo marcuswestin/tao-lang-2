@@ -160,7 +160,7 @@ export function importableValueDeclarationsInFile(
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
-  | AST.UiDeclaration
+  | AST.ViewDeclaration
   | AST.CaseSetCase
 > {
   return [
@@ -271,7 +271,7 @@ export function isImportableValueDeclaration(
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
-  | AST.UiDeclaration
+  | AST.ViewDeclaration
 {
   return AST.isAliasDeclaration(node)
     || AST.isActionDeclaration(node)
@@ -279,7 +279,7 @@ export function isImportableValueDeclaration(
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)
-    || AST.isUiDeclaration(node)
+    || AST.isViewDeclaration(node)
 }
 
 /** ConfigurableDeclaration is an ordinary type whose primitive family is app, nav, or datasource. */
@@ -590,9 +590,30 @@ export function statementsOf(block: AST.Block | undefined): AST.Statement[] {
   return block?.statements || []
 }
 
-/** renderSlotDeclarationsOf returns the direct named visual slots owned by one frame. */
-export function renderSlotDeclarationsOf(frame: AST.FrameDeclaration): AST.RenderSlotDeclaration[] {
-  return frame.block.statements.filter(AST.isRenderSlotDeclaration)
+/** renderSlotDeclarationsOf returns the direct named visual slots owned by one view. */
+export function renderSlotDeclarationsOf(view: AST.ViewDeclaration): AST.RenderSlotDeclaration[] {
+  return view.block?.statements.filter(AST.isRenderSlotDeclaration) ?? []
+}
+
+/**
+ * viewPlacesCallerContent reports whether a view's body places `@@content` — in its render tree or
+ * by naming the channel in a render injection — which is the placement that makes the view accept
+ * unnamed caller content. Content acceptance is inferred from the body, never declared.
+ */
+export function viewPlacesCallerContent(view: AST.ViewDeclaration): boolean {
+  if (!view.block) {
+    const target = viewAliasTarget(view)
+    return AST.isViewDeclaration(target) ? viewPlacesCallerContent(target) : false
+  }
+  for (const node of streamAllContents(view.block)) {
+    if (AST.isCallerContentStatement(node)) {
+      return true
+    }
+    if (AST.isRenderAmbientChannel(node) && node.channel === '@@content') {
+      return true
+    }
+  }
+  return false
 }
 
 /** renderSlotUsesOf returns direct slot placements or fills from one render block. */
@@ -714,8 +735,8 @@ export function whenExpressionOutcomes(
 }
 
 /** findOwningView returns the renderable declaration that owns `node`, if any. */
-export function findOwningView(node: AST.Node): AST.VisualDeclaration | undefined {
-  return findAncestor(node, AST.isVisualDeclaration)
+export function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined {
+  return findAncestor(node, AST.isViewDeclaration)
 }
 
 /** findOwningAction returns the action declaration that owns `node`, if any. */

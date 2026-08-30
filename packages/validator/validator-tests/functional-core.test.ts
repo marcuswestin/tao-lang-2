@@ -8,13 +8,13 @@ import {
   accepts,
   app,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
   testValidateCode,
   testValidateCodeWithErrors,
 } from './test-validate'
 
-const runtimeViews = `${stubLayout('Stack')}${stubView('Text', 'Value text')}`
+const runtimeViews = `${stubContainer('Stack')}${stubView('Text', 'Value text')}`
 
 function functionalApp(body: string, declarations = ''): string {
   return `${declarations}\n${app(body, runtimeViews)}`

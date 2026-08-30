@@ -31,12 +31,12 @@ guard default {
 // -- Frames and layouts ---------------------------------------------------------------------------------------
 
 // A layout places caller content and nothing else.
-layout Centered() {
+view Centered() {
    render Col [screen, content center center] { @@content }
 }
 
 // Named slots beside `@@content`, so a caller can fill more than one region.
-frame Section(Title text) {
+view Section(Title text) {
    @actions = empty
 
    render Col [gap sm] {
@@ -47,8 +47,8 @@ frame Section(Title text) {
       Col [gap xs] { @@content }
 }  }
 
-// The design's `EmptyState` pattern names the slots; this frame fills them.
-frame EmptyState(Icon icon, Title text, Body text) {
+// The design's `EmptyState` pattern names the slots; this view fills them.
+view EmptyState(Icon icon, Title text, Body text) {
    render Col [pattern EmptyState] {
       Icon(Icon) [@icon]
       Text(Title) [@title]
@@ -99,7 +99,7 @@ view IngredientLine(Ingredient, Scale number (default 1)) {
 // -- The one question ---------------------------------------------------------------------------------------
 
 // Back, tapping outside, or Cancel answers no. `stop unless ask Confirm(…)` is the idiom.
-dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
+view Confirm(Question text, Body text, Verb text) responds yes / no {
    render Col(Label: Question) [card, width max 480, gap md] {
       Text(Question) [sectionTitle]
       Text(Body) [body]
@@ -109,7 +109,7 @@ dialogue Confirm(Question text, Body text, Verb text) responds yes / no {
          Button(Verb) [destructive] { on press -> respond yes }
 }  }  }
 
-ui Notice(Message text) {
+view Notice(Message text) {
    render Text(Message) [toast]
 }
 
@@ -124,7 +124,7 @@ command FindAnything {
    does { present FindSheet() as palette }
 }
 
-ui FindSheet() {
+view FindSheet() {
    Title "Find anything"
    Search Query
    // One query over two fields and two entities, ranked by relevance.

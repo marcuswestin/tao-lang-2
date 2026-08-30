@@ -8,7 +8,7 @@ import {
   accepts,
   app,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
   testValidateCodeWithErrors,
   validationErrorMessages,
@@ -16,7 +16,7 @@ import {
 
 const invocationMessages = InvocationsValidator.messages
 const textView = stubView('Text', 'Value text')
-const stackLayout = stubLayout('Stack')
+const stackLayout = stubContainer('Stack')
 
 function actionApp(body: string, extra = ''): string {
   return app(`${body}\nrender Text("Ready")`, `${textView}\n${extra}`)

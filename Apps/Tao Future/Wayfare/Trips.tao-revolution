@@ -18,7 +18,7 @@ command NewTrip {
       open TripLink(Trip)
 }  }
 
-ui TripLibrary() {
+view TripLibrary() {
    Title "Trips"
    Toolbar { NewTrip [primary] }
    query MyTrips from Trips { order by Begins desc } // the access rule already scopes this to my trips
@@ -45,7 +45,7 @@ ui TripLibrary() {
                   Text(TravelerCount(Trip.Members[is Joined].Count)) [chip]
 }  }  }  }  }  }
 
-file dialogue NewTripSheet() responds Trip {
+file view NewTripSheet() responds Trip {
    draft New = Trip for new { Begins: today, Ends: today + 3 days }
    action Create() runs single {
       when CreateTrip(New.Name, New.Summary, New.Begins, New.Ends) {
@@ -68,13 +68,13 @@ file dialogue NewTripSheet() responds Trip {
          Button("Create trip", Disabled: New.Incomplete, Busy: Create running) [primary] { on press Create }
 }  }  }
 
-ui NoTripOpen() {
+view NoTripOpen() {
    render EmptyState(Icon: "map", Title: "Open a trip", Body: "Its days open here, and each day's stops beside them.")
 }
 
 // -- One trip -----------------------------------------------------------------------------------------------
 
-ui TripOverview(Trip) {
+view TripOverview(Trip) {
    Title Trip.Name
    Toolbar { AddDay [primary], EditTrip, ShareThis }
    presence Planners on Trip
@@ -149,7 +149,7 @@ ui TripOverview(Trip) {
 
 // The trip's own fields stand on their own, so the editor writes through; `validate Ends >= Begins` holds
 // at every keystroke's commit and shows its sentence in Problems.
-file ui TripEditor(Trip) {
+file view TripEditor(Trip) {
    Title "Edit trip"
    Toolbar { Done [primary] }
    command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
@@ -166,9 +166,9 @@ file ui TripEditor(Trip) {
          Problems(Trip)
 }  }  }
 
-// A dialogue rather than a blind create: the entity's `validate` (inside the trip's dates) and
+// A responding view rather than a blind create: the entity's `validate` (inside the trip's dates) and
 // `unique Trip, Date` reject a bad day with a sentence.
-file dialogue NewDaySheet(Trip) responds Day {
+file view NewDaySheet(Trip) responds Day {
    draft New = Day for new {
       Trip
       Date: if Trip.Days is empty then Trip.Begins else Trip.Days.Last.Date + 1 day
@@ -223,7 +223,7 @@ view TravelerPanel(Trip) {
       if cannot create Member in Trip.Members { Text("Owners and editors can invite people.") [caption] }
 }  }
 
-file dialogue InviteSheet(Trip) responds Member {
+file view InviteSheet(Trip) responds Member {
    draft New = Member for new { Trip, Role: Editor }
    let Grantable = Role.Cases where can create Member in Trip.Members { Role } // editors mint editors and viewers; owners any
    action Send() runs single {
@@ -244,7 +244,7 @@ file dialogue InviteSheet(Trip) responds Member {
          Button("Create invitation", Busy: Send running) [primary] { on press Send }
 }  }  }
 
-ui JoinTrip(Code secret) {
+view JoinTrip(Code secret) {
    Title "Join trip"
    let Invited = InvitedTrip by Code
    state Refusal = ""
@@ -269,7 +269,7 @@ ui JoinTrip(Code secret) {
 
 // -- Sharing --------------------------------------------------------------------------------------------------
 
-file ui ShareTripSheet(Trip) {
+file view ShareTripSheet(Trip) {
    Title "Share itinerary"
    action Start() runs single {
       when ShareTrip(Trip) { done -> SharedTrip { share SharedTripLink(SharedTrip); dismiss } }
@@ -295,7 +295,7 @@ file ui ShareTripSheet(Trip) {
                Button("Share link") [primary] { on press -> share SharedTripLink(publish Trip as SharedTrip) }
 }  }  }  }  }
 
-public ui SharedTripScreen(SharedTrip) {
+public view SharedTripScreen(SharedTrip) {
    Title SharedTrip.Name
    render ScrollView [screen] {
       guard SharedTrip

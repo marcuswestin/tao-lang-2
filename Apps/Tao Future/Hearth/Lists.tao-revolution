@@ -2,7 +2,7 @@
 
 phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"
 
-ui HearthListIndex() {
+view HearthListIndex() {
    Title "Lists"
    Toolbar { NewList [primary] }
    query Lists from MyHome.Lists { }
@@ -43,11 +43,11 @@ ui HearthListIndex() {
             on select -> open ListLink(HearthList)
 }  }  }  }
 
-ui HearthListWelcome() {
+view HearthListWelcome() {
    render EmptyState(Icon: "sidebar.left", Title: "Choose a list", Body: "Your lists stay here while their details open beside them, or on the next screen.")
 }
 
-file dialogue NewListSheet(Home) responds HearthList {
+file view NewListSheet(Home) responds HearthList {
    draft New = HearthList for new { Home, Kind: Chores, Color: Home.Accent }
    action Add() runs single {
       when save New { saved -> HearthList { respond HearthList } }
@@ -67,7 +67,7 @@ file dialogue NewListSheet(Home) responds HearthList {
 
 // -- One list -----------------------------------------------------------------------------------------------
 
-ui HearthListScreen(HearthList) {
+view HearthListScreen(HearthList) {
    Title HearthList.Name
    Toolbar { Rename, ShareThis, DeleteThis }
    Search Find
@@ -180,7 +180,7 @@ ui HearthListScreen(HearthList) {
    }  }  }  }  }  }
 
 // Renaming needs no draft: the row exists and each field stands on its own.
-file ui RenameList(HearthList) {
+file view RenameList(HearthList) {
    Title "Rename list"
    Toolbar { Done [primary] }
    command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
@@ -192,7 +192,7 @@ file ui RenameList(HearthList) {
 
 // -- One item ------------------------------------------------------------------------------------------------
 
-ui HearthItemScreen(Item) {
+view HearthItemScreen(Item) {
    Title Item.Title
    Toolbar { OpenSeparately, DeleteItem }
    presence Lookers on Item
@@ -285,7 +285,7 @@ ui HearthItemScreen(Item) {
 
 // -- Sharing --------------------------------------------------------------------------------------------------
 
-file ui ShareListSheet(HearthList) {
+file view ShareListSheet(HearthList) {
    Title "Share list"
    action Start() runs single {
       when ShareList(HearthList) {
@@ -312,7 +312,7 @@ file ui ShareListSheet(HearthList) {
                Button("Share link") [primary] { on press -> share SharedListLink(publish HearthList as SharedList) }
 }  }  }  }  }
 
-public ui SharedListScreen(SharedList) {
+public view SharedListScreen(SharedList) {
    Title SharedList.Name
    render ScrollView [screen] {
       guard SharedList

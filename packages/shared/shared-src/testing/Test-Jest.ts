@@ -1,6 +1,6 @@
 import { type JestApi, setTestRuntime, type TestRuntime } from './Test'
 
-export { app, fence, stubLayout, stubView, tsFence } from './TaoFixtures'
+export { app, fence, stubContainer, stubView, tsFence } from './TaoFixtures'
 export {
   AfterAll,
   AfterEach,

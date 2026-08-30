@@ -35,7 +35,7 @@ The old Tao repo has useful precedent in app-level design blocks, semantic varia
 - ~~How are the first tokens and named specs declared?~~ **Implemented:** flat `name value`
   tokens and `name [clauses]` bundles inside `design Name { ... }`. Recipe and variant spelling
   remains open.
-- Which visuals can be applied to `layout` and `frame` declarations, versus only to `view`
+- Which visuals can be applied to content-accepting wrapper views, versus only to leaf views
   declarations and view-like primitives?
 - How much of "beautiful defaults" should ship before author-controlled tokens and recipes? A deterministic baseline can be useful, but it should not obscure the source-level design system contract.
 - Should recipe variants be declared through a standalone `recipe Button { variant ... }` surface, named combined specs, generated semantic components, or a staged combination?

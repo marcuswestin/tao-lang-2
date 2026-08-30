@@ -94,7 +94,7 @@ data Comments / Comment {
    order by Ordering
 }
 
-ui FrontPage() {
+view FrontPage() {
    query Stories as TopStories {
       where Rank >= 1
       limit 30
@@ -136,7 +136,7 @@ view StoryRow(Story) {
          Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
 }  }  }
 
-ui StoryScreen(Story) {
+view StoryScreen(Story) {
    query Thread from Story.Comments { }
    render Col() [screen] {
       Col() [header] {

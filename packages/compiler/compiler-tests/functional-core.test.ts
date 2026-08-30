@@ -38,7 +38,7 @@ Describe('compiler: functional core', () => {
           }
         }
       }
-      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
@@ -50,7 +50,7 @@ Describe('compiler: functional core', () => {
     Expect(compiled.files[0]?.code).toContain('if (TR.Binary(')
   })
 
-  Test('lowers typed defaults in view, layout, action, and function callee scopes', async () => {
+  Test('lowers typed defaults in view, action, and function callee scopes', async () => {
     const compiled = await Compiler.compileCode(`
       app DefaultsApp { view Main }
       function Label(Value text default "Save") returns text { return Value }
@@ -58,7 +58,7 @@ Describe('compiler: functional core', () => {
         action Submit(Message text default "Saved") { }
         render Card(){ Greeting() }
       }
-      layout Card(Gap number default 8) { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Card(Gap number default 8) { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
       view Greeting(Title text default "Welcome") { render inject \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
@@ -95,7 +95,7 @@ Describe('compiler: functional core', () => {
           }
         }
       }
-      layout Stack() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 

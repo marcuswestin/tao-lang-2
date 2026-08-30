@@ -1,10 +1,10 @@
 // Getting in, Today, who lives here, and settings.
 
-ui Loading() {
+view Loading() {
    render Col [screen, content center center] { Spinner(Label: "Opening Hearth…") }
 }
 
-ui Welcome() {
+view Welcome() {
    render ScrollView [screen] {
       Col [page, width max 560, content center center] {
          Icon("flame") [size 48, ink accent, decorative]
@@ -69,7 +69,7 @@ file view StartHomePanel() {
       Button("Create home", Disabled: New.Incomplete, Busy: Create running) [primary] { on press Create }
 }  }
 
-ui JoinHome(Code secret) {
+view JoinHome(Code secret) {
    Title "Join home"
    let Invited = InvitedHome by Code
    state Refusal = ""
@@ -94,7 +94,7 @@ ui JoinHome(Code secret) {
 
 // -- Today ---------------------------------------------------------------------------------------------------
 
-ui TodayScreen() {
+view TodayScreen() {
    Title "Today at { MyHome.Name }"
    Toolbar { AddSomething [primary] }
    query DueToday from MyHome.Lists.Items {
@@ -127,7 +127,7 @@ ui TodayScreen() {
 
 // -- People -----------------------------------------------------------------------------------------------------
 
-ui PeopleScreen() {
+view PeopleScreen() {
    Title "People"
    Toolbar { InviteSomeone }
    query Members from MyHome.Memberships { order by JoinedAt }
@@ -165,7 +165,7 @@ ui PeopleScreen() {
                         on press -> if ask Confirm("Remove { Member.Person.Name }?", Body: "They will lose access to this home.", Verb: "Remove") { delete Member }
 }  }  }  }  }  }  }  }
 
-file dialogue InviteSheet(Home) responds Invite {
+file view InviteSheet(Home) responds Invite {
    draft New = Invite for new { Home, Role: Adult }
    let Grantable = Role.Cases where can create Invite in Home.Invites { Role } // only an owner may mint an owner
    action Send() runs single {
@@ -187,7 +187,7 @@ file dialogue InviteSheet(Home) responds Invite {
 
 // -- Settings ------------------------------------------------------------------------------------------------------
 
-ui SettingsScreen() {
+view SettingsScreen() {
    Title "Settings"
 
    command Leave {

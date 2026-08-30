@@ -110,12 +110,8 @@ function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration
 
   if (key === undefined && properties.length === 1 && properties[0]?.name === 'Initial') {
     const initialType = Type.ofConfigurationProperty(properties[0])
-    if (isPrimitive(initialType, 'ui')) {
-      return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
-        readonly initial: TR.Presentable
-      }>`
-    }
-    if (isPresentableUnion(initialType)) {
+    // `nav` refines `view`, so a view-typed Initial accepts a presentable or a mounted nav value.
+    if (isPrimitive(initialType, 'view')) {
       return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
         readonly initial: TR.Presentable | TR.NavigationValue
       }>`
@@ -147,18 +143,11 @@ function hasSelectionConfigurationShape(
     && isPrimitive(Type.ofConfigurationProperty(label), 'text')
     && (icon === undefined || isPrimitive(Type.ofConfigurationProperty(icon), 'text'))
     && content !== undefined
-    && isPresentableUnion(Type.ofConfigurationProperty(content))
+    && isPrimitive(Type.ofConfigurationProperty(content), 'view')
 }
 
-function isPrimitive(type: ASTUtils.TaoType, primitive: 'text' | 'ui' | 'nav'): boolean {
+function isPrimitive(type: ASTUtils.TaoType, primitive: 'text' | 'view' | 'nav'): boolean {
   return type.kind === 'primitive' && type.primitive === primitive
-}
-
-function isPresentableUnion(type: ASTUtils.TaoType): boolean {
-  return type.kind === 'union'
-    && type.members.length === 2
-    && type.members.some(member => isPrimitive(member, 'ui'))
-    && type.members.some(member => isPrimitive(member, 'nav'))
 }
 
 function configurationPropertyType(property: AST.ConfigurationProperty): Compiled {

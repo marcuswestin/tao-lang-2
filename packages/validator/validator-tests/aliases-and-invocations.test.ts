@@ -8,7 +8,7 @@ import {
   accepts,
   app,
   rejects,
-  stubLayout,
+  stubContainer,
   stubView,
   testValidateCodeWithErrors,
   validationErrorMessages,
@@ -17,7 +17,7 @@ import {
 const aliasMessages = AliasesValidator.messages
 const invocationMessages = InvocationsValidator.messages
 const textView = stubView('Text', 'Value text')
-const stackLayout = stubLayout('Stack')
+const stackLayout = stubContainer('Stack')
 
 const eventViews = `
   ${stackLayout}

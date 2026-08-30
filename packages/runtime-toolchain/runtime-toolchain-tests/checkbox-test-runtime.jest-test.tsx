@@ -18,7 +18,7 @@ const checkboxApp = `
     }
   }
 
-  layout Stack() {
+  view Stack() {
     render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
       return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
     \`\`\`
