@@ -10,6 +10,9 @@ type TaoFileCompileOptions = {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   selectedAppName?: string
+  studioDataCatalog?: boolean
+  studio?: boolean
+  studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
   viewRegistrations?: string
 }
 

@@ -2062,6 +2062,16 @@ scenario Recipe.tablet {
 }
 ```
 
+- **A scenario subject is either an app run or one focused view render.** `run Skillet` exercises the
+  app, optionally at a destination; `render RecipeRow(Recipe: Shakshuka)` mounts one parameterized
+  view with named fixture-handle arguments. The two subjects are mutually exclusive.
+- **`prepare` is the scenario-local data delta.** It contains ordered `update <fixture-handle> { … }`
+  statements applied after the selected fixture and before the subject mounts. It does not introduce
+  a second fixture or hidden Studio-owned state.
+- **The first network spelling is exactly `network online` or `network offline`.** Latency, injected
+  failures, and synchronization controls remain part of the broader verification world and need their
+  own provider-addressed spelling before they join authored scenarios.
+
 - **There is no `design check` declaration.** The design's `rules { }` are the acceptance criteria,
   and each rule runs where it is actually decidable, so nothing is restated at a check site and
   nothing pretends to be a test that a machine cannot in fact perform:

@@ -58,65 +58,45 @@ Describe('repo lint contracts', () => {
     ))).toEqual([])
   })
 
-  Test('rejects a stale open directory status when every mapped file matches', () => {
-    const issues = wordFlowerDirectoryIssues(directory(
+  Test('allows either Next status when mapped content matches', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
       [file('WordFlower.tao-next', `${open}\nview Main { }`)],
-    ))
-
-    Expect(issues).toEqual([
-      'Next matches Current after mapping .tao-next files and normalizing the directory status and must be absorbed.',
-    ])
+    ))).toEqual([])
   })
 
-  Test('rejects an absorbed status while mapped content diverges', () => {
-    const issues = wordFlowerDirectoryIssues(directory(
+  Test('allows Current and Next content to diverge independently of status', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
       [file('WordFlower.tao-next', `${absorbed}\nview Main { render New() }`)],
-    ))
-
-    Expect(issues).toEqual([
-      'Next diverges from Current after mapping .tao-next files and must be open.',
-    ])
+    ))).toEqual([])
   })
 
-  Test('rejects an absorbed status while the mapped file set diverges', () => {
-    const issues = wordFlowerDirectoryIssues(directory(
+  Test('allows the Current and Next mapped file sets to diverge', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
       [
         file('WordFlower.tao-next', `${absorbed}\nview Main { }`),
         file('Shared.tao-next', 'let Shared = 1'),
       ],
-    ))
-
-    Expect(issues).toEqual([
-      'Next diverges from Current after mapping .tao-next files and must be open.',
-    ])
+    ))).toEqual([])
   })
 
-  Test('requires byte-identical mapped content after status normalization', () => {
-    const issues = wordFlowerDirectoryIssues(directory(
+  Test('ignores mapped whitespace differences', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }\n`)],
       [file('WordFlower.tao-next', `${absorbed}\nview Main { } \n`)],
-    ))
-
-    Expect(issues).toEqual([
-      'Next diverges from Current after mapping .tao-next files and must be open.',
-    ])
+    ))).toEqual([])
   })
 
-  Test('compares raw bytes without replacing invalid UTF-8', () => {
-    const issues = wordFlowerDirectoryIssues(directory(
+  Test('ignores mapped byte differences', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', absorbed, Buffer.from([...Buffer.from(absorbed), 0x80]))],
       [file('WordFlower.tao-next', absorbed, Buffer.from([...Buffer.from(absorbed), 0x81]))],
-    ))
-
-    Expect(issues).toEqual([
-      'Next diverges from Current after mapping .tao-next files and must be open.',
-    ])
+    ))).toEqual([])
   })
 
-  Test('includes hidden files in the repository directory absorption gate', async () => {
+  Test('ignores hidden file divergence in repository lint', async () => {
     const root = await FS.mkTmpDir(FS.resolvePath('tao-repo-lint-', FS.tmpdir()))
     try {
       await FS.writeText(
@@ -138,9 +118,7 @@ Describe('repo lint contracts', () => {
       await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
       await FS.mkdir(FS.resolvePath('packages', root))
 
-      Expect(await repoLintIssues(root)).toEqual([
-        'Apps/WordFlower/2 - Next diverges from Apps/WordFlower/1 - Current after mapping .tao-next files and must be open.',
-      ])
+      Expect(await repoLintIssues(root)).toEqual([])
     } finally {
       await FS.remove(root)
     }

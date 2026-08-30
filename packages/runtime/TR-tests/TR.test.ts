@@ -482,8 +482,15 @@ Describe('TR.TaoProps', () => {
     })
     const response = { respond: () => {} }
 
+    const studio: TR.TaoStudioIdentity = {
+      end: 24,
+      kind: 'render',
+      sourcePath: '/project/Main.tao',
+      start: 10,
+    }
     Expect(TR.TaoContext({
       layout: TR.Layout.create([['gap', 9]]),
+      studio,
       testTag: 'outer',
       callerProps: { app, navigation, response },
     })).toEqual({ app, navigation, response })

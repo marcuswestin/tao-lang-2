@@ -32,8 +32,14 @@ declaration object. Loading another generated module with an app of the same nam
 the first definition, so module evaluation and test order do not affect target resolution. The
 selected app remains the compiled module's default export for launch; filename and source order
 never choose it. A check drives whatever the running app presents, including overlays. Focused
-`render` subjects, authored row seeding, remote-provider adapters, and direct action/value tests
-remain deferred.
+`render` subjects, authored row seeding, remote-provider adapters, and direct action/value tests remain
+deferred in the test runner.
+
+Tao now accepts file-level `fixture` and `scenario` declarations for source-owned Studio examples.
+Those declarations are typechecked and emitted into Studio preview metadata, but ordinary production
+compilation treats them as metadata and `tao test` does not execute them yet. In particular, a
+scenario's focused `render View(Parameter: FixtureHandle)` subject must not be confused with a test
+check's `run AppName` subject. See `Tao Studio.md` for the implemented source and manifest contract.
 
 `tao test [path]` discovers inline and sidecar tests, compiles them to structured test-plan IR, and
 runs the plans through the repository's runtime Jest harness. Richer filtering, watch, JSON,
@@ -236,7 +242,8 @@ syntax.
 
 ## Non-goals
 
-The implemented surface intentionally omits direct state/value assertions, direct action calls,
-provider-row inspection or seeding, production datasource access, arbitrary sleeps, public runtime
-or test IDs, entity-ID row selection, focused render subjects, and raw navigation-state assertions.
-Those may be designed independently without weakening the current user-observable testing contract.
+The implemented test-runner surface intentionally omits direct state/value assertions, direct action
+calls, provider-row inspection or fixture/scenario seeding, production datasource access, arbitrary
+sleeps, public runtime or test IDs, entity-ID row selection, focused render subjects, and navigation
+diagnostic assertions. Those may be connected independently without weakening the current
+user-observable testing contract.

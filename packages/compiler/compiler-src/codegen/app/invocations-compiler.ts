@@ -1,26 +1,26 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
 export default {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
-  RenderStatementBody(render: AST.RenderStatement): Compiled {
+  RenderStatementBody(render: AST.RenderStatement, options: CodegenOptions = {}): Compiled {
     if (render.injection) {
       return Compile.Injection(render.injection)
     }
 
-    return Compile.Render(render)
+    return Compile.Render(render, options)
   },
 
   /** ViewRender compiles a Tao child view invocation into a JSX fragment. */
-  ViewRender(render: AST.ViewRender): Compiled {
-    return Compile.Render(render)
+  ViewRender(render: AST.ViewRender, options: CodegenOptions = {}): Compiled {
+    return Compile.Render(render, options)
   },
 
   /** Render compiles a Tao view invocation into a JSX fragment. */
-  Render(render: AST.Render): Compiled {
+  Render(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const invocation = ASTUtils.resolveRenderInvocation(render)
     const view = invocation.view
     Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
@@ -28,13 +28,13 @@ export default {
     Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
 
     const renderArguments = Compile.RenderArguments(invocation)
-    const taoProps = Compile.RenderTaoProps(render)
+    const taoProps = Compile.RenderTaoProps(render, options)
     const block = render.block
     const slotFills = AST.renderSlotUsesOf(block).filter(
       (use): use is AST.RenderSlotUse & { render: AST.ViewRender } => use.render !== undefined,
     )
     if (block && slotFills.length > 0) {
-      return Compile.RenderWithSlots(view, renderArguments, taoProps, block, slotFills)
+      return Compile.RenderWithSlots(view, renderArguments, taoProps, block, slotFills, options)
     }
     const children = AST.statementsOf(block).filter(statement =>
       !AST.isEventHandler(statement)
@@ -49,7 +49,7 @@ export default {
     return gen`
       <${gen.scopeName(view)}${renderArguments}${taoProps}>
         {TR.BlockScope(_Scope, _Scope => {
-          ${Compile.RenderBlockBody(block)}
+          ${Compile.RenderBlockBody(block, options)}
         })}
       </${gen.scopeName(view)}>
     `
@@ -71,6 +71,7 @@ export default {
     taoProps: Compiled,
     block: AST.Block,
     slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[],
+    options: CodegenOptions = {},
   ): Compiled {
     const setupStatements = block.statements.filter(statement =>
       AST.isAliasDeclaration(statement) || AST.isEntityQueryDeclaration(statement)
@@ -79,9 +80,9 @@ export default {
     return gen`
       <>
         {TR.BlockScope(_Scope, _Scope => {
-          ${gen.list(setupStatements, Compile.Statement)}
-          return <${gen.scopeName(view)}${renderArguments}${taoProps}${Compile.RenderSlotProps(slotFills)}>
-            ${Compile.RenderBlockFragments(content)}
+          ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
+          return <${gen.scopeName(view)}${renderArguments}${taoProps}${Compile.RenderSlotProps(slotFills, options)}>
+            ${Compile.RenderBlockFragments(content, options)}
           </${gen.scopeName(view)}>
         })}
       </>
@@ -89,9 +90,17 @@ export default {
   },
 
   /** RenderSlotProps compiles opaque named visual fills into private generated component props. */
-  RenderSlotProps(slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[]): Compiled {
+  RenderSlotProps(
+    slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[],
+    options: CodegenOptions = {},
+  ): Compiled {
     return gen` __taoSlots={{
-      ${gen.list(slotFills, fill => gen`${gen.jsLiteral(fill.slot.$refText)}: ${Compile.Render(fill.render)},`)}
+      ${
+      gen.list(
+        slotFills,
+        fill => gen`${gen.jsLiteral(fill.slot.$refText)}: ${Compile.Render(fill.render, options)},`,
+      )
+    }
     }}`
   },
 

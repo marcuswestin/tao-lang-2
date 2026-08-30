@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type Compiled, gen, resolveRef } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileDeclarationIdentity } from './declaration-identity'
 
@@ -16,8 +16,8 @@ type EffectiveAppConfiguration = Map<string, EffectiveAppProperty>
 
 export default {
   /** App compiles legacy root-view apps and complete primitive-headed app values. */
-  App(app: AST.AppDeclaration): Compiled {
-    return isLegacyViewApp(app) ? compileLegacyViewApp(app) : compileAppValue(app)
+  App(app: AST.AppDeclaration, options: CodegenOptions = {}): Compiled {
+    return isLegacyViewApp(app) ? compileLegacyViewApp(app, options) : compileAppValue(app, options)
   },
 
   /** AppValue compiles an inferred `let` whose value family is app. */
@@ -54,7 +54,7 @@ export default {
   },
 } as const
 
-function compileAppValue(app: AST.AppValueDeclaration): Compiled {
+function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions = {}): Compiled {
   const configuration = effectiveAppConfiguration(app)
   const navigator = configuration.get('Navigator')
   Assert.defined(navigator, 'validated app value has a Navigator')
@@ -105,11 +105,44 @@ function compileAppValue(app: AST.AppValueDeclaration): Compiled {
         )`
       : gen.noop()
   }
+      ${compileStudioSubject(options, definition)}
       return <TR.AppShell>
         <TR.Navigation.AppHost app={${gen.Name(definition)}} />
       </TR.AppShell>
     }
     ${gen.scopeName(app)} = ${gen.Name(definition)}
+  `
+}
+
+function compileStudioSubject(options: CodegenOptions, appDefinition?: { name: string }): Compiled {
+  if (!options.studio) {
+    return gen.noop()
+  }
+  const views = options.studioViews ?? []
+  return gen`
+    const _TaoStudioScenario = TR.Studio.Environment.useScenario()
+    const _TaoStudioFixture = TR.Studio.Environment.useFixture(${
+    options.studioDataCatalog ? gen.scopeName({ name: '_TaoDataCatalog' }) : 'undefined'
+  })
+    if (_TaoStudioScenario?.kind === 'view') {
+      const _TaoStudioViews: Readonly<Record<string, React.ElementType>> = {
+        ${gen.list(views, item => gen`${gen.jsLiteral(item.id)}: ${gen.scopeName(item.view)},`)}
+      }
+      const _TaoStudioView = _TaoStudioViews[_TaoStudioScenario.subjectId]
+      if (_TaoStudioView === undefined) throw new Error('Tao Studio focused view is not available in the selected app scope.')
+      if (!_TaoStudioFixture.ready) return null
+      const _TaoStudioArgs = Object.fromEntries(
+        Object.entries(_TaoStudioScenario.arguments ?? {}).map(([name, value]) => [
+          name,
+          TR.Studio.Environment.Argument(value, _TaoStudioFixture.handles),
+        ]),
+      )
+      return <TR.AppShell>{React.createElement(_TaoStudioView, ${
+    appDefinition === undefined
+      ? '_TaoStudioArgs'
+      : gen`{ ..._TaoStudioArgs, __tao: { app: ${gen.Name(appDefinition)} } }`
+  })}</TR.AppShell>
+    }
   `
 }
 
@@ -180,10 +213,11 @@ function restorationPolicy(
   }
 }
 
-function compileLegacyViewApp(app: AST.AppDeclaration): Compiled {
+function compileLegacyViewApp(app: AST.AppDeclaration, options: CodegenOptions = {}): Compiled {
   const roots = AST.blockStatements(app).filter(AST.isAppView)
   return gen`
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
+      ${compileStudioSubject(options)}
       ${gen.list(roots, Compile.AppView)}
     }
   `

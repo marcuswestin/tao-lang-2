@@ -1,9 +1,9 @@
 import { AST } from '@parser'
-import { type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { isRuntimeConfigurableDeclaration } from './configuration-compiler'
 
-type TaoFileCompileOptions = {
+type TaoFileCompileOptions = CodegenOptions & {
   configurationTypes?: string
   dataEntities?: readonly AST.EntityDataDeclaration[]
   emitDataCatalog?: boolean
@@ -52,7 +52,7 @@ export default {
 
       ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
 
-      ${gen.list(taoFile.statements, Compile.Statement, { newLines: 2 })}
+      ${gen.list(taoFile.statements, statement => Compile.Statement(statement, opts), { newLines: 2 })}
       ${registry}
       ${gen.textLines(exportLines)}
       ${gen.textLines(configurationTypes)}

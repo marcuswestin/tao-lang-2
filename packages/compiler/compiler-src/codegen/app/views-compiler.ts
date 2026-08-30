@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { compileRuntimeType } from './runtime-type-compiler'
@@ -57,15 +57,15 @@ export const ViewsCompiler = {
   },
 
   /** RenderBlockBody compiles render child setup statements followed by JSX children. */
-  RenderBlockBody(block: AST.Block): Compiled {
+  RenderBlockBody(block: AST.Block, options: CodegenOptions = {}): Compiled {
     const setupStatements = block.statements.filter(statement =>
       AST.isAliasDeclaration(statement) || AST.isEntityQueryDeclaration(statement)
     )
     const renders = block.statements.filter(AST.isRenderFragment)
     return gen`
-      ${gen.list(setupStatements, Compile.Statement)}
+      ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
       return <>
-        ${Compile.RenderBlockFragments(renders)}
+        ${Compile.RenderBlockFragments(renders, options)}
       </>
     `
   },
@@ -73,18 +73,24 @@ export const ViewsCompiler = {
   /** RenderBlockFragments compiles sequential render fragments around the first block-scoped guard. */
   RenderBlockFragments(
     statements: readonly AST.RenderFragment[],
+    options: CodegenOptions = {},
   ): Compiled {
     const guardIndex = statements.findIndex(AST.isGuardRenderStatement)
     if (guardIndex < 0) {
-      return gen.list(statements, Compile.RenderFragmentStatement)
+      return gen.list(statements, statement => Compile.RenderFragmentStatement(statement, options))
     }
     const guard = statements[guardIndex]
     if (!AST.isGuardRenderStatement(guard)) {
       return gen.noop()
     }
     return gen`
-      ${gen.list(statements.slice(0, guardIndex), Compile.RenderFragmentStatement)}
-      ${Compile.GuardRenderStatement(guard, statements.slice(guardIndex + 1))}
+      ${
+      gen.list(
+        statements.slice(0, guardIndex),
+        statement => Compile.RenderFragmentStatement(statement, options),
+      )
+    }
+      ${Compile.GuardRenderStatement(guard, statements.slice(guardIndex + 1), options)}
     `
   },
 
@@ -109,7 +115,7 @@ export const ViewsCompiler = {
   },
 } as const
 
-function ViewDeclaration(renderable: AST.ViewDeclaration): Compiled {
+function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOptions = {}): Compiled {
   // A pass-through alias has no body of its own: the imported target is bound under the alias's
   // name by the module's import bindings, so there is nothing to emit here.
   if (renderable.aliasTarget) {
@@ -130,9 +136,9 @@ function ViewDeclaration(renderable: AST.ViewDeclaration): Compiled {
     ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
-        ${gen.list(setupStatements, Compile.Statement)}
+        ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
         ${hostSlots}
-        ${gen.list(renderStatements, Compile.Statement)}
+        ${gen.list(renderStatements, statement => Compile.Statement(statement, options))}
       })
     }
   `

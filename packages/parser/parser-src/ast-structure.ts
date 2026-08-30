@@ -179,6 +179,35 @@ export function findRoot(node: AST.Node): AST.Node {
   return current
 }
 
+/** findOwningFixture returns the fixture containing `node`, if any. */
+export function findOwningFixture(node: AST.Node): AST.FixtureDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isFixtureDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+/** findOwningScenario returns the scenario containing `node`, if any. */
+export function findOwningScenario(node: AST.Node): AST.ScenarioDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isScenarioDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+/** fixtureValueDeclarations returns the account and created-row handles owned by a fixture. */
+export function fixtureValueDeclarations(fixture: AST.FixtureDeclaration): AST.FixtureValueDeclaration[] {
+  return fixture.block.entries.filter(AST.isFixtureValueDeclaration)
+}
+
 /** streamAllContents returns every descendant of `node` in document order. */
 export function streamAllContents(node: AST.Node): AST.Node[] {
   return Langium.AstUtils.streamAllContents(node).toArray()

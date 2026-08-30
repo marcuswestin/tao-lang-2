@@ -162,8 +162,8 @@ view StoryScreen(Story) {
          Row() [threadWrap] {
             Col() [thread] {
                Col() [storyCard, gap 4] {
-                  TextMultiline(Story.Title) [pageTitle]
                   Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
+                  TextMultiline(Story.Title) [pageTitle]
                }
                guard Thread {
                   loading -> { Col() [stateBox] {
@@ -202,6 +202,6 @@ view CommentRow(Comment) {
          Col() [rail] { }
       }
       Col() [commentCard, claim 1, compress] {
-         Text(Comment.Author) [author]
          TextMultiline(Comment.Text) [commentText]
+         Text(Comment.Author) [author]
 }  }  }

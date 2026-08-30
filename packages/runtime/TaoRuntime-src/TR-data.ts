@@ -17,6 +17,7 @@ import { RuntimeDataSchema } from './TR-data-schema'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
+import { StudioEnvironmentControls } from './TR-studio-environment'
 
 export { DataProviderControls, testProvider } from './TR-data-provider'
 
@@ -145,10 +146,15 @@ export type TaoKeyValueStorage = {
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 
 function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
+  const studioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
+  const declaration = React.useMemo<TaoDatasourceDeclaration>(() =>
+    studioProvider === source.declaration.provider
+      ? source.declaration
+      : Object.freeze({ ...source.declaration, provider: studioProvider }), [source.declaration, studioProvider])
   const storageKey = configuredStorageKey(source)
   React.useLayoutEffect(() => {
-    DataControls.BindConfigured(schema, source.declaration, storageKey, source.config)
-  }, [schema, source.declaration, storageKey, source.config])
+    DataControls.BindConfigured(schema, declaration, storageKey, source.config)
+  }, [schema, declaration, storageKey, source.config])
 }
 
 function configuredStorageKey(source: TaoConfiguredDatasource): string | undefined {

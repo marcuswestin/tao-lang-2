@@ -1,15 +1,15 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { isRuntimeConfigurableDeclaration } from './configuration-compiler'
 
 export const StatementsCompiler = {
   /** Statement compiles one Tao statement. */
-  Statement(statement: AST.Statement): Compiled {
+  Statement(statement: AST.Statement, options: CodegenOptions = {}): Compiled {
     return Switch.type(statement, {
       AliasDeclaration: Compile.AliasDeclaration,
-      AppDeclaration: Compile.App,
+      AppDeclaration: value => Compile.App(value, options),
       ActionDeclaration: Compile.ActionDeclaration,
       AsyncActionStatement: Compile.AsyncActionStatement,
       AdvanceStep: Compile.AdvanceStep,
@@ -30,12 +30,13 @@ export const StatementsCompiler = {
       ExpectGroupStep: Compile.ExpectGroupStep,
       ExpectNavigationTitleStep: Compile.ExpectNavigationTitleStep,
       ExpectScopeStep: Compile.ExpectScopeStep,
+      FixtureDeclaration: Compile.FixtureDeclaration,
       ExpectToolbarCommandStep: Compile.ExpectToolbarCommandStep,
-      ForStatement: Compile.ForStatement,
+      ForStatement: value => Compile.ForStatement(value, options),
       FunctionDeclaration: Compile.FunctionDeclaration,
-      GuardRenderStatement: statement => Compile.GuardRenderStatement(statement, []),
-      IfRenderStatement: Compile.IfRenderStatement,
-      WhenRenderStatement: Compile.WhenRenderStatement,
+      GuardRenderStatement: value => Compile.GuardRenderStatement(value, [], options),
+      IfRenderStatement: value => Compile.IfRenderStatement(value, options),
+      WhenRenderStatement: value => Compile.WhenRenderStatement(value, options),
       Injection: Compile.Injection,
       LoopSelectHandler: Compile.LoopSelectHandler,
       NavDeclaration: Compile.PrimitiveValueDeclaration,
@@ -44,11 +45,12 @@ export const StatementsCompiler = {
       TagPressStep: Compile.TagPressStep,
       ProjectDeclaration: Compile.ProjectDeclaration,
       PrimitiveDeclaration: Compile.PrimitiveDeclaration,
-      RenderStatement: Compile.RenderStatement,
+      RenderStatement: value => Compile.RenderStatement(value, options),
       RenderSlotDeclaration: Compile.RenderSlotDeclaration,
       RenderSlotUse: Compile.RenderSlotUse,
       CallerContentStatement: Compile.CallerContentStatement,
       RunStep: Compile.RunStep,
+      ScenarioDeclaration: Compile.ScenarioDeclaration,
       StateDeclaration: Compile.StateDeclaration,
       SubmitInputStep: Compile.SubmitInputStep,
       TagSubmitStep: Compile.TagSubmitStep,
@@ -58,8 +60,8 @@ export const StatementsCompiler = {
       TypeDeclaration: Compile.TypeDeclaration,
       UsePackageStatement: Compile.UsePackageStatement,
       UseStatement: Compile.UseStatement,
-      ViewDeclaration: Compile.ViewDeclaration,
-      ViewRender: Compile.ViewRender,
+      ViewDeclaration: value => Compile.ViewDeclaration(value, options),
+      ViewRender: value => Compile.ViewRender(value, options),
     })
   },
 
@@ -78,6 +80,16 @@ export const StatementsCompiler = {
 
   /** PrimitiveDeclaration is parsed semantic input and emits no runtime binding. */
   PrimitiveDeclaration(): Compiled {
+    return gen.noop()
+  },
+
+  /** FixtureDeclaration is Studio/test setup metadata and emits no production app binding. */
+  FixtureDeclaration(): Compiled {
+    return gen.noop()
+  },
+
+  /** ScenarioDeclaration is Studio/review metadata and emits no production app binding. */
+  ScenarioDeclaration(): Compiled {
     return gen.noop()
   },
 

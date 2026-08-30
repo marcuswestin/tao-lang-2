@@ -11,6 +11,15 @@ import type { TaoNavigationValue } from './TR-navigation'
 import type { TaoRuntimeApp } from './TR-navigation'
 import { ParentDirectionContext } from './TR-parent-direction'
 
+/** TaoStudioIdentity locates one concrete render occurrence in Tao source. */
+export type TaoStudioIdentity = {
+  end: number
+  kind: 'render'
+  ownerName?: string
+  sourcePath: string
+  start: number
+}
+
 /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
 export type TaoProps = TaoLayoutProps & {
   /** app is private Tao metadata for app-owned transient presentation such as keyed toasts. */
@@ -23,6 +32,8 @@ export type TaoProps = TaoLayoutProps & {
   navigationHostActive?: boolean
   /** response is private occurrence-owned ask metadata inherited by nested generated views. */
   response?: TaoResponseOccurrence
+  /** studio is private occurrence identity lowered only onto the concrete native root. */
+  studio?: TaoStudioIdentity
   /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
   designSpec?: TaoDesignSpec
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
@@ -60,8 +71,14 @@ type MergedTaoViewProps = {
   readonly direction?: TaoLayoutDirection
   readonly nativeProps: Record<string, unknown>
   readonly props: TaoResolvedLayoutProps | undefined
+  readonly studio: TaoStudioIdentity | undefined
   readonly testTag: string | undefined
 }
+
+// Injected visual implementations receive a deliberately layout-only value. Studio occurrence
+// identity follows that exact object through a private side table so standard-library wrappers do
+// not need a new language-visible ambient channel or access to the complete private __tao bag.
+const studioIdentityByVisualLayout = new WeakMap<object, TaoStudioIdentity>()
 
 /** TaoPropsControls exposes runtime Tao props merging for generated views. */
 export const TaoPropsControls = {
@@ -71,6 +88,7 @@ export const TaoPropsControls = {
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
+  visualNativeProps,
   visualLayout,
   visualTag,
 } as const
@@ -147,6 +165,9 @@ function mergeViewProps(
       resolveDesignProps(explicitLayoutProps, design),
       ParentDirectionContext.propsForDirection(parentDirection),
     ),
+    studio: studioIdentityInChain(props.__tao)
+      ?? studioIdentityForVisualLayout(props.layout)
+      ?? studioIdentityInChain(taoRuntimeProps),
     testTag: props.tag ?? testTag ?? testTagInChain(taoRuntimeProps) ?? testTagInChain(props.__tao),
   }
 }
@@ -183,12 +204,23 @@ function mergeResolvedStyles(
 /** Returns only the occurrence layout and immediate parent direction for an injected visual root. */
 function visualLayout(props: TaoProps | undefined): TaoVisualLayout | undefined {
   const mountedDesign = appInChain(props)?.design
-  return LayoutRuntime.resolveProps(
+  const resolved = LayoutRuntime.resolveProps(
     undefined,
     undefined,
     resolveDesignProps(props, mountedDesign),
     ParentDirectionContext.propsForDirection(ParentDirectionContext.use()),
   )
+  const studio = studioIdentityInChain(props)
+  if (studio === undefined) {
+    return resolved
+  }
+  const visualLayout = resolved ?? {}
+  studioIdentityByVisualLayout.set(visualLayout, studio)
+  return visualLayout
+}
+
+function studioIdentityForVisualLayout(layout: TaoVisualLayout | undefined): TaoStudioIdentity | undefined {
+  return layout === undefined ? undefined : studioIdentityByVisualLayout.get(layout)
 }
 
 /** Returns the nearest concrete occurrence tag without exposing any other Tao-owned metadata. */
@@ -196,9 +228,44 @@ function visualTag(props: TaoProps | undefined): string | undefined {
   return testTagInChain(props)
 }
 
+/** Lowers private Studio occurrence identity and the public test tag onto an injected native root. */
+function visualNativeProps(layout: TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
+  const nativeProps = nativePropsWithStudioIdentity({}, studioIdentityForVisualLayout(layout))
+  return tag ? { ...nativeProps, testID: tag } : nativeProps
+}
+
 function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknown> {
   const nativeProps = LayoutRuntime.nativePropsWithStyle(merged.nativeProps, merged.props, merged.direction)
-  return merged.testTag ? { ...nativeProps, testID: merged.testTag } : nativeProps
+  const nativePropsWithStudio = nativePropsWithStudioIdentity(nativeProps, merged.studio)
+  return merged.testTag ? { ...nativePropsWithStudio, testID: merged.testTag } : nativePropsWithStudio
+}
+
+function nativePropsWithStudioIdentity(
+  nativeProps: Record<string, unknown>,
+  studio: TaoStudioIdentity | undefined,
+): Record<string, unknown> {
+  if (!studio) {
+    return nativeProps
+  }
+  const dataSet = nativeProps['dataSet']
+  const existingDataSet = typeof dataSet === 'object' && dataSet !== null && !Array.isArray(dataSet)
+    ? dataSet as Record<string, unknown>
+    : {}
+  return {
+    ...nativeProps,
+    dataSet: {
+      ...existingDataSet,
+      taoStudio: JSON.stringify(studio),
+    },
+  }
+}
+
+/** Finds the outermost caller occurrence represented by one concrete runtime root. */
+function studioIdentityInChain(props: TaoProps | undefined): TaoStudioIdentity | undefined {
+  if (!props) {
+    return undefined
+  }
+  return studioIdentityInChain(props.callerProps) ?? props.studio
 }
 
 function testTagInChain(props: TaoProps | undefined): string | undefined {

@@ -40,8 +40,6 @@ view WorkspaceList() {
    render ScrollView() [screen] {
       Col() [width max 720, centered, gap 10] {
          Text("WordFlower") [title]
-         Text(WordFlowerTagline) [body]
-         // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
          guard Workspaces {
             loading -> { Spinner() }
             error -> Message {
@@ -56,6 +54,8 @@ view WorkspaceList() {
             }
             on submit AddWorkspace
          }
+         Text(WordFlowerTagline) [body]
+         // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
          Text(when WorkspaceName {
             empty -> "Workspace name is required"
             otherwise -> WorkspaceName
@@ -229,18 +229,19 @@ view NoWorkspacesYet() {
 
 // One row of the workspace library. Presenting is legal in any view body, so the row opens its own
 // workspace instead of receiving an `Open action()` from the screen that lists it.
+workspace
 view WorkspaceRow(Workspace) {
    render Col() [gap 6, pad 10] {
       Text(Workspace.Name) [body]
 
-      #openWorkspace
-      FormButton("Open workspace") {
-         on press -> { present WorkspaceDetail(Workspace) }
-      }
-
       #deleteWorkspace
       FormButton("Delete workspace") {
          on press -> { delete Workspace }
+      }
+
+      #openWorkspace
+      FormButton("Open workspace") {
+         on press -> { present WorkspaceDetail(Workspace) }
 }  }  }
 
 // One unfinished document: open it, finish it, or discard it.

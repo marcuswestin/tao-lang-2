@@ -1,0 +1,549 @@
+export const studioProtocolVersion = 1 as const
+export const studioProtocolChannel = 'tao-studio' as const
+export const studioSourceActionVersion = 1 as const
+
+export type StudioJsonObject = { readonly [key: string]: StudioJsonValue }
+
+export type StudioJsonValue =
+  | boolean
+  | null
+  | number
+  | readonly StudioJsonValue[]
+  | string
+  | StudioJsonObject
+
+/** StudioProjectIdentity keeps one server/session scoped to a specific Tao app in a project. */
+export type StudioProjectIdentity = {
+  appName: string
+  project: string
+}
+
+/** StudioSourceIdentity identifies the exact source text a preview or source action observed. */
+export type StudioSourceIdentity = {
+  path: string
+  sourceVersion: string
+}
+
+/** StudioPreviewIdentity distinguishes a replaced/reloaded preview from the prior iframe instance. */
+export type StudioPreviewIdentity = StudioProjectIdentity & {
+  cellId?: string
+  cellRevision?: number
+  compileRevision?: number
+  manifestRevision?: string
+  previewInstanceId: string
+}
+
+/** StudioPreviewSourceIdentity correlates a rendered node with the exact preview and source text that produced it. */
+export type StudioPreviewSourceIdentity = StudioPreviewIdentity & StudioSourceIdentity
+
+export type StudioSourceRange = {
+  end: number
+  start: number
+}
+
+/**
+ * StudioCanonicalSourceAction is deliberately extensible while source-action kinds are re-landed.
+ * Every action is JSON data with a discriminating kind; no executable or hidden visual state crosses the bus.
+ */
+export type StudioCanonicalSourceAction = StudioJsonObject & {
+  kind: string
+}
+
+/** StudioSourceActionCheckpoint groups one direct-manipulation gesture into one undoable source operation. */
+export type StudioSourceActionCheckpoint = {
+  id: string
+  phase: 'begin' | 'commit' | 'single' | 'update'
+}
+
+/** StudioSourceActionEnvelope is the one canonical, versioned request shape for semantic visual edits. */
+export type StudioSourceActionEnvelope = {
+  action: StudioCanonicalSourceAction
+  channel: typeof studioProtocolChannel
+  checkpoint: StudioSourceActionCheckpoint
+  identity: StudioPreviewSourceIdentity
+  protocolVersion: typeof studioProtocolVersion
+  requestId: string
+  sourceActionVersion: typeof studioSourceActionVersion
+  type: 'source-action'
+}
+
+/** StudioSourceActionUndoEnvelope restores the source snapshot captured at a committed checkpoint. */
+export type StudioSourceActionUndoEnvelope = {
+  channel: typeof studioProtocolChannel
+  checkpointId: string
+  identity: StudioPreviewSourceIdentity
+  protocolVersion: typeof studioProtocolVersion
+  requestId: string
+  sourceActionVersion: typeof studioSourceActionVersion
+  type: 'source-action-undo'
+}
+
+export type StudioPreviewAppliedMessage = {
+  appliedRevision: number
+  channel: typeof studioProtocolChannel
+  compileRevision: number
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-applied'
+}
+
+export type StudioPreviewSourceMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewSourceIdentity
+  protocolVersion: typeof studioProtocolVersion
+  range: StudioSourceRange
+  type: 'preview-hover-source' | 'preview-select-source'
+}
+
+export type StudioHighlightSourceMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewSourceIdentity
+  protocolVersion: typeof studioProtocolVersion
+  range?: StudioSourceRange
+  type: 'highlight-source'
+}
+
+export type StudioFixtureValue =
+  | boolean
+  | number
+  | string
+  | Readonly<{ kind: 'now' }>
+  | Readonly<{ handle: string; kind: 'fixture-reference' }>
+
+export type StudioFixturePlan = Readonly<{
+  accounts: readonly Readonly<{ fields: Readonly<Record<string, StudioFixtureValue>>; name: string }>[]
+  creates: readonly Readonly<{
+    entity: string
+    fields: Readonly<Record<string, StudioFixtureValue>>
+    name: string
+  }>[]
+}>
+
+export type StudioPreviewFixtureCapturedMessage = {
+  channel: typeof studioProtocolChannel
+  fixture: StudioFixturePlan
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  requestId: string
+  type: 'preview-fixture-captured'
+}
+
+export type StudioPreviewFixtureCaptureFailedMessage = {
+  channel: typeof studioProtocolChannel
+  error: string
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  requestId: string
+  type: 'preview-fixture-capture-failed'
+}
+
+export type StudioWindowMessage =
+  | StudioHighlightSourceMessage
+  | StudioPreviewAppliedMessage
+  | StudioPreviewFixtureCapturedMessage
+  | StudioPreviewFixtureCaptureFailedMessage
+  | StudioPreviewSourceMessage
+  | StudioSourceActionEnvelope
+  | StudioSourceActionUndoEnvelope
+
+export type StudioMessageEvent = {
+  data: unknown
+  origin: string
+  source?: unknown
+}
+
+export type StudioMessageExpectation = StudioProjectIdentity & {
+  origin: string
+  previewInstanceId?: string
+  source: unknown
+}
+
+/** StudioProtocol owns v1 DTO validation at every untrusted transport boundary. */
+export const StudioProtocol = {
+  messageOrigin,
+  parseMessage: parseMessageData,
+  parseSourceActionEnvelope,
+  parseSourceActionUndoEnvelope,
+  parseWindowMessage,
+} as const
+
+/** messageOrigin returns the exact target/check origin to use with window.postMessage. */
+function messageOrigin(url: string): string | undefined {
+  try {
+    const origin = new URL(url).origin
+    return origin === 'null' ? undefined : origin
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * parseWindowMessage validates the browser-provided origin, optional WindowProxy identity, protocol identity,
+ * and the complete message payload. Callers must not inspect event.data before this boundary.
+ */
+function parseWindowMessage(
+  event: StudioMessageEvent,
+  expected: StudioMessageExpectation,
+): StudioWindowMessage | undefined {
+  if (event.origin !== expected.origin || event.source !== expected.source) {
+    return undefined
+  }
+  const message = parseMessageData(event.data)
+  if (message === undefined || !matchesProject(message.identity, expected)) {
+    return undefined
+  }
+  if (
+    expected.previewInstanceId !== undefined
+    && message.identity.previewInstanceId !== expected.previewInstanceId
+  ) {
+    return undefined
+  }
+  return message
+}
+
+function parseMessageData(value: unknown): StudioWindowMessage | undefined {
+  if (
+    !isObject(value)
+    || value['channel'] !== studioProtocolChannel
+    || value['protocolVersion'] !== studioProtocolVersion
+  ) {
+    return undefined
+  }
+  if (value['type'] === 'preview-applied') {
+    return parsePreviewApplied(value)
+  }
+  if (value['type'] === 'preview-hover-source' || value['type'] === 'preview-select-source') {
+    return parsePreviewSource(value)
+  }
+  if (value['type'] === 'highlight-source') {
+    return parseHighlightSource(value)
+  }
+  if (value['type'] === 'preview-fixture-captured') {
+    return parsePreviewFixtureCaptured(value)
+  }
+  if (value['type'] === 'preview-fixture-capture-failed') {
+    return parsePreviewFixtureCaptureFailed(value)
+  }
+  if (value['type'] === 'source-action') {
+    return parseSourceActionEnvelope(value)
+  }
+  if (value['type'] === 'source-action-undo') {
+    return parseSourceActionUndoEnvelope(value)
+  }
+  return undefined
+}
+
+function parsePreviewFixtureCaptured(value: StudioJsonObject): StudioPreviewFixtureCapturedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const fixture = parseFixturePlan(value['fixture'])
+  if (identity === undefined || fixture === undefined || !nonEmptyString(value['requestId'])) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    fixture,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    requestId: value['requestId'],
+    type: 'preview-fixture-captured',
+  }
+}
+
+function parsePreviewFixtureCaptureFailed(
+  value: StudioJsonObject,
+): StudioPreviewFixtureCaptureFailedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  if (identity === undefined || !nonEmptyString(value['requestId']) || !nonEmptyString(value['error'])) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    error: value['error'],
+    identity,
+    protocolVersion: studioProtocolVersion,
+    requestId: value['requestId'],
+    type: 'preview-fixture-capture-failed',
+  }
+}
+
+function parseFixturePlan(value: unknown): StudioFixturePlan | undefined {
+  if (!isObject(value) || !Array.isArray(value['accounts']) || !Array.isArray(value['creates'])) {
+    return undefined
+  }
+  const accounts = value['accounts'].map(parseFixtureAccount)
+  const creates = value['creates'].map(parseFixtureCreate)
+  return accounts.every(isDefined) && creates.every(isDefined)
+    ? { accounts, creates }
+    : undefined
+}
+
+function parseFixtureAccount(value: unknown): StudioFixturePlan['accounts'][number] | undefined {
+  if (!isObject(value) || !nonEmptyString(value['name'])) {
+    return undefined
+  }
+  const fields = parseFixtureFields(value['fields'])
+  return fields === undefined ? undefined : { fields, name: value['name'] }
+}
+
+function parseFixtureCreate(value: unknown): StudioFixturePlan['creates'][number] | undefined {
+  if (!isObject(value) || !nonEmptyString(value['entity']) || !nonEmptyString(value['name'])) {
+    return undefined
+  }
+  const fields = parseFixtureFields(value['fields'])
+  return fields === undefined ? undefined : { entity: value['entity'], fields, name: value['name'] }
+}
+
+function parseFixtureFields(value: unknown): Readonly<Record<string, StudioFixtureValue>> | undefined {
+  if (!isObject(value) || !Object.values(value).every(isFixtureValue)) {
+    return undefined
+  }
+  return value as Readonly<Record<string, StudioFixtureValue>>
+}
+
+function isFixtureValue(value: unknown): value is StudioFixtureValue {
+  return typeof value === 'boolean'
+    || typeof value === 'string'
+    || typeof value === 'number' && Number.isFinite(value)
+    || isObject(value) && value['kind'] === 'now' && Object.keys(value).length === 1
+    || isObject(value)
+      && value['kind'] === 'fixture-reference'
+      && nonEmptyString(value['handle'])
+      && Object.keys(value).length === 2
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined
+}
+
+function parsePreviewApplied(value: StudioJsonObject): StudioPreviewAppliedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const compileRevision = nonNegativeInteger(value['compileRevision'])
+  const appliedRevision = nonNegativeInteger(value['appliedRevision'])
+  if (identity === undefined || compileRevision === undefined || appliedRevision === undefined) {
+    return undefined
+  }
+  if (appliedRevision !== compileRevision) {
+    return undefined
+  }
+  return {
+    appliedRevision,
+    channel: studioProtocolChannel,
+    compileRevision,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-applied',
+  }
+}
+
+function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage | undefined {
+  const identity = parsePreviewSourceIdentity(value['identity'])
+  const range = parseSourceRange(value['range'])
+  const type = value['type']
+  if (
+    identity === undefined
+    || range === undefined
+    || (type !== 'preview-hover-source' && type !== 'preview-select-source')
+  ) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    range,
+    type,
+  }
+}
+
+function parseHighlightSource(value: StudioJsonObject): StudioHighlightSourceMessage | undefined {
+  const identity = parsePreviewSourceIdentity(value['identity'])
+  const rawRange = value['range']
+  const range = rawRange === undefined ? undefined : parseSourceRange(rawRange)
+  if (identity === undefined || (rawRange !== undefined && range === undefined)) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    range,
+    type: 'highlight-source',
+  }
+}
+
+function parseSourceActionEnvelope(value: unknown): StudioSourceActionEnvelope | undefined {
+  if (
+    !isObject(value)
+    || value['channel'] !== studioProtocolChannel
+    || value['protocolVersion'] !== studioProtocolVersion
+    || value['sourceActionVersion'] !== studioSourceActionVersion
+    || value['type'] !== 'source-action'
+    || !nonEmptyString(value['requestId'])
+  ) {
+    return undefined
+  }
+  const identity = parsePreviewSourceIdentity(value['identity'])
+  const action = parseCanonicalSourceAction(value['action'])
+  const checkpoint = parseSourceActionCheckpoint(value['checkpoint'])
+  if (identity === undefined || action === undefined || checkpoint === undefined) {
+    return undefined
+  }
+  return {
+    action,
+    channel: studioProtocolChannel,
+    checkpoint,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    requestId: value['requestId'],
+    sourceActionVersion: studioSourceActionVersion,
+    type: 'source-action',
+  }
+}
+
+function parseSourceActionUndoEnvelope(value: unknown): StudioSourceActionUndoEnvelope | undefined {
+  if (
+    !isObject(value)
+    || value['channel'] !== studioProtocolChannel
+    || !nonEmptyString(value['checkpointId'])
+    || value['protocolVersion'] !== studioProtocolVersion
+    || !nonEmptyString(value['requestId'])
+    || value['sourceActionVersion'] !== studioSourceActionVersion
+    || value['type'] !== 'source-action-undo'
+  ) {
+    return undefined
+  }
+  const identity = parsePreviewSourceIdentity(value['identity'])
+  if (identity === undefined) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    checkpointId: value['checkpointId'],
+    identity,
+    protocolVersion: studioProtocolVersion,
+    requestId: value['requestId'],
+    sourceActionVersion: studioSourceActionVersion,
+    type: 'source-action-undo',
+  }
+}
+
+function parseSourceActionCheckpoint(value: unknown): StudioSourceActionCheckpoint | undefined {
+  if (!isObject(value) || !nonEmptyString(value['id'])) {
+    return undefined
+  }
+  const phase = value['phase']
+  return phase === 'begin' || phase === 'commit' || phase === 'single' || phase === 'update'
+    ? { id: value['id'], phase }
+    : undefined
+}
+
+function parseCanonicalSourceAction(value: unknown): StudioCanonicalSourceAction | undefined {
+  return isObject(value) && nonEmptyString(value['kind']) && isJsonValue(value)
+    ? value as StudioCanonicalSourceAction
+    : undefined
+}
+
+function parsePreviewIdentity(value: unknown): StudioPreviewIdentity | undefined {
+  if (
+    !isObject(value)
+    || !nonEmptyString(value['project'])
+    || !nonEmptyString(value['appName'])
+    || !nonEmptyString(value['previewInstanceId'])
+  ) {
+    return undefined
+  }
+  const rawCellIdentity = [
+    value['cellId'],
+    value['cellRevision'],
+    value['compileRevision'],
+    value['manifestRevision'],
+  ]
+  const hasCellIdentity = rawCellIdentity.some(field => field !== undefined)
+  const cellRevision = nonNegativeInteger(value['cellRevision'])
+  const compileRevision = nonNegativeInteger(value['compileRevision'])
+  if (
+    hasCellIdentity
+    && (
+      !nonEmptyString(value['cellId'])
+      || cellRevision === undefined
+      || compileRevision === undefined
+      || !nonEmptyString(value['manifestRevision'])
+    )
+  ) {
+    return undefined
+  }
+  return {
+    appName: value['appName'],
+    ...(hasCellIdentity
+      ? {
+        cellId: value['cellId'] as string,
+        cellRevision: cellRevision!,
+        compileRevision: compileRevision!,
+        manifestRevision: value['manifestRevision'] as string,
+      }
+      : {}),
+    previewInstanceId: value['previewInstanceId'],
+    project: value['project'],
+  }
+}
+
+function parsePreviewSourceIdentity(value: unknown): StudioPreviewSourceIdentity | undefined {
+  const preview = parsePreviewIdentity(value)
+  if (
+    preview === undefined
+    || !isObject(value)
+    || !nonEmptyString(value['path'])
+    || !nonEmptyString(value['sourceVersion'])
+  ) {
+    return undefined
+  }
+  return {
+    ...preview,
+    path: value['path'],
+    sourceVersion: value['sourceVersion'],
+  }
+}
+
+function parseSourceRange(value: unknown): StudioSourceRange | undefined {
+  if (!isObject(value)) {
+    return undefined
+  }
+  const start = nonNegativeInteger(value['start'])
+  const end = nonNegativeInteger(value['end'])
+  return start !== undefined && end !== undefined && start <= end ? { end, start } : undefined
+}
+
+function matchesProject(identity: StudioPreviewIdentity, expected: StudioProjectIdentity): boolean {
+  return identity.project === expected.project && identity.appName === expected.appName
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function isObject(value: unknown): value is StudioJsonObject {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function isJsonValue(value: unknown): value is StudioJsonValue {
+  if (
+    value === null
+    || typeof value === 'boolean'
+    || typeof value === 'string'
+    || (typeof value === 'number' && Number.isFinite(value))
+  ) {
+    return true
+  }
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue)
+  }
+  return isObject(value) && Object.values(value).every(isJsonValue)
+}

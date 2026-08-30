@@ -3,6 +3,9 @@ import { runWithCommands } from './cli/run-with-commands'
 import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
 import { TestRunner } from './repository-tests/TestRunner'
 import { TestTUI } from './repository-tests/TestTUI'
+import { runStudioDev } from './studio/StudioDev'
+import { StudioNative } from './studio/StudioNative'
+import { StudioSmoke } from './studio/StudioSmoke'
 
 type TestOutputMode = 'lines' | 'tui'
 
@@ -33,6 +36,100 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('studio')
+    .description('Launch Tao Studio against a project folder.')
+    .argument('[project]', 'Tao project folder.', '.')
+    .option('--entry <path>', 'Entry Tao file when project selection is ambiguous.')
+    .option('--app <name>', 'App declaration when project selection is ambiguous.')
+    .option('--host <hostname>', 'Studio server hostname.', '127.0.0.1')
+    .option('--port <port>', 'Studio server port; defaults to an available port.')
+    .option('--no-browser', 'Do not open Studio in a browser.')
+    .action(async (project, options) => {
+      Platform.runtimeProcess.exit(
+        await runStudioDev({
+          appName: options.app,
+          browser: options.browser,
+          entryPath: options.entry,
+          hostname: options.host,
+          port: parseOptionalPositiveInteger(options.port, '--port'),
+          projectRoot: project,
+        }),
+      )
+    })
+
+  commands
+    .command('studio-native')
+    .description('Launch Tao Studio in the optional local Electron wrapper.')
+    .argument('[project]', 'Tao project folder.', '.')
+    .option('--entry <path>', 'Entry Tao file when project selection is ambiguous.')
+    .option('--app <name>', 'App declaration when project selection is ambiguous.')
+    .option('--host <hostname>', 'Studio server hostname.', '127.0.0.1')
+    .option('--port <port>', 'Studio server port; defaults to an available port.')
+    .option('--artifact-root <path>', 'Electron wrapper artifact and user-data root.')
+    .option('--electron <path>', 'Explicit Electron executable path.')
+    .option('--remote-debugging-port <port>', 'Optional Electron CDP port.')
+    .action(async (project, options) => {
+      Platform.runtimeProcess.exit(
+        await runStudioDev({
+          appName: options.app,
+          browser: false,
+          entryPath: options.entry,
+          hostname: options.host,
+          native: true,
+          nativeArtifactRoot: options.artifactRoot,
+          nativeElectronPath: options.electron,
+          nativeRemoteDebuggingPort: parseOptionalPositiveInteger(
+            options.remoteDebuggingPort,
+            '--remote-debugging-port',
+          ),
+          port: parseOptionalPositiveInteger(options.port, '--port'),
+          projectRoot: project,
+        }),
+      )
+    })
+
+  commands
+    .command('package-studio-native')
+    .description('Package a local macOS Tao Studio application from Electron.app.')
+    .option('--output-root <path>', 'Application bundle output root.', '.artifacts/build/studio-native')
+    .option('--app-name <name>', 'Application display and bundle name.', 'Tao Studio')
+    .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'dev.tao-lang.studio')
+    .action(async options => {
+      try {
+        const packaged = await StudioNative.packageApp({
+          appName: options.appName,
+          bundleIdentifier: options.bundleIdentifier,
+          outputRoot: options.outputRoot,
+        })
+        HCI.logProcessInfo('studio-native', `Packaged: ${packaged.appPath}`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        HCI.logProcessError('studio-native', Errors.formatForLog(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('studio-smoke')
+    .description('Run explicit slow Studio smoke test files in an isolated resource lane.')
+    .argument('<files...>', 'Explicit Studio smoke test files.')
+    .requiredOption('--run-id <id>', 'Run identifier used to isolate artifacts.')
+    .option('--shard <index>', 'Zero-based smoke shard index.', '0')
+    .option('--worker <index>', 'Zero-based worker index.', '0')
+    .option('--native', 'Run the smoke through the local Electron wrapper instead of Chrome.')
+    .action(async (files, options) => {
+      Platform.runtimeProcess.exit(
+        await StudioSmoke.run({
+          files,
+          native: options.native,
+          runId: options.runId,
+          shardIndex: parseNonNegativeInteger(options.shard, '--shard'),
+          workerIndex: parseNonNegativeInteger(options.worker, '--worker'),
+        }),
+      )
     })
 
   commands
@@ -83,4 +180,12 @@ function parseOptionalPositiveInteger(value: string | undefined, label: string):
     return parsed
   }
   Errors.throwUserInput(`${label} must be a positive integer.`)
+}
+
+function parseNonNegativeInteger(value: string, label: string): number {
+  const parsed = Number(value)
+  if (Number.isInteger(parsed) && parsed >= 0) {
+    return parsed
+  }
+  Errors.throwUserInput(`${label} must be a non-negative integer.`)
 }

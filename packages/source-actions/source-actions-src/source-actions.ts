@@ -10,6 +10,27 @@ import {
   type SourceActionOptions,
   sourceStatementContext,
 } from './source-actions-utils'
+import {
+  StudioActions,
+  type StudioComponentKind,
+  type StudioInsertCapturedFixturePatchRequest,
+  type StudioInsertComponentPatchRequest,
+  type StudioInsertProjectViewPatchRequest,
+  type StudioLayoutAlignment,
+  type StudioLayoutContentTerm,
+  type StudioLayoutEntry,
+  type StudioLayoutSpacingSide,
+  type StudioLayoutTermValue,
+  type StudioMoveRenderPatchRequest,
+  type StudioMoveRenderRequest,
+  type StudioScenarioArgumentValue,
+  type StudioSetLayoutEntryPatchRequest,
+  type StudioSetScenarioArgumentsPatchRequest,
+  type StudioSourcePatch,
+  type StudioSourcePatchRequest,
+  type StudioSourceTextEdit,
+  type StudioWrapRenderPatchRequest,
+} from './studio-actions'
 import { removeUnusedImportNames } from './use-actions'
 import { moveViewRendersLast } from './views-actions'
 
@@ -55,12 +76,36 @@ async function fixSource(document: AST.Document, options: SourceActionOptions = 
 
 /** SourceActions exposes Tao source canonicalization transforms. */
 const SourceActions = {
+  applyStudioPatch: StudioActions.applyPatch,
   fixSource,
+  insertStudioComponent: StudioActions.insertComponent,
+  moveStudioRender: StudioActions.moveRender,
   moveRendersLast,
   organizeSource,
   removeUnusedImports,
+  studioSourceVersion: StudioActions.sourceVersion,
 }
 
-export { type SourceActionOptions }
+export {
+  type SourceActionOptions,
+  type StudioComponentKind,
+  type StudioInsertCapturedFixturePatchRequest,
+  type StudioInsertComponentPatchRequest,
+  type StudioInsertProjectViewPatchRequest,
+  type StudioLayoutAlignment,
+  type StudioLayoutContentTerm,
+  type StudioLayoutEntry,
+  type StudioLayoutSpacingSide,
+  type StudioLayoutTermValue,
+  type StudioMoveRenderPatchRequest,
+  type StudioMoveRenderRequest,
+  type StudioScenarioArgumentValue,
+  type StudioSetLayoutEntryPatchRequest,
+  type StudioSetScenarioArgumentsPatchRequest,
+  type StudioSourcePatch,
+  type StudioSourcePatchRequest,
+  type StudioSourceTextEdit,
+  type StudioWrapRenderPatchRequest,
+}
 
 export default SourceActions

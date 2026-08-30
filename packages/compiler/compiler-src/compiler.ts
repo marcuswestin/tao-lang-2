@@ -22,6 +22,11 @@ import {
   withInlineInjectionBindings,
 } from './codegen/app/injection-plan'
 import RuntimeGen from './codegen/app/runtime-gen'
+import {
+  compileStudioPreviewManifest,
+  type StudioPreviewManifest,
+  studioPreviewManifestModule,
+} from './studio-preview-manifest'
 import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
 
 const codeProjectRoot = '/__tao__'
@@ -77,10 +82,13 @@ export type CompileResult = {
   validation: ValidationResult
   code: string
   files: CompiledFile[]
+  studioManifest?: StudioPreviewManifest
 }
 
 export type CompileOptions = {
   appName?: string
+  /** studio emits preview-only render occurrence metadata into generated Tao props. */
+  studio?: boolean
 }
 
 /** CompilerSession reuses standalone validation and package state across source strings. */
@@ -136,7 +144,10 @@ function compileValidated(
   options: CompileOptions = {},
 ): CompileResult {
   const errors = Diagnostics.errorMessages(validationResult.diagnostics)
-  Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, { errors })
+  Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, {
+    diagnostics: Diagnostics.errors(validationResult.diagnostics),
+    errors,
+  })
   const entryApps = AST.appValueDeclarationsInFile(validationResult.entry.ast)
   Assert(entryApps.length > 0, 'Cannot compile app entry: entry file must declare at least one app.')
   const appNames = entryApps.map(app => app.name)
@@ -150,7 +161,7 @@ function compileValidated(
     `Cannot compile unknown app '${selectedAppName}'. Available apps: ${appNames.join(', ')}.`,
     { appNames, selectedAppName },
   )
-  return compileValidatedInput(validationResult, context, selectedAppName)
+  return compileValidatedInput(validationResult, context, selectedAppName, options.studio === true)
 }
 
 /** Compiler exposes Tao source compilation functions. */
@@ -175,6 +186,7 @@ function compileValidatedInput(
   validationResult: ValidationResult,
   context: CompilerContext,
   selectedAppName: string,
+  studio: boolean,
 ): CompileResult {
   const entryPath = validationResult.entry.path
   const sourceFiles = validationResult.files.filter(file =>
@@ -195,10 +207,23 @@ function compileValidatedInput(
       packagesContext: context.packagesContext,
       identityProjects,
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
+      studio,
     })
   )
 
-  return compileResultForEntry(validationResult, compiledFiles)
+  const studioManifest = studio ? compileStudioPreviewManifest(sourceFiles, selectedAppName) : undefined
+  if (studioManifest !== undefined) {
+    compiledFiles.push({
+      code: studioPreviewManifestModule(studioManifest),
+      relativePath: 'TaoStudioManifest.ts',
+      sourcePath: entryPath,
+    })
+  }
+
+  return {
+    ...compileResultForEntry(validationResult, compiledFiles),
+    ...(studioManifest === undefined ? {} : { studioManifest }),
+  }
 }
 
 function planOutputPaths(
@@ -289,13 +314,23 @@ type CompileSourceFileOptions = {
   packagesContext: Packages.Context
   identityProjects: readonly DeclarationIdentityProject[]
   selectedAppName: string | undefined
+  studio: boolean
 }
 
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
-  const { dataCatalog, sourceByPath, outputPaths, packagesContext, selectedAppName, identityProjects } = options
+  const {
+    dataCatalog,
+    sourceByPath,
+    outputPaths,
+    packagesContext,
+    identityProjects,
+    selectedAppName,
+    studio,
+  } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
-  if (dataCatalog && !ownsDataCatalog && dataCatalog.userPaths.has(file.path)) {
+  const needsStudioDataCatalog = studio && selectedAppName !== undefined && dataCatalog !== undefined
+  if (dataCatalog && !ownsDataCatalog && (dataCatalog.userPaths.has(file.path) || needsStudioDataCatalog)) {
     addResolvedImport(imports, dataCatalog.ownerPath, dataCatalogBindingName)
   }
   const planned = outputPaths.bySourcePath.get(file.path)
@@ -346,6 +381,17 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             scopeBindings,
             exportedBindings,
             selectedAppName,
+            studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
+            studio,
+            studioViews: studio && selectedAppName !== undefined
+              ? file.ast.statements.filter(AST.isScenarioDeclaration).flatMap(scenario => {
+                const render = scenario.block.entries.find(AST.isScenarioRenderClause)
+                const view = render?.view.ref
+                return view === undefined
+                  ? []
+                  : [{ id: `${AST.getDocument(view).uri.fsPath}#${view.name}`, view }]
+              })
+              : [],
             viewRegistrations: RuntimeGen.ViewRegistrations(file.ast),
           }),
       )),
