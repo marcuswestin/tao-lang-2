@@ -5,6 +5,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "overrides": {
+    "expo-constants": "18.0.14"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",
