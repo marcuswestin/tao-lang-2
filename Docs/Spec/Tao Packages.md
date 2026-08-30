@@ -9,8 +9,8 @@ workspace package index, and public self-hosted `nav` and `datasource` declarati
 CLI package commands, and package publishing remain future work.
 
 The implemented package surface includes `@tao/text`, `@tao/time`, and the curated
-`@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every visual,
-dialogue, action, and function declaration parameter list.
+`@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every view, action,
+and function declaration parameter list.
 
 `@tao/text` exports `CountWords(Value text)` and `Join(Values list of text, Separator text)`.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
@@ -78,6 +78,7 @@ app ChatApp {
 }
 
 view ThreadListUi() {
+   Title "Threads"
    query Messages { }
 
    render Col() {
@@ -91,6 +92,7 @@ view ThreadListUi() {
 }
 
 view ThreadUi(Message) {
+   Title Message.Text
    render Col() {
       Text(Message.Text)
       FormButton("Open another occurrence") {
@@ -103,7 +105,8 @@ view ThreadUi(Message) {
 The project `id` is an opaque, immutable value chosen by the developer and checked into the project declaration. `tao create <id>` uses its new directory name as the ID. For an existing project, `tao project id <id> [path]` creates and persists a missing ID; repeating it with the same value preserves the existing declaration. The ID travels with clones and published artifacts and does not change when the project later moves, gains a remote, or advances to another commit. A fork that becomes an independent Tao project runs `tao project id <new-id> [path] --replace`. Required dependencies retain their own project IDs; lockfile revisions select code but do not alter declaration identity. Ordinary checking, compiling, formatting, and launching never invent or modify identity as a side effect.
 
 The top-level data declaration supplies singular and plural values. The UI presents first-class
-view values; `StackNav` owns the corresponding native transition.
+view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corresponding native
+transition and reads each directly presented view's reactive `Title` and optional `Toolbar`.
 
 ## Using packages and publishing projects
 
@@ -227,9 +230,45 @@ location, existence, and named export; generated-output TypeScript checks and th
 establish type and behavioral conformance. The shipped `StackNav` and `Memory` declarations use the
 same mechanisms available to copied or third-party packages.
 
+### Transparent package aliases and standard kit layout
+
+A configurable type may publish another package member transparently:
+
+```tao
+use package ./native
+
+public type StackNav = native.StackNav
+```
+
+Unlike `type Name is Base with { ... }`, this form does not derive a new nominal declaration. The
+alias and target are the same declaration identity and expose the same inferred interface,
+primitive family, configuration type, implementation binding, and host-slot contract. Alias chains
+must resolve to a configurable type and may not cycle. Generated code imports and re-exports the
+target binding; it never emits a second protocol declaration.
+
+The standard component kits use this facility consistently:
+
+```text
+@tao/ui/            root aliases native views
+@tao/ui/native/     platform-native implementations
+@tao/ui/basic/      portable implementations
+@tao/nav/           root aliases native nav types
+@tao/nav/native/    platform-native navigation hosts
+@tao/nav/basic/     portable navigation hosts
+```
+
+Thus `use StackNav from @tao/nav` is native by default, while
+`use StackNav from @tao/nav/basic` selects the clause-honoring basic host without changing the
+configuration or any presentation call. Native and basic forms of a nav family publish identical
+configuration and host-slot read/require sets. See `Tao Presentation and Navigation.md`.
+
 This first sidecar slice copies only the named implementation file. A sidecar is therefore
 self-contained at runtime: it may import installed packages such as `@runtime/TR` and may type-import
 its sibling Tao contract, but relative runtime helper and asset dependency graphs remain deferred.
+An explicitly ascribed action value may bind a bare function export through the same expression
+boundary (`let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts`); `do` passes plain JavaScript
+arguments and follows synchronous or promise completion. Packages do not need a compiler-known
+primitive for each platform effect.
 
 For every Tao source `X.tao` containing these declarations, the compiler also emits TypeScript
 declarations named `<DeclarationName>Config`. A sibling sidecar can therefore import its readonly

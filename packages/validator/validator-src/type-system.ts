@@ -25,6 +25,9 @@ export class TaoTypeSystem implements LangiumTypeSystemDefinition<TaoSpecifics> 
   /** onNewAstNode handles AST-instance-specific type creation. */
   onNewAstNode(node: AST.Node, typir: TaoTypirServices): void {
     if (AST.isTypeDefinition(node)) {
+      if (AST.isTypeDeclaration(node) && node.aliasTarget) {
+        return
+      }
       const nominalType = TypeSystemHelpers.ensurePrimitive(TypeSystemHelpers.typirTypeDefinitionName(node), typir)
       const baseType = typirBaseTypeForDefinition(node, typir)
       if (nominalType && baseType && nominalType.getName() !== baseType.getName()) {
@@ -128,6 +131,7 @@ function inferValueReference(
   }
   return Switch.type(target, {
     ActionDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
+    CommandDeclaration: () => TypeSystemHelpers.taoPrimitiveType('action', typir) ?? InferenceRuleNotApplicable,
     AliasDeclaration: alias =>
       TypeSystemHelpers.taoType(Type.ofValueDeclaration(alias), typir) ?? InferenceRuleNotApplicable,
     AppDeclaration: declaration =>
@@ -160,7 +164,14 @@ function typirBaseTypeForDefinition(
 ): TypirType | undefined {
   return Switch.type(definition, {
     ParameterTypeDeclaration: declaration => typirTypeForTypeExpression(declaration.type, typir),
-    TypeDeclaration: declaration => typirTypeForTypeExpression(declaration.type, typir),
+    TypeDeclaration: declaration => {
+      const target = declaration.aliasTarget?.member.ref
+      return AST.isTypeDeclaration(target)
+        ? TypeSystemHelpers.taoType(Type.ofDefinition(target), typir)
+        : declaration.type
+        ? typirTypeForTypeExpression(declaration.type, typir)
+        : undefined
+    },
     TypeProperty: property => {
       if (property.type) {
         return TypeSystemHelpers.taoPrimitiveType(property.type, typir)

@@ -9,6 +9,7 @@ type NamedValueDeclaration =
   | AST.ParameterDeclaration
   | AST.StateDeclaration
   | AST.EntityQueryDeclaration
+  | AST.CommandDeclaration
   | AST.ForStatement
   | AST.AskStatement
   | AST.CasePayload
@@ -39,6 +40,7 @@ const aliasValidationMessages = {
 export const AliasesValidator = {
   checks: {
     [AST.ActionDeclaration.$type]: reportReservedRuntimeName,
+    [AST.CommandDeclaration.$type]: reportReservedRuntimeName,
     [AST.AliasDeclaration.$type]: [reportReservedRuntimeName, reportAliasAscription, reportAliasReferenceOrder],
     [AST.AppDeclaration.$type]: reportReservedRuntimeName,
     [AST.NavDeclaration.$type]: reportReservedRuntimeName,
@@ -142,6 +144,9 @@ function visibleDeclarations(declarations: readonly NamedDeclaration[]): Map<str
 
 function reportAliasReferenceOrder(alias: AST.AliasDeclaration, ctx: ValidationContext): void {
   for (const reference of aliasValueReferences(alias)) {
+    if (AST.findOwningFromExpression(reference)) {
+      continue
+    }
     const target = reference.target.ref
     if (AST.isValueDeclaration(target) && isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
       ctx.error(

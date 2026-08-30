@@ -4,20 +4,21 @@ phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"
 
 view HearthListIndex() {
    Title "Lists"
-   Toolbar { NewList [primary] }
+   Toolbar { NewList }
    query Lists from MyHome.Lists { }
 
-   command NewList {
+   action NewListIntent() runs single {
+      Title "New list"
+      // Visibility follows permission to create a HearthList in MyHome.Lists, resolved by the store.
+      let HearthList = ask NewListSheet(MyHome)
+      stop if HearthList is none
+      open ListLink(HearthList)
+   }
+   command NewList = NewListIntent() with {
       Label "New list"
       Icon "plus"
       Key "cmd+shift+n"
-      Available when can create HearthList in MyHome.Lists
-      runs single
-      does {
-         let HearthList = ask NewListSheet(MyHome)
-         stop if HearthList is none
-         open ListLink(HearthList)
-   }  }
+   }
 
    render ScrollView [screen] {
       Col [page] {
@@ -69,7 +70,7 @@ file view NewListSheet(Home) responds HearthList {
 
 view HearthListScreen(HearthList) {
    Title HearthList.Name
-   Toolbar { Rename, ShareThis, DeleteThis }
+   Toolbar { Rename ShareThis DeleteThis }
    Search Find
    state NewTitle = ""
    state ShowFinished = no
@@ -100,29 +101,36 @@ view HearthListScreen(HearthList) {
       if HearthList.Kind is not Shopping { open ItemLink(Item) }
    }
 
-   command Rename {
+   action RenameIntent() {
+      Title "Rename"
+      // Visibility follows permission to change HearthList, resolved by the store.
+      present RenameList(HearthList) as sheet
+   }
+   command Rename = RenameIntent() with {
       Label "Rename"
       Icon "pencil"
-      Available when can change HearthList
-      does { present RenameList(HearthList) as sheet }
    }
-   command ShareThis {
+   action ShareThisIntent() {
+      Title "Share this"
+      // Visibility follows permission to change HearthList, resolved by the store.
+      present ShareListSheet(HearthList) as sheet
+   }
+   command ShareThis = ShareThisIntent() with {
       Label if HearthList is Shared then "Manage link" else "Share list"
       Icon "square.and.arrow.up"
-      Available when can change HearthList
-      does { present ShareListSheet(HearthList) as sheet }
    }
-   command DeleteThis {
+   action DeleteThisIntent() runs single {
+      Title "Delete list"
+      // Store-derived delete permission controls visibility. The delete effect and explicit
+      // confirmation carry the destructive intent; the command adds no separate role marker.
+      stop unless ask Confirm("Delete { HearthList.Name }?", Body: "Its items, notes, and photos will be removed for everyone.", Verb: "Delete")
+      delete HearthList
+      dismiss
+   }
+   command DeleteThis = DeleteThisIntent() with {
       Label "Delete list"
       Icon "trash"
-      Intent destructive
-      Available when can delete HearthList
-      runs single
-      does {
-         stop unless ask Confirm("Delete { HearthList.Name }?", Body: "Its items, notes, and photos will be removed for everyone.", Verb: "Delete")
-         delete HearthList
-         dismiss
-   }  }
+   }
 
    // A view declared inside the screen sees its queries: the shopping fold and the finished items.
    view ShoppingContent() {
@@ -156,6 +164,11 @@ view HearthListScreen(HearthList) {
                Text(HearthList.Name) [pageTitle]
                Text("Shared with { HearthList.Home.Memberships.Count } people at home") [caption]
          }  }
+         Row [content right center, gap xs, wrap] {
+            Button(Rename)
+            Button(ShareThis)
+            Button(DeleteThis)
+         }
 
          if can create HearthItem in HearthList.Items {
             Row [surface, pad xs, gap xs] {
@@ -182,19 +195,27 @@ view HearthListScreen(HearthList) {
 // Renaming needs no draft: the row exists and each field stands on its own.
 file view RenameList(HearthList) {
    Title "Rename list"
-   Toolbar { Done [primary] }
-   command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
+   action DoneIntent() {
+      Title "Done"
+      dismiss
+   }
+   command Done = DoneIntent() with {
+      Label "Done"
+      Icon "checkmark"
+      Key "escape"
+   }
    render Col [card, width max 480, gap md] {
       TextInput(Value: HearthList.Name, Label: "List name")
       Choice(Value: HearthList.Color, Label: "Color")
       Problems(HearthList)
+      Row [content right center] { Button(Done) [primary] }
 }  }
 
 // -- One item ------------------------------------------------------------------------------------------------
 
 view HearthItemScreen(Item) {
    Title Item.Title
-   Toolbar { OpenSeparately, DeleteItem }
+   Toolbar { OpenSeparately DeleteItem }
    presence Lookers on Item
    query ItemComments from Item.Comments { }
    query ItemPhotos from Item.Photos { }
@@ -209,29 +230,37 @@ view HearthItemScreen(Item) {
       create Photo in Item.Photos { Image: Picture, AddedBy: Me }
    }
 
-   command OpenSeparately {
+   action OpenSeparatelyIntent() {
+      Title "Open separately"
+      // A window on a laptop; where there are no windows, a full-screen sheet. The key means opening
+      // the same item twice focuses the one window instead of stacking a second.
+      present HearthItemScreen(Item) as window (Key: Item)
+   }
+   command OpenSeparately = OpenSeparatelyIntent() with {
       Label "Open separately"
       Icon "rectangle.on.rectangle"
-      // A window on a laptop; where there are no windows, a full-screen sheet. The key means opening the
-      // same item twice focuses the one window instead of stacking a second.
-      does { present HearthItemScreen(Item) as window (Key: Item) }
    }
-   command DeleteItem {
+   action DeleteItemIntent() runs single {
+      Title "Delete"
+      // Store-derived delete permission controls visibility. The delete effect and explicit
+      // confirmation carry the destructive intent; the command adds no separate role marker.
+      stop unless ask Confirm("Delete { Item.Title }?", Body: "Its notes and photos go with it.", Verb: "Delete")
+      delete Item
+      dismiss
+   }
+   command DeleteItem = DeleteItemIntent() with {
       Label "Delete"
       Icon "trash"
-      Intent destructive
-      Available when can delete Item
-      runs single
-      does {
-         stop unless ask Confirm("Delete { Item.Title }?", Body: "Its notes and photos go with it.", Verb: "Delete")
-         delete Item
-         dismiss
-   }  }
+   }
 
    render ScrollView [screen] {
       guard Item
       Col [page] {
          Text(Item.HearthList.Name) [caption]
+         Row [content right center, gap xs, wrap] {
+            Button(OpenSeparately)
+            Button(DeleteItem)
+         }
          loop Lookers where Looker is not Me { Status("{ Looker.Name } is looking at this too") }
 
          Panes [gap lg] {

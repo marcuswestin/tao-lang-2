@@ -24,8 +24,7 @@ export const preludeValidationMessages = {
   location: 'Primitive declarations are allowed only in the pinned Tao prelude.',
   missing: (name: AST.PrimitiveType) => `Tao prelude is missing primitive '${name}'.`,
   extra: (name: AST.PrimitiveType) => `Tao prelude declares unsupported primitive '${name}'.`,
-  slots: (name: AST.PrimitiveType, expected: readonly string[]) =>
-    `Primitive '${name}' must declare slots: ${expected.join(', ') || '(none)'}.`,
+  slotType: (name: string) => `Primitive supplied slot '${name}' must have a resolvable type.`,
 } as const
 
 export const preludeValidationChecks = {
@@ -52,29 +51,10 @@ export function validatePreludeFile(file: AST.TaoFile, ctx: ValidationContext): 
     if (!expectedNames.has(declaration.name)) {
       ctx.error(preludeValidationMessages.extra(declaration.name), declaration)
     }
-  }
-  validateSlots(declarations, 'nav', ['implement'], ctx)
-  validateSlots(declarations, 'datasource', ['implement'], ctx)
-  validateSlots(declarations, 'app', ['Name', 'Navigator', 'Datasource', 'Design'], ctx)
-}
-
-function validateSlots(
-  declarations: readonly AST.PrimitiveDeclaration[],
-  name: AST.PrimitiveType,
-  expected: readonly string[],
-  ctx: ValidationContext,
-): void {
-  const declaration = declarations.find(candidate => candidate.name === name)
-  if (!declaration) {
-    return
-  }
-  const slots = declaration.slots?.properties.map(property => property.name) ?? []
-  if (slots.length !== expected.length || slots.some((slot, index) => slot !== expected[index])) {
-    ctx.error(preludeValidationMessages.slots(name, expected), declaration)
-  }
-  for (const property of declaration.slots?.properties ?? []) {
-    if (property.name !== 'implement' && Type.ofProperty(property).kind === 'unresolved') {
-      ctx.error(preludeValidationMessages.slots(name, expected), property)
+    for (const property of declaration.slots?.properties ?? []) {
+      if (property.name !== 'implement' && Type.ofProperty(property).kind === 'unresolved') {
+        ctx.error(preludeValidationMessages.slotType(property.name), property)
+      }
     }
   }
 }

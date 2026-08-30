@@ -15,14 +15,25 @@ primitive time
 // A duration is a unit value of the `duration` family; `.unit` builds and reads it (Decisions §2).
 primitive duration
 
-primitive action
+// Named actions may publish defaulted host-readable intent metadata. A command binds one action
+// invocation into an action value; host surfaces consume those values without compiler-owned slot
+// vocabulary.
+primitive action with {
+   Title text is "",
+   Description text is "",
+   Summary text is "",
+}
 
 primitive design
 
 // One renderable primitive. Every declaration made with `view` has this type; what a view can do
 // is inferred from its body, and how it appears is chosen where it is presented. `nav` refines it,
-// so a mounted navigator goes wherever a view goes.
-primitive view
+// so a mounted navigator goes wherever a view goes. Toolbar is a list of bound zero-argument action
+// values (commands at the source level).
+primitive view with {
+   Title text is "",
+   Toolbar list of action() is [],
+}
 
 primitive nav is view with {
    implement,

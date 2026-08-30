@@ -28,13 +28,16 @@ view ShoppingList() {
       set NewItem = ""
    }
 
-   command ClearTheBought {
+   action ClearTheBoughtIntent() runs single {
+      Title "Clear bought"
+      // Visibility is store-derived from whether any Bought Grocery may be deleted; Enabled below
+      // separately keeps the visible command inert when there are no bought rows.
+      delete MyKitchen.Groceries where is Bought
+   }
+   command ClearTheBought = ClearTheBoughtIntent() with {
       Label "Clear bought"
       Icon "trash"
-      Available when Bought has any where can delete Grocery // hidden for a guest
-      Enabled when Bought is not empty // shown, but not pressable, when there is nothing to clear
-      runs single
-      does { delete MyKitchen.Groceries where is Bought } // one bulk write; no transaction needed
+      Enabled Bought is not empty
    }
 
    render ScrollView [screen] {

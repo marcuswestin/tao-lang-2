@@ -5,6 +5,7 @@ import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
 import { bridgeValidationChecks } from './validators/bridge-validator'
+import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
 import { configurationValidationChecks } from './validators/configuration-validator'
 import {
@@ -12,6 +13,7 @@ import {
   validateConfiguredValuesFile,
 } from './validators/configured-values-validator'
 import { dataValidationChecks, validateDataFile } from './validators/data-validator'
+import { declarationSlotValidationChecks } from './validators/declaration-slots-validator'
 import { DesignValidator } from './validators/design-validator'
 import { ExpressionsValidator } from './validators/expressions-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
@@ -50,6 +52,8 @@ const nodeValidationChecks = NodeValidation.compile(
     DesignValidator.checks,
     configurationValidationChecks,
     completenessValidationChecks,
+    commandValidationChecks,
+    declarationSlotValidationChecks,
     preludeValidationChecks,
     ResponsesValidator.checks,
     navigationValidationChecks,

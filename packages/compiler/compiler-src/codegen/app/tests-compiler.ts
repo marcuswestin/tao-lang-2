@@ -79,4 +79,16 @@ export default {
   ExpectScopeStep(): Compiled {
     return gen.noop()
   },
+
+  ExpectNavigationTitleStep(): Compiled {
+    return gen.noop()
+  },
+
+  ExpectToolbarCommandStep(): Compiled {
+    return gen.noop()
+  },
+
+  PressToolbarCommandStep(): Compiled {
+    return gen.noop()
+  },
 } as const

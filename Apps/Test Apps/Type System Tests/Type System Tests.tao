@@ -57,6 +57,7 @@ let Team = [
 ]
 
 view Demo() {
+   Title "Type System Tests"
    let OuterScopeLabel = ScopeLabel
    render Stack() {
       let ScopeLabel = "Nested scope label"

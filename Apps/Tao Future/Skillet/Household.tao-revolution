@@ -1,12 +1,14 @@
 // Getting in, who cooks here, and what you keep to yourself.
 
 view Loading() {
+   Title "Skillet"
    render Centered { Spinner(Label: "Opening Skillet…") }
 }
 
 // The only first-run surface. After a kitchen exists the app root becomes the kitchen — because
 // `MyKitchen` changed, not because this screen replaced anything.
 view Welcome() {
+   Title "Skillet"
    render ScrollView [screen] {
       Col [page, width max 560, content center center] {
          Icon("flame") [size 48, ink accent, decorative]
@@ -85,40 +87,44 @@ view KitchenScreen() {
    Toolbar { InviteSomeone }
    query Members from MyKitchen.Memberships { order by JoinedAt }
 
-   command InviteSomeone {
+   action InviteSomeoneIntent() runs single {
+      Title "Invite someone"
+      // Visibility is derived from whether the store permits creating an Invite in MyKitchen.Invites.
+      let Invite = ask InviteSheet(MyKitchen)
+      stop if Invite is none
+      share JoinLink(Invite.Code)
+      present Notice("Invite link ready — it works once, for seven days") as toast (Key: "invite", Duration: 6)
+   }
+   command InviteSomeone = InviteSomeoneIntent() with {
       Label "Invite someone"
       Icon "person.badge.plus"
       Key "cmd+i"
-      Available when can create Invite in MyKitchen.Invites
-      runs single
-      does {
-         let Invite = ask InviteSheet(MyKitchen)
-         stop if Invite is none
-         share JoinLink(Invite.Code)
-         present Notice("Invite link ready — it works once, for seven days") as toast (Key: "invite", Duration: 6)
-   }  }
+   }
 
-   command Leave {
+   action LeaveIntent() runs single {
+      Title "Leave kitchen"
+      stop unless ask Confirm("Leave { MyKitchen.Name }?", Body: "You will lose access to its recipes, plan, and list.", Verb: "Leave")
+      // One write, no transaction needed. The store refuses the write that would leave the kitchen
+      // ownerless; the sentence is the entity's own `validate` copy, and `guard default` shows it. On
+      // success the root follows the account, so Welcome comes back — nothing to do here.
+      delete MyMembership
+   }
+   command Leave = LeaveIntent() with {
       Label "Leave kitchen"
       Icon "rectangle.portrait.and.arrow.right"
-      runs single
-      does {
-         stop unless ask Confirm("Leave { MyKitchen.Name }?", Body: "You will lose access to its recipes, plan, and list.", Verb: "Leave")
-         // One write, no transaction needed. The store refuses the write that would leave the kitchen
-         // ownerless; the sentence is the entity's own `validate` copy, and `guard default` shows it. On
-         // success the root follows the account, so Welcome comes back — nothing to do here.
-         delete MyMembership
-   }  }
+   }
 
-   command DeleteAccount {
+   action DeleteAccountIntent() runs single {
+      Title "Delete my account"
+      // The delete effect and explicit confirmation carry the destructive intent; commands have no
+      // separate `Intent destructive` marker.
+      stop unless ask Confirm("Delete your account?", Body: "Your kitchens stay with the people in them. This cannot be undone.", Verb: "Delete account")
+      do DeleteMyAccount() // a sole owner is refused with the kitchen's own sentence
+   }
+   command DeleteAccount = DeleteAccountIntent() with {
       Label "Delete my account"
       Icon "person.crop.circle.badge.xmark"
-      Intent destructive
-      runs single
-      does {
-         stop unless ask Confirm("Delete your account?", Body: "Your kitchens stay with the people in them. This cannot be undone.", Verb: "Delete account")
-         do DeleteMyAccount() // a sole owner is refused with the kitchen's own sentence
-   }  }
+   }
 
    render ScrollView [screen] {
       Col [page, width max 760] {

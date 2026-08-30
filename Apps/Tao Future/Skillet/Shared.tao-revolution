@@ -117,11 +117,14 @@ view Notice(Message text) {
 //
 // Mounted on the navigator (see Skillet.tao-revolution), so the shortcut works from every tab.
 
-command FindAnything {
+action FindAnythingIntent() {
+   Title "Find anything"
+   present FindSheet() as palette
+}
+command FindAnything = FindAnythingIntent() with {
    Label "Find anything"
    Icon "magnifyingglass"
    Key "cmd+k"
-   does { present FindSheet() as palette }
 }
 
 view FindSheet() {

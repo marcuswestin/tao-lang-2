@@ -4,6 +4,7 @@ use ProjectWidget from @copy/widgets
 
 workspace
 view MainView() {
+   Title "Package Access"
    render Stack() {
       Text(CardTitle)
       Text(SiblingFileTitle)

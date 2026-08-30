@@ -1,3 +1,4 @@
+import { beforeEach } from '@jest/globals'
 import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import TR from '@runtime/TR'
 import { FS } from '@shared'
@@ -14,6 +15,10 @@ type RuntimeScreensAssertions = (screens: Readonly<Record<string, RuntimeScreen>
 
 /** registerRuntimeE2ELifecycle registers shared compiler and render cleanup for a runtime E2E suite. */
 export function registerRuntimeE2ELifecycle(): void {
+  beforeEach(() => {
+    TR.Navigation.beginTest()
+  })
+
   AfterAll(async () => {
     await RuntimeTesting.stopTestCompiler()
   })

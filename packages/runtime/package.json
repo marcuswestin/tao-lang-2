@@ -16,12 +16,14 @@
     "@react-native-async-storage/async-storage": "2.2.0"
   },
   "peerDependencies": {
+    "@expo/vector-icons": "^15.0.0",
     "react": "^19.1.0",
     "react-native": "^0.81.5",
     "react-native-safe-area-context": "^5.6.0",
     "react-native-screens": "^4.16.0"
   },
   "devDependencies": {
+    "@expo/vector-icons": "15.1.1",
     "@types/react": "~19.1.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
@@ -29,6 +31,9 @@
     "react-native-screens": "~4.16.0"
   },
   "peerDependenciesMeta": {
+    "@expo/vector-icons": {
+      "optional": true
+    },
     "react-native-screens": {
       "optional": true
     }

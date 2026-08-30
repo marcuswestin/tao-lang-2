@@ -1,4 +1,4 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type NodeValidationCheck, type NodeValidationChecks } from '../node-validation'
@@ -34,6 +34,9 @@ export const testValidationMessages = {
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
   selectIndex: 'Tagged loop row selection uses a 1-based index greater than zero.',
   selectBlock: 'A select block may contain test steps but cannot start another app.',
+  navigationValueType: (actual: string) => `Navigation and toolbar test values expect text, got ${actual}.`,
+  navigationValueLiteral: 'Navigation and toolbar test values must be text literals.',
+  navigationVocabulary: (expected: string) => `Expected '${expected}' in this navigation test step.`,
 } as const
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
@@ -51,6 +54,7 @@ export const testValidationChecks = {
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
+  [AST.PressToolbarCommandStep.$type]: [validatePressPlacement, validateNavigationVocabulary, validateNavigationValue],
   [AST.EnterTextStep.$type]: [validateEnterPlacement, validateSelector],
   [AST.TagEnterStep.$type]: validateEnterPlacement,
   [AST.ExpectInputValueStep.$type]: [validateInputExpectationPlacement, validateInputSelector],
@@ -64,6 +68,16 @@ export const testValidationChecks = {
   [AST.AdvanceStep.$type]: [validateAdvancePlacement, validateAdvanceDuration],
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
+  [AST.ExpectNavigationTitleStep.$type]: [
+    validateExpectationPlacement,
+    validateNavigationVocabulary,
+    validateNavigationValue,
+  ],
+  [AST.ExpectToolbarCommandStep.$type]: [
+    validateExpectationPlacement,
+    validateNavigationVocabulary,
+    validateNavigationValue,
+  ],
 } satisfies NodeValidationChecks
 
 /**
@@ -129,10 +143,13 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       TagInputValueExpectation: checkStepOrder,
       ExpectCheckboxStateStep: checkStepOrder,
       ExpectTextStep: checkStepOrder,
+      ExpectNavigationTitleStep: checkStepOrder,
+      ExpectToolbarCommandStep: checkStepOrder,
       ExpectGroupStep: checkStepOrder,
       ExpectScopeStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       TagPressStep: checkStepOrder,
+      PressToolbarCommandStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
       },
@@ -152,10 +169,13 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.TagInputValueExpectation
       | AST.ExpectCheckboxStateStep
       | AST.ExpectTextStep
+      | AST.ExpectNavigationTitleStep
+      | AST.ExpectToolbarCommandStep
       | AST.ExpectGroupStep
       | AST.ExpectScopeStep
       | AST.PressTextStep
       | AST.TagPressStep
+      | AST.PressToolbarCommandStep
       | AST.SubmitInputStep
       | AST.TagSubmitStep
       | AST.SelectStep
@@ -165,6 +185,35 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
     }
+  }
+}
+
+function validateNavigationValue(
+  step: AST.ExpectNavigationTitleStep | AST.ExpectToolbarCommandStep | AST.PressToolbarCommandStep,
+  ctx: ValidationContext,
+): void {
+  if (!AST.isStringLiteral(step.value)) {
+    const actual = Type.ofExpression(step.value)
+    if (actual.kind === 'primitive' && actual.primitive === 'text') {
+      ctx.error(testValidationMessages.navigationValueLiteral, step.value)
+      return
+    }
+  }
+  const actual = Type.ofExpression(step.value)
+  const expected: ASTUtils.TaoType = { kind: 'primitive', primitive: 'text' }
+  if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+    ctx.error(testValidationMessages.navigationValueType(Type.displayName(actual)), step.value)
+  }
+}
+
+function validateNavigationVocabulary(
+  step: AST.ExpectNavigationTitleStep | AST.ExpectToolbarCommandStep | AST.PressToolbarCommandStep,
+  ctx: ValidationContext,
+): void {
+  const actual = AST.isExpectNavigationTitleStep(step) ? step.subject : step.surface
+  const expected = AST.isExpectNavigationTitleStep(step) ? 'title' : 'toolbar'
+  if (actual !== expected) {
+    ctx.error(testValidationMessages.navigationVocabulary(expected), step)
   }
 }
 

@@ -11,6 +11,7 @@ app TickingClock {
 // A ticker is held like any other view-local value. `Elapsed` is an ordinary derivation over it, so
 // it recomputes on every tick rather than being evaluated once.
 view MainView() {
+   Title "Ticking Clock"
    state Tick = Interval(1.s)
    state StartedAt = now
    let Elapsed = Tick.Value - StartedAt

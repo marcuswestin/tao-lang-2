@@ -21,8 +21,14 @@ TagStatement:
 // caller content iff it places `@@content`, and offers named render slots iff it declares them.
 ViewDeclaration:
     visibility=DeclarationVisibility? 'view' name=ID
-    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])? block=Block
+    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])? block=ViewBlock
         | '=' aliasTarget=PackageMemberReference);
+
+// The source is context-sensitive here: bare supplied slots belong only to declaration bodies,
+// while nested render blocks retain the ordinary statement grammar. Returning Block preserves the
+// shared AST utilities and compiler boundary.
+ViewBlock returns Block:
+    '{' statements+=ViewStatement* '}';
 
 // Views own optional, single-fill visual holes. A use without a render value places the slot in
 // the declaring view's implementation; a use with a render value fills that slot at one call site.

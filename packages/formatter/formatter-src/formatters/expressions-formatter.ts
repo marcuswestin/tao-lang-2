@@ -108,6 +108,7 @@ export default {
   /** CaseTestExpression formats a postfix built-in or declared case predicate. */
   CaseTestExpression(f) {
     f.oneSpaceAround('is')
+    f.oneSpaceAfter('not')
   },
 
   /** UnaryExpression keeps numeric negation tight and boolean negation readable. */

@@ -891,13 +891,14 @@ view RecipeScreen(Recipe) {
    command Cook = CookRecipe(Recipe) with {
       Icon "flame"
       Key primary + "r"
-      Enabled when Recipe.Steps is not empty      // possible-but-not-yet: shown, disabled
+      Enabled Recipe.Steps is not empty           // possible-but-not-yet: shown, disabled
    }
 }
 ```
 
-- **Command members are capitalized** — `Label`, `Icon`, `Key`, `Enabled when` — and `Label` defaults
-  to the intent's `Title`.
+- **Command members are capitalized** — `Label`, `Icon`, `Key`, `Enabled` — and `Label` defaults
+  to the intent's `Title`. Each member takes an ordinary reactive expression; `Enabled` expects a
+  boolean value and has no special conditional gate syntax.
 - **Commands nest inside the `view` they act on**, closing over its parameters (`Recipe`, above), so
   they take no parameters of their own. App-wide commands sit on the app the same way:
   `command New = CreateRecipe with { Icon "plus", Key primary + "n" }` — with no argument bound, the
@@ -906,6 +907,10 @@ view RecipeScreen(Recipe) {
   while the nearest presented instance of that view holds focus — there is no separate screen kind
   to attach it to (§9), so command lifetime is the presentation's, and lifecycle language throughout
   this document reads "the presentation", never "the `ui`".
+- **A view's host-facing members are one mechanism.** `Title` and `Toolbar` are supplied slots on
+  `view` (§9); commands are the focused declarations a surface such as `Toolbar` lists. The
+  presenter reads those members from the directly presented view and owns their chrome, so a title,
+  a toolbar, and the commands in that toolbar are not three unrelated channels.
 - **Surfaces list commands; a command never names its surface.** `Toolbar { … }` and `menu Name
   { … }` inside a `view`; `Menu { … }` (the OS menu bar), `Rail { … }`, and `Palette all` on the app.
   A view's command listed in the app's `Menu` (`RecipeScreen.Favorite`) is enabled while a presented
@@ -1108,6 +1113,29 @@ file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a 
 - **One body grammar.** State, entity queries, actions, commands, aliases, tags, and render are
   legal in any view body — there is no statelessness ladder, so a stateful content-accepting
   wrapper (a collapsible section) is expressible.
+- **Host-facing self-description is supplied slots on `view`.** The prelude owns the vocabulary, not
+  the compiler, and begins with `Title` and `Toolbar`; `Icon`, `Badge`, detents, appearance, and
+  package-extensible host traits wait for forcing features. A fill is an ordinary capitalized member
+  in the body — no content-side keyword or declaration modifier is added — and its value is an
+  ordinary reactive expression over the view's parameters, state, and reads:
+
+```swift
+view RecipeScreen(Recipe) {
+   Title Recipe.Title
+   command Share = ShareRecipe(Recipe) with { Icon "square.and.arrow.up" }
+   Toolbar { Share }
+   render RecipePage(Recipe)
+}
+```
+
+- **A host reads only the directly presented view.** Host-facing slots never bubble from descendants;
+  a wrapper that carries a title or toolbar fills its own slots from its own parameters. Because
+  `nav` refines `view`, a nav inherits the same optional slots rather than masking them, but a host
+  never reads through the nav to whichever descendant it currently presents.
+- **Self-description stays with the view; presentation policy stays at the call site.** A presenter
+  cannot override `Title` or `Toolbar`; two presenters that need different policy express that policy
+  on `present` (`Key: Recipe` remains on `present … as window`), while stable self-description is a
+  slot. Whether a slot is required is inferred from the host usage in §10, never from the view head.
 - **No arrangement-only category.** A wrapper that only positions caller content (`Centered`) and
   one that owns content around it (`Section`) are indistinguishable to the language. If a future
   rule ever needs the distinction, it returns as a property derived from the render tree, never as
@@ -1125,6 +1153,15 @@ types `visual`, `presentable`, `ui`, `frame`, and `layout` collapse into the sin
 `view` (`nav`, `datasource`, and `app` are untouched). A `public destination` marker for
 package-exported views was considered and deferred (`Docs/Roadmap/Deferred Tao language
 decisions.md`).
+
+**Amended by the host-read view slots and native nav kit tranche.** The unified view decision made
+every view presentable but left host-owned chrome without a typed way to read the presented view's
+self-description. The declaration model already supplies that mechanism: primitive families own
+supplied slots in the prelude and declarations fill them as named members. `Title` and `Toolbar`
+therefore join the single `view` primitive as optional host-facing slots. They remain reactive,
+direct-only, and usage-required; no second metadata channel, preference bubbling, call-site override,
+or compiler-owned title vocabulary is introduced. `nav is view` keeps the slots by refinement so a
+navigator can describe itself when it is itself presented, without exposing its child's slots.
 
 - **Every declaration's parameter list is parenthesized, including an empty one** — `view
   RecipeLibrary()`, `action Add()` — so a declaration mirrors the call site that invokes it.
@@ -1389,6 +1426,22 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   entirely from use — the diagnostic lands at the usage site ("CookScreen cannot be presented as a
   window: parameter `Undo action` does not serialize"), never at the declaration, because the
   declaration is not wrong; the placement is.
+- **Host read-sets and requirements belong to the stdlib host family.** For the current families and
+  presentation modes, the complete set is:
+  - every `StackNav` entry, including `Initial` and later pushes, reads `Title` and `Toolbar` from that
+    entry's own view and requires `Title`;
+  - `present … as window` reads both slots and requires `Title`; its full-screen-sheet fallback on a
+    non-windowing target preserves this window contract rather than dropping the chrome;
+  - `Toolbar` is optional in both hosts, and an absent toolbar means no toolbar items;
+  - `SlotNav`, `SelectionNav`, and `SplitNav`, and the sheet, root, menu, and toast presentation modes,
+    read neither slot. Selection items retain their explicit `Label` and `Icon`, and split panes retain
+    their own configuration, rather than acquiring values by bubbling from content.
+
+  Native and basic implementations of a family have the same read-set. The native host renders these
+  values in platform chrome; the basic host renders equivalent styled Tao chrome. A missing required
+  slot is diagnosed at the placement — for example, "StoryScreen is pushed on a StackNav: it must fill
+  Title" — because the view is valid and that use is not. Slot changes update mounted host chrome
+  reactively.
 - **A responding presentation is never restorable.** A view presented while its `responds T` answer
   is awaited does not survive relaunch — the asking context is gone, so restoring the question alone
   would be a lie. This is consistent with the default exclusions below and holds even when a
@@ -1429,6 +1482,14 @@ app Skillet {
 - **App variants are keywordized bindings**: `app SkilletPreview = Skillet with { Datasource Memory }`.
   A variant swaps providers for previews, on-device builds, and tests without forking any product
   declaration.
+- **The standard component kits are native by default and keep an explicit basic tier.** `@tao/ui`
+  and `@tao/nav` share one package shape: the package root publishes pass-through aliases to names in
+  `native/`, while `basic/` publishes clause-honouring portable implementations. Thus
+  `use StackNav from @tao/nav` selects platform-native navigation with no ceremony, and
+  `use StackNav from @tao/nav/basic` selects the basic rendering without changing the declaration or
+  any call site. Native and basic implementations expose the same family configuration and the same
+  host read-sets (§10); native uses maintained platform navigation machinery and chrome where
+  available, while basic renders the contract as styled Tao controls rather than ignoring it.
 - **Provider bindings are keywordized**:
 
 ```swift

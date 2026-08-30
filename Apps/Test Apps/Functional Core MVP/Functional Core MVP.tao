@@ -26,6 +26,7 @@ function PresenceLabel(Present boolean) returns text {
 }  }
 
 view MainView() {
+   Title "Functional Core MVP"
    state Count = 2
    state Visible = true
    state AsyncStarted = false

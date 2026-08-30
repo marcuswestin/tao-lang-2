@@ -3,6 +3,7 @@ use WordFlower from ./
 test "WordFlower workspaces" {
    test "starts empty and keeps invalid creates inert" {
       run WordFlower
+      expect navigation title "WordFlower"
       expect { // `expect { ... }` groups several assertions into one step
          text "WordFlower"
          text "No workspaces yet"
@@ -32,18 +33,23 @@ test "WordFlower workspaces" {
          expect text "Home"
          press #openWorkspace
       }
+      expect navigation title "Home"
       expect text "Workspace: Home"
       expect #workspaceTitle input value "Home"
       enter "" into #workspaceTitle
+      expect toolbar command "Save workspace" disabled
       submit #workspaceTitle
       expect text "Workspace: Home"
       enter "Renamed workspace" into #workspaceTitle
-      press #saveWorkspace
+      expect toolbar command "Save workspace" enabled
+      press toolbar command "Save workspace"
+      expect navigation title "Renamed workspace"
       expect {
          text "Workspace: Renamed workspace"
          text "No drafts"
       }
       back
+      expect navigation title "WordFlower"
       expect {
          text "WordFlower"
          text "Renamed workspace"

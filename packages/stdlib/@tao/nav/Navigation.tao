@@ -1,49 +1,12 @@
-// The navigation stdlib is self-hosted: every nav ships as an ordinary Tao declaration bound to a
-// runtime implementation through the same public mechanism a third-party package uses. Copy a
-// declaration, rename it, and swap the implementation without changing the compiler or language.
-// Anything an app can present is a `view`; `nav` refines it, so a mounted nav fills the same slots.
-// A nav declares its configuration contract in Tao. Property names are ordinary capitalized
-// identifiers, and `@key` declares the common shape accepted by every keyed item.
-//
-// `<protocol> <Name> from <path>` binds the declaration to a TS value satisfying the published,
-// versioned TR.NavKind protocol. The binding attaches to a package-level declaration rather than
-// defining app semantics inline.
-//
-// TR.NavKind contract (conformance suite: TR.testNavKind(kind, profile)):
-// - configure(declaration, config) returns an immutable descriptor whose identity is the declaring
-//   Tao declaration plus normalized configuration — never a name lookup and never serialized
-// - mount(descriptor) creates independent state per occurrence in an app mount
-// - render(mount, taoProps) keeps every state-bearing covered occurrence mounted, hidden, and out
-//   of accessibility; the runtime wraps every kind in the same nav-owned overlay lane
-// - present, dismiss, back, reset, and canGoBack are the only content-lifecycle verbs; dismiss and
-//   back report whether they consumed the request and are root-safe
-// - the profile fixes kind-specific meaning: stack pushes/pops fresh occurrences; slot replaces and
-//   restores Initial; selection activates one keyed child without creating new content
-// - occurrence identity is monotonic within one mount; a kind never drives native navigation itself
-// Common conformance is shared, while stack, slot, and selection each add their profile assertions.
-public
-type StackNav is nav with {
-   Initial view // the argument-free entry seeded at mount; nav-in-stack entries stay deferred
+use package ./native
 
-   nav StackNavKind from ./NavKinds.ts
-}
+// Native navigation is the package default. These transparent configurable-type aliases preserve
+// the native declarations' identity, configuration contracts, implementation, and host read-set.
+public
+type StackNav = native.StackNav
 
 public
-type SlotNav is nav with {
-   Initial view
-
-   nav SlotNavKind from ./NavKinds.ts
-}
+type SlotNav = native.SlotNav
 
 public
-type SelectionNav is nav with {
-   Initial key
-   Display text
-   @key {
-      Label text
-      Icon text is ""
-      Content view
-   }
-
-   nav SelectionNavKind from ./NavKinds.ts
-}
+type SelectionNav = native.SelectionNav

@@ -4,7 +4,7 @@ phrase WeekTitle(Day date) = "Week of { Day.Short }"
 
 view WeekPlan() {
    Title WeekTitle(WeekStart)
-   Toolbar { AddMeal [primary], ShopThisWeek, ThisWeek }
+   Toolbar { AddMeal ShopThisWeek ThisWeek }
    state WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
    query Meals from MyKitchen.Meals {
       // A timezone-qualified range, so a household in another zone sees its own week.
@@ -12,29 +12,37 @@ view WeekPlan() {
       order by Day, Course
    }
 
-   command AddMeal {
+   action AddMealIntent() {
+      Title "Add a meal"
+      // Visibility follows permission to create a Meal in MyKitchen.Meals, resolved by the store.
+      present PlanMeal() as sheet
+   }
+   command AddMeal = AddMealIntent() with {
       Label "Add a meal"
       Icon "plus"
       Key "cmd+n"
-      Available when can create Meal in MyKitchen.Meals
-      does { present PlanMeal() as sheet }
    }
-   command ThisWeek {
+   action ThisWeekIntent() {
+      Title "This week"
+      set WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
+   }
+   command ThisWeek = ThisWeekIntent() with {
       Label "This week"
       Icon "calendar"
-      does { set WeekStart = StartOfWeek(today in MyKitchen.TimeZone) }
    }
-   command ShopThisWeek {
+   action ShopThisWeekIntent() runs single {
+      Title "Shop the week"
+      // Visibility follows permission to create Grocery rows in MyKitchen.Groceries.
+      // Single-flight plus the transaction's per-meal idempotence prevents a double press from
+      // duplicating a week of groceries.
+      when ShopTheWeek(MyKitchen, WeekStart, WeekStart + 7 days) {
+               done -> present Notice("Added the week to your list") as toast (Key: "shop")
+      }
+   }
+   command ShopThisWeek = ShopThisWeekIntent() with {
       Label "Shop the week"
       Icon "basket"
-      Available when can create Grocery in MyKitchen.Groceries
-      // `runs single` is why a double press cannot duplicate a week of groceries; the transaction is
-      // idempotent per meal as well.
-      runs single
-      does {
-         when ShopTheWeek(MyKitchen, WeekStart, WeekStart + 7 days) {
-            done -> present Notice("Added the week to your list") as toast (Key: "shop")
-   }  }  }
+   }
 
    render ScrollView [screen] {
       Col [page] {
@@ -66,28 +74,50 @@ view WeekPlan() {
 }  }  }  }  }  }
 
 file view MealRow(Meal) {
-   command Cook { Label "Cook"; Icon "flame"; does { open CookMealLink(Meal.Recipe, Meal) } }
-   command AddToList {
+   action CookIntent() {
+      Title "Cook"
+      open CookMealLink(Meal.Recipe, Meal)
+   }
+   command Cook = CookIntent() with {
+      Label "Cook"
+      Icon "flame"
+   }
+   action AddToListIntent() runs single {
+      Title "Add to shopping list"
+      // The transaction is idempotent per meal, so this cannot double the list either.
+            when AddMealToList(Meal) {
+               done -> present Notice("Added { Meal.Recipe.Title } to your list") as toast (Key: "shop")
+      }
+   }
+   command AddToList = AddToListIntent() with {
       Label "Add to shopping list"
       Icon "basket"
-      runs single
-      does {
-         // The transaction is idempotent per meal, so this cannot double the list either.
-         when AddMealToList(Meal) {
-            done -> present Notice("Added { Meal.Recipe.Title } to your list") as toast (Key: "shop")
-   }  }  }
-   command Change { Label "Change"; Icon "pencil"; does { present MealScreen(Meal) as sheet } }
-   command ToggleCooked {
+   }
+   action ChangeIntent() {
+      Title "Change"
+      present MealScreen(Meal) as sheet
+   }
+   command Change = ChangeIntent() with {
+      Label "Change"
+      Icon "pencil"
+   }
+   action ToggleCookedIntent() {
+      Title "Toggle cooked"
+      toggle Meal.Cooked
+   }
+   command ToggleCooked = ToggleCookedIntent() with {
       Label if Meal is Cooked then "Mark as planned" else "Mark as cooked"
       Icon "checkmark"
-      does { toggle Meal.Cooked }
    }
-   command Remove {
+   action RemoveIntent() {
+      Title "Remove from plan"
+      // Store-derived delete permission controls visibility. The delete effect carries the
+      // destructive intent; the command adds no separate role marker.
+      delete Meal
+   }
+   command Remove = RemoveIntent() with {
       Label "Remove from plan"
       Icon "trash"
-      Intent destructive
-      Available when can delete Meal
-      does { delete Meal }
    }
    // A menu anchors beside what opened it where there is room, and is an action sheet on a phone.
    menu Actions { Cook, AddToList, Change, ToggleCooked, separator, Remove }
@@ -143,8 +173,15 @@ view PlanMeal(Recipe (optional), Day date (optional)) {
 // Changing a planned meal: the row exists, so every input writes through.
 view MealScreen(Meal) {
    Title Meal.Recipe.Title
-   Toolbar { Done [primary] }
-   command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
+   action DoneIntent() {
+      Title "Done"
+      dismiss
+   }
+   command Done = DoneIntent() with {
+      Label "Done"
+      Icon "checkmark"
+      Key "escape"
+   }
    render Col [gap lg, pad lg, width max 560] {
       guard Meal
       Text(Meal.Recipe.Title) [sectionTitle]
@@ -153,4 +190,5 @@ view MealScreen(Meal) {
       NumberInput(Value: Meal.Servings, Label: "Serves", Min: 1)
       DurationInput(Value: Meal.Remind, Label: "Remind me before")
       Problems(Meal)
+      Row [content right center] { Button(Done) [primary] }
 }  }

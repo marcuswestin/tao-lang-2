@@ -60,6 +60,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'function' && AST.isFunctionCallExpression(context.container)) {
       return this.createFunctionScope(context.container)
     }
+    if (context.property === 'action' && AST.isCommandDeclaration(context.container)) {
+      return this.createActionScope(context.container)
+    }
+    if (context.property === 'references' && AST.isDeclarationSlotReferenceBlock(context.container)) {
+      const view = AST.findOwningView(context.container)
+      return this.createScopeForNodes(AST.isViewDeclaration(view) ? AST.commandsOf(view) : [])
+    }
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
       return this.createUseImportScope(context.container)
     }
@@ -138,6 +145,22 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(carrier.block), scope)
     }
 
+    return scope
+  }
+
+  private createActionScope(reference: AST.CommandDeclaration): Langium.Scope {
+    const root = AST.findRoot(reference)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isActionDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isActionDeclaration), scope)
+    for (const carrier of scopeCarriersContaining(reference).reverse()) {
+      if (carrier.kind === 'block') {
+        scope = this.createScopeForNodes(carrier.block.statements.filter(AST.isActionDeclaration), scope)
+      }
+    }
     return scope
   }
 

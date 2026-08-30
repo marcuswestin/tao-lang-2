@@ -9,6 +9,7 @@ app NavigationMVPApp {
 
 workspace
 view Home() {
+   Title "Navigation MVP"
    state Visits = 0
    action CountVisit() {
       set Visits += 1
@@ -32,6 +33,7 @@ view Home() {
 
 workspace
 view Detail(Name text) {
+   Title Name
    render Col() [gap 10, pad 16] {
       Text("Detail")
       Text(Name)

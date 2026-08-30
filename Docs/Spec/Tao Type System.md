@@ -21,8 +21,9 @@ expressions; unit values and dimensional arithmetic; pure functions; immutable `
 compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
 `loop`; first-class `view` and configured `nav` values under the collapsed primitive hierarchy
 (`view` is the one renderable primitive; `nav` refines it); top-level data/query/write forms;
-declaration-owned configuration; `ask`/`respond` on views declaring `responds`; and the
-expression-position TypeScript boundary.
+declaration-owned configuration; `ask`/`respond` on views declaring `responds`; the
+expression-position TypeScript boundary; prelude-declared host-facing supplied-slot fills; focused
+intent-backed commands; and transparent configurable-type aliases.
 
 `match`, heterogeneous lists, richer collection transforms, and general concurrency policy remain
 future work. Optional item fields and non-blocking `async { ... }` are implemented as described
@@ -79,6 +80,31 @@ Lists declare their element type as `list of T`. Enums are nominal types whose c
 values; a one-case set is valid. Optional item fields use `Field Type?`. `async { ... }`
 runs its block without delaying later statements and surfaces failures as provider error state;
 async functions, `await`, scheduling, and fork/concurrency policy remain future work.
+
+Primitive declarations may supply defaulted slots inherited by refinements. Primitive `view`
+currently supplies optional `Title` and `Toolbar`; a view body fills them as capitalized members,
+and an action supplies intent metadata in the same form. Completeness is declaration-driven: a
+defaulted slot may be omitted, while a host such as StackNav can independently require `Title` at a
+usage site. A command is a scoped binding of an intent invocation plus its declared affordance
+members, not an action body:
+
+```tao
+view Detail(Task) {
+   Title Task.Title
+   state Draft = Task.Title
+
+   action Save() {
+      Title "Save"
+      update Task { Title: Draft }
+   }
+   command SaveTask = Save() with {
+      Icon "checkmark"
+      Enabled Draft is not empty
+   }
+   Toolbar { SaveTask }
+   // ...
+}
+```
 
 Injection bindings are explicit. `inject Type` produces a typed value outside render
 position. A TypeScript-backed view uses
@@ -320,6 +346,18 @@ Tao owns the type. A bridged value therefore needs a declared one — a `returns
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
 compiler copies the named sidecar beside its generated module and imports the export from there.
 
+An explicitly action-typed bare export is the effectful form of the same boundary:
+
+```tao
+let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts
+```
+
+The sidecar exports a JavaScript function. `do OpenUrl(Value)` unwraps Tao arguments to plain
+JavaScript, invokes that function, and observes synchronous completion or its returned promise as
+one Tao action. This is not a URL primitive or an action-body escape hatch; any platform bridge may
+publish the action type it implements. Calls used as value expressions keep the ordinary wrapped
+result behavior.
+
 `render inject` remains the separate authoring mode for a view whose implementation Tao does not
 own. Value-position `inject <type>` and its inline `ts` fence are retired.
 
@@ -360,6 +398,12 @@ string-keyed contract until their normalization is part of the compiler. This is
 TypeScript surface, while runtime protocol behavior remains the responsibility of the published
 conformance suites. An app variant retains its originating app declaration identity while replacing
 or patching public app properties.
+
+A package can transparently republish a configurable type with
+`public type StackNav = native.StackNav`. The right side resolves a package member in the type
+namespace. It is an identity-preserving alias, not a derivation: the alias exposes the target's
+family, slots, generated config type, implementation, and runtime declaration object, and cannot
+form a cycle. Use `type Derived is Base with { ... }` when a new nominal declaration is intended.
 
 ## Future directions
 

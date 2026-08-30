@@ -9,11 +9,12 @@ export default {
     f.oneSpaceAround('with')
   },
 
-  /** TypeDeclaration formats `type Name is ...` declarations. */
+  /** TypeDeclaration formats nominal definitions and transparent package-member aliases. */
   TypeDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('type')
     f.oneSpaceAround('is')
+    f.oneSpaceAround('=')
   },
 
   /** CaseSetTypeExpression formats `one of A, B, C`. */

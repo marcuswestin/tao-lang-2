@@ -81,11 +81,15 @@ view HearthItemRow(Item) {
 // carries the entity's own `required` copy — "Say what needs doing" is written once, on the data — and an
 // abandoned capture never syncs to the whole home.
 
-command AddSomething {
+folder
+action AddSomethingIntent() {
+   Title "Add something"
+   present QuickCapture(MyHome) as sheet
+}
+command AddSomething = AddSomethingIntent() with {
    Label "Add something"
    Icon "plus"
    Key "cmd+n"
-   does { present QuickCapture(MyHome) as sheet }
 }
 
 view QuickCapture(Home) {
@@ -132,11 +136,15 @@ view Notice(Message text) {
 
 // -- Find anything ---------------------------------------------------------------------------------------------
 
-command FindAnything {
+folder
+action FindAnythingIntent() {
+   Title "Find anything"
+   present FindSheet() as palette
+}
+command FindAnything = FindAnythingIntent() with {
    Label "Find anything"
    Icon "magnifyingglass"
    Key "cmd+k"
-   does { present FindSheet() as palette }
 }
 
 view FindSheet() {

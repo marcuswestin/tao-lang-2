@@ -10,6 +10,7 @@ app SheetPresentation {
 // `as sheet` presents through the platform's own modal host — a page sheet on iOS, a modal window
 // on Android — while Back and `dismiss` stay the operations they are for any other presentation.
 view MainView() {
+   Title "Sheet Presentation"
    render Col() [gap 8] {
       Text("Sheet Presentation")
 

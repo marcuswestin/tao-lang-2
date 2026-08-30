@@ -13,24 +13,26 @@ view NoStopSelected() {
 
 view DayPlan(Day) {
    Title if Day.Title is empty then Day.Date.Long else Day.Title
-   Toolbar { AddStop [primary] }
+   Toolbar { AddStop }
    query DayStops from Day.Stops { }
 
-   command AddStop {
+   action AddStopIntent() runs single {
+      Title "Add a stop"
+      // Visibility follows permission to create a Stop in Day.Stops, resolved by the store.
+      let Stop = ask NewStopSheet(Day)
+      stop if Stop is none
+      reveal StopDetails(Stop) in @details
+   }
+   command AddStop = AddStopIntent() with {
       Label "Add a stop"
       Icon "plus"
       Key "cmd+n"
-      Available when can create Stop in Day.Stops
-      runs single
-      does {
-         let Stop = ask NewStopSheet(Day)
-         stop if Stop is none
-         reveal StopDetails(Stop) in @details
-   }  }
+   }
 
    render ScrollView [screen] {
       guard Day
       Col [page, width max 900] {
+         Row [content right center, gap xs, wrap] { Button(AddStop) }
          if Day.Title is not empty { Text(Day.Date.Long) [caption] }
          // The day's name and date stand on their own, so they write through — no draft, no save; the
          // entity's `validate` keeps the date inside the trip.
@@ -90,43 +92,49 @@ file view NewStopSheet(Day) responds Stop {
 
 view StopDetails(Stop) {
    Title Stop.Title
-   Toolbar { SaveStop [primary], ToggleVisited, DeleteStop }
+   Toolbar { SaveStop ToggleVisited DeleteStop }
    draft Mine = Stop from Stop
    presence Others on Stop
    query Attached from Stop.Attachments { }
 
-   command SaveStop {
+   action SaveStopIntent() runs single {
+      Title "Save"
+      when save Mine {
+               saved -> present Notice("Saved") as toast (Key: "stop")
+               // Offline is not failure: the draft commits locally and syncs when the connection returns.
+               queued -> present Notice("Saved on this device — it syncs when you're back online") as toast (Key: "stop")
+               conflict -> present ResolveStopConflict(Mine) as sheet
+      }
+   }
+   command SaveStop = SaveStopIntent() with {
       Label "Save"
       Icon "checkmark"
       Key "cmd+s"
-      Enabled when Mine changed // shown, but not pressable, until something changed
-      runs single
-      does {
-         when save Mine {
-            saved -> present Notice("Saved") as toast (Key: "stop")
-            // Offline is not failure: the draft commits locally and syncs when the connection returns.
-            queued -> present Notice("Saved on this device — it syncs when you're back online") as toast (Key: "stop")
-            conflict -> present ResolveStopConflict(Mine) as sheet
-   }  }  }
-   command ToggleVisited {
-      // Visited is a fact about the road, not part of the edit: it stands on its own, so it writes through
-      // the row directly and never waits on the draft.
+      Enabled Mine changed
+   }
+   action ToggleVisitedIntent() {
+      Title "Toggle visited"
+      // Visibility follows permission to change Stop, resolved by the store.
+      // Visited is a fact about the road, not part of the edit: it writes through directly and never
+      // waits on the draft.
+      toggle Stop.Visited
+   }
+   command ToggleVisited = ToggleVisitedIntent() with {
       Label if Stop is Visited then "Mark as planned" else "Mark as visited"
       Icon "checkmark.circle"
-      Available when can change Stop
-      does { toggle Stop.Visited }
    }
-   command DeleteStop {
+   action DeleteStopIntent() runs single {
+      Title "Delete stop"
+      // Store-derived delete permission controls visibility. The delete effect and explicit
+      // confirmation carry the destructive intent; the command adds no separate role marker.
+      stop unless ask Confirm("Delete { Stop.Title }?", Body: "It leaves the day for everyone.", Verb: "Delete")
+      delete Stop
+      dismiss
+   }
+   command DeleteStop = DeleteStopIntent() with {
       Label "Delete stop"
       Icon "trash"
-      Intent destructive
-      Available when can delete Stop
-      runs single
-      does {
-         stop unless ask Confirm("Delete { Stop.Title }?", Body: "It leaves the day for everyone.", Verb: "Delete")
-         delete Stop
-         dismiss
-   }  }
+   }
    action Attach(Chosen file) runs parallel {
       create Attachment in Stop.Attachments { File: Chosen, AddedBy: Me }
    }
@@ -135,6 +143,11 @@ view StopDetails(Stop) {
       guard Stop
       Col [page, width max 680] {
          Text("{ Stop.Day.Date.Long } · Stop { Stop.Position } of { Stop.Day.Stops.Count }") [caption]
+         Row [content right center, gap xs, wrap] {
+            Button(SaveStop)
+            Button(ToggleVisited)
+            Button(DeleteStop)
+         }
          loop Others where Other is not Me { Status("{ Other.Name } is editing this stop", Announce: yes) }
          if Mine changed { Status("Unsaved changes") }
 

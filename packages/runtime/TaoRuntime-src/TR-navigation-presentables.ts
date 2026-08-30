@@ -3,6 +3,7 @@ import type {
   TaoNavigationArguments,
   TaoPresentableDefinition,
 } from './TR-navigation'
+import type { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import type { TaoProps } from './TR-TaoProps'
 
 export type Evaluable = {
@@ -23,8 +24,12 @@ export class RuntimePresentable {
     return this
   }
 
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode {
-    return this.definition.render(arguments_, taoProps)
+  render(
+    arguments_: TaoNavigationArguments,
+    taoProps?: TaoProps,
+    host?: RuntimeHostReadChannel,
+  ): React.ReactNode {
+    return this.definition.render(arguments_, taoProps, host)
   }
 }
 

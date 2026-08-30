@@ -18,6 +18,20 @@ export function testNavKind(
   profile: TaoNavKindProfile,
 ): void {
   assertNavKind(kind.profile === profile, `Expected the '${profile}' profile, received '${kind.profile}'.`)
+  assertNavKind(kind.protocolVersion === 2, 'A navigation kind must implement protocol version 2.')
+  assertNavKind(Object.isFrozen(kind.hostSlots), 'Host-slot metadata must be immutable.')
+  assertNavKind(Object.isFrozen(kind.hostSlots.reads), 'Host-slot read metadata must be immutable.')
+  assertNavKind(Object.isFrozen(kind.hostSlots.requires), 'Host-slot requirement metadata must be immutable.')
+  const expectedReads = profile === 'stack' ? ['Title', 'Toolbar'] : []
+  const expectedRequires = profile === 'stack' ? ['Title'] : []
+  assertNavKind(
+    JSON.stringify(kind.hostSlots.reads) === JSON.stringify(expectedReads),
+    `${profile} must publish its exact host read-set.`,
+  )
+  assertNavKind(
+    JSON.stringify(kind.hostSlots.requires) === JSON.stringify(expectedRequires),
+    `${profile} must publish its exact required host slots.`,
+  )
 
   const declaration = createNavDeclaration(`Conformance ${profile}`)
   const home = new RuntimePresentable({ name: 'Home', render: () => null })

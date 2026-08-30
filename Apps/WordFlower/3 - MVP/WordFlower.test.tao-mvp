@@ -105,13 +105,17 @@ test "WordFlower full target" {
 
    test "preserves workspace and document CRUD through lifecycle states" {
       run WordFlower
+      expect navigation title "WordFlower"
       enter "Novel" into #workspaceName
       submit #workspaceName
       select #workspaces[1] {
          press #openWorkspace
       }
+      expect navigation title "Novel"
       enter "Renamed novel" into #workspaceTitle
-      press #saveWorkspace
+      expect toolbar command "Save workspace" enabled
+      press toolbar command "Save workspace"
+      expect navigation title "Renamed novel"
       expect text "Workspace: Renamed novel"
       press #addDocument
       expect text "Document title is required"
@@ -206,10 +210,13 @@ test "WordFlower remote data" {
 test "WordFlower navigation foundation" {
    test "native back uses the semantic reducer" {
       run WordFlowerFoundationTest
+      expect navigation title "Navigation foundation"
       expect text "Foundation home marker"
       press text "Open deterministic detail"
+      expect navigation title "Foundation detail"
       expect text "Foundation detail marker"
       back
+      expect navigation title "Navigation foundation"
       expect text "Foundation home marker"
       expect missing text "Foundation detail marker"
    }

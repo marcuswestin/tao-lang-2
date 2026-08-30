@@ -1,0 +1,188 @@
+import React from 'react'
+import type { Evaluable } from './TR-navigation-presentables'
+import type { Subscription } from './TR-navigation-state'
+
+/** TaoNavigationCommand is one occurrence-scoped intent exposed by a directly presented view. */
+export type TaoNavigationCommand = Readonly<{
+  enabled: boolean
+  icon?: string
+  identity: string
+  key: string
+  label: string
+  invoke(): unknown
+}>
+
+/** TaoHostSlotSnapshot is the normalized chrome state read by a navigation host. */
+export type TaoHostSlotSnapshot = Readonly<{
+  title?: string
+  toolbar: readonly TaoNavigationCommand[]
+}>
+
+export type TaoCommandAction = {
+  evaluate(): { jsValue: { invoke(...arguments_: Evaluable[]): unknown } }
+}
+
+export type TaoCommandDefinition = {
+  action: TaoCommandAction
+  arguments: readonly Evaluable[]
+  enabled?: () => Evaluable | undefined
+  icon?: () => Evaluable | undefined
+  intentTitle?: () => Evaluable | undefined
+  key?: () => Evaluable | undefined
+  label?: () => Evaluable | undefined
+  name: string
+}
+
+export type TaoHostSlotValue = Evaluable | undefined | readonly RuntimeNavigationCommand[]
+export type TaoHostSlotValues = Readonly<Record<string, (() => TaoHostSlotValue) | undefined>>
+export type TaoNavHostSlotConfiguration = Readonly<
+  Record<string, Evaluable | readonly RuntimeNavigationCommand[]>
+>
+
+/** RuntimeNavigationCommand keeps bound arguments and reactive affordance metadata together. */
+export class RuntimeNavigationCommand {
+  readonly jsValue: Readonly<{ invoke(): unknown }>
+
+  constructor(private readonly definition: TaoCommandDefinition) {
+    this.jsValue = Object.freeze({
+      invoke: () => this.definition.action.evaluate().jsValue.invoke(...this.definition.arguments),
+    })
+  }
+
+  evaluate(): this {
+    return this
+  }
+
+  read(): TaoNavigationCommand {
+    const icon = textValue(this.definition.icon?.())
+    const label = textValue(this.definition.label?.())
+      ?? textValue(this.definition.intentTitle?.())
+      ?? this.definition.name
+    return Object.freeze({
+      enabled: booleanValue(this.definition.enabled?.(), true),
+      ...(icon ? { icon } : {}),
+      identity: this.definition.name,
+      key: textValue(this.definition.key?.()) ?? this.definition.name,
+      label,
+      invoke: this.jsValue.invoke,
+    })
+  }
+}
+
+/** RuntimeHostReadChannel belongs to one presented occurrence, never to its render descendants. */
+export class RuntimeHostReadChannel implements Subscription {
+  private invocations = new Map<string, { current(): unknown; invoke(): unknown }>()
+  private listeners = new Set<() => void>()
+  private revision = 0
+  private current: TaoHostSlotSnapshot = emptyHostSlotSnapshot
+
+  readonly snapshot = (): number => this.revision
+
+  readonly subscribe = (listener: () => void): () => void => {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  read(): TaoHostSlotSnapshot {
+    return this.current
+  }
+
+  publish(next: TaoHostSlotSnapshot): void {
+    const activeKeys = new Set<string>()
+    const toolbar = next.toolbar.map(command => {
+      activeKeys.add(command.identity)
+      let invocation = this.invocations.get(command.identity)
+      if (!invocation) {
+        invocation = {
+          current: command.invoke,
+          invoke() {
+            return this.current()
+          },
+        }
+        this.invocations.set(command.identity, invocation)
+      } else {
+        invocation.current = command.invoke
+      }
+      return Object.freeze({ ...command, invoke: invocation.invoke.bind(invocation) })
+    })
+    for (const key of this.invocations.keys()) {
+      if (!activeKeys.has(key)) {
+        this.invocations.delete(key)
+      }
+    }
+    const normalized = Object.freeze({
+      ...(next.title === undefined ? {} : { title: next.title }),
+      toolbar: Object.freeze(toolbar),
+    })
+    const changed = !sameSnapshot(this.current, normalized)
+    // Stable invocation cells refresh occurrence closures without rerendering visually equal chrome.
+    if (changed) {
+      this.current = normalized
+    }
+    if (!changed) {
+      return
+    }
+    this.revision += 1
+    for (const listener of this.listeners) {
+      listener()
+    }
+  }
+}
+
+export const emptyHostSlotSnapshot: TaoHostSlotSnapshot = Object.freeze({ toolbar: Object.freeze([]) })
+
+/** useHostSlotSnapshot subscribes one host surface to one direct occurrence channel. */
+export function useHostSlotSnapshot(channel: RuntimeHostReadChannel): TaoHostSlotSnapshot {
+  React.useSyncExternalStore(channel.subscribe, channel.snapshot, channel.snapshot)
+  return channel.read()
+}
+
+/** useHostSlots publishes direct view fills after the presented view commits. */
+export function useHostSlots(channel: RuntimeHostReadChannel | undefined, values: TaoHostSlotValues): void {
+  const titleValue = values['Title']?.()
+  const toolbarValue = values['Toolbar']?.()
+  const title = textValue(isEvaluable(titleValue) ? titleValue : undefined)
+  const toolbar = Array.isArray(toolbarValue) ? toolbarValue.map(command => command.read()) : []
+  React.useLayoutEffect(() => {
+    if (!channel) {
+      return
+    }
+    channel.publish(Object.freeze({
+      ...(title === undefined ? {} : { title }),
+      toolbar: Object.freeze(toolbar),
+    }))
+  })
+}
+
+function isEvaluable(value: TaoHostSlotValue): value is Evaluable {
+  return value !== undefined
+    && !Array.isArray(value)
+    && typeof (value as Evaluable).evaluate === 'function'
+}
+
+function textValue(value: Evaluable | undefined): string | undefined {
+  const jsValue = value?.evaluate().jsValue
+  return typeof jsValue === 'string' && jsValue.length > 0 ? jsValue : undefined
+}
+
+function booleanValue(value: Evaluable | undefined, fallback: boolean): boolean {
+  const jsValue = value?.evaluate().jsValue
+  return typeof jsValue === 'boolean' ? jsValue : fallback
+}
+
+function snapshotFingerprint(title: string | undefined, toolbar: readonly TaoNavigationCommand[]): string {
+  return JSON.stringify([
+    title ?? null,
+    toolbar.map(command => [
+      command.identity,
+      command.key,
+      command.label,
+      command.icon ?? null,
+      command.enabled,
+    ]),
+  ])
+}
+
+function sameSnapshot(left: TaoHostSlotSnapshot, right: TaoHostSlotSnapshot): boolean {
+  return snapshotFingerprint(left.title, left.toolbar) === snapshotFingerprint(right.title, right.toolbar)
+}

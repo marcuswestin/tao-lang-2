@@ -188,6 +188,7 @@ Describe('Expo runtime', () => {
         }
 
         view Home() {
+          Title "Home"
           state Status = "Ready"
           action AskForConfirmation() {
             let Result = ask Confirm()
@@ -245,6 +246,48 @@ Describe('Expo runtime', () => {
       async paths => {
         await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
           /press text "Missing button" expected one pressable but found 0 matches/,
+        )
+      },
+    )
+  })
+
+  Test('rejects pressing a disabled toolbar command', async () => {
+    await withTaoFiles(
+      'tao-runtime-disabled-toolbar-test-plan-',
+      {
+        'Main.test.tao': `
+          use ToolbarApp from ./
+
+          test "Toolbar" {
+            test "disabled command cannot be pressed" {
+              run ToolbarApp
+              expect toolbar command "Save" disabled
+              press toolbar command "Save"
+            }
+          }
+        `,
+        'Main.tao': `
+          use StackNav from @tao/nav
+          use Text from @tao/ui
+
+          app ToolbarApp {
+            Name "Toolbar"
+            Navigator StackNav { Initial Home }
+          }
+
+          view Home() {
+            state CanSave = false
+            Title "Home"
+            action SaveDocument() { Title "Save" }
+            command Save = SaveDocument() with { Enabled CanSave }
+            Toolbar { Save }
+            render Text("Home")
+          }
+        `,
+      },
+      async paths => {
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /cannot press a disabled toolbar command/,
         )
       },
     )
@@ -362,6 +405,7 @@ Describe('Expo runtime', () => {
         }
 
         view Main() {
+          Title "Main"
           state Draft = ""
           state Status = "Waiting"
           state Selection = "Nothing selected"
@@ -458,6 +502,7 @@ Describe('Expo runtime', () => {
         }
 
         workspace view Home() {
+          Title "Home"
           action Open() { present Detail() }
           render Stack(){
             Text("Home")
@@ -466,6 +511,7 @@ Describe('Expo runtime', () => {
         }
 
         workspace view Detail() {
+          Title "Detail"
           render Text("Detail")
         }
 

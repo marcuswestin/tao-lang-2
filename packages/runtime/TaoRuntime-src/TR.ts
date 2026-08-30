@@ -31,8 +31,13 @@ import { NativeModules } from './TR-native-modules'
 import {
   NavigationControls,
   NavKindControls,
+  type RuntimeHostReadChannel,
+  type RuntimeNavigationCommand,
   type TaoNavDeclaration,
   type TaoNavDescriptor,
+  type TaoNavHostSlot,
+  type TaoNavHostSlotConfiguration,
+  type TaoNavHostSlotContract,
   type TaoNavigationValue,
   type TaoNavKind,
   type TaoNavKindProfile,
@@ -203,8 +208,38 @@ class TR {
   }
 
   /** Action creates runtime Tao actions from generated callbacks. */
-  static Action<Args extends any[]>(body: (...args: Args) => unknown): TR.Action<Args> {
-    return new RuntimeAction(body)
+  static Action<Args extends any[]>(
+    body: (...args: Args) => unknown,
+    metadata: RuntimeActionMetadata<Args> = {},
+  ): TR.Action<Args> {
+    return new RuntimeAction(body, metadata)
+  }
+
+  /** ActionTitle evaluates an intent's reactive Title for one bound command invocation. */
+  static ActionTitle<Args extends any[]>(action: TR.Action<Args>, arguments_: Args): TR.Evaluable | undefined {
+    return runtimeActionMetadata.get(action)?.title?.(...arguments_)
+  }
+
+  /** ActionDescription evaluates an intent's explanatory metadata for one invocation. */
+  static ActionDescription<Args extends any[]>(
+    action: TR.Action<Args>,
+    arguments_: Args,
+  ): TR.Evaluable | undefined {
+    return runtimeActionMetadata.get(action)?.description?.(...arguments_)
+  }
+
+  /** ActionSummary evaluates an intent's parameter sentence for one invocation. */
+  static ActionSummary<Args extends any[]>(action: TR.Action<Args>, arguments_: Args): TR.Evaluable | undefined {
+    return runtimeActionMetadata.get(action)?.summary?.(...arguments_)
+  }
+
+  /** BridgedAction adapts an explicitly action-typed TypeScript export at the ordinary from boundary. */
+  static BridgedAction<Args extends TR.Evaluable[]>(
+    implementation: (...arguments_: any[]) => unknown,
+  ): TR.Action<Args> {
+    return TR.Action(async (...arguments_: Args) => {
+      await implementation(...arguments_.map(argument => argument.evaluate().jsValue))
+    })
   }
 
   /** Async starts detached action work immediately and reports the failure its absent caller cannot observe. */
@@ -484,11 +519,23 @@ class RuntimeActionValue<Args extends any[] = any[]> {
   }
 }
 
+type RuntimeActionMetadata<Args extends any[] = any[]> = {
+  description?: (...args: Args) => TR.Evaluable
+  summary?: (...args: Args) => TR.Evaluable
+  title?: (...args: Args) => TR.Evaluable
+}
+
+const runtimeActionMetadata = new WeakMap<object, RuntimeActionMetadata>()
+
 class RuntimeAction<Args extends any[] = any[]> {
   readonly jsValue: RuntimeActionValue<Args>
 
-  constructor(body: (...args: Args) => unknown) {
+  constructor(
+    body: (...args: Args) => unknown,
+    metadata: RuntimeActionMetadata<Args> = {},
+  ) {
     this.jsValue = new RuntimeActionValue(body)
+    runtimeActionMetadata.set(this, metadata)
   }
 
   evaluate(): RuntimeAction<Args> {
@@ -596,6 +643,10 @@ namespace TR {
   export type DesignSpec = TaoDesignSpec
   /** NavKindProfile declares the shipped profile-specific lifecycle contracts. */
   export type NavKindProfile = TaoNavKindProfile
+  /** NavHostSlot names chrome values a navigation kind may read from its direct presented view. */
+  export type NavHostSlot = TaoNavHostSlot
+  /** NavHostSlotContract publishes immutable read and requirement sets in protocol v2. */
+  export type NavHostSlotContract = TaoNavHostSlotContract
   /** NavDeclaration is the immutable declaration identity carried by configured descriptors. */
   export type NavDeclaration = TaoNavDeclaration
   /** NavKind declares the published declaration-owned navigation implementation protocol. */
@@ -621,6 +672,12 @@ namespace TR {
   export type SelectionNavConfiguration = TaoSelectionNavConfiguration
   /** NavigationValue declares one mounted declaration-owned navigation occurrence. */
   export type NavigationValue = TaoNavigationValue
+  /** HostReadChannel is the occurrence-local direct-view chrome publication channel. */
+  export type HostReadChannel = RuntimeHostReadChannel
+  /** NavigationCommand is one occurrence-bound toolbar intent. */
+  export type NavigationCommand = RuntimeNavigationCommand
+  /** NavHostSlotConfiguration is the normalized host-read slot payload for a nav occurrence. */
+  export type NavHostSlotConfiguration = TaoNavHostSlotConfiguration
   /** Presentable declares a first-class Tao ui descriptor. */
   export type Presentable = TaoPresentable
 }

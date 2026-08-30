@@ -21,7 +21,8 @@ Describe('Expo runtime', () => {
       .map(view => RN.StyleSheet.flatten(view.props.style))
       .filter(Boolean)
 
-    ExpectScreen(screen).toHaveText('Layout and app shell')
+    Expect(screen.getAllByText('Layout and app shell')).toHaveLength(2)
+    Expect(screen.getByRole('header').props.children).toBe('Layout and app shell')
     ExpectScreen(screen).toHaveText('This screen should sit inside the default Tao app shell.')
     ExpectScreen(screen).toHaveText('Safe default app frame')
     ExpectScreen(screen).toHaveText('Primary action')

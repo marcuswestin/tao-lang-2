@@ -11,6 +11,9 @@ import type {
   TaoSlotNavConfiguration,
   TaoStackNavConfiguration,
 } from './TR-navigation'
+import { BasicStackSurface } from './TR-navigation-basic-stack'
+import { RuntimeHostReadChannel } from './TR-navigation-host-slots'
+import { nativeStackAvailable, NativeStackSurface } from './TR-navigation-native-stack'
 import { nativeSelectionTabsAvailable, renderNativeSelectionTabs } from './TR-navigation-native-tabs'
 import type { PresentableEntry } from './TR-navigation-state'
 import { navigationHostStyle, NavigationLevel, navigationProps } from './TR-navigation-surfaces'
@@ -31,13 +34,19 @@ import { Views } from './TR-views'
 export class RuntimeStackNav extends RuntimeNavigationValue {
   readonly kind = 'stack'
   readonly name: string
-  private entries: PresentableEntry[]
+  private entries: Array<PresentableEntry & { host: RuntimeHostReadChannel }>
   private nextEntryId = 1
 
-  constructor(readonly descriptor: TaoNavDescriptor<'stack', TaoStackNavConfiguration>) {
+  constructor(
+    readonly descriptor: TaoNavDescriptor<'stack', TaoStackNavConfiguration>,
+    private readonly surface: 'basic' | 'native' = 'native',
+  ) {
     super()
     this.name = descriptor.declaration.name
     this.entries = [this.initialEntry()]
+    if (isNavigation(descriptor.config.initial)) {
+      descriptor.config.initial.subscribe(() => this.emit())
+    }
   }
 
   get depth(): number {
@@ -45,7 +54,12 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   }
 
   present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
-    this.entries.push({ arguments: { ...arguments_ }, instanceId: this.nextEntryId++, presentable })
+    this.entries.push({
+      arguments: { ...arguments_ },
+      host: new RuntimeHostReadChannel(),
+      instanceId: this.nextEntryId++,
+      presentable,
+    })
     this.emit()
   }
 
@@ -59,7 +73,11 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   }
 
   protected canGoBackContent(): boolean {
-    return this.entries.length > 1
+    return this.entries.length > 1 || this.initialNavigation()?.canGoBack === true
+  }
+
+  protected override contentHistoryDepth(): number {
+    return this.entries.length - 1 + (this.initialNavigation()?.historyDepth() ?? 0)
   }
 
   protected dismissContent(): boolean {
@@ -67,30 +85,76 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   }
 
   protected backContent(): boolean {
-    if (this.entries.length === 1) {
-      return false
+    if (this.entries.length > 1) {
+      this.entries.pop()
+      this.emit()
+      return true
     }
-    this.entries.pop()
-    this.emit()
-    return true
+    return this.initialNavigation()?.back() ?? false
   }
 
   protected resetContent(): void {
     this.entries = [this.initialEntry()]
+    this.initialNavigation()?.reset()
   }
 
   protected renderContent(taoProps?: TaoProps): React.ReactNode {
-    return this.entries.map((entry, index) =>
-      React.createElement(NavigationLevel, {
-        children: entry.presentable.render(entry.arguments, navigationProps(taoProps, this)),
-        hidden: index !== this.entries.length - 1,
-        key: entry.instanceId,
-      })
-    )
+    const props = { entries: this.entries, navigation: this, taoProps: navigationProps(taoProps, this) }
+    return this.surface === 'native'
+      ? React.createElement(NativeStackSurface, props)
+      : React.createElement(BasicStackSurface, props)
   }
 
-  private initialEntry(): PresentableEntry {
-    return { arguments: {}, instanceId: this.nextEntryId++, presentable: this.descriptor.config.initial }
+  /** reconcileNativeDismissal applies a gesture once; a prior Tao/header Back makes it a no-op. */
+  reconcileNativeDismissal(instanceId: number, count: number): void {
+    // A native gesture belongs to the retained content stack. If Tao is currently presenting an
+    // overlay or ask above it, that semantic layer must win Back precedence and the gesture is stale.
+    if (this.historyDepth() > this.contentHistoryDepth()) {
+      return
+    }
+    const dismissedIndex = this.entries.findIndex(entry => entry.instanceId === instanceId)
+    if (dismissedIndex !== this.entries.length - 1 || dismissedIndex < 1) {
+      return
+    }
+    let changed = false
+    for (let index = 0; index < count && this.entries.length > 1; index++) {
+      this.entries.pop()
+      changed = true
+    }
+    if (changed) {
+      this.emit()
+    }
+  }
+
+  override ownsWindowSurface(): boolean {
+    return true
+  }
+
+  override ownsBackAffordance(): boolean {
+    // Content chrome is defocused while an overlay or ask is active, so it cannot own the visible
+    // affordance then. The app host supplies one until the overlay lane is empty again.
+    if (this.historyDepth() > this.contentHistoryDepth()) {
+      return false
+    }
+    return this.depth > 1 || this.initialNavigation()?.ownsBackAffordance() === true
+  }
+
+  nativeSurfaceAvailable(): boolean {
+    return this.surface === 'native' && nativeStackAvailable()
+  }
+
+  private initialEntry(): PresentableEntry & { host: RuntimeHostReadChannel } {
+    return {
+      arguments: {},
+      host: new RuntimeHostReadChannel(),
+      instanceId: this.nextEntryId++,
+      presentable: this.descriptor.config.initial,
+    }
+  }
+
+  private initialNavigation(): RuntimeNavigationValue | undefined {
+    const initial = this.descriptor.config.initial
+    return isNavigation(initial) ? initial : undefined
   }
 }
 
@@ -98,7 +162,7 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
 export class RuntimeSlotNav extends RuntimeNavigationValue {
   readonly kind = 'slot'
   readonly name: string
-  private presented: PresentableEntry | undefined
+  private presented: PresentableEntry<TaoPresentable> | undefined
   private nextEntryId = 1
 
   constructor(readonly descriptor: TaoNavDescriptor<'slot', TaoSlotNavConfiguration>) {
@@ -135,6 +199,16 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
   protected canGoBackContent(): boolean {
     return this.presented !== undefined
       || (isNavigation(this.descriptor.config.initial) && this.descriptor.config.initial.canGoBack)
+  }
+
+  protected override contentHistoryDepth(): number {
+    const initialDepth = isNavigation(this.descriptor.config.initial)
+      ? this.descriptor.config.initial.historyDepth()
+      : 0
+    if (this.presented) {
+      return 1 + initialDepth
+    }
+    return initialDepth
   }
 
   protected backContent(): boolean {
@@ -181,7 +255,10 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
   private readonly items: SelectionItemState[]
   private nextEntryId = 1
 
-  constructor(readonly descriptor: TaoNavDescriptor<'selection', TaoSelectionNavConfiguration>) {
+  constructor(
+    readonly descriptor: TaoNavDescriptor<'selection', TaoSelectionNavConfiguration>,
+    private readonly nativeSurface = true,
+  ) {
     super()
     const definition = descriptor.config
     this.name = descriptor.declaration.name
@@ -248,6 +325,13 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     return isNavigation(content) && content.canGoBack
   }
 
+  protected override contentHistoryDepth(): number {
+    const active = this.activeItem()
+    const nested = active.definition.content
+    return active.entries.length - 1
+      + (isNavigation(nested) ? nested.historyDepth() : 0)
+  }
+
   protected dismissContent(): boolean {
     return this.backContent()
   }
@@ -280,7 +364,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     // reducer stays the source of truth — and every tab's entry stack stays mounted inside its
     // native screen, matching the JS surface's covered-content contract. Where no native host
     // exists (web, checks, a platform without the module), the JS bar below renders instead.
-    if (display === 'automatic') {
+    if (display === 'automatic' && this.nativeSurface) {
       const native = renderNativeSelectionTabs({
         activeKey: this.activeKey,
         items: this.items.map(item => ({
@@ -332,7 +416,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                 children: renderPresentable(
                   entry.presentable,
                   entry.arguments,
-                  navigationProps(taoProps, this),
+                  this.entryTaoProps(item, taoProps),
                 ),
                 hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
                 key: `${item.key}-${entry.instanceId}`,
@@ -353,6 +437,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
    */
   override ownsWindowSurface(): boolean {
     return String(this.descriptor.config.display.evaluate().jsValue) === 'automatic'
+      && this.nativeSurface
       && nativeSelectionTabsAvailable()
   }
 
@@ -365,7 +450,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
       { nativeInsets: true },
       item.entries.map((entry, index) =>
         React.createElement(NavigationLevel, {
-          children: renderPresentable(entry.presentable, entry.arguments, navigationProps(taoProps, this)),
+          children: renderPresentable(entry.presentable, entry.arguments, this.entryTaoProps(item, taoProps)),
           hidden: index !== item.entries.length - 1,
           key: `${item.key}-${entry.instanceId}`,
         })
@@ -375,6 +460,13 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
 
   private activeItem(): SelectionItemState {
     return this.item(this.activeKey)!
+  }
+
+  private entryTaoProps(item: SelectionItemState, taoProps?: TaoProps): TaoProps {
+    return {
+      ...navigationProps(taoProps, this),
+      navigationHostActive: taoProps?.navigationHostActive !== false && item.key === this.activeKey,
+    }
   }
 
   private initialEntry(content: TaoPresentable | TaoNavigationValue): SelectionItemState['entries'][number] {

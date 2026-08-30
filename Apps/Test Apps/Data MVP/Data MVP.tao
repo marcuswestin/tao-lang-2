@@ -30,6 +30,7 @@ data Tasks / Task {
 }
 
 view MainView() {
+   Title "Data MVP"
    state WorkspaceDraft = ""
    state TaskDraft = ""
    query Workspaces { }

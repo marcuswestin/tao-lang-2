@@ -11,6 +11,7 @@ app DeviceKit {
 }  }
 
 view MainView() {
+   Title "Device Kit"
    state Feedback = Haptic()
    state Pasteboard = Clipboard()
    state Sharing = Share()

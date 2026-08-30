@@ -1,0 +1,12 @@
+use BasicNavigation from ./
+
+test "Basic Navigation" {
+   test "renders the same host slots through the explicit basic kit" {
+      run BasicNavigation
+      expect navigation title "Basic navigation"
+      expect toolbar command "Confirm basic navigation" enabled
+      expect text "Confirmed: no"
+      press toolbar command "Confirm basic navigation"
+      expect text "Confirmed: yes"
+   }
+}

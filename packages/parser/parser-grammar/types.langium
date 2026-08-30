@@ -2,6 +2,7 @@ grammar TaoTypes
 
 import "./visibility"
 import "./expressions"
+import "./imports"
 import "./terminals"
 
 entry TypesGrammarEntrypoint:
@@ -12,7 +13,8 @@ PrimitiveDeclaration:
     'primitive' name=PrimitiveType ('is' base=PrimitiveType)? ('with' slots=ItemTypeExpression)?;
 
 TypeDeclaration:
-    visibility=DeclarationVisibility? 'type' name=ID 'is' type=TypeExpression;
+    visibility=DeclarationVisibility? 'type' name=ID
+    ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference);
 
 TypeExpression:
     DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;

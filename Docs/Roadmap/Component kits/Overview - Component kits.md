@@ -33,8 +33,9 @@ public view Slider = native.Slider
 - **`view Name = ns.Member`** declares a pass-through alias, with ordinary visibility. Implemented:
   the alias form targets a `view` — since the unified view tranche there is only one renderable
   kind, and call-site checks (caller content, named slots, `responds`) are inferred from the
-  target's body, so the alias publishes the target's whole interface. Navs keep their own value
-  heads.
+  target's body, so the alias publishes the target's whole interface. Configurable types use the
+  parallel identity-preserving form `type Name = ns.Member`; `@tao/nav` uses it to republish the
+  native declarations while retaining their configuration interfaces and protocol identities.
 - **Namespace member access** is cheap at runtime — the generated module does the equivalent of
   `import * as ns` from the target module, which generated code already does for every import.
   The cost is per grammar position; alias right-hand sides and render sites
@@ -121,9 +122,12 @@ Rules to pin during implementation:
 ## Navigation surfaces (settled)
 
 The native **tab bar** is a native SelectionNav implementation — the nav-kind seam exists and
-`Display "automatic"` was already pointing at it. **Sheet** becomes a presentation mode
+`Display "automatic"` was already pointing at it. Native **stack navigation** maps the same Tao
+reducer-owned entries to platform transitions and header chrome; the directly presented view's
+reactive `Title` and `Toolbar` supplied slots drive that header. **Sheet** is a presentation mode
 (`present X as sheet`) beside overlay and toast. App code keeps writing `nav X = SelectionNav
-{ ... }` and `present Y`; native-ness lives in the implementation, never at the call site.
+{ ... }` and `present Y`; native-ness lives in the imported implementation, never at the call site.
+Bare `@tao/nav` aliases `native/`; an explicit `@tao/nav/basic` import selects the portable host.
 
 ## Starting set (settled: conservative, bridge-first)
 
@@ -152,8 +156,13 @@ Landed:
   the clause-honoring wireframe tier.
 - **Native navigation surfaces**: `SelectionNav` with `Display "automatic"` renders through
   `react-native-screens`' BottomTabs (UITabBarController on iOS — Liquid Glass on an iOS 26 build —
-  and the Material bar on Android), controlled by Tao's reducer; `present X as sheet` hosts a ui in
-  the platform's modal.
+  and the Material bar on Android), controlled by Tao's reducer; `present X as sheet` hosts a view in
+  the platform's modal. `StackNav` now uses the platform stack/header while retaining Tao's reducer,
+  reads direct reactive `Title`/`Toolbar` slots, and falls back to the same fixed-header basic host on
+  web or under deterministic behavior checks.
+- **`@tao/nav` has the standard kit shape**: root configurable-type aliases publish `native/` by
+  default, and `basic/` publishes the portable implementations with the same family contracts and
+  `TR.NavKind` conformance coverage.
 - **Best-effort styling** with a development-time warning for clauses a native control cannot honor.
 - **Optional hosts**: every platform module is required lazily; a missing one renders a portable
   equivalent, so web, the Jest harness, and a partial rollout all work behind the same import.

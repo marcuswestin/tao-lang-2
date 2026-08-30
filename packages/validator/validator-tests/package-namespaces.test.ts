@@ -122,6 +122,45 @@ Describe('validator: package namespaces and view aliases', () => {
   )
 
   Test(
+    'reports the terminal target kind through a type-alias chain',
+    rejectsFiles(
+      {
+        'Main.tao': `
+          use package @middle
+          public type Published = middle.Middle
+        `,
+        '@middle/Types.tao': `
+          use package @widgets
+          public type Middle = widgets.Slug
+        `,
+        '@widgets/Widgets.tao': widgetsPackage,
+      },
+      usePackageValidationMessages.typeAliasTargetKind('Published', 'Slug'),
+    ),
+  )
+
+  Test(
+    'reserves the type-alias cycle diagnostic for an actual cycle',
+    rejectsFiles(
+      {
+        'Main.tao': `
+          use package @alpha
+          public type Published = alpha.Alpha
+        `,
+        '@alpha/Types.tao': `
+          use package @beta
+          public type Alpha = beta.Beta
+        `,
+        '@beta/Types.tao': `
+          use package @alpha
+          public type Beta = alpha.Alpha
+        `,
+      },
+      usePackageValidationMessages.typeAliasCycle('Published'),
+    ),
+  )
+
+  Test(
     'binds call sites through the alias to the target interface',
     rejectsFiles(
       {

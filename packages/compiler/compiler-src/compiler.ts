@@ -3,9 +3,11 @@ import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import {
+  configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
   configurationSidecarBindingName,
   isRuntimeConfigurableDeclaration,
+  isTransparentConfigurableAlias,
 } from './codegen/app/configuration-compiler'
 import {
   bridgeBindingName,
@@ -248,6 +250,9 @@ function planOutputPaths(
     }
     const sidecars = [
       ...declarations.flatMap(declaration => {
+        if (isTransparentConfigurableAlias(declaration)) {
+          return []
+        }
         const implementation = AST.configurationImplementationOf(declaration)
         const sidecarPath = implementation?.path
         return implementation === undefined || sidecarPath === undefined
@@ -287,6 +292,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = [
     ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
+    ...configurationAliasImportLines(file, planned.modulePath, outputPaths),
     ...planned.injections.map(injection =>
       `import ${injection.binding} from '${relativeImportPath(planned.modulePath, injection.relativePath)}'`
     ),
@@ -337,7 +343,10 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     : [{
       sourcePath: file.path,
       relativePath: planned.declarationsPath,
-      code: RuntimeGen.ConfigurationDeclarations(file.ast),
+      code: RuntimeGen.ConfigurationDeclarations(
+        file.ast,
+        configurationAliasImportLines(file, planned.declarationsPath, outputPaths),
+      ),
     }]
   const injections: CompiledFile[] = planned.injections.map(injection => ({
     sourcePath: file.path,
@@ -361,6 +370,30 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     })
   }
   return [module, ...injections, ...declarations, ...copiedSidecars.values()]
+}
+
+function configurationAliasImportLines(
+  file: ParsedFile,
+  currentOutputPath: string,
+  outputPaths: PlannedOutputs,
+): string[] {
+  const importLines = file.ast.statements.filter(isTransparentConfigurableAlias).flatMap(declaration => {
+    const target = declaration.aliasTarget?.member.ref
+    if (!target || !AST.isTypeDeclaration(target)) {
+      return []
+    }
+    const targetSourcePath = AST.getDocument(target).uri.path
+    const targetOutputPath = outputPaths.modulePathBySourcePath.get(targetSourcePath)
+    if (!targetOutputPath) {
+      return []
+    }
+    const targetType = `${target.name}Config`
+    const localType = configurationAliasTargetTypeBindingName(declaration)
+    return [
+      `import type { ${targetType} as ${localType} } from '${relativeImportPath(currentOutputPath, targetOutputPath)}'`,
+    ]
+  })
+  return [...new Set(importLines)]
 }
 
 function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {
@@ -471,9 +504,13 @@ function resolveImports(
       scopeBindings.set(binding, binding)
     }
   }
-  // A view alias imports its target under a private local name; the alias's own name is then bound
-  // and exported by the ordinary scope machinery, so consumers never see the indirection.
-  for (const declaration of file.statements.filter(AST.isViewDeclaration)) {
+  // A transparent view or configurable-type alias imports its target under a private local name;
+  // the alias's own exported binding points at that exact value, preserving declaration identity.
+  for (
+    const declaration of file.statements.filter(statement =>
+      AST.isViewDeclaration(statement) || isTransparentConfigurableAlias(statement)
+    )
+  ) {
     const aliasTarget = declaration.aliasTarget
     if (!aliasTarget) {
       continue
@@ -508,11 +545,25 @@ function resolveImports(
     if (!target) {
       continue
     }
+    const targetDeclaration = target.ast.statements.find(statement =>
+      declarationEmitsRuntimeBinding(statement)
+      && statement.name === memberName
+      && Packages.declarationIsImportableFromUse(statement, resolution)
+    )
+    if (!targetDeclaration) {
+      continue
+    }
+    const targetBinding = isRuntimeConfigurableDeclaration(targetDeclaration)
+      ? configurationRuntimeBindingName(targetDeclaration)
+      : memberName
+    const aliasBinding = isRuntimeConfigurableDeclaration(declaration)
+      ? configurationRuntimeBindingName(declaration)
+      : declaration.name
     const localBinding = `__tao_package_${namespaceName}_${memberName}`
     const names = bySource.get(target.path) ?? new Set<string>()
-    names.add(`${memberName} as ${localBinding}`)
+    names.add(`${targetBinding} as ${localBinding}`)
     bySource.set(target.path, names)
-    scopeBindings.set(declaration.name, localBinding)
+    scopeBindings.set(aliasBinding, localBinding)
   }
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
     const resolution = Packages.resolve(packagesContext, {

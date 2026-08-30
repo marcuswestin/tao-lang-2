@@ -19,6 +19,7 @@ function Doubled(Length duration) returns duration {
 }
 
 view MainView() {
+   Title "Unit Values"
    let Wait = 220.ms
    let Half = 30.seconds
    let Whole = 1.minute

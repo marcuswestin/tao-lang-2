@@ -43,11 +43,16 @@ export const navigationValidationMessages = {
   replaceContext: '`replace` is allowed only inside a view declaration.',
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
   unknownAuxiliary: (app: string, key: string) => `App ${app} has no auxiliary navigator named '@${key}'.`,
+  missingHostTitle: (view: string) =>
+    `View '${view}' must fill Title when used as a statically known StackNav destination.`,
+  missingNavHostTitle: (nav: string) =>
+    `Navigation '${nav}' must configure Title when used as a statically known StackNav destination.`,
 } as const
 
 /** navigationValidationChecks validates configured navigation and presentation calls. */
 export const navigationValidationChecks = {
   [AST.ContextualPresentStatement.$type]: validateContextualPresentation,
+  [AST.ConfigurationEntry.$type]: validateStackInitialTitle,
   [AST.DismissStatement.$type]: (dismiss, ctx) => {
     if (!AST.findOwningView(dismiss)) {
       ctx.error(navigationValidationMessages.dismissContext, dismiss)
@@ -291,6 +296,293 @@ function validateContextualPresentation(
   validatePresentationMode(presentation, toast, ctx)
   validatePresentationArguments(presentation, ctx)
   validatePresentationTarget(presentation, toast, ctx)
+  validatePresentedViewTitle(presentation, ctx)
+}
+
+function validateStackInitialTitle(entry: AST.ConfigurationEntry, ctx: ValidationContext): void {
+  if (!stackInitialHost(entry)) {
+    return
+  }
+  const value = entry.value
+  if (!value) {
+    return
+  }
+  if (AST.isConfigurationReference(value)) {
+    validateReferencedStackDestinationTitle(value.target.ref, entry, ctx)
+    return
+  }
+  if (!AST.isExpression(value)) {
+    return
+  }
+  const configuration = configuredExpressionConfiguration(value)
+  if (
+    configuration
+    && AST.configurationPrimitiveOf(configuration.declaration) === 'nav'
+    && !configurationExpressionFillsTitle(value, new Set())
+  ) {
+    ctx.error(navigationValidationMessages.missingNavHostTitle(configuration.declaration.name), entry)
+  }
+}
+
+function stackInitialHost(entry: AST.ConfigurationEntry): AST.ConfigurableDeclaration | undefined {
+  if (entry.name !== 'Initial' || !entry.value) {
+    return undefined
+  }
+  const block = entry.$container
+  const constructor = AST.isConfigurationBlock(block) ? block.$container : undefined
+  const declaration = AST.isConfigurationConstructor(constructor)
+    ? constructor.type.ref
+    : AST.isRefinementExpression(constructor)
+    ? configuredExpressionConfiguration(constructor)?.declaration
+    : undefined
+  return AST.isTypeDeclaration(declaration) && isStackNavDeclaration(declaration) ? declaration : undefined
+}
+
+function validateReferencedStackDestinationTitle(
+  destination: AST.NamedDeclaration | undefined,
+  node: AST.Node,
+  ctx: ValidationContext,
+): void {
+  const view = referencedViewDeclaration(destination)
+  if (view) {
+    reportMissingHostTitle(view, node, ctx)
+    return
+  }
+  if (
+    (AST.isNavDeclaration(destination) || AST.isAliasDeclaration(destination))
+    && Type.isAssignable(Type.ofValueDeclaration(destination), { kind: 'primitive', primitive: 'nav' })
+    && !configuredValueFillsTitle(destination)
+  ) {
+    ctx.error(navigationValidationMessages.missingNavHostTitle(destination.name), node)
+  }
+}
+
+function configuredValueFillsTitle(
+  declaration: AST.NavDeclaration | AST.AliasDeclaration,
+  seen: Set<AST.ValueDeclaration> = new Set(),
+): boolean {
+  if (seen.has(declaration)) {
+    return false
+  }
+  seen.add(declaration)
+  return configurationExpressionFillsTitle(declaration.value, seen)
+}
+
+function configurationExpressionFillsTitle(
+  expression: AST.Expression | undefined,
+  seen: Set<AST.ValueDeclaration>,
+): boolean {
+  if (!expression) {
+    return false
+  }
+  if (AST.isConfigurationConstructor(expression)) {
+    return configurationBlockFillsTitle(expression.block)
+      || configurationTypeHasMeaningfulTitle(expression.type.ref)
+  }
+  if (AST.isRefinementExpression(expression)) {
+    if (configurationBlockFillsTitle(expression.patchBlock)) {
+      return true
+    }
+  }
+  if (!AST.isRefinementExpression(expression) && !AST.isValueReference(expression)) {
+    return false
+  }
+  const target = expression.target.ref
+  return (AST.isNavDeclaration(target) || AST.isAliasDeclaration(target))
+    ? configuredValueFillsTitle(target, seen)
+    : false
+}
+
+function configurationBlockFillsTitle(block: AST.ConfigurationBlock | undefined): boolean {
+  return block?.entries.some(entry => entry.name === 'Title' && entry.value !== undefined) ?? false
+}
+
+function configurationTypeHasMeaningfulTitle(declaration: AST.ConstructorDeclaration | undefined): boolean {
+  if (!AST.isTypeDeclaration(declaration) || !AST.isConfigurableDeclaration(declaration)) {
+    return false
+  }
+  const value = AST.configurationPropertiesOf(declaration).find(property => property.name === 'Title')?.value
+  return value !== undefined
+    && !(AST.isStringLiteral(value) && value.value === '')
+    && !AST.isNoneLiteral(value)
+}
+
+function validatePresentedViewTitle(
+  presentation: AST.ContextualPresentStatement,
+  ctx: ValidationContext,
+): void {
+  if (presentation.mode) {
+    return
+  }
+  const view = presentation.view.ref
+  if (!view) {
+    return
+  }
+  if (presentation.target?.value) {
+    const configuration = configuredExpressionConfiguration(presentation.target.value)
+    if (configuration && isStackNavDeclaration(configuration.declaration)) {
+      reportMissingHostTitle(view, presentation, ctx)
+    }
+    return
+  }
+  const auxiliary = presentation.target ? auxiliaryNavigatorForTarget(presentation.target) : undefined
+  if (auxiliary) {
+    const configuration = configuredExpressionConfiguration(auxiliary.value)
+    if (configuration && isStackNavDeclaration(configuration.declaration)) {
+      reportMissingHostTitle(view, presentation, ctx)
+    }
+    return
+  }
+  if (!presentation.target) {
+    const owner = AST.findOwningView(presentation)
+    const reachability = stackReachability(ctx.workspaceFiles)
+    if (
+      owner
+      && reachability.pushContexts.has(canonicalView(owner))
+      && reachability.destinations.has(canonicalView(view))
+    ) {
+      reportMissingHostTitle(view, presentation, ctx)
+    }
+  }
+}
+
+type StackReachability = {
+  destinations: Set<AST.ViewDeclaration>
+  pushContexts: Set<AST.ViewDeclaration>
+}
+
+function stackReachability(files: readonly AST.TaoFile[]): StackReachability {
+  const nodes = files.flatMap(file => AST.streamAllContents(file))
+  const destinations = new Set<AST.ViewDeclaration>()
+  const pushContexts = new Set<AST.ViewDeclaration>()
+  for (const node of nodes) {
+    if (AST.isConfigurationEntry(node)) {
+      const destination = stackInitialDestination(node)
+      if (destination) {
+        destinations.add(destination)
+        pushContexts.add(destination)
+      }
+      continue
+    }
+    if (AST.isContextualPresentStatement(node) && node.target && node.view.ref) {
+      const targetValue = node.target.value ?? auxiliaryNavigatorForTarget(node.target)?.value
+      const configuration = targetValue ? configuredExpressionConfiguration(targetValue) : undefined
+      if (configuration && isStackNavDeclaration(configuration.declaration)) {
+        const destination = canonicalView(node.view.ref)
+        pushContexts.add(destination)
+        if (!node.mode) {
+          destinations.add(destination)
+        }
+      }
+    }
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const node of nodes) {
+      if (AST.isRender(node)) {
+        const owner = AST.findOwningView(node)
+        const rendered = node.view?.ref
+        if (owner && rendered && pushContexts.has(canonicalView(owner))) {
+          const destination = canonicalView(rendered)
+          if (!pushContexts.has(destination)) {
+            pushContexts.add(destination)
+            changed = true
+          }
+        }
+        continue
+      }
+      if (!AST.isContextualPresentStatement(node) || node.target || !node.view.ref) {
+        continue
+      }
+      const owner = AST.findOwningView(node)
+      const destination = canonicalView(node.view.ref)
+      if (!owner || !pushContexts.has(canonicalView(owner))) {
+        continue
+      }
+      if (!pushContexts.has(destination)) {
+        pushContexts.add(destination)
+        changed = true
+      }
+      if (!node.mode && !destinations.has(destination)) {
+        destinations.add(destination)
+        changed = true
+      }
+    }
+  }
+  return { destinations, pushContexts }
+}
+
+function stackInitialDestination(entry: AST.ConfigurationEntry): AST.ViewDeclaration | undefined {
+  if (entry.name !== 'Initial' || !entry.value || !AST.isConfigurationReference(entry.value)) {
+    return undefined
+  }
+  return stackInitialHost(entry) ? referencedViewDeclaration(entry.value.target.ref) : undefined
+}
+
+function referencedViewDeclaration(
+  declaration: AST.NamedDeclaration | undefined,
+  seen: Set<AST.AliasDeclaration> = new Set(),
+): AST.ViewDeclaration | undefined {
+  if (AST.isViewDeclaration(declaration)) {
+    return canonicalView(declaration)
+  }
+  if (!AST.isAliasDeclaration(declaration) || seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  return AST.isValueReference(declaration.value)
+    ? referencedViewDeclaration(declaration.value.target.ref, seen)
+    : undefined
+}
+
+function canonicalView(view: AST.ViewDeclaration): AST.ViewDeclaration {
+  const target = AST.viewAliasTarget(view)
+  return AST.isViewDeclaration(target) ? target : view
+}
+
+function reportMissingHostTitle(
+  view: AST.ViewDeclaration,
+  node: AST.Node,
+  ctx: ValidationContext,
+): void {
+  const declaration = canonicalView(view)
+  if (!AST.declarationSlotFillNamed(declaration, 'Title')) {
+    ctx.error(navigationValidationMessages.missingHostTitle(view.name), node)
+  }
+}
+
+/** isStackNavDeclaration follows transparent aliases and nominal ancestry to the stdlib family. */
+export function isStackNavDeclaration(
+  declaration: AST.ConfigurableDeclaration,
+  seen: Set<AST.TypeDeclaration> = new Set(),
+): boolean {
+  if (seen.has(declaration)) {
+    return false
+  }
+  seen.add(declaration)
+  if (AST.configurationPrimitiveOf(declaration) !== 'nav') {
+    return false
+  }
+  const path = AST.getDocument(declaration).uri.path
+  if (
+    declaration.name === 'StackNav'
+    && (path.endsWith('/@tao/nav/native/Navigation.tao')
+      || path.endsWith('/@tao/nav/basic/Navigation.tao'))
+  ) {
+    return true
+  }
+  const aliasTarget = declaration.aliasTarget?.member.ref
+  if (AST.isTypeDeclaration(aliasTarget) && isStackNavDeclaration(aliasTarget, seen)) {
+    return true
+  }
+  const type = declaration.type
+  const base = type && AST.isDerivedTypeExpression(type) ? type.base : type
+  if (!base || !AST.isNamedTypeReference(base) || base.members.length > 0) {
+    return false
+  }
+  const parent = Type.visibleDeclaration(declaration, base.root)
+  return parent ? isStackNavDeclaration(parent, seen) : false
 }
 
 function validatePresentationMode(
@@ -360,15 +652,21 @@ function validatePresentationTarget(
     return
   }
   const targetKey = target.key.slice(1)
-  const rootApp = ASTUtils.rootAppValue(app)
-  const auxiliary = rootApp
-    && AST.isAppDeclaration(rootApp)
-    && AST.blockStatements(rootApp).find(statement =>
-      AST.isAppAuxiliaryNavigator(statement) && statement.name.slice(1) === targetKey
-    )
+  const auxiliary = auxiliaryNavigatorForTarget(target)
   if (!auxiliary) {
     ctx.error(navigationValidationMessages.unknownAuxiliary(app.name, targetKey), target)
   }
+}
+
+function auxiliaryNavigatorForTarget(target: AST.NavigationTarget): AST.AppAuxiliaryNavigator | undefined {
+  const app = target.app?.ref
+  const rootApp = app ? ASTUtils.rootAppValue(app) : undefined
+  return rootApp && AST.isAppDeclaration(rootApp) && target.key
+    ? AST.blockStatements(rootApp).find(
+      (statement): statement is AST.AppAuxiliaryNavigator =>
+        AST.isAppAuxiliaryNavigator(statement) && statement.name === target.key,
+    )
+    : undefined
 }
 
 function negativeNumberLiteral(expression: AST.Expression): boolean {

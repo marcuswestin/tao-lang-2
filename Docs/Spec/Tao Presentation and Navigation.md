@@ -8,7 +8,10 @@ toast, be presented into a nav, or be asked for a typed response. The implemente
 is:
 
 ```tao
-primitive view
+primitive view with {
+   Title text is ""
+   Toolbar list of action() is []
+}
 primitive nav is view with { implement }
 ```
 
@@ -47,6 +50,16 @@ app WordFlower {
    Datasource Local {
       StorageKey "WordFlowerData"
    }
+}
+
+view Home() {
+   Title "Home"
+   render HomePage()
+}
+
+view Settings() {
+   Title "Settings"
+   render SettingsPage()
 }
 ```
 
@@ -96,7 +109,61 @@ interactive terminal asks which app to use; a noninteractive process fails befor
 Expo startup and lists the available names. Filename, source order, and a global name registry never
 select an app.
 
-## Self-hosted nav declarations
+## Host-facing view slots
+
+`Title` and `Toolbar` are supplied slots declared by primitive `view` in the prelude. They are not
+compiler-owned metadata and do not make a second kind of view body statement. A declaration fills
+them with the same capitalized-member form used for other supplied slots:
+
+```tao
+view StoryScreen(Story) {
+   Title Story.Title
+
+   action OpenStoryLink() {
+      Title "Open story"
+      do OpenURL(Story.Url)
+   }
+   command Open = OpenStoryLink() with {
+      Icon "safari"
+   }
+   Toolbar { Open }
+
+   render StoryPage(Story)
+}
+```
+
+The values are reactive in the presented occurrence. If `Story.Title`, a parameter, a query, or
+local state used by a fill changes, the mounted host updates its chrome. A host reads only the view
+it directly presents. It never searches descendants, so a wrapper that should carry chrome fills
+its own slots and a child's title or toolbar cannot bubble through it. Presentation sites cannot
+override these fills.
+
+An action becomes an intent when it supplies `Title`. A view-scoped `command` binds an intent and
+may supply `Label`, `Icon`, `Key`, and boolean `Enabled`; its label defaults to the intent title. The
+members all take ordinary reactive expressions: `Enabled CanSave` is a boolean fill, while `when`
+always begins a value-producing expression. The binding closes over that view occurrence and is
+active while the nearest presentation of the view has focus. `Toolbar { ... }` lists commands in source order. Native hosts put them in trailing
+platform chrome; basic and web hosts render equivalent styled controls. When space is insufficient,
+the current mobile/basic header policy keeps the first two controls direct and moves the trailing
+suffix into an accessible `More` affordance in the same order. A future wider host may expose more
+direct controls without reordering them. A command is never clipped or dropped, and a disabled
+command remains visible but inert.
+
+The stdlib host-family contract fixes the current read and requirement sets:
+
+| Host placement                                                                | Reads              | Requires |
+| ----------------------------------------------------------------------------- | ------------------ | -------- |
+| every `StackNav` entry, including `Initial` and later pushes                  | `Title`, `Toolbar` | `Title`  |
+| reserved `present ... as window` contract, including its full-screen fallback | `Title`, `Toolbar` | `Title`  |
+| `SlotNav`, `SelectionNav`, `SplitNav`; root, sheet, menu, and toast           | neither            | neither  |
+
+`Toolbar` is optional wherever it is read. Selection item `Label` and `Icon` remain explicit item
+configuration, and split-pane configuration is not inferred from child content. Native and basic
+implementations of the same family have identical sets. A missing required fill is diagnosed at the
+placement, not the declaration: a view remains valid until it is placed in a host that requires the
+slot. For example, a push reports that `StoryScreen` is pushed on a `StackNav` and must fill `Title`.
+
+## Self-hosted nav declarations and kits
 
 The stdlib navs are ordinary Tao declarations whose public properties are their complete generic
 configuration contract:
@@ -104,6 +171,9 @@ configuration contract:
 Reusable nav types use `type Name is nav with { ... }`. Their explicit protocol-binding clause is
 `nav <Export> from <path>`; it fills primitive `nav`'s implementation requirement but is not an
 ordinary Tao data property.
+
+The standard package has the same root/native/basic shape as `@tao/ui`. Its native declaration is
+ordinary Tao plus a TypeScript protocol binding:
 
 ```tao
 public
@@ -113,6 +183,20 @@ type StackNav is nav with {
    nav StackNavKind from ./NavKinds.ts
 }
 ```
+
+The root transparently republishes that declaration rather than constructing another kind:
+
+```tao
+use package ./native
+
+public type StackNav = native.StackNav
+```
+
+This configurable-type alias preserves the target declaration's identity, inferred interface,
+primitive family, configuration type, host-slot contract, and runtime implementation. Product code
+uses `StackNav` from bare `@tao/nav`, which is native by default. A harness or product that wants the
+portable rendering imports the same family name from `@tao/nav/basic`; configurations and call sites
+do not change.
 
 A reusable `nav` type is top-level, declares its visibility, and binds one implementation with
 `nav <Export> from <path>`; it is not a render-bearing product declaration. The
@@ -127,10 +211,12 @@ zero-argument factory — a named export, never a default — and the compiler c
 into generated output and evaluates it once for the declaration.
 The resulting value implements the published `TR.NavKind` protocol. Its immutable descriptor keeps
 the Tao declaration identity and normalized configuration. Each mount creates independent state.
-The protocol owns `configure`, `mount`, `render`, `present`, `dismiss`, `back`, `reset`,
-`canGoBack`, and keyed activation; it does not drive native navigation directly. Every implementation
+Protocol version 2 owns `configure`, `mount`, `render`, `present`, `dismiss`, `back`, `reset`,
+`canGoBack`, keyed activation, and immutable host-slot `reads` and `requires` metadata. Tao's reducer
+continues to own occurrence identity, history, overlay precedence, and Back semantics; a host renderer
+may drive native transition and chrome machinery without becoming a second navigation state owner. Every implementation
 must pass the exported `TR.testNavKind(kind, profile)` common and profile-specific conformance suite.
-`StackNav` is the shipped proof that the stdlib itself uses this mechanism.
+Every shipped native and basic kind passes that suite.
 
 ## Navigation kinds
 
@@ -144,6 +230,14 @@ The implemented declarations are:
   text and view-typed `Content`. An item may also supply `Icon` text as system-icon metadata.
   Selecting another key reveals its mounted item without pushing a content occurrence. Inactive
   items stay mounted but hidden, preserving their state.
+
+The native `StackNav` maps those reducer-owned entries to the platform stack and header through the
+pinned `react-native-screens` host. A native dismissal or gesture reconciles exactly one Tao Back;
+overlays still consume Back before content history. The basic stack renders a fixed title/back/toolbar
+header and scrollable safe content. On web, the native kit uses that basic chrome, updates
+`document.title`, mirrors semantic pushes into same-URL `history.state`, and maps browser Back to one
+Tao Back. This is history integration, not routing: internal mount paths are not shareable or
+reloadable URLs.
 
 The configured `Initial` value is a descriptor, not an invoked rendered element. The general
 declaration-completeness rule requires every supplied slot to be filled before any declaration is
@@ -159,9 +253,11 @@ SelectionNav item without presenting new content:
 present WordFlower@settings
 ```
 
-Split navigation, windows, routes, deep links, restoration, animation policy, public occurrence
-handles, presentation results, and lifecycle hooks remain deferred unless a later WordFlower tier
-states an explicit future design.
+Split navigation, window hosting, routes, deep links, restoration, animation policy, public
+occurrence handles, presentation results, and lifecycle hooks remain deferred unless a later
+WordFlower tier states an explicit future design. The window host's read/require set above is
+settled now so its future implementation cannot invent call-site title overrides or different
+fallback semantics.
 
 ## Presenting overlays and toasts
 
@@ -245,7 +341,8 @@ Presenting the same view and semantic arguments again creates a distinct occurre
 parameters remain live, and navigation hosts subscribe to data revisions. Mounts of the same
 descriptor in separate app occurrences remain independent.
 
-The visible Back affordance, platform hardware Back, and Tao test `back` step all dispatch through
+The host-owned visible Back affordance, platform hardware Back, native stack gesture, browser Back,
+and Tao test `back` step all dispatch through
 the same app reducer. The reducer gives app auxiliaries first opportunity, then the root nav; each
 nav removes its top overlay before delegating into its content history. Root-safe Back returns
 without changing state. Each behavior check resets every mounted app and nav occurrence before it

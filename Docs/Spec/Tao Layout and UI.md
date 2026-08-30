@@ -39,13 +39,23 @@ from the body or chosen at the call site:
   places no `@@content` is a validation error.
 - A view offers named render slots iff its body declares them with `@name = empty`.
 - A view answers `ask` iff its head declares `responds <Type>`.
+- A view describes itself to a host iff it fills a supplied host-facing slot such as `Title` or
+  `Toolbar`. Those slots are declared on primitive `view` in the prelude, and their values are
+  ordinary reactive expressions over the occurrence's parameters, reads, and state. Which host
+  reads or requires them is inferred from the placement, never declared on the view.
 - How a view appears — composed inline, presented as an overlay, sheet, or toast, presented into a
   nav, or asked for a response — is a property of each call site, never of the declaration. See
   `Tao Presentation and Navigation.md`.
 
-One body grammar covers every view: state, entity queries, actions, aliases, tags, slot
-declarations, and one trailing `render` are legal in any view body, so a stateful
+One body grammar covers every view: supplied-slot fills, state, entity queries, actions, commands,
+aliases, tags, render-slot declarations, and one trailing `render` are legal in any view body, so a stateful
 content-accepting wrapper (a collapsible section) is an ordinary view.
+
+Host-facing slots are distinct from render slots. `Title Book.Title` supplies a value for the host
+that directly presents the view; `Toolbar { Save }` supplies focused commands for host-owned chrome.
+Neither inserts a render node, and neither bubbles from a descendant. By contrast, `@actions =
+empty` declares caller-provided content and places it inside the view's own render tree. See
+`Tao Presentation and Navigation.md` for the fixed host read/require matrix and toolbar behavior.
 
 In the type system, `view` is the one renderable primitive, and `nav` refines it
 (`primitive nav is view`). A `nav` is a package-configured presentation kind that binds its

@@ -99,6 +99,11 @@ Describe('validator: workspace structure', () => {
     rejects('primitive text', preludeValidationMessages.location),
   )
 
+  Test(
+    'reports cyclic user primitive inheritance without aborting validation',
+    rejects('primitive view is nav', preludeValidationMessages.location),
+  )
+
   Test('does not report duplicate visible declarations for repeated LSP document instances', async () => {
     const parserContext = Parser.createContext()
     const uri = Langium.URI.file('/__tao__/Views.tao')

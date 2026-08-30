@@ -9,6 +9,9 @@ export const usePackageValidationMessages = {
   duplicateNamespace: (name: string) => `Package namespace '${name}' is declared more than once in this file.`,
   aliasTargetKind: (name: string, member: string) => `View alias '${name}' must target a view; '${member}' is not one.`,
   aliasCycle: (name: string) => `View alias '${name}' cycles back to itself.`,
+  typeAliasTargetKind: (name: string, member: string) =>
+    `Type alias '${name}' must target a configurable type; '${member}' is not one.`,
+  typeAliasCycle: (name: string) => `Type alias '${name}' cycles back to itself.`,
 } as const
 
 /** validatePackageUseStatements validates namespace imports and their derived names. */
@@ -55,6 +58,30 @@ export const usePackageValidationChecks = {
     if (!AST.isViewDeclaration(target)) {
       ctx.error(
         usePackageValidationMessages.aliasTargetKind(declaration.name, aliasTarget.member.$refText),
+        declaration,
+      )
+    }
+  },
+  [AST.TypeDeclaration.$type]: (declaration, ctx) => {
+    const aliasTarget = declaration.aliasTarget
+    if (!aliasTarget) {
+      return
+    }
+    const member = aliasTarget.member.ref
+    if (!member) {
+      return
+    }
+    const resolution = AST.configurableTypeAliasResolution(declaration)
+    if (resolution.kind === 'unresolved') {
+      return
+    }
+    if (resolution.kind === 'cycle') {
+      ctx.error(usePackageValidationMessages.typeAliasCycle(declaration.name), declaration)
+      return
+    }
+    if (resolution.kind === 'invalid' || !AST.isConfigurableDeclaration(resolution.target)) {
+      ctx.error(
+        usePackageValidationMessages.typeAliasTargetKind(declaration.name, resolution.target.name),
         declaration,
       )
     }

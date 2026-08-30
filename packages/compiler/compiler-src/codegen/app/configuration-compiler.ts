@@ -7,6 +7,9 @@ import { compileRuntimeType } from './runtime-type-compiler'
 export const ConfigurationCompiler = {
   /** ConfigurableDeclaration emits one declaration-identity binding and evaluates its injection once. */
   ConfigurableDeclaration(declaration: AST.ConfigurableDeclaration): Compiled {
+    if (declaration.aliasTarget) {
+      return gen.noop()
+    }
     const implementation = AST.configurationImplementationOf(declaration)
     Assert.defined(implementation, 'validated configurable declaration has one implementation')
     const factory = configurationFactory(declaration, implementation)
@@ -22,13 +25,15 @@ export const ConfigurationCompiler = {
   },
 
   /** ConfigurationDeclarations emits sidecar-facing TypeScript configuration contracts for one Tao file. */
-  ConfigurationDeclarations(taoFile: AST.TaoFile): Compiled {
+  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = []): Compiled {
     const declarations = taoFile.statements.filter(isRuntimeConfigurableDeclaration)
     const hasProperties = declarations.some(declaration =>
-      AST.configurationPropertiesOf(declaration).length > 0
-      || (AST.configurationKeyOf(declaration)?.block.properties.length ?? 0) > 0
+      !declaration.aliasTarget
+      && (AST.configurationPropertiesOf(declaration).length > 0
+        || (AST.configurationKeyOf(declaration)?.block.properties.length ?? 0) > 0)
     )
     return gen`
+      ${gen.textLines(importLines.join('\n'))}
       ${hasProperties ? gen`import type TR from '@runtime/TR'` : gen.noop()}
 
       ${gen.list(declarations, configurationDeclarationType, { newLines: 2 })}
@@ -56,6 +61,15 @@ export function isRuntimeConfigurableDeclaration(
   return primitive === 'nav' || primitive === 'datasource'
 }
 
+/** isTransparentConfigurableAlias identifies a pass-through with no declaration identity of its own. */
+export function isTransparentConfigurableAlias(
+  declaration: AST.Node,
+): declaration is AST.TypeDeclaration {
+  return AST.isTypeDeclaration(declaration)
+    && declaration.aliasTarget !== undefined
+    && isRuntimeConfigurableDeclaration(declaration)
+}
+
 /** configurationSidecarBindingName returns the local alias for one sidecar's named export. */
 export function configurationSidecarBindingName(declaration: AST.ConfigurableDeclaration): string {
   return `__tao_configuration_implementation_${declaration.name}__`
@@ -64,6 +78,13 @@ export function configurationSidecarBindingName(declaration: AST.ConfigurableDec
 /** configurationRuntimeBindingName separates reusable type identities from same-name Tao values. */
 export function configurationRuntimeBindingName(declaration: AST.ConfigurableDeclaration): string {
   return `__tao_type_${declaration.name}`
+}
+
+/** configurationAliasTargetTypeBindingName is the private imported target config type for an alias. */
+export function configurationAliasTargetTypeBindingName(declaration: AST.TypeDeclaration): string {
+  const target = declaration.aliasTarget
+  Assert.defined(target, 'transparent configurable alias has a target')
+  return `__tao_package_${target.namespace.$refText}_${target.member.$refText}Config`
 }
 
 function configurationFactory(
@@ -79,6 +100,11 @@ function configurationFactory(
 }
 
 function configurationDeclarationType(declaration: AST.ConfigurableDeclaration): Compiled {
+  if (declaration.aliasTarget) {
+    return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = ${
+      gen.Name({ name: configurationAliasTargetTypeBindingName(declaration) })
+    }`
+  }
   if (AST.configurationPrimitiveOf(declaration) === 'nav') {
     return normalizedNavConfigurationType(declaration)
   }
@@ -98,6 +124,7 @@ function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration
   const key = AST.configurationKeyOf(declaration)
   if (key !== undefined && hasSelectionConfigurationShape(properties, key)) {
     return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
+      readonly hostSlots?: TR.NavHostSlotConfiguration
       readonly display: TR.Evaluable
       readonly initial: string
       readonly items: Readonly<Record<string, Readonly<{
@@ -113,6 +140,7 @@ function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration
     // `nav` refines `view`, so a view-typed Initial accepts a presentable or a mounted nav value.
     if (isPrimitive(initialType, 'view')) {
       return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
+        readonly hostSlots?: TR.NavHostSlotConfiguration
         readonly initial: TR.Presentable | TR.NavigationValue
       }>`
     }

@@ -30,6 +30,7 @@ Describe('Expo runtime minimal design', () => {
         app DarkApp { Name "Dark" Navigator StackNav { Initial DarkHome } Design Dark }
 
         view LightHome() {
+          Title "Light"
           #screen
           render Col() [screen, claim 2, width max 720, centered] {
             #title
@@ -38,6 +39,7 @@ Describe('Expo runtime minimal design', () => {
         }
 
         view DarkHome() {
+          Title "Dark"
           #screen
           render Col() [screen, claim 2, width max 720, centered] {
             #title

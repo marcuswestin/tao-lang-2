@@ -130,6 +130,47 @@ Describe('compiler: files and packages', () => {
     )
   })
 
+  Test('preserves declaration and config identity through transparent configurable alias chains', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use ChainStack from @chain
+          app Demo { Name "Demo" Navigator ChainStack { Initial Home } }
+          view Home() { Title "Home" render Empty() }
+          view Empty() { render inject ${tsFence} return null ${fence} }
+        `,
+        'Packages/@chain/Navigation.tao': `
+          use package @tao/nav as navs
+          public type AlternateStack = navs.StackNav
+          public type ChainStack = navs.StackNav
+        `,
+      },
+      async (compiled, files) => {
+        const chain = compiled['Packages/@chain/Navigation.tao'].code
+        const chainTypes = files.find(file =>
+          file.sourcePath === compiled['Packages/@chain/Navigation.tao'].sourcePath
+          && file.relativePath.endsWith('.d.ts')
+        )?.code ?? ''
+        const root = files.find(file =>
+          file.sourcePath.endsWith('/@tao/nav/Navigation.tao') && file.relativePath.endsWith('.tsx')
+        )
+          ?.code ?? ''
+
+        Expect(chain).toContain('__tao_type_StackNav as __tao_package_navs_StackNav')
+        Expect(chain).toContain('export type ChainStackConfig = __tao_package_navs_StackNavConfig')
+        Expect(chain).not.toContain('TR.Navigation.Declaration(')
+        Expect(chainTypes).toContain('import type { StackNavConfig as __tao_package_navs_StackNavConfig }')
+        Expect(chainTypes).toContain('export type ChainStackConfig = __tao_package_navs_StackNavConfig')
+        Expect(chain.match(/import type \{ StackNavConfig as __tao_package_navs_StackNavConfig \}/g)).toHaveLength(1)
+        Expect(chainTypes.match(/import type \{ StackNavConfig as __tao_package_navs_StackNavConfig \}/g))
+          .toHaveLength(1)
+        Expect(root).toContain('export type StackNavConfig = __tao_package_native_StackNavConfig')
+        Expect(root).not.toContain('TR.Navigation.Declaration(')
+      },
+    )
+  })
+
   Test('copies configuration sidecars, wires their factories, and emits configuration declarations', async () => {
     const sidecarCode = [
       "import TR from '@runtime/TR'",
@@ -236,6 +277,7 @@ Describe('compiler: files and packages', () => {
         const declarationText = declarations.code.replace(/\s+/g, ' ')
         Expect(declarationText).toContain(
           'export type SidecarStackConfig = Readonly<{ '
+            + 'readonly hostSlots?: TR.NavHostSlotConfiguration '
             + 'readonly initial: TR.Presentable | TR.NavigationValue }>',
         )
         Expect(declarationText).toContain(
@@ -243,10 +285,12 @@ Describe('compiler: files and packages', () => {
         )
         Expect(declarationText).toContain(
           'export type SidecarSlotConfig = Readonly<{ '
+            + 'readonly hostSlots?: TR.NavHostSlotConfiguration '
             + 'readonly initial: TR.Presentable | TR.NavigationValue }>',
         )
         Expect(declarationText).toContain(
           'export type SidecarSelectionConfig = Readonly<{ '
+            + 'readonly hostSlots?: TR.NavHostSlotConfiguration '
             + 'readonly display: TR.Evaluable readonly initial: string '
             + 'readonly items: Readonly<Record<string, Readonly<{ '
             + 'readonly label: TR.Evaluable readonly icon?: TR.Evaluable '
@@ -257,6 +301,7 @@ Describe('compiler: files and packages', () => {
         )
         Expect(module.code.replace(/\s+/g, ' ')).toContain(
           'export type SidecarStackConfig = Readonly<{ '
+            + 'readonly hostSlots?: TR.NavHostSlotConfiguration '
             + 'readonly initial: TR.Presentable | TR.NavigationValue }>',
         )
       },
@@ -337,6 +382,7 @@ Describe('compiler: files and packages', () => {
           use Root from ./
           workspace nav ResetNav = StackNav { Initial Home }
           view Home() {
+            Title "Home"
             action Reset() { replace ResetNav in Root }
             render Empty()
           }

@@ -95,6 +95,25 @@ type TaoTestAdvanceStep = {
   source: TaoTestSourceLocation
 }
 
+type TaoTestNavigationTitleExpectation = {
+  kind: 'expectNavigationTitle'
+  source: TaoTestSourceLocation
+  title: string
+}
+
+type TaoTestToolbarCommandExpectation = {
+  enabled: boolean
+  kind: 'expectToolbarCommand'
+  label: string
+  source: TaoTestSourceLocation
+}
+
+type TaoTestToolbarCommandPress = {
+  kind: 'pressToolbarCommand'
+  label: string
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestSelectStep scopes nested operations to one 1-based tagged loop row. */
 type TaoTestSelectStep = {
   kind: 'select'
@@ -112,8 +131,11 @@ type TaoTestStep =
   | TaoTestExpectation
   | TaoTestCheckboxStateExpectation
   | TaoTestExpectationGroupStep
+  | TaoTestNavigationTitleExpectation
   | TaoTestInputValueExpectation
   | TaoTestPressStep
+  | TaoTestToolbarCommandExpectation
+  | TaoTestToolbarCommandPress
   | TaoTestSelectStep
   | TaoTestSubmitStep
 
@@ -219,8 +241,24 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
     }),
     ExpectTextStep: compileExpectation,
     ExpectGroupStep: step => compileExpectationGroup(step, undefined),
+    ExpectNavigationTitleStep: step => ({
+      kind: 'expectNavigationTitle',
+      source: sourceLocation(step),
+      title: literalText(step.value),
+    }),
     ExpectScopeStep: step => compileExpectationGroup(step, tagName(step.tag)),
+    ExpectToolbarCommandStep: step => ({
+      enabled: step.state === 'enabled',
+      kind: 'expectToolbarCommand',
+      label: literalText(step.value),
+      source: sourceLocation(step),
+    }),
     PressTextStep: compilePressTextStep,
+    PressToolbarCommandStep: step => ({
+      kind: 'pressToolbarCommand',
+      label: literalText(step.value),
+      source: sourceLocation(step),
+    }),
     TagPressStep: step => ({
       kind: 'press',
       selector: 'tag',
@@ -243,6 +281,13 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
       source: sourceLocation(step),
     }),
   })
+}
+
+function literalText(expression: AST.Expression): string {
+  if (!AST.isStringLiteral(expression)) {
+    throw new Error('Validated navigation chrome test step must use literal text.')
+  }
+  return expression.value
 }
 
 function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {

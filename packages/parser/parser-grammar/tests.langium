@@ -17,7 +17,7 @@ TestDeclaration:
     (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
     name=STRING? block=Block;
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -28,8 +28,17 @@ PressTextStep:
 TagPressStep:
     'press' tag=TagOrHexColor;
 
+PressToolbarCommandStep:
+    'press' surface=ID 'command' value=Expression;
+
 ExpectTextStep:
     'expect' missing?='missing'? selector=TestSelector text=STRING;
+
+ExpectNavigationTitleStep:
+    'expect' 'navigation' subject=ID value=Expression;
+
+ExpectToolbarCommandStep:
+    'expect' surface=ID 'command' value=Expression state=('enabled' | 'disabled');
 
 ExpectCheckboxStateStep:
     'expect' 'checkbox' tag=TagOrHexColor state=('checked' | 'unchecked');

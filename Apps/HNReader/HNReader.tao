@@ -36,6 +36,10 @@ type StubSource is Http with {
    Adapter item is StubAdapter from ./StubAdapter.ts
 }
 
+// The generic sidecar boundary supplies an action value; the Tao intent below owns product title,
+// availability, and command placement while this bridge owns only the external-application edge.
+let OpenUrl is action(text) = OpenUrl from ./OpenStoryLink.ts
+
 // Hacker News's warm paper and orange, tuned for reading: white story cards on the beige ground,
 // rank and bylines in the brand orange, ink sized for scanning titles and reading comments.
 design HNDesign {
@@ -95,6 +99,7 @@ data Comments / Comment {
 }
 
 view FrontPage() {
+   Title "Hacker News"
    query Stories as TopStories {
       where Rank >= 1
       limit 30
@@ -137,6 +142,16 @@ view StoryRow(Story) {
 }  }  }
 
 view StoryScreen(Story) {
+   Title Story.Title
+   action OpenStoryLink() {
+      Title "Open story"
+      do OpenUrl(Story.Url)
+   }
+   command Open = OpenStoryLink() with {
+      Icon "safari"
+      Enabled Story.Url is not empty
+   }
+   Toolbar { Open }
    query Thread from Story.Comments { }
    render Col() [screen] {
       Col() [header] {

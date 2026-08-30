@@ -2,6 +2,7 @@ import type React from 'react'
 import type {
   TaoNavDeclaration,
   TaoNavDescriptor,
+  TaoNavHostSlotContract,
   TaoNavigationArguments,
   TaoNavKind,
   TaoNavKindProfile,
@@ -25,8 +26,11 @@ class RuntimeNavKind<ProfileT extends TaoNavKindProfile, ConfigurationT extends 
 {
   constructor(
     readonly profile: ProfileT,
+    readonly hostSlots: TaoNavHostSlotContract,
     private readonly createMount: NavMountFactory<ProfileT, ConfigurationT>,
   ) {}
+
+  readonly protocolVersion = 2 as const
 
   configure(
     declaration: TaoNavDeclaration,
@@ -100,31 +104,69 @@ class RuntimeNavKind<ProfileT extends TaoNavKindProfile, ConfigurationT extends 
   }
 }
 
-const stackNavKind = Object.freeze(
+const stackHostSlots = Object.freeze({
+  reads: Object.freeze(['Title', 'Toolbar'] as const),
+  requires: Object.freeze(['Title'] as const),
+})
+const noHostSlots = Object.freeze({
+  reads: Object.freeze([]),
+  requires: Object.freeze([]),
+})
+
+const nativeStackNavKind = Object.freeze(
   new RuntimeNavKind<'stack', TaoStackNavConfiguration>(
     'stack',
-    descriptor => new RuntimeStackNav(descriptor),
+    stackHostSlots,
+    descriptor => new RuntimeStackNav(descriptor, 'native'),
   ),
 )
-const slotNavKind = Object.freeze(
+const basicStackNavKind = Object.freeze(
+  new RuntimeNavKind<'stack', TaoStackNavConfiguration>(
+    'stack',
+    stackHostSlots,
+    descriptor => new RuntimeStackNav(descriptor, 'basic'),
+  ),
+)
+const nativeSlotNavKind = Object.freeze(
   new RuntimeNavKind<'slot', TaoSlotNavConfiguration>(
     'slot',
+    noHostSlots,
     descriptor => new RuntimeSlotNav(descriptor),
   ),
 )
-const selectionNavKind = Object.freeze(
+const basicSlotNavKind = Object.freeze(
+  new RuntimeNavKind<'slot', TaoSlotNavConfiguration>(
+    'slot',
+    noHostSlots,
+    descriptor => new RuntimeSlotNav(descriptor),
+  ),
+)
+const nativeSelectionNavKind = Object.freeze(
   new RuntimeNavKind<'selection', TaoSelectionNavConfiguration>(
     'selection',
-    descriptor => new RuntimeSelectionNav(descriptor),
+    noHostSlots,
+    descriptor => new RuntimeSelectionNav(descriptor, true),
+  ),
+)
+const basicSelectionNavKind = Object.freeze(
+  new RuntimeNavKind<'selection', TaoSelectionNavConfiguration>(
+    'selection',
+    noHostSlots,
+    descriptor => new RuntimeSelectionNav(descriptor, false),
   ),
 )
 
 /** NavKindControls publishes the built-in implementations used by Tao `implement inject`. */
 export const NavKindControls = {
   Declaration: createNavDeclaration,
-  Selection: (): TaoNavKind<'selection', TaoSelectionNavConfiguration> => selectionNavKind,
-  Slot: (): TaoNavKind<'slot', TaoSlotNavConfiguration> => slotNavKind,
-  Stack: (): TaoNavKind<'stack', TaoStackNavConfiguration> => stackNavKind,
+  Selection: (): TaoNavKind<'selection', TaoSelectionNavConfiguration> => nativeSelectionNavKind,
+  Slot: (): TaoNavKind<'slot', TaoSlotNavConfiguration> => nativeSlotNavKind,
+  Stack: (): TaoNavKind<'stack', TaoStackNavConfiguration> => nativeStackNavKind,
+  Basic: Object.freeze({
+    Selection: (): TaoNavKind<'selection', TaoSelectionNavConfiguration> => basicSelectionNavKind,
+    Slot: (): TaoNavKind<'slot', TaoSlotNavConfiguration> => basicSlotNavKind,
+    Stack: (): TaoNavKind<'stack', TaoStackNavConfiguration> => basicStackNavKind,
+  }),
 } as const
 
 export function assertNavKind(condition: unknown, message: string): asserts condition {

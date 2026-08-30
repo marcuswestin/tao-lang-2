@@ -199,8 +199,57 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   its diagnostic belong to the usage site, never the declaration — which is why an ephemeral
 //   presentation may take a non-serializable parameter: `SavedToast` receives the revert `action`
 //   for the very save it announces
-// - Command focus scoping (amendment §8) and the restoration policy (§10) land with their own
-//   tranches; nothing here implements them
+// - [Superseded by HOST-READ VIEW SLOTS AND NATIVE NAV KIT below.] This tranche originally deferred
+//   command focus scoping and restoration together. The host-read tranche now lands the minimal
+//   focused command vertical forced by `Toolbar`; restoration policy remains a later tranche
+//
+// HOST-READ VIEW SLOTS AND NATIVE NAV KIT. This tranche gives every view a typed, reactive way to
+// describe itself to the host that directly presents it, then makes native navigation the standard
+// kit while retaining an explicit deterministic basic implementation.
+//
+// This tranche decides:
+// - `Title` and `Toolbar` are optional supplied slots on primitive `view`, declared by the Prelude
+//   rather than compiler-owned vocabulary. `nav is view` inherits them; stdlib hosts name only the
+//   slots in their fixed read-set. A view fills
+//   one with an ordinary capitalized body member (`Title Workspace.Name`, `Toolbar { Save }`); no
+//   declaration modifier or content-side metadata keyword is introduced
+// - Slot values are live expressions over that presented occurrence's parameters, reads, and state.
+//   The host updates its chrome when a value changes. It reads only the directly presented view:
+//   descendants never bubble values, wrappers fill their own slots, and a presenter cannot override
+//   a fill at a call site
+// - Every `StackNav` entry, both `Initial` and later pushes, reads `Title` and `Toolbar` and requires
+//   `Title`. `present … as window` has that same contract, including its full-screen fallback.
+//   `Toolbar` remains optional. `SlotNav`, `SelectionNav`, `SplitNav`, and sheet, root, menu, and toast
+//   presentations read neither slot. Missing required fills are diagnosed at the placement, because
+//   the view itself remains valid in a host that does not require them
+// - An `action` or `transaction` is an intent when it supplies `Title`; no `intent` keyword exists.
+//   A `command` is a focused reference to an intent, never a second behavior body. It may supply
+//   `Label`, `Icon`, `Key`, and boolean `Enabled`; each takes an ordinary reactive expression and
+//   `Label` defaults to the intent's `Title`. A command
+//   nested in a view closes over that occurrence and remains active while its nearest presented
+//   occurrence holds focus. This tranche implements the action metadata, bound command, `Icon`,
+//   reactive `Enabled`, label default, and `Toolbar` listing that WordFlower and HNReader force; broader
+//   menus, rails, palettes, assistants, and restoration remain later work
+// - Native toolbars use trailing platform controls and basic/web toolbars use styled Tao controls.
+//   Commands retain source order. The current mobile/basic policy keeps the first two controls
+//   direct and moves the trailing suffix into a `More` affordance in the same order; a future wider
+//   host may expose more direct controls without reordering them. It never clips, drops, or silently
+//   disables commands
+// - `@tao/nav` mirrors `@tao/ui`: `native/` owns platform navigation and chrome, `basic/` owns the
+//   portable clause-honoring rendering, and the package root publishes native by default. Native and
+//   basic implementations of a family expose the same configuration, behavior, and host read-set
+// - A configurable type may transparently publish another package member with
+//   `public type StackNav = native.StackNav`. This is a pass-through, not nominal derivation: the
+//   alias preserves the target declaration's identity, inferred interface, primitive family,
+//   configuration contract, host read-set, and runtime implementation
+// - Product code keeps bare `@tao/nav` imports. The deterministic navigation harness imports
+//   `@tao/nav/basic` explicitly. Under behavior tests or on a target without the native host, a native
+//   kind uses the same synchronous semantic reducer and basic host surface; focused native adapter
+//   tests exercise platform options, transitions, and callbacks separately
+// - Journeys observe host-owned chrome rather than matching duplicate body text:
+//   `expect navigation title "WordFlower"` asserts the directly presented title,
+//   `expect toolbar command "Save workspace" enabled|disabled` asserts a visible command state, and
+//   `press toolbar command "Save workspace"` invokes that command through the host surface
 project {
    name "WordFlower"
    remote none

@@ -19,6 +19,8 @@ export type TaoProps = TaoLayoutProps & {
   callerProps?: TaoProps
   /** navigation is private Tao metadata for nearest-container presentation and dismissal. */
   navigation?: TaoNavigationValue
+  /** navigationHostActive is private focus metadata propagated separately from host-slot channels. */
+  navigationHostActive?: boolean
   /** response is private occurrence-owned ask metadata inherited by nested generated views. */
   response?: TaoResponseOccurrence
   /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
@@ -28,7 +30,7 @@ export type TaoProps = TaoLayoutProps & {
 }
 
 /** TaoAmbientContext is navigation-owned context propagated independently of layout caller props. */
-export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'response'>
+export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'navigationHostActive' | 'response'>
 
 /** TaoResponseOccurrence settles exactly one independently asked view. */
 export type TaoResponseOccurrence = {
@@ -78,11 +80,20 @@ function ambientContext(props: TaoProps | undefined): TaoAmbientContext {
   const app = appInChain(props)
   const response = responseInChain(props)
   const navigation = navigationInChain(props)
+  const navigationHostActive = navigationHostActiveInChain(props)
   return {
     ...(app ? { app } : {}),
     ...(response ? { response } : {}),
     ...(navigation ? { navigation } : {}),
+    ...(navigationHostActive === undefined ? {} : { navigationHostActive }),
   }
+}
+
+function navigationHostActiveInChain(props: TaoProps | undefined): boolean | undefined {
+  if (!props) {
+    return undefined
+  }
+  return props.navigationHostActive ?? navigationHostActiveInChain(props.callerProps)
 }
 
 /** Finds the nearest enclosing mounted app accepted by an optional declaration-identity match. */

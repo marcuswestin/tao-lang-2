@@ -164,6 +164,7 @@ Describe('Expo runtime', () => {
         }
 
         workspace view Home(Title text default "Welcome home") {
+          Title Title
           render Text(Title)
         }
 
@@ -174,7 +175,8 @@ Describe('Expo runtime', () => {
         }
       `,
       screen => {
-        ExpectScreen(screen).toHaveText('Welcome home')
+        Expect(screen.getAllByText('Welcome home')).toHaveLength(2)
+        Expect(screen.getByRole('header').props.children).toBe('Welcome home')
       },
     )
   })
@@ -315,6 +317,7 @@ Describe('Expo runtime', () => {
         let Basic = Profile { Name: "Ada" }
 
         view Home() {
+          Title "Home"
           render Stack() {
             Text("Mounted reusable app")
             when (Basic.Subtitle == none) {

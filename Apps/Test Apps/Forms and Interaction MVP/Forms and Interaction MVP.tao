@@ -12,6 +12,7 @@ function SubmittedLabel(Title text) returns text {
 }
 
 view MainView() {
+   Title "Forms and Interaction MVP"
    state Draft = ""
    state Submitted = ""
    state NamedChange = ""

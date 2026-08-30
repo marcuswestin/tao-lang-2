@@ -129,16 +129,18 @@ app WayfarePreview = Wayfare with {
 view SettingsScreen() {
    Title "Settings"
 
-   command DeleteAccount {
+   action DeleteAccountIntent() runs single {
+      Title "Delete my account"
+      // Visibility follows the signed-in account. The delete effect and explicit confirmation carry
+      // the destructive intent; commands have no separate `Intent destructive` marker.
+      stop unless ask Confirm("Delete your account?", Body: "Trips stay with the people on them; your private documents go with you. This cannot be undone.", Verb: "Delete account")
+      do DeleteMyAccount() // a sole owner is refused with the trip's own sentence
+   }
+   command DeleteAccount = DeleteAccountIntent() with {
       Label "Delete my account"
       Icon "person.crop.circle.badge.xmark"
-      Intent destructive
-      Available when Me is signed in
-      runs single
-      does {
-         stop unless ask Confirm("Delete your account?", Body: "Trips stay with the people on them; your private documents go with you. This cannot be undone.", Verb: "Delete account")
-         do DeleteMyAccount() // a sole owner is refused with the trip's own sentence
-   }  }
+      Enabled Me is signed in
+   }
 
    render ScrollView [screen] {
       Col [page, width max 720] {

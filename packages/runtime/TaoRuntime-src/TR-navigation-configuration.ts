@@ -7,6 +7,7 @@ import type {
   TaoNavigationValue,
   TaoPresentable,
 } from './TR-navigation'
+import { RuntimeNavigationCommand } from './TR-navigation-host-slots'
 import type { Evaluable } from './TR-navigation-presentables'
 import { registerNavigation } from './TR-navigation-registry'
 import { RuntimeNavigationValue } from './TR-navigation-value'
@@ -84,6 +85,7 @@ function normalizeConfiguredNavigation(
   const config = configured.config
   if (configured.declaration.kind.profile === 'stack' || configured.declaration.kind.profile === 'slot') {
     return {
+      ...normalizedHostSlots(configured),
       initial: configuredPresentable(config['Initial'], configured.declaration.name, 'Initial', registerMount),
       name: configured.declaration.name,
     }
@@ -110,11 +112,29 @@ function normalizeConfiguredNavigation(
       }),
   )
   return {
+    ...normalizedHostSlots(configured),
     display: configuredEvaluable(config['Display'], configured.declaration.name, 'Display'),
     initial: configuredKey(config['Initial'], configured.declaration.name, 'Initial'),
     items,
     name: configured.declaration.name,
   }
+}
+
+function normalizedHostSlots(configured: TaoConfiguredNavigation): Record<string, unknown> {
+  const supplied = configured.config['__taoHostSlots']
+  const values = isPlainRecord(supplied)
+    ? supplied
+    : Object.fromEntries(configured.declaration.kind.hostSlots.reads.map(name => [name, configured.config[name]]))
+  const entries = Object.entries(values).flatMap(([name, value]) => {
+    if (value && typeof (value as Evaluable).evaluate === 'function') {
+      return [[name, value] as const]
+    }
+    if (Array.isArray(value) && value.every(item => item instanceof RuntimeNavigationCommand)) {
+      return [[name, Object.freeze([...value])] as const]
+    }
+    return []
+  })
+  return { hostSlots: Object.freeze(Object.fromEntries(entries)) }
 }
 
 function configuredEvaluable(value: unknown, name: string, property: string): Evaluable {

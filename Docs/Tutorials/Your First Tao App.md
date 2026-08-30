@@ -39,6 +39,7 @@ nav LibraryStack = StackNav {
 }
 
 view BookList() {
+   Title "Reading List"
    render Col() {
       Text("Reading List")
 }  }
@@ -49,9 +50,10 @@ Four declarations, and each one has a job:
 - **`project`** names the project. One per project.
 - **`app`** is what launches. It mounts a navigator; an app never renders content itself.
 - **`nav`** is a navigator _value_. `StackNav` pushes and pops screens, and `Initial` is what it
-  shows first.
+  shows first. Bare `@tao/nav` selects the native kit, so the platform owns its transition and bar.
 - **`view`** is content that draws on screen. `render` is the tree it draws, and a navigator
-  can present any view.
+  can present any view. `Title` is reactive self-description read by the host that directly presents
+  it; every `StackNav` entry supplies one.
 
 Closing braces gather on one line rather than marching down the page. That is Tao's convention.
 
@@ -68,6 +70,7 @@ use Col, Row, ScrollView, Text from @tao/ui
 
 ```tao
 view BookList() {
+   Title "Reading List"
    render ScrollView() {
       Col() [width max 960, centered, gap 10] {
          Text("Reading List")
@@ -123,6 +126,7 @@ Now apply the bundles. A bundle goes in the same brackets as any other clause, a
 
 ```tao
 view BookList() {
+   Title "Reading List"
    render ScrollView() [screen] {
       Col() [width max 960, centered, gap 10] {
          Text("Reading List") [title]
@@ -189,6 +193,7 @@ Now read the rows. Replace `view BookList()` with:
 
 ```tao
 view BookList() {
+   Title "Reading List"
    query Books { }
    render ScrollView() [screen] {
       Col() [width max 960, centered, gap 10] {
@@ -237,6 +242,7 @@ version below — `view BookRow(Book)` underneath it does not change:
 
 ```tao
 view BookList() {
+   Title "Reading List"
    state NewTitle = ""
    query Books { }
    action AddBook() {
@@ -300,12 +306,14 @@ Add `on select` inside the loop:
 
 `on select` makes each row pressable, scoped to that row — so `Book` in the handler is the row you
 touched. **`present`** puts a view on screen; because the app's navigator is a `StackNav`, it pushes,
-and Back pops it.
+and Back pops it. The native bar reads `Title Book.Title` from that directly presented occurrence;
+if the saved title changes, the bar changes with it.
 
 Now the screen itself. Add `Checkbox` to the `@tao/ui` use line and add this declaration at the end:
 
 ```tao
 view BookScreen(Book) {
+   Title Book.Title
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
@@ -415,6 +423,7 @@ And a screen for the second tab, at the end of the file:
 
 ```tao
 view About() {
+   Title "About"
    render Col() [screen, gap 10] {
       Text("About") [title]
       Text("A small reading list, written in Tao.") [body]
@@ -492,6 +501,7 @@ test "Reading List" {
    test "adds a book, opens it, finishes it, and removes it" {
       run ReadingList
 
+      expect navigation title "Reading List"
       expect text "Nothing on the go"
       enter "The Dispossessed" into #newTitle
       press #addBook
@@ -502,6 +512,7 @@ test "Reading List" {
       select #reading[1] {
          press "The Dispossessed"
       }
+      expect navigation title "The Dispossessed"
       enter "Ursula K. Le Guin" into #author
       press #save
       expect checkbox #finished unchecked
@@ -593,6 +604,7 @@ nav ReadingListNavigator = SelectionNav {
 }  }
 
 view BookList() {
+   Title "Reading List"
    state NewTitle = ""
    query Books { }
    query Books as CurrentlyReading {
@@ -652,6 +664,7 @@ view BookRow(Book) {
 }  }
 
 view BookScreen(Book) {
+   Title Book.Title
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
@@ -703,6 +716,7 @@ view BookScreen(Book) {
 }  }  }  }
 
 view About() {
+   Title "About"
    render Col() [screen, gap 10] {
       Text("About") [title]
       Text("A small reading list, written in Tao.") [body]
@@ -712,6 +726,7 @@ test "Reading List" {
    test "adds a book, opens it, finishes it, and removes it" {
       run ReadingList
 
+      expect navigation title "Reading List"
       expect text "Nothing on the go"
       enter "The Dispossessed" into #newTitle
       press #addBook
@@ -722,6 +737,7 @@ test "Reading List" {
       select #reading[1] {
          press "The Dispossessed"
       }
+      expect navigation title "The Dispossessed"
       enter "Ursula K. Le Guin" into #author
       press #save
       expect checkbox #finished unchecked

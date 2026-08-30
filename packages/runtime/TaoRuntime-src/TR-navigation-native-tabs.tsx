@@ -1,4 +1,5 @@
 import React from 'react'
+import { nativeNavigationModule } from './TR-navigation-native-hosts'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 /**
@@ -22,51 +23,10 @@ export type TaoNativeTabItem = {
   content: React.ReactNode
 }
 
-type NativeTabsModule = {
-  BottomTabs: React.ComponentType<any>
-  BottomTabsScreen: React.ComponentType<any>
-}
-
-let nativeSurfacesEnabled = true
-
-/** disableNativeNavigationSurfaces keeps every check on the deterministic JS surfaces. */
-export function disableNativeNavigationSurfaces(): void {
-  nativeSurfacesEnabled = false
-}
-
-let cachedModule: NativeTabsModule | null | undefined
-
-function nativeTabsModule(): NativeTabsModule | undefined {
-  if (cachedModule === undefined) {
-    try {
-      // Lazy and optional: the runtime never hard-requires the native module, so environments
-      // without it keep the JS surface. An install that omits the package still bundles, because
-      // the toolchain's metro config resolves missing optional hosts to Metro's empty module.
-      const screens = require('react-native-screens') as Partial<NativeTabsModule>
-      cachedModule = screens.BottomTabs && screens.BottomTabsScreen
-        ? { BottomTabs: screens.BottomTabs, BottomTabsScreen: screens.BottomTabsScreen }
-        : null
-      if (!cachedModule) {
-        console.warn('[tao] native tabs unavailable: react-native-screens has no BottomTabs export')
-      }
-    } catch (error) {
-      console.warn(`[tao] native tabs unavailable: ${String(error)}`)
-      cachedModule = null
-    }
-  }
-  return cachedModule ?? undefined
-}
-
 /** nativeSelectionTabsAvailable says whether the platform tab surface can render here at all. */
 export function nativeSelectionTabsAvailable(): boolean {
-  if (!nativeSurfacesEnabled) {
-    return false
-  }
-  const os = requireReactNativeRuntime().Platform?.OS
-  if (os !== 'ios' && os !== 'android') {
-    return false
-  }
-  return nativeTabsModule() !== undefined
+  const module = nativeNavigationModule()
+  return Boolean(module?.BottomTabs && module.BottomTabsScreen)
 }
 
 /**
@@ -83,9 +43,11 @@ export function renderNativeSelectionTabs(options: {
     return undefined
   }
   const os = requireReactNativeRuntime().Platform?.OS
-  const module = nativeTabsModule()!
+  const module = nativeNavigationModule()!
+  const BottomTabs = module.BottomTabs!
+  const BottomTabsScreen = module.BottomTabsScreen!
   return React.createElement(
-    module.BottomTabs,
+    BottomTabs,
     {
       experimentalControlNavigationStateInJS: true,
       onNativeFocusChange: (event: { nativeEvent: { tabKey: string } }) => {
@@ -93,7 +55,7 @@ export function renderNativeSelectionTabs(options: {
       },
     },
     options.items.map(item =>
-      React.createElement(module.BottomTabsScreen, {
+      React.createElement(BottomTabsScreen, {
         children: item.content,
         isFocused: item.key === options.activeKey,
         key: item.key,

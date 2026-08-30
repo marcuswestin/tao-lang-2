@@ -1,5 +1,5 @@
 use InstantDB from @instantdb
-use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav, Window, WindowHost from @tao/nav
+use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav from @tao/nav
 use CountWords, Join from @tao/text
 use Checkbox, Col, FormButton, Icon, Image, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
@@ -236,7 +236,7 @@ datasource WordFlowerStageStore = WordFlowerStore with {
 // owns an absolute overlay lane above its content, so no app declares an overlay host; overlays stack
 // while covered entries stay mounted but hidden, and Back/dismiss use the app reducer. Toasts are
 // app-level, transient, replace the same key rather than stacking, and neither consume Back nor expose
-// plain dismissal. Keyed auxiliary entries remain for app-specific hosts such as windows.
+// plain dismissal. Window presentation is universal and keeps its semantic key on the call site.
 // A datasource value uses a primitive head, such as `datasource WordFlowerStore = InstantDB { ... }`;
 // Memory is keyless, while remote providers own their provider-specific configuration below.
 app WordFlower {
@@ -244,13 +244,10 @@ app WordFlower {
    Design WordFlowerDesign
    Navigator WordFlowerNavigator
 
-   // Declaring a nav does not mount it. App-owned direct keys mount app-specific hosts.
-   // Overlay and toast hosting need no declaration; a presentation names the mode instead.
+   // Overlay, toast, and window hosting need no declaration; a presentation names the mode instead.
    // Layout and Dismissible below are Revolution-only future overlay-presentation modifiers:
    //   present X() as overlay (Layout: "sheet", Dismissible: true)
    // Layout is one of "sheet" | "popover" | "full-screen" | "palette" | "inspector" | "floating".
-   @windows WindowHost { }
-
    Datasource WordFlowerStore
 }
 
@@ -396,6 +393,7 @@ view TagSummary(Tags PromptTags) {
 }
 
 view WorkspaceList() {
+   Title "WordFlower"
    state WorkspaceName = ""
    query Workspaces { }
    action AddWorkspace() {
@@ -483,6 +481,7 @@ view WorkspaceNameNotice() {
 
 workspace
 view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
+   Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    let SectionLabel = "Drafts"
@@ -493,11 +492,17 @@ view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named
       where is Final
    }
    action SaveWorkspace() {
+      Title "Save workspace"
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
       }
    }
+   command Save = SaveWorkspace() with {
+      Icon "checkmark"
+      Enabled WorkspaceNameDraft is not empty
+   }
+   Toolbar { Save }
    action AddDocument() {
       guard DocumentTitle empty
       async {
@@ -605,6 +610,7 @@ view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named
 }
 
 view WorkspaceChooser() {
+   Title "Choose a workspace"
    query Workspaces { }
    render Col() [screen, gap 10] {
       Text("Choose a workspace")
@@ -700,6 +706,7 @@ view FileTree(Workspace) {
 // The pane-level entry guards entity availability; the editor below assumes an available document.
 workspace
 view DocumentScreen(Document) {
+   Title Document.Title
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -800,11 +807,7 @@ view DocumentEditor(Document) {
          #comparisonWindow
          FormButton("Comparison window") {
             on press -> {
-               present Window {
-                  Content: DocumentScreen(Document)
-                  Key: "comparison-left"
-                  Title: DocumentLabel(Document.Title)
-               } in WordFlower@windows
+               present DocumentScreen(Document) as window (Key: "comparison-left")
             }
          }
          #snapshotDocument
@@ -920,6 +923,7 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
 }
 
 view Settings() {
+   Title "Settings"
    render Scroller() [screen] {
       Col() [width max 720, centered, gap 10] {
          Text("Settings") [title]
@@ -937,6 +941,7 @@ view Settings() {
 }
 
 view SignedOut() {
+   Title "Signed out"
    render Text("Signed out")
 }
 
@@ -986,6 +991,7 @@ let WordFlowerDeclarationLetWith = app with {
 }
 
 view FoundationHome() {
+   Title "Navigation foundation"
    render Col() {
       Text("Foundation home marker")
       FormButton("Open deterministic detail") {
@@ -998,6 +1004,7 @@ view FoundationHome() {
 }
 
 view FoundationDetail() {
+   Title "Foundation detail"
    render Col() {
       Text("Foundation detail marker")
       FormButton("Reset foundation app") {

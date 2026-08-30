@@ -11,7 +11,16 @@ import {
   mountConfiguredNavigation,
   resolveNavigationTarget,
 } from './TR-navigation-configuration'
-import { disableNativeNavigationSurfaces } from './TR-navigation-native-tabs'
+import {
+  type RuntimeHostReadChannel,
+  RuntimeNavigationCommand,
+  type TaoCommandAction,
+  type TaoCommandDefinition,
+  type TaoHostSlotValues,
+  type TaoNavHostSlotConfiguration,
+  useHostSlots,
+} from './TR-navigation-host-slots'
+import { disableNativeNavigationSurfaces } from './TR-navigation-native-hosts'
 import {
   type Evaluable,
   RuntimePresentable,
@@ -32,7 +41,11 @@ export type TaoNavigationArguments = Record<string, Evaluable>
 
 export type TaoPresentableDefinition = {
   name: string
-  render(arguments_: TaoNavigationArguments, taoProps?: TaoProps): React.ReactNode
+  render(
+    arguments_: TaoNavigationArguments,
+    taoProps?: TaoProps,
+    host?: RuntimeHostReadChannel,
+  ): React.ReactNode
 }
 
 export type TaoSelectionNavItemDefinition = {
@@ -70,6 +83,11 @@ type TaoToastPresentationOptions = {
 }
 
 export type TaoNavKindProfile = 'selection' | 'slot' | 'stack'
+export type TaoNavHostSlot = 'Title' | 'Toolbar'
+export type TaoNavHostSlotContract = Readonly<{
+  reads: readonly TaoNavHostSlot[]
+  requires: readonly TaoNavHostSlot[]
+}>
 
 export type TaoNavDeclaration = Readonly<{
   identity: symbol
@@ -83,15 +101,18 @@ export type TaoImplementedNavDeclaration =
   }>
 
 export type TaoStackNavConfiguration = Readonly<{
-  initial: TaoPresentable
+  hostSlots?: TaoNavHostSlotConfiguration
+  initial: TaoPresentable | TaoNavigationValue
 }>
 
 export type TaoSlotNavConfiguration = Readonly<{
+  hostSlots?: TaoNavHostSlotConfiguration
   initial: TaoPresentable | TaoNavigationValue
 }>
 
 export type TaoSelectionNavConfiguration = Readonly<{
   display: Evaluable
+  hostSlots?: TaoNavHostSlotConfiguration
   initial: string
   items: Readonly<Record<string, Readonly<TaoSelectionNavItemDefinition>>>
 }>
@@ -131,6 +152,8 @@ export type TaoNavKind<
   ProfileT extends TaoNavKindProfile = TaoNavKindProfile,
   ConfigurationT extends object = object,
 > = Readonly<{
+  hostSlots: TaoNavHostSlotContract
+  protocolVersion: 2
   profile: ProfileT
   activate(mount: TaoNavMount<ProfileT, ConfigurationT>, key: string): boolean
   back(mount: TaoNavMount<ProfileT, ConfigurationT>): boolean
@@ -179,6 +202,24 @@ export const NavigationControls = {
   /** View creates the first-class presentation descriptor for one Tao view declaration. */
   View(definition: TaoPresentableDefinition): TaoPresentable {
     return new RuntimePresentable(definition)
+  },
+
+  /** Command binds one intent invocation and its live chrome metadata to the declaring view occurrence. */
+  Command(definition: TaoCommandDefinition): RuntimeNavigationCommand {
+    return new RuntimeNavigationCommand(definition)
+  },
+
+  /** CommandReference adapts one validated reference-block action without owning the slot vocabulary. */
+  CommandReference(name: string, resolveAction: () => TaoCommandAction): RuntimeNavigationCommand {
+    const lazyAction: TaoCommandAction = {
+      evaluate: () => resolveAction().evaluate(),
+    }
+    return new RuntimeNavigationCommand({ action: lazyAction, arguments: [], name })
+  },
+
+  /** UseHostSlots publishes only the fills of the directly presented generated view. */
+  UseHostSlots(host: RuntimeHostReadChannel | undefined, values: TaoHostSlotValues): void {
+    useHostSlots(host, values)
   },
 
   /** App creates a lazy, resettable process-local app navigation definition. */
@@ -294,9 +335,17 @@ export const NavigationControls = {
 
   /** PatchConfigured merge-copies immutable descriptor configuration without mounting it. */
   PatchConfigured(configured: TaoConfiguredNavigation, patch: Record<string, unknown>): TaoConfiguredNavigation {
+    const baseHostSlots = recordValue(configured.config['__taoHostSlots'])
+    const patchHostSlots = recordValue(patch['__taoHostSlots'])
     return NavigationControls.Configure(
       configured.declaration,
-      { ...configured.config, ...patch },
+      {
+        ...configured.config,
+        ...patch,
+        ...(patchHostSlots
+          ? { '__taoHostSlots': { ...baseHostSlots, ...patchHostSlots } }
+          : {}),
+      },
     )
   },
 
@@ -330,9 +379,16 @@ export const NavigationControls = {
   },
 } as const
 
+function recordValue(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : undefined
+}
+
 export type TaoPresentable = RuntimePresentable
 export type TaoNavigationValue = RuntimeNavigationValue
 export type TaoRuntimeApp = RuntimeAppDefinition
+export type { RuntimeHostReadChannel, RuntimeNavigationCommand, TaoNavHostSlotConfiguration }
 
 function resolveStrictAppTarget(
   taoProps: TaoProps | undefined,

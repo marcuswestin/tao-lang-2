@@ -206,8 +206,8 @@ Describe('validator: declaration contracts', () => {
       let NavigationAlias = BaseNavigation
       let PatchedNavigation = NavigationAlias with { Initial Other }
       app Demo { Name "Demo" Navigator PatchedNavigation }
-      view Home() { render Empty() }
-      view Other() { render Empty() }
+      view Home() { Title "Home" render Empty() }
+      view Other() { Title "Other" render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -494,6 +494,7 @@ Describe('validator: declaration contracts', () => {
       }
       let StrictVariant = StrictApp with { Name "Strict variant" }
       view Home() {
+        Title "Home"
         action Activate() { present StrictVariant@workspace }
         action Open() { present Detail() in StrictVariant@window }
         action Reset() { replace ResetNav in StrictVariant }

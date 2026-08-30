@@ -46,6 +46,9 @@ without erasing compatible coverage:
   reads and writes, and opening the system Share sheet through deterministic native-module fakes.
 - All `view`, `action`, and `function` declarations use a parenthesized parameter list,
   including `()`.
+- Every `StackNav` destination fills its own `Title`. Navigation MVP keeps the bare `@tao/nav`
+  native-default import, while Basic Navigation proves that explicit `@tao/nav/basic` renders the
+  same title and toolbar command contract deterministically.
 
 ## Navigation MVP
 
@@ -54,6 +57,17 @@ Exercise app-mounted navigation: presentation, covered-entry state preservation,
 **Belongs here:** an `app` with `Name` and a configured `Navigator StackNav { Initial <view> }`; presented `view` declarations with typed parameters; `present Detail(Name: "…")` with required parentheses; a covered entry that stays mounted and hidden and restores its state when revealed; the accessible Back control, native back, and the test `back` step through the same reducer.
 
 **Does not belong here:** selection, split, overlays, toasts, windows, restoration, routes, or transition policy; target-resolution and argument diagnostics; WordFlower product behavior.
+
+## Basic Navigation
+
+Exercise the portable navigation kit explicitly, independently of the native-default package root.
+
+**Belongs here:** `StackNav` from `@tao/nav/basic`; the same required `Title` and optional `Toolbar`
+slots as native StackNav; intent-title label defaulting; host command invocation; deterministic basic
+chrome assertions.
+
+**Does not belong here:** native adapter appearance or transitions; other navigation families;
+diagnostics; product behavior.
 
 ## Forms and Interaction MVP
 

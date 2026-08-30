@@ -39,6 +39,59 @@ IfFunctionStatement:
 Expression:
     FromExpression;
 
+// Declaration slots reserve a brace-initial value for reference blocks (`Toolbar { Save }`) and
+// an immediately parenthesized value for a bare child invocation (`Child(...)`). Otherwise they
+// retain the ordinary expression hierarchy, including grouping after an operator, reactive calls,
+// state, conditionals, and typed constructors. A brace-valued item can still be named with an
+// explicit declared constructor.
+DeclarationSlotExpression infers Expression:
+    DeclarationSlotFromExpression;
+
+DeclarationSlotFromExpression infers Expression:
+    DeclarationSlotOrExpression ({infer FromExpression.expression=current} 'from' path=USE_IMPORT_PATH)?;
+
+DeclarationSlotOrExpression infers Expression:
+    DeclarationSlotAndExpression
+    ({infer BinaryExpression.left=current} operator='or' right=AndExpression)*;
+
+DeclarationSlotAndExpression infers Expression:
+    DeclarationSlotEqualityExpression
+    ({infer BinaryExpression.left=current} operator='and' right=EqualityExpression)*;
+
+DeclarationSlotEqualityExpression infers Expression:
+    DeclarationSlotComparisonExpression
+    ({infer BinaryExpression.left=current} operator=('==' | '!=') right=ComparisonExpression)*;
+
+DeclarationSlotComparisonExpression infers Expression:
+    DeclarationSlotCaseTestExpression
+    ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
+
+DeclarationSlotCaseTestExpression infers Expression:
+    DeclarationSlotAdditionExpression
+    ({infer CaseTestExpression.value=current} 'is' negated?='not'?
+        (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
+
+DeclarationSlotAdditionExpression infers Expression:
+    DeclarationSlotMultiplicationExpression
+    ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
+
+DeclarationSlotMultiplicationExpression infers Expression:
+    DeclarationSlotUnaryExpression
+    ({infer BinaryExpression.left=current} operator=('*' | '/') right=UnaryExpression)*;
+
+DeclarationSlotUnaryExpression infers Expression:
+    ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression)
+    | DeclarationSlotPostfixExpression;
+
+DeclarationSlotPostfixExpression infers Expression:
+    DeclarationSlotPrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+
+DeclarationSlotPrimaryExpression infers Expression:
+    WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor
+    | ConfigurationConstructor | ListLiteral | MemberAccessExpression
+    | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral
+    | FunctionCallExpression | RefinementExpression | ValueReference;
+
 // `<expression> from <path>` (Decisions §15) binds loosest, taking the whole expression to its left,
 // so a bridged call reads the way a local one would. The names in that expression resolve to the
 // module's named exports rather than to Tao declarations.
@@ -58,7 +111,8 @@ ComparisonExpression infers Expression:
     CaseTestExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
 
 CaseTestExpression infers Expression:
-    AdditionExpression ({infer CaseTestExpression.value=current} 'is' (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
+    AdditionExpression ({infer CaseTestExpression.value=current} 'is' negated?='not'?
+        (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
 
 AdditionExpression infers Expression:
     MultiplicationExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
@@ -108,7 +162,7 @@ ConfigurationEntry:
 
 ConfigurationValue:
     PropertyConfigurationPatch | ConfigurationConstructor | ConfigurationKeyValue
-    | StringLiteral | NumberLiteral | BooleanLiteral | ConfigurationReference;
+    | ListLiteral | StringLiteral | NumberLiteral | BooleanLiteral | ConfigurationReference;
 
 NonIdentifierConstructorEntryValue infers Expression:
     TypedConstructor | ListLiteral | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral;
@@ -156,7 +210,7 @@ WhenSubjectComparisonExpression infers Expression:
         right=WhenSubjectCaseTestExpression)*;
 
 WhenSubjectCaseTestExpression infers Expression:
-    WhenSubjectAdditionExpression ({infer CaseTestExpression.value=current} 'is'
+    WhenSubjectAdditionExpression ({infer CaseTestExpression.value=current} 'is' negated?='not'?
         (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
 
 WhenSubjectAdditionExpression infers Expression:
@@ -262,4 +316,4 @@ RefinementExpression:
     target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;
 
 type RefinementBaseDeclaration = ValueDeclaration | TypeDeclaration;
-type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration;
+type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration;

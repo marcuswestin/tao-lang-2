@@ -1,4 +1,4 @@
-use SlotNav, StackNav from @tao/nav
+use SlotNav, StackNav from @tao/nav/basic
 use Col, FormButton, Text from @tao/ui
 use WordFlowerNavHarness from ./
 
@@ -31,6 +31,7 @@ nav HarnessNavigator = SlotNav {
 }
 
 view HarnessHome() {
+   Title "Navigation harness"
    render Col() {
       Text("Harness home marker")
       FormButton("Open deterministic detail") {
@@ -41,6 +42,7 @@ view HarnessHome() {
 }  }  }
 
 view HarnessDetail() {
+   Title "Harness detail"
    render Col() {
       Text("Harness detail marker")
       FormButton("Reset foundation app") {

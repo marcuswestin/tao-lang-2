@@ -6,6 +6,12 @@ import type {
   TaoNavKindProfile,
   TaoPresentable,
 } from './TR-navigation'
+import {
+  type RuntimeHostReadChannel,
+  type TaoHostSlotValues,
+  type TaoNavHostSlotConfiguration,
+  useHostSlots,
+} from './TR-navigation-host-slots'
 import { type Evaluable, RuntimeNavigationResult } from './TR-navigation-presentables'
 import type { OverlayEntry, ResponseOccurrenceState, Subscription } from './TR-navigation-state'
 import { NavigationSurface } from './TR-navigation-surfaces'
@@ -37,6 +43,11 @@ export abstract class RuntimeNavigationValue implements Subscription {
     return this.overlayEntries.length > 0 || this.canGoBackContent()
   }
 
+  /** historyDepth is the number of semantic Back operations mirrored by the web adapter. */
+  historyDepth(): number {
+    return this.overlayEntries.length + this.contentHistoryDepth()
+  }
+
   back(): boolean {
     return this.dismissOverlay() || this.backContent()
   }
@@ -58,6 +69,11 @@ export abstract class RuntimeNavigationValue implements Subscription {
    * bounds — the app host then leaves the scrollable content frame to the navigator's own screens.
    */
   ownsWindowSurface(): boolean {
+    return false
+  }
+
+  /** ownsBackAffordance says the navigator's own chrome already exposes semantic Back. */
+  ownsBackAffordance(): boolean {
     return false
   }
 
@@ -94,13 +110,27 @@ export abstract class RuntimeNavigationValue implements Subscription {
     })
   }
 
-  render(taoProps?: TaoProps): React.ReactNode {
+  render(taoProps?: TaoProps, host?: RuntimeHostReadChannel): React.ReactNode {
+    return React.createElement(NavigationValueHost, { host, navigation: this, taoProps })
+  }
+
+  renderSurface(taoProps?: TaoProps): React.ReactNode {
+    const contentTaoProps = this.overlayEntries.length > 0
+      ? { ...taoProps, navigationHostActive: false }
+      : taoProps
     return React.createElement(NavigationSurface, {
-      content: this.renderContent(taoProps),
+      content: this.renderContent(contentTaoProps),
       navigation: this,
       overlays: this.overlayEntries,
       taoProps,
     })
+  }
+
+  hostSlotValues(): TaoHostSlotValues {
+    const config = this.descriptor.config as { hostSlots?: TaoNavHostSlotConfiguration }
+    return Object.freeze(Object.fromEntries(
+      Object.entries(config.hostSlots ?? {}).map(([name, value]) => [name, () => value]),
+    ))
   }
 
   reset(): void {
@@ -118,6 +148,9 @@ export abstract class RuntimeNavigationValue implements Subscription {
   protected abstract backContent(): boolean
   protected abstract canGoBackContent(): boolean
   protected abstract dismissContent(): boolean
+  protected contentHistoryDepth(): number {
+    return this.canGoBackContent() ? 1 : 0
+  }
   protected abstract renderContent(taoProps?: TaoProps): React.ReactNode
   protected abstract resetContent(): void
 
@@ -157,4 +190,13 @@ export abstract class RuntimeNavigationValue implements Subscription {
       this.emit()
     }
   }
+}
+
+function NavigationValueHost(props: {
+  host?: RuntimeHostReadChannel
+  navigation: RuntimeNavigationValue
+  taoProps?: TaoProps
+}): React.ReactNode {
+  useHostSlots(props.host, props.navigation.hostSlotValues())
+  return props.navigation.renderSurface(props.taoProps)
 }

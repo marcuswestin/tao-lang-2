@@ -11,6 +11,7 @@ type ConfirmResult is one of Confirmed
 // The presented entry guards entity availability; the editor below assumes an available document.
 workspace
 view DocumentScreen(Document) {
+   Title Document.Title
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }

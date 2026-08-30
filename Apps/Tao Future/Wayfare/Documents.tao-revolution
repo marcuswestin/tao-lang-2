@@ -5,14 +5,19 @@
 
 view DocumentsScreen() {
    Title "Documents"
-   Toolbar { AddDocument [primary] }
+   Toolbar { AddDocument }
    query TripDocuments from MyTrip.Documents { order by Kind, AddedAt }
 
-   command AddDocument {
+   action AddDocumentIntent() {
+      Title "Add a document"
+      // Visibility requires an open trip and store permission to create that person's Document.
+      // The current minimal command members cannot spell hidden-vs-disabled independently.
+      present NewDocumentSheet(MyTrip) as sheet
+   }
+   command AddDocument = AddDocumentIntent() with {
       Label "Add a document"
       Icon "doc.badge.plus"
-      Available when MyTrip is not none and can create Document in MyTrip.Documents // a viewer may: their own, private
-      does { present NewDocumentSheet(MyTrip) as sheet }
+      Enabled MyTrip is not none
    }
 
    render ScrollView [screen] {

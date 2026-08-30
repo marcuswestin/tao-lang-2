@@ -4,6 +4,7 @@ use Col, FormButton, Row, Text from @tao/ui
 // The screens the app shell mounts directly.
 workspace
 view Settings() {
+   Title "Settings"
    render Scroller() [screen] {
       Col() [width max 720, centered, gap 10] {
          Toolbar() {
@@ -21,6 +22,7 @@ view Settings() {
 
 workspace
 view SignedOut() {
+   Title "Signed out"
    render Col() [screen, centered] {
       Text("Signed out") [title]
 }  }

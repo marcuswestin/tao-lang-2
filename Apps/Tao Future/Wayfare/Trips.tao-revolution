@@ -6,21 +6,29 @@ phrase TravelerCount(Count number) = one "{ Count } traveler" / other "{ Count }
 phrase StopCount(Count number) = one "{ Count } stop" / other "{ Count } stops"
 
 // App-wide, mounted on the navigator.
-command NewTrip {
+action NewTripIntent() runs single {
+   Title "New trip"
+   // Visibility follows the signed-in account required by the trip-creation flow.
+   let Trip = ask NewTripSheet()
+   stop if Trip is none
+   open TripLink(Trip)
+}
+command NewTrip = NewTripIntent() with {
    Label "New trip"
    Icon "plus"
    Key "cmd+n"
-   Available when Me is signed in
-   runs single
-   does {
-      let Trip = ask NewTripSheet()
-      stop if Trip is none
-      open TripLink(Trip)
-}  }
+   Enabled Me is signed in
+}
 
 view TripLibrary() {
    Title "Trips"
-   Toolbar { NewTrip [primary] }
+   command NewTrip = NewTripIntent() with {
+      Label "New trip"
+      Icon "plus"
+      Key "cmd+n"
+      Enabled Me is signed in
+   }
+   Toolbar { NewTrip }
    query MyTrips from Trips { order by Begins desc } // the access rule already scopes this to my trips
 
    render ScrollView [screen] {
@@ -76,41 +84,49 @@ view NoTripOpen() {
 
 view TripOverview(Trip) {
    Title Trip.Name
-   Toolbar { AddDay [primary], EditTrip, ShareThis }
+   Toolbar { AddDay EditTrip ShareThis }
    presence Planners on Trip
    query TripDays from Trip.Days { }
 
-   command AddDay {
+   action AddDayIntent() runs single {
+      Title "Add a day"
+      // Visibility follows permission to create a Day in Trip.Days, resolved by the store.
+      let Day = ask NewDaySheet(Trip)
+      stop if Day is none
+      open DayLink(Day)
+   }
+   command AddDay = AddDayIntent() with {
       Label "Add a day"
       Icon "calendar.badge.plus"
       Key "cmd+shift+n"
-      Available when can create Day in Trip.Days
-      runs single
-      does {
-         let Day = ask NewDaySheet(Trip)
-         stop if Day is none
-         open DayLink(Day)
-   }  }
-   command EditTrip {
+   }
+   action EditTripIntent() {
+      Title "Edit trip"
+      // Visibility follows permission to change Trip, resolved by the store.
+      present TripEditor(Trip) as sheet
+   }
+   command EditTrip = EditTripIntent() with {
       Label "Edit trip"
       Icon "pencil"
-      Available when can change Trip
-      does { present TripEditor(Trip) as sheet }
    }
-   command ShareThis {
+   action ShareThisIntent() {
+      Title "Share this"
+      // Visibility follows permission to change Trip, resolved by the store.
+      present ShareTripSheet(Trip) as sheet
+   }
+   command ShareThis = ShareThisIntent() with {
       Label if Trip is Shared then "Manage link" else "Share itinerary"
       Icon "square.and.arrow.up"
-      Available when can change Trip
-      does { present ShareTripSheet(Trip) as sheet }
    }
-   command Leave {
+   action LeaveIntent() runs single {
+      Title "Leave trip"
+      stop unless ask Confirm("Leave { Trip.Name }?", Body: "You will lose the itinerary, its notes, and its reminders.", Verb: "Leave")
+      do LeaveTrip(exactly one Trip.Members where Person is Me)
+   }
+   command Leave = LeaveIntent() with {
       Label "Leave trip"
       Icon "rectangle.portrait.and.arrow.right"
-      runs single
-      does {
-         stop unless ask Confirm("Leave { Trip.Name }?", Body: "You will lose the itinerary, its notes, and its reminders.", Verb: "Leave")
-         do LeaveTrip(exactly one Trip.Members where Person is Me)
-   }  }
+   }
 
    render ScrollView [screen] {
       guard Trip
@@ -151,8 +167,15 @@ view TripOverview(Trip) {
 // at every keystroke's commit and shows its sentence in Problems.
 file view TripEditor(Trip) {
    Title "Edit trip"
-   Toolbar { Done [primary] }
-   command Done { Label "Done"; Icon "checkmark"; Key "escape"; does { dismiss } }
+   action DoneIntent() {
+      Title "Done"
+      dismiss
+   }
+   command Done = DoneIntent() with {
+      Label "Done"
+      Icon "checkmark"
+      Key "escape"
+   }
    render ScrollView [pad lg] {
       Col [width max 640, gap lg] {
          ImageInput(Value: Trip.Cover, Label: "Cover photo", Sources: camera, library) [height 140, radius md]
@@ -164,6 +187,7 @@ file view TripEditor(Trip) {
          }
          Choice(Value: Trip.HomeZone, Label: "Home time zone")
          Problems(Trip)
+         Row [content right center] { Button(Done) [primary] }
 }  }  }
 
 // A responding view rather than a blind create: the entity's `validate` (inside the trip's dates) and
@@ -191,18 +215,19 @@ file view NewDaySheet(Trip) responds Day {
 view TravelerPanel(Trip) {
    query Travelers from Trip.Members { order by InvitedAt }
 
-   command InviteSomeone {
+   action InviteSomeoneIntent() runs single {
+      Title "Invite a traveler"
+      // Visibility follows permission to create a Member in Trip.Members, resolved by the store.
+      let Member = ask InviteSheet(Trip)
+      stop if Member is none
+      share JoinLink(Member.InviteCode)
+      present Notice("Invitation ready — it works once, for { Member.Email }") as toast (Key: "invite")
+   }
+   command InviteSomeone = InviteSomeoneIntent() with {
       Label "Invite a traveler"
       Icon "person.badge.plus"
       Key "cmd+i"
-      Available when can create Member in Trip.Members
-      runs single
-      does {
-         let Member = ask InviteSheet(Trip)
-         stop if Member is none
-         share JoinLink(Member.InviteCode)
-         present Notice("Invitation ready — it works once, for { Member.Email }") as toast (Key: "invite")
-   }  }
+   }
 
    render Section("Travelers") {
       @actions InviteSomeone

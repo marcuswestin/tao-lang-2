@@ -104,6 +104,7 @@ export const ExpressionsCompiler = {
       ConfigurationConstructor: Compile.ConfiguredValue,
       ConfigurationKeyValue: value => gen`TR.Value(${gen.jsLiteral(value.key)})`,
       ConfigurationReference: compileConfigurationReference,
+      ListLiteral: Compile.Expression,
       NumberLiteral: Compile.Expression,
       PropertyConfigurationPatch: value =>
         Assert.never(value as never, 'property-position with is compiled against its owning property'),
@@ -147,17 +148,19 @@ export const ExpressionsCompiler = {
 
   /** CaseTestExpression compares one subject with a built-in or declaration-linked case. */
   CaseTestExpression(expression: AST.CaseTestExpression): Compiled {
+    let test: Compiled
     if (expression.builtinCase) {
-      return gen`TR.IsCase(${Compile.Expression(expression.value)}, ${gen.jsLiteral(expression.builtinCase)})`
+      test = gen`TR.IsCase(${Compile.Expression(expression.value)}, ${gen.jsLiteral(expression.builtinCase)})`
+    } else {
+      Assert.defined(expression.declaredCase, 'parsed case test has a declared or built-in case')
+      const declaredCase = resolveRef(expression.declaredCase)
+      test = AST.isEntityDataField(declaredCase)
+        ? gen`TR.IsCase(${Compile.Expression(expression.value)}, TR.Value(${
+          expression.declaredCase.$refText === declaredCase.name ? 'true' : 'false'
+        }))`
+        : gen`TR.IsCase(${Compile.Expression(expression.value)}, ${Compile.ValueDeclarationReference(declaredCase)})`
     }
-    Assert.defined(expression.declaredCase, 'parsed case test has a declared or built-in case')
-    const declaredCase = resolveRef(expression.declaredCase)
-    if (AST.isEntityDataField(declaredCase)) {
-      return gen`TR.IsCase(${Compile.Expression(expression.value)}, TR.Value(${
-        expression.declaredCase.$refText === declaredCase.name ? 'true' : 'false'
-      }))`
-    }
-    return gen`TR.IsCase(${Compile.Expression(expression.value)}, ${Compile.ValueDeclarationReference(declaredCase)})`
+    return expression.negated ? gen`TR.Unary('not', ${test})` : test
   },
 
   /** WhenExpression evaluates one subject and selects one lazy value case. */
@@ -305,6 +308,7 @@ export const ExpressionsCompiler = {
       AppDeclaration: app => gen`${gen.Name({ name: `_TaoAppDefinition_${app.name}` })}`,
       AskStatement: ask => gen`${gen.scopeName(ask)}.evaluate()`,
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
+      CommandDeclaration: command => gen`${gen.scopeName(command)}.evaluate()`,
       DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
@@ -332,13 +336,13 @@ function compileNavigationDescriptor(
 ): Compiled {
   return gen`TR.Navigation.View({
       name: ${gen.jsLiteral(declaration.name)},
-      render: (_NavigationArguments, _NavigationProps) =>
+      render: (_NavigationArguments, _NavigationProps, _NavigationHost) =>
         <${gen.scopeName(declaration)}${
     gen.join(AST.parametersOf(declaration), parameter => {
       const name = Type.parameterName(parameter)
       return gen` ${name}={_NavigationArguments[${gen.jsLiteral(name)}]}`
     }, { separator: '' })
-  } __tao={_NavigationProps} />,
+  } __tao={_NavigationProps} __taoHost={_NavigationHost} />,
     })`
 }
 
@@ -506,9 +510,10 @@ function compileConfigurationObject(block: AST.ConfigurationBlock): Compiled {
 function compileConfigurationObjectWithDefaults(
   block: AST.ConfigurationBlock,
   keyedDefaults: readonly AST.ConfigurationProperty[],
+  entries: readonly AST.ConfigurationEntry[] = block.entries,
 ): Compiled {
   return gen`{
-    ${compileConfigurationEntries(block, keyedDefaults)}
+    ${compileConfigurationEntries(block, keyedDefaults, entries)}
   }`
 }
 
@@ -536,10 +541,28 @@ function compileKeyedItemObject(
 function compileConfigurationEntries(
   block: AST.ConfigurationBlock,
   keyedDefaults: readonly AST.ConfigurationProperty[],
+  entries: readonly AST.ConfigurationEntry[] = block.entries,
 ): Compiled {
-  return gen.list(block.entries, entry => {
+  return gen.list(entries, entry => {
     if (entry.key && entry.block) {
       return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
+    }
+    if (entry.name && entry.block) {
+      const references = entry.block.entries.flatMap(referenceEntry => {
+        const reference = referenceEntry.reference?.ref
+        return reference && AST.isActionDeclaration(reference)
+          ? [{ declaration: reference, name: referenceEntry.reference!.$refText }]
+          : []
+      })
+      return gen`${gen.jsLiteral(entry.name)}: [${
+        gen.join(references, reference =>
+          gen`TR.Navigation.Command({
+          action: { evaluate: () => ${gen.scopeName(reference.declaration)}.evaluate() },
+          arguments: [],
+          intentTitle: () => TR.ActionTitle(${gen.scopeName(reference.declaration)}, []),
+          name: ${gen.jsLiteral(reference.name)},
+        })`)
+      }],`
     }
     Assert.defined(entry.name, 'validated configuration entry has a property name')
     Assert.defined(entry.value, 'validated configuration property has a value')
@@ -551,13 +574,17 @@ function compileConfigurationEntries(
 function compileConfiguredPatch(value: AST.RefinementExpression): Compiled {
   const base = resolveRef(value.target)
   Assert.is(base, AST.isValueDeclaration, 'validated refinement target is a value')
-  const patch = compileConfigurationPatchObject(value.patchBlock, configuredDeclarationOfValue(base))
+  const compiledBase = Compile.ValueDeclarationReference(base)
+  const patch = compileConfigurationPatchObject(
+    value.patchBlock,
+    configuredDeclarationOfValue(base),
+  )
   const type = Type.ofValueDeclaration(base)
   if (type.kind === 'primitive' && type.primitive === 'nav') {
-    return gen`TR.Navigation.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
+    return gen`TR.Navigation.Patch(${compiledBase}, ${patch})`
   }
   if (type.kind === 'primitive' && type.primitive === 'datasource') {
-    return gen`TR.Data.Patch(${Compile.ValueDeclarationReference(base)}, ${patch})`
+    return gen`TR.Data.Patch(${compiledBase}, ${patch})`
   }
   if (type.kind === 'item') {
     if (type.item) {
@@ -574,17 +601,30 @@ function compileConfiguredTypeObject(
   block: AST.ConfigurationBlock,
 ): Compiled {
   const keyedDefaults = AST.configurationKeyOf(declaration)?.block.properties ?? []
-  const configured = compileConfigurationObjectWithDefaults(block, keyedDefaults)
+  const declaredNames = new Set(AST.configurationPropertiesOf(declaration).map(property => property.name))
+  const hostSlotEntries = block.entries.filter(entry => entry.name && !declaredNames.has(entry.name))
+  const hostSlotEntrySet = new Set(hostSlotEntries)
+  const configured = compileConfigurationObjectWithDefaults(
+    block,
+    keyedDefaults,
+    block.entries.filter(entry => !hostSlotEntrySet.has(entry)),
+  )
+  const withHostSlots = gen`{
+    ...${configured},
+    "__taoHostSlots": {
+      ${compileConfigurationEntries(block, keyedDefaults, hostSlotEntries)}
+    },
+  }`
   const filled = AST.configurationPropertiesOf(declaration)
     .filter(Type.propertyIsFilled)
   const defaults = AST.configurationPropertiesOf(declaration)
     .filter(Type.propertyHasDefault)
     .filter(property => !block.entries.some(entry => entry.name === property.name))
   if (filled.length === 0 && defaults.length === 0) {
-    return configured
+    return withHostSlots
   }
   return gen`{
-    ...${configured},
+    ...${withHostSlots},
     ${
     gen.list([...filled, ...defaults], property => {
       Assert.defined(property.value, 'filled/defaulted configuration slot has a value')
@@ -630,16 +670,27 @@ function compileConfigurationPatchObject(
   declaration?: AST.ConfigurableDeclaration,
 ): Compiled {
   const keyedDefaults = declaration ? AST.configurationKeyOf(declaration)?.block.properties ?? [] : []
+  const declaredNames = new Set(
+    declaration ? AST.configurationPropertiesOf(declaration).map(property => property.name) : [],
+  )
+  const hostSlotEntries = declaration
+    ? block.entries.filter(entry => entry.name && !declaredNames.has(entry.name))
+    : []
+  const hostSlotEntrySet = new Set(hostSlotEntries)
   return gen`{
     ${
-    gen.list(block.entries, entry => {
-      if (entry.key && entry.block) {
-        return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
-      }
-      Assert.defined(entry.name, 'validated patch entry has a property name')
-      Assert.defined(entry.value, 'validated patch entry has a property value')
-      return gen`${gen.jsLiteral(entry.name)}: ${Compile.ConfigurationValue(entry.value)},`
-    })
+    compileConfigurationEntries(
+      block,
+      keyedDefaults,
+      block.entries.filter(entry => !hostSlotEntrySet.has(entry)),
+    )
+  }
+    ${
+    hostSlotEntries.length > 0
+      ? gen`"__taoHostSlots": {
+        ${compileConfigurationEntries(block, keyedDefaults, hostSlotEntries)}
+      },`
+      : gen.noop()
   }
   }`
 }

@@ -19,7 +19,7 @@ import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Clock } from './TR-units'
 
-type ToastEntry = PresentableEntry & {
+type ToastEntry = PresentableEntry<TaoPresentable> & {
   key: string
   cancelExpiry: () => void
 }
@@ -126,6 +126,12 @@ export class RuntimeAppDefinition implements Subscription {
   get canGoBack(): boolean {
     return Object.values(this.auxiliaries).some(auxiliary => auxiliary.canGoBack)
       || this.navigator.canGoBack
+  }
+
+  /** historyDepth totals the reducer work one browser history cursor represents. */
+  historyDepth(): number {
+    return Object.values(this.auxiliaries).reduce((depth, auxiliary) => depth + auxiliary.historyDepth(), 0)
+      + this.navigator.historyDepth()
   }
 
   reset(): void {

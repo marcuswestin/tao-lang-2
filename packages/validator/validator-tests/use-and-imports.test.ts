@@ -299,6 +299,7 @@ Describe('validator: use and imports', () => {
           use AppLet, MyApp from ./
           workspace nav ResetNav = StackNav { Initial Helper }
           workspace view Helper() {
+            Title "Helper"
             action Reset() { replace ResetNav in MyApp }
             render Col() { }
           }

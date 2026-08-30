@@ -39,6 +39,24 @@ Describe('compiler: typed values', () => {
     Expect(code).toContain('["Name"]: TR.Value("Ada").jsValue')
     Expect(code).not.toContain('["Subtitle"]')
   })
+
+  Test('adapts explicitly action-typed bare exports without URL-specific compiler knowledge', async () => {
+    const compiled = await Compiler.compileCode(`
+      app BridgeApp { view Main }
+      view Main() {
+        let OpenUrl is action(text) = OpenUrl from ./OpenStoryLink.ts
+        action Open() { do OpenUrl("https://example.com/story") }
+        render Empty()
+      }
+      view Empty() { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain("import { OpenUrl as __tao_bridge_1__ } from './OpenStoryLink'")
+    Expect(code).toContain('_Scope.OpenUrl = TR.Alias(TR.BridgedAction(__tao_bridge_1__))')
+    Expect(code).toContain('TR.Do(_Scope.OpenUrl.evaluate(), TR.Value("https://example.com/story"))')
+    Expect(code).not.toContain('Linking')
+  })
 })
 
 function promptTagsApp(): string {

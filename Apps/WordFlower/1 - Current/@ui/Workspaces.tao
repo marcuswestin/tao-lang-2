@@ -23,6 +23,7 @@ type WritingPrompt is {
 // render tree or enters the presentation tree is decided at each use site, never on the head.
 workspace
 view WorkspaceList() {
+   Title "WordFlower"
    state WorkspaceName = ""
    query Workspaces { }
    action AddWorkspace() {
@@ -88,6 +89,7 @@ view WorkspaceNameNotice() {
 }  }  }
 
 view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
+   Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
    query Drafts from Workspace.Documents {
@@ -97,10 +99,16 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
       where is Final
    }
    action SaveWorkspace() {
+      Title "Save workspace"
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
    }  }
+   command Save = SaveWorkspace() with {
+      Icon "checkmark"
+      Enabled WorkspaceNameDraft is not empty
+   }
+   Toolbar { Save }
    action AddDocument() {
       guard DocumentTitle empty
       create Document {

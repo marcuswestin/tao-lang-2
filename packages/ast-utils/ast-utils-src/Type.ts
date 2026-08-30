@@ -899,6 +899,7 @@ class TypeResolutionContext {
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: declaration => this.ofAction(declaration),
+      CommandDeclaration: () => actionType([]),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
       AskStatement: ask =>
@@ -1045,7 +1046,15 @@ class TypeResolutionContext {
     try {
       return Switch.type(definition, {
         ParameterTypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
-        TypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
+        TypeDeclaration: declaration => {
+          const target = declaration.aliasTarget?.member.ref
+          if (AST.isTypeDeclaration(target)) {
+            return this.ofDefinition(target)
+          }
+          return declaration.type
+            ? withNominal(this.ofTypeExpression(declaration.type), declaration)
+            : unresolvedType()
+        },
         TypeProperty: property => this.typePropertyType(property),
       })
     } finally {
@@ -1202,7 +1211,14 @@ function nominalChain(
 function parentTypeDefinition(definition: AST.TypeDefinition): AST.TypeDefinition | undefined {
   return Switch.type(definition, {
     ParameterTypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type),
-    TypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type),
+    TypeDeclaration: declaration => {
+      const target = declaration.aliasTarget?.member.ref
+      return AST.isTypeDeclaration(target)
+        ? target
+        : declaration.type
+        ? parentDefinitionOfExpression(declaration.type)
+        : undefined
+    },
     TypeProperty: property =>
       property.type
         ? namedParentDefinition(property.type)

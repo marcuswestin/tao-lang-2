@@ -129,9 +129,12 @@ rerender or remove it. Nested selectors and expectations remain inside the selec
 Executable steps run in source order:
 
 - `press`, `enter`, and `submit` deliver the corresponding native event to one matched control;
+- `press toolbar command "Label"` invokes one enabled command in the focused host toolbar;
 - `back` dispatches the same root-safe app reducer as the visible Back affordance and platform
   hardware Back;
 - `expect` and `expect missing` inspect the current rendered tree;
+- `expect navigation title "Title"` observes the focused host's user-visible title, and
+  `expect toolbar command "Label" enabled|disabled` observes one focused toolbar control;
 - grouped and tag-scoped expectations run as one plan step;
 - `select #tag[N] { ... }` supplies a dynamically re-resolved row scope;
 - `advance <duration>` moves the held clock, described below.
@@ -146,8 +149,32 @@ expect checkbox #marketingOptIn unchecked
 The selector resolves exactly one `Checkbox`; `checked` and `unchecked` assert its current exposed
 control state. This does not expose arbitrary Tao state or provider data.
 
+Navigation chrome has its own user-facing vocabulary because a native title or toolbar item need
+not occur in the React content tree:
+
+```tao
+expect navigation title "Home"
+expect toolbar command "Save workspace" disabled
+enter "Renamed" into #workspaceName
+expect navigation title "Renamed"
+expect toolbar command "Save workspace" enabled
+press toolbar command "Save workspace"
+```
+
+These assertions inspect the active host surface, not reducer entries, declaration slots, or
+generated metadata. Labels are normalized by the same exact user-visible-text rule as ordinary
+controls. The command must be unique in the focused toolbar; pressing a disabled command is a test
+failure rather than a silent no-op.
+
 Each event runs inside React's `act` boundary so synchronous Tao state, data, and navigation updates
 settle before the next step. Assertions do not currently poll or sleep.
+
+Behavior checks use one deterministic navigation rule: the test runtime disables optional native
+host surfaces and renders the native kind through its synchronous basic surface. Product source can
+therefore keep the bare native-default `@tao/nav` import, while a dedicated harness may import
+`@tao/nav/basic` explicitly. Adapter-level runtime tests separately exercise the native screen and
+header bindings. The same title, command, Back, and reducer semantics must pass through both hosts;
+journeys do not wait for platform animation timing.
 
 Overlay and toast journeys use the same ordinary interaction and assertion vocabulary; they are no
 longer deferred test subjects. Every nav's overlay lane sits absolutely above its content. Stacked
@@ -211,5 +238,5 @@ syntax.
 
 The implemented surface intentionally omits direct state/value assertions, direct action calls,
 provider-row inspection or seeding, production datasource access, arbitrary sleeps, public runtime
-or test IDs, entity-ID row selection, focused render subjects, and navigation diagnostic assertions.
+or test IDs, entity-ID row selection, focused render subjects, and raw navigation-state assertions.
 Those may be designed independently without weakening the current user-observable testing contract.
