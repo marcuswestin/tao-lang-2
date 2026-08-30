@@ -441,27 +441,37 @@ Describe('validator: workspace structure', () => {
     const projectCase of [
       {
         title: 'rejects multiple project declarations',
-        source: `project { name "One" }\nproject { name "Two" }\n${stubApp()}`,
+        source: `project { id "one" name "One" }\nproject { id "two" name "Two" }\n${stubApp()}`,
         message: projectValidationMessages.duplicateProject(),
       },
       {
+        title: 'rejects a missing project id with the migration command',
+        source: `project { name "One" }\n${stubApp()}`,
+        message: projectValidationMessages.requiredId(),
+      },
+      {
+        title: 'rejects duplicate project ids',
+        source: `project { id "one" id "two" name "One" }\n${stubApp()}`,
+        message: projectValidationMessages.duplicateId(),
+      },
+      {
         title: 'rejects duplicate project names',
-        source: `project { name "One" name "Two" }\n${stubApp()}`,
+        source: `project { id "one" name "One" name "Two" }\n${stubApp()}`,
         message: projectValidationMessages.duplicateName(),
       },
       {
         title: 'rejects duplicate project remotes',
-        source: `project { remote none remote none }\n${stubApp()}`,
+        source: `project { id "one" name "One" remote none remote none }\n${stubApp()}`,
         message: projectValidationMessages.duplicateRemote(),
       },
       {
         title: 'rejects duplicate project licenses',
-        source: `project { license MIT license Apache }\n${stubApp()}`,
+        source: `project { id "one" name "One" license MIT license Apache }\n${stubApp()}`,
         message: projectValidationMessages.duplicateLicense(),
       },
       {
         title: 'rejects unsupported project requirements',
-        source: `project { requires foo }\n${stubApp()}`,
+        source: `project { id "one" name "One" requires foo }\n${stubApp()}`,
         message: projectValidationMessages.unsupportedRequires(),
       },
     ]

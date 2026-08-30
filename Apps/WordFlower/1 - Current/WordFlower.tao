@@ -251,6 +251,7 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `expect toolbar command "Save workspace" enabled|disabled` asserts a visible command state, and
 //   `press toolbar command "Save workspace"` invokes that command through the host surface
 project {
+   id "wordflower"
    name "WordFlower"
    remote none
    license MIT

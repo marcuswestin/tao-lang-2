@@ -1,0 +1,4 @@
+project {
+   id "component-aliases"
+   name "Component Aliases"
+}

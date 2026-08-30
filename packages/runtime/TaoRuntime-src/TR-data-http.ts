@@ -70,6 +70,8 @@ function httpProvider(config: Readonly<Record<string, unknown>>): TaoDataProvide
   return {
     load: storageKey => base.load(storageKey),
     persist: (storageKey, snapshot) => base.persist(storageKey, snapshot),
+    referenceToken: reference => base.referenceToken!(reference),
+    resolveReference: reference => base.resolveReference!(reference),
     fill: (request, ops) => runAdapterFill(adapter, request, ops),
     fillCacheMs: (cacheForNs ?? 0) / NANOSECONDS_PER_MILLISECOND,
     withConfiguration: configured => httpProvider(configured),

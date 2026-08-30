@@ -103,6 +103,7 @@ const sheetModalSurfaceStyle = {
 function modalSheet(
   content: React.ReactNode,
   navigation: TaoNavigationValue,
+  taoProps: TaoProps | undefined,
   visible: boolean,
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
@@ -124,7 +125,8 @@ function modalSheet(
       allowSwipeDismissal: true,
       animationType: 'slide',
       onRequestClose: () => {
-        backNavigation(navigation)
+        const app = appInProps(taoProps)
+        app ? app.dismiss(navigation) : backNavigation(navigation)
       },
       presentationStyle: 'pageSheet',
       visible,
@@ -154,7 +156,7 @@ export function NavigationSurface(props: {
           children: entry.response
             ? modalAsk(content)
             : entry.sheet
-            ? modalSheet(content, props.navigation, index === props.overlays.length - 1)
+            ? modalSheet(content, props.navigation, props.taoProps, index === props.overlays.length - 1)
             : content,
           fill: true,
           hidden: index !== props.overlays.length - 1,
@@ -171,6 +173,10 @@ export function NavigationSurface(props: {
     props.content,
     overlays,
   )
+}
+
+function appInProps(props: TaoProps | undefined): TaoProps['app'] {
+  return props?.app ?? appInProps(props?.callerProps)
 }
 
 /** modalAsk centres one asked view on a dimming scrim, which is what makes it read as modal. */

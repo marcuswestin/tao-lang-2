@@ -2,6 +2,7 @@ import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { DataControls } from './TR-data'
 import { RuntimeAppDefinition } from './TR-navigation-app'
+import { browserNavigationHistoryDriver } from './TR-navigation-browser-history'
 import {
   backNavigation,
   clearActiveBackTarget,
@@ -9,11 +10,19 @@ import {
 } from './TR-navigation-registry'
 import type { Subscription } from './TR-navigation-state'
 import { NavigationBackAffordance, navigationHostStyle } from './TR-navigation-surfaces'
-import { useWebNavigationHistory } from './TR-navigation-web-history'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
 export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
+  const ready = useNavigationRestoration(props.app)
+  const runtime = requireReactNativeRuntime()
+  if (!ready) {
+    return React.createElement(runtime.View, { style: navigationHostStyle })
+  }
+  return React.createElement(MountedNavigationAppHost, props)
+}
+
+function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
   useSubscription(props.app)
   const navigator = props.app.navigator
   const auxiliaries = Object.values(props.app.auxiliaries)
@@ -24,7 +33,6 @@ export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   }
   React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
   usePlatformBack(props.app)
-  useWebNavigationHistory(props.app)
   const runtime = requireReactNativeRuntime()
   const appTaoProps = { ...props.__tao, app: props.app }
   const focusedAuxiliary = auxiliaries.findLast(auxiliary => auxiliary.historyDepth() > 0)
@@ -68,13 +76,42 @@ export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   })
 }
 
+function useNavigationRestoration(app: RuntimeAppDefinition): boolean {
+  const [ready, setReady] = React.useState(() => !app.restorationRequiresInitialLoad())
+  React.useEffect(() => {
+    let active = true
+    let detach: (() => void) | undefined
+    void app.attachRestoration().then(dispose => {
+      if (!active) {
+        dispose()
+        return
+      }
+      detach = dispose
+      setReady(true)
+    })
+    return () => {
+      active = false
+      detach?.()
+    }
+  }, [app])
+  return ready
+}
+
 function useSubscription(subscription: Subscription): void {
   React.useSyncExternalStore(subscription.subscribe, subscription.snapshot, subscription.snapshot)
 }
 
-function usePlatformBack(target: { back(): boolean }): void {
+function usePlatformBack(target: RuntimeAppDefinition): void {
   React.useEffect(() => {
     setActiveBackTarget(target)
+    const browserHistory = browserNavigationHistoryDriver()
+    if (browserHistory) {
+      const detachBrowserHistory = target.attachBrowserHistory(browserHistory)
+      return () => {
+        detachBrowserHistory()
+        clearActiveBackTarget(target)
+      }
+    }
     const subscription = requireReactNativeRuntime().BackHandler?.addEventListener(
       'hardwareBackPress',
       () => backNavigation(target),

@@ -205,6 +205,7 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-configuration-sidecar-',
       {
+        'Project.tao': `project { id "compiler-sidecars" name "Compiler sidecars" }`,
         'Main.tao': `
           use SidecarStack, SidecarStore from ./Constructs.tao
           app Demo {
@@ -255,7 +256,7 @@ Describe('compiler: files and packages', () => {
         )
         Expect(module.code.replace(/\s+/g, ' ')).toContain(
           'TR.Navigation.Declaration( "SidecarStack", Reflect.apply( '
-            + '__tao_configuration_implementation_SidecarStack__, undefined, [], ), )',
+            + '__tao_configuration_implementation_SidecarStack__, undefined, [], ), TR.Navigation.Identity(',
         )
         // Three declarations name three exports of one file, so the file is copied once and
         // imported three times under distinct local aliases.
@@ -407,6 +408,7 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-sidecar-',
       {
+        'Project.tao': `project { id "compiler-sidecar-test" name "Compiler sidecar test" }`,
         'Main.tao': `
         app MyApp { view MainView }
         use Text from ./
@@ -608,6 +610,7 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-sidecar-collisions-',
       {
+        'Project.tao': `project { id "compiler-collision-test" name "Compiler collision test" }`,
         'app/Main.tao': `
           use AStack from ../liba
           use BStack from ../libb
@@ -720,10 +723,13 @@ async function withCompiledFiles<
   files: Files,
   testFunction: (compiled: CompiledFiles<Files>, files: readonly CompiledFile[]) => Promise<void> | void,
 ): Promise<void> {
-  await withTaoFiles('tao-compiler-', files, async paths => {
+  await withTaoFiles('tao-compiler-', {
+    'Project.tao': `project { id "compiler-files-test" name "Compiler files test" }`,
+    ...files,
+  }, async paths => {
     const result = await Workspace.compile(paths[entryFile])
     const compiled = {} as CompiledFiles<Files>
-    for (const relativePath of Object.keys(paths) as Array<keyof Files & string>) {
+    for (const relativePath of Object.keys(files) as Array<keyof Files & string>) {
       compiled[relativePath] = requireCompiledFile(result.files, paths[relativePath])
     }
 

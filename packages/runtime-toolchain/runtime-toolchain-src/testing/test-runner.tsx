@@ -22,10 +22,16 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   let screen: RuntimeApp.Screen | undefined
   try {
     TR.Data.beginTest()
-    TR.Navigation.beginTest()
+    TR.Navigation.beginTest({ freshRestoration: true })
     // Every check starts from the same instant and moves only when the journey says so.
     TR.Clock.beginTest()
     screen = renderCompiledApp({ testAppPath: check.app.modulePath })
+    await act(async () => {
+      // The host reads navigation restoration before exposing the initial semantic tree.
+      await Promise.resolve()
+      await Promise.resolve()
+      await new Promise<void>(resolve => queueMicrotask(resolve))
+    })
     await settleData()
     for (const step of check.steps) {
       await runStep(screen, step)
@@ -38,6 +44,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
   } finally {
     screen?.unmount()
     TR.Clock.endTest()
+    TR.Navigation.endTest()
     TR.Data.endTest()
   }
 }

@@ -3,6 +3,7 @@ grammar TaoApp
 import "./blocks"
 import "./data"
 import "./terminals"
+import "./restoration"
 
 entry AppGrammarEntrypoint:
     AppDeclaration;
@@ -18,7 +19,7 @@ AppBlock:
     '{' statements+=(AppStatement | AppBlockDiagnosticStatement)* '}';
 
 AppStatement:
-    AppAuxiliaryNavigator | AppView | AppProperty;
+    AppAuxiliaryNavigator | AppView | AppProperty | RestorationPolicy;
 
 AppAuxiliaryNavigator:
     name=USE_IMPORT_PATH value=ConfigurationConstructor;

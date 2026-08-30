@@ -10,11 +10,23 @@ import type {
   TaoPresentable,
 } from './TR-navigation'
 import {
+  BrowserNavigationHistory,
+  type BrowserNavigationHistoryDriver,
+} from './TR-navigation-browser-history'
+import {
   createAppDeclaration,
   isConfiguredNavigation,
   mountConfiguredNavigation,
 } from './TR-navigation-configuration'
+import type { Evaluable } from './TR-navigation-presentables'
+import { presentableRegistryVersion, resolvePresentable } from './TR-navigation-registry'
+import { NavigationRestorationController } from './TR-navigation-restoration'
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
+import {
+  observeNavigationActivation,
+  takeRemovedBrowserHistoryId,
+  withBrowserHistoryEntry,
+} from './TR-navigation-value'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Clock } from './TR-units'
@@ -24,17 +36,69 @@ type ToastEntry = PresentableEntry<TaoPresentable> & {
   cancelExpiry: () => void
 }
 
+type NavigationOwner = {
+  app: RuntimeAppDefinition
+  lane: TaoNavigationValue
+}
+
+type NavigationLaneRecord = {
+  configured: Array<readonly [TaoConfiguredNavigation, TaoNavigationValue]>
+  contextDispose?: () => void
+  mounts: TaoNavigationValue[]
+  owner: NavigationOwner
+  ownerDispose?: () => void
+}
+
+const navigationOwners = new WeakMap<TaoNavigationValue, Set<NavigationOwner>>()
+
+export function ownerOfNavigation(navigation: TaoNavigationValue): NavigationOwner | undefined {
+  const owners = navigationOwners.get(navigation)
+  return owners?.size === 1 ? owners.values().next().value : undefined
+}
+
+function registerNavigationOwner(
+  mounts: TaoNavigationValue[],
+  owner: NavigationOwner,
+): () => void {
+  for (const mount of mounts) {
+    const owners = navigationOwners.get(mount) ?? new Set<NavigationOwner>()
+    owners.add(owner)
+    navigationOwners.set(mount, owners)
+  }
+  return () => {
+    for (const mount of mounts) {
+      const owners = navigationOwners.get(mount)
+      owners?.delete(owner)
+      if (owners?.size === 0) {
+        navigationOwners.delete(mount)
+      }
+    }
+  }
+}
+
 /** RuntimeAppDefinition lazily resolves app nav factories after generated module initialization. */
 export class RuntimeAppDefinition implements Subscription {
   private auxiliariesValue: Record<string, TaoNavigationValue> | undefined
+  private readonly browserMutatingLanes = new Map<TaoNavigationValue, number>()
+  private readonly browserContexts = new WeakMap<
+    TaoNavigationValue,
+    Map<TaoNavigationValue, { id: number; key: string }>
+  >()
   private descriptorMounts = new Map<TaoConfiguredNavigation, TaoNavigationValue>()
   private designValue: TaoDesign | undefined
   private listeners = new Set<() => void>()
+  private readonly navigationLanes = new WeakMap<TaoNavigationValue, TaoNavigationValue>()
+  private readonly navigationLaneRecords = new Map<TaoNavigationValue, NavigationLaneRecord>()
+  private nextBrowserEntryId = 1
+  private nextBrowserSelectionId = 1
   private nextToastEntryId = 1
+  private readonly presentableVersion = presentableRegistryVersion()
   private navigatorValue: TaoNavigationValue | undefined
   private replacement: TaoNavigationValue | undefined
   private toastEntries = new Map<string, ToastEntry>()
   private version = 0
+  private readonly browserHistory = new BrowserNavigationHistory(() => this.back())
+  private readonly restoration = new NavigationRestorationController(this)
 
   readonly declaration: TaoAppDeclaration
 
@@ -64,9 +128,128 @@ export class RuntimeAppDefinition implements Subscription {
     return this.designValue ??= this.definition.design?.()
   }
 
+  attachBrowserHistory(driver: BrowserNavigationHistoryDriver): () => void {
+    return this.browserHistory.attach(driver)
+  }
+
+  attachRestoration(): Promise<() => void> {
+    return this.restoration.attach()
+  }
+
+  restorationRequiresInitialLoad(): boolean {
+    return this.restoration.requiresInitialLoad()
+  }
+
+  present(
+    navigation: TaoNavigationValue,
+    presentable: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+  ): void {
+    presentable = this.localPresentable(presentable)
+    const instanceId = this.nextBrowserEntryId++
+    const owner = this.browserOwner(navigation)
+    const argumentsCopy = { ...arguments_ }
+    const apply = () =>
+      withBrowserHistoryEntry(
+        navigation,
+        instanceId,
+        () => this.mutateNavigation(navigation, () => navigation.present(presentable, argumentsCopy)),
+      )
+    apply()
+    this.recordBrowserMutation(
+      instanceId,
+      'content',
+      owner,
+      presentable,
+      argumentsCopy,
+      apply,
+    )
+  }
+
+  presentOverlay(
+    navigation: TaoNavigationValue,
+    presentable: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+    options: { sheet?: boolean } = {},
+  ): void {
+    presentable = this.localPresentable(presentable)
+    const instanceId = this.nextBrowserEntryId++
+    const owner = this.browserOwner(navigation)
+    const argumentsCopy = { ...arguments_ }
+    const apply = () =>
+      withBrowserHistoryEntry(
+        navigation,
+        instanceId,
+        () =>
+          this.mutateNavigation(
+            navigation,
+            () => navigation.presentOverlay(presentable, argumentsCopy, options),
+          ),
+      )
+    apply()
+    this.recordBrowserMutation(
+      instanceId,
+      'overlay',
+      owner,
+      presentable,
+      argumentsCopy,
+      apply,
+    )
+  }
+
+  ask(
+    navigation: TaoNavigationValue,
+    view: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+  ): Promise<Evaluable> {
+    view = this.localPresentable(view)
+    const instanceId = this.nextBrowserEntryId++
+    const owner = this.browserOwner(navigation)
+    const result = withBrowserHistoryEntry(
+      navigation,
+      instanceId,
+      () =>
+        this.mutateNavigation(navigation, () =>
+          navigation.ask(
+            view,
+            arguments_,
+            () => this.browserHistory.reducerBackCompleted({ instanceId, owner }),
+          )),
+    )
+    this.recordBrowserMutation(instanceId, 'ask', owner, view, arguments_)
+    return result
+  }
+
+  dismiss(navigation: TaoNavigationValue): boolean {
+    const owner = this.browserOwner(navigation)
+    const dismissed = this.mutateNavigation(navigation, () => navigation.dismiss())
+    if (dismissed) {
+      this.browserHistory.reducerBackCompleted({
+        instanceId: takeRemovedBrowserHistoryId(navigation),
+        context: this.browserContext(owner),
+        owner,
+      })
+    }
+    return dismissed
+  }
+
   replace(navigator: TaoNavigationInput): void {
+    const previousReplacement = this.replacement
+    const previous = previousReplacement ?? this.navigatorValue
+    if (previous) {
+      this.deactivateNavigationLane(
+        previous,
+        previousReplacement !== undefined && !this.isRetainedNavigation(previous),
+      )
+    }
     this.replacement = this.mount(navigator)
+    this.restoration.lanesChanged()
+    this.browserHistory.reset()
     this.emit()
+  }
+
+  activate(key: string): boolean {
+    return this.navigator.activate(key)
   }
 
   /** resolve returns the mounted occurrence owned by this app for one descriptor identity. */
@@ -83,6 +266,7 @@ export class RuntimeAppDefinition implements Subscription {
     presentable: TaoPresentable,
     arguments_: TaoNavigationArguments,
   ): void {
+    presentable = this.localPresentable(presentable)
     const existing = this.toastEntries.get(key)
     if (existing) {
       existing.cancelExpiry()
@@ -116,11 +300,25 @@ export class RuntimeAppDefinition implements Subscription {
 
   back(): boolean {
     for (const auxiliary of Object.values(this.auxiliaries).toReversed()) {
-      if (auxiliary.back()) {
+      if (this.mutateNavigation(auxiliary, () => auxiliary.back())) {
+        this.browserHistory.reducerBackCompleted({
+          context: this.browserContext(auxiliary),
+          instanceId: takeRemovedBrowserHistoryId(auxiliary),
+          owner: auxiliary,
+        })
         return true
       }
     }
-    return this.navigator.back()
+    const navigator = this.navigator
+    const consumed = this.mutateNavigation(navigator, () => navigator.back())
+    if (consumed) {
+      this.browserHistory.reducerBackCompleted({
+        context: this.browserContext(navigator),
+        instanceId: takeRemovedBrowserHistoryId(navigator),
+        owner: navigator,
+      })
+    }
+    return consumed
   }
 
   get canGoBack(): boolean {
@@ -135,15 +333,27 @@ export class RuntimeAppDefinition implements Subscription {
   }
 
   reset(): void {
-    this.replacement = undefined
     for (const entry of this.toastEntries.values()) {
       entry.cancelExpiry()
     }
     this.toastEntries.clear()
-    this.navigatorValue?.reset()
-    for (const auxiliary of Object.values(this.auxiliariesValue ?? {})) {
-      auxiliary.reset()
+
+    const replacement = this.replacement
+    if (replacement) {
+      this.mutateNavigation(replacement, () => replacement.reset())
+      this.deactivateNavigationLane(replacement, !this.isRetainedNavigation(replacement))
+      this.replacement = undefined
     }
+    const retained = [
+      ...(this.navigatorValue ? [this.navigatorValue] : []),
+      ...Object.values(this.auxiliariesValue ?? {}),
+    ]
+    for (const navigation of retained) {
+      this.deactivateNavigationLane(navigation)
+      this.mutateNavigation(navigation, () => navigation.reset())
+      this.activateNavigationLane(this.navigationLaneRecords.get(navigation)!)
+    }
+    this.browserHistory.reset()
     this.emit()
   }
 
@@ -154,10 +364,187 @@ export class RuntimeAppDefinition implements Subscription {
     }
   }
 
+  private mutateNavigation<ResultT>(
+    navigation: TaoNavigationValue,
+    mutation: () => ResultT,
+  ): ResultT {
+    const lane = this.browserOwner(navigation)
+    this.browserMutatingLanes.set(lane, (this.browserMutatingLanes.get(lane) ?? 0) + 1)
+    try {
+      return mutation()
+    } finally {
+      const depth = this.browserMutatingLanes.get(lane)! - 1
+      if (depth === 0) {
+        this.browserMutatingLanes.delete(lane)
+      } else {
+        this.browserMutatingLanes.set(lane, depth)
+      }
+    }
+  }
+
+  private isRetainedNavigation(navigation: TaoNavigationValue): boolean {
+    return navigation === this.navigatorValue
+      || Object.values(this.auxiliariesValue ?? {}).includes(navigation)
+  }
+
   private mount(input: TaoNavigationInput): TaoNavigationValue {
-    return isConfiguredNavigation(input)
-      ? mountConfiguredNavigation(input, (configured, mount) => this.descriptorMounts.set(configured, mount))
-      : input
+    if (!isConfiguredNavigation(input)) {
+      const existing = this.navigationLaneRecords.get(input)
+      if (existing) {
+        this.activateNavigationLane(existing)
+        return input
+      }
+      const record: NavigationLaneRecord = {
+        configured: [],
+        mounts: [input],
+        owner: { app: this, lane: input },
+      }
+      this.navigationLaneRecords.set(input, record)
+      this.activateNavigationLane(record)
+      return input
+    }
+    const mounts: TaoNavigationValue[] = []
+    const configuredMounts: Array<readonly [TaoConfiguredNavigation, TaoNavigationValue]> = []
+    const lane = mountConfiguredNavigation(
+      input,
+      (configured, mount) => {
+        mounts.push(mount)
+        configuredMounts.push([configured, mount])
+      },
+      presentable => this.localPresentable(presentable),
+    )
+    const record: NavigationLaneRecord = {
+      configured: configuredMounts,
+      mounts,
+      owner: { app: this, lane },
+    }
+    this.navigationLaneRecords.set(lane, record)
+    this.activateNavigationLane(record)
+    return lane
+  }
+
+  /** resolvePresentable returns the closure registered in this app's generated module generation. */
+  resolvePresentable(canonicalIdentity: string): TaoPresentable {
+    return resolvePresentable<TaoPresentable>(canonicalIdentity, this.presentableVersion)
+  }
+
+  private localPresentable(presentable: TaoPresentable): TaoPresentable {
+    const identity = presentable.definition.identity?.canonical
+    return identity ? this.resolvePresentable(identity) : presentable
+  }
+
+  private activateNavigationLane(record: NavigationLaneRecord): void {
+    if (record.ownerDispose) {
+      return
+    }
+    const { lane } = record.owner
+    for (const mount of record.mounts) {
+      this.navigationLanes.set(mount, lane)
+    }
+    for (const [configured, mount] of record.configured) {
+      this.descriptorMounts.set(configured, mount)
+    }
+    record.ownerDispose = registerNavigationOwner(record.mounts, record.owner)
+    record.contextDispose = this.trackBrowserContexts(lane, record.mounts)
+  }
+
+  private deactivateNavigationLane(lane: TaoNavigationValue, forget = false): void {
+    const record = this.navigationLaneRecords.get(lane)
+    if (!record?.ownerDispose) {
+      return
+    }
+    record.contextDispose?.()
+    record.contextDispose = undefined
+    record.ownerDispose()
+    record.ownerDispose = undefined
+    for (const mount of record.mounts) {
+      if (this.navigationLanes.get(mount) === lane) {
+        this.navigationLanes.delete(mount)
+      }
+    }
+    for (const [configured, mount] of record.configured) {
+      if (this.descriptorMounts.get(configured) === mount) {
+        this.descriptorMounts.delete(configured)
+      }
+    }
+    if (forget) {
+      this.navigationLaneRecords.delete(lane)
+    }
+  }
+
+  private recordBrowserMutation(
+    instanceId: number,
+    kind: 'ask' | 'content' | 'overlay',
+    owner: TaoNavigationValue,
+    presentable: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+    replay?: () => void,
+  ): void {
+    const context = this.browserContext(owner)
+    this.browserHistory.record({
+      arguments: arguments_,
+      ...(context ? { context } : {}),
+      instanceId,
+      kind,
+      owner,
+      presentable,
+      ...(replay ? { replay } : {}),
+    })
+  }
+
+  private browserOwner(navigation: TaoNavigationValue): TaoNavigationValue {
+    return this.navigationLanes.get(navigation) ?? navigation
+  }
+
+  private browserContext(navigation: TaoNavigationValue): string | undefined {
+    const contexts = this.browserContexts.get(navigation)
+    if (!contexts || contexts.size === 0) {
+      return undefined
+    }
+    return JSON.stringify(
+      [...contexts.values()]
+        .sort((left, right) => left.id - right.id)
+        .map(context => [context.id, context.key]),
+    )
+  }
+
+  private trackBrowserContexts(lane: TaoNavigationValue, mounts: TaoNavigationValue[]): () => void {
+    const selections = mounts.filter(mount => mount.kind === 'selection')
+    if (selections.length === 0) {
+      return () => {}
+    }
+    const contexts = new Map<TaoNavigationValue, { id: number; key: string }>()
+    const disposers: Array<() => void> = []
+    this.browserContexts.set(lane, contexts)
+    for (const selection of selections) {
+      const initial = (selection.descriptor.config as { initial?: unknown }).initial
+      if (typeof initial !== 'string') {
+        continue
+      }
+      const context = { id: this.nextBrowserSelectionId++, key: initial }
+      contexts.set(selection, context)
+      // Subscription is the zero-change structural fallback for sealed third-party mounts. Any
+      // selection state change makes an existing redo chain unsafe even if its active key is opaque.
+      const observation = observeNavigationActivation(selection, key => {
+        if (key !== context.key) {
+          this.browserHistory.invalidateRedo()
+        }
+        context.key = key
+      })
+      disposers.push(observation.dispose)
+      disposers.push(selection.subscribe(() => {
+        if (this.browserMutatingLanes.has(lane) || observation.observesKey) {
+          return
+        }
+        this.browserHistory.invalidateOwnerReplay(lane)
+      }))
+    }
+    return () => {
+      for (const dispose of disposers.toReversed()) {
+        dispose()
+      }
+      this.browserContexts.delete(lane)
+    }
   }
 
   private expireToast(key: string, entry: ToastEntry): void {

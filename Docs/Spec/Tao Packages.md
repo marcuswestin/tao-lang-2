@@ -1,11 +1,12 @@
 # Tao Project and Packages
 
 Status: partially implemented design draft. The current implementation supports local
-`project { name "..." remote none license ... }` metadata, `file`/`package`/`workspace`/`public`
+`project { id "..." name "..." remote none license ... }` metadata, `tao create` and project-ID
+migration, `file`/`package`/`workspace`/`public`
 declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
 stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports through an in-memory
-workspace package index, and public self-hosted `nav` and `datasource` declarations. Project IDs,
-`tao create`, import renaming, `requires`, external workspace installation, lockfiles, remotes, other
+workspace package index, and public self-hosted `nav` and `datasource` declarations. Import renaming,
+`requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
 The implemented package surface includes `@tao/text`, `@tao/time`, and the curated
@@ -44,9 +45,9 @@ compiler-known names are involved.
 
 ## Creating a Tao Project
 
-- The intended command is `tao create <id>`.
-- It will create `<id>/App.tao`, using the new project's directory name as its developer-supplied, checked-in project ID and initial display name. This command and richer repository scaffolding remain future work.
-- For example, `tao create "My TODOs"` creates `./My TODOs/App.tao` with `id "My TODOs"`.
+- `tao create <id>` creates `<id>/App.tao`, using the new project's directory name as its
+  developer-supplied, checked-in project ID and initial display name.
+- For example, `tao create my-todos` creates `./my-todos/App.tao` with `id "my-todos"`.
 
 ### Creating a Tao app
 
@@ -58,6 +59,7 @@ use StackNav from @tao/nav
 use Col, FormButton, Text from @tao/ui
 
 project {
+   id "chat"
    name "Chat"
    remote none
    license MIT
@@ -102,7 +104,21 @@ view ThreadUi(Message) {
 }
 ```
 
-The project `id` is an opaque, immutable value chosen by the developer and checked into the project declaration. `tao create <id>` uses its new directory name as the ID. For an existing project, `tao project id <id> [path]` creates and persists a missing ID; repeating it with the same value preserves the existing declaration. The ID travels with clones and published artifacts and does not change when the project later moves, gains a remote, or advances to another commit. A fork that becomes an independent Tao project runs `tao project id <new-id> [path] --replace`. Required dependencies retain their own project IDs; lockfile revisions select code but do not alter declaration identity. Ordinary checking, compiling, formatting, and launching never invent or modify identity as a side effect.
+The project `id` is an opaque, immutable value chosen by the developer and checked into the project
+declaration. `tao create <id>` uses its new directory name as the ID. For an existing directory,
+`tao project id <id> [path]` creates `Project.tao`; when metadata already exists it adds the missing
+ID, and repeating the same value preserves it. The ID travels with clones and published artifacts
+and does not change when the project moves, gains a remote, or advances to another commit. A fork
+that becomes an independent Tao project runs `tao project id <new-id> [path] --replace`, which
+explicitly severs persisted-state compatibility. Required dependencies retain their own project IDs;
+lockfile revisions and consumer installation names select code but do not alter declaration
+identity. Two distinct dependency roots claiming the same ID are a hard resolution error. Ordinary
+checking, compiling, formatting, and launching never invent or modify identity as a side effect.
+
+A project is the self-contained ownership and dependency unit. It may expose several public package
+surfaces through checked-in `@folder` names. A consuming app project installs the library project and
+imports only its public declarations from those package surfaces. The defining project supplies the
+canonical identity of each declaration; consumers read that identity and never recompute it.
 
 The top-level data declaration supplies singular and plural values. The UI presents first-class
 view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corresponding native

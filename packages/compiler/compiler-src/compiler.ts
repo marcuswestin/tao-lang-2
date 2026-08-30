@@ -10,6 +10,10 @@ import {
   isTransparentConfigurableAlias,
 } from './codegen/app/configuration-compiler'
 import {
+  type DeclarationIdentityProject,
+  withDeclarationIdentityContext,
+} from './codegen/app/declaration-identity'
+import {
   bridgeBindingName,
   bridgedExpressionsOf,
   bridgeExportName,
@@ -174,8 +178,12 @@ function compileValidatedInput(
 ): CompileResult {
   const entryPath = validationResult.entry.path
   const sourceFiles = validationResult.files.filter(file =>
-    file.ast.statements.length === 0 || !file.ast.statements.every(AST.isPrimitiveDeclaration)
+    file.ast.statements.length === 0
+    || !file.ast.statements.every(statement =>
+      AST.isPrimitiveDeclaration(statement) || AST.isProjectDeclaration(statement)
+    )
   )
+  const identityProjects = declarationIdentityProjects(validationResult.files, context)
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
   const dataCatalog = planDataCatalog(sourceFiles, entryPath)
@@ -185,6 +193,7 @@ function compileValidatedInput(
       sourceByPath,
       outputPaths,
       packagesContext: context.packagesContext,
+      identityProjects,
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
     })
   )
@@ -278,11 +287,12 @@ type CompileSourceFileOptions = {
   sourceByPath: Map<string, ParsedFile>
   outputPaths: PlannedOutputs
   packagesContext: Packages.Context
+  identityProjects: readonly DeclarationIdentityProject[]
   selectedAppName: string | undefined
 }
 
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
-  const { dataCatalog, sourceByPath, outputPaths, packagesContext, selectedAppName } = options
+  const { dataCatalog, sourceByPath, outputPaths, packagesContext, selectedAppName, identityProjects } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
   if (dataCatalog && !ownsDataCatalog && dataCatalog.userPaths.has(file.path)) {
@@ -322,21 +332,23 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const module: CompiledFile = {
     sourcePath: file.path,
     relativePath: planned.modulePath,
-    code: withInlineInjectionBindings(
-      new Map(planned.injections.map(injection => [injection.node, injection.binding])),
-      () =>
-        RuntimeGen.TaoFile(file.ast, {
-          configurationTypes: planned.declarationsPath === undefined
-            ? undefined
-            : RuntimeGen.ConfigurationTypes(file.ast),
-          dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-          emitDataCatalog: ownsDataCatalog,
-          importLines,
-          scopeBindings,
-          exportedBindings,
-          selectedAppName,
-        }),
-    ),
+    code: withDeclarationIdentityContext(identityProjects, () =>
+      withInlineInjectionBindings(
+        new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+        () =>
+          RuntimeGen.TaoFile(file.ast, {
+            configurationTypes: planned.declarationsPath === undefined
+              ? undefined
+              : RuntimeGen.ConfigurationTypes(file.ast),
+            dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+            emitDataCatalog: ownsDataCatalog,
+            importLines,
+            scopeBindings,
+            exportedBindings,
+            selectedAppName,
+            viewRegistrations: RuntimeGen.ViewRegistrations(file.ast),
+          }),
+      )),
   }
   const declarations: CompiledFile[] = planned.declarationsPath === undefined
     ? []
@@ -370,6 +382,22 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     })
   }
   return [module, ...injections, ...declarations, ...copiedSidecars.values()]
+}
+
+function declarationIdentityProjects(
+  files: readonly ParsedFile[],
+  context: CompilerContext,
+): DeclarationIdentityProject[] {
+  const projects = files.flatMap(file =>
+    file.ast.statements.filter(AST.isProjectDeclaration).flatMap(project => {
+      const id = AST.blockStatementOf(project, { filter: AST.isProjectId })[0]?.value
+      return id === undefined ? [] : [{ id, root: FS.dirname(file.path) }]
+    })
+  )
+  if (context.sourceRoot === codeProjectRoot && !projects.some(project => project.root === codeProjectRoot)) {
+    projects.push({ id: 'tao-compiler-test', root: codeProjectRoot })
+  }
+  return projects
 }
 
 function configurationAliasImportLines(

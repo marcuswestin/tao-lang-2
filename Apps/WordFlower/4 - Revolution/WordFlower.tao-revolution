@@ -53,7 +53,7 @@ use every, Interval from @tao/time
 //   - Result values with try/catch/finally and exhaustive case matching (LANG-021)
 //   - `blur self`, field-bound inputs, and AI/package actions (LANG-016, LANG-019, LANG-020)
 // Presentation
-//   - Public routes and deep links, without exposing internal mounted paths (LANG-022, DEF-NAV-001)
+//   - Authenticated and anonymous link authority (Decisions.md §10)
 //   - Addressing a specific window/toast/dynamic-selection occurrence by runtime key (DEF-NAV-016)
 //   - Conditional chrome tied to the active selection item (DEF-NAV-012)
 //   - Multiple scenes, spatial presentation, widgets, complications (DEF-NAV-003)
@@ -1146,20 +1146,6 @@ view AutosaveController(Document) {
    }
 
    render Text("Saved { SecondsSinceSave } seconds ago") [type body, fg fg.muted]
-}
-
-// Presentation state survives relaunch, and migrates when declarations are renamed.
-state SavedPresentation = serialize presentation WordFlower
-
-on app restore -> {
-   let Restored = deserialize presentation SavedPresentation
-   // Invoking a view always needs parentheses; presenting an already-constructed presentable value
-   // does not, exactly as with `present Occurrence { ... }` and target-only `present App@key`.
-   present Restored
-}
-
-migrate presentation 2 -> 3 {
-   rename destination DocumentEditorUi to DocumentScreen
 }
 
 // `unsafe ts` declares a typed native boundary as a declaration, rather than inlining TS in a render.

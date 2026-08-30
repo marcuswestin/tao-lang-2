@@ -7,6 +7,13 @@ export type RuntimeEntityMetadata = {
   schema: TaoDataSchema
 }
 
+export type TaoEntityReferenceSnapshot = Readonly<{
+  entity: string
+  provider: string
+  schema: string
+  token: string
+}>
+
 const runtimeEntityMetadata = new WeakMap<RuntimeEntityHandle, RuntimeEntityMetadata>()
 
 export class RuntimeEntityHandle {

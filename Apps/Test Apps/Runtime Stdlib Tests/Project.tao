@@ -1,0 +1,4 @@
+project {
+   id "runtime-stdlib-tests"
+   name "Runtime Stdlib Tests"
+}

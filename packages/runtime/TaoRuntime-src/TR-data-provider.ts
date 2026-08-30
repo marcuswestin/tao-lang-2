@@ -25,17 +25,21 @@ export function MemoryProvider(initial?: string): TaoDataProvider {
       initialize(storageKey)
       stored.set(storageKey, value)
     },
+    referenceToken: reference => reference.id,
+    resolveReference: reference => reference.token,
   }
 }
 
 /** LocalProvider persists envelopes through AsyncStorage without silently degrading to memory. */
 function LocalProvider(storage?: TaoKeyValueStorage, keyPrefix = 'tao-data'): TaoDataProvider {
-  const keyValueStorage = (): TaoKeyValueStorage => storage ?? asyncStorage()
+  const keyValueStorage = (): TaoKeyValueStorage => storage ?? platformKeyValueStorage()
   return {
     load: async storageKey => (await keyValueStorage().getItem(`${keyPrefix}:${storageKey}`)) ?? undefined,
     persist: async (storageKey, value) => {
       await keyValueStorage().setItem(`${keyPrefix}:${storageKey}`, value)
     },
+    referenceToken: reference => reference.id,
+    resolveReference: reference => reference.token,
   }
 }
 
@@ -133,7 +137,8 @@ export function UnboundProvider(schemaName: string): TaoDataProvider {
   }
 }
 
-function asyncStorage(): TaoKeyValueStorage {
+/** platformKeyValueStorage exposes the shared host storage boundary to data and navigation persistence. */
+export function platformKeyValueStorage(): TaoKeyValueStorage {
   const required = require('@react-native-async-storage/async-storage') as
     | TaoKeyValueStorage
     | { default: TaoKeyValueStorage }

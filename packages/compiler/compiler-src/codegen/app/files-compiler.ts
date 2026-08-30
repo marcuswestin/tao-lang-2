@@ -11,6 +11,7 @@ type TaoFileCompileOptions = {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   selectedAppName?: string
+  viewRegistrations?: string
 }
 
 export default {
@@ -19,6 +20,7 @@ export default {
     const configurationTypes = opts.configurationTypes ?? ''
     const importLines = opts.importLines?.join('\n') ?? ''
     const scopeBindings = opts.scopeBindings?.join('\n') ?? ''
+    const viewRegistrations = opts.viewRegistrations ?? ''
     const exportLines = opts.exportedBindings
       ?.map(({ exported, binding }) => `export const ${exported} = _Scope.${binding}`)
       .join('\n') ?? ''
@@ -46,6 +48,7 @@ export default {
 
       const _Scope: any = {}
       ${gen.textLines(scopeBindings)}
+      ${gen.textLines(viewRegistrations)}
 
       ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
 

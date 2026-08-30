@@ -371,6 +371,40 @@ Describe('validator: declaration contracts', () => {
   }
 
   Test(
+    'rejects statically known action arguments at a restorable presentation usage site',
+    rejects(
+      `
+        use StackNav from @tao/nav
+        app RestoreApp { Name "Restore" Navigator StackNav { Initial Home } }
+        view Home() {
+          action Callback() { }
+          action Open() { present Detail(Callback) }
+          render Empty()
+        }
+        view Detail(Callback action) { render Empty() }
+        ${stubView('Empty')}
+      `,
+      navigationValidationMessages.nonRestorableArgument('Detail', 'Callback'),
+    ),
+  )
+
+  Test(
+    'allows action arguments on toasts because toasts never enter restoration snapshots',
+    accepts(`
+      use StackNav from @tao/nav
+      app ToastActions { Name "Toast actions" Navigator StackNav { Initial Home } }
+      view Home() {
+        Title "Home"
+        action Callback() { }
+        action Open() { present Notice(Callback) as toast (Key: "notice", Duration: 1.s) }
+        render Empty()
+      }
+      view Notice(Callback action) { render Empty() }
+      ${stubView('Empty')}
+    `),
+  )
+
+  Test(
     'rejects target-only selection activation outside view declarations',
     rejects(
       `

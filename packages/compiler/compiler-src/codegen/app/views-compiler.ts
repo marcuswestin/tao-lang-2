@@ -2,11 +2,30 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ViewsCompiler = {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
   ViewDeclaration,
+
+  /** ViewRegistrations registers every view before app configuration evaluates restorable positions. */
+  ViewRegistrations(taoFile: AST.TaoFile): Compiled {
+    return gen.list(taoFile.statements.filter(AST.isViewDeclaration), view => {
+      const canonical = canonicalDeclaration(view)
+      return gen`TR.Navigation.View({
+        identity: ${compileDeclarationIdentity(view)},
+        name: ${gen.jsLiteral(canonical.name)},
+        render: (_NavigationArguments, _NavigationProps, _NavigationHost) =>
+          <${gen.scopeName(view)}${
+        gen.join(AST.parametersOf(view), parameter => {
+          const name = Type.parameterName(parameter)
+          return gen` ${name}={_NavigationArguments[${gen.jsLiteral(name)}]}`
+        }, { separator: '' })
+      } __tao={_NavigationProps} __taoHost={_NavigationHost} />,
+      })`
+    })
+  },
 
   /** ViewParameterList compiles Tao view parameters into generated React props. */
   ViewParameterList(renderable: AST.ViewDeclaration): Compiled {

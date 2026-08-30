@@ -1,4 +1,5 @@
 import type { TaoDataSchema } from './TR-data'
+import { entityHandle, metadataOf, type TaoEntityReferenceSnapshot } from './TR-data-entity'
 import { MemoryProvider } from './TR-data-provider'
 
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
@@ -15,6 +16,21 @@ export function isDataTestMode(): boolean {
 
 export function registerDataSchema(schema: TaoDataSchema): void {
   schemas.add(schema)
+}
+
+export function serializeEntityReference(value: unknown): TaoEntityReferenceSnapshot | undefined {
+  const handle = entityHandle(value)
+  return handle ? metadataOf(handle).schema.serializeReference(handle) : undefined
+}
+
+export function restoreEntityReference(reference: TaoEntityReferenceSnapshot): unknown {
+  for (const schema of schemas) {
+    const handle = schema.restoreReference(reference)
+    if (handle) {
+      return handle
+    }
+  }
+  throw new Error(`No active datasource matches restored entity schema '${reference.schema}'.`)
 }
 
 export function bindConfiguredDataSchema(

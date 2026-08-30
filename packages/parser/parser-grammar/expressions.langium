@@ -6,6 +6,7 @@ import "./blocks"
 import "./configuration"
 import "./types"
 import "./terminals"
+import "./restoration"
 
 entry ExpressionsGrammarEntrypoint:
     ArgumentList | Expression | FunctionDeclaration;
@@ -154,7 +155,8 @@ ConfigurationBlock:
     '{' (entries+=ConfigurationEntry (','? entries+=ConfigurationEntry)*)? '}';
 
 ConfigurationEntry:
-    key=USE_IMPORT_PATH block=ConfigurationBlock
+    restoration=RestorationPolicy
+    | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
     | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
     | reference=[ValueDeclaration:ID]

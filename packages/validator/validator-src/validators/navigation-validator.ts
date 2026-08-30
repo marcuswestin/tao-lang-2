@@ -25,6 +25,8 @@ export const navigationValidationMessages = {
     `Destination ${destination} has no parameter named '${name}'.`,
   duplicateNamedArgument: (destination: string, name: string) =>
     `Presentation of ${destination} provides parameter '${name}' more than once.`,
+  nonRestorableArgument: (destination: string, parameter: string) =>
+    `Presentation of ${destination} cannot be restored: parameter ${parameter} action does not serialize.`,
   namedArgumentType: (destination: string, name: string, expected: string, actual: string) =>
     `Labeled argument '${name}:' of destination ${destination} expects ${expected}, got ${actual}.`,
   presentationContext: 'Contextual presentation is allowed only inside a view declaration.',
@@ -627,6 +629,17 @@ function validatePresentationArguments(
     const resolved = ASTUtils.resolveArgumentBindings(view, presentation)
     for (const diagnostic of resolved.diagnostics) {
       reportBindingDiagnostic(view, diagnostic, presentation, ctx)
+    }
+    if (presentation.mode?.kind !== 'toast') {
+      for (const { argument, parameter } of resolved.pairs) {
+        const parameterType = Type.ofParameter(parameter)
+        if (parameterType.kind === 'primitive' && parameterType.primitive === 'action') {
+          ctx.error(
+            navigationValidationMessages.nonRestorableArgument(view.name, Type.parameterName(parameter)),
+            argument,
+          )
+        }
+      }
     }
   }
 }

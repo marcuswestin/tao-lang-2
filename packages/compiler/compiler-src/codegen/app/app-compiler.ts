@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileDeclarationIdentity } from './declaration-identity'
 
 type AppPropertySource = AST.Expression | AST.ConfigurationValue
 
@@ -60,11 +61,12 @@ function compileAppValue(app: AST.AppValueDeclaration): Compiled {
   const name = configuration.get('Name')
   const datasource = configuration.get('Datasource')
   const design = configuration.get('Design')
+  const restoration = effectiveRestorationPolicy(app)
   const root = ASTUtils.rootAppValue(app)
   Assert.defined(root, 'validated app derivation is acyclic')
   const definition = { name: `_TaoAppDefinition_${app.name}` }
   const rootDeclaration = root === app
-    ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)})`
+    ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}, ${compileDeclarationIdentity(app)})`
     : gen`${appDefinitionReference(root)}.declaration`
   const auxiliaries = rootAuxiliaryNavigators(root)
   return gen`
@@ -72,6 +74,16 @@ function compileAppValue(app: AST.AppValueDeclaration): Compiled {
       declaration: ${rootDeclaration},
       name: ${name ? gen`${compileAppProperty(name, 'Name')}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
       navigator: () => ${compileAppProperty(navigator, 'Navigator')},
+      restoration: {
+        exclusions: ${gen.jsLiteral(restoration.exclusions)},
+        mode: ${gen.jsLiteral(restoration.mode)},
+        variant: ${gen.jsLiteral(app.name)},
+        ${
+    datasource
+      ? gen`providerIdentity: () => ${compileAppProperty(datasource, 'Datasource')}.bindingIdentity(),`
+      : gen.noop()
+  }
+      },
       ${
     design && !AST.isNoneLiteral(design.value)
       ? gen`design: () => ${compileAppProperty(design, 'Design')},`
@@ -99,6 +111,73 @@ function compileAppValue(app: AST.AppValueDeclaration): Compiled {
     }
     ${gen.scopeName(app)} = ${gen.Name(definition)}
   `
+}
+
+type EffectiveRestorationPolicy = {
+  exclusions: Array<'menus' | 'sheets' | 'toasts'>
+  mode: 'automatic' | 'fresh'
+}
+
+function effectiveRestorationPolicy(
+  app: AST.AppValueDeclaration,
+  seen: Set<AST.AppValueDeclaration> = new Set(),
+): EffectiveRestorationPolicy {
+  Assert(!seen.has(app), 'validated app restoration derivation is acyclic')
+  seen.add(app)
+  if (AST.isAppDeclaration(app) && app.block) {
+    return restorationPolicy(
+      AST.blockStatements(app).find(AST.isRestorationPolicy),
+      { exclusions: [], mode: 'automatic' },
+    )
+  }
+  const expression = app.value
+  if (!expression) {
+    return { exclusions: [], mode: 'automatic' }
+  }
+  return effectiveRestorationExpression(expression, seen)
+}
+
+function effectiveRestorationExpression(
+  expression: AST.Expression,
+  seen: Set<AST.AppValueDeclaration>,
+): EffectiveRestorationPolicy {
+  if (AST.isRefinementExpression(expression)) {
+    const target = resolveRef(expression.target)
+    Assert.is(target, AST.isAppValueDeclaration, 'validated app restoration refinement resolves an app')
+    return restorationPolicy(
+      expression.patchBlock.entries.find(entry => entry.restoration)?.restoration,
+      effectiveRestorationPolicy(target, seen),
+    )
+  }
+  if (AST.isValueReference(expression)) {
+    const target = resolveRef(expression.target)
+    Assert.is(target, AST.isAppValueDeclaration, 'validated app restoration reference resolves an app')
+    return effectiveRestorationPolicy(target, seen)
+  }
+  if (
+    AST.isPrimitiveConfigurationConstructor(expression)
+    || AST.isConfigurationConstructor(expression)
+    || AST.isInferredConfigurationConstructor(expression)
+  ) {
+    return restorationPolicy(
+      expression.block?.entries.find(entry => entry.restoration)?.restoration,
+      { exclusions: [], mode: 'automatic' },
+    )
+  }
+  return { exclusions: [], mode: 'automatic' }
+}
+
+function restorationPolicy(
+  policy: AST.RestorationPolicy | undefined,
+  fallback: EffectiveRestorationPolicy,
+): EffectiveRestorationPolicy {
+  if (!policy) {
+    return fallback
+  }
+  return {
+    exclusions: (policy.exclusions?.exclusions ?? []) as EffectiveRestorationPolicy['exclusions'],
+    mode: policy.mode as EffectiveRestorationPolicy['mode'],
+  }
 }
 
 function compileLegacyViewApp(app: AST.AppDeclaration): Compiled {

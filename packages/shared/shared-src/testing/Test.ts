@@ -23,6 +23,7 @@ export const Jest: JestApi = {
 
 /** Test wraps the active test runner's test case API. */
 export const Test = createTestRunnerFunction('test')
+let temporaryProjectSequence = 0
 
 /** mkTestDir creates a unique temporary directory under the host temp directory. */
 export async function mkTestDir(prefix: string): Promise<string> {
@@ -39,6 +40,13 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
   const paths = {} as { [Path in keyof Files]: string }
 
   try {
+    if (!Object.values(files).some(source => /\bproject\s*\{/u.test(source))) {
+      const projectId = `tao-temporary-test-project-${++temporaryProjectSequence}`
+      await FS.writeText(
+        FS.resolvePath('Project.tao', rootDir),
+        `project { id "${projectId}" name "Temporary test project" }`,
+      )
+    }
     for (const relativePath of Object.keys(files) as Array<keyof Files & string>) {
       const source = files[relativePath]
       Assert.defined(source, 'Tao test fixture source exists', { relativePath })

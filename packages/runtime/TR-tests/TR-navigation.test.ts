@@ -1,8 +1,46 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
+import type {
+  BrowserNavigationHistoryDriver,
+  BrowserNavigationPosition,
+} from '../TaoRuntime-src/TR-navigation-browser-history'
 import { RuntimeHostReadChannel } from '../TaoRuntime-src/TR-navigation-host-slots'
 import { configuredStack } from './TR-navigation-test-fixtures'
+
+function browserHistoryHarness() {
+  let epoch: string | undefined
+  let listener: ((position: BrowserNavigationPosition | undefined) => void) | undefined
+  const pushes: number[] = []
+  const replacements: number[] = []
+  const driver: BrowserNavigationHistoryDriver = {
+    go: () => {},
+    push(position) {
+      epoch = position.epoch
+      pushes.push(position.sequence)
+    },
+    replace(position) {
+      epoch = position.epoch
+      replacements.push(position.sequence)
+    },
+    subscribe(nextListener) {
+      listener = nextListener
+      return () => {
+        if (listener === nextListener) {
+          listener = undefined
+        }
+      }
+    },
+  }
+  return {
+    driver,
+    pop(sequence: number) {
+      listener?.(epoch ? { epoch, sequence } : undefined)
+    },
+    pushes,
+    replacements,
+  }
+}
 
 function configuredSlot(
   name: string,
@@ -38,6 +76,104 @@ function configuredSelection(definition: {
       ...items,
     },
   ))
+}
+
+function thirdPartySelectionKind(options: { sealed?: boolean } = {}) {
+  let activateFromUi: (key: string) => boolean = () => false
+  const presented: string[] = []
+  const kind: TR.NavKind<'selection', TR.SelectionNavConfiguration> = {
+    hostSlots: { reads: [], requires: [] },
+    profile: 'selection',
+    protocolVersion: 2,
+    activate: (mount, key) => mount.activate(key),
+    back: mount => mount.back(),
+    canGoBack: mount => mount.canGoBack,
+    configure(declaration, config) {
+      return Object.freeze({
+        config: Object.freeze(config),
+        declaration,
+        kind,
+        profile: 'selection' as const,
+      })
+    },
+    dismiss: mount => mount.dismiss(),
+    mount(descriptor) {
+      let activeKey = descriptor.config.initial
+      const depths = new Map(Object.keys(descriptor.config.items).map(key => [key, 0]))
+      const listeners = new Set<() => void>()
+      let version = 0
+      const emit = () => {
+        version += 1
+        for (const listener of listeners) {
+          listener()
+        }
+      }
+      const mount: TR.NavMount<'selection', TR.SelectionNavConfiguration> = {
+        get canGoBack() {
+          return (depths.get(activeKey) ?? 0) > 0
+        },
+        descriptor,
+        kind: 'selection',
+        name: descriptor.declaration.name,
+        activate(key) {
+          if (!depths.has(key)) {
+            return false
+          }
+          activeKey = key
+          emit()
+          return true
+        },
+        back() {
+          const depth = depths.get(activeKey) ?? 0
+          if (depth === 0) {
+            return false
+          }
+          depths.set(activeKey, depth - 1)
+          emit()
+          return true
+        },
+        dismiss() {
+          return this.back()
+        },
+        evaluate() {
+          return this
+        },
+        present(presentable) {
+          depths.set(activeKey, (depths.get(activeKey) ?? 0) + 1)
+          presented.push(`${activeKey}:${presentable.name}`)
+          emit()
+        },
+        presentOverlay(presentable) {
+          this.present(presentable, {})
+        },
+        render: () => null,
+        reset() {
+          activeKey = descriptor.config.initial
+          for (const key of depths.keys()) {
+            depths.set(key, 0)
+          }
+          emit()
+        },
+        snapshot: () => version,
+        subscribe(listener) {
+          listeners.add(listener)
+          return () => listeners.delete(listener)
+        },
+      }
+      // A custom rendered tab control closes over its own structural mount and calls Activate
+      // directly; it has no knowledge of RuntimeAppDefinition.
+      activateFromUi = key => mount.activate(key)
+      return options.sealed ? Object.seal(mount) : mount
+    },
+    present: (mount, presentable, arguments_) => mount.present(presentable, arguments_),
+    render: (mount, taoProps) => mount.render(taoProps),
+    reset: mount => mount.reset(),
+  }
+  return {
+    activateFromUi: (key: string) => activateFromUi(key),
+    kind,
+    presented,
+  }
 }
 
 Describe('TR.Navigation', () => {
@@ -271,6 +407,34 @@ Describe('TR.Navigation', () => {
     Expect(app.navigator).toBe(slot)
   })
 
+  Test('replays the actual auxiliary occurrence removed ahead of newer root history', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
+    const notice = TR.Navigation.View({ name: 'Notice', render: () => null })
+    const root = configuredStack('History root', home)
+    const auxiliary = configuredSlot('History auxiliary', home)
+    const app = TR.Navigation.App({
+      name: 'Ordered history app',
+      navigator: () => root,
+      auxiliaries: () => ({ auxiliary }),
+    })
+    const browser = browserHistoryHarness()
+    app.attachBrowserHistory(browser.driver)
+    // Force app ownership registration, then use the explicit-target APIs without Tao props.
+    void app.navigator
+    void app.auxiliaries
+    TR.Navigation.PresentOverlay(undefined, auxiliary, notice, {})
+    TR.Navigation.PresentIn(undefined, root, detail, {})
+    Expect(browser.pushes).toEqual([1, 2])
+
+    browser.pop(1)
+    Expect(auxiliary.canGoBack).toBe(false)
+    Expect(root.canGoBack).toBe(true)
+    browser.pop(2)
+    Expect(auxiliary.canGoBack).toBe(true)
+    Expect(root.canGoBack).toBe(true)
+  })
+
   Test('hosts overlays directly on every configured navigation value', () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => null })
     const notice = TR.Navigation.View({ name: 'Notice', render: () => null })
@@ -385,6 +549,231 @@ Describe('TR.Navigation', () => {
     Expect(app.canGoBack).toBe(false)
     TR.Navigation.beginTest()
     Expect(app.canGoBack).toBe(false)
+  })
+
+  Test('keeps selection, toasts, and replacement out of browser history', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Settings', render: () => null })
+    const selection = configuredSelection({
+      display: TR.Value('automatic'),
+      initial: 'home',
+      items: {
+        home: { content: home, label: TR.Value('Home') },
+        settings: { content: settings, label: TR.Value('Settings') },
+      },
+      name: 'History-free selection',
+    })
+    const replacement = configuredStack('History-free replacement', home)
+    const app = TR.Navigation.App({
+      name: 'History classification app',
+      navigator: () => selection,
+      auxiliaries: () => ({}),
+    })
+    const browser = browserHistoryHarness()
+    app.attachBrowserHistory(browser.driver)
+    void app.navigator
+
+    TR.Navigation.Activate({ app }, app, 'settings')
+    TR.Navigation.PresentToast({ app }, home, {}, {
+      duration: TR.Value(3),
+      key: TR.Value('saved'),
+    })
+    TR.Navigation.Replace({ app }, replacement, app)
+
+    Expect(browser.pushes).toEqual([])
+    TR.Navigation.beginTest()
+  })
+
+  Test('tracks UI-driven activation from a structural third-party selection mount', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Settings', render: () => null })
+    const homeDetail = TR.Navigation.View({ name: 'Home detail', render: () => null })
+    const settingsDetail = TR.Navigation.View({ name: 'Settings detail', render: () => null })
+    const thirdParty = thirdPartySelectionKind()
+    const selection = TR.Navigation.Configure(
+      TR.Navigation.Declaration('Structural selection', thirdParty.kind),
+      {
+        '@home': { Content: home, Label: TR.Value('Home') },
+        '@settings': { Content: settings, Label: TR.Value('Settings') },
+        Display: TR.Value('tabs'),
+        Initial: TR.Value('@home'),
+      },
+    )
+    const app = TR.Navigation.App({
+      name: 'Structural selection app',
+      navigator: () => selection,
+      auxiliaries: () => ({}),
+    })
+    const browser = browserHistoryHarness()
+    app.attachBrowserHistory(browser.driver)
+
+    TR.Navigation.PresentIn(undefined, app.navigator, homeDetail, {})
+    Expect(thirdParty.activateFromUi('settings')).toBe(true)
+    TR.Navigation.PresentIn(undefined, app.navigator, settingsDetail, {})
+    Expect(thirdParty.activateFromUi('home')).toBe(true)
+
+    browser.pop(1)
+    Expect(thirdParty.activateFromUi('home')).toBe(true)
+    browser.pop(2)
+
+    Expect(thirdParty.presented).toEqual([
+      'home:Home detail',
+      'settings:Settings detail',
+      'home:Home detail',
+    ])
+
+    browser.pop(1)
+    Expect(thirdParty.activateFromUi('settings')).toBe(true)
+    browser.pop(2)
+
+    Expect(thirdParty.presented).toEqual([
+      'home:Home detail',
+      'settings:Settings detail',
+      'home:Home detail',
+    ])
+    Expect(browser.replacements.at(-1)).toBe(1)
+    TR.Navigation.beginTest()
+  })
+
+  Test('invalidates Forward after UI activation from a sealed structural selection mount', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Settings', render: () => null })
+    const homeDetail = TR.Navigation.View({ name: 'Home detail', render: () => null })
+    const settingsDetail = TR.Navigation.View({ name: 'Settings detail', render: () => null })
+    const thirdParty = thirdPartySelectionKind({ sealed: true })
+    const selection = TR.Navigation.Configure(
+      TR.Navigation.Declaration('Sealed structural selection', thirdParty.kind),
+      {
+        '@home': { Content: home, Label: TR.Value('Home') },
+        '@settings': { Content: settings, Label: TR.Value('Settings') },
+        Display: TR.Value('tabs'),
+        Initial: TR.Value('@home'),
+      },
+    )
+    const app = TR.Navigation.App({
+      name: 'Sealed structural app',
+      navigator: () => selection,
+      auxiliaries: () => ({}),
+    })
+    const browser = browserHistoryHarness()
+    app.attachBrowserHistory(browser.driver)
+
+    TR.Navigation.PresentIn(undefined, app.navigator, homeDetail, {})
+    Expect(thirdParty.activateFromUi('settings')).toBe(true)
+    TR.Navigation.PresentIn(undefined, app.navigator, settingsDetail, {})
+    Expect(thirdParty.activateFromUi('home')).toBe(true)
+    browser.pop(1)
+    browser.pop(2)
+
+    Expect(thirdParty.presented).toEqual([
+      'home:Home detail',
+      'settings:Settings detail',
+    ])
+    Expect(browser.replacements.at(-1)).toBe(1)
+    TR.Navigation.beginTest()
+  })
+
+  Test('refreshes selection context on reset before deciding whether Forward remains valid', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Settings', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
+    const thirdParty = thirdPartySelectionKind()
+    const selection = TR.Navigation.Configure(
+      TR.Navigation.Declaration('Resettable structural selection', thirdParty.kind),
+      {
+        '@home': { Content: home, Label: TR.Value('Home') },
+        '@settings': { Content: settings, Label: TR.Value('Settings') },
+        Display: TR.Value('tabs'),
+        Initial: TR.Value('@home'),
+      },
+    )
+    const app = TR.Navigation.App({
+      name: 'Resettable structural app',
+      navigator: () => selection,
+      auxiliaries: () => ({}),
+    })
+    const browser = browserHistoryHarness()
+    app.attachBrowserHistory(browser.driver)
+    void app.navigator
+
+    Expect(thirdParty.activateFromUi('settings')).toBe(true)
+    app.reset()
+    TR.Navigation.PresentIn(undefined, app.navigator, detail, {})
+    browser.pop(0)
+    Expect(thirdParty.activateFromUi('settings')).toBe(true)
+    browser.pop(1)
+
+    Expect(thirdParty.presented).toEqual(['home:Detail'])
+    Expect(browser.replacements.at(-1)).toBe(0)
+    TR.Navigation.beginTest()
+  })
+
+  Test('releases replaced selection observers before tracking the replacement lane', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Settings', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
+    const oldKind = thirdPartySelectionKind()
+    const replacementKind = thirdPartySelectionKind()
+    const configure = (name: string, kind: typeof oldKind.kind) =>
+      TR.Navigation.Configure(TR.Navigation.Declaration(name, kind), {
+        '@home': { Content: home, Label: TR.Value('Home') },
+        '@settings': { Content: settings, Label: TR.Value('Settings') },
+        Display: TR.Value('tabs'),
+        Initial: TR.Value('@home'),
+      })
+    const app = TR.Navigation.App({
+      name: 'Replacement observer app',
+      navigator: () => configure('Old structural selection', oldKind.kind),
+      auxiliaries: () => ({}),
+    })
+    const browser = browserHistoryHarness()
+    app.attachBrowserHistory(browser.driver)
+    void app.navigator
+
+    TR.Navigation.Replace(
+      { app },
+      configure('Replacement structural selection', replacementKind.kind),
+      app,
+    )
+    TR.Navigation.PresentIn(undefined, app.navigator, detail, {})
+    browser.pop(0)
+    Expect(oldKind.activateFromUi('settings')).toBe(true)
+    browser.pop(1)
+
+    Expect(replacementKind.presented).toEqual(['home:Detail', 'home:Detail'])
+    TR.Navigation.beginTest()
+  })
+
+  Test('does not guess app ownership when two apps share one raw navigation value', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
+    const shared = configuredStack('Shared raw stack', home)
+    const first = TR.Navigation.App({
+      name: 'First shared app',
+      navigator: () => shared,
+      auxiliaries: () => ({}),
+    })
+    const second = TR.Navigation.App({
+      name: 'Second shared app',
+      navigator: () => shared,
+      auxiliaries: () => ({}),
+    })
+    const firstBrowser = browserHistoryHarness()
+    const secondBrowser = browserHistoryHarness()
+    first.attachBrowserHistory(firstBrowser.driver)
+    second.attachBrowserHistory(secondBrowser.driver)
+    void first.navigator
+    void second.navigator
+
+    TR.Navigation.PresentIn(undefined, shared, detail, {})
+    Expect(firstBrowser.pushes).toEqual([])
+    Expect(secondBrowser.pushes).toEqual([])
+    Expect(shared.back()).toBe(true)
+
+    TR.Navigation.PresentIn({ app: first }, shared, detail, {})
+    Expect(firstBrowser.pushes).toEqual([1])
+    Expect(secondBrowser.pushes).toEqual([])
+    TR.Navigation.beginTest()
   })
 
   Test('patches configured navigation into an independent value without mutating its base', () => {

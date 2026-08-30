@@ -7,6 +7,7 @@ export type PresentableEntry<
   PresentableT extends TaoPresentable | TaoNavigationValue = TaoPresentable | TaoNavigationValue,
 > = {
   arguments: TaoNavigationArguments
+  browserHistoryId?: number
   instanceId: number
   presentable: PresentableT
   host?: RuntimeHostReadChannel

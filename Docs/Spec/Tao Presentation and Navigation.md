@@ -67,9 +67,23 @@ view Settings() {
 app's provider; Local's storage identity is specified in `Tao Data.md`. App auxiliaries remain valid
 for genuine app-specific hosts such as windows. Overlays and toasts never require auxiliary hosts.
 
-An app value and each configured nav descriptor have process-local declaration identity. Universal
-auto-typed `let` remains equivalent and may name any of the descriptors above without changing that
-identity. The `nav Name = Assignment` and `app Name = Assignment` heads constrain their value
+Every project has one checked-in opaque `id`. `tao create <id>` creates it and
+`tao project id <id> [path]` adds missing metadata; `--replace` deliberately makes a fork independent
+and severs persisted-state compatibility. A missing ID is a diagnostic, never a path-, repository-,
+lockfile-, or process-derived fallback. Two dependencies with the same project ID but different
+project roots are a resolution error.
+
+An app, view, nav, or datasource declaration has canonical owner-defined identity:
+project ID, the owning project's checked-in `@package` folder (or the reserved `@workspace` root),
+owner-relative module path, declaration kind, and declaration name. Clone location, consumer install
+name, remote, branch, and revision do not participate. A public view alias is a lexical declaration
+for navigation and diagnostics, but its canonical identity is the final target's; alias chains
+flatten, alias cycles are invalid, and a wrapper body is required to create a new authored address.
+
+Configured nav descriptors retain process-local `Symbol` identity as an optimization and add a
+canonical structural descriptor for persistence. Universal auto-typed `let` remains equivalent and
+may name any of the descriptors above without changing that identity. The
+`nav Name = Assignment` and `app Name = Assignment` heads constrain their value
 families without erasing the more precise inferred type; they declare values, not reusable types.
 Reusable derivation uses `type Name is nav|app with { ... }`. `Type { ... }` constructs a value and
 is sugar for `Type with { ... }`, while derivation from an existing value must retain `with`.
@@ -253,7 +267,7 @@ SelectionNav item without presenting new content:
 present WordFlower@settings
 ```
 
-Split navigation, window hosting, routes, deep links, restoration, animation policy, public
+Split navigation, window hosting, routes, deep links, animation policy, public
 occurrence handles, presentation results, and lifecycle hooks remain deferred unless a later
 WordFlower tier states an explicit future design. The window host's read/require set above is
 settled now so its future implementation cannot invent call-site title overrides or different
@@ -298,8 +312,10 @@ plainly dismissible.
 
 Arguments use the shared owner binder. `Name: Value` selects a parameter owned by the invoked view;
 unlabeled values bind uniquely by exact or nominal type. A presented view's parameters are ordinary
-parameters — an ephemeral presentation such as an overlay or toast may take a non-serializable
-value like an `action`. Unknown, duplicate, ambiguous, missing, or
+parameters. A toast or asked occurrence may take a non-serializable value like an `action` because
+neither is restored. A stack, slot, overlay, or sheet presentation may not; when statically known,
+the diagnostic belongs to the `present` usage site rather than the view declaration. Unknown,
+duplicate, ambiguous, missing, or
 incorrectly typed arguments are diagnostics, and source order never disambiguates.
 
 ## Responses, dismissal, and replacement
@@ -335,6 +351,43 @@ replace FoundationNavigator in WordFlowerFoundationTest
 `replace <nav> in <App>` is allowed only from an action inside a view declaration. It replaces
 that app's mounted root with the given configured nav and does not append a stack occurrence.
 
+## Relaunch restoration
+
+Navigation restoration is default-on and host managed. Apps write `Restore` only to deviate:
+
+```tao
+app Preview = WordFlower with {
+   Restore fresh
+}
+
+app WordFlower {
+   Restore automatic { Exclude sheets, menus, toasts }
+}
+```
+
+`Restore fresh` neither reads nor writes host navigation storage. `Exclude` names semantic
+presentation categories, not runtime lanes; the accepted words are `sheets`, `menus`, and `toasts`.
+Toasts and asked/responding occurrences never restore by language rule. An exclusion is a declared
+subtraction applied while snapshotting; a restoration failure never causes an undeclared partial
+tree.
+
+The host stores a versioned snapshot of StackNav entries, SlotNav presentation, SelectionNav active
+keys and item histories, app auxiliaries, and restorable nav overlays. Every committed reducer
+change schedules a coalesced snapshot, and equal payloads suppress writes. A successfully restored
+tree must be one the app reducer could have produced. Invalid or version-mismatched data, an
+unregistered view, a provider failure, or a nav kind without restoration capability resets the
+whole app to its live initial root and emits a warning-level structured diagnostic for tooling.
+Applications cannot observe that diagnostic stream. Third-party nav restoration is optional for
+now; absence follows this same diagnostic-and-fallback path and does not make the application wrong.
+
+Snapshots are keyed by canonical app identity, app variant, and the complete configured datasource
+binding. Provider-owned opaque entity tokens are stored with provider, schema, and entity identity;
+restoration reconstructs a live handle whose availability may be loading, available, missing,
+unauthorized, or failed. Changing a variant or provider binding therefore cannot consume another
+binding's tokens. Arguments containing actions, functions, cycles, or opaque host values are skipped
+at snapshot time. There is no Tao serialize, deserialize, migrate, restore hook, or named fallback
+destination.
+
 ## Back, mounting, and layout
 
 Presenting the same view and semantic arguments again creates a distinct occurrence. Entity-valued
@@ -342,11 +395,35 @@ parameters remain live, and navigation hosts subscribe to data revisions. Mounts
 descriptor in separate app occurrences remain independent.
 
 The host-owned visible Back affordance, platform hardware Back, native stack gesture, browser Back,
-and Tao test `back` step all dispatch through
-the same app reducer. The reducer gives app auxiliaries first opportunity, then the root nav; each
-nav removes its top overlay before delegating into its content history. Root-safe Back returns
-without changing state. Each behavior check resets every mounted app and nav occurrence before it
-starts.
+and Tao test `back` step all
+dispatch through the same app reducer. The reducer gives app auxiliaries first opportunity, then the
+root nav; each nav removes its top overlay before delegating into its content history. Root-safe
+Back returns without changing state. A browser stops intercepting at that point so
+the browser's own Back leaves the app origin. Each behavior check resets every mounted app and nav
+occurrence before it starts.
+
+On a browser host, session history mirrors exactly the mutations Back can consume: StackNav pushes,
+SlotNav presentations, overlay presentations, and asked occurrences. Selection activation, toasts,
+and root replacement do not add entries. Each mirrored mutation pushes the same URL with only an
+opaque per-attachment epoch and monotonic sequence number in a Tao-namespaced `history.state` field;
+other occupants' state fields are preserved, and only one mounted app host owns the browser mirror
+at a time. Ordinary navigation never manufactures a URL. Browser history is not app state. A
+backward sequence delta dispatches Back through the reducer, and any mismatch is re-armed from the
+reducer rather than imposed on it. Remounting an app host rebuilds equivalent browser Back depth from
+the live in-memory reducer mirror. Replacing the root or resetting the app starts a fresh root epoch.
+
+Forward is an in-memory redo journal. A consecutive Back chain can be replayed in order, creating
+fresh occurrences from the retained presentable and arguments; local view state such as scroll
+position is therefore not preserved by Forward. A new history-visible mutation truncates the redo
+journal, as does a history-free selection change or root replacement because an older replay may
+no longer target the same reducer context. A structural third-party selection that keeps its active
+key opaque remains Back-capable, but its replays become inert after such an opaque state change
+rather than risking cross-item presentation. Back dismisses an asked occurrence as `none`, but
+Forward never asks it again because its continuation has already resumed; landing on that
+unreplayable entry is inert and re-arms history to the current app state. In-app dismissal reconciles
+the matching browser entry so Back and Forward remain as close as the History API permits to
+operations the reducer can honor. Positions from an earlier page lifetime carry a different epoch,
+resolve to no live journal entry, and are likewise inert. Forward across a reload is not supported.
 
 Whether a view is presented or composed inline is decided where it is used; presenting,
 dismissing, replacing, and selection activation are legal in any view body. A configured nav is

@@ -40,6 +40,40 @@ function createCommands(): Command {
     .description('Tao language CLI.')
 
   commands
+    .command('create')
+    .argument('<id>', 'Checked-in project id and new directory name.')
+    .description('Create a new Tao project with an immutable project id.')
+    .action(async (id: string) => {
+      try {
+        const { createProject } = await import('./project-command')
+        const appPath = await createProject(id)
+        HCI.writeSuccess(`Created ${FS.displayPath(appPath)}\n`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('project')
+    .description('Manage checked-in Tao project metadata.')
+    .command('id')
+    .argument('<id>', 'Opaque project id to persist.')
+    .argument('[path]', 'Project .tao file or directory to search.', '.')
+    .option('--replace', 'Replace an existing id when making an independent project.')
+    .description('Add or deliberately replace a project id.')
+    .action(async (id: string, path: string, options: { replace?: boolean }) => {
+      try {
+        const { setProjectId } = await import('./project-command')
+        const projectPath = await setProjectId(id, path, options)
+        HCI.writeSuccess(`Project id '${id}' in ${FS.displayPath(projectPath)}\n`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('dev')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')

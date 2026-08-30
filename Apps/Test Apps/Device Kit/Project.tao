@@ -1,0 +1,4 @@
+project {
+   id "tao-test-device-kit"
+   name "Device Kit"
+}
