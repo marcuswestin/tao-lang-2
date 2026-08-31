@@ -60,8 +60,8 @@ studio-proof-real-app run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
 
 # Run native Tao Studio against a deterministic project and report what it proved
-studio-canary project="Apps/HNReader":
-    ./dev studio-canary --project "{{ project }}"
+studio-canary project="Apps/HNReader" app="HNReader":
+    ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
 
 # Validate a built native Studio release without publishing anything
 studio-release-check payload_root *ARGS:

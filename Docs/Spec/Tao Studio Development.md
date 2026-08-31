@@ -209,20 +209,56 @@ tool is missing is reported **UNVERIFIED**, never as passed.
 
 ### Operator steps for the external gates
 
-These cannot be done from this repository and must be done by an operator on a machine with Xcode
-command line tools and the signing identity in its keychain:
+Signing and notarization need an Apple Developer account and a machine whose login keychain holds
+the certificate. Nothing in this repository ever reads the values behind these variables — only
+whether each name is set — and none of them belongs in a file that is committed.
 
-1. Install the Developer ID Application certificate into the login keychain.
-2. Export the notarization credentials in the packaging shell. Only these names are read, and this
-   repository never reads their values:
-   - `APPLE_ID` — the Apple ID that owns the notarization submission.
-   - `APPLE_TEAM_ID` — the Developer Team ID the certificate belongs to.
-   - `APPLE_APP_SPECIFIC_PASSWORD` — an app-specific password for that Apple ID.
-3. Set `TAO_STUDIO_RELEASE_BASE_URL` to the HTTPS host installed copies fetch updates from, so
-   `./dev studio-doctor` can confirm it is configured.
-4. Run `just studio-package <release-base-url> <channel>`, then `just studio-release-check` above.
-5. Upload the artifacts and the update manifest to the release host yourself. No command here
-   publishes anything.
+1. **Install the certificate.** In the Apple Developer account, create a **Developer ID Application**
+   certificate and install it into the login keychain. Confirm it is usable for signing:
+
+   ```bash
+   security find-identity -v -p codesigning
+   ```
+
+   The identity string it prints — `Developer ID Application: Company Name (TEAMID)` — is the value
+   for the next step.
+
+2. **Export the signing identity.** Always required:
+
+   - `ELECTROBUN_DEVELOPER_ID` — the full identity string from step 1.
+
+3. **Export one notarization credential set.** Either, not both:
+
+   _App Store Connect API key — preferred, and the only sensible choice for any shared machine:_
+
+   - `ELECTROBUN_APPLEAPIKEYPATH` — path to the downloaded `.p8` key file.
+   - `ELECTROBUN_APPLEAPIKEY` — the key identifier.
+   - `ELECTROBUN_APPLEAPIISSUER` — the issuer ID.
+
+   _Apple ID:_
+
+   - `ELECTROBUN_APPLEID` — the Apple ID email address.
+   - `ELECTROBUN_APPLEIDPASS` — an **app-specific** password from `account.apple.com`, never the
+     account password.
+   - `ELECTROBUN_TEAMID` — the ten-character team identifier.
+
+   `ELECTROBUN_SKIP_NOTARIZATION=1` signs without submitting for notarization, which is useful for a
+   local build that will not be distributed.
+
+4. **Set the release host.** `TAO_STUDIO_RELEASE_BASE_URL` — the HTTPS host installed copies fetch
+   updates from. `./dev studio-doctor` confirms it is configured.
+
+5. **Confirm before building.** `./dev studio-doctor` reports which method is configured, or exactly
+   which variables of a partially configured set are missing. It never prints a value.
+
+6. **Build, then validate.** `just studio-package <release-base-url> <channel>`, then
+   `just studio-release-check` as above.
+
+7. **Publish yourself.** Upload the artifacts and the update manifest to the release host. No command
+   here publishes anything.
+
+These variable names are Electrobun's, not Apple's own tooling's; see
+<https://framework.blackboard.sh/electrobun/guides/code-signing/>.
 
 ## Troubleshooting
 

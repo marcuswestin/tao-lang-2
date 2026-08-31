@@ -20,10 +20,14 @@ import {
 /** The `./dev studio-canary` and `./dev studio-release-check` entry points. */
 
 export type CanaryOptions = {
+  /** The app to open. A project with several apps is not deterministic without one. */
+  appName?: string
   artifactRoot?: string
   hutchPath?: string
   projectRoot?: string
 }
+
+const DEFAULT_CANARY_PROJECT = { appName: 'HNReader', projectRoot: 'Apps/HNReader' }
 
 /**
  * Runs the native shell against a deterministic project and reports what it proved. A host that
@@ -44,9 +48,13 @@ async function runStudioCanary(options: CanaryOptions = {}): Promise<number> {
     return canaryExitCode(report)
   }
 
-  const projectRoot = options.projectRoot ?? FS.resolvePath('Apps/HNReader', repositoryRoot)
+  const projectRoot = options.projectRoot
+    ?? FS.resolvePath(DEFAULT_CANARY_PROJECT.projectRoot, repositoryRoot)
+  const appName = options.appName
+    ?? (options.projectRoot === undefined ? DEFAULT_CANARY_PROJECT.appName : undefined)
   const before = new Set((await readLaunches(repositoryRoot)).map(launch => launch.manifest.launchId))
-  await runStudioDev({
+  const exitCode = await runStudioDev({
+    appName,
     browser: false,
     native: true,
     nativeArtifactRoot: FS.resolvePath('electrobun', artifactRoot),
@@ -60,6 +68,12 @@ async function runStudioCanary(options: CanaryOptions = {}): Promise<number> {
   // The native shell writes its probe result beside its generated Electrobun project.
   const probe = await readProbeResult(FS.resolvePath('electrobun/artifacts/runtime-result.json', artifactRoot))
   const report = evaluateCanary({
+    // A native shell that never reported means it never got far enough to run the probe. The
+    // usual cause is the window server refusing AppKit registration, which aborts the runtime.
+    blockedReason: probe === undefined && exitCode !== 0
+      ? `the native runtime exited ${exitCode} before reporting. If it terminated by a signal, `
+        + 'this host refused AppKit registration; run the canary from an ordinary Terminal.'
+      : undefined,
     probe,
     survivingPids: launchId === undefined ? [] : await survivingOwnedPids(launchId, repositoryRoot),
   })

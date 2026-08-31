@@ -2,6 +2,7 @@ import { CLI, FS, Platform, Repo } from '@shared'
 import type { CheckStatus, DoctorCheck } from '../doctor/RepositoryDoctor'
 import { doctorReport, readDoctorFacts, worstStatus } from '../doctor/RepositoryDoctor'
 import { listLaunches } from './StudioLifecycle'
+import { StudioNative } from './StudioNative'
 import { readWatchFacts, studioWatchChecks, type WatchFacts } from './StudioWatchHealth'
 
 /**
@@ -10,8 +11,27 @@ import { readWatchFacts, studioWatchChecks, type WatchFacts } from './StudioWatc
  * Read-only, like the repository half: it names what is wrong and what to run, and changes nothing.
  */
 
-/** Environment variables Electrobun's signing and notarization steps read, by name only. */
-const NOTARIZATION_ENV_VARS = ['APPLE_ID', 'APPLE_TEAM_ID', 'APPLE_APP_SPECIFIC_PASSWORD'] as const
+/**
+ * Electrobun's signing identity, and the two credential sets it accepts for notarization. Only
+ * whether each name is set is ever read; the values belong to the operator and to nothing here.
+ *
+ * @see https://framework.blackboard.sh/electrobun/guides/code-signing/
+ */
+const SIGNING_IDENTITY_ENV_VAR = 'ELECTROBUN_DEVELOPER_ID'
+
+const NOTARIZATION_METHODS = [
+  {
+    name: 'App Store Connect API key',
+    vars: ['ELECTROBUN_APPLEAPIKEYPATH', 'ELECTROBUN_APPLEAPIKEY', 'ELECTROBUN_APPLEAPIISSUER'],
+  },
+  { name: 'Apple ID', vars: ['ELECTROBUN_APPLEID', 'ELECTROBUN_APPLEIDPASS', 'ELECTROBUN_TEAMID'] },
+] as const
+
+/** Every signing variable, for reporting which are set without ever reading one's value. */
+const SIGNING_ENV_VARS = [
+  SIGNING_IDENTITY_ENV_VAR,
+  ...NOTARIZATION_METHODS.flatMap(method => method.vars),
+] as const
 
 /** The versions the generated Electrobun project pins; a mismatch changes what `dev` produces. */
 export const PINNED_NATIVE_VERSIONS = {
@@ -56,8 +76,8 @@ export type StudioDoctorFacts = {
   /** Ports held by a listener no recorded launch owns. */
   legacyPorts: readonly { pids: readonly number[]; port: number }[]
   missingStudioSources: readonly string[]
-  /** Names of the notarization variables that are set. Values are never read. */
-  notarizationEnvPresent: readonly string[]
+  /** Names of the signing variables that are set. Values are never read. */
+  signingEnvPresent: readonly string[]
   /** Whether an HTTPS release host is configured, without printing it. */
   releaseHostConfigured: boolean
   /** Diagnostics from the runtime dependency compatibility gate that concern React. */
@@ -220,27 +240,49 @@ function legacyPortCheck(facts: StudioDoctorFacts): DoctorCheck {
 }
 
 function releaseCheck(facts: StudioDoctorFacts): DoctorCheck {
-  const missing = NOTARIZATION_ENV_VARS.filter(name => !facts.notarizationEnvPresent.includes(name))
-  if (!facts.releaseHostConfigured && missing.length === NOTARIZATION_ENV_VARS.length) {
+  const isSet = (name: string) => facts.signingEnvPresent.includes(name)
+  const identity = isSet(SIGNING_IDENTITY_ENV_VAR)
+  const complete = NOTARIZATION_METHODS.find(method => method.vars.every(isSet))
+  const partial = NOTARIZATION_METHODS
+    .filter(method => method.vars.some(isSet))
+    .map(method => `${method.name} is missing ${method.vars.filter(name => !isSet(name)).join(', ')}`)
+
+  if (!identity && complete === undefined && partial.length === 0) {
     return {
-      detail: 'no release host or notarization credentials are configured',
+      // Nothing here is configured for release, which is the ordinary state of a dev machine.
+      detail: 'no signing identity or notarization credentials are configured',
       name: 'studio release',
-      remediation: 'Optional. Only ./dev package-studio-native needs them; see Docs/Spec/Tao Studio.md.',
+      remediation: 'Optional. Only ./dev package-studio-native needs them; see Docs/Spec/Tao Studio Development.md.',
       status: 'warn',
     }
   }
-  if (missing.length > 0) {
+  if (!identity) {
     return {
-      detail: `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set`,
+      detail: `${SIGNING_IDENTITY_ENV_VAR} is not set, so the build cannot be signed at all`,
       name: 'studio release',
-      remediation: 'Set them in the packaging shell. Their values are never read here.',
+      remediation: `Set ${SIGNING_IDENTITY_ENV_VAR} to your Developer ID Application identity.`,
       status: 'warn',
     }
   }
+  if (complete === undefined) {
+    return {
+      detail: partial.length > 0
+        ? `signing identity is set; notarization is incomplete: ${partial.join('; ')}`
+        : 'signing identity is set, but no notarization credentials are',
+      name: 'studio release',
+      remediation: 'Set one complete credential set: the App Store Connect API key, or the Apple ID trio.',
+      status: 'warn',
+    }
+  }
+  const host = facts.releaseHostConfigured ? 'an HTTPS release host' : 'no release host'
   return {
-    detail: `release host configured and ${NOTARIZATION_ENV_VARS.length} notarization variables are set`,
+    // The method is named; no value behind any of these variables is read or printed.
+    detail: `signing identity set, notarizing through the ${complete.name}, ${host} configured`,
     name: 'studio release',
-    status: 'pass',
+    remediation: facts.releaseHostConfigured
+      ? undefined
+      : 'Set TAO_STUDIO_RELEASE_BASE_URL to the HTTPS host installed copies fetch updates from.',
+    status: facts.releaseHostConfigured ? 'pass' : 'warn',
   }
 }
 
@@ -255,7 +297,9 @@ export async function studioDoctorReport(repositoryRoot = Repo.getRoot()): Promi
 /** readStudioDoctorFacts inspects Studio's own prerequisites without changing anything. */
 export async function readStudioDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<StudioDoctorFacts> {
   const listing = await listLaunches({ repositoryRoot })
-  const hutchPath = await findExecutable('hutch')
+  // Resolved exactly the way StudioNative does, including the installer's own user path, so the
+  // doctor cannot report Hutch missing while a launch would find it.
+  const hutchPath = await StudioNative.resolveHutchExecutablePath().catch(() => undefined)
   const claimedPorts = new Set(listing.launches.flatMap(row => [...row.ports.owned, ...row.ports.foreign]))
   return {
     appKitAvailable: await hasWindowServerSession(),
@@ -277,7 +321,7 @@ export async function readStudioDoctorFacts(repositoryRoot = Repo.getRoot()): Pr
     },
     legacyPorts: await readLegacyPorts(claimedPorts),
     missingStudioSources: await missingPaths(repositoryRoot, STUDIO_SOURCES),
-    notarizationEnvPresent: NOTARIZATION_ENV_VARS.filter(
+    signingEnvPresent: SIGNING_ENV_VARS.filter(
       name => (Platform.runtimeProcess.env[name] ?? '').trim() !== '',
     ),
     reactSingletonIssues: (await readDoctorFacts(repositoryRoot)).dependencyIssues
