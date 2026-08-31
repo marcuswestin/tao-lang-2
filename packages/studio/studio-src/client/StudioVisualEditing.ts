@@ -227,10 +227,11 @@ function numericLayoutControl(
   input.step = '1'
   input.type = 'number'
   input.value = String(layoutEntry(inspection, head)?.[1] ?? 8)
-  input.addEventListener(
-    'change',
-    () => apply({ entry: [head, input.valueAsNumber], kind: 'set-layout-entry', renderId }),
-  )
+  input.addEventListener('change', () => {
+    if (Number.isFinite(input.valueAsNumber)) {
+      apply({ entry: [head, input.valueAsNumber], kind: 'set-layout-entry', renderId })
+    }
+  })
   return inspectorField(label, input)
 }
 
@@ -257,12 +258,12 @@ function dimensionLayoutControl(
   value.min = '1'
   value.type = 'number'
   value.value = String(typeof current?.[1] === 'number' ? current[1] : 320)
-  const commit = (): void =>
-    apply({
-      entry: [head, mode.value === 'fill' ? 'fill' : value.valueAsNumber],
-      kind: 'set-layout-entry',
-      renderId,
-    })
+  const commit = (): void => {
+    const next = mode.value === 'fill' ? 'fill' : value.valueAsNumber
+    if (next === 'fill' || Number.isFinite(next)) {
+      apply({ entry: [head, next], kind: 'set-layout-entry', renderId })
+    }
+  }
   mode.addEventListener('change', () => {
     value.disabled = disabled || mode.value !== 'fixed'
     commit()

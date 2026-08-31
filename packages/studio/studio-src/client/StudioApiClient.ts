@@ -78,10 +78,12 @@ export type StudioSourceActionUndoResult = {
 }
 
 export type StudioApiEventHandlers = {
+  onConnect?: () => void
   onCompile: (state: StudioCompileState) => void
   onFile: (file: StudioFile) => void
   onFiles?: (files: readonly StudioFile[]) => void
   onManifest: (manifest: StudioPreviewManifestV2) => void
+  onHandshake?: (handshake: StudioHandshake) => void
   onDisconnect: () => void
 }
 
@@ -207,6 +209,7 @@ function connectEvents(handlers: StudioApiEventHandlers): WebSocket {
   socket.addEventListener('message', event => {
     const message = JSON.parse(String(event.data)) as StudioHandshake | StudioEvent
     if (!('type' in message)) {
+      handlers.onHandshake?.(message)
       return
     }
     if (message.type === 'compile-state') {
@@ -219,6 +222,7 @@ function connectEvents(handlers: StudioApiEventHandlers): WebSocket {
       handlers.onManifest(message.manifest)
     }
   })
+  socket.addEventListener('open', () => handlers.onConnect?.())
   socket.addEventListener('close', handlers.onDisconnect)
   return socket
 }

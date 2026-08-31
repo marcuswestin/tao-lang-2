@@ -207,7 +207,10 @@ export default function App() {
   React.useEffect(() => {
     if (TaoStudioPreviewBootstrap?.cell !== true) return
     let cancelled = false
-    const url = new URL('/api/preview/cell/bootstrap', TaoStudioPreviewBootstrap.parentOrigin)
+    const bootstrapPath = TaoStudioPreviewBootstrap.sessionId === undefined
+      ? '/api/preview/cell/bootstrap'
+      : '/sessions/' + encodeURIComponent(TaoStudioPreviewBootstrap.sessionId) + '/api/preview/cell/bootstrap'
+    const url = new URL(bootstrapPath, TaoStudioPreviewBootstrap.parentOrigin)
     url.searchParams.set('previewInstanceId', TaoStudioPreviewBootstrap.previewInstanceId)
     void fetch(url).then(async response => {
       if (!response.ok) throw new Error('Tao Studio cell bootstrap was rejected (' + response.status + ').')
@@ -305,9 +308,13 @@ function studioPreviewBootstrap(href: string) {
   const params = new URL(href).searchParams
   const parentOrigin = params.get('taoStudioParentOrigin')
   const previewInstanceId = params.get('taoStudioPreviewInstanceId')
+  const requestedSessionId = params.get('taoStudioSessionId')
+  const sessionId = requestedSessionId !== null && /^[A-Za-z0-9_-]{1,128}$/.test(requestedSessionId)
+    ? requestedSessionId
+    : undefined
   return parentOrigin === null || previewInstanceId === null
     ? undefined
-    : { cell: params.get('taoStudioCell') === '1', parentOrigin, previewInstanceId }
+    : { cell: params.get('taoStudioCell') === '1', parentOrigin, previewInstanceId, sessionId }
 }
 `
 }

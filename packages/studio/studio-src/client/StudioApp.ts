@@ -171,7 +171,9 @@ export async function mountStudio(): Promise<void> {
     let inspectorContext: StudioInspectorContext = 'Layout'
     let inspectorRequestRevision = 0
     let previewManifest = handshake.previewManifest
+    const searchDocuments = new Map<string, { content: string; sourceVersion: string }>()
     let searchRevision = 0
+    let searchTimer: ReturnType<typeof setTimeout> | undefined
     let sourceActionBusy = false
     let testError: string | undefined
     let testStatus: StudioTestStatus | undefined
@@ -202,6 +204,21 @@ export async function mountStudio(): Promise<void> {
           view.status.dataset['state'] = 'error'
           view.status.textContent = 'Fix or revert the invalid Tao draft before switching files.'
           return { editor: editor!, file: activeFile! }
+        }
+        const evictionPath = editorTabs.evictionCandidate(path)
+        const eviction = evictionPath === undefined ? undefined : openTabs.get(evictionPath)
+        if (evictionPath !== undefined && eviction !== undefined && evictionPath !== activePath) {
+          const evictionResult = await eviction.draft.flush()
+          if (!attempt.isCurrent()) {
+            return undefined
+          }
+          if (evictionResult?.saved === false || eviction.editor.state.doc.toString() !== eviction.file.content) {
+            editorTabs.activate(evictionPath)
+            activateEditorTab(evictionPath)
+            view.status.dataset['state'] = 'error'
+            view.status.textContent = 'Fix or revert the invalid Tao draft before opening another tab.'
+            return eviction
+          }
         }
         const existing = openTabs.get(path)
         if (existing !== undefined && !existing.stale) {
@@ -553,7 +570,7 @@ export async function mountStudio(): Promise<void> {
       try {
         documents = await Promise.all(projectFiles.map(async file => ({
           content: openTabs.get(file.path)?.editor.state.doc.toString()
-            ?? (await StudioApiClient.file(file.path)).content,
+            ?? await cachedSearchDocument(file),
           path: file.path,
         })))
       } catch (error) {
@@ -570,6 +587,21 @@ export async function mountStudio(): Promise<void> {
         StudioRailPanels.search(documents, compileState.diagnostics ?? [], query),
         result => void openSearchResult(result),
       )
+    }
+
+    async function cachedSearchDocument(file: StudioFile): Promise<string> {
+      const cached = searchDocuments.get(file.path)
+      if (cached?.sourceVersion === file.sourceVersion) {
+        return cached.content
+      }
+      const opened = await StudioApiClient.file(file.path)
+      searchDocuments.set(file.path, { content: opened.content, sourceVersion: opened.sourceVersion })
+      return opened.content
+    }
+
+    function scheduleSearch(delayMs = 150): void {
+      clearTimeout(searchTimer)
+      searchTimer = setTimeout(() => void searchProject(), delayMs)
     }
 
     function scheduleHighlight(target: EditorView, content: string, delayMs = 60): void {
@@ -951,8 +983,22 @@ export async function mountStudio(): Promise<void> {
     }
 
     function publishProjectFiles(files: readonly StudioFile[]): void {
+      const previousFiles = projectFiles
       projectFiles = files
       const available = new Set(files.map(file => file.path))
+      if (preparedOpenMutationPath !== undefined && !available.has(preparedOpenMutationPath)) {
+        const previousPaths = new Set(previousFiles.map(file => file.path))
+        const added = files.filter(file => !previousPaths.has(file.path))
+        if (added.length === 1) {
+          editorTabs.rename(preparedOpenMutationPath, added[0]!.path)
+        }
+      }
+      for (const [path, cached] of searchDocuments) {
+        const file = files.find(candidate => candidate.path === path)
+        if (file === undefined || file.sourceVersion !== cached.sourceVersion) {
+          searchDocuments.delete(path)
+        }
+      }
       const snapshot = editorTabs.reconcile([...available])
       let activeWasRemoved = false
       for (const [path, tab] of openTabs) {
@@ -986,7 +1032,7 @@ export async function mountStudio(): Promise<void> {
       renderEditorTabs()
       renderCommands()
       if (view.searchInput.value.trim() !== '') {
-        void searchProject()
+        scheduleSearch()
       }
       if (drawerTab === 'Data') {
         void loadData()
@@ -1016,10 +1062,16 @@ export async function mountStudio(): Promise<void> {
       preview.changed = () => {
         if (preview === activePreview.current()) {
           renderInspector()
+          if (drawerTab === 'Data') {
+            void loadData()
+          } else if (drawerTab === 'Logs') {
+            renderDrawer()
+          }
         }
       }
     }
     activePreview.subscribe(() => {
+      dataResult = []
       renderInspector()
       renderDrawer()
       if (drawerTab === 'Data') {
@@ -1029,7 +1081,7 @@ export async function mountStudio(): Promise<void> {
     activePreview.reconcile(wirePreview)
     renderScreens(view.screens, previewManifest, item => void openScreen(item))
     renderSearchResults(view.searchResults, [], result => void openSearchResult(result))
-    view.searchInput.addEventListener('input', () => void searchProject())
+    view.searchInput.addEventListener('input', () => scheduleSearch())
 
     renderComponentPalette(view.components, insertComponent)
     view.preview.addEventListener('dragover', event => {
@@ -1124,7 +1176,7 @@ export async function mountStudio(): Promise<void> {
         compileState = state
         renderDrawer()
         if (view.searchInput.value.trim() !== '') {
-          void searchProject()
+          scheduleSearch()
         }
         if (state.status !== 'compiling') {
           void fileTree?.refresh().catch(error => showSourceActionError(view.status, error))
@@ -1293,6 +1345,7 @@ export async function mountStudio(): Promise<void> {
     })
     window.addEventListener('beforeunload', () => {
       clearTimeout(highlightTimer)
+      clearTimeout(searchTimer)
       if (dataTimer !== undefined) {
         clearInterval(dataTimer)
       }
@@ -1318,6 +1371,10 @@ function connectEvents(
   },
 ): WebSocket {
   return StudioApiClient.connectEvents({
+    onConnect() {
+      status.dataset['state'] = 'idle'
+      status.textContent = 'Studio server connected; synchronizing…'
+    },
     onCompile: state => {
       updateStatus(status, state, openDiagnostic)
       handlers.onCompile(state)
@@ -1329,6 +1386,14 @@ function connectEvents(
     },
     onFile: handlers.onFile,
     onFiles: handlers.onFiles,
+    onHandshake(handshake) {
+      updateStatus(status, handshake.compile, openDiagnostic)
+      handlers.onCompile(handshake.compile)
+      handlers.onFiles(handshake.files)
+      if (handshake.previewManifest !== undefined) {
+        handlers.onManifest(handshake.previewManifest)
+      }
+    },
     onManifest: handlers.onManifest,
   })
 }

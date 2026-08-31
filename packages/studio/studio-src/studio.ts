@@ -138,7 +138,7 @@ export {
   type StudioForeignActionFetch,
   studioServerForeignActionContract,
   StudioServerForeignActions,
-} from './StudioServerForeignActions'
+} from './TaoStudioServerActions'
 
 export {
   type StartedStudioServer,

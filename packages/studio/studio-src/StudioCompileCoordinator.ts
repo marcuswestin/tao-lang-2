@@ -247,18 +247,17 @@ export class StudioCompileCoordinator {
       while (this.#pending !== undefined) {
         const batch = this.#pending
         this.#pending = undefined
-        const completion = await this.#compileBatch(batch)
-        for (const waiter of batch.waiters) {
-          waiter.resolve(completion)
+        try {
+          const completion = await this.#compileBatch(batch)
+          for (const waiter of batch.waiters) {
+            waiter.resolve(completion)
+          }
+        } catch (error) {
+          for (const waiter of batch.waiters) {
+            waiter.reject(error)
+          }
         }
       }
-    } catch (error) {
-      const abandoned = this.#pending
-      this.#pending = undefined
-      for (const waiter of abandoned?.waiters ?? []) {
-        waiter.reject(error)
-      }
-      throw error
     } finally {
       this.#working = false
       if (this.#pending !== undefined) {

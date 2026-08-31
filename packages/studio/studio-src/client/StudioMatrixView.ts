@@ -20,7 +20,7 @@ import {
   type StudioRuntimeCaptureArtifact,
   type StudioSourceActionEnvelope,
 } from '../StudioProtocol'
-import { StudioApiClient, type StudioHandshake } from './StudioApiClient'
+import { StudioApiClient, StudioApiRoutes, type StudioHandshake } from './StudioApiClient'
 import { absoluteSourcePath, projectRelativePath } from './StudioEditor'
 
 export type StudioMatrixCell<Item> = {
@@ -328,6 +328,10 @@ export async function connectPreviews(
   const url = new URL(previewUrl)
   url.searchParams.set('taoStudioParentOrigin', window.location.origin)
   url.searchParams.set('taoStudioPreviewInstanceId', previewInstanceId)
+  const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
+  if (sessionId !== undefined) {
+    url.searchParams.set('taoStudioSessionId', sessionId)
+  }
   const iframe = document.createElement('iframe')
   iframe.src = url.toString()
   iframe.title = `${handshake.identity.appName} live preview`
@@ -699,7 +703,8 @@ async function promoteScenarioArguments(
     throw new Error('Studio cell identity is unavailable.')
   }
   const sourceVersion = manifest.sourceVersions[scenario.source.path]
-  if (sourceVersion === undefined) {
+  const sourcePath = projectRelativePath(manifest.project.root, scenario.source.path)
+  if (sourceVersion === undefined || sourcePath === undefined) {
     throw new Error('Studio scenario source version is unavailable.')
   }
   const requestId = crypto.randomUUID()
@@ -714,7 +719,7 @@ async function promoteScenarioArguments(
     checkpoint: { id: `scenario-arguments:${requestId}`, phase: 'single' },
     identity: {
       ...identity,
-      path: projectRelativePath(manifest.project.root, scenario.source.path),
+      path: sourcePath,
       previewInstanceId: connection.previewInstanceId,
       sourceVersion,
     },
@@ -1030,7 +1035,7 @@ function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewC
         connection.iframe.src = source
       }
     }
-  }, { rootMargin: '600px 600px' })
+  }, { root: frame.closest<HTMLElement>('.studio-preview-grid'), rootMargin: '600px' })
   observer.observe(frame)
   connection.visibilityObserver = observer
 }
@@ -1521,8 +1526,7 @@ export async function refreshCellPreviews(
     const identity = cellIdentity(manifest, cell)
     preview.cellIdentity = identity
     const refresh = async (): Promise<void> => {
-      const previewInstanceId = crypto.randomUUID()
-      await StudioApiClient.cellInstance({ ...identity, previewInstanceId })
+      await StudioApiClient.cellInstance({ ...identity, previewInstanceId: preview.previewInstanceId })
       if (preview.cellIdentity !== identity) {
         return
       }
@@ -1536,9 +1540,7 @@ export async function refreshCellPreviews(
         preview.runtimeCaptureRequest = undefined
       }
       preview.cell = cell
-      preview.previewInstanceId = previewInstanceId
       preview.iframe.title = `${cell.scenarioId} live preview`
-      setPreviewSource(preview, cellPreviewUrl(previewUrl, previewInstanceId))
       if (preview.frame !== undefined) {
         renderCellPreview(preview.frame, preview, previewUrl, manifest)
       }

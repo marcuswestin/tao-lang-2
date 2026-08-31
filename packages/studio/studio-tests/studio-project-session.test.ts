@@ -537,6 +537,45 @@ Test('Studio groups a visual gesture into one checkpoint and undoes its exact cu
   })
 })
 
+Test('Studio commits an abandoned visual gesture before accepting the next checkpoint', async () => {
+  await withStudioProject(async session => {
+    session.registerPreview({ previewInstanceId: 'preview-recovery' })
+    const original = await session.readFile('Garden.tao')
+    const identity = {
+      ...session.identity(),
+      path: original.path,
+      previewInstanceId: 'preview-recovery',
+      sourceVersion: original.sourceVersion,
+    }
+    const abandoned = await session.applySourceAction({
+      action: { component: 'Text', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'abandoned-gesture', phase: 'begin' },
+      identity,
+      protocolVersion: studioProtocolVersion,
+      requestId: 'abandoned-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })
+    const next = await session.applySourceAction({
+      action: { component: 'Number', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'next-action', phase: 'single' },
+      identity: { ...identity, sourceVersion: abandoned.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'next-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })
+
+    Expect(next.checkpoint).toEqual({ id: 'next-action', status: 'committed' })
+    Expect(session.checkpoints().map(checkpoint => [checkpoint.id, checkpoint.status])).toEqual([
+      ['abandoned-gesture', 'committed'],
+      ['next-action', 'committed'],
+    ])
+  })
+})
+
 Test('Studio registers one preview instance and acknowledges only its compiled revision', async () => {
   await withStudioProject(async session => {
     session.registerPreview({ previewInstanceId: 'preview-1' })

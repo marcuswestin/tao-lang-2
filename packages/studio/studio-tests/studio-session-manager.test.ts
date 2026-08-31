@@ -151,6 +151,25 @@ Describe('Studio session manager', () => {
     Expect(changes).toEqual([['/projects/Retry']])
   })
 
+  Test('retries cleanup after a synchronous close failure', async () => {
+    let attempts = 0
+    const manager = new StudioSessionManager({ createSessionId: () => 'sync_retry_window' })
+    const opened = manager.add({
+      close: () => {
+        attempts += 1
+        if (attempts === 1) {
+          throw new Error('synchronous cleanup failed')
+        }
+      },
+      session: { appName: 'Retry', projectRoot: '/projects/Retry' } as StudioProjectSession,
+    })
+
+    await Expect(manager.close(opened.sessionId)).rejects.toThrow('synchronous cleanup failed')
+    Expect(manager.list().current.map(item => item.status)).toEqual(['open'])
+    Expect(await manager.close(opened.sessionId)).toBe(true)
+    Expect(attempts).toBe(2)
+  })
+
   Test('reports closing ownership and joins concurrent close attempts', async () => {
     const cleanup = deferred<void>()
     let attempts = 0

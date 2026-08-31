@@ -14,7 +14,6 @@ import {
 } from './StudioProjectSession'
 import {
   StudioServerDatasource,
-  studioServerEntitiesForEvent,
   type StudioServerFillRequest,
   type StudioServerInvalidation,
 } from './StudioServerDatasource'
@@ -78,24 +77,27 @@ async function startManagedStudioServer(
   }
 
   const eventClients = new Map<string, Set<StudioSocket>>()
-  const dataRevisions = new Map<string, number>()
+  const dataSources = new Map<string, StudioServerDatasource>()
+  const dataSourceSubscriptions = new Map<string, () => void>()
   const sessionSubscriptions = new Map<string, () => void>()
   const subscribeSession = (sessionId: string): void => {
     if (sessionSubscriptions.has(sessionId)) {
       return
     }
     const resource = manager.require(sessionId)
+    const datasource = new StudioServerDatasource(resource.session)
+    dataSources.set(sessionId, datasource)
+    dataSourceSubscriptions.set(
+      sessionId,
+      datasource.subscribe(invalidation => {
+        broadcast(eventClients.get(sessionId) ?? new Set(), { ...invalidation, type: 'data-invalidated' })
+      }),
+    )
     sessionSubscriptions.set(
       sessionId,
       resource.session.subscribe(event => {
         const clients = eventClients.get(sessionId) ?? new Set()
         broadcast(clients, event)
-        const entities = studioServerEntitiesForEvent(event)
-        if (entities.length > 0) {
-          const revision = (dataRevisions.get(sessionId) ?? 0) + 1
-          dataRevisions.set(sessionId, revision)
-          broadcast(clients, { entities, revision, type: 'data-invalidated' })
-        }
       }),
     )
   }
@@ -112,7 +114,10 @@ async function startManagedStudioServer(
     }
     sessionSubscriptions.get(sessionId)?.()
     sessionSubscriptions.delete(sessionId)
-    dataRevisions.delete(sessionId)
+    dataSourceSubscriptions.get(sessionId)?.()
+    dataSourceSubscriptions.delete(sessionId)
+    dataSources.get(sessionId)?.close()
+    dataSources.delete(sessionId)
   }
   const unsubscribeManager = manager.subscribe(event => {
     if (event.type === 'opened') {
@@ -182,7 +187,7 @@ async function startManagedStudioServer(
         }
         const sessionUrl = new URL(url)
         sessionUrl.pathname = route.pathname
-        return await handleRequest(resource.session, request, sessionUrl, {
+        return await handleRequest(resource.session, dataSources.get(route.sessionId)!, request, sessionUrl, {
           ...requestOptions,
           previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
         })
@@ -236,6 +241,14 @@ async function startManagedStudioServer(
         unsubscribe()
       }
       sessionSubscriptions.clear()
+      for (const unsubscribe of dataSourceSubscriptions.values()) {
+        unsubscribe()
+      }
+      dataSourceSubscriptions.clear()
+      for (const datasource of dataSources.values()) {
+        datasource.close()
+      }
+      dataSources.clear()
       for (const clients of eventClients.values()) {
         for (const client of clients) {
           client.close(1001, 'Studio server stopped')
@@ -368,6 +381,7 @@ function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
 
 async function handleRequest(
   session: StudioProjectSession,
+  datasource: StudioServerDatasource,
   request: Request,
   url: URL,
   options: StudioServerOptions,
@@ -400,12 +414,7 @@ async function handleRequest(
     return response(request, url, options, await session.syncDraft(draftWriteRequest(await request.json())))
   }
   if (request.method === 'POST' && url.pathname === '/api/data/fill') {
-    const datasource = new StudioServerDatasource(session)
-    try {
-      return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
-    } finally {
-      datasource.close()
-    }
+    return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
   }
   if (request.method === 'POST' && url.pathname === '/api/design') {
     return response(request, url, options, await session.inspectDesign(designRequest(await request.json())))
@@ -680,7 +689,8 @@ function previewOriginPath(pathname: string): boolean {
 
 function serverOrigin(protocol: string, hostname: string, port: number): string {
   const host = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
-  return `${protocol}//${host}:${port}`
+  const defaultPort = (protocol === 'http:' && port === 80) || (protocol === 'https:' && port === 443)
+  return `${protocol}//${host}${defaultPort ? '' : `:${port}`}`
 }
 
 function forbiddenResponse(message: string): Response {

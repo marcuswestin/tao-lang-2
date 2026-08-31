@@ -892,6 +892,9 @@ export class StudioProjectSession {
     const { id, phase } = envelope.checkpoint
     const existing = this.#actionCheckpoints.get(id)
     if (phase === 'begin' || phase === 'single') {
+      if (this.#openCheckpointId !== undefined && this.#openCheckpointId !== id) {
+        this.#commitAbandonedCheckpoint(this.#openCheckpointId)
+      }
       if (existing !== undefined) {
         throw new Errors.UserInputError(`Studio source-action checkpoint id was reused: ${id}`)
       }
@@ -918,6 +921,19 @@ export class StudioProjectSession {
       throw new Errors.UserInputError(`Studio source-action checkpoint is not open: ${id}`)
     }
     return existing
+  }
+
+  #commitAbandonedCheckpoint(id: string): void {
+    const checkpoint = this.#actionCheckpoints.get(id)
+    if (checkpoint === undefined || checkpoint.status !== 'open') {
+      this.#openCheckpointId = undefined
+      return
+    }
+    checkpoint.status = 'committed'
+    this.#openCheckpointId = undefined
+    this.#checkpointOrder.push(id)
+    this.#trimSourceActionCheckpoints()
+    this.#emitCheckpoint({ id, status: 'committed' })
   }
 
   #recordSourceActionCheckpoint(

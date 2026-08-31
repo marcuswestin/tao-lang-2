@@ -215,6 +215,24 @@ Describe('Studio compile coordinator', () => {
     }])
     Expect(coordinator.snapshot().diagnostics).toEqual(completion.diagnostics)
   })
+
+  Test('rejects every waiter when an observer fails and remains usable', async () => {
+    let failObserver = true
+    const coordinator = new StudioCompileCoordinator({
+      appName: 'Garden',
+      async compile() {},
+      onState(state) {
+        if (failObserver && state.status === 'compiling') {
+          failObserver = false
+          throw new Error('observer failed')
+        }
+      },
+      project: '/workspace/garden',
+    })
+
+    await Expect(coordinator.requestInitialCompile()).rejects.toThrow('observer failed')
+    await Expect(coordinator.requestInitialCompile()).resolves.toMatchObject({ status: 'compiled' })
+  })
 })
 
 function appliedMessage(previewInstanceId: string, revision: number): StudioPreviewAppliedMessage {

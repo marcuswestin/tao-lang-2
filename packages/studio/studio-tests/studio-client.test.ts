@@ -101,6 +101,7 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Injected Studio network failure')
   Expect(bundle).toContain('Inert — runtime Scheme support is not available yet.')
   Expect(bundle).toContain('taoStudioPreviewInstanceId')
+  Expect(bundle).toContain('taoStudioSessionId')
   Expect(bundle).not.toContain('taoStudioArgs')
   Expect(bundle).not.toContain('taoStudioState')
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
@@ -197,7 +198,7 @@ Test('Studio editor tabs follow rename/delete metadata and ignore corrupt device
   }
   const tabs = new StudioEditorTabs({
     appName: 'Garden',
-    availablePaths: ['First.tao', 'Second.tao', 'Renamed.tao'],
+    availablePaths: ['First.tao', 'Second.tao'],
     project: '/projects/Garden',
     storage,
   })
@@ -210,6 +211,28 @@ Test('Studio editor tabs follow rename/delete metadata and ignore corrupt device
     paths: ['First.tao', 'Renamed.tao'],
   })
   Expect(tabs.reconcile(['Renamed.tao'])).toEqual({ activePath: 'Renamed.tao', paths: ['Renamed.tao'] })
+})
+
+Test('Studio editor tabs rename onto an existing tab without corrupting order and expose safe eviction', () => {
+  const paths = Array.from({ length: 22 }, (_, index) => `File${index}.tao`)
+  const tabs = new StudioEditorTabs({
+    appName: 'Garden',
+    availablePaths: paths,
+    project: '/projects/Garden',
+    storage: { getItem: () => null, setItem() {} },
+  })
+  tabs.open('File0.tao')
+  tabs.open('File1.tao')
+  tabs.open('File2.tao')
+  Expect(tabs.rename('File2.tao', 'File0.tao')).toEqual({
+    activePath: 'File0.tao',
+    paths: ['File1.tao', 'File0.tao'],
+  })
+  for (const path of paths.slice(3, 21)) {
+    tabs.open(path)
+  }
+  Expect(tabs.evictionCandidate('File21.tao')).toBe('File1.tao')
+  Expect(tabs.evictionCandidate('File0.tao')).toBe(undefined)
 })
 
 Test('Studio preview cells suspend outside the canvas viewport and resume on return', () => {
