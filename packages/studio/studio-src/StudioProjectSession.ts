@@ -157,6 +157,20 @@ export type StudioSourceActionResult = {
   sourceVersion: string
 }
 
+export type StudioSourceActionProposal = {
+  content: string
+  diff: string
+  edits: readonly {
+    end: number
+    replacement: string
+    start: number
+  }[]
+  path: string
+  proposedSourceVersion: string
+  requestId: string
+  sourceVersion: string
+}
+
 export type StudioSourceActionUndoResult = {
   checkpoint: {
     id: string
@@ -177,6 +191,7 @@ export type StudioSessionHandshake = {
     sourceActions: {
       canonicalEnvelope: true
       checkpoints: true
+      proposals: true
       undo: true
       version: typeof studioSourceActionVersion
     }
@@ -271,7 +286,10 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'POST', path: '/api/language/highlight' },
   { method: 'POST', path: '/api/source-action' },
   { method: 'POST', path: '/api/source-action/inspect' },
+  { method: 'POST', path: '/api/source-action/propose' },
   { method: 'POST', path: '/api/source-action/undo' },
+  { method: 'GET', path: '/api/tests/status' },
+  { method: 'POST', path: '/api/tests/run' },
   { method: 'GET', path: '/api/ai/availability' },
   { method: 'POST', path: '/api/ai/fixture' },
   { method: 'POST', path: '/api/preview/instance' },
@@ -391,14 +409,14 @@ export class StudioProjectSession {
     this.#matrix = this.#matrix?.rebase(manifest) ?? new StudioMatrixSession(manifest)
     this.#emit({
       channel: studioProtocolChannel,
-      manifest: this.#matrix.manifest,
+      manifest: this.#matrix.publishedManifest(),
       protocolVersion: studioProtocolVersion,
       type: 'preview-manifest-changed',
     })
   }
 
   previewManifest(): StudioPreviewManifestV2 | undefined {
-    return this.#matrix?.manifest
+    return this.#matrix?.publishedManifest()
   }
 
   previewCell(cellId: string): StudioCellRuntime {
@@ -439,6 +457,7 @@ export class StudioProjectSession {
         sourceActions: {
           canonicalEnvelope: true,
           checkpoints: true,
+          proposals: true,
           undo: true,
           version: studioSourceActionVersion,
         },
@@ -454,7 +473,7 @@ export class StudioProjectSession {
       entryPath: FS.relativePath(this.projectRoot, this.entryPath),
       files: await this.files(),
       identity: this.identity(),
-      ...(this.#matrix === undefined ? {} : { previewManifest: this.#matrix.manifest }),
+      ...(this.#matrix === undefined ? {} : { previewManifest: this.#matrix.publishedManifest() }),
       protocolVersion: studioProtocolVersion,
       type: 'handshake',
     }
@@ -472,13 +491,22 @@ export class StudioProjectSession {
       excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
       extensions: ['.tao'],
     })
-    return await Promise.all(paths.map(async path => {
-      const content = await FS.readText(path)
-      return this.#projectFile(
-        FS.relativePath(this.projectRoot, path),
-        SourceActions.studioSourceVersion(content),
-      )
+    const files = await Promise.all(paths.map(async path => {
+      try {
+        const content = await FS.readText(path)
+        return this.#projectFile(
+          FS.relativePath(this.projectRoot, path),
+          SourceActions.studioSourceVersion(content),
+        )
+      } catch (error) {
+        // A watcher may remove a file after discovery but before this snapshot reads it.
+        if (!await FS.isFile(path)) {
+          return undefined
+        }
+        throw error
+      }
     }))
+    return files.filter(file => file !== undefined)
   }
 
   async readFile(path: string): Promise<StudioProjectFileContent> {
@@ -656,6 +684,37 @@ export class StudioProjectSession {
         ...this.#projectFile(current.path, patch.sourceVersion),
       })
       return result
+    })
+  }
+
+  /** Produces the exact canonical patch and compact diff without writing source or reserving a checkpoint. */
+  proposeSourceAction(input: unknown): Promise<StudioSourceActionProposal> {
+    return this.#mutate(async () => {
+      const envelope = StudioProtocol.parseSourceActionEnvelope(input)
+      if (envelope === undefined) {
+        throw new Errors.UserInputError('Expected a valid Tao Studio source-action v1 envelope.')
+      }
+      requireSessionIdentity(envelope, this.identity())
+      this.#acceptPreviewIdentity(envelope)
+      const current = await this.readFile(envelope.identity.path)
+      requireSourceVersion(current, envelope.identity.sourceVersion)
+      const path = await this.#resolveTaoFile(current.path)
+      const parsed = await this.#workspace.parse(path)
+      if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
+        throw new Errors.UserInputError(`Cannot propose a Studio source action until ${current.path} parses.`)
+      }
+      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, sourcePatchRequest(envelope), {
+        files: parsed.files.map(file => file.ast),
+      })
+      return {
+        content: patch.content,
+        diff: sourceActionProposalDiff(current.path, current.content, patch.content),
+        edits: patch.edits,
+        path: current.path,
+        proposedSourceVersion: patch.sourceVersion,
+        requestId: envelope.requestId,
+        sourceVersion: current.sourceVersion,
+      }
     })
   }
 
@@ -1249,6 +1308,32 @@ function isCapturedFixturePlan(value: unknown): value is StudioInsertCapturedFix
 
 function isFixtureFields(value: unknown): value is Readonly<Record<string, StudioScenarioArgumentValue>> {
   return isRecord(value) && Object.values(value).every(isStudioScenarioArgumentValue)
+}
+
+function sourceActionProposalDiff(path: string, before: string, after: string): string {
+  const beforeLines = before.split('\n')
+  const afterLines = after.split('\n')
+  let prefix = 0
+  while (prefix < beforeLines.length && prefix < afterLines.length && beforeLines[prefix] === afterLines[prefix]) {
+    prefix += 1
+  }
+  let suffix = 0
+  while (
+    suffix < beforeLines.length - prefix
+    && suffix < afterLines.length - prefix
+    && beforeLines[beforeLines.length - suffix - 1] === afterLines[afterLines.length - suffix - 1]
+  ) {
+    suffix += 1
+  }
+  const removed = beforeLines.slice(prefix, beforeLines.length - suffix)
+  const added = afterLines.slice(prefix, afterLines.length - suffix)
+  return [
+    `--- ${path}`,
+    `+++ ${path} (proposed)`,
+    `@@ -${prefix + 1},${removed.length} +${prefix + 1},${added.length} @@`,
+    ...removed.map(line => `-${line}`),
+    ...added.map(line => `+${line}`),
+  ].join('\n')
 }
 
 function isStudioScenarioArgumentValue(value: unknown): value is

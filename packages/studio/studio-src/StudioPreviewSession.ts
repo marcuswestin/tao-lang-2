@@ -1,4 +1,5 @@
 import Runtime from '@runtime-toolchain'
+import { Errors, FS } from '@shared'
 import type {
   StudioParameterSchema,
   StudioPreviewManifestV2,
@@ -65,6 +66,7 @@ export function matrixManifest(
   if (compiler === undefined || publication === undefined) {
     throw new Error('Tao Studio matrix manifests require a preview compilation.')
   }
+  validatePreviewScenarios(session, compiler.scenarios)
   const subjects: StudioScenarioSubject[] = [
     ...compiler.apps.map(app => ({
       appName: app.name,
@@ -153,6 +155,37 @@ export function matrixManifest(
     states: [],
     subjects,
     version: 2,
+  }
+}
+
+function validatePreviewScenarios(
+  session: Pick<StudioProjectSession, 'appName' | 'entryPath' | 'projectRoot'>,
+  scenarios: NonNullable<
+    Awaited<ReturnType<typeof Runtime.generateApp>>['studioManifest']
+  >['scenarios'],
+): void {
+  const entryPath = FS.resolvePath(session.entryPath)
+  for (const scenario of scenarios) {
+    if (FS.resolvePath(scenario.source.path, session.projectRoot) !== entryPath) {
+      throw new Errors.UserInputError(
+        `Tao Studio cannot preview scenario "${scenario.group} / ${scenario.name}" because it is declared outside the selected app entry file. Move the scenario into ${
+          FS.basename(entryPath)
+        } until imported scenario hosts are supported.`,
+      )
+    }
+    if (scenario.subject.kind !== 'app') {
+      continue
+    }
+    if (scenario.subject.appName !== session.appName) {
+      throw new Errors.UserInputError(
+        `Tao Studio cannot run app ${scenario.subject.appName} from a ${session.appName} preview session. Open that app in Studio instead.`,
+      )
+    }
+    if (scenario.subject.destination !== undefined) {
+      throw new Errors.UserInputError(
+        `Tao Studio cannot run ${scenario.subject.appName} at destination ${scenario.subject.destination} yet. Remove the destination until destination routing is supported.`,
+      )
+    }
   }
 }
 

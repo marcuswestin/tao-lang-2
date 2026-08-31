@@ -27,6 +27,7 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(handshake.capabilities.sourceActions).toEqual({
       canonicalEnvelope: true,
       checkpoints: true,
+      proposals: true,
       undo: true,
       version: studioSourceActionVersion,
     })
@@ -35,10 +36,13 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/rename' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/delete' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/inspect' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/propose' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/data/fill' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/design' })
     Expect(handshake.endpoints).toContainEqual({ method: 'WS', path: '/api/language/lsp' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/language/highlight' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/tests/status' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/tests/run' })
     Expect(handshake.files.map(candidate => candidate.path)).toEqual([
       'Garden.tao',
       'Project.tao',
@@ -435,7 +439,7 @@ Test('Studio saves a captured provider state as a named Tao fixture through the 
   await withStudioProject(async session => {
     session.registerPreview({ previewInstanceId: 'capture-preview' })
     const file = await session.readFile('Garden.tao')
-    const applied = await session.applySourceAction({
+    const envelope = {
       action: {
         fixtureName: 'CapturedState',
         kind: 'insert-captured-fixture',
@@ -456,7 +460,15 @@ Test('Studio saves a captured provider state as a named Tao fixture through the 
       requestId: 'captured-fixture-request',
       sourceActionVersion: studioSourceActionVersion,
       type: 'source-action',
-    })
+    } as const
+    const proposal = await session.proposeSourceAction(envelope)
+
+    Expect(proposal.diff).toContain('+++ Garden.tao (proposed)')
+    Expect(proposal.diff).toContain('+fixture CapturedState')
+    Expect(proposal.content).toContain('fixture CapturedState')
+    Expect((await session.readFile('Garden.tao')).content).toBe(file.content)
+
+    const applied = await session.applySourceAction(envelope)
 
     Expect(applied.content).toContain('fixture CapturedState')
     Expect(applied.content).toContain('Account1 = create Account {')

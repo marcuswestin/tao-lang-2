@@ -68,6 +68,14 @@ export class StudioMatrixSession {
     return this.#runtime(cell)
   }
 
+  /** publishedManifest exposes the live rebased cell contract, including retained override revisions. */
+  publishedManifest(): StudioPreviewManifestV2 {
+    return {
+      ...this.manifest,
+      cells: this.manifest.cells.map(cell => this.#cells.get(cell.cellId) ?? cell),
+    }
+  }
+
   /** rebase carries compatible explicit cell configuration onto a fresh compiler manifest. */
   rebase(manifest: StudioPreviewManifestV2): StudioMatrixSession {
     const rebased = new StudioMatrixSession(manifest)

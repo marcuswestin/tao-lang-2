@@ -175,7 +175,10 @@ async function startManagedStudioServer(
         if (route === undefined) {
           return response(request, url, requestOptions, { error: 'Studio endpoint not found.' }, 404)
         }
-        const resource = manager.require(route.sessionId)
+        const resource = manager.get(route.sessionId)
+        if (resource === undefined) {
+          return response(request, url, requestOptions, { error: 'Studio session not found.' }, 404)
+        }
         subscribeSession(route.sessionId)
         const testResponse = await handleTestRequest(resource, request, url, requestOptions, route.pathname)
         if (testResponse !== undefined) {
@@ -234,7 +237,7 @@ async function startManagedStudioServer(
           const clients = eventClients.get(socket.data.sessionId) ?? new Set<StudioSocket>()
           clients.add(socket)
           eventClients.set(socket.data.sessionId, clients)
-          void resource.session.handshake().then(handshake => socket.send(JSON.stringify(handshake)))
+          void initializeEventSocket(socket, resource.session)
         } else {
           socket.data.session = StudioLsp.createSession(resource.session.projectRoot, socket)
         }
@@ -272,6 +275,17 @@ async function startManagedStudioServer(
       server.stop(true)
     },
     url,
+  }
+}
+
+async function initializeEventSocket(
+  socket: Pick<StudioSocket, 'close' | 'send'>,
+  session: Pick<StudioProjectSession, 'handshake'>,
+): Promise<void> {
+  try {
+    socket.send(JSON.stringify(await session.handshake()))
+  } catch {
+    socket.close(1011, 'Could not initialize Studio events')
   }
 }
 
@@ -442,6 +456,9 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/inspect') {
     return response(request, url, options, await session.inspectRender(inspectRenderRequest(await request.json())))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/source-action/propose') {
+    return response(request, url, options, await session.proposeSourceAction(await request.json()))
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
@@ -731,6 +748,7 @@ function forbiddenResponse(message: string): Response {
 export const StudioServerTesting = {
   handleRequest: handleRequestForTesting,
   handleTestRequest,
+  initializeEventSocket,
   managerRequestPath,
   originAuthorization,
   previewOriginPath,
