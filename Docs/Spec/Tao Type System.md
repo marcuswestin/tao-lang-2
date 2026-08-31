@@ -204,7 +204,7 @@ entity fields require an explicit handler.
 
 ### Persisted app state
 
-App-level state may declare an explicit type and device-local persistence:
+App-level state must declare an explicit type and device-local persistence:
 
 ```tao
 app Workbench {

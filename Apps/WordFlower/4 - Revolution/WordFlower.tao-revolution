@@ -23,7 +23,7 @@ use every, Interval from @tao/time
 // and `default` properties; case-valued and unit-typed state; optional self-referential relations;
 // query field selection; time and lifecycle automation; presentation results and presentation
 // serialization with migration; platform-conditional declarations; the `unsafe ts` native
-// boundary; asset literals; richer stdlib primitives; and design `scenario` declarations.
+// boundary; asset literals; richer stdlib primitives; and grouped `scenarios` declarations.
 //
 // TODO — intended functionality with no settled syntax yet. Add usage here as each is decided.
 //

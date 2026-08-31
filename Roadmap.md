@@ -66,15 +66,12 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
-- [ ] Complete Tao Studio v1
-  - The local editor/preview/semantic-edit chassis and the fixture/scenario language, preview-manifest,
-    cell-matrix, focused WordFlower host, provider/environment wiring, and data-state foundations are
-    implemented, including promotion of current argument controls into an authored scenario and
-    snapshot-to-new-named-fixture capture/save through the source-action bus. Remaining work is exact
-    server-produced diff review, loading captured state in tests, and real browser/Electron proof. The
-    repository gate is green. Living
-    ledger:
-    `Docs/Roadmap/Tao Studio v1/Plan - Tao Studio v1.md`.
+- [ ] Complete Tao Studio v2
+  - The Studio v2 foundations replace Electron with Electrobun, split the browser client, add
+    multi-project sessions and grouped scenario matrices, and establish the Tao-client strangler.
+    Remaining integration and native-validation gates are tracked in the living ledger:
+    `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md`. The v1 plan is retained only as a historical
+    ledger.
   - A native phone as a Studio canvas is feasible for an explicitly instrumented Expo development
     build, limited for internal preview builds, and rejected as an unrestricted production-code path.
     No native transport is implemented and a real-iPhone spike remains required. Exploration:
@@ -95,12 +92,6 @@ tests written in Tao, green in Current, for every construct introduced.
   - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Docs/Roadmap/Add Tao design system MVP/`.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
-- [ ] Build Tao Studio v1
-  - The studio product's core loop: live editing chassis with source ↔ preview identity, semantic
-    visual editing through the source-action patch bus, scene examples rendered in parallel, a
-    named-state library, and the environment matrix (viewports, network simulation, scheme toggle).
-    The `feat/studio` branch holds the prototype as reference; agent instructions:
-    `Docs/Roadmap/Tao Studio/Prompt - Tao Studio v1.md`. Absorbs the Ro's-stack simulation-mode item.
 - [ ] Implement secrets
 - [ ] Polish the IDE MVP
   - Syntax, diagnostics, formatting, source actions, go-to-definition, and references remain the IDE

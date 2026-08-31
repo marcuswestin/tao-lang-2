@@ -72,8 +72,8 @@ action SyncDraft(Path text, SourceVersion text, Content text) runs latest from .
 - `runs latest` is a foreign-action scheduling contract. A native action using it is a validation error.
 
 Failure messages use, in order: the provider/server sentence; the sentence from the matching foreign
-declaration or native `fail` site; `Couldn't finish '<command Label or humanized action name>.' Nothing was
-changed.`; then a host-owned deep fallback if even that metadata is unavailable.
+declaration or native `fail` site; then `Couldn't finish '<action name>.' Nothing was changed.`. Command
+labels and humanized action names are not part of the implemented fallback contract.
 
 ## Proposed runtime wording
 
@@ -111,5 +111,6 @@ This implementation still does not claim:
 - automatic retry of a failed action merely because its report is retry-eligible;
 - capture of arbitrary React hooks, timers, native controls, process state, or unregistered stores;
 - automatic conversion of a failure capture into durable authored fixture-plus-scenario source; or
+- command-label lookup or humanization in the action-failure fallback message; or
 - source ranges on the name-only frames in action-failure reports. Render-failure frames do carry the
   compiler-owned range supplied by their automatic boundary.
