@@ -1,6 +1,7 @@
 import { Type } from '@ast-utils'
+import type { GenerationDeclaration, GenerationField } from '@generation'
 import { AST, type ParsedFile } from '@parser'
-import { Switch } from '@shared'
+import { Assert, Switch } from '@shared'
 
 export type StudioPreviewParameterKind =
   | 'boolean'
@@ -103,12 +104,13 @@ export type StudioPreviewManifest = {
   }[]
   fixtures: readonly StudioPreviewFixtureManifest[]
   formatVersion: 2
+  generationDeclarations: readonly GenerationDeclaration[]
   scenarios: readonly StudioPreviewScenarioManifest[]
   selectedAppName: string
   views: readonly StudioPreviewViewManifest[]
 }
 
-/** compileStudioPreviewManifest publishes source-owned view schemas without inventing example authority. */
+/** compileStudioPreviewManifest publishes source-owned preview and generation schemas. */
 export function compileStudioPreviewManifest(
   files: readonly ParsedFile[],
   selectedAppName: string,
@@ -123,6 +125,9 @@ export function compileStudioPreviewManifest(
     ),
     fixtures: files.flatMap(file => file.ast.statements.filter(AST.isFixtureDeclaration).map(compileFixture)),
     formatVersion: 2,
+    generationDeclarations: files.flatMap(file =>
+      file.ast.statements.flatMap(statement => generationDeclaration(statement))
+    ),
     scenarios: files.flatMap(file =>
       file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
         AST.scenarioDeclarations(group).map(scenario => compileScenario(group, scenario))
@@ -138,6 +143,79 @@ export function compileStudioPreviewManifest(
       }))
     ),
   }
+}
+
+function generationDeclaration(statement: AST.Statement): GenerationDeclaration[] {
+  if (AST.isEntityDataDeclaration(statement)) {
+    return [{
+      collection: statement.name,
+      fields: statement.block.entries.filter(AST.isEntityDataField).map(generationField),
+      kind: 'entity',
+      name: statement.singularName,
+    }]
+  }
+  if (AST.isTypeDeclaration(statement) && AST.isCaseSetTypeExpression(statement.type)) {
+    return [{
+      cases: statement.type.cases.map(generationCaseName),
+      kind: 'case',
+      name: statement.name,
+    }]
+  }
+  return []
+}
+
+function generationCaseName(candidate: AST.CaseSetCase): string {
+  const name = candidate.name ?? candidate.literal
+  Assert.defined(name, 'validated generation case has a name or literal')
+  return name
+}
+
+function generationField(field: AST.EntityDataField): GenerationField {
+  const traits = field.traits?.traits ?? []
+  const guidance = traits.find(trait => trait.sentence)?.sentence
+  const defaultValue = generationFieldDefault(field)
+  return {
+    ...(defaultValue === undefined ? {} : { defaultValue }),
+    ...(guidance === undefined ? {} : { guidance }),
+    name: field.name,
+    optional: field.optional,
+    secret: false,
+    type: generationFieldType(field),
+  }
+}
+
+function generationFieldType(field: AST.EntityDataField): GenerationField['type'] {
+  if (field.primitive || field.boolean) {
+    return {
+      kind: 'scalar',
+      scalar: field.boolean ? 'boolean' : field.primitive!,
+    }
+  }
+  const relation = Type.dataFieldRelationEntity(field)
+  Assert.defined(relation, 'validated generation field resolves a scalar or relation type')
+  return {
+    entity: relation.singularName,
+    inverse: Type.dataFieldIsInverseRelation(field),
+    kind: 'relation',
+  }
+}
+
+function generationFieldDefault(field: AST.EntityDataField): GenerationField['defaultValue'] {
+  const modifier = field.traits?.traits.find(trait => trait.defaultValue || trait.defaultCase)
+  if (modifier === undefined) {
+    return field.boolean ? false : undefined
+  }
+  if (modifier.defaultCase !== undefined) {
+    return modifier.defaultCase === field.name
+  }
+  const value = modifier.defaultValue
+  Assert.defined(value, 'validated generation field default trait has a value')
+  return Switch.type(value, {
+    BooleanLiteral: value => value.value,
+    NowExpression: () => ({ kind: 'now' as const }),
+    NumberLiteral: value => value.value,
+    StringLiteral: value => value.value,
+  })
 }
 
 function compileFixture(fixture: AST.FixtureDeclaration): StudioPreviewFixtureManifest {

@@ -14,6 +14,8 @@ import {
   handlePreviewMessage,
   runtimeCaptureWithEnvironment,
   StudioActivePreview,
+  StudioFixtureGenerationFeedback,
+  StudioFixtureProposal,
   StudioMatrixLayout,
   type StudioPreviewConnection,
   StudioPreviewSuspension,
@@ -59,6 +61,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('/api/file/delete')
   Expect(bundle).toContain('New Tao file')
   Expect(bundle).toContain('/api/source-action/undo')
+  Expect(bundle).toContain('/api/ai/availability')
+  Expect(bundle).toContain('/api/ai/fixture')
   Expect(bundle).not.toContain('/api/data/fill')
   Expect(bundle).toContain('/api/tests/status')
   Expect(bundle).toContain('/api/tests/run')
@@ -86,6 +90,9 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Search project')
   Expect(bundle).toContain('No manifest screens are available yet.')
   Expect(bundle).toContain('Save to scenario')
+  Expect(bundle).toContain('Generate fixture')
+  Expect(bundle).toContain('Generating a realistic fixture')
+  Expect(bundle).toContain('The Tao source changed while generation was running; its result was ignored.')
   Expect(bundle).toContain('Load failure capture')
   Expect(bundle).toContain('Paste failure capture')
   Expect(bundle).toContain('Replay captured state')
@@ -106,6 +113,48 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
   Expect(html).toContain('\\u003c/script>')
+})
+
+Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
+  const identity = {
+    appName: 'WordFlower',
+    cellId: 'Workspace.focused#cell',
+    cellRevision: 0,
+    compileRevision: 1,
+    manifestRevision: 'compile:1',
+    path: 'Scenarios.tao',
+    previewInstanceId: 'preview-1',
+    project: '/project',
+    sourceVersion: 'text-v1:scenarios',
+  }
+  const plan = {
+    accounts: [],
+    creates: [{ entity: 'Workspace', fields: { CreatedAt: { kind: 'now' as const }, Title: 'Roadmap' }, name: 'Main' }],
+  }
+
+  Expect(StudioFixtureProposal.source('GeneratedState', plan)).toContain(
+    'fixture GeneratedState {\n   Main = create Workspace { CreatedAt: now, Title: "Roadmap" }\n}',
+  )
+  Expect(StudioFixtureProposal.sourceAction({
+    fixtureName: 'GeneratedState',
+    identity,
+    origin: 'generated',
+    plan,
+    requestId: 'generation-1',
+  })).toMatchObject({
+    action: { fixtureName: 'GeneratedState', kind: 'insert-captured-fixture', plan },
+    checkpoint: { id: 'generated-fixture:generation-1', phase: 'single' },
+    identity,
+    requestId: 'generation-1',
+    type: 'source-action',
+  })
+})
+
+Test('Studio generated fixture failures include actionable validation issues', () => {
+  Expect(StudioFixtureGenerationFeedback.failure({
+    error: 'The generated draft failed validation.',
+    issues: ['Title is required.', 'Count must be positive.'],
+  })).toBe('The generated draft failed validation. Title is required. Count must be positive.')
 })
 
 Test('Studio browser assets bundle one CodeMirror view singleton', async () => {

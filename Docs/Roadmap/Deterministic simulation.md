@@ -10,7 +10,7 @@ sections as the dialogue proceeds. Nothing here is language law until it reaches
 ## Framing
 
 A Tao app is closer to a deterministic state machine than any React or Swift app can be, and the
-distance that remains is *enumerable* — because the compiler sees every construct that touches the
+distance that remains is _enumerable_ — because the compiler sees every construct that touches the
 world. That is the whole thesis. Three products fall out of one mechanism:
 
 1. **Deterministic simulation** — run the whole app against a scripted world: a virtual clock, a
@@ -27,7 +27,7 @@ world. That is the whole thesis. Three products fall out of one mechanism:
 The precedent is FoundationDB: a system whose entire test story is running the real program inside
 a simulator that owns time, network, and disk, with seeded chaos — and which shipped a distributed
 database with famously few production surprises because every bug found in the field could be
-turned into a seed. Tao can make the same move, and can make it *language-native*: where FDB had to
+turned into a seed. Tao can make the same move, and can make it _language-native_: where FDB had to
 discipline a C++ codebase by convention, Tao's effects are language constructs, so the boundary is
 checkable by the compiler rather than promised by the team.
 
@@ -50,13 +50,13 @@ More is in place than the roadmap's "regressed" row suggests. As implemented tod
   navigation surfaces are disabled in favor of a synchronous basic host.
 - **A deterministic network simulator exists — in Studio.** The environment overlay
   (`TR-studio-environment.ts`, `TR.Studio.Environment.Provider`) wraps any datasource provider:
-  latency awaits the *Tao clock* (not `setTimeout`), offline throws before the adapter is called,
+  latency awaits the _Tao clock_ (not `setTimeout`), offline throws before the adapter is called,
   and declared fill failures are a scripted schedule addressed by entity and 1-based occurrence.
   Cell-local snapshots mean the durable provider is never touched.
 - **Deterministic re-crash detection exists.** The error-containment boundary
   (`TR-error-containment.tsx`, on the Studio v2 branch) computes a failure fingerprint over
   `(state key, error name, message)`; a retry that reproduces the fingerprint escalates or stops.
-  That is a determinism *check* already running in production containment.
+  That is a determinism _check_ already running in production containment.
 - **A versioned capture format exists.** `TaoRuntimeCaptureArtifact` (version 1): exact provider
   snapshots, `(persist)` state, navigation state, a bounded 50-entry redacted action history, and
   the Studio cell environment — loadable back into a cell as a replay.
@@ -69,7 +69,7 @@ More is in place than the roadmap's "regressed" row suggests. As implemented tod
   runtime test resorts to `setTimeout(resolve, 0)` as its barrier.
 - **Foreign TypeScript is a black box.** `render inject` blocks and `from ./X.ts` sidecars run
   arbitrary code — their own timers, `fetch`, `Date`, `Math.random` — invisible to the clock and
-  the overlay. The Http datasource's *adapter* is app TypeScript calling real `fetch`; today's
+  the overlay. The Http datasource's _adapter_ is app TypeScript calling real `fetch`; today's
   only discipline is swapping the whole adapter via an app variant.
 - **One unseeded random in the runtime.** The browser-history epoch mints
   `crypto.randomUUID() ?? Date.now()+Math.random()` (`TR-navigation-browser-history.ts:375`).
@@ -84,13 +84,13 @@ More is in place than the roadmap's "regressed" row suggests. As implemented tod
 - **Animation timing is native-owned.** No Reanimated, no `requestAnimationFrame` in the runtime;
   transitions belong to `react-native-screens` and `Modal`. Under simulation there is nothing to
   virtualize — and nothing to assert against. The harness already sidesteps it by disabling native
-  surfaces; the honest position is that animation is *outside* the determinism boundary, like
+  surfaces; the honest position is that animation is _outside_ the determinism boundary, like
   pixels.
 - **The scripted-failure surface is unreachable from the language.** The overlay's rich
   per-entity/per-occurrence schedule is TypeScript-only; the scenario spelling stops at
   `network online | offline`, and Studio's UI lowering drops error status/code and cannot address
   entities. The decided fault injection (`datasource fails after create Membership "…"`) is
-  *write-side* and nothing built covers writes at all. `TR.Data.setTestStatus` survives as an
+  _write-side_ and nothing built covers writes at all. `TR.Data.setTestStatus` survives as an
   orphaned API with zero callers.
 - **Two time systems.** `TR.Clock` and `jest.useFakeTimers()` coexist uncoordinated; two
   navigation tests use the latter.
@@ -100,25 +100,25 @@ More is in place than the roadmap's "regressed" row suggests. As implemented tod
 What the runtime must virtualize, axis by axis. The doctrine throughout: **every axis is owned by
 a runtime seam, and the compiler knows every hole in the fence.**
 
-| Axis | Today | Target |
-| --- | --- | --- |
-| Time | `TR.Clock`, complete inside the runtime | unchanged; becomes the *only* clock a simulation admits |
-| Storage | fresh Memory store per check; exact snapshot codec | unchanged; seeded from fixtures or generators |
-| Network reads (fills) | Studio overlay: latency, offline, scripted failures | promoted to the harness proper, with a language spelling |
-| Network writes | nothing | the decided `datasource fails after create X "…"` — atomicity's proof |
-| Sidecars / foreign actions | nothing | the decided `action X fails Case` / `action X returns { … }` stubs |
-| Randomness | one leak; `new secret` unspecified in tests | a seeded PRNG seam behind everything random |
-| Identity / accounts | fixture `account` handles; `as` in decided tests | simulated sign-in per the decided `as` steps |
-| Environment (locale, scheme, text scale) | manifest-only, inert | enforced per cell once reactive resolution exists |
-| Layout measurement | real `onLayout` only | injectable measurement from the cell's device class |
-| Foreign views | none; no boundary of their own | declared holes: scripted or stubbed per scenario, reported by `tao check` |
-| Animation | native-owned | declared *outside* the boundary; simulation asserts states, not motion |
+| Axis                                     | Today                                               | Target                                                                    |
+| ---------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------- |
+| Time                                     | `TR.Clock`, complete inside the runtime             | unchanged; becomes the _only_ clock a simulation admits                   |
+| Storage                                  | fresh Memory store per check; exact snapshot codec  | unchanged; seeded from fixtures or generators                             |
+| Network reads (fills)                    | Studio overlay: latency, offline, scripted failures | promoted to the harness proper, with a language spelling                  |
+| Network writes                           | nothing                                             | the decided `datasource fails after create X "…"` — atomicity's proof     |
+| Sidecars / foreign actions               | nothing                                             | the decided `action X fails Case` / `action X returns { … }` stubs        |
+| Randomness                               | one leak; `new secret` unspecified in tests         | a seeded PRNG seam behind everything random                               |
+| Identity / accounts                      | fixture `account` handles; `as` in decided tests    | simulated sign-in per the decided `as` steps                              |
+| Environment (locale, scheme, text scale) | manifest-only, inert                                | enforced per cell once reactive resolution exists                         |
+| Layout measurement                       | real `onLayout` only                                | injectable measurement from the cell's device class                       |
+| Foreign views                            | none; no boundary of their own                      | declared holes: scripted or stubbed per scenario, reported by `tao check` |
+| Animation                                | native-owned                                        | declared _outside_ the boundary; simulation asserts states, not motion    |
 
 The last two rows carry the doctrine's teeth. Foreign code cannot be forced deterministic — but it
-is *declared* (`from ./X.tsx`, the sidecar graph), so the compiler can print the complete list of
+is _declared_ (`from ./X.tsx`, the sidecar graph), so the compiler can print the complete list of
 holes an app has punched in the simulation fence, exactly the way the AI direction made the prompt
-surface a derived report. A simulation whose every hole is scripted is deterministic *by
-construction*; one with an unscripted hole gets a diagnostic, not a silent flake. That is the move
+surface a derived report. A simulation whose every hole is scripted is deterministic _by
+construction_; one with an unscripted hole gets a diagnostic, not a silent flake. That is the move
 React and Swift structurally cannot make: their effect surfaces are unenumerable userland.
 
 ## The harness architecture
@@ -139,8 +139,8 @@ scenario environment, per-cell provider overlay, capture codec — and adds a dr
   the app against the same provider state (the restoration path already exists); a concurrent
   collaborator is a second app instance bound to the same simulated provider, interleaved on the
   same timeline. This is where the FDB analogy pays off most directly: sync semantics
-  (`Conflicts fieldwise latest`, `queued` → `saved` drains) become testable as *properties over
-  interleavings*, not hand-written races.
+  (`Conflicts fieldwise latest`, `queued` → `saved` drains) become testable as _properties over
+  interleavings_, not hand-written races.
 - **Results surface in the scenario-group matrix.** The group is already the display unit; a
   simulation verdict is a per-cell banner in the exact slot the runtime-failure panel occupies
   today.
@@ -153,7 +153,7 @@ Nothing here asks the developer to learn QuickCheck. The inputs exist:
   never defaulted), defaults, `yes/no` poles, relations with inferred cardinality, `unique`,
   `together` — every one narrows the generator. The substrate is the fixture plan: a generated
   world is generated rows through the same codec that named fixtures and captures use. (The AI
-  direction already claims this: "the fixture generator *is* the `makeSamples` analog.")
+  direction already claims this: "the fixture generator _is_ the `makeSamples` analog.")
 - **The fuzzer's alphabet comes from the intent surface.** Titled actions with typed parameters
   are a closed vocabulary; access rules bound who may invoke what; `as <account>` steps switch
   actors. A random journey is a random word over that alphabet — well-typed by construction.
@@ -170,7 +170,7 @@ Nothing here asks the developer to learn QuickCheck. The inputs exist:
   - **offline equivalence**: a journey run offline then drained equals the journey run online;
   - `runs single` never double-fires; `runs latest` never lets a stale result land;
   - **no crash**: the containment boundary never fires across generated states (and when it does,
-    the capture *is* the repro).
+    the capture _is_ the repro).
 - **Shrinking is sound because runs are deterministic.** A failing world is a fixture plan plus an
   event script plus a seed — all data. Shrink by dropping rows and events and re-running; the
   fingerprint says when the same failure survives. The failing seed is the artifact CI hands back.
@@ -196,7 +196,7 @@ under simulation, recording is total — the full event journal from the fixture
 The decided three-way split stands: statically decidable rules (contrast per declared ink/background
 pair, tap-target minimums, unnamed controls) are build diagnostics; layout-dependent measurements
 run over the scenario gallery; perceptual judgements are review criteria, never assertions. What
-simulation adds is the middle tier's *muscle*: with every scenario cell rendered deterministically
+simulation adds is the middle tier's _muscle_: with every scenario cell rendered deterministically
 in CI, measured-but-machine-decidable checks (a rendered control's actual hit target under this
 device class and text scale; a resolved ink/background pair the static checker couldn't see) can
 run over every cell on every push. The functionality/QA line is respected — anything requiring
@@ -223,7 +223,7 @@ human judgement stays gallery-annotated, not red.
 
 Holds: one virtual timeline; all I/O through scripted interfaces; seeded chaos with declared fault
 points (their `BUGGIFY` is our declared fill/write fault schedule); the failing seed as the bug
-report; thousands of cheap seeded runs in CI. And in one respect Tao's position is *better*: FDB
+report; thousands of cheap seeded runs in CI. And in one respect Tao's position is _better_: FDB
 simulated a distributed system it had to build; Tao's "cluster" is app instances over a provider
 whose sync semantics are already declared (`fieldwise latest`, tombstones, offline queues) — the
 simulator tests a contract, not an implementation's emergent behavior.

@@ -1,5 +1,7 @@
+import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { Errors } from '@shared'
 import { StudioClientAssets } from './StudioClientAssets'
+import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
 import { StudioLsp, type StudioLspSession } from './StudioLsp'
 import { StudioMatrixConflictError } from './StudioMatrixSession'
@@ -28,6 +30,7 @@ import { StudioWelcome } from './StudioWelcome'
 export type StudioServerOptions = {
   allowedOrigins?: readonly string[]
   compileOnStart?: boolean
+  generationProvider?: GenerationProvider
   hostname?: string
   port?: number
   previewUrl?: string
@@ -77,6 +80,11 @@ async function startManagedStudioServer(
     )
   }
 
+  const fixtureGeneration = new StudioFixtureGeneration(
+    options.generationProvider
+      ?? new UnavailableGenerationProvider('Apple Foundation Models is not configured for this Studio server.'),
+  )
+
   const eventClients = new Map<string, Set<StudioSocket>>()
   const dataRevisions = new Map<string, number>()
   const sessionSubscriptions = new Map<string, () => void>()
@@ -123,7 +131,6 @@ async function startManagedStudioServer(
   })
   const closeSession = async (sessionId: string): Promise<boolean> => await manager.close(sessionId)
   const authorization = originAuthorization(manager, options.allowedOrigins)
-
   const server = Bun.serve<StudioSocketData>({
     fetch: async (request, bunServer) => {
       const url = new URL(request.url)
@@ -182,7 +189,7 @@ async function startManagedStudioServer(
         }
         const sessionUrl = new URL(url)
         sessionUrl.pathname = route.pathname
-        return await handleRequest(resource.session, request, sessionUrl, {
+        return await handleRequest(resource.session, fixtureGeneration, request, sessionUrl, {
           ...requestOptions,
           previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
         })
@@ -368,6 +375,7 @@ function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
 
 async function handleRequest(
   session: StudioProjectSession,
+  fixtureGeneration: StudioFixtureGeneration,
   request: Request,
   url: URL,
   options: StudioServerOptions,
@@ -421,6 +429,16 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
+  }
+  if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
+    return response(request, url, options, await fixtureGeneration.availability())
+  }
+  if (request.method === 'POST' && url.pathname === '/api/ai/fixture') {
+    const manifest = session.previewManifest()
+    if (manifest === undefined) {
+      return response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
+    }
+    return response(request, url, options, await fixtureGeneration.generate(manifest, await request.json()))
   }
   if (request.method === 'POST' && url.pathname === '/api/preview/instance') {
     return response(request, url, options, session.registerPreview(await request.json()))
@@ -694,6 +712,7 @@ function forbiddenResponse(message: string): Response {
 }
 
 export const StudioServerTesting = {
+  handleRequest,
   handleTestRequest,
   managerRequestPath,
   originAuthorization,

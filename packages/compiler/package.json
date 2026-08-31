@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "tao-ast-utils": "workspace:*",
+    "tao-generation": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-validator": "workspace:*"

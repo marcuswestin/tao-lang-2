@@ -1,5 +1,6 @@
 /// <reference path="../expo-dev-loop/expo-runner/better-opn.d.ts" />
 
+import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import {
   openStudioPreviewSession,
@@ -62,6 +63,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   const removeSigterm = Platform.onProcessSignal('SIGTERM', () => stop(143))
   let native: StartedStudioNative | undefined
   let server: StartedStudioServer | undefined
+  let foundationModels: AppleFoundationModelsService | undefined
   let manager: StudioSessionManager | undefined
   const recentProjects = createRecentProjectStore(
     FS.resolvePath('recent-projects.json', options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')),
@@ -87,6 +89,14 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       openProject: projects.additional,
       recentProjects: await recentProjects.load(),
     })
+    foundationModels = await startAppleFoundationModelsService()
+    const intelligence = await foundationModels.provider.availability()
+    HCI.logProcessInfo(
+      'studio',
+      intelligence.status === 'available'
+        ? 'Apple Foundation Models: available'
+        : `Apple Foundation Models: unavailable (${intelligence.reason})`,
+    )
     const initialResource = await projects.initial({
       appName: options.appName,
       projectPath: options.projectRoot,
@@ -95,6 +105,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     HCI.logProcessInfo('studio', `Project: ${initial.project}`)
     server = await startStudioSessionServer(manager, {
       compileOnStart: false,
+      generationProvider: foundationModels.provider,
       hostname: options.hostname,
       port: options.port,
     })
@@ -132,6 +143,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       () => native?.stop(),
       () => server?.stop(),
       () => manager?.closeAll(),
+      () => foundationModels?.stop(),
       () =>
         recentProjects.flush().catch(error => {
           HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)

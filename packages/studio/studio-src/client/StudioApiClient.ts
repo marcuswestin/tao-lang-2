@@ -13,7 +13,7 @@ import type {
   StudioRenameFileRequest,
   StudioRenameFileResult,
 } from '../StudioProjectSession'
-import type { StudioSourceActionEnvelope } from '../StudioProtocol'
+import type { StudioFixturePlan, StudioSourceActionEnvelope } from '../StudioProtocol'
 import type { StudioTestRun, StudioTestStatus } from '../StudioTestRunner'
 
 export type StudioCompileDiagnostic = {
@@ -62,6 +62,15 @@ export type StudioCellRuntimeResponse = {
   cell: StudioPreviewCell
   identity: StudioCellIdentity
 }
+
+export type StudioAIAvailability = {
+  reason?: string
+  status: 'available' | 'unavailable'
+}
+
+export type StudioGeneratedFixtureResult =
+  | { fixture: StudioFixturePlan; status: 'ready' }
+  | { code: string; error: string; issues?: readonly string[]; status: 'failed' }
 
 export type StudioSourceActionResult = {
   checkpoint: { id: string; status: 'committed' | 'open' }
@@ -119,6 +128,7 @@ export type StudioSessionTransition = Readonly<{
 
 /** Typed boundary around Studio's HTTP and WebSocket endpoints. */
 export const StudioApiClient = {
+  aiAvailability: async (): Promise<StudioAIAvailability> => await get('/api/ai/availability'),
   captureFixture: async <Result>(body: unknown): Promise<Result> => await request('/api/source-action', body),
   cellInstance: async (body: unknown): Promise<unknown> => await request('/api/preview/cell/instance', body),
   connectEvents,
@@ -131,6 +141,8 @@ export const StudioApiClient = {
     await request('/api/file/delete', body),
   file: async (path: string): Promise<StudioDraftFile> => await get(`/api/file?path=${encodeURIComponent(path)}`),
   files: async (): Promise<{ files: readonly StudioFile[] }> => await get('/api/files'),
+  generateFixture: async (scenarioId: string): Promise<StudioGeneratedFixtureResult> =>
+    await request('/api/ai/fixture', { scenarioId }),
   handshake: async (): Promise<StudioHandshake> => await get('/api/protocol'),
   highlight: async (content: string): Promise<StudioLanguageHighlight> =>
     await request('/api/language/highlight', { content }),

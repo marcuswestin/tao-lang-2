@@ -204,7 +204,6 @@ Plan = generate MealPlan {
   always accurate, no bookkeeping. Centralized `Sees` declarations return only for agents,
   where the model (not the developer) chooses what to read (see Agents).
 
-
 ## Agents
 
 The agentic case — the model reads, decides, and acts toward a goal — composes from parts the
@@ -293,13 +292,18 @@ both halves of the story exist as maintained providers of it:
   shape; structured output uses native guided generation on iOS 26+; streaming and tool calling.
   Requires RN ≥ 0.80 + New Architecture; the repository's Expo SDK 54 / RN 0.81 qualify. Preview
   status, so it sits behind our own seam and is swappable.
-- **Studio server (macOS)**: `@meridius-labs/apple-on-device-ai` — Foundation Models bindings
-  for Node _and Bun_, AI-SDK-compatible (`generateObject` = schema-constrained), actively
-  maintained. The Studio preview always speaks HTTP to the Studio server, which makes the AI
-  path webview-agnostic — identical under Chrome, Electrobun's WKWebView, or a future WebView2
-  host. (Fallback if the bindings misbehave: a ~100-line Swift helper the toolchain compiles and
-  supervises like Metro. Apple's `fm serve` CLI is not on the stable toolchain yet; adopt it
-  behind the seam when it is.)
+- **Studio server (macOS)**: the stable Swift helper won the implementation spike.
+  `@meridius-labs/apple-on-device-ai` 1.6.2 loaded under Bun and reported Foundation Models
+  available, but its guided `generateObject` path failed against a real WordFlower schema with
+  `Failed to deserialize a Generable type from model output`. The replacement compiles with the
+  installed Xcode 26.6, binds an authenticated ephemeral loopback port, receives its bearer secret
+  over standard input rather than process arguments, and streams compact dynamic-schema snapshots
+  as NDJSON. The Studio developer process owns its lifetime, reports a post-start helper exit as
+  unavailable, and applies explicit availability and generation deadlines without silently retrying
+  a generation. The helper bounds and validates its small HTTP surface before authentication. The
+  Studio preview still speaks only HTTP to the Studio server, keeping model access webview-agnostic.
+  No beta OS or Xcode is required. Adopt Apple's `fm serve` behind the same seam when it reaches the
+  stable toolchain and is the better implementation.
 - **Shared machinery**: one entity→schema compiler and one AI-SDK-provider client, used by the
   compiled app, the Studio server, and the scripted test binding alike. Built in the shared
   packages, never Studio-private, so the stdlib and the keyword lower onto it without
@@ -325,11 +329,25 @@ cross-platform support — platforms graduate one at a time:
 
 ## Driving use cases and sequence
 
-1. **Studio fixture generation** (the driver): "generate a realistic named state for this
+1. **Studio fixture generation** (the driver) — **landed 2026-08-30**: "generate a realistic named state for this
    scene" — the model fills entity rows from their own declarations, schema-constrained,
-   validates enforced, saved through the existing capture path into the named-state library.
+   with the shared validate-before-accept gate, saved through the existing capture path into the
+   named-state library.
    Exercises the entire pipeline with no app UI and no language work; Studio calls the shared
-   TS machinery directly. Proves the Studio-server bridge.
+   TS machinery directly. The shared package now owns the entity/case schema compiler, Apple and
+   deterministic scripted providers, streamed partial/final contract, schema checker, and
+   terminal validate-before-accept gate. The compiler publishes generation declarations in the
+   Studio manifest; secrets are unconditionally excluded and relations remain opt-in. Studio
+   exposes availability and fixture generation on its existing HTTP server, and its data-state
+   control saves accepted proposals through the same `insert-captured-fixture` source action as
+   hand capture, with explicit generating and failed states and no retry. A fixture source patch is
+   accepted only when Tao compilation succeeds; a failed compile restores the exact previous source.
+   Studio preserves executable `now` time values instead of generating timestamps it cannot author,
+   and rejects fixture topology it cannot preserve. The Apple live check is explicitly opt-in;
+   deterministic tests use only the scripted binding. Current Tao does not yet author entity
+   `validate` declarations, so Studio has no authored rules to supply today; adding those declarations
+   remains language work for the later tranche. The shared gate is wired and tested for rules and
+   durable acceptance failures without deciding the retry-policy open question below.
 2. **The `generate` tranche**: grammar, validator, formatter, compiler lowering, the runtime
    multi-state value, and the scripted-model test surface — in scope together, since the keyword
    without `model answers` is untestable. Mode 3 (`runs latest`) waits for the separate

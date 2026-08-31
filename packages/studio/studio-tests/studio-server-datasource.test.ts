@@ -296,6 +296,7 @@ function manifest(session: StudioProjectSession): StudioPreviewManifestV2 {
     }],
     compileRevision: 1,
     fixtures: [{ fixtureId: 'fixture-empty', label: 'Empty', plan: {}, source: source(session.entryPath) }],
+    generationDeclarations: [],
     manifestRevision: 'manifest-1',
     parametersBySubject: {
       [appId]: [],

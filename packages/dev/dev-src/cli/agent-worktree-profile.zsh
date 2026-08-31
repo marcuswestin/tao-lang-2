@@ -14,7 +14,7 @@ function tao_bun_install_args() {
   local worktree_dir="$1"
   reply=(install)
   if tao_is_linked_worktree "$worktree_dir"; then
-    # Clonefile installation cannot cross Codex's linked-worktree sandbox boundary.
+    # Clonefile installation is not supported across linked-worktree filesystem boundaries.
     reply+=(--backend=copyfile)
   else
     local linked_status=$?
@@ -87,21 +87,28 @@ function tao_activate_devenv_profile() {
   export PATH="$devenv_profile/bin:$PATH"
 }
 
-# Bun's installer requires the host's per-user temporary directory on macOS.
-# A workspace-local TMPDIR is writable to the shell but Bun rejects it during
-# package extraction. Fall back to a caller-owned directory on other hosts.
+# Report whether a temporary directory accepts an actual file creation.
+function tao_temp_dir_accepts_files() {
+  local temp_dir="$1"
+  local temp_probe
+  [[ -d "$temp_dir" && -w "$temp_dir" ]] || return 1
+  temp_probe="$(mktemp "${temp_dir:A}/tao-bun-temp.XXXXXXXX" 2>/dev/null)" || return 1
+  rm -f "$temp_probe"
+}
+
+# Prefer macOS's per-user temporary directory when the current process can use it.
+# Repository-local artifacts remain the fallback under filesystem isolation.
 function tao_bun_temp_dir() {
   local fallback_dir="$1"
   local darwin_temp_dir
   darwin_temp_dir="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)" || darwin_temp_dir=""
-  if [[ -n "$darwin_temp_dir" && -d "$darwin_temp_dir" && -w "$darwin_temp_dir" ]]; then
-    # Codex grants the physical /private/var path; macOS reports its /var symlink.
-    # Bun 1.3 also requires TMPDIR's trailing separator for this physical path.
+  if [[ -n "$darwin_temp_dir" ]] && tao_temp_dir_accepts_files "$darwin_temp_dir"; then
+    # Bun 1.3 requires TMPDIR's trailing separator for the physical macOS path.
     print -r -- "${darwin_temp_dir:A}/"
     return
   fi
 
-  if [[ -n "${TMPDIR:-}" && -d "$TMPDIR" && -w "$TMPDIR" ]]; then
+  if [[ -n "${TMPDIR:-}" ]] && tao_temp_dir_accepts_files "$TMPDIR"; then
     print -r -- "${TMPDIR:A}/"
     return
   fi

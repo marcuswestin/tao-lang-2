@@ -220,6 +220,7 @@ function runtimeJestSuite(name: string, testFiles: string[], pattern: string): T
   const args = [
     'node_modules/jest/bin/jest.js',
     ...testFiles,
+    '--no-watchman',
     ...(pattern ? [`--testNamePattern=${pattern}`] : []),
     '--silent',
   ]

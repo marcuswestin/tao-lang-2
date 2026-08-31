@@ -83,36 +83,36 @@ What exists today, established against the working tree:
 
 ## What the language derives vs what the provider owns
 
-| Concern | The language derives | The provider owns |
-| --- | --- | --- |
-| Rules | Lowering of `access` / `audience` / `publish` / cross-row `validate` into the provider's rule language, deployed by the toolchain | Evaluating them on every read and write, server-side, unconditionally |
-| Identity | `Me` as an ordinary binding; the `Account` entity extension; fixture accounts | Sign-in flows (magic codes, OAuth), the authenticated principal a write arrives under |
-| `can …` questions | A client-side evaluator compiled from the same declared rules | The authoritative answer when the write actually lands |
-| Secrets | The `secret` type: generation, rotation, structural exclusions (never in prompts, logs, captures) | Unguessable storage, matching a presented capability against a row |
-| Refusals | The rule ↔ sentence map; classification into `rejected` / `unauthorized`; translatable copy | The typed rejection naming which rule refused |
-| Redaction | `DeleteMyAccount`-style transactions ending in `delete Me`; which fields clear; the stand-in phrase | Deleting/redacting the auth record itself (an admin-lane operation on every candidate provider) |
-| Deployment | Emitting schema + rules as build artifacts; versioning them with the app | Accepting pushed rules; enforcing the currently deployed set |
+| Concern           | The language derives                                                                                                              | The provider owns                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Rules             | Lowering of `access` / `audience` / `publish` / cross-row `validate` into the provider's rule language, deployed by the toolchain | Evaluating them on every read and write, server-side, unconditionally                           |
+| Identity          | `Me` as an ordinary binding; the `Account` entity extension; fixture accounts                                                     | Sign-in flows (magic codes, OAuth), the authenticated principal a write arrives under           |
+| `can …` questions | A client-side evaluator compiled from the same declared rules                                                                     | The authoritative answer when the write actually lands                                          |
+| Secrets           | The `secret` type: generation, rotation, structural exclusions (never in prompts, logs, captures)                                 | Unguessable storage, matching a presented capability against a row                              |
+| Refusals          | The rule ↔ sentence map; classification into `rejected` / `unauthorized`; translatable copy                                       | The typed rejection naming which rule refused                                                   |
+| Redaction         | `DeleteMyAccount`-style transactions ending in `delete Me`; which fields clear; the stand-in phrase                               | Deleting/redacting the auth record itself (an admin-lane operation on every candidate provider) |
+| Deployment        | Emitting schema + rules as build artifacts; versioning them with the app                                                          | Accepting pushed rules; enforcing the currently deployed set                                    |
 
 ## The lowering map (InstantDB)
 
 How each decided construct lands, with the three genuinely open rows flagged. Everything in
 this table is examples-to-provoke, not settled.
 
-| Tao construct | InstantDB mechanism | Status |
-| --- | --- | --- |
-| Deny by default | `"$default": "false"` on every namespace | direct |
-| `read to <audience>` | per-namespace `view` rule (server filters query results) | direct |
-| `audience` with a role filter | **not one `ref` traversal** — see "Audience materialization" below | **design area** |
-| `create … where <new row>` | `create` rule over `data` (the new object); additive grants OR together | direct |
-| Field-scoped `change` | `update` rule over `request.modifiedFields` + `newData` | direct |
-| `holder of <Field>` | `ruleParams` — InstantDB's own documented share-link pattern | direct |
-| `create/change … through <Transaction>` | **no server notion of "which transaction"** — see "Remote authorization semantics" below | **design area** |
-| `publish` projection | `fields` clause (allow-list) + `view` rule (row filter + capability) + guest auth for anonymous resolution | direct, with care: `fields` alone only filters returns |
-| Capability rotation | ordinary field write; links resolve by `where Code = ruleParams.code` | direct |
-| Cross-row `validate` | generated per-operation rules (§2 decides this verbatim) | decided |
-| Remote refusal | `permission-denied` body names the failing rule → compiler-emitted rule↔sentence map → `rejected` / `unauthorized` | design area |
-| Account redaction | client-side field clearing + an admin lane for the `$users` record | **design area**, seam with `tao ship` |
-| Rules deployment | `push perms`-equivalent from the toolchain; no provider-side versioning | design area, seam with `tao ship` |
+| Tao construct                           | InstantDB mechanism                                                                                                | Status                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| Deny by default                         | `"$default": "false"` on every namespace                                                                           | direct                                                 |
+| `read to <audience>`                    | per-namespace `view` rule (server filters query results)                                                           | direct                                                 |
+| `audience` with a role filter           | **not one `ref` traversal** — see "Audience materialization" below                                                 | **design area**                                        |
+| `create … where <new row>`              | `create` rule over `data` (the new object); additive grants OR together                                            | direct                                                 |
+| Field-scoped `change`                   | `update` rule over `request.modifiedFields` + `newData`                                                            | direct                                                 |
+| `holder of <Field>`                     | `ruleParams` — InstantDB's own documented share-link pattern                                                       | direct                                                 |
+| `create/change … through <Transaction>` | **no server notion of "which transaction"** — see "Remote authorization semantics" below                           | **design area**                                        |
+| `publish` projection                    | `fields` clause (allow-list) + `view` rule (row filter + capability) + guest auth for anonymous resolution         | direct, with care: `fields` alone only filters returns |
+| Capability rotation                     | ordinary field write; links resolve by `where Code = ruleParams.code`                                              | direct                                                 |
+| Cross-row `validate`                    | generated per-operation rules (§2 decides this verbatim)                                                           | decided                                                |
+| Remote refusal                          | `permission-denied` body names the failing rule → compiler-emitted rule↔sentence map → `rejected` / `unauthorized` | design area                                            |
+| Account redaction                       | client-side field clearing + an admin lane for the `$users` record                                                 | **design area**, seam with `tao ship`                  |
+| Rules deployment                        | `push perms`-equivalent from the toolchain; no provider-side versioning                                            | design area, seam with `tao ship`                      |
 
 ### The three hard problems
 
@@ -120,13 +120,13 @@ this table is examples-to-provoke, not settled.
 any rule to bite. The runtime's whole-snapshot provider contract can survive if the provider
 composes loads from namespace queries and decomposes saves into per-row `transact` ops (a diff
 against the last confirmed state) — the sync program later replaces the diffing with a real
-change protocol, but the *storage shape* it needs is the same one rules need now. Alternatively
+change protocol, but the _storage shape_ it needs is the same one rules need now. Alternatively
 this program waits for an entity/change protocol first, which inverts the program order.
 
 **2. Remote authorization semantics for `through` grants.** A Tao transaction compiles to
 client code performing one atomic `transact`. The server cannot know the client "ran
 `JoinWithInvite`" — a hostile client sends raw ops. The Tao-native candidate: the compiler
-lowers a `through` grant into rules that verify the *effect shape* — the created/changed row is
+lowers a `through` grant into rules that verify the _effect shape_ — the created/changed row is
 permitted exactly when the transaction's own `refuse when` conditions and write pattern hold
 over the atomic change-set (e.g. a `Membership` create is allowed when the same transact marks
 a matching, unused, unexpired `Invite` as `Used` and `ruleParams` carries its code). "The
@@ -143,7 +143,7 @@ each op's rule against the post-state of the full atomic transact needs a spike 
 else depends on it.
 
 **3. Audience materialization.** `audience Cooks for Household =
-Household.Memberships[Role in Owner, Cook].Person` needs a *correlated* check — the same
+Household.Memberships[Role in Owner, Cook].Person` needs a _correlated_ check — the same
 membership row must match both the person and the role — but `data.ref('…')` flattens a path to
 a list of terminal values, so two separate traversals produce a cross-product (a cook anywhere
 would pass). The hand-written InstantDB pattern for this is materialized role links, and the
@@ -227,7 +227,7 @@ on press -> { do LeaveKitchen(MyMembership) }
    `unauthorized` shape (no sentence of its own — access rules deliberately carry none).
 5. The outcome lands exactly as a local refusal would: `rejected` with `Problem`, or
    `unauthorized` through `guard default` — same vocabulary, same copy, translated the same
-   way. In the Studio v2 failure ladder, this is a provider failure that selects a *declared*
+   way. In the Studio v2 failure ladder, this is a provider failure that selects a _declared_
    case and sentence; a genuinely unmapped provider error (rule drift, outage) stays `error`.
 
 ### Secrets and the share link
@@ -357,7 +357,7 @@ strongest claims available: the policy layer behaves identically on both sides o
 ## Deferred (running list — liked or acknowledged, not in this program's slices)
 
 - Nuanced rule customization: negative grants, time-boxed grants, delegation ("may invite but
-  not remove"), per-field *read* scoping outside `publish`.
+  not remove"), per-field _read_ scoping outside `publish`.
 - Organizations, nested groups, roles beyond one enum per membership.
 - Audit trails ("who changed this"), admin consoles, session/device management, sign-in
   revocation UX.
@@ -369,4 +369,4 @@ strongest claims available: the policy layer behaves identically on both sides o
 
 ## Direction settled
 
-*(Accumulates from dialogue with Ro; dated entries, one ruling each. Nothing recorded yet.)*
+_(Accumulates from dialogue with Ro; dated entries, one ruling each. Nothing recorded yet.)_

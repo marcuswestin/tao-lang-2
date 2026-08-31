@@ -464,6 +464,51 @@ Test('Studio saves a captured provider state as a named Tao fixture through the 
   })
 })
 
+Test('Studio restores the original Tao source when a captured fixture fails compilation', async () => {
+  let compileCount = 0
+  await withStudioProject(async (session, paths) => {
+    session.registerPreview({ previewInstanceId: 'capture-preview' })
+    const original = await session.readFile('Garden.tao')
+    const request = {
+      action: {
+        fixtureName: 'RejectedState',
+        kind: 'insert-captured-fixture',
+        plan: {
+          accounts: [],
+          creates: [{ entity: 'Account', fields: { Name: 'Rejected' }, name: 'Account1' }],
+        },
+      },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'rejected-fixture', phase: 'single' as const },
+      identity: {
+        ...session.identity(),
+        path: original.path,
+        previewInstanceId: 'capture-preview',
+        sourceVersion: original.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'rejected-fixture-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action' as const,
+    }
+
+    await Expect(session.applySourceAction(request)).rejects.toThrow(
+      'Studio did not save the fixture because its Tao source failed to compile',
+    )
+    Expect(await FS.readText(paths['Garden.tao'])).toBe(original.content)
+    Expect(compileCount).toBe(2)
+
+    const retried = await session.applySourceAction(request)
+    Expect(retried.content).toContain('fixture RejectedState')
+    Expect(compileCount).toBe(3)
+  }, () => {
+    compileCount += 1
+    if (compileCount === 1) {
+      throw new Error('Injected fixture compilation failure.')
+    }
+  })
+})
+
 Test('Studio groups a visual gesture into one checkpoint and undoes its exact current source', async () => {
   let compileCount = 0
   await withStudioProject(async session => {
@@ -589,6 +634,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
         plan: {},
         source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: 10, start: 0 } },
       }],
+      generationDeclarations: [],
       manifestRevision: 'manifest-1',
       parametersBySubject: { 'app:Garden': [] },
       project: {
@@ -663,6 +709,8 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     Expect(events.some(event => event.type === 'preview-manifest-changed')).toBe(true)
     Expect(handshake.capabilities.matrix).toEqual({ concurrentCells: true, scheme: 'inert', version: 2 })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/preview/cell/reconfigure' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/ai/availability' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/ai/fixture' })
     await Expect(
       Promise.resolve().then(() =>
         session.registerCellPreview({

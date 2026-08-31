@@ -7,6 +7,9 @@ const config = getDefaultConfig(__dirname)
 const runtimeToolchainSourceRoot = process.env.TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT || __dirname
 const repositoryNodeModules = nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', 'node_modules')
 const installedNodeModules = nodeFs.realpathSync(repositoryNodeModules)
+const runtimeToolchainNodeModules = nodeFs.realpathSync(nodePath.resolve(__dirname, 'node_modules'))
+const runtimeSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src')
+const sharedCoreSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'shared', 'shared-src', 'core')
 
 // Worktrunk worktrees reuse the primary checkout's install through a root node_modules symlink.
 // Watching and searching the physical root makes Bun's package targets visible to Metro's file map,
@@ -17,10 +20,22 @@ const installedNodeModules = nodeFs.realpathSync(repositoryNodeModules)
 // the bundle's resolution, which is how a second react once reached the app and broke hooks. Every
 // declared dependency and peer resolves through Bun's per-package nested symlinks without it; a
 // module that fails to resolve is missing a declaration in its package.json, not this farm.
-config.watchFolders = [...new Set([...config.watchFolders, installedNodeModules])]
+// Alias resolution below deliberately reaches workspace source outside the isolated preview
+// project. Metro must watch those source roots as well as resolve them, or its file map cannot
+// compute hashes for the returned files when Watchman is active.
+config.watchFolders = [
+  ...new Set([
+    ...config.watchFolders,
+    installedNodeModules,
+    runtimeToolchainNodeModules,
+    runtimeSourceRoot,
+    sharedCoreSourceRoot,
+  ]),
+]
 config.resolver.nodeModulesPaths = [
   ...new Set([
     ...config.resolver.nodeModulesPaths,
+    runtimeToolchainNodeModules,
     installedNodeModules,
   ]),
 ]
@@ -48,13 +63,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === '@runtime/TR') {
     return {
       type: 'sourceFile',
-      filePath: nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src', 'TR.ts'),
+      filePath: nodePath.resolve(runtimeSourceRoot, 'TR.ts'),
     }
   }
   if (moduleName === '@shared/core') {
     return {
       type: 'sourceFile',
-      filePath: nodePath.resolve(runtimeToolchainSourceRoot, '..', 'shared', 'shared-src', 'core', 'shared-core.ts'),
+      filePath: nodePath.resolve(sharedCoreSourceRoot, 'shared-core.ts'),
     }
   }
 

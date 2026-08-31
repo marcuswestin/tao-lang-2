@@ -148,6 +148,11 @@ export {
 } from './StudioServer'
 
 export {
+  StudioFixtureGeneration,
+  type StudioFixtureGenerationResult,
+} from './StudioFixtureGeneration'
+
+export {
   type StudioTestFailure,
   StudioTestOutput,
   type StudioTestRun,

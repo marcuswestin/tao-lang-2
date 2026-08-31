@@ -19,7 +19,7 @@ deployment pipeline normally makes you configure:
 - **Environments are already in the language.** `app WordFlowerStage = WordFlower with
   { Datasource WordFlowerStageStore }` is a staging environment: a variant swaps providers,
   seeds, and accounts without forking a declaration, and §10 already gives variants distinct
-  persisted-state identity. `tao ship` should ship *an app variant*, not a project plus a flag
+  persisted-state identity. `tao ship` should ship _an app variant_, not a project plus a flag
   file — no new "environment" concept is needed, and none should be invented.
 - **The backend is derivable.** The compiler already owns what a hosted platform makes you
   author by hand: entity `validate`s lower to per-operation store rules (§2), publish
@@ -37,7 +37,7 @@ reasons. And because the hosted half (Cloud datasources, automation execution, p
 error reports) is a running service, this is also the commercial engine: the thing people pay
 for monthly is the thing only Tao can derive.
 
-The claim to keep testing throughout: every place this document says *derived*, there must be a
+The claim to keep testing throughout: every place this document says _derived_, there must be a
 declaration that already exists for a non-shipping reason. Where a fact is genuinely new (a
 signing credential, a store listing screenshot), it is named as declared-or-provided, never
 smuggled in as inference.
@@ -46,19 +46,19 @@ smuggled in as inference.
 
 What exists, what is decided-but-unbuilt, and what is a hole:
 
-| Concern | Status |
-| --- | --- |
-| `project` envelope | Decided (§11). Grammar implements only `id/name/remote none/license/requires` — no `targets`, no `languages`. |
-| App variants | Decided (§11), implemented, in daily use (`WordFlowerInstantDB`, `WordFlowerStage` pattern). The environment mechanism. |
-| Datasources | `Local`/`Memory`/`Http`/`InstantDB` implemented on the provider-neutral snapshot protocol. `Cloud { Conflicts, Deletes, Offline }` decided (§11), unimplemented. |
-| InstantDB provider | Semi-experimental. Stores the whole app snapshot as **one opaque JSON string in one row**; no schema push, no rules push, no admin token, `AppId` hardcoded in source. Last-snapshot-wins. |
-| `automation` | Semantics fully decided (§12); execution host **never named**; zero implementation; Post-MVP tier. |
-| Permissions | Decided as reason-carrying multi-state values; spelling drift between §11 (`Reason "…"`) and the demos (`location while using because "…"`); no grammar support yet. |
-| Secrets | `secret` is a decided *capability value type* (§2–§4). Build/deploy credentials have **no owner, no syntax, no channel** — `Roadmap.md`'s "Implement secrets" is ambiguous between the two. |
-| Build toolchain | One checked-in Expo host (SDK 54 / RN 0.81.5); compiler overwrites `_gen_tao-app/` in place; dev = Metro + Expo Go on LAN; no dev-client, no EAS, no eas.json, no expo-updates, no release path of any kind. |
-| Store/OTA posture | Repo stance (native-device exploration): production builds **reject live compilation**; internal preview builds may take "an explicitly compatible signed update"; "Do not add an unrestricted production remote-code path." |
-| Schema migration | **Nothing.** See its own section — the current behavior on any `data` change is total refusal. |
-| Studio-in-release | Open item: nothing today proves Studio instrumentation is absent from a release bundle. `tao ship` must prove it. |
+| Concern            | Status                                                                                                                                                                                                                       |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project` envelope | Decided (§11). Grammar implements only `id/name/remote none/license/requires` — no `targets`, no `languages`.                                                                                                                |
+| App variants       | Decided (§11), implemented, in daily use (`WordFlowerInstantDB`, `WordFlowerStage` pattern). The environment mechanism.                                                                                                      |
+| Datasources        | `Local`/`Memory`/`Http`/`InstantDB` implemented on the provider-neutral snapshot protocol. `Cloud { Conflicts, Deletes, Offline }` decided (§11), unimplemented.                                                             |
+| InstantDB provider | Semi-experimental. Stores the whole app snapshot as **one opaque JSON string in one row**; no schema push, no rules push, no admin token, `AppId` hardcoded in source. Last-snapshot-wins.                                   |
+| `automation`       | Semantics fully decided (§12); execution host **never named**; zero implementation; Post-MVP tier.                                                                                                                           |
+| Permissions        | Decided as reason-carrying multi-state values; spelling drift between §11 (`Reason "…"`) and the demos (`location while using because "…"`); no grammar support yet.                                                         |
+| Secrets            | `secret` is a decided _capability value type_ (§2–§4). Build/deploy credentials have **no owner, no syntax, no channel** — `Roadmap.md`'s "Implement secrets" is ambiguous between the two.                                  |
+| Build toolchain    | One checked-in Expo host (SDK 54 / RN 0.81.5); compiler overwrites `_gen_tao-app/` in place; dev = Metro + Expo Go on LAN; no dev-client, no EAS, no eas.json, no expo-updates, no release path of any kind.                 |
+| Store/OTA posture  | Repo stance (native-device exploration): production builds **reject live compilation**; internal preview builds may take "an explicitly compatible signed update"; "Do not add an unrestricted production remote-code path." |
+| Schema migration   | **Nothing.** See its own section — the current behavior on any `data` change is total refusal.                                                                                                                               |
+| Studio-in-release  | Open item: nothing today proves Studio instrumentation is absent from a release bundle. `tao ship` must prove it.                                                                                                            |
 
 External facts that bound the design (researched 2026-08-30):
 
@@ -72,10 +72,10 @@ External facts that bound the design (researched 2026-08-30):
   servers exist. Building on EAS Update keeps a credible self-host exit for the update plane.
   CodePush is retired (March 2025); EAS is the only maintained managed option.
 - **Store OTA policy**: Apple (3.3.1(b), 2.5.2) and Google (interpreter exception) permit JS
-  bundles executed by the shipped runtime that fix and adjust *your own reviewed app*; both
+  bundles executed by the shipped runtime that fix and adjust _your own reviewed app_; both
   actively enforce against apps that generate or download new behavior (Apple pulled
   app-generating "vibe coding" apps in March 2026). Tao's compiled-bundle OTA sits squarely in
-  the safe zone *because* Tao compiles ahead of time; a live-compilation path in production
+  the safe zone _because_ Tao compiles ahead of time; a live-compilation path in production
   would sit squarely in the enforcement zone. The language's own posture and the platform's are
   the same posture.
 
@@ -93,18 +93,18 @@ One argument: an app declaration name. Everything else is derived or remembered.
 
 ### What is derived, from declarations that already exist
 
-| Pipeline fact | Derived from |
-| --- | --- |
-| App display name | `app { Name … }` (variants override — "WordFlower Stage" labels itself) |
-| Bundle identifier / package name | `project { id }` + a settled derivation rule (open: see Versioning & identity) |
-| Device families | `project { targets phone, tablet, laptop }` |
-| Locales in the store listing | `project { languages … }` |
-| `Info.plist` / manifest usage strings | the `permissions` block's `because` sentences, per locale |
-| Native dependency closure | the compiled module graph — the compiler knows exactly which sidecars/SDKs are reachable, so the **runtime fingerprint for OTA compatibility is computed, not hand-declared** (EAS makes you author `runtimeVersion`; Tao derives it) |
-| Update channel | the shipped variant — `WordFlowerStage` and `WordFlower` are distinct channels because they are distinct declarations with distinct persisted-state identity (§10) |
-| Push entitlements & config | the app's `Notifications` provider + any `automation … notify` |
-| Backend provisioning | the `Cloud`/InstantDB datasource + derived rules (see The hosted runtime) |
-| Schema fingerprint | the `data` declarations (see Schema migration) |
+| Pipeline fact                         | Derived from                                                                                                                                                                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App display name                      | `app { Name … }` (variants override — "WordFlower Stage" labels itself)                                                                                                                                                               |
+| Bundle identifier / package name      | `project { id }` + a settled derivation rule (open: see Versioning & identity)                                                                                                                                                        |
+| Device families                       | `project { targets phone, tablet, laptop }`                                                                                                                                                                                           |
+| Locales in the store listing          | `project { languages … }`                                                                                                                                                                                                             |
+| `Info.plist` / manifest usage strings | the `permissions` block's `because` sentences, per locale                                                                                                                                                                             |
+| Native dependency closure             | the compiled module graph — the compiler knows exactly which sidecars/SDKs are reachable, so the **runtime fingerprint for OTA compatibility is computed, not hand-declared** (EAS makes you author `runtimeVersion`; Tao derives it) |
+| Update channel                        | the shipped variant — `WordFlowerStage` and `WordFlower` are distinct channels because they are distinct declarations with distinct persisted-state identity (§10)                                                                    |
+| Push entitlements & config            | the app's `Notifications` provider + any `automation … notify`                                                                                                                                                                        |
+| Backend provisioning                  | the `Cloud`/InstantDB datasource + derived rules (see The hosted runtime)                                                                                                                                                             |
+| Schema fingerprint                    | the `data` declarations (see Schema migration)                                                                                                                                                                                        |
 
 ### What is declared or provided, honestly
 
@@ -123,7 +123,7 @@ The option space, for the record (dialogue decision #1):
 
 - **A — Tao-managed on EAS.** `tao ship` talks to a Tao service that fronts EAS: builds,
   signing custody, submission, and updates run under Tao's platform account; the developer
-  never sees Expo. Commercially strongest (the managed path *is* the product); operationally
+  never sees Expo. Commercially strongest (the managed path _is_ the product); operationally
   heaviest (Tao intermediates credentials and billing from day one).
 - **B — Bring-your-own EAS.** `tao ship` drives the developer's own Expo account (and their
   Apple/Google credentials) directly. Thin, shippable immediately, zero Tao infrastructure —
@@ -158,12 +158,12 @@ Tao-managed lane vs a declared `bundle` fact under BYO).
 
 ### OTA, within the rules
 
-- **What an update is**: the compiled JS bundle + assets of the *same reviewed app* — the exact
+- **What an update is**: the compiled JS bundle + assets of the _same reviewed app_ — the exact
   artifact `tao compile` already produces, published to the variant's channel. Never a
   compilation path in production; the repo's standing prohibition and Apple's 2.5.2 enforcement
   agree, and this document treats that as a constraint, not a choice.
 - **Compatibility is double-gated, both gates derived**: an update reaches a binary only when
-  the runtime fingerprint matches (native closure unchanged) *and* the schema fingerprint is
+  the runtime fingerprint matches (native closure unchanged) _and_ the schema fingerprint is
   compatible (see Schema migration). EAS enforces the first natively; the second is Tao's own
   gate on top — `tao ship --update` refuses to publish an update whose schema change the
   installed base can't survive, which no general-purpose OTA product can offer because none of
@@ -226,15 +226,15 @@ decide here.
 
 The server-shaped parts of a declared Tao app, and where each comes from:
 
-| Hosted piece | Derived from | Firebase/Vercel equivalent |
-| --- | --- | --- |
-| Data store + schema | `data` declarations | hand-authored schema/collections |
-| Store rules | `validate` lowering, access rules, publish projections (§2, §4) | hand-written security rules |
-| Scheduled work | `automation` — trigger, `while`, `once per`, audience, payload | cron config + job code + dedup logic |
-| Push delivery | `notify` payloads + `Notifications` provider | FCM/APNs glue |
-| Auth service | `use auth from @tao/auth`, account references in access rules | Auth product config |
-| Error-report store | the error architecture's capture bundles | third-party crash SDK |
-| Analytics | declared intents/transactions/screens (see Derived analytics) | event-tracking SDK + taxonomy doc |
+| Hosted piece        | Derived from                                                    | Firebase/Vercel equivalent           |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------ |
+| Data store + schema | `data` declarations                                             | hand-authored schema/collections     |
+| Store rules         | `validate` lowering, access rules, publish projections (§2, §4) | hand-written security rules          |
+| Scheduled work      | `automation` — trigger, `while`, `once per`, audience, payload  | cron config + job code + dedup logic |
+| Push delivery       | `notify` payloads + `Notifications` provider                    | FCM/APNs glue                        |
+| Auth service        | `use auth from @tao/auth`, account references in access rules   | Auth product config                  |
+| Error-report store  | the error architecture's capture bundles                        | third-party crash SDK                |
+| Analytics           | declared intents/transactions/screens (see Derived analytics)   | event-tracking SDK + taxonomy doc    |
 
 Two grounding facts give this section its shape. First, §12 decided `automation` is
 "provider-owned scheduled work … explicitly not a timer on one mounted device" — but no
@@ -243,7 +243,7 @@ answer: a hosted service. The hosted runtime is not an optional accessory; it is
 **unnamed execution host the language already promised.** Second, §4's publish machinery is
 decided as "(none of it is server code)" — lowered to provider-native rules. So the hosted
 runtime's job is narrow and derivable: hold the store, enforce the derived rules, evaluate
-automation schedules, deliver push, answer auth — and *not* run app code. An automation cannot
+automation schedules, deliver push, answer auth — and _not_ run app code. An automation cannot
 write (§12); it `do`es a transaction, whose authority question (§12 gap: what identity does a
 server-side scheduled `do` carry?) is a real language decision this program must put to Ro.
 
@@ -280,7 +280,7 @@ The hardest unsolved question in the language, confronted here deliberately. Fir
 truth, verified in code (2026-08-30):
 
 **Today, any change to any `data` declaration is fatal to all existing data.** The runtime's
-`parseEnvelope` demands *exact* equality between the persisted shape and the compiled shape —
+`parseEnvelope` demands _exact_ equality between the persisted shape and the compiled shape —
 entity sets and per-row field sets must match by name; even a purely additive field trips it on
 the first row. `schemaVersion` is wired end-to-end through the envelope but hardcoded to `1` by
 the compiler; it has never once gated anything. The outcomes:
@@ -319,7 +319,7 @@ Any answer must play in three places at once:
 - **O1 — Derived compatibility: make `schemaVersion` real.** The compiler derives a schema
   fingerprint from the `data` declarations' content. The ship service keeps every shipped
   schema (this is the uniquely-Tao move: **schema history is a ship artifact**, so `tao ship`
-  always holds both shapes and can classify the diff *before anything reaches a user*).
+  always holds both shapes and can classify the diff _before anything reaches a user_).
   Additive-compatible changes — new entity; new field with a derivable default (optional,
   defaulted, or case-with-none) — migrate mechanically: fill on read, write back upgraded.
   Anything else is refused at ship time until the developer says what it means. The lenient
@@ -339,7 +339,7 @@ Any answer must play in three places at once:
   }
   ```
 
-  Checked at ship time against the *actual* previous shipped schema (not a guessed one — the
+  Checked at ship time against the _actual_ previous shipped schema (not a guessed one — the
   service has it), chainable across skipped versions, testable with the scenario machinery
   against captured fixtures from the old shape. The design bar: a migration is a total,
   deterministic, store-only function of the old row — no I/O, no model calls, so it can run
@@ -361,7 +361,7 @@ Any answer must play in three places at once:
   zero-downtime services: ship shapes that read both, contract later. Maximum availability,
   maximum ceremony — it forces every developer to think in three-phase deploys, which is
   precisely the class of burden Tao exists to delete. Recorded as the escape hatch for the
-  hosted service's *own* internals, not as the developer surface.
+  hosted service's _own_ internals, not as the developer surface.
 
 - **The fleet gate (orthogonal, required by O3/O4).** The schema fingerprint becomes a sync
   gate the way the runtime fingerprint gates OTA: the store carries its shape's version; a
@@ -392,13 +392,13 @@ vocabulary and the capture machinery already exist; ship adds transport, storage
 - **A capture bundle is the existing Studio capture, produced in the field**: the datasource
   snapshots (the only implemented capture domain, extended per the error architecture),
   persisted state, nav state, the action log, and environment values — exactly the ingredients
-  Studio already replays as fixture + scenario. A production error report is therefore *a
-  reproducible test case*, not a stack trace: opened in Studio, it becomes a named state and a
+  Studio already replays as fixture + scenario. A production error report is therefore _a
+  reproducible test case_, not a stack trace: opened in Studio, it becomes a named state and a
   failing scenario.
 - **Structural exclusions, not scrubbing lists**: `secret`-typed values never serialize into a
   capture (the same language-level guarantee that keeps them out of prompts); credentials are
   excluded by construction because the capture domains simply do not include a credential
-  store. Reports carry account *identity* (whose session) because replay and support need it —
+  store. Reports carry account _identity_ (whose session) because replay and support need it —
   identity is data the app already holds; credentials are not.
 - **Scrubbing defaults for the rest**: user-content fields are the app's actual data, and a
   full-snapshot capture of them is radioactive. Default posture to settle in dialogue —
@@ -427,7 +427,7 @@ funnel diagram. The hosted runtime counts them.
   error section wants).
 - Open: whether analytics is on-by-default-anonymous or opt-in like reports; app-store privacy
   ("nutrition label") declarations are themselves derivable from these choices — a genuinely
-  novel derivation (the compiler can *prove* what the app collects).
+  novel derivation (the compiler can _prove_ what the app collects).
 
 ## The commercial shape
 
@@ -446,10 +446,10 @@ What people pay for, and why it is defensible:
      without ever seeing four consoles," priced above the passed-through EAS costs.
 - **Tenancy**: the `project id` is the tenant key (already decided as the stable identity that
   "travels with clones and published artifacts", with `--replace` as the explicit fork/sever
-  operation); variants are environments *within* a project's tenancy; a Tao account owns
+  operation); variants are environments _within_ a project's tenancy; a Tao account owns
   projects. Per-app auth (recommended above) keeps end-user accounts inside the app's tenancy.
 - **The moat is derivation, not hosting.** Hosting is commodity; what Firebase/Vercel/Supabase
-  cannot do is *see the app*: derived rules that cannot drift from `validate`, OTA gated by a
+  cannot do is _see the app_: derived rules that cannot drift from `validate`, OTA gated by a
   schema the platform actually understands, migration checked against held history, analytics
   with a compiler-proven privacy label, error reports that replay as test cases. Every paid
   feature above is a compiler feature wearing a service; that is the pitch and the defense.
@@ -468,8 +468,8 @@ The acceptance narrative for the whole program, in the canonical app:
 3. **A `data` field addition that loses no one's document.** Add `Starred boolean` to
    `Documents`; ship an update. The schema gate classifies it additive; devices upgrade their
    envelope on load; the hosted snapshot upgrades once; a teammate's un-updated phone is gated
-   honestly rather than overwriting. Every document survives. *(Acts 1–2 need no migration
-   machinery; act 3 is the migration program's first proof.)*
+   honestly rather than overwriting. Every document survives. _(Acts 1–2 need no migration
+   machinery; act 3 is the migration program's first proof.)_
 
 Per the tranche rule — a capability exists only if a real feature in one of the four apps
 forces it — WordFlower's `2 - Next` tier grows the ship-forcing features as slices land.
