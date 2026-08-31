@@ -26,7 +26,6 @@ Describe('TR adaptive layout', () => {
     Expect(layout.entries).toEqual([['width', 'max', 720]])
     Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'row' })).toEqual({
       maxWidth: 720,
-      width: '100%',
     })
   })
 
@@ -98,9 +97,28 @@ Describe('TR adaptive layout', () => {
   Test('composes a width maximum with bare fill in either source order', () => {
     const fillThenMaximum = TR.Layout.create([['fill'], ['width', 'max', 720]])
     const maximumThenFill = TR.Layout.create([['width', 'max', 720], ['fill']])
-    const expected = { alignSelf: 'stretch', flexGrow: 1, maxWidth: 720, width: '100%' }
+    const expected = { alignSelf: 'stretch', flexGrow: 1, maxWidth: 720 }
 
     Expect(TR.Layout.resolve({ entries: fillThenMaximum.entries, parentDirection: 'row' })).toEqual(expected)
     Expect(TR.Layout.resolve({ entries: maximumThenFill.entries, parentDirection: 'row' })).toEqual(expected)
+  })
+
+  Test('caps row claims without turning each sibling into a full-row width', () => {
+    const layout = TR.Layout.create([['claim', 2], ['width', 'max', 720]])
+
+    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'row' })).toEqual({
+      flexGrow: 2,
+      maxWidth: 720,
+    })
+  })
+
+  Test('keeps a centered column fluid across its parent cross axis up to the maximum', () => {
+    const layout = TR.Layout.create([['width', 'max', 720], ['centered']])
+
+    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'column' })).toEqual({
+      alignSelf: 'center',
+      maxWidth: 720,
+      width: '100%',
+    })
   })
 })

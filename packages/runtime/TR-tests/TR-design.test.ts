@@ -31,7 +31,6 @@ Describe('TR design runtime', () => {
       justifyContent: 'flex-start',
       maxWidth: 720,
       padding: 16,
-      width: '100%',
     })
   })
 
@@ -106,7 +105,6 @@ Describe('TR design runtime', () => {
       paddingLeft: 4,
       paddingRight: 8,
       paddingTop: 8,
-      width: '100%',
     })
   })
 

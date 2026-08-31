@@ -10,6 +10,8 @@ type TaoButtonProps = TaoViewProps & {
   action?: {
     invoke(): unknown
   }
+  /** defaultStyle is component chrome applied below mounted design and render-site overrides. */
+  defaultStyle?: TaoResolvedLayoutStyle
   disabled?: boolean
   title: string
 }
@@ -52,6 +54,7 @@ type TaoTextInputProps = TaoViewProps & {
 type TaoPrimitiveKind = 'Image' | 'Pressable' | 'Spinner' | 'Text' | 'View'
 
 type TaoPrimitiveElementProps = {
+  readonly defaultStyle?: TaoResolvedLayoutStyle
   readonly kind: TaoPrimitiveKind
   readonly nativePropOverrides?: Record<string, unknown>
   readonly pressableTitle?: string
@@ -95,6 +98,7 @@ export const Views = {
 
   Pressable(props: TaoButtonProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     return React.createElement(TaoPrimitiveElement, {
+      defaultStyle: props.defaultStyle,
       kind: 'Pressable',
       nativePropOverrides: {
         onPress: () => props.disabled === true ? undefined : props.action?.invoke(),
@@ -426,6 +430,9 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
     ...TaoPropsControls.nativePropsWithStyle(merged),
     ...props.nativePropOverrides,
   }
+  if (props.defaultStyle !== undefined) {
+    elementProps['style'] = [props.defaultStyle, elementProps['style']]
+  }
   const elementChildren = nativeChildren(runtime, props, merged.children, merged.props?.style)
   const providedChildren = props.providesParentDirection
     ? ParentDirectionContext.childrenForLayoutParent(elementChildren, elementProps['style'])
@@ -456,7 +463,12 @@ function nativeChildren(
 ): React.ReactNode {
   return props.pressableTitle === undefined
     ? children
-    : createReactElement(runtime, runtime.Text, { style: textStyle(style) }, props.pressableTitle)
+    : createReactElement(
+      runtime,
+      runtime.Text,
+      { style: [textStyle(props.defaultStyle), textStyle(style)] },
+      props.pressableTitle,
+    )
 }
 
 function withoutVisualStyle(merged: MergedTaoViewProps): MergedTaoViewProps {

@@ -70,6 +70,9 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
   }
 
   override componentDidCatch(_error: unknown, info: React.ErrorInfo): void {
+    // A boundary may remain mounted while its generated frame/state key changes. Resolve diagnostics
+    // for each newly caught failure so the report never reuses metadata from an earlier render.
+    this.#resolvedDiagnostics = undefined
     this.#bareComponentStack = info.componentStack ?? undefined
   }
 

@@ -182,6 +182,38 @@ Describe('TR.Views explicit visual props', () => {
     })
   })
 
+  Test('keeps usable pressable defaults below mounted design overrides', () => {
+    const defaults = renderRuntimeElement(TR.Views.Pressable({
+      action: { invoke: () => undefined },
+      defaultStyle: { backgroundColor: '#2f6b4f', borderRadius: 8, color: '#ffffff' },
+      title: 'Save',
+    }))
+    const app = styledElementApp('Buttons', {
+      FormButton: TR.Design.Spec([['bg', 'accent'], ['radius', 12]]),
+    }, { accent: '#1f4f8f' })
+    const button = renderRuntimeElement(TR.Views.Pressable({
+      __tao: { app, designDefault: 'FormButton' },
+      action: { invoke: () => undefined },
+      defaultStyle: { backgroundColor: '#2f6b4f', borderRadius: 8, color: '#ffffff' },
+      title: 'Save',
+    }))
+    const defaultTitle = defaults.props['children'] as RuntimeElement
+    const themedTitle = button.props['children'] as RuntimeElement
+
+    Expect(flattenStyle(defaults.props['style'])).toMatchObject({
+      backgroundColor: '#2f6b4f',
+      borderRadius: 8,
+      color: '#ffffff',
+    })
+    Expect(flattenStyle(defaultTitle.props['style'])).toMatchObject({ color: '#ffffff' })
+    Expect(flattenStyle(button.props['style'])).toMatchObject({
+      backgroundColor: '#1f4f8f',
+      borderRadius: 12,
+      color: '#ffffff',
+    })
+    Expect(flattenStyle(themedTitle.props['style'])).toMatchObject({ color: '#ffffff' })
+  })
+
   Test('applies mounted input colors to the field instead of painting its layout wrapper', () => {
     const app = styledElementApp('Dark', {
       TextInput: TR.Design.Spec([

@@ -23,6 +23,11 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
           tag: Tag,
           title: Submitting ? 'Saving…' : Title,
           action: Press,
+          defaultStyle: {
+            backgroundColor: effectiveDisabled ? '#9aa49d' : '#2f6b4f',
+            borderRadius: 8,
+            color: '#ffffff',
+          },
           disabled: effectiveDisabled,
         },
         {
