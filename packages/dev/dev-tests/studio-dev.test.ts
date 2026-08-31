@@ -72,7 +72,12 @@ Describe('Studio native wrapper foundation', () => {
     const path = FS.resolvePath('studio.js', root)
     try {
       await StudioNative.testing.stageStudioClientBundle(path)
-      Expect((await FS.readText(path)).length).toBeGreaterThan(1_000)
+      const source = await FS.readText(path)
+      Expect(source.length).toBeGreaterThan(1_000)
+      Expect(source).toContain('Loading Studio files')
+      Expect(source).toContain('tao-studio-product-host')
+      Expect(source).toContain('/api/data/fill')
+      Expect(source).not.toContain('sourceMappingURL=data:')
     } finally {
       await FS.remove(root)
     }

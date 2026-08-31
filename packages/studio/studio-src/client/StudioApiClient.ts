@@ -119,6 +119,14 @@ export type StudioSessionTransition = Readonly<{
   url: string
 }>
 
+export class StudioApiError extends Error {
+  override readonly name = 'StudioApiError'
+
+  constructor(message: string, readonly status: number) {
+    super(message)
+  }
+}
+
 /** Typed boundary around Studio's HTTP and WebSocket endpoints. */
 export const StudioApiClient = {
   captureFixture: async <Result>(body: unknown): Promise<Result> => await request('/api/source-action', body),
@@ -199,7 +207,7 @@ async function response<Result>(value: Response): Promise<Result> {
   const body = await value.json() as Result | { error?: string }
   if (!value.ok) {
     const message = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined
-    throw new Error(message ?? `Tao Studio request failed (${value.status}).`)
+    throw new StudioApiError(message ?? `Tao Studio request failed (${value.status}).`, value.status)
   }
   return body as Result
 }

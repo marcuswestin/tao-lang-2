@@ -1,7 +1,7 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Expect, Test } from '@shared/test'
-import { StudioApiRoutes, type StudioHandshake } from '../studio-src/client/StudioApiClient'
+import { StudioApiError, StudioApiRoutes, type StudioHandshake } from '../studio-src/client/StudioApiClient'
 import { StudioDataFillCoordinator } from '../studio-src/client/StudioApp'
 import { StudioEditorTabs } from '../studio-src/client/StudioEditorTabs'
 import {
@@ -25,7 +25,7 @@ import {
   StudioProductCapabilities,
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
-import { StudioPaneSizes } from '../studio-src/client/StudioShell'
+import { StudioPaneSizes, studioShellMarkup, studioShellRailPanels } from '../studio-src/client/StudioShell'
 import {
   StudioCodeEditor,
   StudioDiagnosticNavigation,
@@ -40,11 +40,17 @@ import {
 } from '../studio-src/StudioDraftSync'
 import { StudioInspector } from '../studio-src/StudioInspector'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
+import {
+  registerStudioProductHostActions,
+  requestStudioProductHostCreateFile,
+  requestStudioProductHostOpenFile,
+  validStudioProductHostPath,
+} from '../studio-src/StudioProductHostProtocol'
 import { studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
 import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
-  const bundle = await StudioClientAssets.bundle()
+  const bundle = await StudioClientAssets.bundle({ validationMode: 'release' })
   const html = StudioClientAssets.html({
     previewUrl: 'http://127.0.0.1:55102/?value=</script><script>bad()</script>',
   })
@@ -59,7 +65,9 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('/api/file/delete')
   Expect(bundle).toContain('New Tao file')
   Expect(bundle).toContain('/api/source-action/undo')
-  Expect(bundle).not.toContain('/api/data/fill')
+  Expect(bundle).toContain('/api/data/fill')
+  Expect(bundle).toContain('Loading Studio files')
+  Expect(bundle).toContain('tao-studio-product-host')
   Expect(bundle).toContain('/api/tests/status')
   Expect(bundle).toContain('/api/tests/run')
   Expect(bundle).toContain('capture-runtime')
@@ -104,31 +112,58 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('taoStudioSessionId')
   Expect(bundle).not.toContain('taoStudioArgs')
   Expect(bundle).not.toContain('taoStudioState')
+  Expect(bundle).not.toContain('sourceMappingURL=data:')
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
   Expect(html).toContain('\\u003c/script>')
 })
 
 Test('Studio browser assets bundle one CodeMirror view singleton', async () => {
-  const inputs = await StudioClientAssets.testing.moduleInputs()
+  const inputs = await StudioClientAssets.testing.moduleInputs('release')
   const viewModules = inputs.filter(path =>
     path.includes('@codemirror+view@') && path.endsWith('/@codemirror/view/dist/index.js')
   )
 
   Expect(viewModules).toHaveLength(1)
-  Expect(inputs.filter(path => path.includes('/studio-src/client/')).map(path => path.split('/').at(-1)).sort())
-    .toEqual([
-      'StudioApiClient.ts',
-      'StudioApp.ts',
-      'StudioEditor.ts',
-      'StudioEditorTabs.ts',
-      'StudioFileTree.ts',
-      'StudioMatrixView.ts',
-      'StudioProductPanels.ts',
-      'StudioRailPanels.ts',
-      'StudioShell.ts',
-      'StudioVisualEditing.ts',
-    ])
+  Expect(inputs.some(path => path.endsWith('/studio-src/TaoStudioBrowser.tsx'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/_gen_tao-app/App.tsx'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/TaoStudioProductHost.tsx'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/client/StudioApp.ts'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/client/StudioFileTree.ts'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/studio-src/StudioClient.ts'))).toBe(false)
+})
+
+Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and preserves Conflict failures', async () => {
+  const calls: string[] = []
+  const earlyOpen = requestStudioProductHostOpenFile('Queued.tao')
+  const unregister = registerStudioProductHostActions({
+    async createFile(path) {
+      calls.push(`create:${path}`)
+      throw new StudioApiError('server conflict', 409)
+    },
+    async deleteFile(path, sourceVersion) {
+      calls.push(`delete:${path}:${sourceVersion}`)
+    },
+    async openFile(path) {
+      calls.push(`open:${path}`)
+    },
+    async renameFile(path, sourceVersion, targetPath) {
+      calls.push(`rename:${path}:${sourceVersion}:${targetPath}`)
+    },
+  })
+  try {
+    await earlyOpen
+    await Expect(requestStudioProductHostCreateFile('Conflict.tao')).rejects.toMatchObject({
+      caseName: 'Conflict',
+      message: 'This file changed under this edit.',
+    })
+    Expect(calls).toEqual(['open:Queued.tao', 'create:Conflict.tao'])
+    Expect(validStudioProductHostPath('Folder/File.tao')).toBe(true)
+    Expect(validStudioProductHostPath('Folder\\File.tao')).toBe(false)
+    await Expect(requestStudioProductHostOpenFile('../Outside.tao')).rejects.toThrow('project-relative Tao')
+  } finally {
+    unregister()
+  }
 })
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
@@ -145,6 +180,23 @@ Test('Studio pane sizes load safe defaults and persist all divider dimensions', 
   Expect(stored).toBe('{"bottom":164,"left":244,"right":320}')
   stored = '{"left":"wide","right":null}'
   Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 180, left: 260, right: 280 })
+})
+
+Test('Embedded Studio keeps one Files portal target and every contextual rail panel', () => {
+  const markup = studioShellMarkup({ embedded: true })
+  Expect(studioShellRailPanels.map(item => item.panel)).toEqual([
+    'files',
+    'components',
+    'screens',
+    'tokens',
+    'data',
+    'search',
+  ])
+  Expect(markup.match(/class="studio-files"/g)).toHaveLength(1)
+  for (const item of studioShellRailPanels) {
+    Expect(markup).toContain(`data-panel="${item.panel}"`)
+  }
+  Expect(markup).toContain('studio-shell studio-shell--embedded')
 })
 
 Test('Studio editor tabs restore only available Tao paths and persist active order safely', () => {

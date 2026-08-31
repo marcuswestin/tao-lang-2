@@ -9,5 +9,5 @@ export {
 } from './client/StudioEditor'
 
 if (typeof document !== 'undefined') {
-  void mountStudio()
+  void mountStudio().catch(error => console.error('Could not mount Tao Studio.', error))
 }

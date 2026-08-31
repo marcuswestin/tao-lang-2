@@ -2,25 +2,16 @@
 // the live StudioServer datasource. The production multi-pane shell and selection protocols remain
 // TypeScript-owned; EditorBoundary is the compiled foreign-editor contract they can adopt next.
 use CodeEditor from @tao/code-editor
-use SplitNav from @tao/nav
+use StackNav from @tao/nav
 use Col, FormButton, Row, Text, TextInput from @tao/ui
 
 // File contents remain editor buffers and never appear in Files or any related entity.
 app TaoStudioFiles {
    Name "Tao Studio Files"
    Design StudioDesign
-   state FilesWidth is number = 280 (persist)
-   Navigator SplitNav {
-      @files {
-         Content FilesPanel
-         Width FilesWidth
-         Resizable true
-      }
-      @main {
-         Content ProductHostBoundary
-         Width 800
-         Resizable true
-   }  }
+   Navigator StackNav {
+      Initial StudioRoot
+   }
    Datasource StudioServer { }
 }
 
@@ -96,11 +87,13 @@ action ApplySourceAction(Envelope text) fails Conflict "This file changed under 
 
 action UndoSourceAction(Envelope text) from ./TaoStudioServerActions.ts
 
-action CreateFile(Path text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+action CreateFile(Path text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
-action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
-action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
+
+action OpenFile(Path text) from ./TaoStudioProductHost.tsx
 
 view FilesPanel() {
    Title "Files"
@@ -163,7 +156,9 @@ view FileRow(File) {
    }
    render Col() {
       Row() {
-         Text(File.Name)
+         FormButton(File.Name) {
+            on press -> { do OpenFile(File.Path) }
+         }
          when File.Dirty {
             true -> { Text("●") }
             otherwise -> { }
@@ -202,7 +197,10 @@ view EditorBoundary(File, Content text) {
    render CodeEditor(Content, Change)
 }
 
-view ProductHostBoundary() {
-   render Col() {
-      Text("Canvas, editor, inspector, and scenario controls remain hosted by the product shell.")
+view StudioRoot() {
+   Title "Tao Studio"
+   render ProductHostBoundary() {
+      FilesPanel()
 }  }
+
+view ProductHostBoundary() accepts content from ./TaoStudioProductHost.tsx

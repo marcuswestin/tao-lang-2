@@ -8,6 +8,9 @@ import {
   studioPaletteComponents,
 } from '../StudioInspector'
 import type { StudioPreviewManifestV2 } from '../StudioPreviewManifest'
+import {
+  registerStudioProductHostActions,
+} from '../StudioProductHostProtocol'
 import type { StudioDesignValue } from '../StudioProjectSession'
 import {
   type StudioCanonicalSourceAction,
@@ -125,14 +128,16 @@ export class StudioDataFillCoordinator {
   }
 }
 
-export async function mountStudio(): Promise<void> {
-  const root = document.querySelector<HTMLElement>('#tao-studio-root')
+export type StudioMountOptions = Readonly<{ embedded?: boolean; root?: HTMLElement }>
+
+export async function mountStudio(options: StudioMountOptions = {}): Promise<() => void> {
+  const root = options.root ?? document.querySelector<HTMLElement>('#tao-studio-root')
   if (root === null) {
     throw new Error('Tao Studio root is missing.')
   }
 
   const config = window.TaoStudioConfig ?? {}
-  const view = createStudioShell(root, config)
+  const view = createStudioShell(root, config, { embedded: options.embedded })
   try {
     const handshake = await StudioApiClient.handshake()
     view.project.textContent = `${handshake.identity.appName} — ${handshake.identity.project}`
@@ -1161,6 +1166,7 @@ export async function mountStudio(): Promise<void> {
       },
       prepareMutation: prepareFileMutation,
       protectedPath: handshake.entryPath,
+      renderDom: options.embedded !== true,
     })
     configureProjectAndAppPickers()
     const restoredTabs = editorTabs.snapshot()
@@ -1171,7 +1177,7 @@ export async function mountStudio(): Promise<void> {
     if (restoredTabs.activePath !== undefined && restoredTabs.activePath !== activePath) {
       await openFile(restoredTabs.activePath)
     }
-    connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
+    const disconnectEvents = connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
       onCompile(state) {
         compileState = state
         renderDrawer()
@@ -1240,8 +1246,9 @@ export async function mountStudio(): Promise<void> {
         view.status.textContent = 'Reloading preview…'
       }
     })
+    let previewMessageListener: ((event: MessageEvent) => void) | undefined
     if (previews.length > 0) {
-      window.addEventListener('message', event => {
+      previewMessageListener = event => {
         const connection = previews.find(candidate => candidate.iframe.contentWindow === event.source)
         if (connection === undefined) {
           return
@@ -1262,7 +1269,8 @@ export async function mountStudio(): Promise<void> {
             void inspectSelection(selection)
           },
         })
-      })
+      }
+      window.addEventListener('message', previewMessageListener)
     }
     function commandItems(): readonly StudioCommandItem[] {
       return StudioCommandPalette.items({
@@ -1335,15 +1343,45 @@ export async function mountStudio(): Promise<void> {
         view.commandResults.querySelector<HTMLButtonElement>('button')?.click()
       }
     })
-    window.addEventListener('keydown', event => {
+    const keydownListener = (event: KeyboardEvent): void => {
       if (event.metaKey && event.key.toLocaleLowerCase() === 'k') {
         event.preventDefault()
         toggleCommands()
       } else if (event.key === 'Escape' && !view.commandOverlay.hidden) {
         closeCommands()
       }
+    }
+    window.addEventListener('keydown', keydownListener)
+    const unregisterProductHost = registerStudioProductHostActions({
+      async createFile(path) {
+        await fileTree!.create(path)
+      },
+      async deleteFile(path, sourceVersion) {
+        await fileTree!.delete(path, sourceVersion)
+      },
+      async openFile(path) {
+        if (!projectFiles.some(file => file.path === path)) {
+          throw new Error(`Tao Studio file is no longer available: ${path}`)
+        }
+        await openFile(path)
+      },
+      async renameFile(path, sourceVersion, targetPath) {
+        await fileTree!.rename(path, sourceVersion, targetPath)
+      },
     })
-    window.addEventListener('beforeunload', () => {
+    let disposed = false
+    const cleanup = (): void => {
+      if (disposed) {
+        return
+      }
+      disposed = true
+      unregisterProductHost()
+      disconnectEvents()
+      window.removeEventListener('keydown', keydownListener)
+      window.removeEventListener('beforeunload', cleanup)
+      if (previewMessageListener !== undefined) {
+        window.removeEventListener('message', previewMessageListener)
+      }
       clearTimeout(highlightTimer)
       clearTimeout(searchTimer)
       if (dataTimer !== undefined) {
@@ -1353,10 +1391,13 @@ export async function mountStudio(): Promise<void> {
         tab.editor.destroy()
       }
       languageClient.disconnect()
-    })
+    }
+    window.addEventListener('beforeunload', cleanup)
+    return cleanup
   } catch (error) {
     view.status.dataset['state'] = 'error'
     view.status.textContent = error instanceof Error ? error.message : String(error)
+    throw error
   }
 }
 
@@ -1369,33 +1410,47 @@ function connectEvents(
     onFiles: (files: readonly StudioFile[]) => void
     onManifest: (manifest: StudioPreviewManifestV2) => void
   },
-): WebSocket {
-  return StudioApiClient.connectEvents({
-    onConnect() {
-      status.dataset['state'] = 'idle'
-      status.textContent = 'Studio server connected; synchronizing…'
-    },
-    onCompile: state => {
-      updateStatus(status, state, openDiagnostic)
-      handlers.onCompile(state)
-    },
-    onDisconnect() {
-      status.dataset['state'] = 'error'
-      status.textContent = 'Studio server disconnected; reconnecting…'
-      setTimeout(() => connectEvents(status, openDiagnostic, handlers), 500)
-    },
-    onFile: handlers.onFile,
-    onFiles: handlers.onFiles,
-    onHandshake(handshake) {
-      updateStatus(status, handshake.compile, openDiagnostic)
-      handlers.onCompile(handshake.compile)
-      handlers.onFiles(handshake.files)
-      if (handshake.previewManifest !== undefined) {
-        handlers.onManifest(handshake.previewManifest)
-      }
-    },
-    onManifest: handlers.onManifest,
-  })
+): () => void {
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  let socket: WebSocket | undefined
+  let stopped = false
+  const connect = (): void => {
+    socket = StudioApiClient.connectEvents({
+      onConnect() {
+        status.dataset['state'] = 'idle'
+        status.textContent = 'Studio server connected; synchronizing…'
+      },
+      onCompile: state => {
+        updateStatus(status, state, openDiagnostic)
+        handlers.onCompile(state)
+      },
+      onDisconnect() {
+        if (stopped) {
+          return
+        }
+        status.dataset['state'] = 'error'
+        status.textContent = 'Studio server disconnected; reconnecting…'
+        reconnectTimer = setTimeout(connect, 500)
+      },
+      onFile: handlers.onFile,
+      onFiles: handlers.onFiles,
+      onHandshake(handshake) {
+        updateStatus(status, handshake.compile, openDiagnostic)
+        handlers.onCompile(handshake.compile)
+        handlers.onFiles(handshake.files)
+        if (handshake.previewManifest !== undefined) {
+          handlers.onManifest(handshake.previewManifest)
+        }
+      },
+      onManifest: handlers.onManifest,
+    })
+  }
+  connect()
+  return () => {
+    stopped = true
+    clearTimeout(reconnectTimer)
+    socket?.close()
+  }
 }
 
 function updateStatus(

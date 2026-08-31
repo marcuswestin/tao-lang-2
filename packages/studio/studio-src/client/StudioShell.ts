@@ -30,10 +30,21 @@ export type StudioClientView = {
   status: HTMLElement
 }
 
+export type StudioShellOptions = Readonly<{ embedded?: boolean }>
+
 type PaneName = 'bottom' | 'left' | 'right'
 
 const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 260, right: 280 }
 const paneStorageKey = 'tao-studio:pane-sizes:v2'
+
+export const studioShellRailPanels = [
+  { icon: 'F', label: 'Files', panel: 'files' },
+  { icon: 'C', label: 'Components', panel: 'components' },
+  { icon: 'S', label: 'Screens', panel: 'screens' },
+  { icon: 'T', label: 'Design tokens', panel: 'tokens' },
+  { icon: 'D', label: 'Data', panel: 'data' },
+  { icon: '⌕', label: 'Search', panel: 'search' },
+] as const
 
 export const StudioPaneSizes = {
   load(storage: Pick<Storage, 'getItem'>): Record<PaneName, number> {
@@ -53,9 +64,10 @@ export const StudioPaneSizes = {
   },
 } as const
 
-export function createStudioShell(root: HTMLElement, config: StudioClientConfig): StudioClientView {
-  root.innerHTML = `
-    <section class="studio-shell">
+export function studioShellMarkup(options: StudioShellOptions = {}): string {
+  const embedded = options.embedded === true
+  return `
+    <section class="studio-shell${embedded ? ' studio-shell--embedded' : ''}">
       <header class="studio-toolbar">
         <span class="studio-wordmark">Tao Studio</span>
         <button class="studio-project studio-picker" type="button" title="Project picker"></button>
@@ -72,12 +84,7 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
       </header>
       <section class="studio-body">
         <nav class="studio-rail" aria-label="Studio panels">
-          ${railButton('files', 'Files', 'F')}
-          ${railButton('components', 'Components', 'C')}
-          ${railButton('screens', 'Screens', 'S')}
-          ${railButton('tokens', 'Design tokens', 'T')}
-          ${railButton('data', 'Data', 'D')}
-          ${railButton('search', 'Search', '⌕')}
+          ${studioShellRailPanels.map(item => railButton(item.panel, item.label, item.icon)).join('')}
         </nav>
         <aside class="studio-sidebar studio-pane-left">
           <header class="studio-pane-header"><strong>Files</strong><button class="studio-collapse-left" type="button" aria-label="Collapse left panel">‹</button></header>
@@ -126,6 +133,14 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
       </section>
     </section>
   `
+}
+
+export function createStudioShell(
+  root: HTMLElement,
+  config: StudioClientConfig,
+  options: StudioShellOptions = {},
+): StudioClientView {
+  root.innerHTML = studioShellMarkup(options)
   const preview = requiredElement(root, '.studio-preview')
   preview.innerHTML = config.previewUrl === undefined
     ? '<div class="studio-empty">Preview host is not connected.</div>'

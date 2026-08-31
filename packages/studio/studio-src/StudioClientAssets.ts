@@ -1,11 +1,16 @@
+import Runtime from '@runtime-toolchain'
 import { FS } from '@shared'
+import { existsSync } from 'node:fs'
 
 export type StudioClientConfig = {
   previewUrl?: string
 }
 
-let clientBundle: Promise<string> | undefined
-let clientModuleInputs: readonly string[] = []
+export type StudioClientBundleMode = 'development' | 'release'
+
+const clientBundles = new Map<StudioClientBundleMode, Promise<string>>()
+let prebuiltClientBundle: string | undefined
+const clientModuleInputs = new Map<StudioClientBundleMode, readonly string[]>()
 
 /** StudioClientAssets builds and serves the browser Studio shell from its typed source. */
 export const StudioClientAssets = {
@@ -18,14 +23,22 @@ export const StudioClientAssets = {
   },
 } as const
 
-async function bundle(): Promise<string> {
-  clientBundle ??= buildClientBundle()
+async function bundle(options: { validationMode?: StudioClientBundleMode } = {}): Promise<string> {
+  if (prebuiltClientBundle !== undefined) {
+    return prebuiltClientBundle
+  }
+  const validationMode = options.validationMode ?? 'development'
+  let clientBundle = clientBundles.get(validationMode)
+  if (clientBundle === undefined) {
+    clientBundle = buildClientBundle(validationMode)
+    clientBundles.set(validationMode, clientBundle)
+  }
   return await clientBundle
 }
 
-async function moduleInputs(): Promise<readonly string[]> {
-  await bundle()
-  return clientModuleInputs
+async function moduleInputs(validationMode: StudioClientBundleMode = 'development'): Promise<readonly string[]> {
+  await bundle({ validationMode })
+  return clientModuleInputs.get(validationMode) ?? []
 }
 
 /** usePrebuiltBundle installs the browser artifact shipped by a packaged Studio application. */
@@ -33,13 +46,14 @@ function usePrebuiltBundle(source: string): void {
   if (source.trim() === '') {
     throw new Error('The packaged Tao Studio browser bundle is empty.')
   }
-  clientBundle = Promise.resolve(source)
-  clientModuleInputs = []
+  prebuiltClientBundle = source
+  clientModuleInputs.clear()
 }
 
 function resetBundle(): void {
-  clientBundle = undefined
-  clientModuleInputs = []
+  prebuiltClientBundle = undefined
+  clientBundles.clear()
+  clientModuleInputs.clear()
 }
 
 function html(config: StudioClientConfig): string {
@@ -62,7 +76,39 @@ function html(config: StudioClientConfig): string {
 `
 }
 
-async function buildClientBundle(): Promise<string> {
+async function buildClientBundle(validationMode: StudioClientBundleMode): Promise<string> {
+  const generatedRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-browser-', FS.tmpdir()))
+  let generated: Awaited<ReturnType<typeof Runtime.generateApp>>
+  try {
+    generated = await Runtime.generateApp(FS.resolvePath('TaoStudioClient.tao', import.meta.dir), {
+      appName: 'TaoStudioFiles',
+      runtimePackageRoot: generatedRoot,
+      validationMode,
+    })
+  } catch (error) {
+    await FS.remove(generatedRoot)
+    if (validationMode === 'release') {
+      throw new Error('Could not compile the release Tao Studio browser client.', { cause: error })
+    }
+    console.error('Tao Studio client compilation failed; using the direct TypeScript development fallback.', error)
+    return await buildDirectClientBundle()
+  }
+  try {
+    const result = await Bun.build({
+      entrypoints: [FS.resolvePath('TaoStudioBrowser.tsx', import.meta.dir)],
+      metafile: true,
+      minify: validationMode === 'release',
+      plugins: [taoStudioBrowserPlugin(generated.outputPath)],
+      sourcemap: validationMode === 'development' ? 'inline' : 'none',
+      target: 'browser',
+    })
+    return await completedBundle(result, 'Tao-authored', validationMode)
+  } finally {
+    await FS.remove(generatedRoot)
+  }
+}
+
+async function buildDirectClientBundle(): Promise<string> {
   const result = await Bun.build({
     entrypoints: [FS.resolvePath('StudioClient.ts', import.meta.dir)],
     metafile: true,
@@ -70,16 +116,91 @@ async function buildClientBundle(): Promise<string> {
     sourcemap: 'inline',
     target: 'browser',
   })
+  return await completedBundle(result, 'direct TypeScript', 'development')
+}
+
+async function completedBundle(
+  result: Awaited<ReturnType<typeof Bun.build>>,
+  label: string,
+  validationMode: StudioClientBundleMode,
+): Promise<string> {
   if (!result.success) {
     const messages = result.logs.map(log => log.message).join('\n')
-    throw new Error(`Could not build the Tao Studio browser client.\n${messages}`)
+    throw new Error(`Could not build the ${label} Tao Studio browser client.\n${messages}`)
   }
-  clientModuleInputs = Object.keys(result.metafile?.inputs ?? {})
+  clientModuleInputs.set(validationMode, Object.keys(result.metafile?.inputs ?? {}))
   const output = result.outputs[0]
   if (output === undefined) {
     throw new Error('Tao Studio browser build produced no JavaScript output.')
   }
   return await output.text()
+}
+
+function taoStudioBrowserPlugin(generatedAppPath: string): Bun.BunPlugin {
+  const dependencyBase = FS.resolvePath('../../runtime-toolchain', import.meta.dir)
+  const studioBase = FS.resolvePath('..', import.meta.dir)
+  const generatedRoot = FS.dirname(generatedAppPath)
+  const optionalNativeModules = new Set([
+    '@expo/vector-icons/FontAwesome6',
+    '@react-native-community/datetimepicker',
+    '@react-native-community/slider',
+    '@react-native-picker/picker',
+    '@react-native-segmented-control/segmented-control',
+    'expo-clipboard',
+    'expo-haptics',
+    'react-native-screens',
+  ])
+  const workspaceDependencies = new Set(['react', 'react-dom', 'react-dom/client', 'react/jsx-dev-runtime'])
+  return {
+    name: 'tao-studio-browser',
+    setup(build) {
+      build.onResolve({ filter: /^tao-studio-generated-app$/ }, () => ({ path: generatedAppPath }))
+      build.onResolve({ filter: /^[^./]/ }, args => {
+        if (args.path.startsWith('node:')) {
+          return undefined
+        }
+        if (optionalNativeModules.has(args.path)) {
+          return { namespace: 'tao-studio-empty-native', path: args.path }
+        }
+        if (args.path === 'react-native-safe-area-context') {
+          return { namespace: 'tao-studio-safe-area', path: args.path }
+        }
+        if (args.path === 'react-native') {
+          return { path: resolveBrowserDependency('react-native-web') }
+        }
+        if (args.path === '@runtime/TR' || workspaceDependencies.has(args.path)) {
+          return { path: resolveBrowserDependency(args.path) }
+        }
+        return (args.importer.startsWith(generatedRoot) || args.importer.includes('/_gen_tao-app/'))
+          ? { path: resolveBrowserDependency(args.path) }
+          : undefined
+      })
+      build.onLoad({ filter: /.*/, namespace: 'tao-studio-empty-native' }, () => ({
+        contents: 'module.exports = {}',
+        loader: 'js',
+      }))
+      build.onLoad({ filter: /.*/, namespace: 'tao-studio-safe-area' }, () => ({
+        contents: `
+          import React from 'react'
+          export function SafeAreaProvider(props) { return React.createElement(React.Fragment, null, props.children) }
+          export function useSafeAreaInsets() { return { bottom: 0, left: 0, right: 0, top: 0 } }
+        `,
+        loader: 'js',
+      }))
+    },
+  }
+
+  function resolveBrowserDependency(name: string): string {
+    try {
+      const resolved = Bun.resolveSync(name, studioBase)
+      if (existsSync(resolved)) {
+        return resolved
+      }
+    } catch {
+      // The workspace install can lag a just-added explicit Studio dependency; use the pinned toolchain copy.
+    }
+    return Bun.resolveSync(name, dependencyBase)
+  }
 }
 
 const clientCss = `
@@ -91,6 +212,7 @@ const clientCss = `
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body, #tao-studio-root { width: 100%; height: 100%; margin: 0; }
+.tao-studio-product-host { height: 100%; min-height: 0; min-width: 0; width: 100%; }
 button { color: inherit; font: inherit; }
 .studio-shell { display: grid; grid-template-rows: 48px minmax(0, 1fr); height: 100%; }
 .studio-toolbar {

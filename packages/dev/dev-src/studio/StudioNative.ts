@@ -293,7 +293,7 @@ async function materializeStudioServicePayload(
 }
 
 async function stageStudioClientBundle(path: string): Promise<void> {
-  const source = await StudioClientAssets.bundle()
+  const source = await StudioClientAssets.bundle({ validationMode: 'release' })
   if (source.trim() === '') {
     throw new Errors.UnexpectedBehaviorError('Studio browser bundling produced an empty artifact.')
   }
