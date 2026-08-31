@@ -2,6 +2,7 @@ import { CLI, FS, Platform, Repo } from '@shared'
 import type { CheckStatus, DoctorCheck } from '../doctor/RepositoryDoctor'
 import { doctorReport, readDoctorFacts, worstStatus } from '../doctor/RepositoryDoctor'
 import { listLaunches } from './StudioLifecycle'
+import { readWatchFacts, studioWatchChecks, type WatchFacts } from './StudioWatchHealth'
 
 /**
  * Studio's own half of `doctor`. It layers on the repository checks rather than repeating them,
@@ -62,6 +63,7 @@ export type StudioDoctorFacts = {
   /** Diagnostics from the runtime dependency compatibility gate that concern React. */
   reactSingletonIssues: readonly string[]
   repositoryRoot: string
+  watch: WatchFacts
 }
 
 /** studioDoctorChecks diagnoses Studio from a gathered snapshot, without touching the machine. */
@@ -75,6 +77,7 @@ export function studioDoctorChecks(facts: StudioDoctorFacts): DoctorCheck[] {
     chromeCheck(facts),
     launchCheck(facts),
     legacyPortCheck(facts),
+    ...studioWatchChecks(facts.watch),
     releaseCheck(facts),
   ]
 }
@@ -184,7 +187,7 @@ function launchCheck(facts: StudioDoctorFacts): DoctorCheck {
     return {
       detail: `${unusable.length} launch manifest(s) cannot be acted on: ${unusable.join('; ')}`,
       name: 'studio launches',
-      remediation: 'Inspect them with: ./dev studio ps --json',
+      remediation: 'Inspect them with: ./dev studio-ps --json',
       status: 'warn',
     }
   }
@@ -192,7 +195,7 @@ function launchCheck(facts: StudioDoctorFacts): DoctorCheck {
     return {
       detail: `${live} live launch(es), ${stale} stale manifest(s)`,
       name: 'studio launches',
-      remediation: 'Clear the stale ones with: ./dev studio stop --all',
+      remediation: 'Clear the stale ones with: ./dev studio-stop --all',
       status: 'warn',
     }
   }
@@ -281,6 +284,7 @@ export async function readStudioDoctorFacts(repositoryRoot = Repo.getRoot()): Pr
       .filter(issue => issue.includes('react')),
     releaseHostConfigured: isHttpsUrl(Platform.runtimeProcess.env['TAO_STUDIO_RELEASE_BASE_URL']),
     repositoryRoot,
+    watch: await readWatchFacts(repositoryRoot, repositoryRoot),
   }
 }
 

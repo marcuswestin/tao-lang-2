@@ -10,7 +10,7 @@ import {
   stopLaunches,
 } from './StudioLifecycle'
 
-/** The `./dev studio ps|stop|doctor` entry points, kept thin over the lifecycle module. */
+/** The `./dev studio-ps`, `studio-stop`, and `studio-doctor` entry points, thin over the lifecycle module. */
 
 export type JsonOption = { json?: boolean }
 

@@ -216,7 +216,7 @@ async function finalizeManifest(stored: StoredLaunch, cleanup: StudioCleanupResu
     ...stored.manifest,
     cleanup,
     generation: stored.manifest.generation + 1,
-    shutdownReason: 'stopped by ./dev studio stop',
+    shutdownReason: 'stopped by ./dev studio-stop',
     state: 'stopped',
   })
 }
