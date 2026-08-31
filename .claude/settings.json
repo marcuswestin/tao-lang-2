@@ -73,6 +73,22 @@
         "*.anthropic.com",
         "*.openai.com"
       ]
+    },
+    "credentials": {
+      "files": [
+        {
+          "path": "~/.ssh",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.aws",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.config/gh",
+          "mode": "deny"
+        }
+      ]
     }
   }
 }

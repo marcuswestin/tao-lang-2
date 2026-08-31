@@ -24,7 +24,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. On a sandbox violation, retry the command unsandboxed rather than abandoning the task; never widen the policy to route around one.
 - Merging onto `main` stops for Ro. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service.
-- `.rulesync/permissions.jsonc` owns the shared rules; `./agent setup` generates `.claude/settings.json` from it. Edit the source, not the generated file. `.codex/config.toml` and `.cursor/permissions.json` are hand-maintained and must be updated in the same change.
+- `.rulesync/permissions.jsonc` owns the shared rules; `./agent setup` generates `.claude/settings.json` and `.codex/config.toml` from it. Edit the source, not the generated files. `.cursor/permissions.json` is hand-maintained and must be updated in the same change.
 
 ## Guidance
 
