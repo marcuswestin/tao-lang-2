@@ -151,12 +151,18 @@ function generationDeclaration(statement: AST.Statement): GenerationDeclaration[
   }
   if (AST.isTypeDeclaration(statement) && AST.isCaseSetTypeExpression(statement.type)) {
     return [{
-      cases: statement.type.cases.map(candidate => candidate.name ?? candidate.literal ?? ''),
+      cases: statement.type.cases.map(generationCaseName),
       kind: 'case',
       name: statement.name,
     }]
   }
   return []
+}
+
+function generationCaseName(candidate: AST.CaseSetCase): string {
+  const name = candidate.name ?? candidate.literal
+  Assert.defined(name, 'validated generation case has a name or literal')
+  return name
 }
 
 function generationField(field: AST.EntityDataField): GenerationField {

@@ -41,9 +41,13 @@ export class StudioFixtureGeneration {
     if (fixture === undefined) {
       throw new Errors.UserInputError(`Studio scenario fixture does not exist: ${scenario.fixtureId}`)
     }
+    const unsupportedClause = unsupportedFixtureClause(fixture.plan)
+    if (unsupportedClause !== undefined) {
+      return failed('validation_failed', unsupportedClause)
+    }
     const sourcePlan = studioFixturePlan(fixture.plan)
     if (sourcePlan.creates.length === 0) {
-      return failed('schema_mismatch', 'The scene fixture has no entity rows to generate.')
+      return failed('validation_failed', 'The scene fixture has no entity rows to generate.')
     }
 
     const declarations = new Map(
@@ -53,6 +57,7 @@ export class StudioFixtureGeneration {
     )
     const jobs: Array<{
       declaration: EntityGenerationDeclaration
+      fixedFields: Record<string, StudioFixtureValue>
       relationFields: Record<string, StudioFixtureValue>
       row: StudioFixturePlan['creates'][number]
     }> = []
@@ -61,8 +66,29 @@ export class StudioFixtureGeneration {
       if (declaration === undefined) {
         return failed('schema_mismatch', `The scene entity has no generation declaration: ${row.entity}`)
       }
+      const fixedFields: Record<string, StudioFixtureValue> = {}
       const relationFields: Record<string, StudioFixtureValue> = {}
       for (const field of declaration.fields) {
+        if (field.type.kind === 'scalar' && field.type.scalar === 'time') {
+          const templateValue = row.fields[field.name]
+          if (templateValue !== undefined) {
+            if (!isNow(templateValue)) {
+              return failed(
+                'validation_failed',
+                `The scene fixture time ${row.entity}.${field.name} must use Tao's executable now value.`,
+              )
+            }
+            fixedFields[field.name] = templateValue
+          } else if (isNow(field.defaultValue)) {
+            fixedFields[field.name] = field.defaultValue
+          } else if (!field.optional) {
+            return failed(
+              'validation_failed',
+              `The required time ${row.entity}.${field.name} needs a fixture now value or a now default.`,
+            )
+          }
+          continue
+        }
         if (field.type.kind !== 'relation' || field.type.inverse) {
           continue
         }
@@ -84,37 +110,48 @@ export class StudioFixtureGeneration {
         }
         relationFields[field.name] = templateValue
       }
-      jobs.push({ declaration, relationFields, row })
+      jobs.push({ declaration, fixedFields, relationFields, row })
     }
 
     const creates: Array<StudioFixturePlan['creates'][number]> = []
-    for (const { declaration, relationFields, row } of jobs) {
-      const compiled = compileGenerationSchema(declaration, {
+    for (const { declaration, fixedFields, relationFields, row } of jobs) {
+      const generationDeclaration = {
+        ...declaration,
+        fields: declaration.fields.filter(field => field.type.kind !== 'scalar' || field.type.scalar !== 'time'),
+      }
+      const compiled = compileGenerationSchema(generationDeclaration, {
         declarations: manifest.generationDeclarations,
       })
-      const run = generateValidated<JsonObject>({
-        guide: [
-          compiled.guide,
-          `Generate one realistic ${row.entity} row for the ${scenario.label} Studio scene.`,
-        ].filter(Boolean).join('\n'),
-        inputs: [{
-          name: 'scene',
-          value: { fixture: fixture.label, row: row.name, scenario: scenario.label },
-        }],
-        provider: this.provider,
-        schema: compiled.schema,
-      })
-      const [, result] = await Promise.all([consume(run.partials), run.final])
-      if (result.status === 'failure') {
-        return {
-          code: result.code,
-          error: result.message,
-          ...(result.issues === undefined ? {} : { issues: result.issues }),
-          status: 'failed',
+      let modelFields: Record<string, StudioFixtureValue> = {}
+      if (Object.keys(compiled.schema.properties ?? {}).length > 0) {
+        const run = generateValidated<JsonObject>({
+          guide: [
+            compiled.guide,
+            `Generate one realistic ${row.entity} row for the ${scenario.label} Studio scene.`,
+          ].filter(Boolean).join('\n'),
+          inputs: [{
+            name: 'scene',
+            value: { fixture: fixture.label, row: row.name, scenario: scenario.label },
+          }],
+          provider: this.provider,
+          schema: compiled.schema,
+        })
+        const [, result] = await Promise.all([consume(run.partials), run.final])
+        if (result.status === 'failure') {
+          return {
+            code: result.code,
+            error: result.message,
+            ...(result.issues === undefined ? {} : { issues: result.issues }),
+            status: 'failed',
+          }
         }
+        modelFields = studioFixtureFields(result.value, declaration.name)
       }
-      const modelFields = generatedStudioFixtureFields(result.value, declaration)
-      creates.push({ entity: row.entity, fields: { ...modelFields, ...relationFields }, name: row.name })
+      creates.push({
+        entity: row.entity,
+        fields: { ...modelFields, ...fixedFields, ...relationFields },
+        name: row.name,
+      })
     }
 
     return {
@@ -176,27 +213,27 @@ function studioFixtureFields(
   )
 }
 
-function generatedStudioFixtureFields(
-  value: Readonly<Record<string, unknown>>,
-  declaration: EntityGenerationDeclaration,
-): Record<string, StudioFixtureValue> {
-  const fields = studioFixtureFields(value, declaration.name)
-  for (const field of declaration.fields) {
-    if (
-      field.type.kind === 'scalar'
-      && field.type.scalar === 'time'
-      && typeof fields[field.name] === 'string'
-    ) {
-      // Tao's current executable time expression is `now`; it has no authored timestamp literal.
-      // The model's schema value still passes through validation before we lower it for fixture source.
-      fields[field.name] = { kind: 'now' }
-    }
-  }
-  return fields
-}
-
 function failed(code: GenerationFailure['code'], error: string): StudioFixtureGenerationResult {
   return { code, error, status: 'failed' }
+}
+
+function unsupportedFixtureClause(value: unknown): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value['creates'])) {
+    return undefined
+  }
+  for (const create of value['creates']) {
+    if (!isRecord(create)) {
+      continue
+    }
+    const row = typeof create['name'] === 'string' ? create['name'] : 'an unnamed row'
+    if (typeof create['account'] === 'string') {
+      return `Studio fixture generation cannot yet preserve the for-account binding on ${row}.`
+    }
+    if (create['through'] !== undefined) {
+      return `Studio fixture generation cannot yet preserve the through clause on ${row}.`
+    }
+  }
+  return undefined
 }
 
 async function consume(values: AsyncIterable<unknown>): Promise<void> {

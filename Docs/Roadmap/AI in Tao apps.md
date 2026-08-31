@@ -296,11 +296,14 @@ both halves of the story exist as maintained providers of it:
   `@meridius-labs/apple-on-device-ai` 1.6.2 loaded under Bun and reported Foundation Models
   available, but its guided `generateObject` path failed against a real WordFlower schema with
   `Failed to deserialize a Generable type from model output`. The replacement compiles with the
-  installed Xcode 26.6, binds an authenticated ephemeral localhost port, streams dynamic-schema
-  snapshots as NDJSON, and is supervised by the Studio developer process. The Studio preview
-  still speaks only HTTP to the Studio server, keeping model access webview-agnostic. No beta OS
-  or Xcode is required. Adopt Apple's `fm serve` behind the same seam when it reaches the stable
-  toolchain and is the better implementation.
+  installed Xcode 26.6, binds an authenticated ephemeral loopback port, receives its bearer secret
+  over standard input rather than process arguments, and streams compact dynamic-schema snapshots
+  as NDJSON. The Studio developer process owns its lifetime, reports a post-start helper exit as
+  unavailable, and applies explicit availability and generation deadlines without silently retrying
+  a generation. The helper bounds and validates its small HTTP surface before authentication. The
+  Studio preview still speaks only HTTP to the Studio server, keeping model access webview-agnostic.
+  No beta OS or Xcode is required. Adopt Apple's `fm serve` behind the same seam when it reaches the
+  stable toolchain and is the better implementation.
 - **Shared machinery**: one entity→schema compiler and one AI-SDK-provider client, used by the
   compiled app, the Studio server, and the scripted test binding alike. Built in the shared
   packages, never Studio-private, so the stdlib and the keyword lower onto it without
@@ -328,7 +331,8 @@ cross-platform support — platforms graduate one at a time:
 
 1. **Studio fixture generation** (the driver) — **landed 2026-08-30**: "generate a realistic named state for this
    scene" — the model fills entity rows from their own declarations, schema-constrained,
-   validates enforced, saved through the existing capture path into the named-state library.
+   with the shared validate-before-accept gate, saved through the existing capture path into the
+   named-state library.
    Exercises the entire pipeline with no app UI and no language work; Studio calls the shared
    TS machinery directly. The shared package now owns the entity/case schema compiler, Apple and
    deterministic scripted providers, streamed partial/final contract, schema checker, and
@@ -336,11 +340,14 @@ cross-platform support — platforms graduate one at a time:
    Studio manifest; secrets are unconditionally excluded and relations remain opt-in. Studio
    exposes availability and fixture generation on its existing HTTP server, and its data-state
    control saves accepted proposals through the same `insert-captured-fixture` source action as
-   hand capture, with explicit generating and failed states and no retry. The Apple live check is
-   explicitly opt-in; deterministic tests use only the scripted binding. Current Tao does not yet
-   author entity `validate` declarations, so Studio has no authored rules to supply today; the
-   shared gate is wired and tested for those rules without deciding the retry-policy open question
-   below.
+   hand capture, with explicit generating and failed states and no retry. A fixture source patch is
+   accepted only when Tao compilation succeeds; a failed compile restores the exact previous source.
+   Studio preserves executable `now` time values instead of generating timestamps it cannot author,
+   and rejects fixture topology it cannot preserve. The Apple live check is explicitly opt-in;
+   deterministic tests use only the scripted binding. Current Tao does not yet author entity
+   `validate` declarations, so Studio has no authored rules to supply today; adding those declarations
+   remains language work for the later tranche. The shared gate is wired and tested for rules and
+   durable acceptance failures without deciding the retry-policy open question below.
 2. **The `generate` tranche**: grammar, validator, formatter, compiler lowering, the runtime
    multi-state value, and the scripted-model test surface — in scope together, since the keyword
    without `model answers` is untestable. Mode 3 (`runs latest`) waits for the separate

@@ -4,8 +4,10 @@ import { Expect, Test } from '@shared/test'
 import {
   StudioCodeEditor,
   StudioDiagnosticNavigation,
+  StudioFixtureGenerationFeedback,
   StudioFixtureProposal,
   StudioOpenFileLifecycle,
+  StudioSourceActionOutcome,
   StudioSourcePath,
 } from '../studio-src/StudioClient'
 import { StudioClientAssets } from '../studio-src/StudioClientAssets'
@@ -43,6 +45,7 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Save to scenario')
   Expect(bundle).toContain('Generate fixture')
   Expect(bundle).toContain('Generating a realistic fixture')
+  Expect(bundle).toContain('The Tao source changed while generation was running; its result was ignored.')
   Expect(bundle).toContain('set-scenario-arguments')
   Expect(bundle).toContain('No editable arguments')
   Expect(bundle).toContain('Injected Studio network failure')
@@ -82,15 +85,37 @@ Test('Studio generated fixture proposals use the captured-fixture source-action 
   Expect(StudioFixtureProposal.sourceAction({
     fixtureName: 'GeneratedState',
     identity,
+    origin: 'generated',
     plan,
     requestId: 'generation-1',
   })).toMatchObject({
     action: { fixtureName: 'GeneratedState', kind: 'insert-captured-fixture', plan },
-    checkpoint: { id: 'captured-fixture:generation-1', phase: 'single' },
+    checkpoint: { id: 'generated-fixture:generation-1', phase: 'single' },
     identity,
     requestId: 'generation-1',
     type: 'source-action',
   })
+
+  const envelope = StudioFixtureProposal.sourceAction({
+    fixtureName: 'GeneratedState',
+    identity,
+    origin: 'generated',
+    plan,
+    requestId: 'generation-1',
+  })
+  Expect(StudioSourceActionOutcome.compileError(envelope, {
+    compile: { message: 'CreatedAt must be time.', status: 'error' },
+  })).toContain('did not save the fixture')
+  Expect(StudioSourceActionOutcome.compileError(envelope, {
+    compile: { message: 'Compiled.', status: 'compiled' },
+  })).toBeUndefined()
+})
+
+Test('Studio generated fixture failures include actionable validation issues', () => {
+  Expect(StudioFixtureGenerationFeedback.failure({
+    error: 'The generated draft failed validation.',
+    issues: ['Title is required.', 'Count must be positive.'],
+  })).toBe('The generated draft failed validation. Title is required. Count must be positive.')
 })
 
 Test('Studio browser assets bundle one CodeMirror view singleton', async () => {

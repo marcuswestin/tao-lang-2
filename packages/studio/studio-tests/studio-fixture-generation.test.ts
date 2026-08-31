@@ -23,7 +23,7 @@ Describe('Studio fixture generation', () => {
       {
         kind: 'answer',
         partials: [{ Title: 'Road' }],
-        value: { CreatedAt: '2026-08-30T21:40:20.733Z', Title: 'Roadmap' },
+        value: { Title: 'Roadmap' },
       },
       { kind: 'answer', value: { Title: 'Introduction' } },
     ])
@@ -50,7 +50,70 @@ Describe('Studio fixture generation', () => {
     })
     Expect(provider.calls).toHaveLength(2)
     Expect(provider.calls[0]?.schema.properties).not.toHaveProperty('PrivateNotes')
+    Expect(provider.calls[0]?.schema.properties).not.toHaveProperty('CreatedAt')
     Expect(provider.calls[1]?.schema.properties).not.toHaveProperty('Workspace')
+  })
+
+  Test('returns a declared failure rather than dropping for-account or through fixture topology', async () => {
+    const base = manifest()
+    for (
+      const [clause, create] of [
+        [
+          'for-account',
+          { account: 'Owner', entity: 'Workspace', fields: { Title: 'Old' }, name: 'Main' },
+        ],
+        [
+          'through',
+          {
+            entity: 'Workspace',
+            fields: { Title: 'Old' },
+            name: 'Main',
+            through: { action: 'CreateWorkspace', arguments: [] },
+          },
+        ],
+      ] as const
+    ) {
+      const provider = new ScriptedGenerationProvider([{ kind: 'answer', value: { Title: 'Unused' } }])
+      const result = await new StudioFixtureGeneration(provider).generate({
+        ...base,
+        fixtures: [{
+          ...base.fixtures[0]!,
+          plan: { accounts: [], creates: [create] },
+        }],
+      }, { scenarioId: 'Workspace.focused' })
+
+      Expect(result).toMatchObject({ code: 'validation_failed', status: 'failed' })
+      Expect((result as { error: string }).error).toContain(clause === 'for-account' ? 'for-account' : 'through')
+      Expect(provider.calls).toHaveLength(0)
+    }
+  })
+
+  Test('fails honestly when a required time has neither a fixture now value nor a now default', async () => {
+    const base = manifest()
+    const declarations = base.generationDeclarations.map(declaration =>
+      declaration.kind !== 'entity' || declaration.name !== 'Workspace'
+        ? declaration
+        : {
+          ...declaration,
+          fields: declaration.fields.map(field =>
+            field.name === 'CreatedAt'
+              ? { ...field, defaultValue: undefined }
+              : field
+          ),
+        }
+    )
+    const provider = new ScriptedGenerationProvider([{ kind: 'answer', value: { Title: 'Unused' } }])
+    const result = await new StudioFixtureGeneration(provider).generate({
+      ...base,
+      generationDeclarations: declarations,
+    }, { scenarioId: 'Workspace.focused' })
+
+    Expect(result).toEqual({
+      code: 'validation_failed',
+      error: 'The required time Workspace.CreatedAt needs a fixture now value or a now default.',
+      status: 'failed',
+    })
+    Expect(provider.calls).toHaveLength(0)
   })
 
   Test('returns a declared provider failure without retrying', async () => {

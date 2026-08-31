@@ -85,6 +85,8 @@ type StudioPreviewConnection = {
   cell?: StudioPreviewCell
   cellIdentity?: StudioCellIdentity
   frame?: HTMLElement
+  generation?: { requestId: string }
+  generationNotice?: string
   iframe: HTMLIFrameElement
   interactionMode: StudioInteractionMode
   origin: string
@@ -107,7 +109,7 @@ type StudioAIAvailability = {
 
 type StudioGeneratedFixtureResult =
   | { fixture: StudioFixturePlan; status: 'ready' }
-  | { error: string; status: 'failed' }
+  | { code: string; error: string; issues?: readonly string[]; status: 'failed' }
 
 type StudioOpenFile = {
   editor: EditorView
@@ -116,6 +118,7 @@ type StudioOpenFile = {
 
 type StudioSourceActionResult = {
   checkpoint: { id: string; status: 'committed' | 'open' }
+  compile: { message: string; status: 'compiled' | 'error' }
   content: string
   path: string
   sourceVersion: string
@@ -380,6 +383,10 @@ async function mountStudio(): Promise<void> {
           headers: { 'content-type': 'application/json' },
           method: 'POST',
         })
+        const compileError = sourceActionCompileError(envelope, result)
+        if (compileError !== undefined) {
+          throw new Error(compileError)
+        }
         if (result.checkpoint.status === 'committed' && undoCheckpoints.at(-1)?.id !== result.checkpoint.id) {
           undoCheckpoints.push({ id: result.checkpoint.id, path: result.path })
         }
@@ -536,7 +543,7 @@ async function mountStudio(): Promise<void> {
             inspected = selection
             renderInspector()
           },
-        })
+        }).catch(error => showSourceActionError(view.status, error))
       })
     }
     window.addEventListener('beforeunload', () => {
@@ -792,6 +799,11 @@ function renderCellPreview(
   const status = document.createElement('span')
   status.className = 'studio-preview-cell-status'
   status.setAttribute('role', 'status')
+  if (connection.generationNotice !== undefined) {
+    status.dataset['state'] = 'error'
+    status.textContent = connection.generationNotice
+    connection.generationNotice = undefined
+  }
   actions.append(apply, promote, fixtureName, capture, generate, status)
   form.append(argumentControls.element, viewportControls.element, networkControls.element, schemeControls, actions)
 
@@ -893,15 +905,21 @@ function renderCellPreview(
     generate.disabled = true
     status.dataset['state'] = 'busy'
     status.textContent = 'Generating a realistic fixture…'
+    const requestId = crypto.randomUUID()
+    connection.generation = { requestId }
     void request<StudioGeneratedFixtureResult>('/api/ai/fixture', {
       body: JSON.stringify({ scenarioId: scenario.scenarioId }),
       headers: { 'content-type': 'application/json' },
       method: 'POST',
     }).then(async result => {
+      if (connection.generation?.requestId !== requestId) {
+        return
+      }
       if (result.status === 'failed') {
+        connection.generation = undefined
         generate.disabled = false
         status.dataset['state'] = 'error'
-        status.textContent = result.error
+        status.textContent = generatedFixtureFailureMessage(result)
         return
       }
       await proposeAndSaveFixture({
@@ -911,10 +929,17 @@ function renderCellPreview(
         identity,
         origin: 'generated',
         plan: result.fixture,
-        requestId: crypto.randomUUID(),
+        requestId,
         status,
       })
+      if (connection.generation?.requestId === requestId) {
+        connection.generation = undefined
+      }
     }).catch(error => {
+      if (connection.generation?.requestId !== requestId) {
+        return
+      }
+      connection.generation = undefined
       generate.disabled = false
       status.dataset['state'] = 'error'
       status.textContent = error instanceof Error ? error.message : String(error)
@@ -1420,6 +1445,14 @@ export const StudioFixtureProposal = {
   sourceAction: fixtureProposalSourceAction,
 } as const
 
+export const StudioFixtureGenerationFeedback = {
+  failure: generatedFixtureFailureMessage,
+} as const
+
+export const StudioSourceActionOutcome = {
+  compileError: sourceActionCompileError,
+} as const
+
 export const StudioSourcePath = {
   relative: sourceActionProjectRelativePath,
 } as const
@@ -1465,6 +1498,7 @@ async function proposeAndSaveFixture(options: {
 function fixtureProposalSourceAction(options: {
   fixtureName: string
   identity: StudioPreviewSourceIdentity
+  origin?: 'captured' | 'generated'
   plan: StudioFixturePlan
   requestId: string
 }): StudioSourceActionEnvelope {
@@ -1474,10 +1508,27 @@ function fixtureProposalSourceAction(options: {
       kind: 'insert-captured-fixture',
       plan: options.plan,
     },
-    checkpointId: `captured-fixture:${options.requestId}`,
+    checkpointId: `${options.origin ?? 'captured'}-fixture:${options.requestId}`,
     identity: options.identity,
     requestId: options.requestId,
   })
+}
+
+function generatedFixtureFailureMessage(result: {
+  error: string
+  issues?: readonly string[]
+}): string {
+  const issues = result.issues?.filter(issue => issue.trim().length > 0) ?? []
+  return issues.length === 0 ? result.error : `${result.error} ${issues.join(' ')}`
+}
+
+function sourceActionCompileError(
+  envelope: StudioSourceActionEnvelope,
+  result: Pick<StudioSourceActionResult, 'compile'>,
+): string | undefined {
+  return envelope.action.kind === 'insert-captured-fixture' && result.compile.status === 'error'
+    ? `Studio did not save the fixture because the Tao source failed to compile: ${result.compile.message}`
+    : undefined
 }
 
 function fixtureProposalSource(name: string, plan: StudioFixturePlan): string {
@@ -1706,6 +1757,10 @@ async function refreshCellPreviews(
     const identity = cellIdentity(manifest, cell)
     preview.cellIdentity = identity
     const refresh = async (): Promise<void> => {
+      if (preview.generation !== undefined) {
+        preview.generation = undefined
+        preview.generationNotice = 'The Tao source changed while generation was running; its result was ignored.'
+      }
       const previewInstanceId = crypto.randomUUID()
       await request('/api/preview/cell/instance', {
         body: JSON.stringify({ ...identity, previewInstanceId }),
