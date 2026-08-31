@@ -14,6 +14,8 @@
       "Bash(docker ps *)",
       "Bash(dprint *)",
       "Bash(emulator *)",
+      "Bash(git fetch *)",
+      "Bash(git ls-remote *)",
       "Bash(git merge *)",
       "Bash(just *)",
       "Bash(xcrun simctl *)",
@@ -38,7 +40,11 @@
       "docker *",
       "gh *",
       "adb *",
-      "emulator *"
+      "emulator *",
+      "git fetch *",
+      "git ls-remote *",
+      "git push *",
+      "git worktree *"
     ],
     "filesystem": {
       "allowWrite": [

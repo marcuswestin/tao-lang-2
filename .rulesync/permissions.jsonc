@@ -25,6 +25,10 @@
       // decision — an agent merges because Ro asked, not on its own initiative. Pushing is the
       // outward-facing step and is deliberately absent from this list.
       "git merge *": "allow",
+      // Read-only remote queries, so agents can inspect origin. Pushing stays absent
+      // above by design; the sandbox exclusion below is what lets its prompt succeed.
+      "git fetch *": "allow",
+      "git ls-remote *": "allow",
     },
     "read": {
       // The previous repository is reference material (see AGENTS.md).
@@ -60,6 +64,17 @@
         "gh *",
         "adb *",
         "emulator *",
+        // Git's github.com credential helper is `gh auth git-credential`, which reads
+        // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
+        // inherits git's sandbox, so networked git failed with a misleading
+        // "could not read Username for 'https://github.com'". Excluding these fixes fetch,
+        // push, and ls-remote while the credential deny still binds every other command.
+        "git fetch *",
+        "git ls-remote *",
+        "git push *",
+        // Removing a worktree writes outside this checkout. It still prompts, which is
+        // correct for a command that deletes directories.
+        "git worktree *",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.
