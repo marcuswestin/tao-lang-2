@@ -94,7 +94,7 @@ export class AppleOnDeviceGenerationProvider implements GenerationProvider {
       let lastPartial: string | undefined
       for await (const chunk of stream) {
         response += chunk
-        const partial = parseGeneratedValue(response)
+        const partial = parsePartialGeneratedValue(response)
         if (partial !== undefined) {
           const serialized = JSON.stringify(partial)
           if (serialized !== lastPartial) {
@@ -163,6 +163,57 @@ function parseGeneratedValue(response: string): JsonValue | undefined {
   } catch {
     return undefined
   }
+}
+
+function parsePartialGeneratedValue(response: string): JsonValue | undefined {
+  const complete = parseGeneratedValue(response)
+  if (complete !== undefined) {
+    return complete
+  }
+
+  for (let end = response.length; end > 0; end -= 1) {
+    const completed = completeJsonPrefix(response.slice(0, end))
+    if (completed === undefined) {
+      continue
+    }
+    const parsed = parseGeneratedValue(completed)
+    if (parsed !== undefined) {
+      return parsed
+    }
+  }
+  return undefined
+}
+
+function completeJsonPrefix(prefix: string): string | undefined {
+  const stack: Array<'}' | ']'> = []
+  let escaped = false
+  let inString = false
+
+  for (const character of prefix) {
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (character === '"') {
+      inString = true
+    } else if (character === '{') {
+      stack.push('}')
+    } else if (character === '[') {
+      stack.push(']')
+    } else if (character === '}' || character === ']') {
+      if (stack.pop() !== character) {
+        return undefined
+      }
+    }
+  }
+
+  return `${prefix}${inString && !escaped ? '"' : ''}${stack.reverse().join('')}`
 }
 
 function isJsonObject(value: JsonValue): value is { [key: string]: JsonValue } {

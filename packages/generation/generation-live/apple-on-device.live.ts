@@ -1,6 +1,12 @@
 import { appleAI, appleAISDK } from '@meridius-labs/apple-on-device-ai'
 import { Expect, Test } from '@shared/test'
 import { generateObject, jsonSchema, streamText } from 'ai'
+import {
+  AppleOnDeviceGenerationProvider,
+  compileGenerationSchema,
+  type EntityGenerationDeclaration,
+  type JsonObject,
+} from '../generation-src/generation'
 
 if (process.env['TAO_LIVE_APPLE_AI'] !== '1') {
   throw new Error('Set TAO_LIVE_APPLE_AI=1 to run live Apple Foundation Models checks.')
@@ -45,6 +51,29 @@ const documentSchema = {
   additionalProperties: false,
 }
 
+const workspaceDeclaration: EntityGenerationDeclaration = {
+  collection: 'Workspaces',
+  fields: [
+    { name: 'Name', optional: false, secret: false, type: { kind: 'scalar', scalar: 'text' } },
+    {
+      defaultValue: { kind: 'now' },
+      name: 'CreatedAt',
+      optional: false,
+      secret: false,
+      type: { kind: 'scalar', scalar: 'time' },
+    },
+    {
+      defaultValue: false,
+      name: 'Pinned',
+      optional: false,
+      secret: false,
+      type: { kind: 'scalar', scalar: 'boolean' },
+    },
+  ],
+  kind: 'entity',
+  name: 'Workspace',
+}
+
 Test(
   'live Apple binding supports availability, AI SDK guided generation, streaming, and realistic entities',
   async () => {
@@ -80,5 +109,22 @@ Test(
     }
     Expect(chunks.length).toBeGreaterThan(0)
     Expect(chunks.join('').length).toBeGreaterThan(10)
+
+    const compiled = compileGenerationSchema(workspaceDeclaration)
+    const providerRun = new AppleOnDeviceGenerationProvider().generate<JsonObject>(
+      compiled.schema,
+      [{ name: 'scene', value: 'WorkspaceRow.novel' }],
+      compiled.guide,
+    )
+    const partials: JsonObject[] = []
+    for await (const partial of providerRun.partials) {
+      partials.push(partial)
+    }
+    const providerResult = await providerRun.final
+    Expect(providerResult.status).toBe('success')
+    Expect(partials.length).toBeGreaterThan(0)
+    if (providerResult.status === 'success') {
+      Expect((providerResult.value['Name'] as string).length).toBeGreaterThan(2)
+    }
   },
 )

@@ -47,7 +47,10 @@ Describe('Apple on-device generation provider', () => {
       status: 'success',
       value: { Title: 'Mushroom Toast', Servings: 2 },
     })
-    Expect(partials).toEqual([{ Title: 'Mushroom Toast', Servings: 2 }])
+    Expect(partials).toEqual([
+      { Title: 'Mush' },
+      { Title: 'Mushroom Toast', Servings: 2 },
+    ])
     Expect(loads).toBe(1)
     Expect(request).toMatchObject({
       schema,
