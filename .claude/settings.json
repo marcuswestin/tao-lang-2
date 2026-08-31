@@ -48,6 +48,9 @@
         "~/.cache",
         "~/.gradle",
         "~/.android",
+        "~/.expo",
+        "~/.hutch",
+        "~/.local/state/watchman",
         "~/Library/Caches"
       ]
     },

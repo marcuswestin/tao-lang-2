@@ -68,12 +68,18 @@
           { "path": "~/.config/gh", "mode": "deny" },
         ],
       },
+      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache,
+      // Hutch's launcher root, and Watchman's state directory are as much part of the dev loop
+      // as Bun's and Gradle's: without them Studio, native Studio, and file watching all fail.
       "filesystem": {
         "allowWrite": [
           "~/.bun",
           "~/.cache",
           "~/.gradle",
           "~/.android",
+          "~/.expo",
+          "~/.hutch",
+          "~/.local/state/watchman",
           "~/Library/Caches",
         ],
       },
