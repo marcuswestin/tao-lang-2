@@ -141,6 +141,15 @@ Describe('Studio launch manifests', () => {
     }
   })
 
+  Test('keeps a launch visible on a host whose process table cannot be read', async () => {
+    // Inside an agent sandbox `ps` is denied, so a fact carries liveness and no command. A launch
+    // must still be listable and stoppable there, or every agent is blind to its own Studio.
+    const recorded = { command: 'bun', pid: 100, role: 'studio-server' as const, startedAt: 'Mon Jan  1 00:00:00 2026' }
+
+    Expect(isSameProcess(recorded, { pid: 100, running: true })).toBe(true)
+    Expect(isSameProcess(recorded, { pid: 100, running: false })).toBe(false)
+  })
+
   Test('disowns a recorded id that a different program now holds', async () => {
     const recorded = { command: 'bun', pid: 100, role: 'studio-server' as const, startedAt: 'Mon Jan  1 00:00:00 2026' }
 

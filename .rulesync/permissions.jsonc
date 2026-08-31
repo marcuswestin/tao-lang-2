@@ -85,8 +85,13 @@
       },
       "network": {
         "allowLocalBinding": true,
+        // Watchman's client talks to its server over this socket, and Metro falls back to
+        // watching through the OS without it — which this repository exceeds, so Metro dies
+        // with EMFILE partway through its first bundle. The `<user>-state` segment is
+        // Watchman's own naming; a glob is not matched here, so the path is spelled out.
         "allowUnixSockets": [
           "/nix/var/nix/daemon-socket/socket",
+          "~/.local/state/watchman/ro-state/sock",
         ],
         "allowedDomains": [
           "registry.npmjs.org",

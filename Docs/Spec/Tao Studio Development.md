@@ -101,6 +101,12 @@ those processes. Nothing is ever stopped by matching a process name.
 `--launch <id>` or `--all` rather than guessing. It is idempotent, it succeeds when there is nothing
 left to stop, and it never invokes `kill` with no operands. Both commands take `--json`.
 
+**Run these outside an agent's Bash sandbox.** That sandbox denies both inspecting and signalling
+processes outside itself, so ownership can never be confirmed from inside it: `studio-ps` reports a
+running launch as `STALE`, and `studio-stop` correctly refuses to signal what it cannot validate,
+leaving the launch running. This is the fail-safe behaving as designed, not a bug — but it means an
+agent must run them from an unsandboxed shell, or stop Studio with Ctrl+C in its own terminal.
+
 ## Diagnostics
 
 ```bash
@@ -232,6 +238,9 @@ prior generation's session.
 **A port is occupied.** `./agent doctor` names the process holding each conventional port and the
 `kill -TERM` command for it. `./dev studio-doctor` additionally reports ports held by processes no
 launch manifest claims — identify those with `ps` before stopping anything.
+
+**`studio-ps` says `STALE` for a launch that is plainly running.** You are inside an agent's Bash
+sandbox, which cannot inspect processes outside it. Run the command from an ordinary shell.
 
 **Metro dies with `EMFILE: too many open files`.** Watchman is not answering, so Metro is watching
 through the OS and this repository exceeds the descriptor limit. `./agent doctor` reports it. Watchman

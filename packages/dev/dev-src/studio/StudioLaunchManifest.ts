@@ -69,7 +69,11 @@ export type StoredLaunch = {
   supported: boolean
 }
 
-/** ProcessFact is what the live process table says about one recorded process id. */
+/**
+ * ProcessFact is what the live machine says about one recorded process id. `command` is absent
+ * when the process table could not be read at all — some agent sandboxes deny `ps` — in which
+ * case liveness is still known but the program behind the id is not.
+ */
 export type ProcessFact = {
   command?: string
   pid: number
@@ -367,14 +371,27 @@ export const systemOwnershipProbes: OwnershipProbes = {
   pathExists: async path => await FS.exists(path),
   processFact: async pid => {
     const result = await runQuietly('ps', ['-o', 'comm=,lstart=', '-p', String(pid)])
-    const line = result?.stdout.trim() ?? ''
-    if (result === undefined || result.exitCode !== 0 || line === '') {
+    if (result === undefined) {
+      // The process table is unreadable here, which is the ordinary case inside an agent
+      // sandbox. Liveness alone still distinguishes a running launch from a finished one; what
+      // is lost is the command check that would catch a reused id, so this is reported rather
+      // than silently assumed. Signalling still only ever reaches the recorded process group.
+      return { pid, running: await processIsAlive(pid) }
+    }
+    const line = result.stdout.trim()
+    if (result.exitCode !== 0 || line === '') {
       return { pid, running: false }
     }
     // `comm` is a path with no spaces on macOS, so the first field is the command.
     const [command, ...startedAt] = line.split(/\s+/)
     return { command, pid, running: true, startedAt: startedAt.join(' ') }
   },
+}
+
+/** processIsAlive asks the kernel directly, which every host permits even when `ps` is denied. */
+async function processIsAlive(pid: number): Promise<boolean> {
+  const result = await runQuietly('/bin/kill', ['-0', String(pid)])
+  return result !== undefined && result.exitCode === 0
 }
 
 async function runQuietly(

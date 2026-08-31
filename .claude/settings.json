@@ -57,7 +57,8 @@
     "network": {
       "allowLocalBinding": true,
       "allowUnixSockets": [
-        "/nix/var/nix/daemon-socket/socket"
+        "/nix/var/nix/daemon-socket/socket",
+        "~/.local/state/watchman/ro-state/sock"
       ],
       "allowedDomains": [
         "registry.npmjs.org",
