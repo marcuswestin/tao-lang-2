@@ -46,6 +46,9 @@ Describe('Expo Metro configuration', () => {
   })
 
   Test('resolves the runtime and shared aliases to workspace sources', () => {
+    Expect(config.watchFolders).toContain(Repo.resolvePath('packages/runtime/TaoRuntime-src'))
+    Expect(config.watchFolders).toContain(Repo.resolvePath('packages/shared/shared-src/core'))
+
     const context: MetroResolutionContext = {
       originModulePath: Repo.resolvePath('packages/runtime-toolchain/index.ts'),
       resolveRequest() {
