@@ -59,6 +59,14 @@ studio-smoke-native test_file run_id="local":
 studio-proof-real-app run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
 
+# Run native Tao Studio against a deterministic project and report what it proved
+studio-canary project="Apps/HNReader":
+    ./dev studio-canary --project "{{ project }}"
+
+# Validate a built native Studio release without publishing anything
+studio-release-check payload_root *ARGS:
+    ./dev studio-release-check --payload-root "{{ payload_root }}" {{ ARGS }}
+
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
 studio-package release_base_url channel="stable" output_root=".artifacts/build/studio-native":
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"

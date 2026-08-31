@@ -5,6 +5,7 @@ import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
 import { formatGateSummary, gateExitCode, runGates } from './repository-tests/GateRunner'
 import { TestRunner } from './repository-tests/TestRunner'
 import { TestTUI } from './repository-tests/TestTUI'
+import { StudioCanaryCommand } from './studio/StudioCanaryCommand'
 import { runStudioDev } from './studio/StudioDev'
 import { StudioLifecycleCommand } from './studio/StudioLifecycleCommand'
 import { StudioNative } from './studio/StudioNative'
@@ -90,6 +91,52 @@ await runWithCommands(commands => {
         }),
       )
     })
+
+  commands
+    .command('studio-canary')
+    .description('Run native Tao Studio against a deterministic project and report what it proved.')
+    .option('--project <path>', 'Tao project folder to open.')
+    .option('--artifact-root <path>', 'Where the canary writes its artifacts.')
+    .option('--hutch <path>', 'Explicit Hutch executable path.')
+    .action(async (options: { artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+      Platform.runtimeProcess.exit(
+        await StudioCanaryCommand.canary({
+          artifactRoot: options.artifactRoot,
+          hutchPath: options.hutch,
+          projectRoot: options.project,
+        }),
+      )
+    })
+
+  commands
+    .command('studio-release-check')
+    .description('Validate a built native Studio release without publishing anything.')
+    .requiredOption('--payload-root <path>', 'Staged service payload directory.')
+    .option('--app <path>', 'Built .app bundle, for signature and notarization checks.')
+    .option('--dmg <path>', 'Built disk image, for the mount check.')
+    .option('--artifact <name...>', 'Names of the artifacts the build produced.')
+    .option('--release-base-url <url>', 'The HTTPS host installed copies fetch updates from.')
+    .action(
+      async (
+        options: {
+          app?: string
+          artifact?: string[]
+          dmg?: string
+          payloadRoot: string
+          releaseBaseUrl?: string
+        },
+      ) => {
+        Platform.runtimeProcess.exit(
+          await StudioCanaryCommand.releaseCheck({
+            appPath: options.app,
+            artifactNames: options.artifact,
+            diskImagePath: options.dmg,
+            payloadRoot: options.payloadRoot,
+            releaseBaseUrl: options.releaseBaseUrl,
+          }),
+        )
+      },
+    )
 
   commands
     .command('studio-ps')
