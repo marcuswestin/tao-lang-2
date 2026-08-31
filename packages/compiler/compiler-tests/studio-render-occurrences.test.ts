@@ -181,6 +181,121 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(production.code).not.toContain('TR.Studio.Environment.useScenario()')
     })
   })
+
+  Test('publishes entity and case generation declarations for Studio fixture generation', async () => {
+    await withTaoFiles('tao-studio-generation-manifest-', {
+      'Main.tao': `
+        type DocumentKind is one of Note, Article, "Other"
+
+        workspace
+        data Workspaces / Workspace {
+          Name text (required "Use a realistic workspace name.")
+          Summary text?
+          CreatedAt time (default now)
+          Pinned yes / no
+          Documents (owned)
+        }
+
+        workspace
+        data Documents / Document {
+          Title text (default "Untitled")
+          Score number (default 0)
+          Public yes / Private no (default Public)
+          Workspace
+        }
+
+        app Preview { view Main }
+        view Main() { render inject ${tsFence} return null ${fence} }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
+
+      Expect(compiled.studioManifest?.generationDeclarations).toEqual([
+        { kind: 'case', name: 'DocumentKind', cases: ['Note', 'Article', 'Other'] },
+        {
+          kind: 'entity',
+          name: 'Workspace',
+          collection: 'Workspaces',
+          fields: [
+            {
+              guidance: 'Use a realistic workspace name.',
+              name: 'Name',
+              optional: false,
+              secret: false,
+              type: { kind: 'scalar', scalar: 'text' },
+            },
+            {
+              name: 'Summary',
+              optional: true,
+              secret: false,
+              type: { kind: 'scalar', scalar: 'text' },
+            },
+            {
+              defaultValue: { kind: 'now' },
+              name: 'CreatedAt',
+              optional: false,
+              secret: false,
+              type: { kind: 'scalar', scalar: 'time' },
+            },
+            {
+              defaultValue: false,
+              name: 'Pinned',
+              optional: false,
+              secret: false,
+              type: { kind: 'scalar', scalar: 'boolean' },
+            },
+            {
+              name: 'Documents',
+              optional: false,
+              secret: false,
+              type: { entity: 'Document', inverse: true, kind: 'relation' },
+            },
+          ],
+        },
+        {
+          kind: 'entity',
+          name: 'Document',
+          collection: 'Documents',
+          fields: [
+            {
+              defaultValue: 'Untitled',
+              name: 'Title',
+              optional: false,
+              secret: false,
+              type: { kind: 'scalar', scalar: 'text' },
+            },
+            {
+              defaultValue: 0,
+              name: 'Score',
+              optional: false,
+              secret: false,
+              type: { kind: 'scalar', scalar: 'number' },
+            },
+            {
+              defaultValue: true,
+              name: 'Public',
+              optional: false,
+              secret: false,
+              type: { kind: 'scalar', scalar: 'boolean' },
+            },
+            {
+              name: 'Workspace',
+              optional: false,
+              secret: false,
+              type: { entity: 'Workspace', inverse: false, kind: 'relation' },
+            },
+          ],
+        },
+      ])
+      const generated = compiled.files.find(file => file.relativePath === 'TaoStudioManifest.ts')
+      Expect(generated?.code).toContain('"generationDeclarations"')
+      Expect(generated?.code).toContain('"guidance":"Use a realistic workspace name."')
+
+      const production = await Workspace.compile(paths['Main.tao'])
+      Expect(production.studioManifest).toBeUndefined()
+      Expect(production.files.some(file => file.relativePath === 'TaoStudioManifest.ts')).toBe(false)
+    })
+  })
 })
 
 function requireRender(

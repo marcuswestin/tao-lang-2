@@ -92,6 +92,25 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
+  Test('uses repository temporary files when preferred directories deny file creation', async () => {
+    const testRoot = await mkTestDir('tao-agent-restricted-temp-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const fallback = FS.resolvePath('fallback-temp', testRoot)
+      await FS.mkdir(fallback)
+      const result = await runProfileScript(
+        'function mktemp() { return 1 }\ntao_bun_temp_dir "$3"',
+        fixture,
+        fallback,
+      )
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout.trim()).toBe(`${await FS.realPath(fallback)}/`)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
   Test('uses copyfile installation only for linked worktrees', async () => {
     const testRoot = await mkTestDir('tao-agent-install-')
     try {

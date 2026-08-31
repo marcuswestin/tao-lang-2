@@ -138,6 +138,8 @@ export type StudioPreviewConnection = {
     status: HTMLElement
     timeout: ReturnType<typeof setTimeout>
   }
+  generation?: { phase: 'generating' | 'saving'; requestId: string }
+  generationNotice?: string
   cell?: StudioPreviewCell
   cellIdentity?: StudioCellIdentity
   frame?: HTMLElement
@@ -161,6 +163,26 @@ export type StudioPreviewConnection = {
   suspended?: boolean
   suspendedSource?: string
   visibilityObserver?: IntersectionObserver
+}
+
+export function disconnectPreviews(
+  previews: readonly StudioPreviewConnection[],
+  reason = 'The Tao Studio preview was disconnected.',
+): void {
+  for (const preview of previews) {
+    if (preview.capture !== undefined) {
+      clearTimeout(preview.capture.timeout)
+      preview.capture = undefined
+    }
+    if (preview.runtimeCaptureRequest !== undefined) {
+      clearTimeout(preview.runtimeCaptureRequest.timeout)
+      preview.runtimeCaptureRequest.reject(new Error(reason))
+      preview.runtimeCaptureRequest = undefined
+    }
+    preview.visibilityObserver?.disconnect()
+    preview.visibilityObserver = undefined
+    preview.iframe.src = 'about:blank'
+  }
 }
 
 export type StudioRuntimeLog = Readonly<{
@@ -294,6 +316,7 @@ export async function connectPreviews(
   parent: HTMLElement,
   previewUrl: string | undefined,
   handshake: StudioHandshake,
+  signal?: AbortSignal,
 ): Promise<StudioPreviewConnection[]> {
   if (previewUrl === undefined) {
     return []
@@ -311,6 +334,7 @@ export async function connectPreviews(
         handshake,
         manifest,
         cell,
+        signal,
       )
     ))
     StudioMatrixView.render(
@@ -324,7 +348,7 @@ export async function connectPreviews(
     return connections
   }
   const previewInstanceId = crypto.randomUUID()
-  await StudioApiClient.previewInstance({ previewInstanceId })
+  await StudioApiClient.previewInstance({ previewInstanceId }, signal)
   const url = new URL(previewUrl)
   url.searchParams.set('taoStudioParentOrigin', window.location.origin)
   url.searchParams.set('taoStudioPreviewInstanceId', previewInstanceId)
@@ -364,6 +388,7 @@ async function connectCellPreview(
   handshake: StudioHandshake,
   manifest: StudioPreviewManifestV2,
   cell: StudioPreviewCell,
+  signal?: AbortSignal,
 ): Promise<StudioPreviewConnection> {
   const previewInstanceId = crypto.randomUUID()
   const cellIdentity: StudioCellIdentity = {
@@ -374,7 +399,7 @@ async function connectCellPreview(
     manifestRevision: manifest.manifestRevision,
     project: handshake.identity.project,
   }
-  await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId })
+  await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId }, signal)
   const iframe = document.createElement('iframe')
   iframe.src = cellPreviewUrl(previewUrl, previewInstanceId)
   iframe.title = `${cell.scenarioId} live preview`
@@ -474,9 +499,19 @@ function renderCellPreview(
   capture.textContent = 'Capture fixture'
   capture.type = 'button'
   capture.disabled = scenario === undefined
+  const generate = document.createElement('button')
+  generate.className = 'studio-preview-cell-generate'
+  generate.textContent = 'Checking AI…'
+  generate.type = 'button'
+  generate.disabled = true
   const status = document.createElement('span')
   status.className = 'studio-preview-cell-status'
   status.setAttribute('role', 'status')
+  if (connection.generationNotice !== undefined) {
+    status.dataset['state'] = 'error'
+    status.textContent = connection.generationNotice
+    connection.generationNotice = undefined
+  }
   const loadReplay = document.createElement('button')
   loadReplay.className = 'studio-preview-cell-replay-load'
   loadReplay.textContent = 'Load failure capture'
@@ -495,7 +530,18 @@ function renderCellPreview(
   replayFile.accept = 'application/json,.json'
   replayFile.hidden = true
   replayFile.type = 'file'
-  actions.append(apply, promote, fixtureName, capture, loadReplay, pasteReplay, replayFailure, replayFile, status)
+  actions.append(
+    apply,
+    promote,
+    fixtureName,
+    capture,
+    generate,
+    loadReplay,
+    pasteReplay,
+    replayFailure,
+    replayFile,
+    status,
+  )
   form.append(argumentControls.element, viewportControls.element, networkControls.element, schemeControls, actions)
   connection.scenarioControls = form
 
@@ -628,6 +674,73 @@ function renderCellPreview(
       },
     )
   })
+  if (scenario !== undefined) {
+    void configureGenerationAvailability(generate)
+  }
+  generate.addEventListener('click', () => {
+    if (scenario === undefined || connection.cellIdentity === undefined) {
+      return
+    }
+    const name = fixtureName.value.trim()
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      status.dataset['state'] = 'error'
+      status.textContent = 'Fixture name must be a Tao identifier.'
+      return
+    }
+    const identity = fixtureSourceIdentity(connection, manifest, scenario)
+    if (identity === undefined) {
+      status.dataset['state'] = 'error'
+      status.textContent = 'Fixture generation source identity is unavailable.'
+      return
+    }
+    generate.disabled = true
+    status.dataset['state'] = 'busy'
+    status.textContent = 'Generating a realistic fixture…'
+    const requestId = crypto.randomUUID()
+    connection.generation = { phase: 'generating', requestId }
+    void StudioApiClient.generateFixture(scenario.scenarioId).then(async result => {
+      if (connection.generation?.requestId !== requestId) {
+        return
+      }
+      if (result.status === 'failed') {
+        connection.generation = undefined
+        generate.disabled = false
+        status.dataset['state'] = 'error'
+        status.textContent = generatedFixtureFailureMessage(result)
+        return
+      }
+      const proposal = fixtureProposalSource(name, result.fixture)
+      if (!window.confirm(`Save this generated Tao fixture?\n\n${proposal}`)) {
+        connection.generation = undefined
+        generate.disabled = false
+        status.dataset['state'] = 'idle'
+        status.textContent = 'Generated fixture was not saved.'
+        return
+      }
+      connection.generation = { phase: 'saving', requestId }
+      status.textContent = 'Saving generated state as Tao source…'
+      await StudioApiClient.sourceAction(fixtureProposalSourceAction({
+        fixtureName: name,
+        identity,
+        origin: 'generated',
+        plan: result.fixture,
+        requestId,
+      }))
+      if (connection.generation?.requestId === requestId) {
+        connection.generation = undefined
+        status.dataset['state'] = 'busy'
+        status.textContent = 'Saved; waiting for the compiled manifest…'
+      }
+    }).catch(error => {
+      if (connection.generation?.requestId !== requestId) {
+        return
+      }
+      connection.generation = undefined
+      generate.disabled = false
+      status.dataset['state'] = 'error'
+      status.textContent = error instanceof Error ? error.message : String(error)
+    })
+  })
   capture.addEventListener('click', () => {
     if (scenario === undefined || connection.cellIdentity === undefined) {
       return
@@ -690,6 +803,38 @@ function renderCellPreview(
   }
   frame.replaceChildren(label, viewport)
   connection.changed?.()
+}
+
+async function configureGenerationAvailability(button: HTMLButtonElement): Promise<void> {
+  try {
+    const availability = await StudioApiClient.aiAvailability()
+    button.textContent = availability.status === 'available' ? 'Generate fixture' : 'AI unavailable'
+    button.disabled = availability.status !== 'available'
+    button.title = availability.status === 'available'
+      ? 'Generate a realistic state for this scene.'
+      : availability.reason ?? 'On-device generation is unavailable.'
+  } catch (error) {
+    button.textContent = 'AI unavailable'
+    button.disabled = true
+    button.title = error instanceof Error ? error.message : String(error)
+  }
+}
+
+function fixtureSourceIdentity(
+  connection: StudioPreviewConnection,
+  manifest: StudioPreviewManifestV2,
+  scenario: StudioPreviewManifestV2['scenarios'][number],
+): StudioPreviewSourceIdentity | undefined {
+  const sourceVersion = manifest.sourceVersions[scenario.source.path]
+  const path = projectRelativePath(manifest.project.root, scenario.source.path)
+  return connection.cellIdentity === undefined || sourceVersion === undefined || path === undefined
+    ? undefined
+    : {
+      ...connection.cellIdentity,
+      path,
+      previewInstanceId: connection.previewInstanceId,
+      sourceVersion,
+    }
 }
 
 async function promoteScenarioArguments(
@@ -1413,6 +1558,39 @@ function fixtureProposalSource(name: string, plan: StudioFixturePlan): string {
   return `fixture ${name} {\n${entries.join('\n')}\n}`
 }
 
+function fixtureProposalSourceAction(options: {
+  fixtureName: string
+  identity: StudioPreviewSourceIdentity
+  origin?: 'captured' | 'generated'
+  plan: StudioFixturePlan
+  requestId: string
+}): StudioSourceActionEnvelope {
+  return StudioInspector.singleAction({
+    action: {
+      fixtureName: options.fixtureName,
+      kind: 'insert-captured-fixture',
+      plan: options.plan,
+    },
+    checkpointId: `${options.origin ?? 'captured'}-fixture:${options.requestId}`,
+    identity: options.identity,
+    requestId: options.requestId,
+  })
+}
+
+function generatedFixtureFailureMessage(result: { error: string; issues?: readonly string[] }): string {
+  const issues = result.issues?.filter(issue => issue.trim().length > 0) ?? []
+  return issues.length === 0 ? result.error : `${result.error} ${issues.join(' ')}`
+}
+
+export const StudioFixtureProposal = {
+  source: fixtureProposalSource,
+  sourceAction: fixtureProposalSourceAction,
+} as const
+
+export const StudioFixtureGenerationFeedback = {
+  failure: generatedFixtureFailureMessage,
+} as const
+
 function fixtureProposalFields(fields: Readonly<Record<string, StudioFixtureValue>>): string {
   return Object.entries(fields).map(([name, value]) => `${name}: ${fixtureProposalValue(value)}`).join(', ')
 }
@@ -1502,15 +1680,7 @@ export async function refreshCellPreviews(
     if (preview.cell !== undefined && nextIds.has(preview.cell.cellId)) {
       continue
     }
-    if (preview.capture !== undefined) {
-      clearTimeout(preview.capture.timeout)
-    }
-    if (preview.runtimeCaptureRequest !== undefined) {
-      clearTimeout(preview.runtimeCaptureRequest.timeout)
-      preview.runtimeCaptureRequest.reject(new Error('The preview cell was removed before live data arrived.'))
-      preview.runtimeCaptureRequest = undefined
-    }
-    preview.visibilityObserver?.disconnect()
+    disconnectPreviews([preview], 'The preview cell was removed before live data arrived.')
   }
   previews.splice(0, previews.length, ...nextConnections)
   StudioMatrixView.reconcile(parent, connectionGroups(manifest, nextConnections), (frame, connection) => {
@@ -1524,6 +1694,10 @@ export async function refreshCellPreviews(
       return
     }
     const identity = cellIdentity(manifest, cell)
+    if (preview.generation?.phase === 'generating') {
+      preview.generation = undefined
+      preview.generationNotice = 'The Tao source changed while generation was running; its result was ignored.'
+    }
     preview.cellIdentity = identity
     const refresh = async (): Promise<void> => {
       await StudioApiClient.cellInstance({ ...identity, previewInstanceId: preview.previewInstanceId })

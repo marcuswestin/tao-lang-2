@@ -1,0 +1,20 @@
+{
+  "name": "tao-generation",
+  "private": true,
+  "type": "module",
+  "module": "generation-src/generation.ts",
+  "types": "generation-src/generation.ts",
+  "exports": {
+    ".": "./generation-src/generation.ts",
+    "./apple": "./generation-src/apple-foundation-models-provider.ts",
+    "./apple/server": "./generation-src/apple-server.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  },
+  "scripts": {
+    "test": "bun test generation-tests",
+    "test:live:apple": "TAO_LIVE_APPLE_AI=1 bun test ./generation-live/apple-foundation-models.live.ts",
+    "typecheck": "tsc --project tsconfig.json"
+  }
+}

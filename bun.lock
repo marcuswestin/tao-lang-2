@@ -40,6 +40,7 @@
       "name": "tao-compiler",
       "dependencies": {
         "tao-ast-utils": "workspace:*",
+        "tao-generation": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-validator": "workspace:*",
@@ -54,6 +55,7 @@
         "commander": "^15.0.0",
         "ink": "^7.1.1",
         "react": "^19.2.8",
+        "tao-generation": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-studio": "workspace:*",
         "wrap-ansi": "^10.0.1",
@@ -70,6 +72,12 @@
         "@dprint/formatter": "0.5.1",
         "@dprint/typescript": "0.96.1",
         "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/generation": {
+      "name": "tao-generation",
+      "dependencies": {
         "tao-shared": "workspace:*",
       },
     },
@@ -200,6 +208,7 @@
         "react-dom": "19.1.0",
         "react-native-web": "~0.21.0",
         "tao-formatter": "workspace:*",
+        "tao-generation": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-runtime-toolchain": "workspace:*",
         "tao-shared": "workspace:*",
@@ -2252,6 +2261,8 @@
     "tao-dev": ["tao-dev@workspace:packages/dev"],
 
     "tao-formatter": ["tao-formatter@workspace:packages/formatter"],
+
+    "tao-generation": ["tao-generation@workspace:packages/generation"],
 
     "tao-ide-extension": ["tao-ide-extension@workspace:packages/ide-extension"],
 

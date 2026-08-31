@@ -1,5 +1,7 @@
+import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { Errors } from '@shared'
 import { StudioClientAssets } from './StudioClientAssets'
+import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
 import { StudioLsp, type StudioLspSession } from './StudioLsp'
 import { StudioMatrixConflictError } from './StudioMatrixSession'
@@ -27,6 +29,7 @@ import { StudioWelcome } from './StudioWelcome'
 export type StudioServerOptions = {
   allowedOrigins?: readonly string[]
   compileOnStart?: boolean
+  generationProvider?: GenerationProvider
   hostname?: string
   port?: number
   previewUrl?: string
@@ -75,6 +78,11 @@ async function startManagedStudioServer(
       manager.list().current.map(async item => await manager.require(item.sessionId).session.compileInitial()),
     )
   }
+
+  const fixtureGeneration = new StudioFixtureGeneration(
+    options.generationProvider
+      ?? new UnavailableGenerationProvider('Apple Foundation Models is not configured for this Studio server.'),
+  )
 
   const eventClients = new Map<string, Set<StudioSocket>>()
   const dataSources = new Map<string, StudioServerDatasource>()
@@ -128,7 +136,6 @@ async function startManagedStudioServer(
   })
   const closeSession = async (sessionId: string): Promise<boolean> => await manager.close(sessionId)
   const authorization = originAuthorization(manager, options.allowedOrigins)
-
   const server = Bun.serve<StudioSocketData>({
     fetch: async (request, bunServer) => {
       const url = new URL(request.url)
@@ -187,10 +194,17 @@ async function startManagedStudioServer(
         }
         const sessionUrl = new URL(url)
         sessionUrl.pathname = route.pathname
-        return await handleRequest(resource.session, dataSources.get(route.sessionId)!, request, sessionUrl, {
-          ...requestOptions,
-          previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
-        })
+        return await handleRequest(
+          resource.session,
+          dataSources.get(route.sessionId)!,
+          fixtureGeneration,
+          request,
+          sessionUrl,
+          {
+            ...requestOptions,
+            previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
+          },
+        )
       } catch (error) {
         return errorResponse(request, url, requestOptions, error)
       }
@@ -382,6 +396,7 @@ function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
 async function handleRequest(
   session: StudioProjectSession,
   datasource: StudioServerDatasource,
+  fixtureGeneration: StudioFixtureGeneration,
   request: Request,
   url: URL,
   options: StudioServerOptions,
@@ -430,6 +445,16 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
+  }
+  if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
+    return response(request, url, options, await fixtureGeneration.availability())
+  }
+  if (request.method === 'POST' && url.pathname === '/api/ai/fixture') {
+    const manifest = session.previewManifest()
+    if (manifest === undefined) {
+      return response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
+    }
+    return response(request, url, options, await fixtureGeneration.generate(manifest, await request.json()))
   }
   if (request.method === 'POST' && url.pathname === '/api/preview/instance') {
     return response(request, url, options, session.registerPreview(await request.json()))
@@ -704,6 +729,7 @@ function forbiddenResponse(message: string): Response {
 }
 
 export const StudioServerTesting = {
+  handleRequest: handleRequestForTesting,
   handleTestRequest,
   managerRequestPath,
   originAuthorization,
@@ -712,6 +738,21 @@ export const StudioServerTesting = {
   serverOrigin,
   studioSessionRoute,
 } as const
+
+async function handleRequestForTesting(
+  session: StudioProjectSession,
+  fixtureGeneration: StudioFixtureGeneration,
+  request: Request,
+  url: URL,
+  options: StudioServerOptions,
+): Promise<Response> {
+  const datasource = new StudioServerDatasource(session)
+  try {
+    return await handleRequest(session, datasource, fixtureGeneration, request, url, options)
+  } finally {
+    datasource.close()
+  }
+}
 
 function broadcast(
   clients: Set<StudioSocket>,

@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "generation-live/**/*",
+    "generation-src/**/*",
+    "generation-tests/**/*"
+  ],
+  "compilerOptions": {
+    "types": [
+      "node",
+      "bun"
+    ],
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "noEmit": true
+  }
+}

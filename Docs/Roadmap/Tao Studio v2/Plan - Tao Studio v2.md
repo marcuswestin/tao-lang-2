@@ -34,7 +34,7 @@ runtime-toolchain, and developer-automation suites cover the rows above. Release
 browser bundling cover the executable Tao root, Files portal, and host bridge; native staging requires that
 release bundle rather than the development fallback. The packaged service has also been bundled and
 installed from the frozen repository lock in isolated test payloads. The final repository-wide
-`./agent verify` gate passed all 18 suites and all 1,536 tests.
+`./agent verify` gate passed all 19 suites and all 1,571 tests.
 
 Native validation is a separate gate. Hutch, signing/notarization credentials, and an HTTPS artifact host
 are unavailable here, so none of the repository tests proves a running signed/notarized Electrobun app or

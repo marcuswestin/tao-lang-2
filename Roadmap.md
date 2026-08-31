@@ -182,7 +182,11 @@ Product and codebase backlog, unordered.
 
 - `Apps/WordFlower/README.md` — the implementation process and the four app tiers.
 - `Docs/Roadmap/AI in Tao apps.md` — AI-in-apps exploration with recorded direction: the `generate` surface, platform-provided models first, the `Sees` prompt boundary, scripted-model testing, and the implementation sequence.
+- `Docs/Roadmap/Authority.md` — authority exploration with open dialogue: lowering the decided access/publish/secrets model into the provider's own rule language, remote authorization semantics for `through` grants, the remote-refusal contract, redaction, and the two-account proof app over InstantDB.
+- `Docs/Roadmap/Deterministic simulation.md` — deterministic whole-app simulation exploration: the determinism boundary, the scripted-world harness over the Studio cell pipeline, schema-derived property testing, journal-based replay and time-travel, and design rules across cells.
 - `Docs/Roadmap/Device capabilities.md` — device-capabilities exploration for the RN/Expo bridge item: the config-through-one-engine recommendation, permission case sets, outcome delivery into `when do`, scripted capability drivers, and the proving sequence.
+- `Docs/Roadmap/Tao ship.md` — ship exploration with open dialogue: the derived publish pipeline (build/sign/submit/OTA), variants as environments, the derived hosted runtime, the schema-migration option space, deploy configuration, error reports and analytics in production, and the commercial shape.
+- `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.

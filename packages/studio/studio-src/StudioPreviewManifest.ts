@@ -1,3 +1,4 @@
+import type { GenerationDeclaration } from '@generation'
 import { Errors } from '@shared'
 import type { StudioJsonObject, StudioJsonValue, StudioSourceRange } from './StudioProtocol'
 import { type StudioStateEntry, StudioStateLibrary } from './StudioStateLibrary'
@@ -87,6 +88,7 @@ export type StudioPreviewManifestV2 = {
   cells: readonly StudioPreviewCell[]
   compileRevision: number
   fixtures: readonly StudioFixture[]
+  generationDeclarations: readonly GenerationDeclaration[]
   manifestRevision: string
   parametersBySubject: Readonly<Record<string, readonly StudioParameterSchema[]>>
   project: { appName: string; entryPath: string; root: string }

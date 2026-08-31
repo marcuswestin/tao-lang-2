@@ -272,6 +272,8 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'POST', path: '/api/source-action' },
   { method: 'POST', path: '/api/source-action/inspect' },
   { method: 'POST', path: '/api/source-action/undo' },
+  { method: 'GET', path: '/api/ai/availability' },
+  { method: 'POST', path: '/api/ai/fixture' },
   { method: 'POST', path: '/api/preview/instance' },
   { method: 'POST', path: '/api/preview/applied' },
   { method: 'GET', path: '/api/preview/manifest' },
@@ -622,6 +624,22 @@ export class StudioProjectSession {
         sourceVersion: patch.sourceVersion,
         writeId: envelope.requestId,
       })
+      if (envelope.action.kind === 'insert-captured-fixture' && compile.status === 'error') {
+        await FS.writeText(path, current.content)
+        const rollback = await this.#coordinator.noteStudioWrite({
+          path,
+          sourceVersion: current.sourceVersion,
+          writeId: `rollback:${envelope.requestId}`,
+        })
+        this.#emitFile(current)
+        const compileMessage = compile.diagnostics[0]?.message ?? compile.message
+        const rollbackMessage = rollback.status === 'compiled'
+          ? 'The original Tao source was restored.'
+          : `The original Tao source was restored, but its preview still failed to compile: ${rollback.message}`
+        throw new Errors.UserInputError(
+          `Studio did not save the fixture because its Tao source failed to compile: ${compileMessage} ${rollbackMessage}`,
+        )
+      }
       const result: StudioSourceActionResult = {
         checkpoint: this.#recordSourceActionCheckpoint(envelope, checkpoint, patch.sourceVersion),
         compile,

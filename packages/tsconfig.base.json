@@ -92,6 +92,12 @@
       "@studio/*": [
         "./studio/studio-src/*"
       ],
+      "@generation": [
+        "./generation/generation-src/generation.ts"
+      ],
+      "@generation/*": [
+        "./generation/generation-src/*"
+      ],
       "@tao/code-editor": [
         "./code-editor/code-editor-src/CodeEditor.tsx"
       ],

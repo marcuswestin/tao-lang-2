@@ -93,6 +93,7 @@ function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManife
     ],
     compileRevision: 7,
     fixtures: [{ fixtureId: 'fixture:base', label: 'Base', plan: {}, source }],
+    generationDeclarations: [],
     manifestRevision: 'manifest-7',
     parametersBySubject: {
       card: [{ label: 'Title', parameterId: 'title', required: true, type: { kind: 'text' } }],

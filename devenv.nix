@@ -48,6 +48,7 @@ in
     pkgs.jq
     pkgs.oxlint
     pkgs.ripgrep
+    pkgs.watchman
     pkgs.watchexec
   ];
 

@@ -11,9 +11,12 @@ import {
 } from '../studio-src/client/StudioFileTree'
 import {
   currentSourceIdentity,
+  disconnectPreviews,
   handlePreviewMessage,
   runtimeCaptureWithEnvironment,
   StudioActivePreview,
+  StudioFixtureGenerationFeedback,
+  StudioFixtureProposal,
   StudioMatrixLayout,
   type StudioPreviewConnection,
   StudioPreviewSuspension,
@@ -42,6 +45,7 @@ import { StudioInspector } from '../studio-src/StudioInspector'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import {
   registerStudioProductHostActions,
+  rejectPendingStudioProductHostActions,
   requestStudioProductHostCreateFile,
   requestStudioProductHostOpenFile,
   validStudioProductHostPath,
@@ -68,6 +72,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('/api/data/fill')
   Expect(bundle).toContain('Loading Studio files')
   Expect(bundle).toContain('tao-studio-product-host')
+  Expect(bundle).toContain('/api/ai/availability')
+  Expect(bundle).toContain('/api/ai/fixture')
   Expect(bundle).toContain('/api/tests/status')
   Expect(bundle).toContain('/api/tests/run')
   Expect(bundle).toContain('capture-runtime')
@@ -94,6 +100,9 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Search project')
   Expect(bundle).toContain('No manifest screens are available yet.')
   Expect(bundle).toContain('Save to scenario')
+  Expect(bundle).toContain('Generate fixture')
+  Expect(bundle).toContain('Generating a realistic fixture')
+  Expect(bundle).toContain('The Tao source changed while generation was running; its result was ignored.')
   Expect(bundle).toContain('Load failure capture')
   Expect(bundle).toContain('Paste failure capture')
   Expect(bundle).toContain('Replay captured state')
@@ -116,6 +125,48 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
   Expect(html).toContain('\\u003c/script>')
+})
+
+Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
+  const identity = {
+    appName: 'WordFlower',
+    cellId: 'Workspace.focused#cell',
+    cellRevision: 0,
+    compileRevision: 1,
+    manifestRevision: 'compile:1',
+    path: 'Scenarios.tao',
+    previewInstanceId: 'preview-1',
+    project: '/project',
+    sourceVersion: 'text-v1:scenarios',
+  }
+  const plan = {
+    accounts: [],
+    creates: [{ entity: 'Workspace', fields: { CreatedAt: { kind: 'now' as const }, Title: 'Roadmap' }, name: 'Main' }],
+  }
+
+  Expect(StudioFixtureProposal.source('GeneratedState', plan)).toContain(
+    'fixture GeneratedState {\n   Main = create Workspace { CreatedAt: now, Title: "Roadmap" }\n}',
+  )
+  Expect(StudioFixtureProposal.sourceAction({
+    fixtureName: 'GeneratedState',
+    identity,
+    origin: 'generated',
+    plan,
+    requestId: 'generation-1',
+  })).toMatchObject({
+    action: { fixtureName: 'GeneratedState', kind: 'insert-captured-fixture', plan },
+    checkpoint: { id: 'generated-fixture:generation-1', phase: 'single' },
+    identity,
+    requestId: 'generation-1',
+    type: 'source-action',
+  })
+})
+
+Test('Studio generated fixture failures include actionable validation issues', () => {
+  Expect(StudioFixtureGenerationFeedback.failure({
+    error: 'The generated draft failed validation.',
+    issues: ['Title is required.', 'Count must be positive.'],
+  })).toBe('The generated draft failed validation. Title is required. Count must be positive.')
 })
 
 Test('Studio browser assets bundle one CodeMirror view singleton', async () => {
@@ -164,6 +215,43 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
   } finally {
     unregister()
   }
+  const abandoned = requestStudioProductHostOpenFile('Abandoned.tao')
+  const cancellation = new Error('host unmounted')
+  cancellation.name = 'AbortError'
+  rejectPendingStudioProductHostActions(cancellation)
+  await Expect(abandoned).rejects.toMatchObject({ name: 'AbortError' })
+})
+
+Test('Studio preview teardown releases observers and pending capture work', () => {
+  let disconnected = 0
+  let rejected = ''
+  const preview = {
+    iframe: { src: 'http://127.0.0.1:55102/' } as HTMLIFrameElement,
+    interactionMode: 'edit',
+    origin: 'http://127.0.0.1:55102',
+    previewInstanceId: 'preview-1',
+    runtimeCaptureRequest: {
+      reject(error: Error) {
+        rejected = error.message
+      },
+      requestId: 'capture-1',
+      resolve() {},
+      timeout: setTimeout(() => {}, 10_000),
+    },
+    visibilityObserver: {
+      disconnect() {
+        disconnected += 1
+      },
+    } as IntersectionObserver,
+  } satisfies StudioPreviewConnection
+
+  disconnectPreviews([preview], 'Studio host unmounted.')
+
+  Expect(disconnected).toBe(1)
+  Expect(rejected).toBe('Studio host unmounted.')
+  Expect(preview.iframe.src).toBe('about:blank')
+  Expect(preview.runtimeCaptureRequest).toBeUndefined()
+  Expect(preview.visibilityObserver).toBeUndefined()
 })
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {

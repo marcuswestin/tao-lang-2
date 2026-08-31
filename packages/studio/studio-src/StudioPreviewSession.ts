@@ -140,6 +140,7 @@ export function matrixManifest(
       plan: jsonObject({ accounts: fixture.accounts, creates: fixture.creates }),
       source: taoSource(fixture.source),
     })),
+    generationDeclarations: compiler.generationDeclarations,
     manifestRevision: `compile:${compileRevision}`,
     parametersBySubject,
     project: {

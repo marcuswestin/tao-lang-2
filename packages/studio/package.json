@@ -23,6 +23,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native-web": "~0.21.0",
+    "tao-generation": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-runtime-toolchain": "workspace:*",

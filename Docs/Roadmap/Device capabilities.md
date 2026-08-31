@@ -63,7 +63,7 @@ reactive optionals, plus a `public function` constructor), a three-line sidecar
 (`return Haptic() from ./Haptic.ts`), and a TR capability module over a lazy native-module kernel —
 `createNativeModules(loaders)` with a **closed literal require union** (Metro resolves requires
 statically) and constructor-injected loaders as the test seam. Vendor enums and result objects never
-cross the Tao contract; declaration-owned case identities flow *into* TR (Haptic passes its compiled
+cross the Tao contract; declaration-owned case identities flow _into_ TR (Haptic passes its compiled
 `HapticKind` cases down) and are matched by identity — the runtime must never manufacture lookalike
 cases. Capabilities are stdlib-owned: app-authored native bindings are fenced out, and each new
 native module is a new literal in the kernel. This is a curated set, not an open extension point.
@@ -75,12 +75,12 @@ modules, 30 of them full bindings sharing one pattern: a structural driver type,
 `setDriverForTests` hatch, lazy `require()` inside a resolver function. Decomposing those ~2,600
 lines:
 
-| Layer                                            | Share of code | Variation across 30 modules            |
-| ------------------------------------------------ | ------------- | -------------------------------------- |
-| Resolver + test hatch                            | ~15%          | byte-identical except the require name |
-| Action-object types and `xAction()` factories    | ~25%          | two shapes, mechanically derivable     |
-| Doc comments and barrel re-aliases               | ~17%          | formulaic                              |
-| **API-specific: driver members, enum maps, verb bodies** | **~40–45%** | the actual content                |
+| Layer                                                    | Share of code | Variation across 30 modules            |
+| -------------------------------------------------------- | ------------- | -------------------------------------- |
+| Resolver + test hatch                                    | ~15%          | byte-identical except the require name |
+| Action-object types and `xAction()` factories            | ~25%          | two shapes, mechanically derivable     |
+| Doc comments and barrel re-aliases                       | ~17%          | formulaic                              |
+| **API-specific: driver members, enum maps, verb bodies** | **~40–45%**   | the actual content                     |
 
 Per module the ratio tracks complexity: Clipboard is ~17% unique, Vibration ~15%, Share ~24%,
 Haptics ~35% (half of that two enum mappers derivable from the enum shape), Location ~58%. What
@@ -95,13 +95,13 @@ Two readings follow. First, **roughly 55–60% of a hand-written binding is enve
 varies — and 30 hand-copies of it produced zero drift, evidence the pattern is stable enough to
 freeze into an engine. Second, **the remaining 40% is language design, not translation**: which
 native calls make one Tao verb, what the case set is, what honest unavailability looks like. That
-part *should* be hand-written, because it is exactly the part Ro decides per capability.
+part _should_ be hand-written, because it is exactly the part Ro decides per capability.
 
 ## The tradeoff, laid out honestly
 
 **Option A — generate bindings from TypeScript definitions (or docs).** A generator reads
 `expo-location.d.ts` and emits driver type, resolver, actions, and a Tao declaration.
-*For:* new APIs at near-zero cost; upstream drift caught by regeneration. *Against:* the `.d.ts`
+_For:_ new APIs at near-zero cost; upstream drift caught by regeneration. _Against:_ the `.d.ts`
 does not contain the design — no case sets, no permission fusion, no verb boundaries, no honest
 `unavailable`; a generated surface is vendor-shaped, which the shipped pattern explicitly forbids
 ("Expo's enum families never cross the Tao contract"); docs-driven generation is strictly worse
@@ -115,14 +115,14 @@ lazy module loading and caching, the driver/test-injection seam, permission-stat
 error-to-outcome mapping honoring declared case identities, availability probing, friendly
 missing-module errors. A capability then costs: a ~5–15 line `.tao` contract, a ~3-line sidecar, a
 ~30–80 line TR module (driver subset type + verb bodies over engine helpers), one loader literal,
-one scripted test driver, behavior tests in Tao. *For:* marginal cost per API is a focused
+one scripted test driver, behavior tests in Tao. _For:_ marginal cost per API is a focused
 afternoon, all of it design rather than plumbing; one place to fix a cross-cutting bug; the seam is
-constructor-injected (no singleton registry — the native-canvas exploration's warning). *Against:*
+constructor-injected (no singleton registry — the native-canvas exploration's warning). _Against:_
 an engine is an abstraction that must earn each helper; over-generalizing it recreates the
 boilerplate as configuration.
 
-**Option C — keep hand-writing whole bindings.** *For:* zero abstraction risk; the shipped three
-prove it works. *Against:* the drafts are the counterfactual — 30 modules of copy-paste, two
+**Option C — keep hand-writing whole bindings.** _For:_ zero abstraction risk; the shipped three
+prove it works. _Against:_ the drafts are the counterfactual — 30 modules of copy-paste, two
 permission models, no failure model. At eight-plus capabilities the envelope drift risk and the
 per-API cost dominate.
 
@@ -157,7 +157,7 @@ when CameraAccess {
 
 `undetermined` renders the same affordance as `granted` in the common case (the OS prompt appears on
 first gated use — which is where the decided "Reason shown at first use" lives); it exists so a
-screen *can* distinguish "will ask" from "was refused". `unavailable` is what makes the Studio web
+screen _can_ distinguish "will ask" from "was refused". `unavailable` is what makes the Studio web
 preview and the simulator honest rather than lying `denied`. Open: whether iOS `limited` (partial
 photo access) is a fifth case or deferred; whether re-asking (deep link to Settings) is an action on
 the permission value or a stdlib affordance.
@@ -179,7 +179,7 @@ when Here {
 }
 ```
 
-The permission-gated *read* is availability on the value; the permission-gated *effect* (one-shot
+The permission-gated _read_ is availability on the value; the permission-gated _effect_ (one-shot
 "locate me now") is an action with declared failures:
 
 ```tao
@@ -321,7 +321,7 @@ simulation program, flagged below, not decided here.
 
 1. The permission case set: is `granted / undetermined / denied / unavailable` the honest minimum,
    and is `limited` in or deferred?
-2. How does a capability *name* its permission — does `@tao/device/location` declare "needs
+2. How does a capability _name_ its permission — does `@tao/device/location` declare "needs
    `LocationAccess`" in its contract, or does the app root wire binding to capability explicitly?
 3. Re-asking after denial: an action on the permission value (`do CameraAccess.Ask()` deep-linking
    to Settings), a stdlib affordance, or nothing (render the hint, the person acts)?
@@ -333,7 +333,7 @@ simulation program, flagged below, not decided here.
 6. Does the `when do` outcome mechanism (slice 2) generalize to every effectful action in the
    language, and is this program the right place to build it, given every other program will
    consume it?
-7. Camera beyond `ImageInput`: is the component the *only* camera surface for now (leaning yes —
+7. Camera beyond `ImageInput`: is the component the _only_ camera surface for now (leaning yes —
    it is the decided spelling in three demo apps), with an imperative capture capability deferred?
 8. Device smoke tests: what is the minimum real-hardware loop (module linking, Info.plist/manifest
    permission strings, platform behavior) that Jest cannot prove, and where does it run?

@@ -26,8 +26,12 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     }
     let cleanup: (() => void) | undefined
     let unmounted = false
-    const mounting = mountStudio({ embedded: true, root })
+    const cancellation = new AbortController()
+    const mounting = mountStudio({ embedded: true, root, signal: cancellation.signal })
     const reportMountError = (error: unknown): void => {
+      if (unmounted && error instanceof Error && error.name === 'AbortError') {
+        return
+      }
       rejectPendingStudioProductHostActions(error)
       console.error('Could not mount the Tao Studio product host.', error)
       if (!unmounted) {
@@ -38,13 +42,18 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
         root.replaceChildren(alert)
       }
     }
+    const unmount = (): void => {
+      unmounted = true
+      cancellation.abort()
+      const error = new Error('Tao Studio product host unmounted before the requested action could run.')
+      error.name = 'AbortError'
+      rejectPendingStudioProductHostActions(error)
+      cleanup?.()
+    }
     const target = root.querySelector<HTMLElement>('.studio-files')
     if (target === null) {
       void mounting.catch(reportMountError)
-      return () => {
-        unmounted = true
-        cleanup?.()
-      }
+      return unmount
     }
     setFilesTarget(target)
     void mounting.then(dispose => {
@@ -54,10 +63,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
         cleanup = dispose
       }
     }).catch(reportMountError)
-    return () => {
-      unmounted = true
-      cleanup?.()
-    }
+    return unmount
   }, [])
   return (
     <div

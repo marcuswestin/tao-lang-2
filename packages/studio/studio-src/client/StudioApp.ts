@@ -25,6 +25,7 @@ import {
   type StudioCompileDiagnostic,
   type StudioCompileState,
   type StudioFile,
+  type StudioLspTransport,
 } from './StudioApiClient'
 import {
   fileUri,
@@ -41,6 +42,7 @@ import {
   configureInteractionMode,
   connectPreviews,
   currentSourceIdentity,
+  disconnectPreviews,
   handlePreviewMessage,
   postEditorSelection,
   refreshCellPreviews,
@@ -128,7 +130,7 @@ export class StudioDataFillCoordinator {
   }
 }
 
-export type StudioMountOptions = Readonly<{ embedded?: boolean; root?: HTMLElement }>
+export type StudioMountOptions = Readonly<{ embedded?: boolean; root?: HTMLElement; signal?: AbortSignal }>
 
 export async function mountStudio(options: StudioMountOptions = {}): Promise<() => void> {
   const root = options.root ?? document.querySelector<HTMLElement>('#tao-studio-root')
@@ -138,22 +140,34 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
   const config = window.TaoStudioConfig ?? {}
   const view = createStudioShell(root, config, { embedded: options.embedded })
+  const partialOpenTabs = new Map<string, StudioOpenEditorTab>()
+  let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
+  let partialLanguageClient: LSPClient | undefined
+  let partialTransport: StudioLspTransport | undefined
   try {
-    const handshake = await StudioApiClient.handshake()
+    throwIfMountAborted(options.signal)
+    const handshake = await StudioApiClient.handshake(options.signal)
+    throwIfMountAborted(options.signal)
     view.project.textContent = `${handshake.identity.appName} — ${handshake.identity.project}`
     updateStatus(view.status, handshake.compile, diagnostic => void openCompileDiagnostic(diagnostic))
-    const previews = await connectPreviews(view.preview, config.previewUrl, handshake)
+    const previews = await connectPreviews(view.preview, config.previewUrl, handshake, options.signal)
+    partialPreviews = previews
+    throwIfMountAborted(options.signal)
     const activePreview = new StudioActivePreview(previews)
     configureInteractionMode(view.interactionMode, previews, handshake)
 
-    const transport = await StudioApiClient.lspTransport()
+    const transport = await StudioApiClient.lspTransport(options.signal)
+    partialTransport = transport
+    throwIfMountAborted(options.signal)
     const languageClient = new LSPClient({
       extensions: languageServerExtensions(),
       rootUri: fileUri(handshake.identity.project),
       sanitizeHTML: sanitizeLspHtml,
       timeout: 10_000,
     }).connect(transport)
+    partialLanguageClient = languageClient
     await languageClient.initializing
+    throwIfMountAborted(options.signal)
 
     let editor: EditorView | undefined
     let draftSync: StudioDraftSync | undefined
@@ -185,7 +199,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let testWatch = false
     const undoCheckpoints: Array<{ id: string; path: string }> = []
     const openFileLifecycle = new StudioOpenFileLifecycle()
-    const openTabs = new Map<string, StudioOpenEditorTab>()
+    const openTabs = partialOpenTabs
     const editorTabs = new StudioEditorTabs({
       appName: handshake.identity.appName,
       availablePaths: projectFiles.map(file => file.path),
@@ -232,7 +246,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           return existing
         }
       }
-      const file = await StudioApiClient.file(path)
+      const file = await StudioApiClient.file(path, options.signal)
       if (!attempt.isCurrent()) {
         return undefined
       }
@@ -599,7 +613,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       if (cached?.sourceVersion === file.sourceVersion) {
         return cached.content
       }
-      const opened = await StudioApiClient.file(file.path)
+      const opened = await StudioApiClient.file(file.path, options.signal)
       searchDocuments.set(file.path, { content: opened.content, sourceVersion: opened.sourceVersion })
       return opened.content
     }
@@ -1173,10 +1187,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const restoredPaths = restoredTabs.paths.length === 0 ? [handshake.entryPath] : restoredTabs.paths
     for (const path of restoredPaths) {
       await openFile(path)
+      throwIfMountAborted(options.signal)
     }
     if (restoredTabs.activePath !== undefined && restoredTabs.activePath !== activePath) {
       await openFile(restoredTabs.activePath)
+      throwIfMountAborted(options.signal)
     }
+    throwIfMountAborted(options.signal)
     const disconnectEvents = connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
       onCompile(state) {
         compileState = state
@@ -1390,15 +1407,37 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       for (const tab of openTabs.values()) {
         tab.editor.destroy()
       }
+      disconnectPreviews(previews)
       languageClient.disconnect()
+      transport.close()
     }
     window.addEventListener('beforeunload', cleanup)
     return cleanup
   } catch (error) {
-    view.status.dataset['state'] = 'error'
-    view.status.textContent = error instanceof Error ? error.message : String(error)
+    for (const tab of partialOpenTabs.values()) {
+      tab.editor.destroy()
+    }
+    disconnectPreviews(partialPreviews)
+    partialLanguageClient?.disconnect()
+    partialTransport?.close()
+    if (!isAbortError(error)) {
+      view.status.dataset['state'] = 'error'
+      view.status.textContent = error instanceof Error ? error.message : String(error)
+    }
     throw error
   }
+}
+
+function throwIfMountAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    const error = new Error('Tao Studio product host mount was cancelled.')
+    error.name = 'AbortError'
+    throw error
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function connectEvents(

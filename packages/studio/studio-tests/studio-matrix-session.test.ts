@@ -205,6 +205,7 @@ function fixture(revisions: { compileRevision: number; manifestRevision: string 
     ],
     compileRevision: revisions.compileRevision,
     fixtures: [{ fixtureId: 'fixture:base', label: 'Base', plan: {}, source }],
+    generationDeclarations: [],
     manifestRevision: revisions.manifestRevision,
     parametersBySubject: {
       card: [{ label: 'Title', parameterId: 'title', required: true, type: { kind: 'text' } }],
