@@ -140,6 +140,11 @@ Chrome or Chromium the smoke lane would use, recorded launches and stale manifes
 processes no manifest claims, Watchman and Metro watch coverage, and the presence — never the
 contents — of release and notarization prerequisites.
 
+Watch coverage is about Metro's `watchFolders`, which decide whether an aliased workspace edit can
+reach the bundle. Studio's own compiles come from a separate watch of the project root, so a
+Metro folder watched twice costs a redundant crawl and nothing more; the doctor reports it without
+warning about it.
+
 It reports whether a window server session is attached, but **not** whether AppKit registration
 will succeed: a process inside an agent host's coalition reports a session and still aborts on
 launch. Only the canary can answer that.
@@ -170,9 +175,16 @@ captures a screenshot and the browser console under the run's artifact root, and
 console error or an uncaught exception. It does not yet see failed resource loads or CSP violations,
 which need `Log.enable`.
 
-`StudioSmokeLaunch` starts Studio through `./dev studio --json` and stops it through its manifest,
-and is the intended way for a lane to drive a real launch. The existing smoke files still wire
-Studio in-process and have not adopted it.
+`studio-launch.test.ts` drives the whole launch contract through the CLI: it starts `./dev studio`,
+checks the advertised session answers, confirms `studio-ps` reports the launch live with its port
+owned, stops it through the manifest, and confirms nothing is left. It skips with a stated reason on
+a host that will not report on its own processes, because ownership cannot be established there.
+
+```bash
+just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts
+```
+
+The other smoke files build a session in-process and do not exercise the CLI.
 
 The deterministic parts of the same behaviour — save-to-preview synchronization and scenario-group
 startup — live in `packages/studio/studio-tests` and run in the ordinary lane, so `./agent verify`

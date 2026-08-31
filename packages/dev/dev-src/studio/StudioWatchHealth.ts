@@ -2,10 +2,14 @@ import { CLI, FS, Repo } from '@shared'
 import type { DoctorCheck } from '../doctor/RepositoryDoctor'
 
 /**
- * Studio's edit-to-preview loop is only as good as its file watching. Two failures look identical
- * from the outside — an edit that never reaches the preview — so they are separated here: a source
- * root Metro does not watch at all, and a tree watched twice, which turns one save into two
- * compiles. Both are checked from Metro's own configuration rather than from a guess.
+ * Studio's edit-to-preview loop is only as good as its file watching, and two different watchers
+ * are involved: Studio compiles from its own chokidar watch of the project root, while Metro
+ * bundles from `watchFolders`. Only the second is checked here, because only the second is
+ * configuration; the first is verified end to end by the studio-smoke lane.
+ *
+ * A source root Metro does not watch is a real failure — an aliased workspace edit that never
+ * reaches the bundle. A tree watched twice is not: it costs a redundant crawl and a duplicate
+ * subscription, and nothing more.
  */
 
 /** Workspace sources an edit must invalidate: Studio's preview bundle is built from all of them. */
@@ -41,9 +45,9 @@ export function unwatchedSourceRoots(facts: WatchFacts): string[] {
 }
 
 /**
- * overlappingWatchFolders returns folders nested inside another watched folder. Metro delivers one
- * change under a doubly-watched tree twice, and Studio compiles on each, so a save becomes two
- * compiles and the second can publish a preview built from the first one's revision.
+ * overlappingWatchFolders returns folders nested inside another watched folder. This is waste, not
+ * breakage: Metro crawls the nested tree twice at startup and subscribes to it twice. It does not
+ * double Studio's compiles, which are driven by a separate watch of the project root.
  */
 export function overlappingWatchFolders(folders: readonly string[]): { inside: string; nested: string }[] {
   const overlaps: { inside: string; nested: string }[] = []
@@ -117,13 +121,16 @@ function duplicateWatchCheck(facts: WatchFacts): DoctorCheck {
     return { detail: 'no watched folder is nested inside another', name: 'studio watch duplication', status: 'pass' }
   }
   return {
-    detail: overlaps
-      .map(overlap => `${FS.displayPath(overlap.nested)} is inside ${FS.displayPath(overlap.inside)}`)
-      .join(', '),
+    // Reported, not warned about: it costs startup work, and nothing else. Warning would put a
+    // permanent yellow line in front of every reader for something that is merely untidy.
+    detail: `${overlaps.length} watched folder(s) are nested inside another, which costs a `
+      + `redundant crawl: ${
+        overlaps
+          .map(overlap => `${FS.displayPath(overlap.nested)} inside ${FS.displayPath(overlap.inside)}`)
+          .join(', ')
+      }`,
     name: 'studio watch duplication',
-    remediation:
-      'A nested watch folder delivers each change twice, compiling twice per save. Watch only the outer root.',
-    status: 'warn',
+    status: 'pass',
   }
 }
 

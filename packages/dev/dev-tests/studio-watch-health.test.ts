@@ -55,13 +55,16 @@ Describe('Studio watch health', () => {
     Expect(unwatchedSourceRoots(enclosing)).toEqual([])
   })
 
-  Test('reports a nested watch folder, which turns one save into two compiles', () => {
+  Test('reports a nested watch folder as redundant work, not as a failure', () => {
     const nested = facts({ metroWatchFolders: ['/w/packages/runtime', '/w/packages/runtime/TaoRuntime-src'] })
 
     Expect(overlappingWatchFolders(nested.metroWatchFolders)).toEqual([
       { inside: '/w/packages/runtime', nested: '/w/packages/runtime/TaoRuntime-src' },
     ])
-    Expect(check(studioWatchChecks(nested), 'studio watch duplication')?.status).toBe('warn')
+    // Studio compiles from its own watch of the project root, so this cannot double a compile.
+    const duplication = check(studioWatchChecks(nested), 'studio watch duplication')
+    Expect(duplication?.status).toBe('pass')
+    Expect(duplication?.detail).toContain('redundant crawl')
   })
 
   Test('names the defined fallback when Watchman is unavailable', () => {
@@ -85,7 +88,7 @@ Describe('Studio watch health', () => {
     Expect(unwatchedSourceRoots(installed)).toEqual([])
   })
 
-  Test('this repository watches three trees twice, and no more than that', async () => {
+  Test('records the three trees this repository deliberately watches twice', async () => {
     const installed = await readWatchFacts(Repo.getRoot())
     const overlaps = overlappingWatchFolders(installed.metroWatchFolders)
       .map(overlap =>
@@ -93,9 +96,11 @@ Describe('Studio watch health', () => {
       )
       .toSorted()
 
-    // Each of these is a package root watched alongside a source root inside it, so one save
-    // there is delivered twice. Recorded rather than asserted away: shrinking this list is a
-    // real improvement to the edit-to-preview loop, and growing it is a regression.
+    // metro.config.cjs names these source roots explicitly so Metro's file map can hash the files
+    // its aliases return, and metro-config.test.ts asserts that requirement directly. Each is also
+    // inside a package root Expo already watches, so each is crawled twice. That is redundant work
+    // and nothing worse — Studio compiles from its own watch of the project root — so it is
+    // recorded here rather than removed. Growing this list is a regression worth seeing.
     Expect(overlaps).toEqual([
       'packages/runtime-toolchain/node_modules inside packages/runtime-toolchain',
       'packages/runtime/TaoRuntime-src inside packages/runtime',
