@@ -254,7 +254,12 @@ async function testNodePath(): Promise<string> {
   if (explicitNode !== undefined) {
     return explicitNode
   }
-  const devenvNode = Repo.resolvePath('.devenv/profile/bin/node')
+  // `tao test` also runs against fixtures outside any Git worktree, where the repository's
+  // pinned devenv Node cannot be located. Fall back to the Node on PATH instead of failing.
+  const devenvNode = Repo.tryResolvePath('.devenv/profile/bin/node')
+  if (devenvNode === undefined) {
+    return 'node'
+  }
   return await FS.isFile(devenvNode) ? devenvNode : 'node'
 }
 

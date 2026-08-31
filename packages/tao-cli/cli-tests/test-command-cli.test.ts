@@ -2,6 +2,38 @@ import { FS, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
+const taoApp = (name: string) => `
+  use Text from @tao/ui
+  app ${name} { view Main }
+  view Main() { render Text("${name}") }
+`
+
+const taoTest = (name: string) => `
+  use ${name} from ./
+  test "${name}" {
+    test "runs" {
+      run ${name}
+      expect text "${name}"
+    }
+  }
+`
+
+/** withJestStub points the runtime test runner at an inert module for the duration of one test. */
+async function withJestStub(rootDir: string, run: () => Promise<void>): Promise<void> {
+  const envName = 'TAO_TEST_JEST_PATH'
+  const previousJestPath = Platform.runtimeProcess.env[envName]
+  Platform.runtimeProcess.env[envName] = FS.resolvePath('jest-stub.mjs', rootDir)
+  try {
+    await run()
+  } finally {
+    if (previousJestPath === undefined) {
+      delete Platform.runtimeProcess.env[envName]
+    } else {
+      Platform.runtimeProcess.env[envName] = previousJestPath
+    }
+  }
+}
+
 Describe('tao test CLI', () => {
   Test('reports no discovered tests without failing', async () => {
     await withTaoFixture({ 'Main.tao': '' }, async (rootDir) => {
@@ -9,6 +41,30 @@ Describe('tao test CLI', () => {
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout).toContain('No Tao tests found under')
+    })
+  })
+
+  Test('runs tests from a working directory outside any Git worktree', async () => {
+    await withTaoFixture({
+      'Project.tao': 'project { id "outside-worktree-test" name "Outside worktree test" }',
+      'App.tao': taoApp('Solo'),
+      'App.test.tao': taoTest('Solo'),
+      // Keep the runtime runner inert: this test owns the repository-root fallback, not Jest.
+      'jest-stub.mjs': '',
+    }, async rootDir => {
+      const previousCwd = Platform.runtimeProcess.cwd()
+      await withJestStub(rootDir, async () => {
+        try {
+          Platform.runtimeProcess.chdir(rootDir)
+          const result = await runTaoCliForTest(['test', '.'])
+
+          Expect(`${result.stdout}${result.stderr}`).not.toContain('Git worktree root not found')
+          Expect(result.exitCode).toBe(0)
+          Expect(result.stdout).toContain('Tao tests finished')
+        } finally {
+          Platform.runtimeProcess.chdir(previousCwd)
+        }
+      })
     })
   })
 
@@ -29,46 +85,23 @@ Describe('tao test CLI', () => {
   })
 
   Test('stops every compiler worker after testing separate source directories', async () => {
-    const app = (name: string) => `
-      use Text from @tao/ui
-      app ${name} { view Main }
-      view Main() { render Text("${name}") }
-    `
-    const test = (name: string) => `
-      use ${name} from ./
-      test "${name}" {
-        test "runs" {
-          run ${name}
-          expect text "${name}"
-        }
-      }
-    `
     await withTaoFixture({
       'Project.tao': 'project { id "worker-lifecycle-test" name "Worker lifecycle test" }',
-      'One/App.tao': app('One'),
-      'One/App.test.tao': test('One'),
-      'Two/App.tao': app('Two'),
-      'Two/App.test.tao': test('Two'),
+      'One/App.tao': taoApp('One'),
+      'One/App.test.tao': taoTest('One'),
+      'Two/App.tao': taoApp('Two'),
+      'Two/App.test.tao': taoTest('Two'),
       // This test owns compiler-worker lifecycle coverage. Keep the runtime runner inert so
       // nested Jest startup cannot consume Bun's test timeout under repository-wide load.
       'jest-stub.mjs': '',
     }, async rootDir => {
-      const envName = 'TAO_TEST_JEST_PATH'
-      const previousJestPath = Platform.runtimeProcess.env[envName]
-      Platform.runtimeProcess.env[envName] = FS.resolvePath('jest-stub.mjs', rootDir)
-      try {
+      await withJestStub(rootDir, async () => {
         const result = await runTaoCliForTest(['test', rootDir])
 
         Expect(result.exitCode).toBe(0)
         Expect(result.stdout).toContain('Found 2 Tao test files')
         Expect(result.stdout).toContain('Tao tests finished')
-      } finally {
-        if (previousJestPath === undefined) {
-          delete Platform.runtimeProcess.env[envName]
-        } else {
-          Platform.runtimeProcess.env[envName] = previousJestPath
-        }
-      }
+      })
     })
   })
 })

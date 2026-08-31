@@ -362,6 +362,20 @@ Describe('Repo', () => {
     Expect(() => Repo.getRoot(outsideRepo)).toThrow(Errors.CommandExecutionError)
   })
 
+  Test('reports no root outside a git worktree instead of throwing', async () => {
+    const outsideRepo = await tmpDir()
+
+    Expect(Repo.tryGetRoot(outsideRepo)).toBeUndefined()
+    Expect(Repo.tryResolvePath('.devenv/profile/bin/node', outsideRepo)).toBeUndefined()
+  })
+
+  Test('resolves repository-relative paths inside a git worktree', async () => {
+    const root = Repo.getRoot()
+
+    Expect(Repo.tryGetRoot(root)).toBe(root)
+    Expect(Repo.tryResolvePath('packages/shared', root)).toBe(FS.resolvePath('packages/shared', root))
+  })
+
   Test('walks files outside a git worktree without applying loose gitignore files', async () => {
     const root = await untrackedTmpDir()
     try {
