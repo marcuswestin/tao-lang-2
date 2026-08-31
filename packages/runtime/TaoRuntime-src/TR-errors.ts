@@ -41,3 +41,16 @@ export class UnexpectedBehaviorError extends Error {
     this.messageForUser = messageForUser
   }
 }
+
+/** TaoViewDepthError is the contained render failure raised by the first frame beyond Tao's depth cap. */
+export class TaoViewDepthError extends Error {
+  readonly depth: number
+  readonly view: string
+  override readonly name = 'TaoViewDepthError'
+
+  constructor(view: string, depth: number) {
+    super(`View '${view}' exceeded Tao's maximum render depth of 256.`)
+    this.depth = depth
+    this.view = view
+  }
+}

@@ -137,11 +137,82 @@ export type StudioPreviewFixtureCaptureFailedMessage = {
   type: 'preview-fixture-capture-failed'
 }
 
+/** StudioRuntimeCaptureArtifact mirrors the runtime-owned, JSON-only capture transport. */
+export type StudioRuntimeCaptureDomain = Readonly<{
+  domain: string
+  value: StudioJsonValue
+  version: number
+}>
+
+export type StudioRuntimeFailureFrame = Readonly<{
+  arguments?: StudioJsonValue
+  boundary: 'app' | 'item' | 'screen'
+  componentStack?: string
+  declaration?: string
+  source?: Readonly<{ end: number; path: string; start: number }>
+}>
+
+export type StudioRuntimeFailure = Readonly<{
+  boundaryId: string
+  error: Readonly<{ message: string; name: string; stack?: string }>
+  frame: StudioRuntimeFailureFrame
+  retryEligible: boolean
+  stopper: boolean
+  timestamp: number
+}>
+
+export type StudioRuntimeCaptureArtifact = Readonly<{
+  capturedAt: number
+  domains: readonly StudioRuntimeCaptureDomain[]
+  failure?: StudioRuntimeFailure
+  version: 1
+}>
+
+export type StudioPreviewRuntimeFailureMessage = {
+  capture: StudioRuntimeCaptureArtifact
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-runtime-failure'
+}
+
+export type StudioPreviewRuntimeCapturedMessage = {
+  capture: StudioRuntimeCaptureArtifact
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  requestId: string
+  type: 'preview-runtime-captured'
+}
+
+export type StudioPreviewRuntimeCaptureFailedMessage = {
+  channel: typeof studioProtocolChannel
+  error: string
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  requestId: string
+  type: 'preview-runtime-capture-failed'
+}
+
+export type StudioPreviewLogMessage = {
+  arguments: readonly StudioJsonValue[]
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  level: 'debug' | 'error' | 'info' | 'log' | 'warn'
+  protocolVersion: typeof studioProtocolVersion
+  timestamp: number
+  type: 'preview-console'
+}
+
 export type StudioWindowMessage =
   | StudioHighlightSourceMessage
   | StudioPreviewAppliedMessage
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
+  | StudioPreviewLogMessage
+  | StudioPreviewRuntimeCapturedMessage
+  | StudioPreviewRuntimeCaptureFailedMessage
+  | StudioPreviewRuntimeFailureMessage
   | StudioPreviewSourceMessage
   | StudioSourceActionEnvelope
   | StudioSourceActionUndoEnvelope
@@ -162,6 +233,7 @@ export type StudioMessageExpectation = StudioProjectIdentity & {
 export const StudioProtocol = {
   messageOrigin,
   parseMessage: parseMessageData,
+  parseRuntimeCapture,
   parseSourceActionEnvelope,
   parseSourceActionUndoEnvelope,
   parseWindowMessage,
@@ -224,6 +296,18 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   if (value['type'] === 'preview-fixture-capture-failed') {
     return parsePreviewFixtureCaptureFailed(value)
   }
+  if (value['type'] === 'preview-runtime-failure') {
+    return parsePreviewRuntimeFailure(value)
+  }
+  if (value['type'] === 'preview-runtime-captured') {
+    return parsePreviewRuntimeCaptured(value)
+  }
+  if (value['type'] === 'preview-runtime-capture-failed') {
+    return parsePreviewRuntimeCaptureFailed(value)
+  }
+  if (value['type'] === 'preview-console') {
+    return parsePreviewLog(value)
+  }
   if (value['type'] === 'source-action') {
     return parseSourceActionEnvelope(value)
   }
@@ -231,6 +315,185 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
     return parseSourceActionUndoEnvelope(value)
   }
   return undefined
+}
+
+function parsePreviewRuntimeCaptured(value: StudioJsonObject): StudioPreviewRuntimeCapturedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const capture = parseRuntimeCapture(value['capture'])
+  if (identity === undefined || capture === undefined || !nonEmptyString(value['requestId'])) {
+    return undefined
+  }
+  return {
+    capture,
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    requestId: value['requestId'],
+    type: 'preview-runtime-captured',
+  }
+}
+
+function parsePreviewRuntimeCaptureFailed(
+  value: StudioJsonObject,
+): StudioPreviewRuntimeCaptureFailedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  if (identity === undefined || !nonEmptyString(value['requestId']) || !nonEmptyString(value['error'])) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    error: value['error'],
+    identity,
+    protocolVersion: studioProtocolVersion,
+    requestId: value['requestId'],
+    type: 'preview-runtime-capture-failed',
+  }
+}
+
+function parsePreviewLog(value: StudioJsonObject): StudioPreviewLogMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const timestamp = nonNegativeInteger(value['timestamp'])
+  const arguments_ = value['arguments']
+  if (
+    identity === undefined
+    || timestamp === undefined
+    || !['debug', 'error', 'info', 'log', 'warn'].includes(String(value['level']))
+    || !Array.isArray(arguments_)
+    || !arguments_.every(isJsonValue)
+  ) {
+    return undefined
+  }
+  return {
+    arguments: arguments_,
+    channel: studioProtocolChannel,
+    identity,
+    level: value['level'] as StudioPreviewLogMessage['level'],
+    protocolVersion: studioProtocolVersion,
+    timestamp,
+    type: 'preview-console',
+  }
+}
+
+function parsePreviewRuntimeFailure(value: StudioJsonObject): StudioPreviewRuntimeFailureMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const capture = parseRuntimeCapture(value['capture'])
+  if (identity === undefined || capture === undefined || capture.failure === undefined) {
+    return undefined
+  }
+  return {
+    capture,
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-runtime-failure',
+  }
+}
+
+function parseRuntimeCapture(value: unknown): StudioRuntimeCaptureArtifact | undefined {
+  const capturedAt = isObject(value) ? nonNegativeInteger(value['capturedAt']) : undefined
+  if (
+    !isObject(value)
+    || value['version'] !== 1
+    || capturedAt === undefined
+    || !Array.isArray(value['domains'])
+  ) {
+    return undefined
+  }
+  const domains = value['domains'].map(parseRuntimeCaptureDomain)
+  if (!domains.every(isDefined)) {
+    return undefined
+  }
+  const domainNames = domains.map(domain => domain.domain)
+  if (new Set(domainNames).size !== domainNames.length) {
+    return undefined
+  }
+  const rawFailure = value['failure']
+  const failure = rawFailure === undefined ? undefined : parseRuntimeFailure(rawFailure)
+  if (rawFailure !== undefined && failure === undefined) {
+    return undefined
+  }
+  return {
+    capturedAt,
+    domains,
+    ...(failure === undefined ? {} : { failure }),
+    version: 1,
+  }
+}
+
+function parseRuntimeCaptureDomain(value: unknown): StudioRuntimeCaptureDomain | undefined {
+  if (!isObject(value) || !nonEmptyString(value['domain']) || !positiveInteger(value['version'])) {
+    return undefined
+  }
+  const domainValue = value['value']
+  return isJsonValue(domainValue)
+    ? { domain: value['domain'], value: domainValue, version: value['version'] }
+    : undefined
+}
+
+function parseRuntimeFailure(value: unknown): StudioRuntimeFailure | undefined {
+  const timestamp = isObject(value) ? nonNegativeInteger(value['timestamp']) : undefined
+  if (
+    !isObject(value)
+    || !nonEmptyString(value['boundaryId'])
+    || typeof value['retryEligible'] !== 'boolean'
+    || typeof value['stopper'] !== 'boolean'
+    || timestamp === undefined
+    || !isObject(value['error'])
+    || !nonEmptyString(value['error']['name'])
+    || !nonEmptyString(value['error']['message'])
+    || !optionalString(value['error']['stack'])
+  ) {
+    return undefined
+  }
+  const frame = parseRuntimeFailureFrame(value['frame'])
+  if (frame === undefined) {
+    return undefined
+  }
+  return {
+    boundaryId: value['boundaryId'],
+    error: {
+      message: value['error']['message'],
+      name: value['error']['name'],
+      ...(value['error']['stack'] === undefined ? {} : { stack: value['error']['stack'] }),
+    },
+    frame,
+    retryEligible: value['retryEligible'],
+    stopper: value['stopper'],
+    timestamp,
+  }
+}
+
+function parseRuntimeFailureFrame(value: unknown): StudioRuntimeFailureFrame | undefined {
+  if (!isObject(value) || !['app', 'item', 'screen'].includes(String(value['boundary']))) {
+    return undefined
+  }
+  if (!optionalString(value['componentStack']) || !optionalString(value['declaration'])) {
+    return undefined
+  }
+  const arguments_ = value['arguments']
+  if (arguments_ !== undefined && !isJsonValue(arguments_)) {
+    return undefined
+  }
+  const rawSource = value['source']
+  const source = rawSource === undefined ? undefined : parseRuntimeFailureSource(rawSource)
+  if (rawSource !== undefined && source === undefined) {
+    return undefined
+  }
+  return {
+    ...(arguments_ === undefined ? {} : { arguments: arguments_ }),
+    boundary: value['boundary'] as StudioRuntimeFailureFrame['boundary'],
+    ...(value['componentStack'] === undefined ? {} : { componentStack: value['componentStack'] }),
+    ...(value['declaration'] === undefined ? {} : { declaration: value['declaration'] }),
+    ...(source === undefined ? {} : { source }),
+  }
+}
+
+function parseRuntimeFailureSource(value: unknown): { end: number; path: string; start: number } | undefined {
+  if (!isObject(value) || !nonEmptyString(value['path'])) {
+    return undefined
+  }
+  const range = parseSourceRange(value)
+  return range === undefined ? undefined : { ...range, path: value['path'] }
 }
 
 function parsePreviewFixtureCaptured(value: StudioJsonObject): StudioPreviewFixtureCapturedMessage | undefined {
@@ -519,6 +782,14 @@ function matchesProject(identity: StudioPreviewIdentity, expected: StudioProject
 
 function nonNegativeInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+}
+
+function optionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string'
 }
 
 function nonEmptyString(value: unknown): value is string {

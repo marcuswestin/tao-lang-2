@@ -6,9 +6,13 @@ import type { ValidationContext } from '../validation'
 /** scenarioValidationMessages declares diagnostics for decided fixture and app-scenario forms. */
 export const scenarioValidationMessages = {
   fixturePlacement: 'Fixtures must be declared at file level.',
-  scenarioPlacement: 'Scenarios must be declared at file level.',
+  scenarioGroupPlacement: 'Scenario groups must be declared at file level.',
+  scenarioPlacement: 'Scenario entries must be declared inside a scenario group.',
   duplicateFixture: (name: string) => `Fixture '${name}' is declared more than once.`,
-  duplicateScenario: (name: string) => `Scenario '${name}' is declared more than once.`,
+  duplicateGroup: (name: string) => `Scenario group '${name}' is declared more than once.`,
+  duplicateScenario: (group: string, name: string) =>
+    `Scenario group '${group}' declares entry '${name}' more than once.`,
+  missingScenario: (group: string) => `Scenario group '${group}' must declare at least one scenario entry.`,
   duplicateHandle: (fixture: string, name: string) => `Fixture '${fixture}' declares handle '${name}' more than once.`,
   duplicateField: (owner: string, name: string) => `${owner} supplies field '${name}' more than once.`,
   unknownField: (entity: string, name: string) => `Entity '${entity}' has no field named '${name}'.`,
@@ -20,6 +24,8 @@ export const scenarioValidationMessages = {
     `Scenario '${scenario}' must declare exactly one '${clause}' clause.`,
   subjectCount: (scenario: string) =>
     `Scenario '${scenario}' must declare exactly one subject: either 'run' or 'render'.`,
+  subjectKind: (scenario: string, kind: 'run' | 'render') =>
+    `Scenario '${scenario}' cannot use '${kind}' with its group subject.`,
   deviceDimensions: 'Scenario device dimensions must be positive whole numbers.',
   pseudolocaleDirection: "A pseudolocale scenario must declare 'direction rightToLeft'.",
   unknownArgument: (action: string, name: string) => `Action '${action}' has no parameter named '${name}'.`,
@@ -39,6 +45,7 @@ export const scenarioValidationMessages = {
 /** scenarioValidationChecks validates placement and the local structure of fixtures and scenarios. */
 export const scenarioValidationChecks = {
   [AST.FixtureDeclaration.$type]: validateFixture,
+  [AST.ScenarioGroupDeclaration.$type]: validateScenarioGroup,
   [AST.ScenarioDeclaration.$type]: validateScenario,
 } satisfies NodeValidationChecks
 
@@ -51,9 +58,9 @@ export function validateScenarioFile(file: AST.TaoFile, ctx: ValidationContext):
     ctx,
   )
   reportDuplicates(
-    file.statements.filter(AST.isScenarioDeclaration),
-    scenario => scenario.name,
-    scenarioValidationMessages.duplicateScenario,
+    file.statements.filter(AST.isScenarioGroupDeclaration),
+    group => group.name,
+    scenarioValidationMessages.duplicateGroup,
     ctx,
   )
 }
@@ -87,26 +94,77 @@ function validateCreateBinding(binding: AST.FixtureCreateBinding, ctx: Validatio
   validateFields(entity, binding.block.fields, true, ctx)
 }
 
-function validateScenario(scenario: AST.ScenarioDeclaration, ctx: ValidationContext): void {
-  if (!AST.isTaoFile(scenario.$container)) {
-    ctx.error(scenarioValidationMessages.scenarioPlacement, scenario)
+function validateScenarioGroup(group: AST.ScenarioGroupDeclaration, ctx: ValidationContext): void {
+  if (!AST.isTaoFile(group.$container)) {
+    ctx.error(scenarioValidationMessages.scenarioGroupPlacement, group)
   }
-  requireOne(scenario, 'fixture', AST.isScenarioFixtureClause, ctx)
-  requireOne(scenario, 'device', AST.isScenarioDeviceClause, ctx)
-  allowOne(scenario, 'prepare', AST.isScenarioPrepareClause, ctx)
-  allowOne(scenario, 'appearance', AST.isScenarioAppearanceClause, ctx)
-  allowOne(scenario, 'locale', AST.isScenarioLocaleClause, ctx)
-  allowOne(scenario, 'direction', AST.isScenarioDirectionClause, ctx)
-  allowOne(scenario, 'network', AST.isScenarioNetworkClause, ctx)
-
-  const subjects = scenario.block.entries.filter(entry =>
-    AST.isScenarioRunClause(entry) || AST.isScenarioRenderClause(entry)
+  const scenarios = AST.scenarioDeclarations(group)
+  if (scenarios.length === 0) {
+    ctx.error(scenarioValidationMessages.missingScenario(group.name), group)
+  }
+  reportDuplicates(
+    scenarios,
+    scenario => scenario.name,
+    name => scenarioValidationMessages.duplicateScenario(group.name, name),
+    ctx,
   )
-  if (subjects.length !== 1) {
-    ctx.error(scenarioValidationMessages.subjectCount(scenario.name), subjects[1] ?? scenario)
+  validateClauseSet(group.name, AST.scenarioGroupClauses(group), ctx)
+  validateClauseContents(AST.scenarioGroupClauses(group), ctx)
+}
+
+function validateScenario(scenario: AST.ScenarioDeclaration, ctx: ValidationContext): void {
+  const group = AST.findOwningScenarioGroup(scenario)
+  if (!group) {
+    ctx.error(scenarioValidationMessages.scenarioPlacement, scenario)
+    return
+  }
+  const identity = `${group.name} / ${scenario.name}`
+  validateClauseSet(identity, scenario.block.entries, ctx)
+  validateClauseContents(scenario.block.entries, ctx)
+  requireEffectiveClause(scenario, identity, 'fixture', AST.isScenarioFixtureClause, ctx)
+  requireEffectiveClause(scenario, identity, 'device', AST.isScenarioDeviceClause, ctx)
+
+  const subjectClause = AST.effectiveScenarioSubjectClause(scenario)
+  const subject = AST.scenarioSubjectDeclaration(scenario)
+  if (!subject) {
+    ctx.error(scenarioValidationMessages.subjectCount(identity), subjectClause ?? scenario)
+  } else if (AST.isScenarioRenderClause(subjectClause) && !AST.isViewDeclaration(subject)) {
+    ctx.error(scenarioValidationMessages.subjectKind(identity, 'render'), subjectClause)
+  } else if (AST.isScenarioRunClause(subjectClause) && !AST.isAppValueDeclaration(subject)) {
+    ctx.error(scenarioValidationMessages.subjectKind(identity, 'run'), subjectClause)
   }
 
-  for (const device of scenario.block.entries.filter(AST.isScenarioDeviceClause)) {
+  const locale = AST.effectiveScenarioClause(scenario, AST.isScenarioLocaleClause)
+  const direction = AST.effectiveScenarioClause(scenario, AST.isScenarioDirectionClause)
+  if (locale?.pseudolocale && !direction) {
+    ctx.error(scenarioValidationMessages.pseudolocaleDirection, locale)
+  }
+
+  if (AST.isScenarioRenderClause(subjectClause) && AST.isViewDeclaration(subject)) {
+    validateScenarioRender(subjectClause, subject, ctx)
+  } else if (!subjectClause && AST.isViewDeclaration(subject)) {
+    validateScenarioRender(undefined, subject, ctx)
+  }
+}
+
+function validateClauseSet(owner: string, clauses: readonly AST.ScenarioClause[], ctx: ValidationContext): void {
+  allowOne(owner, clauses, 'fixture', AST.isScenarioFixtureClause, ctx)
+  allowOne(owner, clauses, 'device', AST.isScenarioDeviceClause, ctx)
+  allowOne(owner, clauses, 'prepare', AST.isScenarioPrepareClause, ctx)
+  allowOne(owner, clauses, 'appearance', AST.isScenarioAppearanceClause, ctx)
+  allowOne(owner, clauses, 'locale', AST.isScenarioLocaleClause, ctx)
+  allowOne(owner, clauses, 'direction', AST.isScenarioDirectionClause, ctx)
+  allowOne(owner, clauses, 'network', AST.isScenarioNetworkClause, ctx)
+  const subjects = clauses.filter((clause): clause is AST.ScenarioRenderClause | AST.ScenarioRunClause =>
+    AST.isScenarioRunClause(clause) || AST.isScenarioRenderClause(clause)
+  )
+  for (const duplicate of subjects.slice(1)) {
+    ctx.error(scenarioValidationMessages.duplicateClause(owner, 'subject'), duplicate)
+  }
+}
+
+function validateClauseContents(clauses: readonly AST.ScenarioClause[], ctx: ValidationContext): void {
+  for (const device of clauses.filter(AST.isScenarioDeviceClause)) {
     if (
       device.width !== undefined
       && (!Number.isInteger(device.width) || !Number.isInteger(device.height) || device.width <= 0
@@ -115,32 +173,29 @@ function validateScenario(scenario: AST.ScenarioDeclaration, ctx: ValidationCont
       ctx.error(scenarioValidationMessages.deviceDimensions, device)
     }
   }
-  const pseudolocale = scenario.block.entries.some(entry => AST.isScenarioLocaleClause(entry) && entry.pseudolocale)
-  if (pseudolocale && !scenario.block.entries.some(AST.isScenarioDirectionClause)) {
-    ctx.error(scenarioValidationMessages.pseudolocaleDirection, scenario)
-  }
-  for (const prepare of scenario.block.entries.filter(AST.isScenarioPrepareClause)) {
-    for (const update of prepare.block.statements) {
-      const target = update.target.ref
-      if (AST.isFixtureCreateBinding(target) && target.entity.ref) {
-        validateFields(target.entity.ref, update.block.fields, false, ctx)
-      }
-    }
-  }
-  for (const render of scenario.block.entries.filter(AST.isScenarioRenderClause)) {
-    validateScenarioRender(render, ctx)
+  for (const prepare of clauses.filter(AST.isScenarioPrepareClause)) {
+    validateScenarioPrepare(prepare, ctx)
   }
 }
 
-function validateScenarioRender(render: AST.ScenarioRenderClause, ctx: ValidationContext): void {
-  const view = render.view.ref
-  if (!view) {
-    return
+function validateScenarioPrepare(prepare: AST.ScenarioPrepareClause, ctx: ValidationContext): void {
+  for (const update of prepare.block.statements) {
+    const target = update.target.ref
+    if (AST.isFixtureCreateBinding(target) && target.entity.ref) {
+      validateFields(target.entity.ref, update.block.fields, false, ctx)
+    }
   }
+}
+
+function validateScenarioRender(
+  render: AST.ScenarioRenderClause | undefined,
+  view: AST.ViewDeclaration,
+  ctx: ValidationContext,
+): void {
   const parameters = AST.parametersOf(view)
   const parametersByName = new Map(parameters.map(parameter => [Type.parameterName(parameter), parameter]))
   const supplied = new Set<string>()
-  for (const argument of render.argumentList?.arguments ?? []) {
+  for (const argument of render?.argumentList?.arguments ?? []) {
     const parameter = parametersByName.get(argument.label)
     if (!parameter) {
       ctx.error(scenarioValidationMessages.renderUnknownArgument(view.name, argument.label), argument)
@@ -168,7 +223,7 @@ function validateScenarioRender(render: AST.ScenarioRenderClause, ctx: Validatio
   for (const parameter of parameters) {
     const name = Type.parameterName(parameter)
     if (!supplied.has(name) && !parameter.optional && !parameter.defaultValue) {
-      ctx.error(scenarioValidationMessages.renderMissingArgument(view.name, name), render)
+      ctx.error(scenarioValidationMessages.renderMissingArgument(view.name, name), render ?? view)
     }
   }
 }
@@ -310,29 +365,27 @@ function validateDuplicateFields(
   reportDuplicates(fields, field => field.name, name => scenarioValidationMessages.duplicateField(owner, name), ctx)
 }
 
-function requireOne<ClauseT extends AST.ScenarioEntry>(
+function requireEffectiveClause<ClauseT extends AST.ScenarioClause>(
   scenario: AST.ScenarioDeclaration,
+  owner: string,
   name: string,
-  predicate: (entry: AST.ScenarioEntry) => entry is ClauseT,
+  predicate: (entry: AST.ScenarioClause) => entry is ClauseT,
   ctx: ValidationContext,
 ): void {
-  const matches = scenario.block.entries.filter(predicate)
-  if (matches.length === 0) {
-    ctx.error(scenarioValidationMessages.missingClause(scenario.name, name), scenario)
-  }
-  for (const duplicate of matches.slice(1)) {
-    ctx.error(scenarioValidationMessages.duplicateClause(scenario.name, name), duplicate)
+  if (!AST.effectiveScenarioClause(scenario, predicate)) {
+    ctx.error(scenarioValidationMessages.missingClause(owner, name), scenario)
   }
 }
 
-function allowOne<ClauseT extends AST.ScenarioEntry>(
-  scenario: AST.ScenarioDeclaration,
+function allowOne<ClauseT extends AST.ScenarioClause>(
+  owner: string,
+  clauses: readonly AST.ScenarioClause[],
   name: string,
-  predicate: (entry: AST.ScenarioEntry) => entry is ClauseT,
+  predicate: (entry: AST.ScenarioClause) => entry is ClauseT,
   ctx: ValidationContext,
 ): void {
-  for (const duplicate of scenario.block.entries.filter(predicate).slice(1)) {
-    ctx.error(scenarioValidationMessages.duplicateClause(scenario.name, name), duplicate)
+  for (const duplicate of clauses.filter(predicate).slice(1)) {
+    ctx.error(scenarioValidationMessages.duplicateClause(owner, name), duplicate)
   }
 }
 

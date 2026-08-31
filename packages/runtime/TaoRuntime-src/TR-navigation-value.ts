@@ -238,6 +238,11 @@ export abstract class RuntimeNavigationValue implements Subscription {
     })
   }
 
+  /** unreplayableOccurrences records asks whose process-local promises cannot enter replay state. */
+  unreplayableOccurrences(): number {
+    return this.overlayEntries.filter(entry => entry.response !== undefined).length
+  }
+
   hostSlotValues(): TaoHostSlotValues {
     const config = this.descriptor.config as { hostSlots?: TaoNavHostSlotConfiguration }
     return Object.freeze(Object.fromEntries(

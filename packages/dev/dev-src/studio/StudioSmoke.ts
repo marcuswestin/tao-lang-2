@@ -1,12 +1,11 @@
 import { CLI, Errors, FS, Repo } from '@shared'
 
 const basePort = 42_000
-const portsPerShard = 1_024
-const portsPerWorker = 8
+const portsPerShard = 128
+const portsPerWorker = 2
 
 export type StudioSmokeResources = {
   artifactRoot: string
-  electronDebuggingPort: number
   previewPort: number
   serverPort: number
   shardIndex: number
@@ -36,7 +35,6 @@ function resources(options: Omit<StudioSmokeOptions, 'files'>): StudioSmokeResou
     artifactRoot: Repo.resolvePath(
       `.artifacts/tests/studio-smoke/${runId}/shard-${shardIndex}/worker-${workerIndex}`,
     ),
-    electronDebuggingPort: lanePort + 2,
     previewPort: lanePort + 1,
     serverPort: lanePort,
     shardIndex,
@@ -54,7 +52,6 @@ async function run(options: StudioSmokeOptions): Promise<number> {
     args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
     env: {
       TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
-      TAO_STUDIO_SMOKE_ELECTRON_DEBUGGING_PORT: String(allocation.electronDebuggingPort),
       TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
       TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),
       TAO_STUDIO_SMOKE_SERVER_PORT: String(allocation.serverPort),

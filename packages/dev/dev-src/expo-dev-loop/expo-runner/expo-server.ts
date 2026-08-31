@@ -2,6 +2,7 @@ import { CLI, FS, Repo, Time } from '@shared'
 import { OutputText } from '../../cli/OutputText'
 import { DevLoopTUI } from '../DevLoopTUI'
 import type { ExpoSessionConfig } from './expo-config'
+import type { ExpoServerOptions } from './ExpoRunner'
 
 const EXPO_FAILURE_OUTPUT_CHARACTER_LIMIT = 32_000
 const EXPO_FAILURE_OUTPUT_LINE_LIMIT = 40
@@ -20,6 +21,7 @@ export class ExpoServer {
     private readonly runtimeRoot: string,
     private readonly config: ExpoSessionConfig,
     private readonly releasePortReservation: () => Promise<void>,
+    private readonly options: ExpoServerOptions = {},
   ) {}
 
   onUnexpectedExit(listener: (message: string) => void): void {
@@ -28,7 +30,9 @@ export class ExpoServer {
 
   async start(): Promise<void> {
     await this.releasePortReservation()
-    const logPath = Repo.resolvePath(this.config.EXPO_LOG_PATH)
+    const logPath = this.options.logRoot === undefined
+      ? Repo.resolvePath(this.config.EXPO_LOG_PATH)
+      : FS.resolvePath(FS.basename(this.config.EXPO_LOG_PATH), this.options.logRoot)
     await FS.mkdir(FS.dirname(logPath))
     this.logFile = await FS.openAppend(logPath)
     this.child = CLI.start('bunx', {
@@ -36,7 +40,8 @@ export class ExpoServer {
       cwd: this.runtimeRoot,
       env: {
         ...this.config.EXPO_START_ENV,
-        TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: Repo.resolvePath(this.config.RUNTIME_TOOLCHAIN_PATH),
+        TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: this.options.runtimeToolchainSourceRoot
+          ?? Repo.resolvePath(this.config.RUNTIME_TOOLCHAIN_PATH),
       },
       onOutput: (stream, chunk) => {
         this.appendRecentOutput(String(chunk))

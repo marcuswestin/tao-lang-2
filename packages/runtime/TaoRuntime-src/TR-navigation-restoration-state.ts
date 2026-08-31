@@ -29,6 +29,10 @@ export type TaoNavigationContentSnapshot =
     >
     kind: 'selection'
   }>
+  | Readonly<{
+    items: Readonly<Record<string, Readonly<{ navigation?: TaoNavigationSnapshot }>>>
+    kind: 'split'
+  }>
 
 export type TaoNavigationSnapshot = Readonly<{
   content: TaoNavigationContentSnapshot

@@ -28,9 +28,12 @@ Describe('TR.ForEach selectable rows', () => {
       value => selections.push(value.jsValue),
     ) as RuntimeElement[]
 
-    const wrapperComponent = rows[0]!.props['children'] as RuntimeElement
-    const wrapper = (wrapperComponent.type as (props: Record<string, unknown>) => RuntimeElement)(
-      wrapperComponent.props,
+    const containedItem = rows[0]!.props['children'] as RuntimeElement
+    const selectableRow = (containedItem.type as (props: Record<string, unknown>) => RuntimeElement)(
+      containedItem.props,
+    )
+    const wrapper = (selectableRow.type as (props: Record<string, unknown>) => RuntimeElement)(
+      selectableRow.props,
     )
 
     Expect(wrapper.type).toBe('Pressable')
@@ -49,6 +52,9 @@ Describe('TR.ForEach selectable rows', () => {
     const content = React.createElement('RowRoot', { testID: 'rows' }, 'Static')
     const rows = TR.ForEach(TR.Value(['Static']), () => content) as RuntimeElement[]
 
-    Expect(rows[0]!.props['children']).toBe(content)
+    const containedItem = rows[0]!.props['children'] as RuntimeElement
+    const rendered = (containedItem.type as (props: Record<string, unknown>) => RuntimeElement)(containedItem.props)
+
+    Expect(rendered).toBe(content)
   })
 })

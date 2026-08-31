@@ -1,0 +1,24 @@
+{
+  "name": "@tao/code-editor",
+  "private": true,
+  "type": "module",
+  "module": "code-editor-src/CodeEditor.tsx",
+  "types": "code-editor-src/CodeEditor.tsx",
+  "exports": {
+    ".": "./code-editor-src/CodeEditor.tsx"
+  },
+  "dependencies": {
+    "@codemirror/lsp-client": "^6.2.5",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.8",
+    "codemirror": "^6.0.2",
+    "tao-runtime": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "react": "19.1.0"
+  }
+}

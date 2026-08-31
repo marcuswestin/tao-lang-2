@@ -244,6 +244,10 @@ The implemented declarations are:
   text and view-typed `Content`. An item may also supply `Icon` text as system-icon metadata.
   Selecting another key reveals its mounted item without pushing a content occurrence. Inactive
   items stay mounted but hidden, preserving their state.
+- `SplitNav` requires keyed panes with view-typed `Content` and numeric `Width`. `Resizable` defaults
+  to false. A resizable pane renders a runtime-owned drag affordance; a writable state width receives
+  drag updates and a portable double-tap resets it to its declared default. A non-writable width still
+  resizes for the mounted occurrence but is forgotten on remount.
 
 The native `StackNav` maps those reducer-owned entries to the platform stack and header through the
 pinned `react-native-screens` host. A native dismissal or gesture reconciles exactly one Tao Back;
@@ -267,8 +271,8 @@ SelectionNav item without presenting new content:
 present WordFlower@settings
 ```
 
-Split navigation, window hosting, routes, deep links, animation policy, public
-occurrence handles, presentation results, and lifecycle hooks remain deferred unless a later
+Window hosting, routes, deep links, animation policy, public occurrence handles, presentation results,
+and lifecycle hooks remain deferred unless a later
 WordFlower tier states an explicit future design. The window host's read/require set above is
 settled now so its future implementation cannot invent call-site title overrides or different
 fallback semantics.

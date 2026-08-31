@@ -18,6 +18,11 @@ type ExpoServerProcess = {
   stop: () => Promise<void>
 }
 
+export type ExpoServerOptions = {
+  logRoot?: string
+  runtimeToolchainSourceRoot?: string
+}
+
 export type ExpoRunnerSession = ReturnType<typeof createSessionFromConfig>
 
 /** createSession binds every Expo runner operation to one explicitly selected port. */
@@ -42,7 +47,8 @@ function createSessionFromConfig(
   const targets = createExpoTargets(config, metro, android)
   return {
     config,
-    createServer: (runtimeRoot: string) => createServer(runtimeRoot, config, releasePortReservation),
+    createServer: (runtimeRoot: string, options?: ExpoServerOptions) =>
+      createServer(runtimeRoot, config, releasePortReservation, options),
     ensureMetroPortFree: metro.ensureMetroPortFree,
     ensureAndroidEmulator: android.ensureEmulator,
     ensureAndroidExpoGo: android.ensureExpoGo,
@@ -80,8 +86,9 @@ function createServer(
   runtimeRoot: string,
   config: ExpoSessionConfig,
   releasePortReservation: () => Promise<void>,
+  options: ExpoServerOptions = {},
 ): ExpoServerProcess {
-  return new ExpoServer(runtimeRoot, config, releasePortReservation)
+  return new ExpoServer(runtimeRoot, config, releasePortReservation, options)
 }
 
 /** startExpo starts the Expo runtime and opens it on Android once Metro is ready. */

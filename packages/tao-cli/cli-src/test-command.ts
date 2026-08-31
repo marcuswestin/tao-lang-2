@@ -51,6 +51,9 @@ type CompilerWorkerSession = ReturnType<typeof RuntimeTesting.TestCompiler.Worke
 // stays on one worker so its files share that worker's workspace, and one worker's requests run
 // serially in its process while distinct workers run in parallel.
 async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise<CompiledTaoTests> {
+  if (Platform.runtimeProcess.env['TAO_TEST_IN_PROCESS'] === 'true') {
+    return await validateAndCompileTaoTestsInProcess(testPaths)
+  }
   const groups = [...groupPathsByDirectory(testPaths).values()]
   const workers = createTestWorkers(groups.length)
   try {
@@ -70,7 +73,7 @@ async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise
     }
 
     HCI.logProcessInfo('test', 'Compiling apps')
-    const runtimeRoot = RuntimeToolchainPaths.packageRoot
+    const runtimeRoot = testRuntimeRoot()
     const runRoot = FS.resolvePath(
       `_gen_tao-app-test/tao-test-command/${RuntimeTesting.TestRunId.create()}`,
       runtimeRoot,
@@ -89,6 +92,37 @@ async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise
   } finally {
     await Promise.all(workers.map(worker => worker.stop()))
   }
+}
+
+async function validateAndCompileTaoTestsInProcess(testPaths: readonly string[]): Promise<CompiledTaoTests> {
+  HCI.logProcessInfo('test', 'Validating Tao test files (packaged runner)')
+  const validationErrors = (await Promise.all(
+    testPaths.map(testPath => RuntimeTesting.TestCompiler.validateTestFile(testPath)),
+  )).flat()
+  if (validationErrors.length > 0) {
+    writeTaoTestValidationErrors(validationErrors)
+    Platform.runtimeProcess.exit(1)
+  }
+  HCI.logProcessInfo('test', 'Compiling apps')
+  const runtimeRoot = testRuntimeRoot()
+  const runRoot = FS.resolvePath(
+    `_gen_tao-app-test/tao-test-command/${RuntimeTesting.TestRunId.create()}`,
+    runtimeRoot,
+  )
+  await FS.mkdir(runRoot)
+  const context: RuntimeTesting.TestCompiler.Context = { appModulePaths: new Map(), runRoot }
+  const files = []
+  for (const testPath of testPaths) {
+    files.push(
+      await RuntimeTesting.TestCompiler.compileTestFile(testPath, {
+        context,
+        skipValidation: true,
+      }),
+    )
+  }
+  const manifestPath = FS.resolvePath('manifest.json', runRoot)
+  await FS.writeJson(manifestPath, { files })
+  return { manifestPath, runtimeRoot, testPaths }
 }
 
 async function mapTestFilesOnWorkers<ResultT>(
@@ -129,7 +163,7 @@ async function runCompiledTaoTests(
   }
   return await CLI.run(await testNodePath(), {
     args: [
-      'node_modules/jest/bin/jest.js',
+      await testJestPath(compiled.runtimeRoot),
       '--config',
       'jest.tao-test.config.cjs',
       '--no-watchman',
@@ -138,6 +172,17 @@ async function runCompiledTaoTests(
     env: { [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath },
     stdio: options.stdio,
   })
+}
+
+async function testJestPath(runtimeRoot: string): Promise<string> {
+  const explicitJest = Platform.runtimeProcess.env['TAO_TEST_JEST_PATH']
+  if (explicitJest !== undefined) {
+    return explicitJest
+  }
+  const localJest = FS.resolvePath('node_modules/jest/bin/jest.js', runtimeRoot)
+  return await FS.isFile(localJest)
+    ? localJest
+    : FS.resolvePath('../../node_modules/jest/bin/jest.js', runtimeRoot)
 }
 
 /** validateTaoTestFiles validates Tao test files before starting the runtime harness. */
@@ -205,8 +250,16 @@ function mayDeclareTaoTests(source: string): boolean {
 }
 
 async function testNodePath(): Promise<string> {
+  const explicitNode = Platform.runtimeProcess.env['TAO_TEST_NODE_PATH']
+  if (explicitNode !== undefined) {
+    return explicitNode
+  }
   const devenvNode = Repo.resolvePath('.devenv/profile/bin/node')
   return await FS.isFile(devenvNode) ? devenvNode : 'node'
+}
+
+function testRuntimeRoot(): string {
+  return Platform.runtimeProcess.env['TAO_TEST_RUNTIME_ROOT'] ?? RuntimeToolchainPaths.packageRoot
 }
 
 function writeTaoTestValidationErrors(errors: readonly TaoTestValidationError[]): void {

@@ -19,10 +19,10 @@ Describe('validator: fixtures and scenarios', () => {
           return null
         ${fence}
       }
-      scenario StoryRow.leading {
+      scenarios StoryRow "states" {
         fixture HNStories
-        render StoryRow(Story: LeadStory)
         device phone
+        scenario "leading" { render (Story: LeadStory) }
       }
     `),
   )
@@ -44,14 +44,31 @@ Describe('validator: fixtures and scenarios', () => {
         Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Ro)
         Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Ro
       }
-      scenario Recipe.tablet {
+      scenarios Skillet "devices" {
         fixture HomeKitchen
-        prepare { update Shakshuka { Servings: 6 } }
-        run Skillet at RecipeLink(Shakshuka)
-        device laptop 1440 x 900
-        appearance dark
+        device phone
         locale "es"
         network online
+        scenario "tablet" {
+          prepare { update Shakshuka { Servings: 6 } }
+          run at RecipeLink(Shakshuka)
+          device laptop 1440 x 900
+          appearance dark
+        }
+      }
+    `),
+  )
+
+  Test(
+    'accepts a group without a header subject when its entry declares one',
+    accepts(`
+      view Main() { render inject ${tsFence} return null ${fence} }
+      app Preview { view Main }
+      fixture Empty { }
+      scenarios "single display" {
+        fixture Empty
+        device phone
+        scenario "only" { run Preview }
       }
     `),
   )
@@ -72,14 +89,16 @@ Describe('validator: fixtures and scenarios', () => {
           ${fence}
         }
         app HNReader { view Main }
-        scenario Invalid {
+        scenarios "invalid states" {
           fixture HNStories
-          run HNReader
-          render StoryRow(Story: LeadStory)
           device phone
+          scenario "invalid" {
+            run HNReader
+            render StoryRow(Story: LeadStory)
+          }
         }
       `,
-      scenarioValidationMessages.subjectCount('Invalid'),
+      scenarioValidationMessages.duplicateClause('invalid states / invalid', 'subject'),
     ),
   )
 
@@ -98,25 +117,13 @@ Describe('validator: fixtures and scenarios', () => {
             return null
           ${fence}
         }
-        scenario Unknown {
+        scenarios StoryRow "states" {
           fixture HNStories
-          render StoryRow(Other: LeadStory)
           device phone
-        }
-        scenario Missing {
-          fixture HNStories
-          render StoryRow()
-          device phone
-        }
-        scenario Duplicate {
-          fixture HNStories
-          render StoryRow(Story: LeadStory, Story: LeadStory)
-          device phone
-        }
-        scenario Mistyped {
-          fixture HNStories
-          render TitleRow(Title: LeadStory)
-          device phone
+          scenario "unknown" { render (Other: LeadStory) }
+          scenario "missing" { }
+          scenario "duplicate" { render (Story: LeadStory, Story: LeadStory) }
+          scenario "mistyped" { render TitleRow(Title: LeadStory) }
         }
       `,
       scenarioValidationMessages.renderUnknownArgument('StoryRow', 'Other'),
@@ -140,13 +147,13 @@ Describe('validator: fixtures and scenarios', () => {
             return null
           ${fence}
         }
-        scenario BrokenScenario {
+        scenarios "broken states" {
           fixture Broken
-          render StoryRow(Story: Lead)
           device phone 0 x 10
           locale pseudolocale
           network offline
           network online
+          scenario "broken" { render StoryRow(Story: Lead) }
         }
       `,
       scenarioValidationMessages.duplicateHandle('Broken', 'Lead'),
@@ -155,7 +162,24 @@ Describe('validator: fixtures and scenarios', () => {
       scenarioValidationMessages.missingField('Story', 'Count'),
       scenarioValidationMessages.deviceDimensions,
       scenarioValidationMessages.pseudolocaleDirection,
-      scenarioValidationMessages.duplicateClause('BrokenScenario', 'network'),
+      scenarioValidationMessages.duplicateClause('broken states', 'network'),
+    ),
+  )
+
+  Test(
+    'requires unique string entry identities within each group',
+    rejects(
+      `
+        view Card() { render inject ${tsFence} return null ${fence} }
+        fixture Empty { }
+        scenarios Card "states" {
+          fixture Empty
+          device phone
+          scenario "same name" { }
+          scenario "same name" { }
+        }
+      `,
+      scenarioValidationMessages.duplicateScenario('states', 'same name'),
     ),
   )
 })

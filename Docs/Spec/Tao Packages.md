@@ -278,9 +278,12 @@ Thus `use StackNav from @tao/nav` is native by default, while
 configuration or any presentation call. Native and basic forms of a nav family publish identical
 configuration and host-slot read/require sets. See `Tao Presentation and Navigation.md`.
 
-This first sidecar slice copies only the named implementation file. A sidecar is therefore
-self-contained at runtime: it may import installed packages such as `@runtime/TR` and may type-import
-its sibling Tao contract, but relative runtime helper and asset dependency graphs remain deferred.
+The compiler copies the named implementation file and follows its transitive relative static imports,
+dynamic imports, and re-exports across TypeScript, TSX, JavaScript, JSX, and JSON files. It preserves
+the relative graph under generated output and rewrites sibling `.tao` type imports to their emitted
+declarations. Installed-package imports such as `@runtime/TR` remain external and are resolved by the
+application package manager.
+
 An explicitly ascribed action value may bind a bare function export through the same expression
 boundary (`let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts`); `do` passes plain JavaScript
 arguments and follows synchronous or promise completion. Packages do not need a compiler-known

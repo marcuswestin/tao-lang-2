@@ -69,7 +69,12 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}, ${compileDeclarationIdentity(app)})`
     : gen`${appDefinitionReference(root)}.declaration`
   const auxiliaries = rootAuxiliaryNavigators(root)
+  const persistedStates = AST.isAppDeclaration(root) && root.block
+    ? root.block.statements.filter(AST.isStateDeclaration)
+    : []
+  const declaredPersistedStates = root === app ? persistedStates : []
   return gen`
+    ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
     const ${gen.Name(definition)} = TR.Navigation.App({
       declaration: ${rootDeclaration},
       name: ${name ? gen`${compileAppProperty(name, 'Name')}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
@@ -97,6 +102,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       }),
     })
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
+      ${gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)}
       ${
     datasource
       ? gen`TR.Data.UseConfigured(

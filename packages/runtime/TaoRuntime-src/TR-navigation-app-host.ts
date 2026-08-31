@@ -1,6 +1,7 @@
 import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { DataControls } from './TR-data'
+import { TaoErrorBoundary } from './TR-error-containment'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { browserNavigationHistoryDriver } from './TR-navigation-browser-history'
 import {
@@ -14,6 +15,19 @@ import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
 export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
+  return React.createElement(
+    TaoErrorBoundary,
+    {
+      app: props.app,
+      boundaryId: `app:${props.app.declaration.canonicalIdentity?.canonical ?? props.app.definition.name}`,
+      frame: { boundary: 'app', declaration: props.app.definition.name },
+      stateKey: props.app.snapshot(),
+    },
+    React.createElement(NavigationAppHostContent, props),
+  )
+}
+
+function NavigationAppHostContent(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
   const ready = useNavigationRestoration(props.app)
   const runtime = requireReactNativeRuntime()
   if (!ready) {

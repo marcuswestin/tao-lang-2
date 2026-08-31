@@ -1,10 +1,12 @@
-import type React from 'react'
+import React from 'react'
+import { captureArguments, TaoErrorBoundary } from './TR-error-containment'
 import type {
   TaoNavigationArguments,
   TaoPresentableDefinition,
 } from './TR-navigation'
 import type { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import type { TaoProps } from './TR-TaoProps'
+import { TaoPropsControls } from './TR-TaoProps'
 
 export type Evaluable = {
   evaluate(): { jsValue: unknown }
@@ -29,8 +31,38 @@ export class RuntimePresentable {
     taoProps?: TaoProps,
     host?: RuntimeHostReadChannel,
   ): React.ReactNode {
-    return this.definition.render(arguments_, taoProps, host)
+    const capturedArguments = Object.fromEntries(
+      Object.entries(arguments_).map(([name, value]) => [
+        name,
+        value.evaluate().jsValue,
+      ]),
+    )
+    const identity = this.definition.identity?.canonical ?? this.definition.name
+    return React.createElement(
+      TaoErrorBoundary,
+      {
+        app: TaoPropsControls.appInChain(taoProps),
+        boundaryId: `screen:${identity}`,
+        frame: {
+          arguments: captureArguments(capturedArguments),
+          boundary: 'screen',
+          declaration: this.definition.name,
+          ...(this.definition.source ? { source: this.definition.source } : {}),
+        },
+        stateKey: JSON.stringify([taoProps?.navigation?.snapshot(), captureArguments(capturedArguments)]),
+      },
+      React.createElement(PresentableContent, { arguments_, definition: this.definition, host, taoProps }),
+    )
   }
+}
+
+function PresentableContent(props: {
+  arguments_: TaoNavigationArguments
+  definition: TaoPresentableDefinition
+  host?: RuntimeHostReadChannel
+  taoProps?: TaoProps
+}): React.ReactNode {
+  return props.definition.render(props.arguments_, props.taoProps, props.host)
 }
 
 /** RuntimeNavigationResult supplies the same evaluable shape as TR.Value without a runtime cycle. */

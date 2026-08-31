@@ -18,7 +18,7 @@ import type {
 } from './TR-navigation-restoration-state'
 import type { PresentableEntry } from './TR-navigation-state'
 
-type RestorationEnvelope = Readonly<{
+export type RestorationEnvelope = Readonly<{
   formatVersion: 1
   payload: Readonly<{
     auxiliaries: Readonly<Record<string, TaoNavigationSnapshot>>
@@ -122,6 +122,14 @@ export class NavigationRestorationController {
       this.subscribe()
       this.scheduleSnapshot()
     }
+  }
+
+  capture(): RestorationEnvelope {
+    return this.envelope()
+  }
+
+  restoreCapture(envelope: RestorationEnvelope): void {
+    this.restore(envelope)
   }
 
   private async load(): Promise<void> {

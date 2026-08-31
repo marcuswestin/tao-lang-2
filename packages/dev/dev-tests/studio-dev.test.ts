@@ -5,40 +5,97 @@ import { StudioDev } from '../dev-src/studio/StudioDev'
 import { StudioNative } from '../dev-src/studio/StudioNative'
 import { StudioPreviewRuntime } from '../dev-src/studio/StudioPreviewRuntime'
 import { StudioSmoke } from '../dev-src/studio/StudioSmoke'
+import { StudioTestProcessOutput } from '../dev-src/studio/StudioTestProcessRunner'
+
+Describe('Studio test process output', () => {
+  Test('bounds displayed output while retaining structured failure locations', () => {
+    const output = new StudioTestProcessOutput(48)
+    output.write(Buffer.from(`${'discarded '.repeat(12)}\n`))
+    output.write(Buffer.from('Tao check failed: saves a note\n'))
+    output.write(Buffer.from('  Source: /projects/My Notes/Notes.test.tao:12:7\n'))
+    output.write(Buffer.from('Expected one saved note.\nlatest output\n'))
+
+    Expect(Buffer.byteLength(output.text())).toBeLessThan(150)
+    Expect(output.text()).toContain('Earlier test output truncated')
+    Expect(output.parseText()).toContain('Tao check failed: saves a note')
+    Expect(output.parseText()).toContain('Source: /projects/My Notes/Notes.test.tao:12:7')
+    Expect(output.parseText()).toContain('Expected one saved note.')
+  })
+})
 
 Describe('Studio native wrapper foundation', () => {
-  Test('generates a sandboxed local-only Electron main process', () => {
-    const source = StudioNative.testing.mainScriptSource()
-
-    Expect(source).toContain("require('electron')")
-    Expect(source).toContain("app.setPath('userData', userDataPath)")
-    Expect(source).toContain("app.commandLine.appendSwitch('remote-debugging-port'")
-    Expect(source).toContain("['127.0.0.1', 'localhost', '[::1]']")
-    Expect(source).toContain('contextIsolation: true')
-    Expect(source).toContain('nodeIntegration: false')
-    Expect(source).toContain('sandbox: true')
-    Expect(source).toContain("externalUrl.protocol === 'http:' || externalUrl.protocol === 'https:'")
-    Expect(source).toContain("return { action: 'deny' }")
-    Expect(source).toContain("mainWindow.webContents.on('will-navigate'")
-  })
-
-  Test('requires the installed Electron executable instead of accepting an orphaned shim', async () => {
-    const packageRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electron-', FS.tmpdir()))
+  Test('recognizes an explicit Hutch executable instead of accepting a missing candidate', async () => {
+    const packageRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-', FS.tmpdir()))
     try {
-      await FS.writeText(FS.resolvePath('path.txt', packageRoot), 'Electron.app/Contents/MacOS/Electron')
-      await Expect(StudioNative.testing.installedElectronExecutablePath([packageRoot])).resolves.toBe(undefined)
+      const executablePath = FS.resolvePath('hutch', packageRoot)
+      await Expect(StudioNative.testing.installedHutchExecutablePath([executablePath])).resolves.toBe(undefined)
 
-      const executablePath = FS.resolvePath('dist/Electron.app/Contents/MacOS/Electron', packageRoot)
-      await FS.mkdir(FS.dirname(executablePath))
       await FS.writeText(executablePath, '#!/bin/sh\n')
 
-      await Expect(StudioNative.testing.installedElectronExecutablePath([packageRoot])).resolves.toBe(executablePath)
+      await Expect(StudioNative.testing.installedHutchExecutablePath([executablePath])).resolves.toBe(
+        executablePath,
+      )
     } finally {
       await FS.remove(packageRoot)
     }
   })
 
-  Test('stops Electron gracefully and closes process resources', async () => {
+  Test('installs and prepares the generated project through the selected Hutch launcher', async () => {
+    const calls: Array<{ args: readonly string[] | undefined; command: string; cwd: string | undefined }> = []
+    await StudioNative.testing.prepareElectrobun('/tools/hutch', '/workspace/native', async (command, spec) => {
+      calls.push({ args: spec.args, command, cwd: spec.cwd })
+      return commandResult(command, spec, 0)
+    })
+
+    Expect(calls).toEqual([
+      {
+        args: ['install'],
+        command: '/tools/hutch',
+        cwd: '/workspace/native',
+      },
+      {
+        args: ['electrobun', 'prepare'],
+        command: '/tools/hutch',
+        cwd: '/workspace/native',
+      },
+    ])
+  })
+
+  Test('surfaces Electrobun preparation failures', async () => {
+    await Expect(StudioNative.testing.prepareElectrobun(
+      '/tools/hutch',
+      '/workspace/native',
+      async (command, spec) => commandResult(command, spec, spec.args?.[0] === 'install' ? 0 : 7),
+    )).rejects.toThrow('Command failed: /tools/hutch electrobun prepare')
+  })
+
+  Test('reads and validates the native shell runtime probe result', async () => {
+    const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-probe-', FS.tmpdir()))
+    const resultPath = FS.resolvePath('result.json', outputRoot)
+    try {
+      await FS.writeJson(resultPath, {
+        capabilities: { iframe: { passed: true }, websocket: { message: 'connected', passed: true } },
+        manualChecks: ['Open the directory picker.'],
+        passed: true,
+      })
+
+      await Expect(StudioNative.testing.waitForProbeResult(
+        resultPath,
+        { exitCode: null, signalCode: null },
+      )).resolves.toEqual({
+        capabilities: {
+          iframe: { message: undefined, passed: true },
+          websocket: { message: 'connected', passed: true },
+        },
+        manualChecks: ['Open the directory picker.'],
+        passed: true,
+      })
+    } finally {
+      await FS.remove(outputRoot)
+    }
+  })
+
+  Test('stops Electrobun gracefully and closes process resources', async () => {
     const fake = fakeCommand(true)
 
     await StudioNative.testing.stopCommand(fake.command, async () => {})
@@ -46,7 +103,7 @@ Describe('Studio native wrapper foundation', () => {
     Expect(fake.events).toEqual(['kill SIGTERM', 'close-output', 'dispose'])
   })
 
-  Test('forces Electron closed after the graceful timeout and closes process resources', async () => {
+  Test('forces Electrobun closed after the graceful timeout and closes process resources', async () => {
     const fake = fakeCommand(false)
 
     await StudioNative.testing.stopCommand(fake.command, async () => {})
@@ -54,37 +111,109 @@ Describe('Studio native wrapper foundation', () => {
     Expect(fake.events).toEqual(['kill SIGTERM', 'kill SIGKILL', 'close-output', 'dispose'])
   })
 
-  Test('packages an installed macOS Electron app as a local Tao Studio bundle', async () => {
-    if (await StudioNative.testing.installedElectronAppPath() === undefined) {
-      return
-    }
-    const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-native-package-', FS.tmpdir()))
-    try {
-      const packaged = await StudioNative.packageApp({
-        appName: 'Tao Studio Test',
-        bundleIdentifier: 'dev.tao-lang.studio.test',
-        outputRoot,
-      })
+  Test('requires HTTPS release hosting before invoking Hutch packaging', async () => {
+    await Expect(StudioNative.packageApp({
+      releaseBaseUrl: 'http://releases.example.com/tao-studio',
+    })).rejects.toThrow('Studio release base URL must be a valid HTTPS URL.')
+  })
 
-      Expect(packaged.appPath).toBe(FS.resolvePath('Tao Studio Test.app', outputRoot))
-      Expect(await FS.isDirectory(packaged.appPath)).toBe(true)
-      Expect(await FS.isFile(packaged.executablePath)).toBe(true)
-      Expect(await FS.readText(packaged.mainPath)).toContain('sandbox: true')
-      Expect(await FS.readJson(packaged.packageJsonPath)).toMatchObject({
-        main: 'main.cjs',
-        name: 'tao-studio-native',
-        productName: 'Tao Studio Test',
+  Test('validates the executable Studio client with targeted release gates before native packaging', async () => {
+    await Expect(StudioNative.testing.validateStudioRelease()).resolves.toBeUndefined()
+  })
+
+  Test('installs the packaged service closure from the frozen repository lock', async () => {
+    const payloadRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-payload-', FS.tmpdir()))
+    const calls: Array<{ args: readonly string[] | undefined; command: string; cwd: string | undefined }> = []
+    try {
+      await StudioNative.testing.installStudioServicePayload(payloadRoot, async (command, spec) => {
+        calls.push({ args: spec.args, command, cwd: spec.cwd })
+        return commandResult(command, spec, 0)
       })
-      const infoPlist = await FS.readText(FS.resolvePath('Contents/Info.plist', packaged.appPath))
-      Expect(infoPlist).toContain('<string>Tao Studio Test</string>')
-      Expect(infoPlist).toContain('<string>dev.tao-lang.studio.test</string>')
+      Expect(calls).toEqual([{
+        args: [
+          'install',
+          '--production',
+          '--frozen-lockfile',
+          '--filter=tao-runtime-toolchain',
+          '--linker=hoisted',
+          '--backend=copyfile',
+        ],
+        command: 'bun',
+        cwd: payloadRoot,
+      }])
     } finally {
-      await FS.remove(outputRoot)
+      await FS.remove(payloadRoot)
     }
   })
 })
 
 Describe('Studio smoke resource isolation', () => {
+  Test('persists and reloads validated recent projects in device-local Studio state', async () => {
+    const stateRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-state-', FS.tmpdir()))
+    const statePath = FS.resolvePath('recent-projects.json', stateRoot)
+    const store = StudioDev.testing.createRecentProjectStore(statePath)
+    const recent = [
+      { appName: 'First', lastOpenedAt: '2026-08-30T12:00:00.000Z', project: '/projects/first' },
+      { appName: 'Second', lastOpenedAt: '2026-08-29T12:00:00.000Z', project: '/projects/second' },
+    ]
+    try {
+      await Expect(store.load()).resolves.toEqual([])
+      await store.save(recent)
+      await store.flush()
+
+      await Expect(StudioDev.testing.createRecentProjectStore(statePath).load()).resolves.toEqual(recent)
+      Expect(await FS.readJson(statePath)).toEqual({ recent, version: 1 })
+    } finally {
+      await FS.remove(stateRoot)
+    }
+  })
+
+  Test('ignores malformed or unsupported recent-project state', async () => {
+    const stateRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-state-', FS.tmpdir()))
+    const statePath = FS.resolvePath('recent-projects.json', stateRoot)
+    const store = StudioDev.testing.createRecentProjectStore(statePath)
+    try {
+      await FS.writeText(statePath, '{not json')
+      await Expect(store.load()).resolves.toEqual([])
+
+      await FS.writeJson(statePath, {
+        recent: [{ appName: '', lastOpenedAt: 'never', project: 42 }],
+        version: 1,
+      })
+      await Expect(store.load()).resolves.toEqual([])
+    } finally {
+      await FS.remove(stateRoot)
+    }
+  })
+
+  Test('uses the CLI entry only for the initial project and defaults shell-opened projects', async () => {
+    const calls: Array<{ entryPath: string | undefined; projectPath: string }> = []
+    const projects = StudioDev.testing.createProjectOpeners('App.tao', async (request, entryPath) => {
+      calls.push({ entryPath, projectPath: request.projectPath })
+      return request.projectPath
+    })
+
+    await Expect(projects.initial({ projectPath: '/workspace/first' })).resolves.toBe('/workspace/first')
+    await Expect(projects.additional({ projectPath: '/workspace/second' })).resolves.toBe('/workspace/second')
+    Expect(calls).toEqual([
+      { entryPath: 'App.tao', projectPath: '/workspace/first' },
+      { entryPath: undefined, projectPath: '/workspace/second' },
+    ])
+  })
+
+  Test('closes each owned project resource once even when close is requested twice', async () => {
+    const cleaned: string[] = []
+    const resource = StudioDev.testing.withCleanup({ previewUrl: 'http://127.0.0.1:8081' }, [
+      () => cleaned.push('watcher'),
+      () => cleaned.push('metro'),
+      () => cleaned.push('preview'),
+    ])
+
+    await Promise.all([resource.close(), resource.close()])
+
+    Expect(cleaned).toEqual(['watcher', 'metro', 'preview'])
+  })
+
   Test('attempts every session cleanup after an earlier resource fails to close', async () => {
     const cleaned: string[] = []
 
@@ -137,15 +266,12 @@ Describe('Studio smoke resource isolation', () => {
       new Set([
         first.serverPort,
         first.previewPort,
-        first.electronDebuggingPort,
         otherWorker.serverPort,
         otherWorker.previewPort,
-        otherWorker.electronDebuggingPort,
         otherShard.serverPort,
         otherShard.previewPort,
-        otherShard.electronDebuggingPort,
       ]).size,
-    ).toBe(9)
+    ).toBe(6)
   })
 
   Test('rejects unsafe artifact ids and out-of-range lanes', () => {
@@ -160,6 +286,18 @@ Describe('Studio smoke resource isolation', () => {
     )
   })
 })
+
+function commandResult(command: string, spec: CLI.CommandSpec, exitCode: number): CLI.CommandResult {
+  return {
+    args: [...(spec.args ?? [])],
+    command,
+    cwd: spec.cwd,
+    exitCode,
+    signal: null,
+    stderr: exitCode === 0 ? '' : 'failed',
+    stdout: '',
+  }
+}
 
 function fakeCommand(graceful: boolean): {
   command: Pick<CLI.StartedCommand, 'closeOutput' | 'dispose' | 'exitCode' | 'kill' | 'signalCode' | 'waitForClose'>

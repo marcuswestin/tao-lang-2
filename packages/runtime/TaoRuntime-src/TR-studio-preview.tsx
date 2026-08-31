@@ -1,5 +1,7 @@
 import React from 'react'
+import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
 import { StudioEnvironmentControls, type TaoStudioFixturePlan } from './TR-studio-environment'
 import type { TaoStudioIdentity } from './TR-TaoProps'
 
@@ -75,6 +77,7 @@ type StudioPreviewOverlay = StudioPreviewElement & {
 }
 
 export type StudioPreviewHost = {
+  console?: Partial<Record<StudioPreviewLogLevel, (...arguments_: unknown[]) => void>>
   document: {
     addEventListener(
       type: 'click' | 'mousedown' | 'mouseleave' | 'mousemove' | 'mouseover' | 'mouseout' | 'mouseup',
@@ -104,6 +107,8 @@ export type StudioPreviewHost = {
     ): void
   }
 }
+
+type StudioPreviewLogLevel = 'debug' | 'error' | 'info' | 'log' | 'warn'
 
 type StudioRenderTarget = {
   element: StudioPreviewElement
@@ -185,7 +190,43 @@ export const StudioPreview = {
   Failure: StudioPreviewFailure,
   Pending: StudioPreviewPending,
   PreviewBridge,
+  ReplayHost,
 } as const
+
+/** ReplayHost restores every registered semantic domain before mounting the generated app. */
+function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCaptureArtifact }): React.ReactElement {
+  const [ready, setReady] = React.useState(() => props.replay === undefined)
+  const [error, setError] = React.useState<unknown>()
+  React.useEffect(() => {
+    let active = true
+    if (props.replay === undefined) {
+      setReady(true)
+      return () => {
+        active = false
+      }
+    }
+    setReady(false)
+    void restoreRuntimeCapture(props.replay).then(
+      () => {
+        if (active) {
+          setReady(true)
+        }
+      },
+      replayError => {
+        if (active) {
+          setError(replayError)
+        }
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [props.replay])
+  if (error !== undefined) {
+    return React.createElement(StudioPreviewFailure, { error })
+  }
+  return ready ? React.createElement(React.Fragment, null, props.children) : React.createElement(StudioPreviewPending)
+}
 
 /** PreviewBridge activates Studio messaging only when a generated preview supplies trusted configuration. */
 function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
@@ -371,6 +412,14 @@ export function mountStudioPreviewBridge(
       )
       return
     }
+    const runtimeCaptureRequestId = runtimeCaptureRequestFromMessage(event, config, host.parent)
+    if (runtimeCaptureRequestId !== undefined) {
+      void captureRuntime().then(
+        capture => postRuntimeCapture(host, config, runtimeCaptureRequestId, capture),
+        error => postRuntimeCaptureFailure(host, config, runtimeCaptureRequestId, error),
+      )
+      return
+    }
     const selection = highlightSelectionFromMessage(event, config, host.parent)
     if (selection === undefined) {
       return
@@ -393,8 +442,20 @@ export function mountStudioPreviewBridge(
   host.window.addEventListener('resize', redrawOverlay)
   host.window.addEventListener('scroll', redrawOverlay)
   postAppliedRevision(host, config)
+  const stopFailures = onRuntimeFailure(capture => {
+    host.parent.postMessage({
+      capture,
+      channel: studioProtocolChannel,
+      identity: previewIdentity(config),
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-runtime-failure',
+    }, config.parentOrigin)
+  })
+  const restoreConsole = forwardPreviewConsole(host, config)
 
   return () => {
+    restoreConsole()
+    stopFailures()
     host.document.removeEventListener('click', onClick, true)
     host.document.removeEventListener('mousedown', onMouseDown, true)
     host.document.removeEventListener('mouseleave', disarmDrag)
@@ -408,6 +469,43 @@ export function mountStudioPreviewBridge(
     host.window.removeEventListener('scroll', redrawOverlay)
     overlay?.remove()
     disarmDrag()
+  }
+}
+
+function forwardPreviewConsole(host: StudioPreviewHost, config: StudioPreviewConfig): () => void {
+  if (host.console === undefined) {
+    return () => {}
+  }
+  const restorers: Array<() => void> = []
+  for (const level of ['debug', 'error', 'info', 'log', 'warn'] as const) {
+    const original = host.console[level]
+    if (original === undefined) {
+      continue
+    }
+    const forwarded = (...arguments_: unknown[]): void => {
+      original(...arguments_)
+      const captured = captureArguments(arguments_)
+      host.parent.postMessage({
+        arguments: Array.isArray(captured) ? captured : [captured],
+        channel: studioProtocolChannel,
+        identity: previewIdentity(config),
+        level,
+        protocolVersion: studioProtocolVersion,
+        timestamp: Date.now(),
+        type: 'preview-console',
+      }, config.parentOrigin)
+    }
+    host.console[level] = forwarded
+    restorers.push(() => {
+      if (host.console?.[level] === forwarded) {
+        host.console[level] = original
+      }
+    })
+  }
+  return () => {
+    for (const restore of restorers) {
+      restore()
+    }
   }
 }
 
@@ -462,6 +560,60 @@ function captureRequestFromMessage(
     : undefined
 }
 
+function runtimeCaptureRequestFromMessage(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+): string | undefined {
+  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
+    return undefined
+  }
+  const message = event.data
+  const identity = message['identity']
+  return message['channel'] === studioProtocolChannel
+      && message['protocolVersion'] === studioProtocolVersion
+      && message['type'] === 'capture-runtime'
+      && nonEmptyValue(message['requestId'])
+      && isObject(identity)
+      && identity['appName'] === config.appName
+      && identity['project'] === config.project
+      && identity['previewInstanceId'] === config.previewInstanceId
+    ? message['requestId']
+    : undefined
+}
+
+function postRuntimeCapture(
+  host: StudioPreviewHost,
+  config: StudioPreviewConfig,
+  requestId: string,
+  capture: TaoRuntimeCaptureArtifact,
+): void {
+  host.parent.postMessage({
+    capture,
+    channel: studioProtocolChannel,
+    identity: previewIdentity(config),
+    protocolVersion: studioProtocolVersion,
+    requestId,
+    type: 'preview-runtime-captured',
+  }, config.parentOrigin)
+}
+
+function postRuntimeCaptureFailure(
+  host: StudioPreviewHost,
+  config: StudioPreviewConfig,
+  requestId: string,
+  error: unknown,
+): void {
+  host.parent.postMessage({
+    channel: studioProtocolChannel,
+    error: error instanceof Error ? error.message : String(error),
+    identity: previewIdentity(config),
+    protocolVersion: studioProtocolVersion,
+    requestId,
+    type: 'preview-runtime-capture-failed',
+  }, config.parentOrigin)
+}
+
 function postCapturedFixture(
   host: StudioPreviewHost,
   config: StudioPreviewConfig,
@@ -499,7 +651,12 @@ function browserPreviewHost(): StudioPreviewHost | undefined {
   if (value.document === undefined || value.parent === undefined || value.parent === (globalThis as unknown)) {
     return undefined
   }
-  return { document: value.document, parent: value.parent, window: value as StudioPreviewHost['window'] }
+  return {
+    console: value.console,
+    document: value.document,
+    parent: value.parent,
+    window: value as StudioPreviewHost['window'],
+  }
 }
 
 function validPreviewConfig(config: StudioPreviewConfig): boolean {

@@ -2,6 +2,7 @@ import { ASTUtils, Packages } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
+import { designValidationCodes } from '@validator/diagnostic-codes'
 import {
   configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
@@ -17,6 +18,10 @@ import {
   bridgeBindingName,
   bridgedExpressionsOf,
   bridgeExportName,
+  foreignActionBindingName,
+  foreignActionsOf,
+  foreignViewBindingName,
+  foreignViewsOf,
   type InlineInjection,
   inlineInjectionsOf,
   withInlineInjectionBindings,
@@ -58,11 +63,17 @@ type PlannedSidecar = {
   relativePath: string
 }
 
+type PlannedSidecarCopy = {
+  sourcePath: string
+  relativePath: string
+}
+
 type PlannedSourceOutputs = {
   injections: PlannedInjection[]
   modulePath: string
   declarationsPath?: string
   sidecars: PlannedSidecar[]
+  sidecarCopies: PlannedSidecarCopy[]
 }
 
 type PlannedInjection = {
@@ -89,6 +100,8 @@ export type CompileOptions = {
   appName?: string
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
+  /** release promotes only stable release-gate diagnostics; ordinary development warnings stay non-blocking. */
+  validationMode?: 'development' | 'release'
 }
 
 /** CompilerSession reuses standalone validation and package state across source strings. */
@@ -143,6 +156,7 @@ function compileValidated(
   context: CompilerContext,
   options: CompileOptions = {},
 ): CompileResult {
+  validationResult = validationForCompileMode(validationResult, options.validationMode ?? 'development')
   const errors = Diagnostics.errorMessages(validationResult.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, {
     diagnostics: Diagnostics.errors(validationResult.diagnostics),
@@ -162,6 +176,23 @@ function compileValidated(
     { appNames, selectedAppName },
   )
   return compileValidatedInput(validationResult, context, selectedAppName, options.studio === true)
+}
+
+function validationForCompileMode(
+  validationResult: ValidationResult,
+  mode: NonNullable<CompileOptions['validationMode']>,
+): ValidationResult {
+  if (mode !== 'release') {
+    return validationResult
+  }
+  return {
+    ...validationResult,
+    diagnostics: validationResult.diagnostics.map(diagnostic =>
+      diagnostic.code === designValidationCodes.exploration
+        ? { ...diagnostic, severity: 'error' as const }
+        : diagnostic
+    ),
+  }
 }
 
 /** Compiler exposes Tao source compilation functions. */
@@ -268,16 +299,26 @@ function planOutputPaths(
         usedOutputPaths,
       )
     const sidecarPathBySourcePath = new Map<string, string>()
+    const sidecarCopies: PlannedSidecarCopy[] = []
     // A sidecar is named relative to the file that declares it, which an imported file may own, so
     // every path resolves against its own declaring document rather than this one.
     const planSidecar = (node: AST.Node, path: string, exportName: string, binding: string): PlannedSidecar => {
       const sourcePath = FS.resolvePath(path, FS.dirname(AST.getDocument(node).uri.path))
       let relativePath = sidecarPathBySourcePath.get(sourcePath)
       if (relativePath === undefined) {
-        relativePath = reserveOutputPath(
-          outputPathInDirectory(companionDirectory, FS.basename(sourcePath)),
+        const graph = sidecarSourceGraph(sourcePath)
+        const plannedGraph = planSidecarGraphOutputs(
+          graph,
+          sourcePath,
+          companionDirectory,
           usedOutputPaths,
         )
+        relativePath = plannedGraph.get(sourcePath)
+        Assert.defined(relativePath, 'planned sidecar graph contains its root', { sourcePath })
+        sidecarCopies.push(...[...plannedGraph].map(([graphSourcePath, graphRelativePath]) => ({
+          relativePath: graphRelativePath,
+          sourcePath: graphSourcePath,
+        })))
         sidecarPathBySourcePath.set(sourcePath, relativePath)
       }
       return { binding, exportName, sourcePath, relativePath }
@@ -301,8 +342,18 @@ function planOutputPaths(
       ...bridgedExpressionsOf(file.ast).map(bridge =>
         planSidecar(bridge, bridge.path, bridgeExportName(bridge), bridgeBindingName(bridge))
       ),
+      ...foreignViewsOf(file.ast).map(view => {
+        const foreign = view.foreign
+        Assert.defined(foreign, 'planned foreign view has a sidecar implementation')
+        return planSidecar(view, foreign.path, view.name, foreignViewBindingName(view))
+      }),
+      ...foreignActionsOf(file.ast).map(action => {
+        const foreign = action.foreign
+        Assert.defined(foreign, 'planned foreign action has a sidecar implementation')
+        return planSidecar(action, foreign.path, action.name, foreignActionBindingName(action))
+      }),
     ]
-    bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars })
+    bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars, sidecarCopies })
   }
   return { bySourcePath, modulePathBySourcePath }
 }
@@ -384,15 +435,17 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
             studio,
             studioViews: studio && selectedAppName !== undefined
-              ? file.ast.statements.filter(AST.isScenarioDeclaration).flatMap(scenario => {
-                const render = scenario.block.entries.find(AST.isScenarioRenderClause)
-                const view = render?.view.ref
-                return view === undefined
-                  ? []
-                  : [{ id: `${AST.getDocument(view).uri.fsPath}#${view.name}`, view }]
-              })
+              ? file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
+                AST.scenarioDeclarations(group).flatMap(scenario => {
+                  const subject = AST.scenarioSubjectDeclaration(scenario)
+                  const view = AST.isViewDeclaration(subject) ? subject : undefined
+                  return view === undefined
+                    ? []
+                    : [{ id: `${AST.getDocument(view).uri.fsPath}#${view.name}`, view }]
+                })
+              )
               : [],
-            viewRegistrations: RuntimeGen.ViewRegistrations(file.ast),
+            viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
           }),
       )),
   }
@@ -412,7 +465,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     code: RuntimeGen.InjectionBoundary(injection.node),
   }))
   const copiedSidecars = new Map<string, CompiledFile>()
-  for (const sidecar of planned.sidecars) {
+  for (const sidecar of planned.sidecarCopies) {
     // A synthetic in-memory source has no directory to copy from. Real compiles still assert,
     // which is what catches a missing sidecar before emitting an import of it.
     if (!FS.existsSync(FS.dirname(sidecar.sourcePath))) {
@@ -424,10 +477,237 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     copiedSidecars.set(sidecar.relativePath, {
       sourcePath: sidecar.sourcePath,
       relativePath: sidecar.relativePath,
-      code: FS.readTextSync(sidecar.sourcePath),
+      code: rewriteSidecarTaoImports(
+        FS.readTextSync(sidecar.sourcePath),
+        sidecar.sourcePath,
+        sidecar.relativePath,
+        outputPaths,
+      ),
     })
   }
   return [module, ...injections, ...declarations, ...copiedSidecars.values()]
+}
+
+const sidecarModuleExtensions = ['.ts', '.tsx', '.js', '.jsx', '.json'] as const
+
+/** sidecarSourceGraph follows authored relative module edges while leaving package imports installed. */
+function sidecarSourceGraph(rootPath: string): readonly string[] {
+  if (!FS.existsSync(rootPath)) {
+    return [rootPath]
+  }
+  const graph: string[] = []
+  const visited = new Set<string>()
+  const visit = (sourcePath: string): void => {
+    if (visited.has(sourcePath)) {
+      return
+    }
+    visited.add(sourcePath)
+    graph.push(sourcePath)
+    const source = FS.readTextSync(sourcePath)
+    for (const specifier of relativeModuleSpecifiers(source)) {
+      if (specifier.endsWith('.tao')) {
+        continue
+      }
+      const dependency = resolveRelativeSidecarImport(sourcePath, specifier)
+      Assert.defined(dependency, `Sidecar relative import '${specifier}' could not be resolved.`, {
+        sourcePath,
+      })
+      visit(dependency)
+    }
+  }
+  visit(rootPath)
+  return graph
+}
+
+type SidecarToken = Readonly<{ kind: 'identifier' | 'punctuation' | 'string'; value: string }>
+
+/** Covers imports, re-exports, side-effect imports, and dynamic import calls without false comment/string edges. */
+function relativeModuleSpecifiers(source: string): string[] {
+  const tokens = sidecarTokens(source)
+  const specifiers: string[] = []
+  const add = (token: SidecarToken | undefined): void => {
+    if (token?.kind === 'string' && (token.value.startsWith('./') || token.value.startsWith('../'))) {
+      specifiers.push(token.value)
+    }
+  }
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    if (token?.kind !== 'identifier' || (token.value !== 'import' && token.value !== 'export')) {
+      continue
+    }
+    const next = tokens[index + 1]
+    if (token.value === 'import' && next?.value === '(') {
+      add(tokens[index + 2])
+      continue
+    }
+    if (token.value === 'import' && next?.kind === 'string') {
+      add(next)
+      continue
+    }
+    for (let cursor = index + 1; cursor < tokens.length; cursor++) {
+      const candidate = tokens[cursor]
+      if (candidate?.value === ';' || candidate?.value === 'import' || candidate?.value === 'export') {
+        break
+      }
+      if (candidate?.kind === 'identifier' && candidate.value === 'from') {
+        add(tokens[cursor + 1])
+        break
+      }
+    }
+  }
+  return [...new Set(specifiers)]
+}
+
+/** sidecarTokens is a deliberately small JS/TS lexical scanner; comments and literal bodies never become code. */
+function sidecarTokens(source: string): SidecarToken[] {
+  const tokens: SidecarToken[] = []
+  for (let index = 0; index < source.length;) {
+    const current = source[index]!
+    const next = source[index + 1]
+    if (/\s/.test(current)) {
+      index += 1
+      continue
+    }
+    if (current === '/' && next === '/') {
+      index = source.indexOf('\n', index + 2)
+      if (index < 0) {
+        break
+      }
+      continue
+    }
+    if (current === '/' && next === '*') {
+      const close = source.indexOf('*/', index + 2)
+      index = close < 0 ? source.length : close + 2
+      continue
+    }
+    if (current === '"' || current === "'") {
+      const quote = current
+      let value = ''
+      index += 1
+      while (index < source.length && source[index] !== quote) {
+        if (source[index] === '\\' && index + 1 < source.length) {
+          value += source[index + 1]
+          index += 2
+        } else {
+          value += source[index]
+          index += 1
+        }
+      }
+      index += index < source.length ? 1 : 0
+      tokens.push({ kind: 'string', value })
+      continue
+    }
+    if (current === '`') {
+      // Module specifiers are string literals. Skipping the complete template also prevents its
+      // prose and interpolation text from manufacturing graph edges.
+      index += 1
+      while (index < source.length) {
+        if (source[index] === '\\') {
+          index += 2
+        } else if (source[index] === '`') {
+          index += 1
+          break
+        } else {
+          index += 1
+        }
+      }
+      continue
+    }
+    if (/[A-Za-z_$]/.test(current)) {
+      let end = index + 1
+      while (end < source.length && /[\w$]/.test(source[end]!)) {
+        end += 1
+      }
+      tokens.push({ kind: 'identifier', value: source.slice(index, end) })
+      index = end
+      continue
+    }
+    tokens.push({ kind: 'punctuation', value: current })
+    index += 1
+  }
+  return tokens
+}
+
+function resolveRelativeSidecarImport(sourcePath: string, specifier: string): string | undefined {
+  const requested = FS.resolvePath(specifier, FS.dirname(sourcePath))
+  const extension = FS.extname(requested)
+  const candidates = extension === ''
+    ? [
+      ...sidecarModuleExtensions.map(extension => `${requested}${extension}`),
+      ...sidecarModuleExtensions.map(extension => FS.resolvePath(`index${extension}`, requested)),
+    ]
+    : [
+      requested,
+      ...(extension === '.js' || extension === '.jsx'
+        ? ['.ts', '.tsx'].map(authoredExtension => `${requested.slice(0, -extension.length)}${authoredExtension}`)
+        : []),
+    ]
+  return candidates.find(FS.existsSync)
+}
+
+function planSidecarGraphOutputs(
+  graph: readonly string[],
+  rootPath: string,
+  companionDirectory: string,
+  usedOutputPaths: Set<string>,
+): ReadonlyMap<string, string> {
+  if (graph.length <= 1) {
+    return new Map([[
+      rootPath,
+      reserveOutputPath(
+        outputPathInDirectory(companionDirectory, FS.basename(rootPath)),
+        usedOutputPaths,
+      ),
+    ]])
+  }
+  const commonDirectory = commonPath(graph.map(FS.dirname))
+  const graphName = `${FS.basename(rootPath, FS.extname(rootPath))}.files`
+  for (let suffix = 1;; suffix++) {
+    const directoryName = suffix === 1 ? graphName : `${graphName}-${suffix}`
+    const directory = outputPathInDirectory(companionDirectory, directoryName)
+    const outputs = new Map(graph.map(sourcePath => [
+      sourcePath,
+      outputPathInDirectory(directory, FS.relativePath(commonDirectory, sourcePath)),
+    ]))
+    if ([...outputs.values()].some(path => usedOutputPaths.has(path))) {
+      continue
+    }
+    for (const path of outputs.values()) {
+      usedOutputPaths.add(path)
+    }
+    return outputs
+  }
+}
+
+function commonPath(paths: readonly string[]): string {
+  const first = paths[0]
+  Assert.defined(first, 'sidecar graph has at least one directory')
+  const segments = first.split('/')
+  for (const path of paths.slice(1)) {
+    const candidate = path.split('/')
+    while (segments.length > 0 && segments.join('/') !== candidate.slice(0, segments.length).join('/')) {
+      segments.pop()
+    }
+  }
+  return segments.join('/') || '/'
+}
+
+/** A moved sidecar still resolves generated declaration companions for authored `.tao` type imports. */
+function rewriteSidecarTaoImports(
+  source: string,
+  sourcePath: string,
+  relativePath: string,
+  outputPaths: PlannedOutputs,
+): string {
+  return source.replace(/(['"])(\.\.?\/[^'"]+\.tao)\1/g, (match, quote: string, specifier: string) => {
+    const taoSourcePath = FS.resolvePath(specifier, FS.dirname(sourcePath))
+    const planned = outputPaths.bySourcePath.get(taoSourcePath)
+    if (!planned) {
+      return match
+    }
+    const target = planned.declarationsPath ?? planned.modulePath
+    return `${quote}${relativeImportPath(relativePath, target)}${quote}`
+  })
 }
 
 function declarationIdentityProjects(

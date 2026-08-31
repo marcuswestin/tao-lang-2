@@ -91,6 +91,25 @@ Describe('Studio source-action patch bus', () => {
     `))
   })
 
+  Test('inserts a component at a render gap identified by the move-render anchors', async () => {
+    const document = await parseDocument(`
+      view MainView() {
+         render Stack() {
+            Text("First")
+            Text("Second")
+      }  }
+    `)
+    const ids = renderIdsByText(document)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      beforeId: ids['Second']!,
+      component: 'Number',
+      kind: 'insert-component',
+    })
+
+    Expect(patch.content.indexOf('Text("First")')).toBeLessThan(patch.content.indexOf('Number(0)'))
+    Expect(patch.content.indexOf('Number(0)')).toBeLessThan(patch.content.indexOf('Text("Second")'))
+  })
+
   Test('renders every typed palette choice in current dialect and rejects arbitrary payloads', async () => {
     const document = await parseDocument(`
       view MainView() {
@@ -98,7 +117,33 @@ Describe('Studio source-action patch bus', () => {
       }
     `)
 
-    for (const component of ['Button', 'Number', 'Stack', 'Text'] satisfies StudioComponentKind[]) {
+    for (
+      const component of [
+        'Box',
+        'Button',
+        'Checkbox',
+        'Col',
+        'DatePicker',
+        'FormButton',
+        'Image',
+        'Number',
+        'Panes',
+        'Picker',
+        'Progress',
+        'Row',
+        'ScrollView',
+        'SegmentedControl',
+        'Slider',
+        'Spinner',
+        'Stack',
+        'Switch',
+        'Text',
+        'TextFrame',
+        'TextInput',
+        'TextMultiline',
+        'WrappingRow',
+      ] satisfies StudioComponentKind[]
+    ) {
       const patch = await SourceActions.applyStudioPatch(document, {
         component,
         kind: 'insert-component',
@@ -188,6 +233,114 @@ Describe('Studio source-action patch bus', () => {
             Text("First")
       }  }
     `))
+  })
+
+  Test('inspects parsed layout and style values and edits current-dialect inline style', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { ink #111 body [fg ink, size 14] }
+      view MainView() {
+         render Text("First") [gap 8, body, size 16]
+      }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+    const inspection = SourceActions.inspectStudioRender(document, id)
+
+    Expect(inspection.layoutEntries).toEqual([['gap', 8]])
+    Expect(inspection.styleEntries).toEqual([['body'], ['size', 16]])
+    Expect(inspection.styleProvenance[0]).toEqual({
+      blastRadius: 1,
+      chain: ['body', 'fg ink', 'size 14'],
+      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'edit' },
+    })
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { kind: 'element-inline' },
+      renderId: id,
+    })
+    Expect(patch.content).toContain('Text("First") [gap 8, body, size 18]')
+  })
+
+  Test('edits and forks a uniquely named current-dialect design bundle', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { ink #111 body [fg ink, size 14] }
+      view MainView() { render Text("First") [body] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'edit' },
+      renderId: id,
+    })
+    Expect(patch.content).toContain('body [fg ink, size 18]')
+
+    const fork = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+    Expect(fork.content).toContain('bodyVariant [fg ink, size 18]')
+    Expect(fork.content).toContain('Text("First") [bodyVariant]')
+  })
+
+  Test('promotes a raw inline color to a token and replaces only the selected render entry', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { ink #111 }
+      view MainView() { render Text("First") [fg #c00] Text("Second") [fg #c00] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['fg', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'danger' },
+      renderId: id,
+    })
+
+    Expect(patch.content).toContain('danger #c00')
+    Expect(patch.content).toContain('Text("First") [fg danger]')
+    Expect(patch.content).toContain('Text("Second") [fg #c00]')
+  })
+
+  Test('promotes an inline exploration into a selected-render-only bundle fork', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { ink #111 body [fg ink, size 14] }
+      view MainView() { render Text("First") [body, size 18] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+
+    Expect(patch.content).toContain('bodyVariant [fg ink, size 18]')
+    Expect(patch.content).toContain('Text("First") [bodyVariant]')
+  })
+
+  Test('promotes an inline exploration to a standard element default', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      workspace design Theme { ink #111 }
+      view MainView() { render Text("First") [size 18] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { elementName: 'Text', kind: 'element-default' },
+      renderId: id,
+    })
+
+    Expect(patch.content).toContain('Text [size 18]')
+    Expect(patch.content).toContain('render Text("First")')
+    Expect(patch.content).not.toContain('Text("First") [size 18]')
   })
 
   Test('accepts exactly the current Studio layout vocabulary', async () => {
@@ -676,10 +829,12 @@ Describe('Studio source-action patch bus', () => {
       view Main() { render Card(Title: "Main") }
       view Card(Title text, Owner Account) { render Text(Title) }
       fixture Cards { Lead = create Account { Name: "Ada" } }
-      scenario Card.lead {
+      scenarios Card "states" {
          fixture Cards
-         render Card(Title: "Old", Owner: Lead)
          device phone
+         scenario "lead" {
+            render (Title: "Old", Owner: Lead)
+         }
       }
     `)
 
@@ -689,11 +844,12 @@ Describe('Studio source-action patch bus', () => {
         Title: 'Promoted',
       },
       kind: 'set-scenario-arguments',
-      scenarioName: 'Card.lead',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
     })
     const updated = await parseRawDocument(patch.content)
 
-    Expect(patch.content).toContain('render Card(Owner: Lead, Title: "Promoted")')
+    Expect(patch.content).toContain('render (Owner: Lead, Title: "Promoted")')
     Expect(updated.parseResult.lexerErrors).toEqual([])
     Expect(updated.parseResult.parserErrors).toEqual([])
   })
@@ -702,16 +858,19 @@ Describe('Studio source-action patch bus', () => {
     const document = await parseDocument(`
       view Card(Title text) { render Text(Title) }
       fixture Cards { }
-      scenario Card.special {
+      scenarios Card "states" {
          fixture Cards
-         render Card(Title: "Old")
+         scenario "special" {
+            render (Title: "Old")
+         }
       }
     `)
     const title = 'Literal {brace}, "quote", \\ slash\nnext line'
     const patch = await SourceActions.applyStudioPatch(document, {
       arguments: { Title: title },
       kind: 'set-scenario-arguments',
-      scenarioName: 'Card.special',
+      scenarioGroupName: 'states',
+      scenarioName: 'special',
     })
     const updated = await parseRawDocument(patch.content)
 
@@ -719,6 +878,35 @@ Describe('Studio source-action patch bus', () => {
     Expect(updated.parseResult.lexerErrors).toEqual([])
     Expect(updated.parseResult.parserErrors).toEqual([])
     Expect(stringLiteralValues(updated)).toContain(title)
+  })
+
+  Test('creates an entry override when focused arguments were inherited from the group', async () => {
+    const document = await parseDocument(`
+      data Accounts / Account { Name text }
+      view Card(Title text, Owner Account) { render Text(Title) }
+      fixture Cards { Lead = create Account { Name: "Ada" } }
+      scenarios Card "states" {
+         fixture Cards
+         render (Title: "Default", Owner: Lead)
+         device phone
+         scenario "lead" { }
+      }
+    `)
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      arguments: {
+        Owner: { handle: 'Lead', kind: 'fixture-reference' },
+        Title: 'Entry override',
+      },
+      kind: 'set-scenario-arguments',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toContain('scenario "lead" {\n      render (Owner: Lead, Title: "Entry override")')
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
   })
 
   Test('inserts a captured provider snapshot as canonical Tao fixture source', async () => {

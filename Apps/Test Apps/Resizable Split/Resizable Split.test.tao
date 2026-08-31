@@ -1,0 +1,10 @@
+use ResizableSplitApp from ./
+
+test "Resizable Split" {
+   test "renders every pane of a resizable split" {
+      run ResizableSplitApp
+
+      expect text "Persistent sidebar"
+      expect text "Resizable workspace"
+   }
+}

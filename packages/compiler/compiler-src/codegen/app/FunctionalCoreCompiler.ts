@@ -147,13 +147,22 @@ export const FunctionalCoreCompiler = {
   /** ForStatement compiles repeated rendering with an iteration-local Tao value binding. */
   ForStatement(statement: AST.ForStatement, options: CodegenOptions = {}): Compiled {
     const selectHandler = AST.loopSelectHandlers(statement)[0]
+    const cst = statement.$cstNode
+    Assert.defined(cst, 'compiled loop has source coordinates')
     return gen`
       {TR.ForEach(${Compile.Expression(statement.collection)}, ${functionRuntimeParameterName(0)} =>
         TR.BlockScope(_Scope, _Scope => {
           ${gen.scopeName(statement)} = ${functionRuntimeParameterName(0)}
           ${Compile.RenderBlockBody(statement.block, options)}
         })
-      ${selectHandler ? gen`, ${Compile.LoopSelectHandlerCallback(selectHandler)}` : ''})}
+      , ${selectHandler ? Compile.LoopSelectHandlerCallback(selectHandler) : 'undefined'}, {
+        declaration: ${gen.jsLiteral(AST.findOwningView(statement)?.name ?? 'loop')},
+        source: {
+          path: ${gen.jsLiteral(AST.getDocument(statement).uri.fsPath)},
+          start: ${cst.offset},
+          end: ${cst.end},
+        },
+      })}
     `
   },
 

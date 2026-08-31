@@ -1,0 +1,27 @@
+use SplitNav from @tao/nav
+use Col, Text from @tao/ui
+
+app ResizableSplitApp {
+   Name "Resizable Split"
+   state SidebarWidth is number = 280 (persist)
+   Navigator SplitNav {
+      @sidebar {
+         Content Sidebar
+         Width SidebarWidth
+         Resizable true
+      }
+      @main {
+         Content Main
+         Width 640
+         Resizable true
+}  }  }
+
+view Sidebar() {
+   render Col() {
+      Text("Persistent sidebar")
+}  }
+
+view Main() {
+   render Col() {
+      Text("Resizable workspace")
+}  }

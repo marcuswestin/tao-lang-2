@@ -15,17 +15,40 @@ const stateValidationMessages = {
     `Compound set '${operator}' requires state '${state}' to be number, got ${actual}.`,
   toggleStateType: (state: string, actual: string) =>
     `\`toggle\` requires state '${state}' to be boolean, got ${actual}.`,
+  persistedOnlyInApp: (state: string) => `Persisted state '${state}' is only allowed directly inside an app.`,
+  appStateMustPersist: (state: string) => `App state '${state}' must declare (persist).`,
+  persistedTypeRequired: (state: string) => `Persisted state '${state}' must declare its type with 'is'.`,
+  initialTypeMismatch: (state: string, expected: string, actual: string) =>
+    `State '${state}' declares ${expected}, got initial value ${actual}.`,
 } as const
 
 /** StateValidator groups state validation and diagnostics. */
 export const StateValidator = {
   checks: {
-    [AST.StateDeclaration.$type]: reportStateReferenceOrder,
+    [AST.StateDeclaration.$type]: [reportStateReferenceOrder, reportStatePlacement],
     [AST.SetStatement.$type]: reportStateMutationTargetReferenceOrder,
     [AST.ToggleStatement.$type]: [reportStateMutationTargetReferenceOrder, reportToggleTarget],
   } satisfies NodeValidationChecks,
   messages: stateValidationMessages,
   registerTypeValidation,
+}
+
+function reportStatePlacement(state: AST.StateDeclaration, ctx: ValidationContext): void {
+  const app = AST.isAppBlock(state.$container) && AST.isAppDeclaration(state.$container.$container)
+    ? state.$container.$container
+    : undefined
+  if (app) {
+    if (!state.persist) {
+      ctx.error(stateValidationMessages.appStateMustPersist(state.name), state)
+    }
+    if (!state.type) {
+      ctx.error(stateValidationMessages.persistedTypeRequired(state.name), state)
+    }
+    return
+  }
+  if (state.persist) {
+    ctx.error(stateValidationMessages.persistedOnlyInApp(state.name), state)
+  }
 }
 
 function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext): void {
@@ -171,6 +194,22 @@ function validateStateDeclarationTypes(
   accept: ValidationProblemAcceptor<TaoSpecifics>,
   services: TaoTypirServices,
 ): void {
+  if (state.type) {
+    const expected = Type.ofReference(state.type)
+    const actual = Type.ofExpression(state.value)
+    if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+      accept({
+        languageNode: state.value,
+        message: stateValidationMessages.initialTypeMismatch(
+          state.name,
+          Type.displayName(expected),
+          Type.displayName(actual),
+        ),
+        severity: 'error',
+      })
+      return
+    }
+  }
   const semanticType = Type.ofExpression(state.value)
   if (semanticType.kind === 'primitive' && semanticType.primitive === 'action') {
     accept({

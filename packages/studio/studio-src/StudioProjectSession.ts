@@ -4,8 +4,11 @@ import SourceActions, {
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioLayoutEntry,
+  type StudioRenderInspection,
   type StudioScenarioArgumentValue,
   type StudioSourcePatchRequest,
+  type StudioStyleEntry,
+  type StudioStyleLandingScope,
 } from '@source-actions'
 import { Workspace } from '@workspace'
 import {
@@ -25,7 +28,7 @@ import {
   type StudioCellEnvironment,
   type StudioCellIdentity,
   type StudioCellInstanceIdentity,
-  type StudioPreviewManifestV1,
+  type StudioPreviewManifestV2,
 } from './StudioPreviewManifest'
 import {
   type StudioJsonObject,
@@ -39,6 +42,8 @@ import {
 } from './StudioProtocol'
 
 export type StudioProjectFile = {
+  diagnosticCount: number
+  dirty: boolean
   kind: 'file'
   path: string
   sourceVersion: string
@@ -55,6 +60,11 @@ export type StudioProjectSessionOptions = {
   projectRoot: string
 }
 
+export type StudioAppVariant = Readonly<{
+  appName: string
+  entryPath: string
+}>
+
 export type StudioDraftWriteRequest = {
   content: string
   path: string
@@ -68,6 +78,63 @@ export type StudioDraftWriteResult = {
   file: StudioProjectFileContent
   saved: boolean
 }
+
+export type StudioCreateFileRequest = {
+  path: string
+  writeId: string
+}
+
+export type StudioRenameFileRequest = {
+  path: string
+  sourceVersion: string
+  targetPath: string
+  writeId: string
+}
+
+export type StudioDeleteFileRequest = {
+  path: string
+  sourceVersion: string
+  writeId: string
+}
+
+export type StudioCreateFileResult = {
+  compile: StudioCompileCompletion
+  file: StudioProjectFileContent
+  files: readonly StudioProjectFile[]
+}
+
+export type StudioRenameFileResult = StudioCreateFileResult & {
+  previousPath: string
+}
+
+export type StudioDeleteFileResult = {
+  compile: StudioCompileCompletion
+  deleted: StudioProjectFile
+  files: readonly StudioProjectFile[]
+}
+
+export type StudioFileDraftState = {
+  diagnostics: readonly string[]
+  dirty: boolean
+}
+
+export type StudioCheckpointSummary = {
+  afterSourceVersion: string
+  beforeSourceVersion: string
+  id: string
+  path: string
+  status: 'committed' | 'open' | 'undone'
+}
+
+export type StudioInspectRenderRequest = {
+  path: string
+  renderId: string
+  sourceVersion: string
+}
+
+export type StudioDesignValue =
+  | { kind: 'bundle'; name: string; entries: readonly string[] }
+  | { kind: 'token'; name: string; value: string }
 
 export type StudioPreviewRegistration = {
   previewInstanceId: string
@@ -103,6 +170,7 @@ export type StudioSourceActionUndoResult = {
 }
 
 export type StudioSessionHandshake = {
+  apps: readonly StudioAppVariant[]
   capabilities: {
     drafts: 'disk-synced-parsable'
     language: readonly string[]
@@ -115,7 +183,7 @@ export type StudioSessionHandshake = {
     matrix: {
       concurrentCells: true
       scheme: 'inert'
-      version: 1
+      version: 2
     }
   }
   channel: typeof studioProtocolChannel
@@ -127,7 +195,7 @@ export type StudioSessionHandshake = {
   entryPath: string
   files: readonly StudioProjectFile[]
   identity: StudioProjectIdentity
-  previewManifest?: StudioPreviewManifestV1
+  previewManifest?: StudioPreviewManifestV2
   protocolVersion: typeof studioProtocolVersion
   type: 'handshake'
 }
@@ -146,6 +214,12 @@ export type StudioSessionEvent =
     type: 'file-changed'
   }
   | {
+    channel: typeof studioProtocolChannel
+    files: readonly StudioProjectFile[]
+    protocolVersion: typeof studioProtocolVersion
+    type: 'files-changed'
+  }
+  | {
     acknowledgements: StudioWatchResult['acknowledgements']
     channel: typeof studioProtocolChannel
     protocolVersion: typeof studioProtocolVersion
@@ -153,9 +227,15 @@ export type StudioSessionEvent =
   }
   | {
     channel: typeof studioProtocolChannel
-    manifest: StudioPreviewManifestV1
+    manifest: StudioPreviewManifestV2
     protocolVersion: typeof studioProtocolVersion
     type: 'preview-manifest-changed'
+  }
+  | {
+    channel: typeof studioProtocolChannel
+    checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>
+    protocolVersion: typeof studioProtocolVersion
+    type: 'checkpoint-changed'
   }
 
 type SourceActionCacheEntry = {
@@ -180,11 +260,17 @@ type SourceActionUndoCacheEntry = {
 
 const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'GET', path: '/api/protocol' },
+  { method: 'POST', path: '/api/data/fill' },
+  { method: 'POST', path: '/api/design' },
   { method: 'GET', path: '/api/files' },
   { method: 'GET', path: '/api/file' },
+  { method: 'POST', path: '/api/file/create' },
+  { method: 'POST', path: '/api/file/delete' },
   { method: 'POST', path: '/api/file/draft' },
+  { method: 'POST', path: '/api/file/rename' },
   { method: 'POST', path: '/api/language/highlight' },
   { method: 'POST', path: '/api/source-action' },
+  { method: 'POST', path: '/api/source-action/inspect' },
   { method: 'POST', path: '/api/source-action/undo' },
   { method: 'GET', path: '/api/ai/availability' },
   { method: 'POST', path: '/api/ai/fixture' },
@@ -208,6 +294,7 @@ export class StudioProjectSession {
   readonly #actionUndoResults = new Map<string, SourceActionUndoCacheEntry>()
   readonly #checkpointOrder: string[] = []
   readonly #coordinator: StudioCompileCoordinator
+  readonly #draftStates = new Map<string, StudioFileDraftState>()
   readonly #listeners = new Set<(event: StudioSessionEvent) => void>()
   readonly #workspace: Workspace
   #mutationLane: Promise<void> = Promise.resolve()
@@ -218,6 +305,7 @@ export class StudioProjectSession {
     readonly projectRoot: string,
     readonly entryPath: string,
     readonly appName: string,
+    readonly apps: readonly StudioAppVariant[],
     workspace: Workspace,
     compile: StudioCompileCoordinatorOptions['compile'],
   ) {
@@ -239,8 +327,19 @@ export class StudioProjectSession {
   static async open(options: StudioProjectSessionOptions): Promise<StudioProjectSession> {
     const projectRoot = await requireProjectRoot(options.projectRoot)
     const workspace = await Workspace.open(projectRoot)
-    const selection = await resolveAppSelection(projectRoot, workspace, options.entryPath, options.appName)
-    return new StudioProjectSession(projectRoot, selection.entryPath, selection.appName, workspace, options.compile)
+    const apps = await discoverAppVariants(projectRoot, workspace)
+    const requestedEntryPath = options.entryPath === undefined
+      ? undefined
+      : FS.relativePath(projectRoot, await resolveEntryPath(projectRoot, options.entryPath))
+    const selection = resolveAppSelection(projectRoot, apps, options.appName, requestedEntryPath)
+    return new StudioProjectSession(
+      projectRoot,
+      FS.resolvePath(selection.entryPath, projectRoot),
+      selection.appName,
+      apps,
+      workspace,
+      options.compile,
+    )
   }
 
   identity(): StudioProjectIdentity {
@@ -249,6 +348,20 @@ export class StudioProjectSession {
 
   compileSnapshot(): StudioCompileSnapshot {
     return this.#coordinator.snapshot()
+  }
+
+  fileDraftState(path: string): StudioFileDraftState {
+    return this.#draftStates.get(path) ?? { diagnostics: [], dirty: false }
+  }
+
+  checkpoints(): readonly StudioCheckpointSummary[] {
+    return [...this.#actionCheckpoints.values()].map(checkpoint => ({
+      afterSourceVersion: checkpoint.afterSourceVersion,
+      beforeSourceVersion: checkpoint.beforeSourceVersion,
+      id: checkpoint.id,
+      path: checkpoint.path,
+      status: checkpoint.status,
+    }))
   }
 
   compileInitial(): Promise<StudioCompileCompletion> {
@@ -271,7 +384,7 @@ export class StudioProjectSession {
   }
 
   /** setMatrixManifest installs the compiler-derived scenario/cell contract for this compile revision. */
-  setMatrixManifest(manifest: StudioPreviewManifestV1): void {
+  setMatrixManifest(manifest: StudioPreviewManifestV2): void {
     if (manifest.project.root !== this.projectRoot || manifest.project.appName !== this.appName) {
       throw new Errors.UserInputError('Studio preview manifest does not match the open project and app.')
     }
@@ -284,7 +397,7 @@ export class StudioProjectSession {
     })
   }
 
-  previewManifest(): StudioPreviewManifestV1 | undefined {
+  previewManifest(): StudioPreviewManifestV2 | undefined {
     return this.#matrix?.manifest
   }
 
@@ -319,6 +432,7 @@ export class StudioProjectSession {
 
   async handshake(): Promise<StudioSessionHandshake> {
     return {
+      apps: this.apps,
       capabilities: {
         drafts: 'disk-synced-parsable',
         language: ['lsp', 'textmate'],
@@ -331,7 +445,7 @@ export class StudioProjectSession {
         matrix: {
           concurrentCells: true,
           scheme: 'inert',
-          version: 1,
+          version: 2,
         },
       },
       channel: studioProtocolChannel,
@@ -360,11 +474,10 @@ export class StudioProjectSession {
     })
     return await Promise.all(paths.map(async path => {
       const content = await FS.readText(path)
-      return {
-        kind: 'file' as const,
-        path: FS.relativePath(this.projectRoot, path),
-        sourceVersion: SourceActions.studioSourceVersion(content),
-      }
+      return this.#projectFile(
+        FS.relativePath(this.projectRoot, path),
+        SourceActions.studioSourceVersion(content),
+      )
     }))
   }
 
@@ -373,10 +486,76 @@ export class StudioProjectSession {
     const content = await FS.readText(resolved)
     return {
       content,
-      kind: 'file',
-      path: FS.relativePath(this.projectRoot, resolved),
-      sourceVersion: SourceActions.studioSourceVersion(content),
+      ...this.#projectFile(
+        FS.relativePath(this.projectRoot, resolved),
+        SourceActions.studioSourceVersion(content),
+      ),
     }
+  }
+
+  createFile(request: StudioCreateFileRequest): Promise<StudioCreateFileResult> {
+    return this.#mutate(async () => {
+      const path = await this.#resolveNewTaoFile(request.path)
+      const content = ''
+      const sourceVersion = SourceActions.studioSourceVersion(content)
+      await FS.writeText(path, content)
+      const compile = await this.#coordinator.noteStudioFileMutation([{
+        path,
+        sourceVersion,
+        writeId: request.writeId,
+      }])
+      const file: StudioProjectFileContent = {
+        content,
+        ...this.#projectFile(FS.relativePath(this.projectRoot, path), sourceVersion),
+      }
+      this.#emitFile(file)
+      const files = await this.files()
+      this.#emitFiles(files)
+      return { compile, file, files }
+    })
+  }
+
+  renameFile(request: StudioRenameFileRequest): Promise<StudioRenameFileResult> {
+    return this.#mutate(async () => {
+      const current = await this.readFile(request.path)
+      requireSourceVersion(current, request.sourceVersion)
+      this.#requireFileMutationAllowed(current.path)
+      const path = await this.#resolveTaoFile(current.path)
+      if (await FS.realPath(path) === this.entryPath) {
+        throw new Errors.UserInputError('Studio cannot rename the active app entry file.')
+      }
+      const targetPath = await this.#resolveNewTaoFile(request.targetPath)
+      await FS.move(path, targetPath)
+      const compile = await this.#coordinator.noteStudioFileMutation([
+        { path, writeId: request.writeId },
+        { path: targetPath, sourceVersion: current.sourceVersion, writeId: request.writeId },
+      ])
+      const file: StudioProjectFileContent = {
+        content: current.content,
+        ...this.#projectFile(FS.relativePath(this.projectRoot, targetPath), current.sourceVersion),
+      }
+      const files = await this.files()
+      this.#emitFiles(files)
+      return { compile, file, files, previousPath: current.path }
+    })
+  }
+
+  deleteFile(request: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> {
+    return this.#mutate(async () => {
+      const current = await this.readFile(request.path)
+      requireSourceVersion(current, request.sourceVersion)
+      this.#requireFileMutationAllowed(current.path)
+      const path = await this.#resolveTaoFile(current.path)
+      if (await FS.realPath(path) === this.entryPath) {
+        throw new Errors.UserInputError('Studio cannot delete the active app entry file.')
+      }
+      await FS.remove(path)
+      const compile = await this.#coordinator.noteStudioFileMutation([{ path, writeId: request.writeId }])
+      const deleted = this.#projectFile(current.path, current.sourceVersion)
+      const files = await this.files()
+      this.#emitFiles(files)
+      return { compile, deleted, files }
+    })
   }
 
   syncDraft(request: StudioDraftWriteRequest): Promise<StudioDraftWriteResult> {
@@ -387,7 +566,10 @@ export class StudioProjectSession {
       const parsed = await this.#workspace.parseSource(request.content, Langium.URI.file(resolved))
       const diagnostics = Diagnostics.errorMessages(parsed.diagnostics, 'lexer', 'parser')
       if (diagnostics.length > 0) {
-        return { diagnostics, file: current, saved: false }
+        this.#draftStates.set(current.path, { diagnostics, dirty: true })
+        const file = { ...current, ...this.#projectFile(current.path, current.sourceVersion) }
+        this.#emitFile(file)
+        return { diagnostics, file, saved: false }
       }
 
       const sourceVersion = SourceActions.studioSourceVersion(request.content)
@@ -397,11 +579,10 @@ export class StudioProjectSession {
         sourceVersion,
         writeId: request.writeId,
       })
+      this.#draftStates.delete(current.path)
       const file: StudioProjectFileContent = {
         content: request.content,
-        kind: 'file',
-        path: current.path,
-        sourceVersion,
+        ...this.#projectFile(current.path, sourceVersion),
       }
       this.#emitFile(file)
       return { compile, diagnostics: [], file, saved: true }
@@ -434,7 +615,9 @@ export class StudioProjectSession {
       if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
         throw new Errors.UserInputError(`Cannot apply a Studio source action until ${current.path} parses.`)
       }
-      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, sourcePatchRequest(envelope))
+      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, sourcePatchRequest(envelope), {
+        files: parsed.files.map(file => file.ast),
+      })
       await FS.writeText(path, patch.content)
       const compile = await this.#coordinator.noteStudioWrite({
         path,
@@ -466,14 +649,57 @@ export class StudioProjectSession {
         requestId: envelope.requestId,
         sourceVersion: patch.sourceVersion,
       }
+      this.#emitCheckpoint(result.checkpoint)
       this.#actionResults.set(envelope.requestId, { fingerprint, result })
       trimMap(this.#actionResults, sourceActionResultLimit)
       this.#emitFile({
-        kind: 'file',
-        path: current.path,
-        sourceVersion: patch.sourceVersion,
+        ...this.#projectFile(current.path, patch.sourceVersion),
       })
       return result
+    })
+  }
+
+  inspectRender(request: StudioInspectRenderRequest): Promise<StudioRenderInspection> {
+    return this.#mutate(async () => {
+      const current = await this.readFile(request.path)
+      requireSourceVersion(current, request.sourceVersion)
+      const path = await this.#resolveTaoFile(current.path)
+      const parsed = await this.#workspace.parse(path)
+      if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
+        throw new Errors.UserInputError(`Cannot inspect a Studio render until ${current.path} parses.`)
+      }
+      return SourceActions.inspectStudioRender(parsed.entry.document, request.renderId, {
+        files: parsed.files.map(file => file.ast),
+      })
+    })
+  }
+
+  inspectDesign(
+    request: Pick<StudioInspectRenderRequest, 'path' | 'sourceVersion'>,
+  ): Promise<readonly StudioDesignValue[]> {
+    return this.#mutate(async () => {
+      const current = await this.readFile(request.path)
+      requireSourceVersion(current, request.sourceVersion)
+      const path = await this.#resolveTaoFile(current.path)
+      const parsed = await this.#workspace.parse(path)
+      if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
+        throw new Errors.UserInputError(`Cannot inspect Studio design values until ${current.path} parses.`)
+      }
+      const values: StudioDesignValue[] = []
+      for (const design of parsed.entry.ast.statements.filter(AST.isDesignDeclaration)) {
+        for (const member of design.members) {
+          if (AST.isDesignToken(member)) {
+            values.push({ kind: 'token', name: member.name, value: member.value })
+          } else if (AST.isDesignBundle(member)) {
+            values.push({
+              entries: member.spec.entries.flatMap(entry => entry.$cstNode?.text ?? []),
+              kind: 'bundle',
+              name: member.name,
+            })
+          }
+        }
+      }
+      return values
     })
   }
 
@@ -532,12 +758,11 @@ export class StudioProjectSession {
         requestId: envelope.requestId,
         sourceVersion: checkpoint.beforeSourceVersion,
       }
+      this.#emitCheckpoint(result.checkpoint)
       this.#actionUndoResults.set(envelope.requestId, { fingerprint, result })
       trimMap(this.#actionUndoResults, sourceActionResultLimit)
       this.#emitFile({
-        kind: 'file',
-        path: checkpoint.path,
-        sourceVersion: checkpoint.beforeSourceVersion,
+        ...this.#projectFile(checkpoint.path, checkpoint.beforeSourceVersion),
       })
       return result
     })
@@ -598,6 +823,53 @@ export class StudioProjectSession {
       throw new Errors.UserInputError(`Studio path resolves outside the project: ${path}`)
     }
     return resolved
+  }
+
+  async #resolveNewTaoFile(path: string): Promise<string> {
+    const resolved = FS.resolvePath(path, this.projectRoot)
+    if (!FS.pathIsWithin(resolved, this.projectRoot) || FS.extname(resolved) !== '.tao') {
+      throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
+    }
+    if (await FS.exists(resolved)) {
+      throw new Errors.UserInputError(`Studio file already exists: ${FS.relativePath(this.projectRoot, resolved)}`)
+    }
+    const missingParts = [FS.basename(resolved)]
+    let ancestor = FS.dirname(resolved)
+    while (!await FS.isDirectory(ancestor)) {
+      if (await FS.exists(ancestor)) {
+        throw new Errors.UserInputError(`Studio file parent is not a folder: ${path}`)
+      }
+      const parent = FS.dirname(ancestor)
+      if (parent === ancestor) {
+        throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
+      }
+      missingParts.unshift(FS.basename(ancestor))
+      ancestor = parent
+    }
+    const canonical = FS.resolvePath(missingParts.join('/'), await FS.realPath(ancestor))
+    if (!FS.pathIsWithin(canonical, this.projectRoot)) {
+      throw new Errors.UserInputError(`Studio path resolves outside the project: ${path}`)
+    }
+    return resolved
+  }
+
+  #requireFileMutationAllowed(path: string): void {
+    if (this.fileDraftState(path).dirty) {
+      throw new Errors.UserInputError(`Save or discard the unsaved Studio draft before changing ${path}.`)
+    }
+  }
+
+  #projectFile(path: string, sourceVersion: string): StudioProjectFile {
+    const draft = this.fileDraftState(path)
+    const diagnosticCount = draft.diagnostics.length + this.#coordinator.snapshot().diagnostics.filter(diagnostic => {
+      if (diagnostic.filePath === undefined) {
+        return false
+      }
+      const diagnosticPath = FS.resolvePath(diagnostic.filePath, this.projectRoot)
+      return FS.pathIsWithin(diagnosticPath, this.projectRoot)
+        && FS.relativePath(this.projectRoot, diagnosticPath) === path
+    }).length
+    return { diagnosticCount, dirty: draft.dirty, kind: 'file', path, sourceVersion }
   }
 
   #acceptPreviewIdentity(envelope: StudioSourceActionEnvelope | StudioSourceActionUndoEnvelope): void {
@@ -717,6 +989,24 @@ export class StudioProjectSession {
     })
   }
 
+  #emitFiles(files: readonly StudioProjectFile[]): void {
+    this.#emit({
+      channel: studioProtocolChannel,
+      files,
+      protocolVersion: studioProtocolVersion,
+      type: 'files-changed',
+    })
+  }
+
+  #emitCheckpoint(checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>): void {
+    this.#emit({
+      channel: studioProtocolChannel,
+      checkpoint,
+      protocolVersion: studioProtocolVersion,
+      type: 'checkpoint-changed',
+    })
+  }
+
   #mutate<T>(mutation: () => Promise<T>): Promise<T> {
     const result = this.#mutationLane.then(mutation, mutation)
     this.#mutationLane = result.then(() => undefined, () => undefined)
@@ -742,39 +1032,49 @@ async function requireProjectRoot(input: string): Promise<string> {
   return await FS.realPath(resolved)
 }
 
-async function resolveAppSelection(
+async function discoverAppVariants(
   projectRoot: string,
   workspace: Workspace,
-  entryInput: string | undefined,
-  requestedAppName: string | undefined,
-): Promise<{ appName: string; entryPath: string }> {
-  const candidates = entryInput === undefined
-    ? await Repo.filesUnder(projectRoot, {
-      excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
-      extensions: ['.tao'],
-    })
-    : [await resolveEntryPath(projectRoot, entryInput)]
-  const apps: Array<{ appName: string; entryPath: string }> = []
+): Promise<StudioAppVariant[]> {
+  const candidates = await Repo.filesUnder(projectRoot, {
+    excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
+    extensions: ['.tao'],
+  })
+  const apps: StudioAppVariant[] = []
   for (const entryPath of candidates) {
     const parsed = await workspace.parse(entryPath)
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
-      apps.push({ appName: declaration.name, entryPath })
+      apps.push({ appName: declaration.name, entryPath: FS.relativePath(projectRoot, entryPath) })
     }
   }
-  const matching = requestedAppName === undefined ? apps : apps.filter(app => app.appName === requestedAppName)
+  return apps.toSorted((left, right) =>
+    left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
+  )
+}
+
+function resolveAppSelection(
+  projectRoot: string,
+  apps: readonly StudioAppVariant[],
+  requestedAppName: string | undefined,
+  requestedEntryPath: string | undefined,
+): StudioAppVariant {
+  const matching = apps.filter(app =>
+    (requestedAppName === undefined || app.appName === requestedAppName)
+    && (requestedEntryPath === undefined || app.entryPath === requestedEntryPath)
+  )
   if (matching.length === 0) {
     const available = apps.map(app => app.appName)
     throw new Errors.UserInputError(
-      requestedAppName === undefined
+      requestedAppName === undefined && requestedEntryPath === undefined
         ? `No Tao app declaration found under ${projectRoot}`
-        : `No Tao app named '${requestedAppName}' found. Available apps: ${available.join(', ') || 'none'}.`,
+        : `No matching Tao app found. Available apps: ${available.join(', ') || 'none'}.`,
     )
   }
   if (matching.length > 1) {
     throw new Errors.UserInputError(
-      requestedAppName === undefined
+      requestedAppName === undefined && requestedEntryPath === undefined
         ? `Multiple Tao apps found: ${matching.map(app => app.appName).join(', ')}. Select an appName.`
-        : `Multiple Tao app declarations named '${requestedAppName}' were found. Select an entryPath.`,
+        : `Multiple matching Tao app declarations were found. Select an appName and entryPath.`,
     )
   }
   return matching[0]!
@@ -821,10 +1121,20 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     }
   }
   if (action.kind === 'insert-component' && isStudioComponentKind(action['component'])) {
-    return { component: action['component'], kind: action.kind }
+    return {
+      ...(typeof action['afterId'] === 'string' ? { afterId: action['afterId'] } : {}),
+      ...(typeof action['beforeId'] === 'string' ? { beforeId: action['beforeId'] } : {}),
+      component: action['component'],
+      kind: action.kind,
+    }
   }
   if (action.kind === 'insert-project-view' && typeof action['viewName'] === 'string') {
-    return { kind: action.kind, viewName: action['viewName'] }
+    return {
+      ...(typeof action['afterId'] === 'string' ? { afterId: action['afterId'] } : {}),
+      ...(typeof action['beforeId'] === 'string' ? { beforeId: action['beforeId'] } : {}),
+      kind: action.kind,
+      viewName: action['viewName'],
+    }
   }
   if (
     action.kind === 'move-render'
@@ -855,7 +1165,23 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     return { kind: action.kind, renderId: action['renderId'], wrapper: action['wrapper'] }
   }
   if (
+    action.kind === 'set-style-entry'
+    && typeof action['renderId'] === 'string'
+    && Array.isArray(action['entry'])
+    && action['entry'].length > 0
+    && action['entry'].every(value => typeof value === 'string' || typeof value === 'number')
+    && isStudioStyleLandingScope(action['landing'])
+  ) {
+    return {
+      entry: action['entry'] as unknown as StudioStyleEntry,
+      kind: action.kind,
+      landing: action['landing'],
+      renderId: action['renderId'],
+    }
+  }
+  if (
     action.kind === 'set-scenario-arguments'
+    && typeof action['scenarioGroupName'] === 'string'
     && typeof action['scenarioName'] === 'string'
     && isRecord(action['arguments'])
     && Object.values(action['arguments']).every(isStudioScenarioArgumentValue)
@@ -863,10 +1189,29 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     return {
       arguments: action['arguments'] as Readonly<Record<string, StudioScenarioArgumentValue>>,
       kind: action.kind,
+      scenarioGroupName: action['scenarioGroupName'],
       scenarioName: action['scenarioName'],
     }
   }
   throw new Errors.UserInputError(`Unsupported or invalid Studio source action: ${action.kind}`)
+}
+
+function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingScope {
+  if (!isRecord(value)) {
+    return false
+  }
+  if (value['kind'] === 'element-inline') {
+    return true
+  }
+  if (value['kind'] === 'style-bundle') {
+    return typeof value['bundleName'] === 'string'
+      && (value['mode'] === 'edit' || value['mode'] === 'fork')
+      && (value['forkName'] === undefined || typeof value['forkName'] === 'string')
+  }
+  if (value['kind'] === 'element-default') {
+    return typeof value['elementName'] === 'string'
+  }
+  return value['kind'] === 'token' && typeof value['tokenName'] === 'string'
 }
 
 function isCapturedFixturePlan(value: unknown): value is StudioInsertCapturedFixturePatchRequest['plan'] {
@@ -947,12 +1292,17 @@ function cellReconfigureRequest(value: unknown): StudioCellReconfigureRequest {
   }
   const args = value['args']
   const environment = value['environment']
+  const rawReplay = value['replay']
+  const replay = rawReplay === undefined ? undefined : StudioProtocol.parseRuntimeCapture(rawReplay)
   const stateLayers = value['stateLayers']
   if (args !== undefined && (!isRecord(args) || !isJsonValue(args))) {
     throw new Errors.UserInputError('Studio cell arguments must be JSON data.')
   }
   if (environment !== undefined && !isRecord(environment)) {
     throw new Errors.UserInputError('Studio cell environment must be an object.')
+  }
+  if (rawReplay !== undefined && replay === undefined) {
+    throw new Errors.UserInputError('Studio cell replay must be a valid runtime capture artifact.')
   }
   if (stateLayers !== undefined && (!Array.isArray(stateLayers) || !stateLayers.every(isString))) {
     throw new Errors.UserInputError('Studio cell state layers must be names.')
@@ -961,6 +1311,7 @@ function cellReconfigureRequest(value: unknown): StudioCellReconfigureRequest {
     ...identity,
     ...(args === undefined ? {} : { args: args as StudioJsonObject }),
     ...(environment === undefined ? {} : { environment: environment as StudioCellEnvironment }),
+    ...(replay === undefined ? {} : { replay }),
     ...(stateLayers === undefined ? {} : { stateLayers }),
   }
 }
@@ -987,8 +1338,34 @@ function isString(value: unknown): value is string {
 }
 
 function isStudioComponentKind(value: unknown): value is StudioComponentKind {
-  return value === 'Button' || value === 'Number' || value === 'Stack' || value === 'Text'
+  return typeof value === 'string' && studioComponentKinds.has(value as StudioComponentKind)
 }
+
+const studioComponentKinds = new Set<StudioComponentKind>([
+  'Box',
+  'Button',
+  'Checkbox',
+  'Col',
+  'DatePicker',
+  'FormButton',
+  'Image',
+  'Number',
+  'Panes',
+  'Picker',
+  'Progress',
+  'Row',
+  'ScrollView',
+  'SegmentedControl',
+  'Slider',
+  'Spinner',
+  'Stack',
+  'Switch',
+  'Text',
+  'TextFrame',
+  'TextInput',
+  'TextMultiline',
+  'WrappingRow',
+])
 
 /** StudioSourceConflictError reports optimistic source-version mismatches as HTTP 409 at the server boundary. */
 export class StudioSourceConflictError extends Error {

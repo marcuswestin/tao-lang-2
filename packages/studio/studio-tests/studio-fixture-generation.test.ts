@@ -1,7 +1,7 @@
 import { type GenerationDeclaration, ScriptedGenerationProvider } from '@generation'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
-import type { StudioPreviewManifestV1 } from '../studio-src/StudioPreviewManifest'
+import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 
 Describe('Studio fixture generation', () => {
   Test('reports injected provider availability without browser-side model access', async () => {
@@ -167,7 +167,7 @@ Describe('Studio fixture generation', () => {
   })
 })
 
-function manifest(): StudioPreviewManifestV1 {
+function manifest(): StudioPreviewManifestV2 {
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 100, start: 0 } }
   return {
     capabilities: { captureDomains: ['data'], scheme: 'inert' },
@@ -207,6 +207,7 @@ function manifest(): StudioPreviewManifestV1 {
     scenarios: [{
       args: {},
       fixtureId: 'fixture:WorkspaceState',
+      group: 'Workspace',
       label: 'Workspace.focused',
       prepare: [],
       scenarioId: 'Workspace.focused',
@@ -217,7 +218,7 @@ function manifest(): StudioPreviewManifestV1 {
     sourceVersions: { '/project/Scenarios.tao': 'text-v1:scenarios' },
     states: [],
     subjects: [{ kind: 'view', source, subjectId: 'view:Workspace', viewName: 'Workspace' }],
-    version: 1,
+    version: 2,
   }
 }
 

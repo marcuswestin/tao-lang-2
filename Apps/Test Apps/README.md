@@ -58,6 +58,16 @@ Exercise app-mounted navigation: presentation, covered-entry state preservation,
 
 **Does not belong here:** selection, split, overlays, toasts, windows, restoration, routes, or transition policy; target-resolution and argument diagnostics; WordFlower product behavior.
 
+## Resizable Split
+
+Exercise the portable SplitNav surface and its app-owned persisted width binding.
+
+**Belongs here:** `SplitNav` with keyed `Content`, numeric `Width`, and `Resizable`; an app-level
+`state Name is number = default (persist)` bound directly as one pane's width; simultaneous pane rendering.
+
+**Does not belong here:** split diagnostics, arbitrary row/column resizing, multi-window layout,
+collapse policy, or product-specific workbench behavior.
+
 ## Basic Navigation
 
 Exercise the portable navigation kit explicitly, independently of the native-default package root.

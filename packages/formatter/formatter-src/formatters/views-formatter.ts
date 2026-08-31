@@ -6,6 +6,16 @@ export default {
   /** ViewDeclaration formats a `view Name parameters` header with its optional responds clause. */
   ViewDeclaration: ViewDeclaration,
 
+  /** ForeignViewImplementation formats its declared capabilities before the sidecar boundary. */
+  ForeignViewImplementation(f) {
+    f.oneSpaceAfter('accepts')
+    f.oneSpaceBefore('slots', 'from')
+    f.oneSpaceAfter('slots', 'from')
+    f.commaSpacedList()
+  },
+
+  ForeignViewSlotDeclaration() {},
+
   /** RenderStatement formats `render` view and injection targets. */
   RenderStatement(f) {
     f.oneSpaceAfter('render')
@@ -51,6 +61,9 @@ export default {
 
   /** LayoutNumberLiteral is a single token with no interior formatting. */
   LayoutNumberLiteral() {},
+
+  /** LayoutColorLiteral is a single token with no interior formatting. */
+  LayoutColorLiteral() {},
 } satisfies Partial<FormatHandlers>
 
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {

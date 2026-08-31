@@ -16,11 +16,13 @@ Test(
           app Garden { view Main }
           view Main() { render Text("Before") }
           fixture Empty { }
-          scenario Main.phone {
+          scenarios Main "states" {
             fixture Empty
-            render Main()
             device phone
-            network online
+            scenario "phone" {
+              render Main()
+              network online
+            }
           }
         `,
         },
@@ -47,7 +49,7 @@ Test(
             Expect(stableRoot).toContain('/api/preview/cell/bootstrap')
             Expect(firstRevision).toContain('"compileRevision":1')
             Expect(firstRevision).toContain(file.sourceVersion)
-            Expect(manifest?.scenarios.map(scenario => scenario.label)).toEqual(['Main.phone'])
+            Expect(manifest?.scenarios.map(scenario => [scenario.group, scenario.label])).toEqual([['states', 'phone']])
             Expect(manifest?.cells[0]?.cellId).toBe(`${manifest?.scenarios[0]?.scenarioId}#cell`)
             Expect(manifest?.cells[0]?.environment.viewport).toEqual({
               height: 844,

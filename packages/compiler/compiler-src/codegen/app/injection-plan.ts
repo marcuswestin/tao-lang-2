@@ -6,6 +6,30 @@ export function bridgedExpressionsOf(file: AST.TaoFile): AST.FromExpression[] {
   return [...AST.streamAllContents(file).filter(AST.isFromExpression)]
 }
 
+/** foreignViewsOf returns sidecar-backed visual declarations owned by one Tao source module. */
+export function foreignViewsOf(file: AST.TaoFile): AST.ViewDeclaration[] {
+  return file.statements.filter(AST.isViewDeclaration).filter(view => view.foreign !== undefined)
+}
+
+/** foreignActionsOf returns sidecar-backed action declarations owned by one Tao source module. */
+export function foreignActionsOf(file: AST.TaoFile): AST.ActionDeclaration[] {
+  return AST.streamAllContents(file).filter(AST.isActionDeclaration).filter(action => action.foreign !== undefined)
+}
+
+/** foreignActionBindingName returns the private named-import alias for one sidecar action. */
+export function foreignActionBindingName(action: AST.ActionDeclaration): string {
+  const root = AST.findRoot(action)
+  Assert.is(root, AST.isTaoFile, 'foreign action is owned by a Tao file')
+  const index = foreignActionsOf(root).indexOf(action)
+  Assert(index >= 0, 'foreign action appears in its owning Tao file')
+  return `__tao_foreign_action_${action.name}_${index + 1}__`
+}
+
+/** foreignViewBindingName returns the private named-import alias for one sidecar component. */
+export function foreignViewBindingName(view: AST.ViewDeclaration): string {
+  return `__tao_foreign_view_${view.name}__`
+}
+
 /** bridgeBindingName returns the private import alias one bridged expression uses. */
 export function bridgeBindingName(bridge: AST.FromExpression): string {
   const root = AST.findRoot(bridge)

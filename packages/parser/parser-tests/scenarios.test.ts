@@ -3,7 +3,7 @@ import { AST } from '../parser-src/parser'
 import { parseCodeWithErrors, rejectsParser, testParseCode } from './test-parse'
 
 Describe('parser: fixtures and scenarios', () => {
-  Test('parses and links the decided app-running fixture and scenario forms', async () => {
+  Test('parses and links grouped app-running scenarios with clause overrides', async () => {
     const result = await testParseCode(`
       data Households / Household { Name text }
       data Recipes / Recipe { Household Title text Servings number }
@@ -17,67 +17,75 @@ Describe('parser: fixtures and scenarios', () => {
         Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Ro
       }
 
-      scenario Recipe.tablet {
+      scenarios Skillet "devices" {
         fixture HomeKitchen
-        prepare { update Shakshuka { Servings: 6 } }
-        run Skillet at RecipeLink(Shakshuka)
-        device laptop 1440 x 900
-        appearance dark
+        device phone
         locale "es"
         network offline
+        scenario "tablet" {
+          prepare { update Shakshuka { Servings: 6 } }
+          run at RecipeLink(Shakshuka)
+          device laptop 1440 x 900
+          appearance dark
+        }
       }
     `)
 
     const fixture = result.entry.ast.statements.find(AST.isFixtureDeclaration)
-    const scenario = result.entry.ast.statements.find(AST.isScenarioDeclaration)
+    const group = result.entry.ast.statements.find(AST.isScenarioGroupDeclaration)
+    const scenario = group?.block.entries.find(AST.isScenarioDeclaration)
     Expect.Is(fixture, AST.isFixtureDeclaration)
+    Expect.Is(group, AST.isScenarioGroupDeclaration)
     Expect.Is(scenario, AST.isScenarioDeclaration)
-    Expect(scenario.name).toBe('Recipe.tablet')
-    const fixtureClause = scenario.block.entries.find(AST.isScenarioFixtureClause)
+    Expect(group.name).toBe('devices')
+    Expect(group.subject?.ref?.name).toBe('Skillet')
+    Expect(scenario.name).toBe('tablet')
+    const fixtureClause = AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)
     const run = scenario.block.entries.find(AST.isScenarioRunClause)
     Expect(fixtureClause?.fixture.ref).toBe(fixture)
-    Expect(run?.app.ref?.name).toBe('Skillet')
+    Expect(run?.app).toBeUndefined()
     Expect.Is(run?.argumentList?.arguments[0]?.value, AST.isFixtureValueReference)
   })
 
-  Test('parses and links the approved focused-view scenario subject', async () => {
+  Test('parses and links the canonical focused-view scenario group', async () => {
     const result = await testParseCode(`
-      data Stories / Story { Title text }
-      view StoryRow(Story) { }
+      data Workspaces / Workspace { Title text }
+      view WorkspaceRow(Workspace) { }
       fixture HNStories {
-        LeadStory = create Story { Title: "Tao Studio" }
+        LeadStory = create Workspace { Title: "Tao Studio" }
       }
-      scenario StoryRow.leading {
+      scenarios WorkspaceRow "states" {
         fixture HNStories
-        render StoryRow(Story: LeadStory)
         device phone
+        scenario "novel" { render (Workspace: LeadStory) }
       }
     `)
 
-    const scenario = result.entry.ast.statements.find(AST.isScenarioDeclaration)
+    const group = result.entry.ast.statements.find(AST.isScenarioGroupDeclaration)
+    const scenario = group?.block.entries.find(AST.isScenarioDeclaration)
+    Expect.Is(group, AST.isScenarioGroupDeclaration)
     Expect.Is(scenario, AST.isScenarioDeclaration)
     const render = scenario.block.entries.find(AST.isScenarioRenderClause)
-    Expect(render?.view.ref?.name).toBe('StoryRow')
-    Expect(render?.argumentList?.arguments[0]?.label).toBe('Story')
+    Expect(render?.view).toBeUndefined()
+    Expect(AST.scenarioSubjectDeclaration(scenario)?.name).toBe('WorkspaceRow')
+    Expect(render?.argumentList?.arguments[0]?.label).toBe('Workspace')
     const value = render?.argumentList?.arguments[0]?.value
     Expect.Is(value, AST.isFixtureValueReference)
     Expect(value.target.ref?.name).toBe('LeadStory')
   })
 
-  Test('accepts environment keywords as natural scenario-name suffixes', async () => {
+  Test('accepts arbitrary string group and entry identities', async () => {
     const result = await testParseCode(`
-      scenario Card.dark { }
-      scenario Card.light { }
-      scenario Card.offline { }
-      scenario Card.rightToLeft { }
+      scenarios "Review states" {
+        scenario "dark mode" { }
+        scenario "offline / RTL" { }
+      }
     `)
 
-    Expect(result.entry.ast.statements.filter(AST.isScenarioDeclaration).map(scenario => scenario.name)).toEqual([
-      'Card.dark',
-      'Card.light',
-      'Card.offline',
-      'Card.rightToLeft',
-    ])
+    const group = result.entry.ast.statements.find(AST.isScenarioGroupDeclaration)
+    Expect.Is(group, AST.isScenarioGroupDeclaration)
+    Expect(group.name).toBe('Review states')
+    Expect(AST.scenarioDeclarations(group).map(scenario => scenario.name)).toEqual(['dark mode', 'offline / RTL'])
   })
 
   Test('keeps fixture handles declaration ordered', async () => {
@@ -99,10 +107,14 @@ Describe('parser: fixtures and scenarios', () => {
   Test(
     'does not invent clock, latency, fixture inheritance, or arbitrary state-capture syntax',
     rejectsParser(`
-      scenario Unsupported {
-        clock "2026-08-30T09:00:00Z"
-        network latency 350 ms
+      scenarios "unsupported" {
+        scenario "clock" {
+          clock "2026-08-30T09:00:00Z"
+          network latency 350 ms
+        }
       }
     `),
   )
+
+  Test('retires the dotted singular scenario form', rejectsParser(`scenario Card.dark { }`))
 })

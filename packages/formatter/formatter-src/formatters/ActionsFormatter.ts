@@ -21,6 +21,27 @@ export const ActionsFormatter = {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('action')
     f.noSpaceBefore('(')
+    f.oneSpaceBefore('runs')
+    f.oneSpaceAfter('runs')
+  },
+
+  /** ForeignActionImplementation keeps declared failures in the action head before its module. */
+  ForeignActionImplementation(f) {
+    f.oneSpaceBefore('fails', 'from')
+    f.oneSpaceAfter('from')
+  },
+
+  /** ActionFailureDeclaration separates the case and user-facing sentence. */
+  ActionFailureDeclaration(f) {
+    f.oneSpaceBefore('fails')
+    f.oneSpaceAfter('fails')
+    f.oneSpaceBeforeProperty('sentence')
+  },
+
+  /** FailStatement separates its case and user-facing sentence. */
+  FailStatement(f) {
+    f.oneSpaceAfter('fail')
+    f.oneSpaceBeforeProperty('sentence')
   },
 
   /** CommandDeclaration formats one bound intent and its optional affordance metadata. */

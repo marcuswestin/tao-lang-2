@@ -26,6 +26,7 @@ export type GenerateAppOptions = {
   cwd?: string
   preview?: GeneratePreviewOptions
   runtimePackageRoot?: string
+  validationMode?: 'development' | 'release'
 }
 
 export type GeneratedApp = {
@@ -50,6 +51,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const compiled = await Workspace.compile(sourcePath, {
       appName: opts.appName,
       studio: opts.preview !== undefined,
+      validationMode: opts.validationMode,
     })
     const preview = opts.preview === undefined
       ? undefined
@@ -242,13 +244,24 @@ export default function App() {
 }
 
 function StudioPreviewContent({ cell, config }: any) {
+  React.useEffect(() => {
+    const environment = cell?.cell?.environment
+    if (environment === undefined) return
+    return TR.Capture.register({
+      capture: () => environment,
+      domain: 'environment',
+      version: 1,
+    })
+  }, [cell])
   const TaoStudioCell = cell === undefined ? undefined : studioCellRuntime(cell)
   return (
     TaoStudioCell === undefined
       ? <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
-      : <TR.Studio.Environment.Host cell={TaoStudioCell}>
-          <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
-        </TR.Studio.Environment.Host>
+      : <TR.Studio.ReplayHost replay={TaoStudioCell.replay}>
+          <TR.Studio.Environment.Host cell={TaoStudioCell}>
+            <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
+          </TR.Studio.Environment.Host>
+        </TR.Studio.ReplayHost>
   )
 }
 
@@ -261,6 +274,7 @@ function studioCellRuntime(runtime: any) {
   const dataState = runtime.resolvedState?.snapshot?.domains?.data?.value
   const network = runtime.cell.environment.network
   return {
+    replay: runtime.replay,
     environment: {
       network: {
         mode: network.outcome === 'offline' ? 'offline' : 'online',

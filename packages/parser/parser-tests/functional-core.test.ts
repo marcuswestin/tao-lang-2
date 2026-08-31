@@ -126,7 +126,7 @@ Describe('parser: functional core', () => {
     Expect.Is(enumDeclaration, AST.isTypeDeclaration)
     Expect.Is(main, AST.isViewDeclaration)
     const close = AST.blockStatementOf(main, { find: AST.isActionDeclaration })
-    const actionIf = close.block.statements.find(AST.isIfActionStatement)
+    const actionIf = close.block!.statements.find(AST.isIfActionStatement)
     Expect.Is(actionIf, AST.isIfActionStatement)
     Expect.Is(actionIf.condition, AST.isCaseTestExpression)
     Expect(actionIf.condition.declaredCase?.ref).toBe(AST.caseSetCasesOf(enumDeclaration)[0])

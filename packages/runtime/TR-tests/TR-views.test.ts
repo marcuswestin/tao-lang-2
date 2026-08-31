@@ -140,6 +140,20 @@ Describe('TR.Views explicit visual props', () => {
     Expect(designReads).toBe(1)
   })
 
+  Test('applies Capitalized element defaults before explicit clauses and accepts raw colors', () => {
+    const design = TR.Design.Declaration({
+      name: 'Theme',
+      tokens: {},
+      bundles: {
+        Text: TR.Design.Spec([['size', 16], ['fg', '#123456']]),
+      },
+    })
+
+    Expect(TR.Design.resolve(design, TR.Design.Spec([['size', 20]]), 'Text')).toEqual({
+      style: { color: '#123456', fontSize: 20 },
+    })
+  })
+
   Test('keeps identical bundle names local to each mounted app', () => {
     const light = styledApp('Light', '#ffffff')
     const dark = styledApp('Dark', '#000000')

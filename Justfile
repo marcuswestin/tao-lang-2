@@ -35,7 +35,7 @@ stop-local-instantdb:
 studio project=".":
     ./dev studio "{{ project }}"
 
-# Launch Tao Studio in its local Electron wrapper
+# Launch Tao Studio in its local Electrobun shell
 studio-native project=".":
     ./dev studio-native "{{ project }}"
 
@@ -47,7 +47,7 @@ studio-test:
 studio-smoke test_file run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
 
-# Run an explicit slow Studio smoke through the local Electron wrapper
+# Run an explicit slow Studio shell smoke through Electrobun
 studio-smoke-native test_file run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
 
@@ -55,9 +55,9 @@ studio-smoke-native test_file run_id="local":
 studio-proof-real-app run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
 
-# Package the local macOS Tao Studio wrapper
-studio-package output_root=".artifacts/build/studio-native":
-    ./dev package-studio-native --output-root "{{ output_root }}"
+# Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
+studio-package release_base_url channel="stable" output_root=".artifacts/build/studio-native":
+    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
 
 # Install development dependencies
 deps:

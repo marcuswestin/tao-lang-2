@@ -15,7 +15,7 @@ Describe('parser: async actions', () => {
 
     const action = parsed.entry.ast.statements.find(AST.isActionDeclaration)
     Expect.Is(action, AST.isActionDeclaration)
-    const [first, second] = action.block.statements
+    const [first, second] = action.block!.statements
     Expect.Is(first, AST.isAsyncActionStatement)
     Expect.Is(first.block.statements[0], AST.isAsyncActionStatement)
     Expect.Is(second, AST.isAsyncActionStatement)

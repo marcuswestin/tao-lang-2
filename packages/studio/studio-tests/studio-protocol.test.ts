@@ -168,6 +168,87 @@ Describe('Studio protocol v1', () => {
     })).toBe(undefined)
   })
 
+  Test('validates versioned runtime failure captures and rejects unsafe or duplicate domains', () => {
+    const capture = {
+      capturedAt: 1_788_100_000_000,
+      domains: [
+        { domain: 'action-history', value: [{ action: 'Save', outcome: 'failed' }], version: 1 },
+        { domain: 'data', value: { snapshots: { notes: '{"rows":{}}' } }, version: 1 },
+        { domain: 'persisted-state', value: { split: 280 }, version: 1 },
+      ],
+      failure: {
+        boundaryId: 'screen:Recipe',
+        error: { message: 'Recipe failed', name: 'Error' },
+        frame: {
+          arguments: { Recipe: '42' },
+          boundary: 'screen',
+          declaration: 'Recipe',
+          source: { end: 42, path: '/workspace/Garden.tao', start: 20 },
+        },
+        retryEligible: true,
+        stopper: false,
+        timestamp: 1_788_100_000_000,
+      },
+      version: 1,
+    } as const
+    const message = {
+      capture,
+      channel: studioProtocolChannel,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-runtime-failure',
+    }
+
+    Expect(StudioProtocol.parseWindowMessage({
+      data: message,
+      origin: expectation.origin,
+      source: previewWindow,
+    }, expectation)).toMatchObject({ capture, type: 'preview-runtime-failure' })
+    Expect(StudioProtocol.parseRuntimeCapture({
+      ...capture,
+      domains: [...capture.domains, capture.domains[0]],
+    })).toBe(undefined)
+    Expect(StudioProtocol.parseRuntimeCapture({
+      ...capture,
+      domains: [{ domain: 'credentials', value: () => 'secret', version: 1 }],
+    })).toBe(undefined)
+    Expect(StudioProtocol.parseMessage({ ...message, capture: { ...capture, version: 2 } })).toBe(undefined)
+  })
+
+  Test('validates live runtime captures and bounded console messages', () => {
+    const capture = {
+      capturedAt: 1_788_100_000_000,
+      domains: [{ domain: 'data', value: { entries: [] }, version: 1 }],
+      version: 1,
+    } as const
+    Expect(StudioProtocol.parseMessage({
+      capture,
+      channel: studioProtocolChannel,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      requestId: 'runtime-1',
+      type: 'preview-runtime-captured',
+    })).toMatchObject({ capture, requestId: 'runtime-1', type: 'preview-runtime-captured' })
+    Expect(StudioProtocol.parseMessage({
+      arguments: ['loaded', { count: 2 }],
+      channel: studioProtocolChannel,
+      identity,
+      level: 'info',
+      protocolVersion: studioProtocolVersion,
+      timestamp: 42,
+      type: 'preview-console',
+    })).toMatchObject({ arguments: ['loaded', { count: 2 }], level: 'info', type: 'preview-console' })
+    Expect(StudioProtocol.parseMessage({
+      arguments: [() => 'not JSON'],
+      channel: studioProtocolChannel,
+      identity,
+      level: 'info',
+      protocolVersion: studioProtocolVersion,
+      timestamp: 42,
+      type: 'preview-console',
+    })).toBe(undefined)
+  })
+
   Test('parses the canonical versioned source-action envelope and rejects non-JSON actions', () => {
     const envelope: StudioSourceActionEnvelope = {
       action: {

@@ -21,6 +21,7 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(session.entryPath).toBe(await FS.realPath(paths['Garden.tao']))
     Expect(session.appName).toBe('Garden')
     Expect(handshake.identity).toEqual({ appName: 'Garden', project: await FS.realPath(root) })
+    Expect(handshake.apps).toEqual([{ appName: 'Garden', entryPath: 'Garden.tao' }])
     Expect(handshake.entryPath).toBe('Garden.tao')
     Expect(handshake.capabilities.language).toEqual(['lsp', 'textmate'])
     Expect(handshake.capabilities.sourceActions).toEqual({
@@ -30,6 +31,12 @@ Test('Studio project session resolves one current Tao app and serves contained v
       version: studioSourceActionVersion,
     })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/undo' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/create' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/rename' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/delete' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/inspect' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/data/fill' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/design' })
     Expect(handshake.endpoints).toContainEqual({ method: 'WS', path: '/api/language/lsp' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/language/highlight' })
     Expect(handshake.files.map(candidate => candidate.path)).toEqual([
@@ -43,6 +50,53 @@ Test('Studio project session resolves one current Tao app and serves contained v
   })
 })
 
+Test('Studio project session publishes every project app variant with a safe relative entry path', async () => {
+  await withTaoFiles('tao-studio-app-variants-', {
+    'First.tao': 'app First { view Main }\napp FirstCompact = First with { }\nview Main() { }\n',
+    'Nested/Second.tao': 'app Second { view Main }\nview Main() { }\n',
+  }, async (_paths, root) => {
+    const session = await StudioProjectSession.open({
+      appName: 'FirstCompact',
+      async compile() {},
+      entryPath: 'First.tao',
+      projectRoot: root,
+    })
+
+    Expect(session.appName).toBe('FirstCompact')
+    Expect(session.entryPath).toBe(FS.resolvePath('First.tao', await FS.realPath(root)))
+    Expect((await session.handshake()).apps).toEqual([
+      { appName: 'First', entryPath: 'First.tao' },
+      { appName: 'FirstCompact', entryPath: 'First.tao' },
+      { appName: 'Second', entryPath: 'Nested/Second.tao' },
+    ])
+  })
+})
+
+Test('Studio project session exposes parser-owned design tokens and local bundles', async () => {
+  await withTaoFiles('tao-studio-design-', {
+    'Garden.tao': `
+      design GardenDesign {
+         ink #121826
+         card [gap 8, fg ink]
+      }
+      app Garden { view Main }
+      view Main() { render Stack() [card] }
+    `,
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const file = await session.readFile('Garden.tao')
+
+    Expect(await session.inspectDesign({ path: file.path, sourceVersion: file.sourceVersion })).toEqual([
+      { kind: 'token', name: 'ink', value: '#121826' },
+      { entries: ['gap 8', 'fg ink'], kind: 'bundle', name: 'card' },
+    ])
+  })
+})
+
 Test('Studio project session rejects Tao symlinks that escape the project root', async () => {
   await withStudioProject(async (session, _paths, root) => {
     const outside = FS.resolvePath('outside.tao', FS.dirname(root))
@@ -50,6 +104,119 @@ Test('Studio project session rejects Tao symlinks that escape the project root',
     await FS.symlink(outside, FS.resolvePath('Escaped.tao', root))
     try {
       await Expect(session.readFile('Escaped.tao')).rejects.toThrow('resolves outside the project')
+    } finally {
+      await FS.remove(outside)
+    }
+  })
+})
+
+Test('Studio file CRUD is versioned, serialized, watcher-aware, and refreshes tree metadata', async () => {
+  const compiles: Array<{ changes: readonly { path: string; sourceVersion?: string }[] }> = []
+  await withStudioProject(async (session, _paths, root) => {
+    const events: StudioSessionEvent[] = []
+    session.subscribe(event => events.push(event))
+
+    const created = await session.createFile({ path: 'Nested/New.tao', writeId: 'create-new' })
+    Expect(created.file.path).toBe('Nested/New.tao')
+    Expect(created.file.dirty).toBe(false)
+    Expect(await FS.readText(FS.resolvePath('Nested/New.tao', root))).toBe('')
+    const createWatch = await session.noteWatchChanges([{
+      path: 'Nested/New.tao',
+      sourceVersion: created.file.sourceVersion,
+    }])
+    Expect(createWatch.compile).toBe(undefined)
+    Expect(createWatch.acknowledgements.map(item => item.writeId)).toEqual(['create-new'])
+
+    const renamed = await session.renameFile({
+      path: created.file.path,
+      sourceVersion: created.file.sourceVersion,
+      targetPath: 'Nested/Renamed.tao',
+      writeId: 'rename-new',
+    })
+    Expect(renamed.previousPath).toBe('Nested/New.tao')
+    Expect(renamed.file.path).toBe('Nested/Renamed.tao')
+    Expect(await FS.exists(FS.resolvePath('Nested/New.tao', root))).toBe(false)
+    const renameWatch = await session.noteWatchChanges([
+      { path: 'Nested/New.tao' },
+      { path: 'Nested/Renamed.tao', sourceVersion: renamed.file.sourceVersion },
+    ])
+    Expect(renameWatch.compile).toBe(undefined)
+    Expect(renameWatch.acknowledgements.map(item => item.writeId)).toEqual(['rename-new', 'rename-new'])
+
+    const deleted = await session.deleteFile({
+      path: renamed.file.path,
+      sourceVersion: renamed.file.sourceVersion,
+      writeId: 'delete-new',
+    })
+    Expect(deleted.files.some(file => file.path === renamed.file.path)).toBe(false)
+    const deleteWatch = await session.noteWatchChanges([{ path: 'Nested/Renamed.tao' }])
+    Expect(deleteWatch.compile).toBe(undefined)
+    Expect(deleteWatch.acknowledgements.map(item => item.writeId)).toEqual(['delete-new'])
+
+    Expect(compiles.map(compile => compile.changes.map(change => FS.relativePath(session.projectRoot, change.path))))
+      .toEqual([
+        ['Nested/New.tao'],
+        ['Nested/New.tao', 'Nested/Renamed.tao'],
+        ['Nested/Renamed.tao'],
+      ])
+    Expect(events.filter(event => event.type === 'files-changed')).toHaveLength(3)
+  }, request => compiles.push(request))
+})
+
+Test('Studio file CRUD rejects unsafe, destructive, stale, and dirty mutations', async () => {
+  await withStudioProject(async (session, _paths, root) => {
+    const support = await session.readFile('Support.tao')
+    await Expect(session.createFile({ path: 'Notes.txt', writeId: 'invalid-extension' }))
+      .rejects.toThrow('not a Tao file')
+    await Expect(session.createFile({ path: 'Support.tao', writeId: 'overwrite' }))
+      .rejects.toThrow('already exists')
+    await Expect(session.renameFile({
+      path: 'Garden.tao',
+      sourceVersion: (await session.readFile('Garden.tao')).sourceVersion,
+      targetPath: 'Moved.tao',
+      writeId: 'rename-entry',
+    })).rejects.toThrow('active app entry')
+    await Expect(session.deleteFile({
+      path: 'Garden.tao',
+      sourceVersion: (await session.readFile('Garden.tao')).sourceVersion,
+      writeId: 'delete-entry',
+    })).rejects.toThrow('active app entry')
+
+    await FS.writeText(FS.resolvePath('Support.tao', root), 'view Support() { render Text("changed") }\n')
+    await Expect(session.deleteFile({
+      path: support.path,
+      sourceVersion: support.sourceVersion,
+      writeId: 'stale-delete',
+    })).rejects.toBeInstanceOf(StudioSourceConflictError)
+
+    const changed = await session.readFile('Support.tao')
+    const invalid = await session.syncDraft({
+      content: 'view Support() {',
+      path: changed.path,
+      sourceVersion: changed.sourceVersion,
+      writeId: 'dirty-support',
+    })
+    Expect(invalid.saved).toBe(false)
+    const dirty = (await session.files()).find(file => file.path === changed.path)!
+    Expect(dirty.dirty).toBe(true)
+    Expect(dirty.diagnosticCount).toBeGreaterThan(0)
+    await Expect(session.renameFile({
+      path: changed.path,
+      sourceVersion: changed.sourceVersion,
+      targetPath: 'Renamed.tao',
+      writeId: 'dirty-rename',
+    })).rejects.toThrow('unsaved Studio draft')
+    await Expect(session.deleteFile({
+      path: changed.path,
+      sourceVersion: changed.sourceVersion,
+      writeId: 'dirty-delete',
+    })).rejects.toThrow('unsaved Studio draft')
+
+    const outside = await FS.mkTmpDir(FS.resolvePath('tao-studio-crud-outside-', FS.tmpdir()))
+    await FS.symlink(outside, FS.resolvePath('Linked', root))
+    try {
+      await Expect(session.createFile({ path: 'Linked/Escaped.tao', writeId: 'symlink-create' }))
+        .rejects.toThrow('outside the project')
     } finally {
       await FS.remove(outside)
     }
@@ -173,6 +340,64 @@ Test('Studio routes a canonical source-action envelope idempotently through sour
   })
 })
 
+Test('Studio inspects parser-owned current render clauses through a versioned file request', async () => {
+  await withStudioProject(async session => {
+    const file = await session.readFile('Garden.tao')
+    const selected = 'Text("Before")'
+    const start = file.content.indexOf(selected)
+    const end = start + selected.length
+    const inspection = await session.inspectRender({
+      path: file.path,
+      renderId: `${FS.resolvePath(file.path, session.projectRoot)}:${start}:${end}`,
+      sourceVersion: file.sourceVersion,
+    })
+
+    Expect(inspection.renderId).toContain('Garden.tao')
+    Expect(inspection.layoutEntries).toEqual([])
+  })
+})
+
+Test('Studio resolves imported design provenance and disables cross-file design writes', async () => {
+  await withTaoFiles('tao-studio-design-provenance-', {
+    'Main.tao': `
+      use Theme from ./Theme
+      app Demo { view Main Design Theme }
+      view Main() { render Surface() [body] }
+      view Other() { render Surface() [body] }
+      view Surface() { }
+    `,
+    'Theme.tao': 'public design Theme { ink #111 body [fg ink] }',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Main.tao'],
+      projectRoot: root,
+    })
+    const file = await session.readFile('Main.tao')
+    const designOwnerPath = await FS.realPath(paths['Theme.tao'])
+    const source = file.content
+    const selected = 'render Surface() [body]'
+    const start = source.indexOf(selected)
+    const inspection = await session.inspectRender({
+      path: file.path,
+      renderId: `${FS.resolvePath(file.path, session.projectRoot)}:${start}:${start + selected.length}`,
+      sourceVersion: file.sourceVersion,
+    })
+
+    Expect(inspection.design).toEqual({
+      editable: false,
+      name: 'Theme',
+      ownerPath: designOwnerPath,
+      reason: 'Imported design values are read-only in this source file.',
+    })
+    Expect(inspection.styleProvenance[0]).toMatchObject({
+      blastRadius: 2,
+      editable: false,
+      ownerPath: designOwnerPath,
+    })
+  })
+})
+
 Test('Studio promotes matrix arguments into the Tao-authored scenario through the source-action bus', async () => {
   await withStudioProject(async session => {
     session.registerPreview({ previewInstanceId: 'scenario-preview' })
@@ -184,7 +409,8 @@ Test('Studio promotes matrix arguments into the Tao-authored scenario through th
           Title: 'Saved from controls',
         },
         kind: 'set-scenario-arguments',
-        scenarioName: 'Card.lead',
+        scenarioGroupName: 'states',
+        scenarioName: 'lead',
       },
       channel: studioProtocolChannel,
       checkpoint: { id: 'scenario-arguments', phase: 'single' },
@@ -200,7 +426,7 @@ Test('Studio promotes matrix arguments into the Tao-authored scenario through th
       type: 'source-action',
     })
 
-    Expect(applied.content).toContain('render Card(Owner: Lead, Title: "Saved from controls")')
+    Expect(applied.content).toContain('render (Owner: Lead, Title: "Saved from controls")')
     Expect(applied.checkpoint.status).toBe('committed')
   })
 })
@@ -419,6 +645,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
       scenarios: [{
         args: {},
         fixtureId: 'fixture:base',
+        group: 'Garden',
         label: 'Garden phone',
         prepare: [],
         scenarioId: 'Garden.phone',
@@ -434,17 +661,23 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
         source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: 10, start: 0 } },
         subjectId: 'app:Garden',
       }],
-      version: 1 as const,
+      version: 2 as const,
     }
     session.setMatrixManifest(manifest)
     const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
     const registered = session.registerCellPreview({ ...identity, previewInstanceId: 'cell-preview-1' })
+    const replay = {
+      capturedAt: 1_788_100_000_000,
+      domains: [{ domain: 'data', value: { snapshots: {} }, version: 1 }],
+      version: 1,
+    }
     const next = session.reconfigureCell({
       ...identity,
       environment: {
         ...cell.environment,
         network: { latencyMs: 250, outcome: 'normal' },
       },
+      replay,
     })
     session.registerCellPreview({ ...next.identity, previewInstanceId: 'cell-preview-2' })
     const events: StudioSessionEvent[] = []
@@ -459,6 +692,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     const handshake = await session.handshake()
     Expect(registered.identity).toEqual(identity)
     Expect(next.identity.cellRevision).toBe(1)
+    Expect(next.replay).toEqual(replay)
     Expect(handshake.previewManifest?.manifestRevision).toBe('manifest-2')
     Expect(() => session.previewCellInstance('cell-preview-2')).toThrow('no longer current')
     const refreshed = session.registerCellPreview({
@@ -471,8 +705,9 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
       manifestRevision: 'manifest-2',
     })
     Expect(refreshed.cell.environment.network.latencyMs).toBe(250)
+    Expect(refreshed.replay).toBe(undefined)
     Expect(events.some(event => event.type === 'preview-manifest-changed')).toBe(true)
-    Expect(handshake.capabilities.matrix).toEqual({ concurrentCells: true, scheme: 'inert', version: 1 })
+    Expect(handshake.capabilities.matrix).toEqual({ concurrentCells: true, scheme: 'inert', version: 2 })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/preview/cell/reconfigure' })
     Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/ai/availability' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/ai/fixture' })
@@ -493,7 +728,10 @@ async function withStudioProject(
     paths: Record<'Garden.tao' | 'Support.tao', string>,
     root: string,
   ) => Promise<void>,
-  onCompile: (request: { compileRevision: number }) => void = () => {},
+  onCompile: (request: {
+    changes: readonly { path: string; sourceVersion?: string }[]
+    compileRevision: number
+  }) => void = () => {},
 ): Promise<void> {
   await withTaoFiles(
     'tao-studio-session-',
@@ -508,10 +746,12 @@ async function withStudioProject(
         }
         view Card(Title text, Owner Account) { render Text(Title) }
         fixture Cards { Lead = create Account { Name: "Ada" } }
-        scenario Card.lead {
+        scenarios Card "states" {
           fixture Cards
-          render Card(Title: "Old", Owner: Lead)
           device phone
+          scenario "lead" {
+            render (Title: "Old", Owner: Lead)
+          }
         }
       `,
       'Support.tao': 'view Support() { }\n',

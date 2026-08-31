@@ -125,6 +125,15 @@ function configurationDeclarationType(declaration: AST.ConfigurableDeclaration):
 function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration): Compiled {
   const properties = AST.configurationPropertiesOf(declaration)
   const key = AST.configurationKeyOf(declaration)
+  if (key !== undefined && hasSplitConfigurationShape(properties, key)) {
+    return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
+      readonly items: Readonly<Record<string, Readonly<{
+        readonly content: TR.Presentable | TR.NavigationValue
+        readonly width: TR.Evaluable
+        readonly resizable: TR.Evaluable
+      }>>>
+    }>`
+  }
   if (key !== undefined && hasSelectionConfigurationShape(properties, key)) {
     return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
       readonly hostSlots?: TR.NavHostSlotConfiguration
@@ -155,6 +164,20 @@ function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration
   return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<Record<string, unknown>>`
 }
 
+function hasSplitConfigurationShape(
+  properties: readonly AST.ConfigurationProperty[],
+  key: AST.ConfigurationKeyDeclaration,
+): boolean {
+  const content = key.block.properties.find(property => property.name === 'Content')
+  const width = key.block.properties.find(property => property.name === 'Width')
+  const resizable = key.block.properties.find(property => property.name === 'Resizable')
+  return properties.length === 0
+    && key.block.properties.length === 3
+    && content !== undefined && isPrimitive(Type.ofConfigurationProperty(content), 'view')
+    && width !== undefined && isPrimitive(Type.ofConfigurationProperty(width), 'number')
+    && resizable !== undefined && isPrimitive(Type.ofConfigurationProperty(resizable), 'boolean')
+}
+
 function hasSelectionConfigurationShape(
   properties: readonly AST.ConfigurationProperty[],
   key: AST.ConfigurationKeyDeclaration,
@@ -177,7 +200,7 @@ function hasSelectionConfigurationShape(
     && isPrimitive(Type.ofConfigurationProperty(content), 'view')
 }
 
-function isPrimitive(type: ASTUtils.TaoType, primitive: 'text' | 'view' | 'nav'): boolean {
+function isPrimitive(type: ASTUtils.TaoType, primitive: 'boolean' | 'number' | 'text' | 'view' | 'nav'): boolean {
   return type.kind === 'primitive' && type.primitive === primitive
 }
 

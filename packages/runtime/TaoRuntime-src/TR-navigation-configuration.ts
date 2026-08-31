@@ -119,6 +119,28 @@ function normalizeConfiguredNavigation(
       name: configured.declaration.name,
     }
   }
+  if (configured.declaration.kind.profile === 'split') {
+    const items = Object.fromEntries(
+      Object.entries(config)
+        .filter(([key, value]) => key.startsWith('@') && isPlainRecord(value))
+        .map(([sourceKey, value]) => {
+          const key = sourceKey.slice(1)
+          const item = value as Record<string, unknown>
+          return [key, {
+            content: configuredPresentable(
+              item['Content'],
+              configured.declaration.name,
+              `@${key}.Content`,
+              registerMount,
+              resolvePresentable,
+            ),
+            resizable: configuredEvaluable(item['Resizable'], configured.declaration.name, `@${key}.Resizable`),
+            width: configuredEvaluable(item['Width'], configured.declaration.name, `@${key}.Width`),
+          }]
+        }),
+    )
+    return { items, name: configured.declaration.name }
+  }
   const items = Object.fromEntries(
     Object.entries(config)
       .filter(([key, value]) => key.startsWith('@') && isPlainRecord(value))

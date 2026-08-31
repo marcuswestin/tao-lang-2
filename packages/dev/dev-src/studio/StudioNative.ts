@@ -1,33 +1,55 @@
-import { CLI, Errors, FS, HCI, Repo, Text, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Repo, Time } from '@shared'
+import { Workspace } from '@workspace'
+import { createHash } from 'node:crypto'
+import {
+  StudioElectrobunSpike,
+  type StudioElectrobunSpikeProject,
+} from './StudioElectrobunSpike'
 
 const stopTimeoutMs = 3_000
+const probeTimeoutMs = 30_000
 const defaultAppName = 'Tao Studio'
 const defaultBundleIdentifier = 'dev.tao-lang.studio'
 
 export type StudioNativeOptions = {
   artifactRoot?: string
-  electronPath?: string
-  remoteDebuggingPort?: number
+  hutchPath?: string
+  previewUrl: string
+  projectUrl: string
+  probe?: boolean
   showWindow?: boolean
   studioUrl: string
 }
 
+export type StudioNativeProbeResult = {
+  capabilities: Record<string, { message?: string; passed: boolean }>
+  manualChecks: readonly string[]
+  passed: boolean
+}
+
 export type StartedStudioNative = {
+  project: StudioElectrobunSpikeProject
   stop(): Promise<void>
   waitForClose(): Promise<number>
+  waitForProbe(): Promise<StudioNativeProbeResult>
 }
 
 export type StudioNativePackageOptions = {
   appName?: string
   bundleIdentifier?: string
+  channel?: 'canary' | 'stable'
+  hutchPath?: string
+  nodePath?: string
   outputRoot?: string
+  releaseBaseUrl: string
+  version?: string
 }
 
 export type PackagedStudioNative = {
-  appPath: string
-  executablePath: string
-  mainPath: string
-  packageJsonPath: string
+  artifactPaths: readonly string[]
+  artifactsRoot: string
+  channel: 'canary' | 'stable'
+  projectRoot: string
 }
 
 type StoppableCommand = Pick<
@@ -36,52 +58,43 @@ type StoppableCommand = Pick<
 >
 
 type WaitForNativeClose = () => Promise<number>
+type CommandRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
 
-/** StudioNative owns the optional local Electron wrapper process. */
+/** StudioNative owns Tao Studio's Electrobun shell process and release builds. */
 export const StudioNative = {
   packageApp,
   start,
   testing: {
-    installedElectronExecutablePath,
-    installedElectronAppPath,
-    mainScriptSource,
+    installedHutchExecutablePath,
+    installStudioServicePayload,
+    materializeStudioNodeRuntime,
+    materializeStudioServicePayload,
+    prepareElectrobun,
     stopCommand,
+    validateStudioRelease,
+    waitForProbeResult,
   },
 } as const
 
-async function packageApp(options: StudioNativePackageOptions = {}): Promise<PackagedStudioNative> {
-  const appName = safeAppName(options.appName ?? defaultAppName)
-  const bundleIdentifier = safeBundleIdentifier(options.bundleIdentifier ?? defaultBundleIdentifier)
-  const outputRoot = FS.resolvePath(options.outputRoot ?? '.artifacts/build/studio-native', Repo.getRoot())
-  const sourceAppPath = await requireElectronAppPath()
-  const appPath = FS.resolvePath(`${appName}.app`, outputRoot)
-  await FS.remove(appPath)
-  await FS.copyDirectory(sourceAppPath, appPath)
-  const { mainPath, packageJsonPath } = await writePackagedPayload(appPath, appName)
-  await updatePackagedInfoPlist(appPath, { appName, bundleIdentifier })
-  return {
-    appPath,
-    executablePath: FS.resolvePath('Contents/MacOS/Electron', appPath),
-    mainPath,
-    packageJsonPath,
-  }
-}
-
 async function start(options: StudioNativeOptions): Promise<StartedStudioNative> {
   const artifactRoot = FS.resolvePath(options.artifactRoot ?? '.artifacts/user/studio-native', Repo.getRoot())
-  const mainPath = FS.resolvePath('main.cjs', artifactRoot)
-  const userDataPath = FS.resolvePath('electron-user-data', artifactRoot)
-  await FS.mkdir(artifactRoot)
-  await FS.writeText(mainPath, mainScriptSource())
-  const electronPath = await resolveElectronPath(options.electronPath)
-  const command = CLI.start(electronPath, {
-    args: [mainPath],
-    env: {
-      TAO_STUDIO_ELECTRON_REMOTE_DEBUGGING_PORT: options.remoteDebuggingPort?.toString(),
-      TAO_STUDIO_ELECTRON_SHOW_WINDOW: options.showWindow === false ? 'false' : 'true',
-      TAO_STUDIO_ELECTRON_USER_DATA: userDataPath,
-      TAO_STUDIO_URL: options.studioUrl,
-    },
+  const project = await StudioElectrobunSpike.create({
+    appName: defaultAppName,
+    bundleIdentifier: defaultBundleIdentifier,
+    outputRoot: artifactRoot,
+    previewUrl: options.previewUrl,
+    projectUrl: options.projectUrl,
+    runProbe: options.probe,
+    showWindow: options.showWindow,
+    studioUrl: options.studioUrl,
+  })
+  await FS.remove(project.runtimeResultPath)
+  const hutchPath = options.hutchPath ?? 'hutch'
+  await prepareElectrobun(hutchPath, project.root)
+  const command = CLI.start(hutchPath, {
+    args: ['electrobun', 'dev', '--watch'],
+    cwd: project.root,
+    env: project.dev.env,
     onOutput(stream, chunk) {
       for (const line of chunk.toString('utf8').split(/\r?\n/).filter(Boolean)) {
         HCI.logProcessOutput('studio-native', line, { stderr: stream === 'stderr' })
@@ -93,148 +106,509 @@ async function start(options: StudioNativeOptions): Promise<StartedStudioNative>
   const waitForClose = finalizeCommand(command)
   let stopping: Promise<void> | undefined
   return {
+    project,
     stop() {
       stopping ??= stopCommand(command, Time.sleep, waitForClose)
       return stopping
     },
     waitForClose,
+    waitForProbe() {
+      if (options.probe !== true) {
+        return Promise.reject(new Errors.UserInputError('The native Studio runtime probe was not enabled.'))
+      }
+      return waitForProbeResult(project.runtimeResultPath, command, Time.sleep)
+    },
   }
 }
 
-async function resolveElectronPath(explicitPath: string | undefined): Promise<string> {
-  if (explicitPath !== undefined) {
-    const candidate = FS.resolvePath(explicitPath)
-    if (await FS.isFile(candidate)) {
-      return candidate
-    }
-  } else {
-    const installed = await installedElectronExecutablePath()
-    if (installed !== undefined) {
-      return installed
-    }
+async function packageApp(options: StudioNativePackageOptions): Promise<PackagedStudioNative> {
+  const outputRoot = FS.resolvePath(options.outputRoot ?? '.artifacts/build/studio-native', Repo.getRoot())
+  const projectRoot = FS.resolvePath('project', outputRoot)
+  const serviceStageRoot = FS.resolvePath('service-stage', outputRoot)
+  const channel = options.channel ?? 'stable'
+  const releaseBaseUrl = requiredHttpsUrl(options.releaseBaseUrl).href
+  await validateStudioRelease()
+  await FS.remove(serviceStageRoot)
+  await FS.mkdir(serviceStageRoot)
+  const serviceBundlePath = FS.resolvePath('service.js', serviceStageRoot)
+  const bundle = await Bun.build({
+    entrypoints: [Repo.resolvePath('packages/dev/dev-src/studio/StudioPackagedService.ts')],
+    minify: true,
+    target: 'bun',
+  })
+  const serviceBundle = bundle.outputs[0]
+  if (!bundle.success || serviceBundle === undefined) {
+    throw new Errors.UnexpectedBehaviorError(
+      `Could not bundle the packaged Studio service: ${bundle.logs.map(log => log.message).join('\n')}`,
+    )
   }
-  throw new Errors.UserInputError(
-    'Electron is optional and is not installed. Install it for tao-dev or pass --electron <path>.',
+  await FS.writeText(serviceBundlePath, await serviceBundle.text())
+  const testCommandBundlePath = FS.resolvePath('test-command.js', serviceStageRoot)
+  const testCommandBundle = await Bun.build({
+    entrypoints: [Repo.resolvePath('packages/dev/dev-src/studio/StudioPackagedTestCommand.ts')],
+    minify: true,
+    target: 'node',
+  })
+  const testCommandOutput = testCommandBundle.outputs[0]
+  if (!testCommandBundle.success || testCommandOutput === undefined) {
+    throw new Errors.UnexpectedBehaviorError(
+      `Could not bundle the packaged Studio test command: ${testCommandBundle.logs.map(log => log.message).join('\n')}`,
+    )
+  }
+  await FS.writeText(testCommandBundlePath, await testCommandOutput.text())
+  const servicePayloadRoot = FS.resolvePath('payload', serviceStageRoot)
+  await materializeStudioServicePayload(servicePayloadRoot)
+  await FS.copyFile(testCommandBundlePath, FS.resolvePath('test-command.js', servicePayloadRoot))
+  await materializeStudioNodeRuntime(
+    options.nodePath ?? Repo.resolvePath('.devenv/profile/bin/node'),
+    servicePayloadRoot,
   )
+  await validatePackagedTestRuntime(servicePayloadRoot)
+  const project = await StudioElectrobunSpike.create({
+    appName: options.appName ?? defaultAppName,
+    bundleIdentifier: options.bundleIdentifier ?? defaultBundleIdentifier,
+    outputRoot: projectRoot,
+    packagedService: true,
+    previewUrl: 'http://127.0.0.1:8081',
+    releaseBaseUrl,
+    serviceBundlePath,
+    studioUrl: 'http://127.0.0.1:55101',
+    version: options.version,
+  })
+  await FS.copyDirectory(servicePayloadRoot, FS.resolvePath('service/payload', project.root))
+  const hutchPath = options.hutchPath ?? 'hutch'
+  const artifactsRoot = FS.resolvePath('artifacts', project.root)
+  await FS.remove(artifactsRoot)
+  await prepareElectrobun(hutchPath, project.root)
+  await runHutchCommand(hutchPath, ['electrobun', 'build', `--env=${channel}`], project.root)
+  const artifactPaths = await builtArtifacts(artifactsRoot)
+  verifyReleaseArtifacts(artifactPaths, channel)
+  return { artifactPaths, artifactsRoot, channel, projectRoot }
 }
 
-async function installedElectronAppPath(): Promise<string | undefined> {
-  const executablePath = await installedElectronExecutablePath()
-  if (executablePath === undefined) {
-    return undefined
+/** validateStudioRelease applies the compiler's targeted release gates before native packaging mutates output. */
+async function validateStudioRelease(): Promise<void> {
+  await Workspace.compile(Repo.resolvePath('packages/studio/studio-src/TaoStudioClient.tao'), {
+    validationMode: 'release',
+  })
+}
+
+function verifyReleaseArtifacts(artifactPaths: readonly string[], channel: 'canary' | 'stable'): void {
+  const names = artifactPaths.map(path => FS.basename(path))
+  const updatePrefix = `${channel}-`
+  const missing = [
+    names.some(name => name.startsWith(updatePrefix) && name.endsWith('-update.json')) ? undefined : 'update metadata',
+    names.some(name => name.endsWith('.tar.zst')) ? undefined : 'full update archive',
+    names.some(name => name.endsWith('.dmg') || name.endsWith('-Setup.zip') || name.endsWith('-Setup.tar.gz'))
+      ? undefined
+      : 'platform installer',
+  ].filter((value): value is string => value !== undefined)
+  if (missing.length > 0) {
+    throw new Errors.UnexpectedBehaviorError(
+      `Electrobun completed without required release artifacts: ${missing.join(', ')}.`,
+    )
   }
-  const appMarkerIndex = executablePath.indexOf('.app/')
-  return appMarkerIndex < 0 ? undefined : executablePath.slice(0, appMarkerIndex + '.app'.length)
 }
 
-async function installedElectronExecutablePath(
-  packageRoots: readonly string[] = electronPackageRoots(),
-): Promise<string | undefined> {
-  for (const packageRoot of packageRoots) {
-    const pathFile = FS.resolvePath('path.txt', packageRoot)
-    if (!await FS.isFile(pathFile)) {
+async function materializeStudioServicePayload(payloadRoot: string): Promise<void> {
+  const packagesRoot = Repo.resolvePath('packages')
+  const packageRoots = new Map<string, string>()
+  for (const directory of await FS.listDir(packagesRoot)) {
+    const root = FS.resolvePath(directory, packagesRoot)
+    const packageJsonPath = FS.resolvePath('package.json', root)
+    if (!await FS.isFile(packageJsonPath)) {
       continue
     }
-    const executableRelativePath = (await FS.readText(pathFile)).trim()
-    const executablePath = FS.resolvePath(executableRelativePath, FS.resolvePath('dist', packageRoot))
-    if (executableRelativePath !== '' && await FS.isFile(executablePath)) {
-      return executablePath
+    const packageJson = await FS.readJson<Record<string, unknown>>(packageJsonPath)
+    if (typeof packageJson['name'] === 'string') {
+      packageRoots.set(packageJson['name'], root)
+    }
+  }
+  const required = new Set<string>(['tao-runtime-toolchain'])
+  const pending = [...required]
+  while (pending.length > 0) {
+    const name = pending.shift()!
+    const root = packageRoots.get(name)
+    if (root === undefined) {
+      throw new Errors.UnexpectedBehaviorError(`Studio service payload requires missing workspace package ${name}.`)
+    }
+    const packageJson = await FS.readJson<Record<string, unknown>>(FS.resolvePath('package.json', root))
+    for (const dependencies of [packageJson['dependencies'], packageJson['peerDependencies']]) {
+      if (!isRecord(dependencies)) {
+        continue
+      }
+      for (const [dependency, version] of Object.entries(dependencies)) {
+        if (typeof version === 'string' && version.startsWith('workspace:') && !required.has(dependency)) {
+          required.add(dependency)
+          pending.push(dependency)
+        }
+      }
+    }
+  }
+
+  const verificationRoot = `${payloadRoot}.verification`
+  await FS.remove(payloadRoot)
+  await FS.remove(verificationRoot)
+  await FS.mkdir(payloadRoot)
+  await FS.copyFile(Repo.resolvePath('package.json'), FS.resolvePath('package.json', payloadRoot))
+  await FS.copyFile(Repo.resolvePath('bun.lock'), FS.resolvePath('bun.lock', payloadRoot))
+  for (const [name, sourceRoot] of [...packageRoots].sort(([left], [right]) => left.localeCompare(right))) {
+    const targetRoot = FS.resolvePath(`packages/${FS.basename(sourceRoot)}`, payloadRoot)
+    if (required.has(name)) {
+      await copyPayloadTree(sourceRoot, targetRoot)
+    } else {
+      await FS.copyFile(FS.resolvePath('package.json', sourceRoot), FS.resolvePath('package.json', targetRoot))
+    }
+  }
+
+  await FS.copyDirectory(payloadRoot, verificationRoot)
+  try {
+    await installStudioServicePayload(payloadRoot)
+    await installStudioServicePayload(verificationRoot)
+    const actualInventory = await dependencyInventory(payloadRoot)
+    const verificationInventory = await dependencyInventory(verificationRoot)
+    if (JSON.stringify(actualInventory) !== JSON.stringify(verificationInventory)) {
+      throw new Errors.UnexpectedBehaviorError(
+        'Two clean Studio service payload materializations produced different dependency inventories.',
+      )
+    }
+    await validateStudioServicePayload(payloadRoot)
+    await validateStudioServicePayload(verificationRoot)
+  } finally {
+    await FS.remove(verificationRoot)
+  }
+}
+
+async function materializeStudioNodeRuntime(
+  sourceNodePath: string,
+  payloadRoot: string,
+  runner: CommandRunner = CLI.run,
+): Promise<void> {
+  const requestedNode = FS.resolvePath(sourceNodePath)
+  if (!await FS.isFile(requestedNode)) {
+    throw new Errors.UserInputError(`Studio packaging Node executable was not found: ${sourceNodePath}`)
+  }
+  const sourceNode = await FS.realPath(requestedNode)
+  const architecture = await runChecked('lipo', ['-archs', sourceNode], undefined, runner)
+  const requiredArchitecture = process.arch === 'arm64' ? 'arm64' : process.arch === 'x64' ? 'x86_64' : process.arch
+  if (!architecture.stdout.trim().split(/\s+/).includes(requiredArchitecture)) {
+    throw new Errors.UserInputError(
+      `Studio packaging Node does not contain the build-host ${requiredArchitecture} architecture.`,
+    )
+  }
+
+  const targetNode = FS.resolvePath('bin/node', payloadRoot)
+  const targetBySource = new Map<string, string>([[sourceNode, targetNode]])
+  const pending = [sourceNode]
+  while (pending.length > 0) {
+    const source = pending.shift()!
+    for (const dependency of await machoDependencies(source, runner)) {
+      if (!dependency.startsWith('/nix/store/') || targetBySource.has(dependency)) {
+        continue
+      }
+      const hash = createHash('sha256').update(dependency).digest('hex').slice(0, 12)
+      targetBySource.set(dependency, FS.resolvePath(`lib/${hash}-${FS.basename(dependency)}`, payloadRoot))
+      pending.push(dependency)
+    }
+  }
+
+  await FS.remove(FS.resolvePath('bin', payloadRoot))
+  await FS.remove(FS.resolvePath('lib', payloadRoot))
+  for (const [source, target] of targetBySource) {
+    await FS.copyFile(source, target)
+    await runChecked('chmod', ['755', target], undefined, runner)
+  }
+  for (const [source, target] of targetBySource) {
+    for (const dependency of await machoDependencies(source, runner)) {
+      const dependencyTarget = targetBySource.get(dependency)
+      if (dependencyTarget === undefined) {
+        continue
+      }
+      const relativeDependency = target === targetNode
+        ? `@loader_path/../lib/${FS.basename(dependencyTarget)}`
+        : `@loader_path/${FS.basename(dependencyTarget)}`
+      await runChecked('install_name_tool', ['-change', dependency, relativeDependency, target], undefined, runner)
+    }
+    if (target !== targetNode) {
+      await runChecked('install_name_tool', ['-id', `@loader_path/${FS.basename(target)}`, target], undefined, runner)
+    }
+  }
+
+  for (const target of targetBySource.values()) {
+    const dependencies = await machoDependencies(target, runner)
+    const hostBoundDependency = dependencies.find(dependency =>
+      !dependency.startsWith('@')
+      && !dependency.startsWith('/System/Library/')
+      && !dependency.startsWith('/usr/lib/')
+    )
+    if (hostBoundDependency !== undefined) {
+      throw new Errors.UserInputError(
+        `Studio packaging Node retains a host-bound Mach-O dependency (${hostBoundDependency}). `
+          + 'Supply a standalone Node executable or a Nix Node whose closure can be relocated.',
+      )
+    }
+    const targetArchitectures = await runChecked('lipo', ['-archs', target], undefined, runner)
+    if (!targetArchitectures.stdout.trim().split(/\s+/).includes(requiredArchitecture)) {
+      throw new Errors.UnexpectedBehaviorError(
+        `Relocated Studio Node dependency does not contain ${requiredArchitecture}: ${target}`,
+      )
+    }
+  }
+  const version = await runChecked(targetNode, ['--version'], payloadRoot, runner)
+  if (!/^v\d+\.\d+\.\d+\s*$/.test(version.stdout)) {
+    throw new Errors.UnexpectedBehaviorError('Relocated Studio Node did not report a valid version.')
+  }
+}
+
+async function validatePackagedTestRuntime(payloadRoot: string): Promise<void> {
+  const runtimeToolchainRoot = FS.resolvePath('packages/runtime-toolchain', payloadRoot)
+  const nodePath = FS.resolvePath('bin/node', payloadRoot)
+  const result = await CLI.run(nodePath, {
+    args: [FS.resolvePath('test-command.js', payloadRoot), Repo.resolvePath('Apps/Test Apps/Data MVP')],
+    cwd: payloadRoot,
+    env: {
+      TAO_STDLIB_ROOT: FS.resolvePath('packages/stdlib', payloadRoot),
+      TAO_TEST_IN_PROCESS: 'true',
+      TAO_TEST_JEST_PATH: FS.resolvePath('node_modules/jest/bin/jest.js', payloadRoot),
+      TAO_TEST_NODE_PATH: nodePath,
+      TAO_TEST_NODE_MODULES_ROOT: FS.resolvePath('node_modules', payloadRoot),
+      TAO_TEST_RUNTIME_ROOT: runtimeToolchainRoot,
+    },
+    stdio: 'pipe',
+  })
+  await FS.remove(FS.resolvePath('_gen_tao-app-test', runtimeToolchainRoot))
+  if (result.error !== undefined || result.exitCode !== 0) {
+    throw new Errors.CommandExecutionError(result)
+  }
+}
+
+async function machoDependencies(path: string, runner: CommandRunner): Promise<readonly string[]> {
+  const output = await runChecked('otool', ['-L', path], undefined, runner)
+  return output.stdout.split(/\r?\n/).slice(1).flatMap(line => {
+    const match = /^\s*(\S+)\s+\(compatibility version/.exec(line)
+    return match?.[1] === undefined ? [] : [match[1]]
+  })
+}
+
+async function runChecked(
+  command: string,
+  args: readonly string[],
+  cwd: string | undefined,
+  runner: CommandRunner,
+): Promise<CLI.CommandResult> {
+  const result = await runner(command, { args, cwd, stdio: 'pipe' })
+  if (result.error !== undefined || result.exitCode !== 0) {
+    throw new Errors.CommandExecutionError(result)
+  }
+  return result
+}
+
+async function installStudioServicePayload(
+  payloadRoot: string,
+  runner: CommandRunner = CLI.run,
+): Promise<void> {
+  const installTempRoot = FS.resolvePath('.tmp', payloadRoot)
+  await FS.mkdir(installTempRoot)
+  const install = await runner('bun', {
+    args: [
+      'install',
+      '--production',
+      '--frozen-lockfile',
+      '--filter=tao-runtime-toolchain',
+      '--linker=hoisted',
+      '--backend=copyfile',
+    ],
+    cwd: payloadRoot,
+    env: { TMPDIR: installTempRoot },
+    stdio: 'stream',
+  })
+  if (install.error !== undefined || install.exitCode !== 0) {
+    throw new Errors.CommandExecutionError(install)
+  }
+  await FS.remove(installTempRoot)
+  await materializePayloadSymlinks(payloadRoot)
+}
+
+async function dependencyInventory(payloadRoot: string): Promise<readonly string[]> {
+  const nodeModulesRoot = FS.resolvePath('node_modules', payloadRoot)
+  const inventory: string[] = []
+  for await (const path of FS.walk(nodeModulesRoot, { includeHidden: true })) {
+    if (FS.basename(path) !== 'package.json') {
+      continue
+    }
+    const packageJson = await FS.readJson<Record<string, unknown>>(path)
+    const name = packageJson['name']
+    const version = packageJson['version']
+    if (typeof name === 'string' && typeof version === 'string') {
+      inventory.push(`${FS.relativePath(nodeModulesRoot, path)}:${name}@${version}`)
+    }
+  }
+  return inventory.sort()
+}
+
+async function copyPayloadTree(sourceRoot: string, targetRoot: string): Promise<void> {
+  for await (
+    const sourcePath of FS.walk(sourceRoot, {
+      excludeDirectory: name => name === 'node_modules' || name === '.artifacts' || name.startsWith('_gen_'),
+      includeHidden: true,
+    })
+  ) {
+    await FS.copyFile(sourcePath, FS.resolvePath(FS.relativePath(sourceRoot, sourcePath), targetRoot))
+  }
+}
+
+async function materializePayloadSymlinks(payloadRoot: string): Promise<void> {
+  for (let pass = 0; pass < 20; pass += 1) {
+    const symlinks: Array<{ path: string; target: string }> = []
+    for await (const path of FS.walk(payloadRoot, { includeDirectories: true, includeHidden: true })) {
+      const target = await FS.realPath(path)
+      if (target !== FS.resolvePath(path)) {
+        symlinks.push({ path, target })
+      }
+    }
+    if (symlinks.length === 0) {
+      return
+    }
+    for (const symlink of symlinks.sort((left, right) => right.path.length - left.path.length)) {
+      const temporaryPath = `${symlink.path}.materializing`
+      await FS.remove(temporaryPath)
+      if (await FS.isDirectory(symlink.target)) {
+        await FS.copyDirectory(symlink.target, temporaryPath)
+      } else {
+        await FS.copyFile(symlink.target, temporaryPath)
+      }
+      await FS.remove(symlink.path)
+      await FS.move(temporaryPath, symlink.path)
+    }
+  }
+  throw new Errors.UnexpectedBehaviorError('Studio service payload symlinks did not converge while materializing.')
+}
+
+async function validateStudioServicePayload(payloadRoot: string): Promise<void> {
+  const required = [
+    'packages/runtime-toolchain/app.json',
+    'packages/runtime-toolchain/index.ts',
+    'packages/runtime-toolchain/metro.config.cjs',
+    'node_modules/expo/package.json',
+    'node_modules/tao-runtime/package.json',
+    'node_modules/tao-shared/package.json',
+    'node_modules/tao-workspace/package.json',
+  ]
+  for (const relativePath of required) {
+    if (!await FS.isFile(FS.resolvePath(relativePath, payloadRoot))) {
+      throw new Errors.UnexpectedBehaviorError(`Studio service payload is missing ${relativePath}.`)
+    }
+  }
+  const repositoryRoot = Repo.getRoot()
+  for await (const path of FS.walk(payloadRoot, { includeDirectories: true, includeHidden: true })) {
+    if (await FS.realPath(path) !== FS.resolvePath(path)) {
+      throw new Errors.UnexpectedBehaviorError(`Studio service payload contains a symlink: ${path}`)
+    }
+    if (await FS.isFile(path) && ['.json', '.js', '.ts', '.cjs', '.mjs', '.map'].includes(FS.extname(path))) {
+      const content = await FS.readText(path)
+      if (content.includes(repositoryRoot)) {
+        throw new Errors.UnexpectedBehaviorError(`Studio service payload contains an absolute repository path: ${path}`)
+      }
+    }
+  }
+}
+
+async function prepareElectrobun(
+  hutchPath: string,
+  projectRoot: string,
+  runner: CommandRunner = CLI.run,
+): Promise<void> {
+  await runHutchCommand(hutchPath, ['install'], projectRoot, runner)
+  await runHutchCommand(hutchPath, ['electrobun', 'prepare'], projectRoot, runner)
+}
+
+async function runHutchCommand(
+  hutchPath: string,
+  args: readonly string[],
+  projectRoot: string,
+  runner: CommandRunner = CLI.run,
+): Promise<void> {
+  const result = await runner(hutchPath, {
+    args,
+    cwd: projectRoot,
+    stdio: 'stream',
+  })
+  if (result.error !== undefined || result.exitCode !== 0) {
+    throw new Errors.CommandExecutionError(result)
+  }
+}
+
+async function builtArtifacts(artifactsRoot: string): Promise<readonly string[]> {
+  if (!await FS.isDirectory(artifactsRoot)) {
+    return []
+  }
+  const paths: string[] = []
+  for await (const path of FS.walk(artifactsRoot)) {
+    paths.push(path)
+  }
+  return paths.sort()
+}
+
+async function installedHutchExecutablePath(
+  candidates: readonly string[],
+): Promise<string | undefined> {
+  for (const candidate of candidates) {
+    if (await FS.isFile(candidate)) {
+      return candidate
     }
   }
   return undefined
 }
 
-async function requireElectronAppPath(): Promise<string> {
-  const appPath = await installedElectronAppPath()
-  if (appPath !== undefined) {
-    return appPath
+async function waitForProbeResult(
+  resultPath: string,
+  command: Pick<StoppableCommand, 'exitCode' | 'signalCode'>,
+  sleep: (milliseconds: number) => Promise<void> = Time.sleep,
+): Promise<StudioNativeProbeResult> {
+  const deadline = Date.now() + probeTimeoutMs
+  while (Date.now() < deadline) {
+    if (await FS.isFile(resultPath)) {
+      return probeResult(await FS.readJson(resultPath))
+    }
+    if (command.exitCode !== null || command.signalCode !== null) {
+      throw new Errors.UnexpectedBehaviorError('Electrobun exited before writing its runtime probe result.')
+    }
+    await sleep(100)
   }
-  const hasElectronPackage = await Promise.all(
-    electronPackageRoots().map(root =>
-      FS.isFile(
-        FS.resolvePath('path.txt', root),
-      )
-    ),
-  )
-  if (hasElectronPackage.includes(true)) {
-    throw new Errors.UserInputError('Native Studio packaging currently supports macOS Electron.app installs.')
+  throw new Errors.UnexpectedBehaviorError('Timed out waiting for the Electrobun runtime probe.')
+}
+
+function probeResult(value: unknown): StudioNativeProbeResult {
+  if (
+    !isRecord(value) || typeof value['passed'] !== 'boolean' || !isRecord(value['capabilities'])
+    || !Array.isArray(value['manualChecks']) || !value['manualChecks'].every(item => typeof item === 'string')
+  ) {
+    throw new Errors.UnexpectedBehaviorError('Electrobun wrote an invalid runtime probe result.')
   }
-  throw new Errors.UserInputError('Electron is optional and is not installed. Install it for tao-dev before packaging.')
-}
-
-function electronPackageRoots(): readonly string[] {
-  return [
-    Repo.resolvePath('node_modules/electron'),
-    Repo.resolvePath('packages/dev/node_modules/electron'),
-    Repo.resolvePath('packages/studio/node_modules/electron'),
-  ]
-}
-
-async function writePackagedPayload(
-  appPath: string,
-  appName: string,
-): Promise<{ mainPath: string; packageJsonPath: string }> {
-  const appRoot = FS.resolvePath('Contents/Resources/app', appPath)
-  const mainPath = FS.resolvePath('main.cjs', appRoot)
-  const packageJsonPath = FS.resolvePath('package.json', appRoot)
-  await FS.remove(appRoot)
-  await FS.writeText(mainPath, mainScriptSource())
-  await FS.writeJson(packageJsonPath, {
-    main: 'main.cjs',
-    name: 'tao-studio-native',
-    private: true,
-    productName: appName,
-    version: '0.0.0',
-  })
-  return { mainPath, packageJsonPath }
-}
-
-async function updatePackagedInfoPlist(
-  appPath: string,
-  options: { appName: string; bundleIdentifier: string },
-): Promise<void> {
-  const infoPlistPath = FS.resolvePath('Contents/Info.plist', appPath)
-  const nextPlist = replacePlistStringValue(
-    replacePlistStringValue(
-      replacePlistStringValue(await FS.readText(infoPlistPath), 'CFBundleDisplayName', options.appName),
-      'CFBundleName',
-      options.appName,
-    ),
-    'CFBundleIdentifier',
-    options.bundleIdentifier,
-  )
-  await FS.writeText(infoPlistPath, nextPlist)
-}
-
-function replacePlistStringValue(plist: string, key: string, value: string): string {
-  const pattern = new RegExp(`(<key>${Text.escapeRegExp(key)}</key>\\s*<string>)([^<]*)(</string>)`)
-  if (!pattern.test(plist)) {
-    throw new Errors.UserInputError(`Electron Info.plist does not define ${key}.`)
+  const capabilities: StudioNativeProbeResult['capabilities'] = {}
+  for (const [name, result] of Object.entries(value['capabilities'])) {
+    if (
+      !isRecord(result) || typeof result['passed'] !== 'boolean'
+      || (result['message'] !== undefined && typeof result['message'] !== 'string')
+    ) {
+      throw new Errors.UnexpectedBehaviorError('Electrobun wrote an invalid runtime probe capability.')
+    }
+    capabilities[name] = { message: result['message'], passed: result['passed'] }
   }
-  return plist.replace(
-    pattern,
-    (_match, prefix: string, _previous: string, suffix: string) => `${prefix}${escapePlistString(value)}${suffix}`,
-  )
+  return { capabilities, manualChecks: value['manualChecks'], passed: value['passed'] }
 }
 
-function escapePlistString(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-}
-
-function safeAppName(value: string): string {
-  const appName = value.trim()
-  if (appName !== '' && appName !== '.' && appName !== '..' && !/[/:\\]/.test(appName)) {
-    return appName
+function requiredHttpsUrl(value: string): URL {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Errors.UserInputError('Studio release base URL must be a valid HTTPS URL.')
   }
-  throw new Errors.UserInputError('Native Studio app name must be a non-empty macOS file name.')
-}
-
-function safeBundleIdentifier(value: string): string {
-  const bundleIdentifier = value.trim()
-  if (/^[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(bundleIdentifier)) {
-    return bundleIdentifier
+  if (url.protocol !== 'https:') {
+    throw new Errors.UserInputError('Studio release base URL must be a valid HTTPS URL.')
   }
-  throw new Errors.UserInputError('Native Studio bundle identifier must be a reverse-DNS identifier.')
+  return url
 }
 
 async function stopCommand(
@@ -268,67 +642,6 @@ function finalizeCommand(command: StoppableCommand): WaitForNativeClose {
   }
 }
 
-function mainScriptSource(): string {
-  return Text.stripIndent(`
-    const { app, BrowserWindow, shell } = require('electron')
-
-    const rawStudioUrl = process.env.TAO_STUDIO_URL
-    const remoteDebuggingPort = process.env.TAO_STUDIO_ELECTRON_REMOTE_DEBUGGING_PORT
-    const showWindow = process.env.TAO_STUDIO_ELECTRON_SHOW_WINDOW !== 'false'
-    const userDataPath = process.env.TAO_STUDIO_ELECTRON_USER_DATA
-
-    if (!rawStudioUrl || !userDataPath) {
-      throw new Error('TAO_STUDIO_URL and TAO_STUDIO_ELECTRON_USER_DATA are required.')
-    }
-    const studioUrl = new URL(rawStudioUrl)
-    if (studioUrl.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(studioUrl.hostname)) {
-      throw new Error('Native Tao Studio only opens a local HTTP server.')
-    }
-    app.setPath('userData', userDataPath)
-    if (remoteDebuggingPort) {
-      app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
-    }
-
-    let mainWindow
-
-    function createWindow() {
-      mainWindow = new BrowserWindow({
-        height: 900,
-        minHeight: 640,
-        minWidth: 960,
-        paintWhenInitiallyHidden: true,
-        show: false,
-        title: 'Tao Studio',
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-        },
-        width: 1400,
-      })
-      mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        try {
-          const externalUrl = new URL(url)
-          if (externalUrl.protocol === 'http:' || externalUrl.protocol === 'https:') {
-            void shell.openExternal(externalUrl.href)
-          }
-        } catch {}
-        return { action: 'deny' }
-      })
-      mainWindow.webContents.on('will-navigate', event => event.preventDefault())
-      if (showWindow) {
-        mainWindow.once('ready-to-show', () => mainWindow?.show())
-      }
-      mainWindow.on('closed', () => {
-        mainWindow = undefined
-      })
-      void mainWindow.loadURL(studioUrl.href)
-    }
-
-    app.whenReady().then(createWindow)
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    })
-    app.on('window-all-closed', () => app.quit())
-  `)
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

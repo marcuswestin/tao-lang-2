@@ -3,7 +3,7 @@ import { Errors } from '@shared'
 import type { StudioJsonObject, StudioJsonValue, StudioSourceRange } from './StudioProtocol'
 import { type StudioStateEntry, StudioStateLibrary } from './StudioStateLibrary'
 
-export const studioPreviewManifestVersion = 1 as const
+export const studioPreviewManifestVersion = 2 as const
 
 export type StudioTaoSource = {
   kind: 'tao'
@@ -32,6 +32,7 @@ export type StudioParameterSchema = {
 export type StudioScenario = {
   args: StudioJsonObject
   fixtureId: string
+  group: string
   label: string
   prepare: readonly StudioJsonObject[]
   scenarioId: string
@@ -79,7 +80,7 @@ export type StudioPreviewCell = {
   stateLayers: readonly string[]
 }
 
-export type StudioPreviewManifestV1 = {
+export type StudioPreviewManifestV2 = {
   capabilities: {
     captureDomains: readonly string[]
     scheme: 'inert'
@@ -119,7 +120,7 @@ export const StudioPreviewManifest = {
   validateEnvironment,
 } as const
 
-function define(input: StudioPreviewManifestV1): StudioPreviewManifestV1 {
+function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   if (input.version !== studioPreviewManifestVersion) {
     throw new Errors.UserInputError(`Unsupported Studio preview manifest version: ${input.version}`)
   }
@@ -157,6 +158,8 @@ function define(input: StudioPreviewManifestV1): StudioPreviewManifestV1 {
   const scenarios = uniqueBy(input.scenarios, scenario => scenario.scenarioId, 'Studio scenario')
   for (const scenario of scenarios.values()) {
     validateSource(scenario.source, 'Studio scenario source')
+    requireText(scenario.group, 'Studio scenario group')
+    requireText(scenario.label, 'Studio scenario label')
     if (!fixtures.has(scenario.fixtureId)) {
       throw new Errors.UserInputError(`Studio scenario targets an unknown fixture: ${scenario.fixtureId}`)
     }
@@ -185,7 +188,7 @@ function define(input: StudioPreviewManifestV1): StudioPreviewManifestV1 {
   return input
 }
 
-function cellIdentity(manifest: StudioPreviewManifestV1, cell: StudioPreviewCell): StudioCellIdentity {
+function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {
   return {
     appName: manifest.project.appName,
     cellId: cell.cellId,
@@ -196,7 +199,7 @@ function cellIdentity(manifest: StudioPreviewManifestV1, cell: StudioPreviewCell
   }
 }
 
-function validateArgs(manifest: StudioPreviewManifestV1, scenarioId: string, args: StudioJsonObject): void {
+function validateArgs(manifest: StudioPreviewManifestV2, scenarioId: string, args: StudioJsonObject): void {
   const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === scenarioId)
   if (scenario === undefined) {
     throw new Errors.UserInputError(`Studio scenario does not exist: ${scenarioId}`)
@@ -204,7 +207,7 @@ function validateArgs(manifest: StudioPreviewManifestV1, scenarioId: string, arg
   validateArgsForSubject(manifest, scenario.subjectId, args)
 }
 
-function validateArgsForSubject(manifest: StudioPreviewManifestV1, subjectId: string, args: StudioJsonObject): void {
+function validateArgsForSubject(manifest: StudioPreviewManifestV2, subjectId: string, args: StudioJsonObject): void {
   const parameters = manifest.parametersBySubject[subjectId] ?? []
   const parameterById = new Map(parameters.map(parameter => [parameter.parameterId, parameter]))
   for (const key of Object.keys(args)) {

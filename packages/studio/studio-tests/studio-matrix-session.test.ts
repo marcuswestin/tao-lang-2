@@ -2,8 +2,9 @@ import { Describe, Expect, Test } from '@shared/test'
 import { StudioMatrixConflictError, StudioMatrixSession } from '../studio-src/StudioMatrixSession'
 import type {
   StudioCellInstanceIdentity,
-  StudioPreviewManifestV1,
+  StudioPreviewManifestV2,
 } from '../studio-src/StudioPreviewManifest'
+import type { StudioRuntimeCaptureArtifact } from '../studio-src/StudioProtocol'
 
 Describe('Studio matrix session', () => {
   Test('registers concurrent cell instances without one cell invalidating another', () => {
@@ -65,6 +66,40 @@ Describe('Studio matrix session', () => {
     Expect(codes).toEqual(['stale-manifest', 'stale-compile', 'stale-cell'])
   })
 
+  Test('carries an explicit-domain runtime capture into one remounted cell and rejects unknown domains', () => {
+    const session = new StudioMatrixSession(fixture())
+    const replay: StudioRuntimeCaptureArtifact = {
+      capturedAt: 1_788_100_000_000,
+      domains: [
+        { domain: 'data', value: { snapshots: { demo: '{"rows":{}}' } }, version: 1 },
+        { domain: 'scene', value: { selected: 'Story1' }, version: 1 },
+      ],
+      failure: {
+        boundaryId: 'screen:Card',
+        error: { message: 'Failed', name: 'Error' },
+        frame: { boundary: 'screen' as const, declaration: 'Card' },
+        retryEligible: true,
+        stopper: false,
+        timestamp: 1_788_100_000_000,
+      },
+      version: 1 as const,
+    }
+
+    const replaying = session.reconfigure({ ...session.cell('phone').identity, replay })
+    Expect(replaying.replay).toEqual(replay)
+    Expect(session.cell('desktop').replay).toBe(undefined)
+
+    Expect(() =>
+      session.reconfigure({
+        ...session.cell('desktop').identity,
+        replay: { ...replay, domains: [{ domain: 'credentials', value: {}, version: 1 }] },
+      })
+    ).toThrow('capture domain is not supported: credentials')
+
+    const cleared = session.reconfigure({ ...replaying.identity, args: { title: 'Fresh' } })
+    Expect(cleared.replay).toBe(undefined)
+  })
+
   Test('rebases compatible explicit overrides and invalidates live instances for remount', () => {
     const session = new StudioMatrixSession(fixture())
     const phoneInstance = instance(session, 'phone', 'phone-instance')
@@ -111,7 +146,7 @@ Describe('Studio matrix session', () => {
       args: { title: 'Removed cell' },
     })
     const base = fixture({ compileRevision: 8, manifestRevision: 'manifest-8' })
-    const manifest: StudioPreviewManifestV1 = {
+    const manifest: StudioPreviewManifestV2 = {
       ...base,
       cells: base.cells.filter(cell => cell.cellId === 'phone').map(cell => ({
         ...cell,
@@ -141,7 +176,7 @@ function instance(session: StudioMatrixSession, cellId: string, previewInstanceI
 function fixture(revisions: { compileRevision: number; manifestRevision: string } = {
   compileRevision: 7,
   manifestRevision: 'manifest-7',
-}): StudioPreviewManifestV1 {
+}): StudioPreviewManifestV2 {
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 20, start: 0 } }
   const environment = {
     network: { latencyMs: 0, outcome: 'normal' as const },
@@ -179,6 +214,7 @@ function fixture(revisions: { compileRevision: number; manifestRevision: string 
     scenarios: [{
       args: { title: 'Hello' },
       fixtureId: 'fixture:base',
+      group: 'Cards',
       label: 'Default',
       prepare: [],
       scenarioId: 'default',
@@ -206,6 +242,6 @@ function fixture(revisions: { compileRevision: number; manifestRevision: string 
       },
     ],
     subjects: [{ kind: 'view', source, subjectId: 'card', viewName: 'Card' }],
-    version: 1,
+    version: 2,
   }
 }

@@ -3,6 +3,44 @@ import { Workspace } from '@workspace'
 import { TestCompiler } from './test-compile'
 
 Describe('compiler: minimal design', () => {
+  Test('gates only inline design explorations in release validation mode', async () => {
+    const source = `
+      use StackNav from @tao/nav
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      view Main() { Title "Main" render Surface() [size 14, fg #fff] }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `
+
+    const development = await TestCompiler.compileCode(source)
+    Expect(development.validation.diagnostics.filter(diagnostic => diagnostic.code === 'design-check-exploration'))
+      .toHaveLength(2)
+    await Expect(TestCompiler.compileCode(source, { validationMode: 'release' })).rejects.toThrow(
+      'must be promoted to a token, style bundle, or element default for release',
+    )
+
+    const ordinaryWarning = await TestCompiler.compileCode(
+      `
+      use SlotNav, StackNav from @tao/nav
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      view Main() { Title "Main" render Surface() }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `,
+      { validationMode: 'release' },
+    )
+    Expect(ordinaryWarning.validation.diagnostics.some(diagnostic => diagnostic.severity === 'warning')).toBe(true)
+  })
+
+  Test('marks linked standard elements for Capitalized design defaults', async () => {
+    const compiled = await TestCompiler.compileCode(`
+      use StackNav from @tao/nav
+      use Text from @tao/ui
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      view Main() { Title "Main" render Text("Hello") }
+    `)
+
+    Expect(compiled.code).toContain('designDefault: "Text"')
+  })
+
   Test('emits declarative tokens, source-ordered specs, lazy app design, and occurrence specs', async () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav

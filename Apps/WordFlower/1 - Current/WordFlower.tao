@@ -9,11 +9,11 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
-// `scenario Name.case` selects one fixture, ordered preparation, a runnable app and destination,
-// and explicit environment pins. Studio adds no `example` declaration or sidecar authority.
+// `scenarios Subject "group"` collects string-identified entries under shared defaults; each entry
+// may override any clause. Studio adds no `example` declaration or sidecar authority.
 //
 // The approved focused subject is `render ViewName(Parameter: FixtureHandle)`. Its named arguments
-// bind the view's declared parameters, and every scenario has exactly one `run` or `render` subject.
+// bind the view's declared parameters, and every scenario has exactly one effective app or view subject.
 // Runtime lowering begins with deterministic fixture data plus viewport, appearance, locale,
 // direction, and the explicitly spelled online/offline network pins. The clock value spelling remains
 // deferred rather than guessed. Scheme remains a visibly inert Studio protocol seam.
@@ -315,33 +315,31 @@ fixture StudioWorkspace {
       Name: "Novel"
 }  }
 
-scenario WorkspaceRow.novel {
+scenarios WorkspaceRow "states" {
    fixture StudioWorkspace
-   render WorkspaceRow(Workspace: Novel)
    device phone
    appearance light
    network online
    locale "en"
-}
+   scenario "novel" {
+      render (Workspace: Novel)
+}  }
 
-scenario WordFlower.phone {
+scenarios WordFlower "devices" {
    fixture StudioWorkspace
-   run WordFlower
-   device phone
-   appearance light
-   network online
-   locale "en"
-}
-
-scenario WordFlower.tabletDark {
-   fixture StudioWorkspace
-   run WordFlower
-   device tablet 1024 x 1366
-   appearance dark
-   network offline
-   locale pseudolocale
-   direction rightToLeft
-}
+   scenario "phone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+   }
+   scenario "tabletDark" {
+      device tablet 1024 x 1366
+      appearance dark
+      network offline
+      locale pseudolocale
+      direction rightToLeft
+}  }
 
 // A configured datasource is a named value like any other. The bare constructor block is the
 // canonical surface spelling for the same refinement operation that explicit `with` exposes;

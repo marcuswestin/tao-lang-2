@@ -491,6 +491,9 @@ function compileConfigurationReference(value: AST.ConfigurationReference): Compi
   ) {
     return Compile.ValueDeclarationReference(target)
   }
+  if (AST.isStateDeclaration(target)) {
+    return gen`${gen.scopeName(target)}`
+  }
   return Assert.never(target as never, 'validated configuration reference targets a configurable declaration')
 }
 

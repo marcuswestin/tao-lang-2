@@ -57,6 +57,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'case' && AST.isRespondStatement(context.container)) {
       return this.createResponseCaseScope(context.container)
     }
+    if (
+      context.property === 'case'
+      && (AST.isFailStatement(context.container) || AST.isActionFailureDeclaration(context.container))
+    ) {
+      return this.createFailureCaseScope(context.container)
+    }
     if (context.property === 'function' && AST.isFunctionCallExpression(context.container)) {
       return this.createFunctionScope(context.container)
     }
@@ -81,6 +87,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (context.property === 'view' && AST.isScenarioRenderClause(container)) {
       return this.createDeclarationScope(container, AST.isViewDeclaration)
+    }
+    if (context.property === 'subject' && AST.isScenarioGroupDeclaration(container)) {
+      return this.createScenarioSubjectScope(container)
     }
     if (context.property === 'slot' && AST.isRenderSlotUse(context.container)) {
       return this.createRenderSlotScope(context.container)
@@ -211,6 +220,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       || AST.isConfigurableDeclaration(candidate)
     let scope = this.createScopeForNodes(root.statements.filter(configurable))
     scope = this.createScopeForNodes(this.importedDeclarations(node, configurable), scope)
+    const app = owningAppDeclaration(node)
+    if (app?.block) {
+      scope = this.createScopeForNodes(app.block.statements.filter(AST.isStateDeclaration), scope)
+    }
     return scope
   }
 
@@ -327,6 +340,22 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(AST.isTaoFile(root) ? root.statements.filter(AST.isFixtureDeclaration) : [])
   }
 
+  private createScenarioSubjectScope(node: AST.ScenarioGroupDeclaration): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes([
+      ...AST.appValueDeclarationsInFile(root),
+      ...root.statements.filter(AST.isViewDeclaration),
+    ])
+    scope = this.createScopeForNodes(
+      this.importedDeclarations(node, AST.isScenarioSubjectDeclaration),
+      scope,
+    )
+    return scope
+  }
+
   private createFixtureAccountScope(node: AST.FixtureCreateBinding): Langium.Scope {
     return this.createScopeForNodes(this.fixtureValuesBefore(node).filter(AST.isFixtureAccountDeclaration))
   }
@@ -358,7 +387,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   private scenarioFixtureValues(node: AST.Node): AST.FixtureValueDeclaration[] {
     const scenario = AST.findOwningScenario(node)
-    const fixtureName = scenario?.block.entries.find(AST.isScenarioFixtureClause)?.fixture.$refText
+    const group = AST.findOwningScenarioGroup(node)
+    const fixtureName = scenario
+      ? AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)?.fixture.$refText
+      : group?.block.entries.find(AST.isScenarioFixtureClause)?.fixture.$refText
     const root = AST.findRoot(node)
     if (!fixtureName || !AST.isTaoFile(root)) {
       return []
@@ -414,6 +446,18 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (exactField) {
       scope = this.createScope(this.booleanFieldCaseDescriptions(exactField), scope)
     }
+    return scope
+  }
+
+  private createFailureCaseScope(node: AST.FailStatement | AST.ActionFailureDeclaration): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(
+      root.statements.filter(AST.isTypeDeclaration).flatMap(AST.caseSetCasesOf),
+    )
+    scope = this.createScopeForNodes(this.importedCaseSetCases(node), scope)
     return scope
   }
 
@@ -708,6 +752,17 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
 
 function statesOwnedByBlock(block: AST.Block): AST.StateDeclaration[] {
   return block.statements.filter(AST.isStateDeclaration)
+}
+
+function owningAppDeclaration(node: AST.Node): AST.AppDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isAppDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
 }
 
 function visibleParametersAtReference(

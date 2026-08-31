@@ -1,14 +1,38 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Expect, Test } from '@shared/test'
+import { StudioApiRoutes, type StudioHandshake } from '../studio-src/client/StudioApiClient'
+import { StudioDataFillCoordinator } from '../studio-src/client/StudioApp'
+import { StudioEditorTabs } from '../studio-src/client/StudioEditorTabs'
+import {
+  StudioFileTreeController,
+  StudioFileTreeModel,
+  StudioFileTreeTransitions,
+} from '../studio-src/client/StudioFileTree'
+import {
+  currentSourceIdentity,
+  handlePreviewMessage,
+  runtimeCaptureWithEnvironment,
+  StudioActivePreview,
+  StudioFixtureGenerationFeedback,
+  StudioFixtureProposal,
+  StudioMatrixLayout,
+  type StudioPreviewConnection,
+  StudioPreviewSuspension,
+  studioReplayConfiguration,
+  StudioRuntimeData,
+} from '../studio-src/client/StudioMatrixView'
+import {
+  StudioCommandPalette,
+  StudioProductCapabilities,
+} from '../studio-src/client/StudioProductPanels'
+import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
+import { StudioPaneSizes } from '../studio-src/client/StudioShell'
 import {
   StudioCodeEditor,
   StudioDiagnosticNavigation,
-  StudioFixtureGenerationFeedback,
-  StudioFixtureProposal,
+  StudioEditorInsertion,
   StudioOpenFileLifecycle,
-  StudioSourceActionOutcome,
-  StudioSourcePath,
 } from '../studio-src/StudioClient'
 import { StudioClientAssets } from '../studio-src/StudioClientAssets'
 import {
@@ -17,7 +41,9 @@ import {
   type StudioDraftSyncResult,
 } from '../studio-src/StudioDraftSync'
 import { StudioInspector } from '../studio-src/StudioInspector'
+import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import { studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
+import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
   const bundle = await StudioClientAssets.bundle()
@@ -30,23 +56,54 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('/api/language/highlight')
   Expect(bundle).not.toContain('createHighlighterCore')
   Expect(bundle).toContain('/api/file/draft')
+  Expect(bundle).toContain('/api/file/create')
+  Expect(bundle).toContain('/api/file/rename')
+  Expect(bundle).toContain('/api/file/delete')
+  Expect(bundle).toContain('New Tao file')
   Expect(bundle).toContain('/api/source-action/undo')
   Expect(bundle).toContain('/api/ai/availability')
   Expect(bundle).toContain('/api/ai/fixture')
+  Expect(bundle).not.toContain('/api/data/fill')
+  Expect(bundle).toContain('/api/tests/status')
+  Expect(bundle).toContain('/api/tests/run')
+  Expect(bundle).toContain('capture-runtime')
+  Expect(bundle).toContain('No console messages from the active preview.')
+  Expect(bundle).toContain('/api/design')
   Expect(bundle).toContain('Reload preview')
   Expect(bundle).toContain('Mode: Edit')
   Expect(bundle).toContain('Mode: Run')
+  Expect(bundle).toContain('Design tokens')
+  Expect(bundle).toContain('Layout presets')
+  Expect(bundle).toContain('Editor breadcrumbs')
+  Expect(bundle).toContain('Bottom drawer')
+  Expect(bundle).toContain('tao-studio:pane-sizes:v2')
+  Expect(bundle).toContain('tao-studio:editor-tabs:v1')
+  Expect(bundle).toContain('/switch')
+  Expect(bundle).toContain('Fix or revert invalid Tao drafts before switching app variants.')
   Expect(bundle).toContain('set-interaction-mode')
   Expect(bundle).toContain('Undo visual edit')
   Expect(bundle).toContain('/api/preview/cell/reconfigure')
   Expect(bundle).toContain('/api/preview/cell/instance')
   Expect(bundle).toContain('Apply & remount')
-  Expect(bundle).toContain('Scenario details')
+  Expect(bundle).not.toContain('Scenario details')
+  Expect(bundle).toContain('Select a scenario preview cell')
+  Expect(bundle).toContain('Search project')
+  Expect(bundle).toContain('No manifest screens are available yet.')
   Expect(bundle).toContain('Save to scenario')
   Expect(bundle).toContain('Generate fixture')
   Expect(bundle).toContain('Generating a realistic fixture')
   Expect(bundle).toContain('The Tao source changed while generation was running; its result was ignored.')
+  Expect(bundle).toContain('Load failure capture')
+  Expect(bundle).toContain('Paste failure capture')
+  Expect(bundle).toContain('Replay captured state')
+  Expect(bundle).toContain('Open failing source')
   Expect(bundle).toContain('set-scenario-arguments')
+  Expect(bundle).toContain('scenarioGroupName')
+  Expect(bundle).toContain('/api/source-action/inspect')
+  Expect(bundle).toContain('set-style-entry')
+  Expect(bundle).toContain('Fork style')
+  Expect(bundle).toContain('Promote to color token')
+  Expect(bundle).not.toContain('window.location.reload')
   Expect(bundle).toContain('No editable arguments')
   Expect(bundle).toContain('Injected Studio network failure')
   Expect(bundle).toContain('Inert — runtime Scheme support is not available yet.')
@@ -59,10 +116,6 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
 })
 
 Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
-  Expect(StudioSourcePath.relative('/project', '/project/Scenarios.tao')).toBe('Scenarios.tao')
-  Expect(StudioSourcePath.relative('/project', 'Scenarios.tao')).toBe('Scenarios.tao')
-  Expect(StudioSourcePath.relative('/project', '/other/Scenarios.tao')).toBeUndefined()
-
   const identity = {
     appName: 'WordFlower',
     cellId: 'Workspace.focused#cell',
@@ -95,20 +148,6 @@ Test('Studio generated fixture proposals use the captured-fixture source-action 
     requestId: 'generation-1',
     type: 'source-action',
   })
-
-  const envelope = StudioFixtureProposal.sourceAction({
-    fixtureName: 'GeneratedState',
-    identity,
-    origin: 'generated',
-    plan,
-    requestId: 'generation-1',
-  })
-  Expect(StudioSourceActionOutcome.compileError(envelope, {
-    compile: { message: 'CreatedAt must be time.', status: 'error' },
-  })).toContain('did not save the fixture')
-  Expect(StudioSourceActionOutcome.compileError(envelope, {
-    compile: { message: 'Compiled.', status: 'compiled' },
-  })).toBeUndefined()
 })
 
 Test('Studio generated fixture failures include actionable validation issues', () => {
@@ -119,11 +158,607 @@ Test('Studio generated fixture failures include actionable validation issues', (
 })
 
 Test('Studio browser assets bundle one CodeMirror view singleton', async () => {
-  const viewModules = (await StudioClientAssets.testing.moduleInputs()).filter(path =>
+  const inputs = await StudioClientAssets.testing.moduleInputs()
+  const viewModules = inputs.filter(path =>
     path.includes('@codemirror+view@') && path.endsWith('/@codemirror/view/dist/index.js')
   )
 
   Expect(viewModules).toHaveLength(1)
+  Expect(inputs.filter(path => path.includes('/studio-src/client/')).map(path => path.split('/').at(-1)).sort())
+    .toEqual([
+      'StudioApiClient.ts',
+      'StudioApp.ts',
+      'StudioEditor.ts',
+      'StudioEditorTabs.ts',
+      'StudioFileTree.ts',
+      'StudioMatrixView.ts',
+      'StudioProductPanels.ts',
+      'StudioRailPanels.ts',
+      'StudioShell.ts',
+      'StudioVisualEditing.ts',
+    ])
+})
+
+Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
+  let stored: string | null = '{"left":312,"right":296,"bottom":205}'
+  const storage = {
+    getItem: () => stored,
+    setItem: (_key: string, value: string) => {
+      stored = value
+    },
+  }
+
+  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 205, left: 312, right: 296 })
+  StudioPaneSizes.save(storage, { bottom: 164, left: 244, right: 320 })
+  Expect(stored).toBe('{"bottom":164,"left":244,"right":320}')
+  stored = '{"left":"wide","right":null}'
+  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 180, left: 260, right: 280 })
+})
+
+Test('Studio editor tabs restore only available Tao paths and persist active order safely', () => {
+  let stored = JSON.stringify({
+    activePath: '../Outside.tao',
+    paths: ['First.tao', '../Outside.tao', 'Notes.txt', 'Nested/Second.tao', 'First.tao'],
+    version: 1,
+  })
+  const storage = {
+    getItem: () => stored,
+    setItem: (_key: string, value: string) => {
+      stored = value
+    },
+  }
+  const tabs = new StudioEditorTabs({
+    appName: 'Garden',
+    availablePaths: ['First.tao', 'Nested/Second.tao', 'Third.tao'],
+    project: '/projects/Garden',
+    storage,
+  })
+
+  Expect(tabs.snapshot()).toEqual({ activePath: 'Nested/Second.tao', paths: ['First.tao', 'Nested/Second.tao'] })
+  Expect(tabs.activate('First.tao')).toEqual({ activePath: 'First.tao', paths: ['First.tao', 'Nested/Second.tao'] })
+  Expect(tabs.open('Third.tao')).toEqual({
+    activePath: 'Third.tao',
+    paths: ['First.tao', 'Nested/Second.tao', 'Third.tao'],
+  })
+  Expect(tabs.open('First.tao')).toEqual({
+    activePath: 'First.tao',
+    paths: ['First.tao', 'Nested/Second.tao', 'Third.tao'],
+  })
+  Expect(tabs.close('Third.tao')).toEqual({
+    activePath: 'First.tao',
+    paths: ['First.tao', 'Nested/Second.tao'],
+  })
+  Expect(() => tabs.open('../Outside.tao')).toThrow('not an available Tao file')
+  Expect(JSON.parse(stored)).toEqual({
+    activePath: 'First.tao',
+    paths: ['First.tao', 'Nested/Second.tao'],
+    version: 1,
+  })
+})
+
+Test('Studio editor tabs follow rename/delete metadata and ignore corrupt device state', () => {
+  let stored = '{bad json'
+  const storage = {
+    getItem: () => stored,
+    setItem: (_key: string, value: string) => {
+      stored = value
+    },
+  }
+  const tabs = new StudioEditorTabs({
+    appName: 'Garden',
+    availablePaths: ['First.tao', 'Second.tao', 'Renamed.tao'],
+    project: '/projects/Garden',
+    storage,
+  })
+
+  Expect(tabs.snapshot()).toEqual({ paths: [] })
+  tabs.open('First.tao')
+  tabs.open('Second.tao')
+  Expect(tabs.rename('Second.tao', 'Renamed.tao')).toEqual({
+    activePath: 'Renamed.tao',
+    paths: ['First.tao', 'Renamed.tao'],
+  })
+  Expect(tabs.reconcile(['Renamed.tao'])).toEqual({ activePath: 'Renamed.tao', paths: ['Renamed.tao'] })
+})
+
+Test('Studio preview cells suspend outside the canvas viewport and resume on return', () => {
+  Expect(StudioPreviewSuspension.transition(false, false)).toBe('suspend')
+  Expect(StudioPreviewSuspension.transition(true, false)).toBe('unchanged')
+  Expect(StudioPreviewSuspension.transition(true, true)).toBe('resume')
+  Expect(StudioPreviewSuspension.transition(false, true)).toBe('unchanged')
+})
+
+Test('Studio live Data tables decode runtime datasource snapshots without provider access', () => {
+  const snapshot = JSON.stringify({
+    formatVersion: 1,
+    nextId: 2,
+    rows: { Notes: [{ Id: '1', Title: 'Hello' }], Tags: [] },
+    schemaVersion: 1,
+  })
+  const tables = StudioRuntimeData.tables({
+    capturedAt: 42,
+    domains: [{
+      domain: 'data',
+      value: { entries: [{ key: JSON.stringify(['Notes:local', 0]), snapshot }] },
+      version: 1,
+    }],
+    version: 1,
+  })
+
+  Expect(tables).toEqual([
+    { datasource: 'Notes:local', entity: 'Notes', rows: [{ Id: '1', Title: 'Hello' }] },
+    { datasource: 'Notes:local', entity: 'Tags', rows: [] },
+  ])
+})
+
+Test('Studio Tao test output becomes structured results with navigable failures', () => {
+  const result = StudioTestOutput.parse({
+    durationMs: 1234,
+    exitCode: 1,
+    finishedAt: '2026-08-30T12:00:00.000Z',
+    id: 'run-1',
+    output: [
+      '\u001b[31mFAIL runtime-toolchain-tests/tao-test-command.jest.tsx\u001b[0m',
+      'Tao check failed: Notes > creates a note',
+      'Source: /projects/My Notes/Notes.test.tao:12:7',
+      'expect text "Saved" expected rendered text but found none.',
+      'Tests:       1 failed, 2 passed, 3 total',
+    ].join('\n'),
+    signal: null,
+  })
+
+  Expect(result).toMatchObject({
+    failed: 1,
+    passed: 2,
+    status: 'failed',
+  })
+  Expect(result.output).not.toContain('\u001b')
+  Expect(result.failures).toEqual([{
+    column: 7,
+    filePath: '/projects/My Notes/Notes.test.tao',
+    line: 12,
+    message: 'expect text "Saved" expected rendered text but found none.',
+    name: 'Notes > creates a note',
+  }])
+})
+
+Test('Studio API routes stay legacy-compatible and bind project windows to one opaque session', () => {
+  Expect(StudioApiRoutes.sessionPath('/', '/api/protocol')).toBe('/api/protocol')
+  Expect(StudioApiRoutes.sessionPath('/sessions/window_one', '/api/protocol'))
+    .toBe('/sessions/window_one/api/protocol')
+  Expect(StudioApiRoutes.sessionPath('/sessions/../project', '/api/protocol')).toBe('/api/protocol')
+  Expect(StudioApiRoutes.transitionUrl(
+    { previewUrl: 'http://127.0.0.1:8082', url: '/sessions/window_two' },
+    new URL('http://127.0.0.1:4276/sessions/window_one'),
+  )).toBe('/sessions/window_two')
+  Expect(StudioApiRoutes.transitionUrl(
+    { previewUrl: 'http://127.0.0.1:8082', url: '/sessions/window_two' },
+    new URL('http://127.0.0.1:4276/sessions/window_one?native-window=project'),
+  )).toBe(
+    '/sessions/window_two?native-window=project&native-preview-url=http%3A%2F%2F127.0.0.1%3A8082',
+  )
+  Expect(() =>
+    StudioApiRoutes.transitionUrl(
+      { url: 'https://example.com/sessions/window_two' },
+      new URL('http://127.0.0.1:4276/sessions/window_one'),
+    )
+  ).toThrow('invalid managed session URL')
+})
+
+Test('Studio file tree groups real paths while preserving dirty and diagnostic metadata', () => {
+  const nodes = StudioFileTreeModel.build([
+    { diagnosticCount: 2, dirty: true, path: 'Features/Card.tao', sourceVersion: 'card-1' },
+    { diagnosticCount: 0, dirty: false, path: 'Garden.tao', sourceVersion: 'garden-1' },
+    { diagnosticCount: 1, dirty: false, path: 'Features/Nested/Detail.tao', sourceVersion: 'detail-1' },
+  ])
+
+  Expect(nodes[0]).toMatchObject({ kind: 'folder', name: 'Features' })
+  Expect(nodes[1]).toMatchObject({ kind: 'file', name: 'Garden.tao' })
+  const features = nodes[0] as Extract<(typeof nodes)[number], { kind: 'folder' }>
+  Expect(features.children[0]).toMatchObject({ kind: 'folder', name: 'Nested' })
+  Expect(features.children[1]).toMatchObject({
+    file: { diagnosticCount: 2, dirty: true, path: 'Features/Card.tao' },
+    kind: 'file',
+  })
+  Expect(StudioFileTreeModel.deletePrompt('Features/Card.tao'))
+    .toBe('Delete Features/Card.tao? This cannot be undone.')
+  Expect(() => StudioFileTreeModel.validatePath('../Outside.tao')).toThrow('project-relative .tao')
+  Expect(() => StudioFileTreeModel.validatePath('Notes.txt')).toThrow('project-relative .tao')
+})
+
+Test(
+  'Studio file tree executes CRUD with prepared versions, publishes live lists, and transitions active files',
+  async () => {
+    const requests: Array<{ kind: string; request: Record<string, unknown> }> = []
+    const published: string[][] = []
+    const callbacks: string[] = []
+    let files = [{ diagnosticCount: 0, dirty: false, path: 'Garden.tao', sourceVersion: 'garden-1' }]
+    const api = {
+      async createFile(request: Record<string, unknown>) {
+        requests.push({ kind: 'create', request })
+        const file = { diagnosticCount: 0, dirty: false, path: request['path'] as string, sourceVersion: 'new-1' }
+        files = [...files, file]
+        return { file: { ...file, content: '' }, files } as never
+      },
+      async deleteFile(request: Record<string, unknown>) {
+        requests.push({ kind: 'delete', request })
+        const deleted = files.find(file => file.path === request['path'])!
+        files = files.filter(file => file !== deleted)
+        return { deleted, files } as never
+      },
+      async files() {
+        return { files }
+      },
+      async renameFile(request: Record<string, unknown>) {
+        requests.push({ kind: 'rename', request })
+        const previousPath = request['path'] as string
+        const file = {
+          ...files.find(candidate => candidate.path === previousPath)!,
+          path: request['targetPath'] as string,
+          sourceVersion: request['sourceVersion'] as string,
+        }
+        files = files.map(candidate => candidate.path === previousPath ? file : candidate)
+        return { file: { ...file, content: '' }, files, previousPath } as never
+      },
+    }
+    const controller = new StudioFileTreeController({
+      api: api as never,
+      files,
+      onCreated(result) {
+        callbacks.push(`created:${result.file.path}`)
+      },
+      onDeleted(result) {
+        callbacks.push(`deleted:${result.deleted.path}`)
+      },
+      onError() {},
+      onFiles: next => published.push(next.map(file => file.path)),
+      onOpen() {},
+      onRenamed(result) {
+        callbacks.push(`renamed:${result.previousPath}->${result.file.path}`)
+      },
+      prepareMutation: async file => ({ ...file, sourceVersion: 'prepared-version' }),
+    })
+
+    const created = await controller.create('New.tao')
+    const renamed = await controller.rename(created.file, 'Nested/Renamed.tao')
+    await controller.delete(renamed!.file)
+
+    Expect(requests.map(({ kind, request }) => ({ kind, ...request }))).toEqual([
+      { kind: 'create', path: 'New.tao', writeId: requests[0]!.request['writeId'] },
+      {
+        kind: 'rename',
+        path: 'New.tao',
+        sourceVersion: 'prepared-version',
+        targetPath: 'Nested/Renamed.tao',
+        writeId: requests[1]!.request['writeId'],
+      },
+      {
+        kind: 'delete',
+        path: 'Nested/Renamed.tao',
+        sourceVersion: 'prepared-version',
+        writeId: requests[2]!.request['writeId'],
+      },
+    ])
+    Expect(published).toEqual([
+      ['Garden.tao', 'New.tao'],
+      ['Garden.tao', 'Nested/Renamed.tao'],
+      ['Garden.tao'],
+    ])
+    Expect(callbacks).toEqual([
+      'created:New.tao',
+      'renamed:New.tao->Nested/Renamed.tao',
+      'deleted:Nested/Renamed.tao',
+    ])
+    Expect(StudioFileTreeTransitions.afterCreate(created)).toBe('New.tao')
+    Expect(StudioFileTreeTransitions.afterRename('New.tao', renamed!)).toBe('Nested/Renamed.tao')
+    Expect(StudioFileTreeTransitions.afterDelete('Nested/Renamed.tao', 'Garden.tao', {
+      deleted: renamed!.file,
+    } as never)).toBe('Garden.tao')
+  },
+)
+
+Test('Studio Data fills coalesce invalidation bursts into one latest follow-up', async () => {
+  const fills = [deferred<void>(), deferred<void>()]
+  const published: number[] = []
+  let fillCount = 0
+  const coordinator = new StudioDataFillCoordinator(async isLatest => {
+    const fill = ++fillCount
+    await fills[fill - 1]!.promise
+    if (isLatest()) {
+      published.push(fill)
+    }
+  })
+
+  const initial = coordinator.request()
+  const compile = coordinator.request()
+  const file = coordinator.request()
+  const manifest = coordinator.request()
+  Expect(fillCount).toBe(1)
+
+  fills[0]!.resolve()
+  await Promise.resolve()
+  await Promise.resolve()
+  Expect(fillCount).toBe(2)
+  Expect(published).toEqual([])
+
+  fills[1]!.resolve()
+  await Promise.all([initial, compile, file, manifest])
+  Expect(fillCount).toBe(2)
+  Expect(published).toEqual([2])
+})
+
+Test('Studio matrix groups cells by source order and diffs keyed reconciliation without page identity', () => {
+  const scenarios = [
+    scenario('novel', 'states', '/Garden.tao'),
+    scenario('long', 'states', '/Garden.tao'),
+    scenario('empty', 'empty states', '/Garden.tao'),
+  ]
+  const groups = StudioMatrixLayout.groups({
+    cells: [cell('long'), cell('empty'), cell('novel')],
+    scenarios,
+  } as Pick<StudioPreviewManifestV2, 'cells' | 'scenarios'>)
+
+  Expect(groups.map(group => ({ cells: group.cellIds, label: group.label }))).toEqual([
+    { cells: ['novel', 'long'], label: 'states' },
+    { cells: ['empty'], label: 'empty states' },
+  ])
+  Expect(StudioMatrixLayout.reconcile(['novel', 'removed'], ['novel', 'long'])).toEqual({
+    added: ['long'],
+    removed: ['removed'],
+    retained: ['novel'],
+  })
+})
+
+Test('Studio command palette indexes files, views, grouped scenarios, commands, and insertions', () => {
+  const manifest = {
+    project: { appName: 'Garden', entryPath: 'Garden.tao', root: '/workspace' },
+    scenarios: [scenario('novel', 'states', '/workspace/Garden.tao')],
+    subjects: [{
+      kind: 'view',
+      source: { kind: 'tao', path: '/workspace/Card.tao', range: { end: 10, start: 0 } },
+      subjectId: 'card',
+      viewName: 'Card',
+    }],
+  } as unknown as StudioPreviewManifestV2
+  const items = StudioCommandPalette.items({
+    files: [{ diagnosticCount: 0, dirty: false, path: 'Garden.tao', sourceVersion: 'source-1' }],
+    manifest,
+    projectViews: [{
+      label: 'Card',
+      snippet: { placeholders: [], text: 'Card()' },
+      sourcePath: '/workspace/Card.tao',
+      viewName: 'Card',
+    }],
+  })
+
+  Expect(new Set(items.map(item => item.category))).toEqual(
+    new Set([
+      'Command',
+      'File',
+      'Insertion',
+      'Scenario',
+      'View',
+    ]),
+  )
+  Expect(StudioCommandPalette.filter(items, 'states novel').map(item => item.id)).toEqual(['scenario:novel'])
+  Expect(StudioCommandPalette.filter(items, 'insert card').map(item => item.id)).toContain(
+    'insert-view:/workspace/Card.tao:Card',
+  )
+  Expect(StudioProductCapabilities.tests.available).toBe(true)
+  Expect(StudioProductCapabilities.logs.available).toBe(true)
+  Expect(StudioProductCapabilities.logs.reason).toContain('active preview cell')
+  Expect(StudioProductCapabilities.tokenWrites.available).toBe(true)
+})
+
+Test('Studio Screens and Search rails derive navigable manifest and project matches', () => {
+  const manifest = {
+    subjects: [{
+      kind: 'view',
+      source: { kind: 'tao', path: '/workspace/Card.tao', range: { end: 20, start: 8 } },
+      subjectId: 'card',
+      viewName: 'Card',
+    }],
+  } as unknown as StudioPreviewManifestV2
+
+  Expect(StudioRailPanels.screens(manifest)).toEqual([{
+    id: 'card',
+    kind: 'view',
+    label: 'Card',
+    path: '/workspace/Card.tao',
+    start: 8,
+  }])
+  Expect(StudioRailPanels.search(
+    [{ content: 'view Card() {\n   Text("Novel")\n}', path: 'Card.tao' }],
+    [{ filePath: '/workspace/Garden.tao', message: 'Novel warning' }],
+    'novel',
+  )).toEqual([
+    {
+      detail: 'Novel warning',
+      kind: 'diagnostic',
+      label: 'Problem · Garden.tao',
+      path: '/workspace/Garden.tao',
+    },
+    {
+      detail: 'Text("Novel")',
+      end: 28,
+      kind: 'text',
+      label: 'Card.tao:2',
+      path: 'Card.tao',
+      start: 23,
+    },
+  ])
+})
+
+Test('Studio selection from a second scenario group makes that cell active for the next visual edit', async () => {
+  const groups = StudioMatrixLayout.groups({
+    cells: [cell('first'), cell('second')],
+    scenarios: [
+      scenario('first', 'first group', '/workspace/Garden.tao'),
+      scenario(
+        'second',
+        'second group',
+        '/workspace/Garden.tao',
+      ),
+    ],
+  } as Pick<StudioPreviewManifestV2, 'cells' | 'scenarios'>)
+  Expect(groups.map(group => group.cellIds)).toEqual([['first'], ['second']])
+
+  const firstWindow = {}
+  const secondWindow = {}
+  const previews = [
+    previewConnection('preview-first', 'first', firstWindow),
+    previewConnection('preview-second', 'second', secondWindow),
+  ]
+  const active = new StudioActivePreview(previews)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  let selected: unknown
+  await handlePreviewMessage(
+    {
+      data: {
+        channel: studioProtocolChannel,
+        identity: {
+          ...previews[1]!.cellIdentity,
+          path: '/workspace/Garden.tao',
+          previewInstanceId: 'preview-second',
+          sourceVersion: 'source-2',
+        },
+        protocolVersion: studioProtocolVersion,
+        range: { end: 12, start: 4 },
+        type: 'preview-select-source',
+      },
+      origin: 'http://127.0.0.1:56102',
+      source: secondWindow,
+    } as MessageEvent,
+    previews[1]!,
+    handshake,
+    async () => ({
+      editor: {
+        dispatch() {},
+        focus() {},
+        state: { doc: { length: 40 } },
+      } as unknown as EditorView,
+      file: { content: 'view Main() {}', path: 'Garden.tao', sourceVersion: 'source-2' },
+    }),
+    {
+      activate: () => active.activate(previews[1]!),
+      async applySourceAction() {},
+      inspect(selection) {
+        selected = selection
+      },
+    },
+  )
+
+  Expect(selected).toBeDefined()
+  Expect(active.current()).toBe(previews[1])
+  Expect(currentSourceIdentity(handshake, active.current(), {
+    content: 'view Main() {}',
+    path: 'Garden.tao',
+    sourceVersion: 'source-2',
+  })).toMatchObject({
+    cellId: 'second',
+    path: '/workspace/Garden.tao',
+    previewInstanceId: 'preview-second',
+    sourceVersion: 'source-2',
+  })
+})
+
+Test('Studio active preview rewires added cells and falls back when the active cell is removed', () => {
+  const first = previewConnection('preview-first', 'first', {})
+  const second = previewConnection('preview-second', 'second', {})
+  const previews = [first, second]
+  const active = new StudioActivePreview(previews)
+  let changes = 0
+  active.subscribe(() => {
+    changes += 1
+  })
+  active.activate(second)
+
+  const replacement = previewConnection('preview-second-next', 'second', {})
+  previews.splice(0, previews.length, first, replacement)
+  active.reconcile()
+  Expect(active.current()).toBe(replacement)
+
+  const added = previewConnection('preview-added', 'added', {})
+  previews.splice(0, previews.length, first, added)
+  const wired: string[] = []
+  active.reconcile(preview => wired.push(preview.cell!.cellId))
+
+  Expect(active.current()).toBe(first)
+  Expect(wired).toEqual(['first', 'added'])
+  added.activate?.()
+  Expect(active.current()).toBe(added)
+  Expect(changes).toBe(4)
+
+  // A manifest refresh replaces the active inspector controls on retained connections and notifies its subscriber.
+  added.scenarioControls = {} as HTMLFormElement
+  active.reconcile()
+  Expect(changes).toBe(4)
+  active.reconcile(() => {})
+  Expect(changes).toBe(5)
+})
+
+Test('Studio runtime failures activate their cell and retain a replay with Studio environment state', async () => {
+  const previewWindow = {}
+  const preview = previewConnection('preview-failure', 'first', previewWindow)
+  preview.cell = cell('first')
+  const active = new StudioActivePreview([preview])
+  const handshake = {
+    files: [{ path: 'Garden.tao', sourceVersion: 'source-2' }],
+    identity: { appName: 'Garden', project: '/workspace' },
+  } as unknown as StudioHandshake
+  const capture = {
+    capturedAt: 1_788_100_000_000,
+    domains: [{ domain: 'data', value: { snapshots: {} }, version: 1 }],
+    failure: {
+      boundaryId: 'screen:Garden',
+      error: { message: 'Garden failed', name: 'Error' },
+      frame: {
+        boundary: 'screen' as const,
+        declaration: 'Garden',
+        source: { end: 12, path: '/workspace/Garden.tao', start: 4 },
+      },
+      retryEligible: true,
+      stopper: false,
+      timestamp: 1_788_100_000_000,
+    },
+    version: 1 as const,
+  }
+
+  await handlePreviewMessage(
+    {
+      data: {
+        capture,
+        channel: studioProtocolChannel,
+        identity: { ...preview.cellIdentity, previewInstanceId: preview.previewInstanceId },
+        protocolVersion: studioProtocolVersion,
+        type: 'preview-runtime-failure',
+      },
+      origin: preview.origin,
+      source: previewWindow,
+    } as MessageEvent,
+    preview,
+    handshake,
+    async () => undefined,
+    {
+      activate: () => active.activate(preview),
+      async applySourceAction() {},
+      inspect() {},
+    },
+  )
+
+  Expect(active.current()).toBe(preview)
+  Expect(preview.runtimeFailure?.domains.map(domain => domain.domain)).toEqual(['data', 'environment'])
+  Expect(preview.runtimeFailure?.domains.find(domain => domain.domain === 'environment')?.value)
+    .toEqual(preview.cell.environment)
+  Expect(runtimeCaptureWithEnvironment(preview.runtimeFailure!, preview.cell.environment).domains)
+    .toHaveLength(2)
+  const devEnvironment = {
+    ...capture,
+    domains: [...capture.domains, { domain: 'environment', value: { platform: 'ios' }, version: 1 }],
+  }
+  const configured = studioReplayConfiguration(devEnvironment, preview.cell.environment)
+  Expect(configured.replay).toBe(devEnvironment)
+  Expect(configured.environment).toBe(preview.cell.environment)
 })
 
 Test('Studio editor Mod-/ binding toggles Tao line comments for selected lines', () => {
@@ -178,7 +813,7 @@ Test('Studio diagnostic navigation converts compiler lines into a bounded CodeMi
   })
 })
 
-Test('Studio inspector derives canonical render identity, palette views, and one-operation checkpoints', () => {
+Test('Studio inspector derives canonical render identity, manifest views, and one-operation checkpoints', () => {
   const message = {
     channel: studioProtocolChannel,
     identity: {
@@ -202,8 +837,41 @@ Test('Studio inspector derives canonical render identity, palette views, and one
 
   Expect(selected.renderId).toBe('/workspace/Garden.tao:20:42')
   Expect(action.checkpoint).toEqual({ id: 'checkpoint-1', phase: 'single' })
-  Expect(StudioInspector.projectViews('view Card() { }\nview Form(Value text) { }\nview Empty() { }'))
-    .toEqual(['Card', 'Empty'])
+  const manifest = {
+    parametersBySubject: {
+      card: [],
+      form: [{ label: 'Value', parameterId: 'Value', required: true, type: { kind: 'text' } }],
+    },
+    project: { appName: 'Garden', entryPath: 'Garden.tao', root: '/workspace' },
+    subjects: [
+      {
+        kind: 'view',
+        source: { kind: 'tao', path: '/workspace/Card.tao', range: { end: 10, start: 0 } },
+        subjectId: 'card',
+        viewName: 'Card',
+      },
+      {
+        kind: 'view',
+        source: { kind: 'tao', path: '/workspace/Form.tao', range: { end: 20, start: 11 } },
+        subjectId: 'form',
+        viewName: 'Form',
+      },
+    ],
+  } as unknown as StudioPreviewManifestV2
+  Expect(StudioInspector.projectViews(manifest).map(view => [view.viewName, view.snippet.text]))
+    .toEqual([['Card', 'Card()'], ['Form', 'Form(Value: "text")']])
+})
+
+Test('Studio editor insertion preserves indentation and selects the first required placeholder', () => {
+  const document = EditorState.create({ doc: 'view Main() {\n   \n}\n' }).doc
+  const position = document.line(2).to
+  const transaction = StudioEditorInsertion.transaction(document, {
+    placeholders: [{ end: 18, start: 12 }],
+    text: 'Card(Title: "text")',
+  }, position)
+
+  Expect(transaction.changes.insert).toBe('Card(Title: "text")')
+  Expect(transaction.selection).toEqual({ anchor: position + 12, head: position + 18 })
 })
 
 Test('Studio draft sync coalesces pending edits and advances the optimistic version serially', async () => {
@@ -305,4 +973,55 @@ function runEditorCommand(state: EditorState, command: Command): EditorState {
   const handled = command(target as EditorView)
   Expect(handled).toBe(true)
   return next
+}
+
+function scenario(scenarioId: string, group: string, path: string): StudioPreviewManifestV2['scenarios'][number] {
+  return {
+    args: {},
+    fixtureId: 'fixture',
+    group,
+    label: scenarioId,
+    prepare: [],
+    scenarioId,
+    source: { kind: 'tao', path, range: { end: 1, start: 0 } },
+    stateLayers: [],
+    subjectId: 'subject',
+  }
+}
+
+function cell(cellId: string): StudioPreviewManifestV2['cells'][number] {
+  return {
+    args: {},
+    cellId,
+    cellRevision: 0,
+    environment: {
+      network: { latencyMs: 0, outcome: 'normal' },
+      scheme: { requested: 'light', status: 'inert' },
+      viewport: { height: 844, width: 390 },
+    },
+    scenarioId: cellId,
+    stateLayers: [],
+  }
+}
+
+function previewConnection(
+  previewInstanceId: string,
+  cellId: string,
+  contentWindow: object,
+): StudioPreviewConnection {
+  return {
+    cell: cell(cellId),
+    cellIdentity: {
+      appName: 'Garden',
+      cellId,
+      cellRevision: 0,
+      compileRevision: 1,
+      manifestRevision: 'manifest-1',
+      project: '/workspace',
+    },
+    iframe: { contentWindow } as HTMLIFrameElement,
+    interactionMode: 'edit',
+    origin: 'http://127.0.0.1:56102',
+    previewInstanceId,
+  }
 }

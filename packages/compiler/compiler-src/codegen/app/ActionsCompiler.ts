@@ -3,6 +3,12 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import {
+  actionBlockContainsRespond,
+  actionBlockRequiresAsync,
+  actionInvocationRequiresAsync,
+} from './action-control-flow'
+import { foreignActionBindingName } from './injection-plan'
 
 type ActionParameter = {
   index: number
@@ -12,7 +18,11 @@ type ActionParameter = {
 export const ActionsCompiler = {
   /** ActionDeclaration compiles a named Tao action into a runtime action value. */
   ActionDeclaration(action: AST.ActionDeclaration): Compiled {
+    if (action.foreign) {
+      return compileForeignAction(action)
+    }
     const parameters = actionParameters(action)
+    const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     const metadata = [
       { property: 'title', fill: AST.declarationSlotFillNamed(action, 'Title') },
       { property: 'description', fill: AST.declarationSlotFillNamed(action, 'Description') },
@@ -21,26 +31,24 @@ export const ActionsCompiler = {
       entry.fill?.value !== undefined
     )
     return gen`
-      ${gen.scopeName(action)} = TR.Action(async (${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
-        return TR.BlockScope(_Scope, async _Scope => {
+      ${gen.scopeName(action)} = TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
+        return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${gen.list(parameters, Compile.ActionParameterBinding)}
           ${Compile.ActionBlockBody(action.block)}
         })
-      }${
-      metadata.length > 0
-        ? gen`, {
+      }, {
+        name: ${gen.jsLiteral(action.name)},
+        ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``}
         ${
-          gen.list(metadata, entry =>
-            gen`${entry.property}: (${
-              gen.join(parameters, Compile.ActionRuntimeParameter)
-            }) => TR.BlockScope(_Scope, _Scope => {
+      gen.list(metadata, entry =>
+        gen`${entry.property}: (${
+          gen.join(parameters, Compile.ActionRuntimeParameter)
+        }) => TR.BlockScope(_Scope, _Scope => {
             ${gen.list(parameters, Compile.ActionParameterBinding)}
             return ${Compile.Expression(entry.fill.value)}
           }),`)
-        }
-      }`
-        : ''
-    })
+    }
+      })
     `
   },
 
@@ -75,12 +83,13 @@ export const ActionsCompiler = {
 
   /** ActionExpression compiles an inline Tao action into a runtime action value. */
   ActionExpression(action: AST.ActionExpression): Compiled {
+    const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
-      TR.Action(async () => {
-        return TR.BlockScope(_Scope, async _Scope => {
+      TR.Action(${asyncKeyword}() => {
+        return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${Compile.ActionBlockBody(action.block)}
         })
-      })
+      }${actionBlockContainsRespond(action.block) ? gen`, { interrupt: true }` : gen``})
     `
   },
 
@@ -119,6 +128,7 @@ export const ActionsCompiler = {
       SetStatement: Compile.SetStatement,
       ToggleStatement: Compile.ToggleStatement,
       UpdateStatement: Compile.UpdateStatement,
+      FailStatement: Compile.FailStatement,
     })
   },
 
@@ -143,7 +153,14 @@ export const ActionsCompiler = {
 
   /** DoStatement compiles Tao action invocation. */
   DoStatement(invocation: AST.DoStatement): Compiled {
-    return gen`await TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+    const awaitKeyword = actionInvocationRequiresAsync(invocation) ? gen`await ` : gen``
+    return gen`${awaitKeyword}TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+  },
+
+  /** FailStatement aborts the joined action transaction with one declared case and sentence. */
+  FailStatement(statement: AST.FailStatement): Compiled {
+    const failureCase = resolveRef(statement.case)
+    return gen`TR.Fail(${Compile.ValueDeclarationReference(failureCase)}, ${gen.jsLiteral(statement.sentence)})`
   },
 
   /** AskStatement suspends its action and binds the response owned by this presented occurrence. */
@@ -230,4 +247,22 @@ function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
     const argument = argumentsByParameter.get(parameter)
     return argument ? Compile.Argument(argument) : gen`undefined`
   })
+}
+
+function compileForeignAction(action: AST.ActionDeclaration): Compiled {
+  const foreign = action.foreign
+  Assert.defined(foreign, 'foreign action has an implementation')
+  const implementation = { name: foreignActionBindingName(action) }
+  return gen`${gen.scopeName(action)} = TR.ForeignAction(
+    ${gen.Name(implementation)},
+    ${gen.jsLiteral(action.name)},
+    [${
+    gen.join(foreign.failures, failure =>
+      gen`{
+      case: ${Compile.ValueDeclarationReference(resolveRef(failure.case))},
+      sentence: ${gen.jsLiteral(failure.sentence)},
+    }`)
+  }],
+    ${action.runsLatest ? gen`{ runs: "latest" }` : gen`{}`},
+  )`
 }

@@ -203,6 +203,63 @@ export function findOwningScenario(node: AST.Node): AST.ScenarioDeclaration | un
   return undefined
 }
 
+/** findOwningScenarioGroup returns the scenario group containing `node`, if any. */
+export function findOwningScenarioGroup(node: AST.Node): AST.ScenarioGroupDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isScenarioGroupDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+/** scenarioDeclarations returns the authored entries in one scenario group. */
+export function scenarioDeclarations(group: AST.ScenarioGroupDeclaration): AST.ScenarioDeclaration[] {
+  return group.block.entries.filter(AST.isScenarioDeclaration)
+}
+
+/** scenarioGroupClauses returns the defaults authored directly in one scenario group. */
+export function scenarioGroupClauses(group: AST.ScenarioGroupDeclaration): AST.ScenarioClause[] {
+  return group.block.entries.filter(AST.isScenarioClause)
+}
+
+/** effectiveScenarioClause resolves one entry clause over the matching group default. */
+export function effectiveScenarioClause<ClauseT extends AST.ScenarioClause>(
+  scenario: AST.ScenarioDeclaration,
+  predicate: (clause: AST.ScenarioClause) => clause is ClauseT,
+): ClauseT | undefined {
+  const ownClause = scenario.block.entries.find(predicate)
+  const group = findOwningScenarioGroup(scenario)
+  return ownClause ?? (group ? scenarioGroupClauses(group).find(predicate) : undefined)
+}
+
+/** effectiveScenarioSubjectClause resolves the mutually-exclusive run/render clause for one entry. */
+export function effectiveScenarioSubjectClause(
+  scenario: AST.ScenarioDeclaration,
+): AST.ScenarioRenderClause | AST.ScenarioRunClause | undefined {
+  return effectiveScenarioClause(
+    scenario,
+    (clause): clause is AST.ScenarioRenderClause | AST.ScenarioRunClause =>
+      AST.isScenarioRenderClause(clause) || AST.isScenarioRunClause(clause),
+  )
+}
+
+/** scenarioSubjectDeclaration resolves an entry's explicit subject or its group-header default. */
+export function scenarioSubjectDeclaration(
+  scenario: AST.ScenarioDeclaration,
+): AST.ScenarioSubjectDeclaration | undefined {
+  const clause = effectiveScenarioSubjectClause(scenario)
+  if (AST.isScenarioRenderClause(clause) && clause.view?.ref) {
+    return clause.view.ref
+  }
+  if (AST.isScenarioRunClause(clause) && clause.app?.ref) {
+    return clause.app.ref
+  }
+  return findOwningScenarioGroup(scenario)?.subject?.ref
+}
+
 /** fixtureValueDeclarations returns the account and created-row handles owned by a fixture. */
 export function fixtureValueDeclarations(fixture: AST.FixtureDeclaration): AST.FixtureValueDeclaration[] {
   return fixture.block.entries.filter(AST.isFixtureValueDeclaration)
@@ -739,8 +796,10 @@ export function statementsOf(block: AST.Block | undefined): AST.Statement[] {
 }
 
 /** renderSlotDeclarationsOf returns the direct named visual slots owned by one view. */
-export function renderSlotDeclarationsOf(view: AST.ViewDeclaration): AST.RenderSlotDeclaration[] {
-  return view.block?.statements.filter(AST.isRenderSlotDeclaration) ?? []
+export function renderSlotDeclarationsOf(
+  view: AST.ViewDeclaration,
+): Array<AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration> {
+  return view.block?.statements.filter(AST.isRenderSlotDeclaration) ?? view.foreign?.slots ?? []
 }
 
 /**
@@ -749,6 +808,9 @@ export function renderSlotDeclarationsOf(view: AST.ViewDeclaration): AST.RenderS
  * unnamed caller content. Content acceptance is inferred from the body, never declared.
  */
 export function viewPlacesCallerContent(view: AST.ViewDeclaration): boolean {
+  if (view.foreign) {
+    return view.foreign.content === 'content'
+  }
   if (!view.block) {
     const target = viewAliasTarget(view)
     return AST.isViewDeclaration(target) ? viewPlacesCallerContent(target) : false
@@ -890,6 +952,16 @@ export function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined 
 /** findOwningAction returns the action declaration that owns `node`, if any. */
 export function findOwningAction(node: AST.Node): AST.ActionDeclaration | undefined {
   return findAncestor(node, AST.isActionDeclaration)
+}
+
+/** actionFailuresOf infers a native action's failure contract from its own `fail` statements. */
+export function actionFailuresOf(action: AST.ActionDeclaration): AST.FailStatement[] {
+  if (!action.block) {
+    return []
+  }
+  return streamAllContents(action.block)
+    .filter(AST.isFailStatement)
+    .filter(failure => findOwningAction(failure) === action)
 }
 
 /** findOwningFunction returns the pure function declaration that owns `node`, if any. */

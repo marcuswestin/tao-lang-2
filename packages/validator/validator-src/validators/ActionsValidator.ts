@@ -38,6 +38,8 @@ const actionValidationMessages = {
   dynamicActionNamedArgument: 'Action callback arguments are positional and cannot use a parameter name.',
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
   asyncPlacement: '`async` is allowed only inside an action block.',
+  foreignActionPath: 'A foreign action implementation path must name a relative TypeScript or TSX module.',
+  runsLatestNative: '`runs latest` is allowed only on a foreign action.',
 }
 
 /** ActionsValidator groups action validation and diagnostics. */
@@ -46,6 +48,12 @@ export const ActionsValidator = {
     [AST.ActionDeclaration.$type]: (action, ctx) => {
       validateDuplicateParameters(action, ctx)
       validateParameterNameConflicts(action, ctx)
+      if (action.runsLatest && !action.foreign) {
+        ctx.error(actionValidationMessages.runsLatestNative, action)
+      }
+      if (action.foreign && !/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
+        ctx.error(actionValidationMessages.foreignActionPath, action.foreign)
+      }
     },
     [AST.AsyncActionStatement.$type]: (statement, ctx) => {
       if (!AST.findOwningActionBlock(statement)) {

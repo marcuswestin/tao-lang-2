@@ -6,7 +6,9 @@ export function referencedConfigurationType(declaration: AST.Node | undefined): 
   if (AST.isTypeDeclaration(declaration)) {
     return Type.ofDefinition(declaration)
   }
-  if (AST.isAliasDeclaration(declaration) || AST.isViewDeclaration(declaration)) {
+  if (
+    AST.isAliasDeclaration(declaration) || AST.isViewDeclaration(declaration) || AST.isStateDeclaration(declaration)
+  ) {
     return Type.ofValueDeclaration(declaration)
   }
   return { kind: 'unresolved' }

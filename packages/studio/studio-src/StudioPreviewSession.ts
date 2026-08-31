@@ -1,7 +1,7 @@
 import Runtime from '@runtime-toolchain'
 import type {
   StudioParameterSchema,
-  StudioPreviewManifestV1,
+  StudioPreviewManifestV2,
   StudioScenarioSubject,
   StudioTaoSource,
 } from './StudioPreviewManifest'
@@ -10,6 +10,7 @@ import type { StudioJsonObject, StudioJsonValue } from './StudioProtocol'
 
 export type OpenStudioPreviewSessionOptions = Omit<StudioProjectSessionOptions, 'compile'> & {
   previewRuntimeRoot: string
+  validationMode?: 'development' | 'release'
 }
 
 export type StudioPreviewSession = {
@@ -37,6 +38,7 @@ export async function openStudioPreviewSession(
           sourceVersions: Object.fromEntries(files.map(file => [file.path, file.sourceVersion])),
         },
         runtimePackageRoot: options.previewRuntimeRoot,
+        validationMode: options.validationMode,
       })
       if (generated.studioManifest !== undefined && generated.preview !== undefined) {
         session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))
@@ -57,7 +59,7 @@ export function matrixManifest(
   session: Pick<StudioProjectSession, 'appName' | 'entryPath' | 'projectRoot'>,
   generated: Awaited<ReturnType<typeof Runtime.generateApp>>,
   compileRevision: number,
-): StudioPreviewManifestV1 {
+): StudioPreviewManifestV2 {
   const compiler = generated.studioManifest
   const publication = generated.preview
   if (compiler === undefined || publication === undefined) {
@@ -96,6 +98,7 @@ export function matrixManifest(
       ? jsonObject(scenario.subject.arguments)
       : {},
     fixtureId: scenario.fixtureId,
+    group: scenario.group,
     label: scenario.name,
     prepare: scenario.prepare.map(update => jsonObject(update)),
     scenarioId: scenario.id,
@@ -104,7 +107,10 @@ export function matrixManifest(
     subjectId: scenario.subject.subjectId,
   }))
   return {
-    capabilities: { captureDomains: ['data'], scheme: 'inert' },
+    capabilities: {
+      captureDomains: ['action-history', 'data', 'environment', 'navigation', 'persisted-state'],
+      scheme: 'inert',
+    },
     cells: compiler.scenarios.map(scenario => ({
       args: scenario.subject.kind === 'view' ? jsonObject(scenario.subject.arguments) : {},
       cellId: `${scenario.id}#cell`,
@@ -146,7 +152,7 @@ export function matrixManifest(
     sourceVersions: publication.sourceVersions,
     states: [],
     subjects,
-    version: 1,
+    version: 2,
   }
 }
 

@@ -219,8 +219,20 @@ class CdpClient {
   static async connect(url: string): Promise<CdpClient> {
     const socket = new WebSocket(url)
     await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => resolve(), { once: true })
-      socket.addEventListener('error', () => reject(new Error('Could not connect to Chrome DevTools.')), { once: true })
+      const cleanup = (): void => {
+        socket.removeEventListener('open', onOpen)
+        socket.removeEventListener('error', onError)
+      }
+      const onOpen = (): void => {
+        cleanup()
+        resolve()
+      }
+      const onError = (): void => {
+        cleanup()
+        reject(new Error('Could not connect to Chrome DevTools.'))
+      }
+      socket.addEventListener('open', onOpen)
+      socket.addEventListener('error', onError)
     })
     return new CdpClient(socket)
   }

@@ -1,0 +1,208 @@
+// Tao Studio client strangler contract. Its mounted slice is a native Tao recursive Files panel over
+// the live StudioServer datasource. The production multi-pane shell and selection protocols remain
+// TypeScript-owned; EditorBoundary is the compiled foreign-editor contract they can adopt next.
+use CodeEditor from @tao/code-editor
+use SplitNav from @tao/nav
+use Col, FormButton, Row, Text, TextInput from @tao/ui
+
+// File contents remain editor buffers and never appear in Files or any related entity.
+app TaoStudioFiles {
+   Name "Tao Studio Files"
+   Design StudioDesign
+   state FilesWidth is number = 280 (persist)
+   Navigator SplitNav {
+      @files {
+         Content FilesPanel
+         Width FilesWidth
+         Resizable true
+      }
+      @main {
+         Content ProductHostBoundary
+         Width 800
+         Resizable true
+   }  }
+   Datasource StudioServer { }
+}
+
+design StudioDesign {
+   filesPanel [gap 8, pad 12]
+}
+
+type StudioServer is datasource with {
+   ServerOrigin text is ""
+
+   provider StudioServerProvider from ./StudioServerDataProvider.ts
+}
+
+workspace
+data Files / File {
+   StableId text (unique)
+   Path text
+   Name text
+   ParentPath text
+   Version text
+   Dirty boolean
+   Folder boolean
+   DiagnosticCount number
+   Diagnostics (owned)
+
+   order by Path
+}
+
+workspace
+data Diagnostics / Diagnostic {
+   Message text
+   Source text
+   File
+}
+
+workspace
+data Screens / Screen {
+   StableId text (unique)
+   Name text
+   SourcePath text
+}
+
+workspace
+data Views / View {
+   StableId text (unique)
+   Name text
+   SourcePath text
+}
+
+workspace
+data Scenarios / Scenario {
+   StableId text (unique)
+   Group text
+   Name text
+   SourcePath text
+   SubjectId text
+}
+
+workspace
+data Checkpoints / Checkpoint {
+   StableId text (unique)
+   Path text
+   BeforeVersion text
+   AfterVersion text
+   Status text
+}
+
+type StudioActionFailure is one of Conflict
+
+action SyncDraft(Path text, SourceVersion text, Content text) runs latest from ./TaoStudioServerActions.ts
+
+action ApplySourceAction(Envelope text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+
+action UndoSourceAction(Envelope text) from ./TaoStudioServerActions.ts
+
+action CreateFile(Path text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+
+action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+
+action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
+
+view FilesPanel() {
+   Title "Files"
+   state NewPath = ""
+   action Create() {
+      do CreateFile(NewPath)
+      set NewPath = ""
+   }
+   render Col() [filesPanel] {
+      Text("Files")
+      TextInput(Value: NewPath, Label: "New Tao file", Placeholder: "Folder/New.tao") {
+         on change -> Value { set NewPath = Value }
+         on submit Create
+      }
+      FormButton("Create file") {
+         on press Create
+      }
+      FileTree("")
+}  }
+
+// Disclosure stays Studio-local: Tao has no generic tree construct. Its expansion is view-local
+// because persisted view-instance keying is deliberately deferred by the current language.
+view Disclosure(Label text) {
+   state Expanded = true
+   render Col() {
+      FormButton(Label) {
+         on press -> { toggle Expanded }
+      }
+      when Expanded {
+         true -> { @@content }
+         otherwise -> { }
+}  }  }
+
+function HasDiagnostics(Count number) returns boolean {
+   return Count > 0
+}
+
+view FileTree(FolderPath text) {
+   query Files as Children {
+      where ParentPath == FolderPath
+   }
+   render Col() {
+      guard Children {
+         loading -> { Text("Loading Studio files…") }
+         error -> Message { Text(Message) }
+      }
+      loop Children / File {
+         when File.Folder {
+            true -> { Disclosure(File.Name) {
+               FileTree(File.Path)
+            } }
+            otherwise -> { FileRow(File) }
+}  }  }  }
+
+view FileRow(File) {
+   state RenamePath = File.Path
+   state ConfirmDelete = false
+   action Rename() {
+      do RenameFile(Path: File.Path, SourceVersion: File.Version, TargetPath: RenamePath)
+   }
+   render Col() {
+      Row() {
+         Text(File.Name)
+         when File.Dirty {
+            true -> { Text("●") }
+            otherwise -> { }
+         }
+         when HasDiagnostics(File.DiagnosticCount) {
+            true -> { Text("{ File.DiagnosticCount } problems") }
+            otherwise -> { }
+      }  }
+      TextInput(Value: RenamePath, Label: "Rename { File.Name }") {
+         on change -> Value { set RenamePath = Value }
+         on submit Rename
+      }
+      FormButton("Rename") {
+         on press Rename
+      }
+      when ConfirmDelete {
+         true -> {
+            Text("Delete { File.Path }?")
+            FormButton("Cancel") {
+               on press -> { set ConfirmDelete = false }
+            }
+            FormButton("Delete") {
+               on press -> { do DeleteFile(Path: File.Path, SourceVersion: File.Version) }
+         }  }
+         otherwise -> { FormButton("Delete") {
+            on press -> { set ConfirmDelete = true }
+         } }
+}  }  }
+
+// This real boundary syncs edits through the declared latest-wins foreign action. It is deliberately
+// not mounted until the TypeScript shell can supply active-file content and selection as Tao values.
+view EditorBoundary(File, Content text) {
+   action Change(NextContent text) {
+      do SyncDraft(Path: File.Path, SourceVersion: File.Version, Content: NextContent)
+   }
+   render CodeEditor(Content, Change)
+}
+
+view ProductHostBoundary() {
+   render Col() {
+      Text("Canvas, editor, inspector, and scenario controls remain hosted by the product shell.")
+}  }

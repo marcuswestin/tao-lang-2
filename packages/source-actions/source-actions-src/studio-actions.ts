@@ -4,16 +4,48 @@ import { AST } from '@parser'
 import { Errors, Switch } from '@shared'
 import { assertNoSyntaxErrors } from './source-actions-utils'
 
-export type StudioComponentKind = 'Button' | 'Number' | 'Stack' | 'Text'
+export type StudioComponentKind =
+  | 'Box'
+  | 'Button'
+  | 'Checkbox'
+  | 'Col'
+  | 'DatePicker'
+  | 'FormButton'
+  | 'Image'
+  | 'Number'
+  | 'Panes'
+  | 'Picker'
+  | 'Progress'
+  | 'Row'
+  | 'ScrollView'
+  | 'SegmentedControl'
+  | 'Slider'
+  | 'Spinner'
+  | 'Stack'
+  | 'Switch'
+  | 'Text'
+  | 'TextFrame'
+  | 'TextInput'
+  | 'TextMultiline'
+  | 'WrappingRow'
+
+export type StudioRenderGap = {
+  afterId?: string
+  beforeId?: string
+}
 
 /** StudioInsertComponentPatchRequest inserts one constrained palette choice into a Tao render block. */
 export type StudioInsertComponentPatchRequest = {
+  afterId?: string
+  beforeId?: string
   component: StudioComponentKind
   kind: 'insert-component'
 }
 
 /** StudioInsertProjectViewPatchRequest inserts a zero-argument project view invocation into a Tao render block. */
 export type StudioInsertProjectViewPatchRequest = {
+  afterId?: string
+  beforeId?: string
   kind: 'insert-project-view'
   viewName: string
 }
@@ -45,6 +77,50 @@ export type StudioSetLayoutEntryPatchRequest = {
   renderId: string
 }
 
+export type StudioStyleEntry = readonly [string, ...(number | string)[]]
+
+export type StudioStyleLandingScope =
+  | { kind: 'element-inline' }
+  | { bundleName: string; kind: 'style-bundle'; mode: 'edit' | 'fork'; forkName?: string }
+  | { elementName: string; kind: 'element-default' }
+  | { kind: 'token'; tokenName: string }
+
+/** StudioSetStyleEntryPatchRequest keeps the landing scope explicit across the source-action bus. */
+export type StudioSetStyleEntryPatchRequest = {
+  entry: StudioStyleEntry
+  kind: 'set-style-entry'
+  landing: StudioStyleLandingScope
+  renderId: string
+}
+
+export type StudioStyleProvenance = {
+  blastRadius: number
+  chain: readonly string[]
+  editable?: false
+  landing: StudioStyleLandingScope
+  ownerPath?: string
+  reason?: string
+}
+
+export type StudioRenderInspection = {
+  design?: Readonly<{
+    editable: boolean
+    name: string
+    ownerPath: string
+    reason?: string
+  }>
+  elementName?: string
+  explorations: readonly StudioStyleEntry[]
+  layoutEntries: readonly StudioLayoutEntry[]
+  renderId: string
+  styleEntries: readonly StudioStyleEntry[]
+  styleProvenance: readonly StudioStyleProvenance[]
+}
+
+export type StudioWorkspaceDesignContext = {
+  files?: readonly AST.TaoFile[]
+}
+
 /** StudioWrapRenderPatchRequest wraps one rendered Tao node in a Studio-owned container. */
 export type StudioWrapRenderPatchRequest = {
   kind: 'wrap-render'
@@ -63,6 +139,7 @@ export type StudioScenarioArgumentValue =
 export type StudioSetScenarioArgumentsPatchRequest = {
   arguments: Readonly<Record<string, StudioScenarioArgumentValue>>
   kind: 'set-scenario-arguments'
+  scenarioGroupName: string
   scenarioName: string
 }
 
@@ -98,6 +175,7 @@ export type StudioSourcePatchRequest =
   | StudioInsertComponentPatchRequest
   | StudioInsertProjectViewPatchRequest
   | StudioSetLayoutEntryPatchRequest
+  | StudioSetStyleEntryPatchRequest
   | StudioSetScenarioArgumentsPatchRequest
   | StudioWrapRenderPatchRequest
   | StudioMoveRenderPatchRequest
@@ -123,17 +201,23 @@ export const StudioActions = {
   insertCapturedFixture,
   insertComponent,
   insertProjectView,
+  inspectRender,
   moveRender,
   setLayoutEntry,
   setScenarioArguments,
+  setStyleEntry,
   sourceVersion: contentVersion,
   wrapRender,
 } as const
 
 /** applyPatch applies a typed Studio source-action request to a Tao document. */
-async function applyPatch(document: AST.Document, request: StudioSourcePatchRequest): Promise<StudioSourcePatch> {
+async function applyPatch(
+  document: AST.Document,
+  request: StudioSourcePatchRequest,
+  context: StudioWorkspaceDesignContext = {},
+): Promise<StudioSourcePatch> {
   const source = document.textDocument.getText()
-  const content = await applyPatchContent(document, request)
+  const content = await applyPatchContent(document, request, context)
   return {
     content,
     edits: fullDocumentEdit(source, content),
@@ -142,14 +226,19 @@ async function applyPatch(document: AST.Document, request: StudioSourcePatchRequ
   }
 }
 
-async function applyPatchContent(document: AST.Document, request: StudioSourcePatchRequest): Promise<string> {
+async function applyPatchContent(
+  document: AST.Document,
+  request: StudioSourcePatchRequest,
+  context: StudioWorkspaceDesignContext,
+): Promise<string> {
   return await Switch.kind(request, {
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
-    'insert-component': async action => await insertComponent(document, action.component),
-    'insert-project-view': async action => await insertProjectView(document, action.viewName),
+    'insert-component': async action => await insertComponent(document, action.component, action),
+    'insert-project-view': async action => await insertProjectView(document, action.viewName, action),
     'move-render': async action => await moveRender(document, action),
     'set-layout-entry': async action => await setLayoutEntry(document, action),
     'set-scenario-arguments': async action => await setScenarioArguments(document, action),
+    'set-style-entry': async action => await setStyleEntry(document, action, context),
     'wrap-render': async action => await wrapRender(document, action),
   })
 }
@@ -203,30 +292,56 @@ async function setScenarioArguments(
   request: StudioSetScenarioArgumentsPatchRequest,
 ): Promise<string> {
   assertNoSyntaxErrors(document)
-  const scenarios = document.parseResult.value.statements
-    .filter(AST.isScenarioDeclaration)
+  const groups = document.parseResult.value.statements
+    .filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === request.scenarioGroupName)
+  const scenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
     .filter(scenario => scenario.name === request.scenarioName)
-  if (scenarios.length !== 1) {
+  if (groups.length !== 1 || scenarios.length !== 1) {
     throw new Errors.UserInputError(
-      `Studio scenario is not uniquely declared in this source file: ${request.scenarioName}`,
+      `Studio scenario is not uniquely declared in this source file: ${request.scenarioGroupName} / ${request.scenarioName}`,
     )
   }
-  const render = scenarios[0]!.block.entries.find(AST.isScenarioRenderClause)
-  if (render?.$cstNode === undefined) {
+  const scenario = scenarios[0]!
+  const subject = AST.scenarioSubjectDeclaration(scenario)
+  const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
+  if (!AST.isViewDeclaration(subject) || scenario.block.$cstNode === undefined) {
     throw new Errors.UserInputError(
-      `Studio can only promote arguments into a focused render scenario: ${request.scenarioName}`,
+      `Studio can only promote arguments into a focused render scenario: ${request.scenarioGroupName} / ${request.scenarioName}`,
     )
   }
   const argumentsSource = Object.entries(request.arguments)
     .map(([name, value]) => `${name}: ${scenarioArgumentSource(value)}`)
     .join(', ')
   const source = document.textDocument.getText()
-  const content = applySourceEdits(source, [{
-    end: render.$cstNode.end,
-    replacement: `render ${render.view.$refText}(${argumentsSource})`,
-    start: render.$cstNode.offset,
-  }])
+  const renderSource = scenarioRenderSource(scenario, subject, argumentsSource)
+  const content = ownRender?.$cstNode
+    ? applySourceEdits(source, [{
+      end: ownRender.$cstNode.end,
+      replacement: renderSource,
+      start: ownRender.$cstNode.offset,
+    }])
+    : applySourceEdits(source, [{
+      end: scenario.block.$cstNode.end - 1,
+      replacement: `\n${renderSource}\n`,
+      start: scenario.block.$cstNode.end - 1,
+    }])
   return await Formatter.formatCode(content)
+}
+
+function scenarioRenderSource(
+  scenario: AST.ScenarioDeclaration,
+  view: AST.ViewDeclaration,
+  argumentsSource: string,
+): string {
+  const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
+  if (ownRender?.view) {
+    return `render ${ownRender.view.$refText}(${argumentsSource})`
+  }
+  const groupSubject = AST.findOwningScenarioGroup(scenario)?.subject?.ref
+  return groupSubject === view
+    ? `render (${argumentsSource})`
+    : `render ${view.name}(${argumentsSource})`
 }
 
 function scenarioArgumentSource(value: StudioScenarioArgumentValue): string {
@@ -280,30 +395,38 @@ const taoStringEscapes: Readonly<Record<string, string>> = {
 }
 
 /** insertComponent inserts a constrained current-dialect palette component into the first render block. */
-async function insertComponent(document: AST.Document, component: StudioComponentKind): Promise<string> {
+async function insertComponent(
+  document: AST.Document,
+  component: StudioComponentKind,
+  gap: StudioRenderGap = {},
+): Promise<string> {
   assertNoSyntaxErrors(document)
   if (!studioComponentKinds.has(component)) {
     throw new Errors.UserInputError(`Unsupported Studio palette component: ${String(component)}`)
   }
-  const source = document.textDocument.getText()
   const insertion = studioComponentSnippets[component]
-  const insertionOffset = studioComponentInsertionOffset(document.parseResult.value, source)
-  const inserted = insertStudioComponentSnippet(source, insertionOffset, insertion)
+  const inserted = insertStudioSnippetAtGap(document, insertion, gap)
   return await Formatter.formatCode(ensureUiComponentImport(inserted, document.parseResult.value, component))
 }
 
-async function insertViewRender(document: AST.Document, insertion: string): Promise<string> {
-  const source = document.textDocument.getText()
-  const insertionOffset = studioComponentInsertionOffset(document.parseResult.value, source)
-  return await Formatter.formatCode(insertStudioComponentSnippet(source, insertionOffset, insertion))
+async function insertViewRender(
+  document: AST.Document,
+  insertion: string,
+  gap: StudioRenderGap = {},
+): Promise<string> {
+  return await Formatter.formatCode(insertStudioSnippetAtGap(document, insertion, gap))
 }
 
 /** insertProjectView inserts a zero-argument project view invocation into the first render block. */
-async function insertProjectView(document: AST.Document, viewName: string): Promise<string> {
+async function insertProjectView(
+  document: AST.Document,
+  viewName: string,
+  gap: StudioRenderGap = {},
+): Promise<string> {
   assertNoSyntaxErrors(document)
   const target = studioInsertionRender(document.parseResult.value)
   requireInsertableProjectView(document.parseResult.value, viewName, AST.findOwningView(target)?.name)
-  return await insertViewRender(document, `${viewName}()`)
+  return await insertViewRender(document, `${viewName}()`, gap)
 }
 
 /** setLayoutEntry sets or replaces one layout entry on a rendered node. */
@@ -318,6 +441,341 @@ async function setLayoutEntry(document: AST.Document, request: StudioSetLayoutEn
   requireCompatibleLayoutEntry(render, layoutEntryHead(entry))
   return await Formatter.formatCode(setRenderLayoutEntrySource(document.textDocument.getText(), render, entry))
 }
+
+/** inspectRender returns parser-owned current clause values and workspace-aware design provenance. */
+function inspectRender(
+  document: AST.Document,
+  renderId: string,
+  context: StudioWorkspaceDesignContext = {},
+): StudioRenderInspection {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, renderId, 'inspect renders')
+  const render = requireRenderById(document.parseResult.value, renderId)
+  const entries = (render.layoutClause?.entries ?? []).map(entry => ASTUtils.layoutEntryValues(entry))
+  const layoutEntries = entries.filter(isStudioLayoutEntry) as unknown as StudioLayoutEntry[]
+  const styleEntries = entries.filter(entry => !isStudioLayoutEntry(entry)) as unknown as StudioStyleEntry[]
+  const files = context.files ?? [document.parseResult.value]
+  const design = selectedDesign(files)
+  const ownerPath = design === undefined ? undefined : AST.getDocument(design).uri.fsPath
+  const local = ownerPath === undefined || ownerPath === document.uri.fsPath
+  const elementName = ASTUtils.standardDesignElementName(render)
+  return {
+    ...(design === undefined || ownerPath === undefined
+      ? {}
+      : {
+        design: {
+          editable: local,
+          name: design.name,
+          ownerPath,
+          ...(local ? {} : { reason: 'Imported design values are read-only in this source file.' }),
+        },
+      }),
+    ...(elementName === undefined ? {} : { elementName }),
+    explorations: entries.filter(isInlineDesignExploration) as unknown as StudioStyleEntry[],
+    layoutEntries,
+    renderId,
+    styleEntries,
+    styleProvenance: styleEntries.map(entry => styleProvenance(files, document, design, entry)),
+  }
+}
+
+function styleProvenance(
+  files: readonly AST.TaoFile[],
+  document: AST.Document,
+  design: AST.DesignDeclaration | undefined,
+  entry: StudioStyleEntry,
+): StudioStyleProvenance {
+  const bundleName = entry.length === 1 && typeof entry[0] === 'string' ? entry[0] : undefined
+  const bundles = (design?.members ?? []).filter(AST.isDesignBundle)
+    .filter(bundle => bundle.name === bundleName)
+  if (bundleName === undefined || bundles.length !== 1) {
+    return { blastRadius: 1, chain: [formatLayoutValues(entry)], landing: { kind: 'element-inline' } }
+  }
+  const bundle = bundles[0]!
+  const blastRadius = [
+    ...files.flatMap(file => [
+      ...AST.streamAllContents(file).filter(AST.isRender).filter(render =>
+        render.layoutClause?.entries.some(candidate => {
+          const values = ASTUtils.layoutEntryValues(candidate)
+          return values.length === 1 && values[0] === bundleName
+        }) === true
+      ),
+    ]),
+  ].length
+  const ownerPath = AST.getDocument(bundle).uri.fsPath
+  const editable = ownerPath === document.uri.fsPath
+  return {
+    blastRadius,
+    chain: [bundleName, ...bundle.spec.entries.map(candidate => ASTUtils.layoutEntryValues(candidate).join(' '))],
+    ...(editable
+      ? {}
+      : {
+        editable: false as const,
+        ownerPath,
+        reason: 'Imported style bundles are read-only; open their owning file to edit or fork them.',
+      }),
+    landing: { bundleName, kind: 'style-bundle', mode: 'edit' },
+  }
+}
+
+/** setStyleEntry lands an exploration in an explicit, parser-owned current-grammar design scope. */
+async function setStyleEntry(
+  document: AST.Document,
+  request: StudioSetStyleEntryPatchRequest,
+  context: StudioWorkspaceDesignContext = {},
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, request.renderId, 'edit styles for renders')
+  const render = requireRenderById(document.parseResult.value, request.renderId)
+  const files = context.files ?? [document.parseResult.value]
+  const entry = request.landing.kind === 'element-inline'
+    ? formatStyleEntry(request.entry)
+    : formatDesignEntry(request.entry)
+  if (request.landing.kind === 'element-inline') {
+    return await Formatter.formatCode(setRenderLayoutEntrySource(document.textDocument.getText(), render, entry))
+  }
+  const design = requireEditableSelectedDesign(document, files)
+  if (request.landing.kind === 'style-bundle' && request.landing.mode === 'edit') {
+    const bundleName = request.landing.bundleName
+    requireIdentifier(bundleName, 'style bundle')
+    const bundles = design.members.filter(AST.isDesignBundle)
+      .filter(bundle => bundle.name === bundleName)
+    if (bundles.length !== 1) {
+      throw new Errors.UserInputError(`Studio style bundle is not uniquely declared in this source file: ${bundleName}`)
+    }
+    return await Formatter.formatCode(
+      setLayoutClauseEntrySource(document.textDocument.getText(), bundles[0]!.spec, entry),
+    )
+  }
+  if (request.landing.kind === 'style-bundle') {
+    return await forkStyleBundle(document, design, render, request.landing, entry)
+  }
+  if (request.landing.kind === 'element-default') {
+    return await setElementDefault(document, design, render, request.landing.elementName, entry)
+  }
+  return await setColorToken(document, design, render, request.entry, request.landing.tokenName)
+}
+
+function selectedDesign(files: readonly AST.TaoFile[]): AST.DesignDeclaration | undefined {
+  const selected = files.flatMap(file => [
+    ...AST.streamAllContents(file).filter(AST.isAppProperty)
+      .filter(property => property.name === 'Design')
+      .flatMap(property => {
+        const value = property.value
+        const target = AST.isValueReference(value) ? value.target.ref : undefined
+        return AST.isDesignDeclaration(target) ? [target] : []
+      }),
+  ])
+  const uniqueSelected = [...new Set(selected)]
+  if (uniqueSelected.length === 1) {
+    return uniqueSelected[0]
+  }
+  const declarations = files.flatMap(file => [
+    ...AST.streamAllContents(file).filter(AST.isDesignDeclaration),
+  ])
+  return declarations.length === 1 ? declarations[0] : undefined
+}
+
+function requireEditableSelectedDesign(
+  document: AST.Document,
+  files: readonly AST.TaoFile[],
+): AST.DesignDeclaration {
+  const design = selectedDesign(files)
+  if (design === undefined) {
+    throw new Errors.UserInputError('Studio design landing requires one uniquely selected design declaration.')
+  }
+  const ownerPath = AST.getDocument(design).uri.fsPath
+  if (ownerPath !== document.uri.fsPath) {
+    throw new Errors.UserInputError(
+      `Studio cannot write imported design ${design.name} from this file; open its owning source file: ${ownerPath}`,
+    )
+  }
+  return design
+}
+
+async function forkStyleBundle(
+  document: AST.Document,
+  design: AST.DesignDeclaration,
+  render: AST.Render,
+  landing: Extract<StudioStyleLandingScope, { kind: 'style-bundle' }>,
+  entry: string,
+): Promise<string> {
+  requireIdentifier(landing.bundleName, 'style bundle')
+  const bundles = design.members.filter(AST.isDesignBundle).filter(bundle => bundle.name === landing.bundleName)
+  if (bundles.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio style bundle is not uniquely declared in this source file: ${landing.bundleName}`,
+    )
+  }
+  const names = new Set(design.members.map(member => member.name))
+  const forkName = landing.forkName === undefined
+    ? uniqueDesignMemberName(`${landing.bundleName}Variant`, names)
+    : landing.forkName
+  requireIdentifier(forkName, 'forked style bundle')
+  if (names.has(forkName)) {
+    throw new Errors.UserInputError(`Studio design member already exists: ${forkName}`)
+  }
+  const source = document.textDocument.getText()
+  const base = bundles[0]!
+  const entries = base.spec.entries.map(candidate => candidate.$cstNode!.text)
+  const head = layoutEntryHead(entry)
+  const existingIndex = base.spec.entries.findLastIndex(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  if (existingIndex === -1) {
+    entries.push(entry)
+  } else {
+    entries[existingIndex] = entry
+  }
+  const bundleReference = render.layoutClause?.entries.find(candidate => {
+    const values = ASTUtils.layoutEntryValues(candidate)
+    return values.length === 1 && values[0] === landing.bundleName
+  })
+  if (bundleReference?.$cstNode === undefined) {
+    throw new Errors.UserInputError(`Selected render no longer applies style bundle ${landing.bundleName}.`)
+  }
+  const inlineExploration = render.layoutClause?.entries.findLast(candidate =>
+    candidate !== bundleReference && ASTUtils.layoutEntryValues(candidate)[0] === head
+  )
+  const content = applySourceEdits(source, [
+    designMemberInsertionEdit(source, design, `${forkName} [${entries.join(', ')}]`),
+    {
+      end: bundleReference.$cstNode.end,
+      replacement: forkName,
+      start: bundleReference.$cstNode.offset,
+    },
+    ...(inlineExploration?.$cstNode === undefined
+      ? []
+      : [removeLayoutClauseEntryEdit(source, render, inlineExploration)]),
+  ])
+  return await Formatter.formatCode(content)
+}
+
+async function setElementDefault(
+  document: AST.Document,
+  design: AST.DesignDeclaration,
+  render: AST.Render,
+  elementName: string,
+  entry: string,
+): Promise<string> {
+  requireIdentifier(elementName, 'element default')
+  if (ASTUtils.standardDesignElementName(render) !== elementName) {
+    throw new Errors.UserInputError(`Selected render is not the standard Tao element ${elementName}.`)
+  }
+  const source = document.textDocument.getText()
+  const defaults = design.members.filter(AST.isDesignBundle).filter(bundle => bundle.name === elementName)
+  if (defaults.length > 1) {
+    throw new Errors.UserInputError(`Studio element default is not uniquely declared: ${elementName}`)
+  }
+  const designEdit = defaults[0] === undefined
+    ? designMemberInsertionEdit(source, design, `${elementName} [${entry}]`)
+    : setLayoutClauseEntryEdit(source, defaults[0].spec, entry)
+  const exploration = requireRenderEntryByHead(render, layoutEntryHead(entry))
+  const content = applySourceEdits(source, [designEdit, removeLayoutClauseEntryEdit(source, render, exploration)])
+  return await Formatter.formatCode(content)
+}
+
+async function setColorToken(
+  document: AST.Document,
+  design: AST.DesignDeclaration,
+  render: AST.Render,
+  values: StudioStyleEntry,
+  tokenName: string,
+): Promise<string> {
+  requireIdentifier(tokenName, 'color token')
+  const [head, value, ...rest] = values
+  if (!colorEntryHeads.has(head) || typeof value !== 'string' || !cssHexColor.test(value) || rest.length > 0) {
+    throw new Errors.UserInputError('Current Tao design tokens can only promote raw bg, border, or fg colors.')
+  }
+  const source = document.textDocument.getText()
+  const tokens = design.members.filter(AST.isDesignToken).filter(token => token.name === tokenName)
+  if (tokens.length > 1) {
+    throw new Errors.UserInputError(`Studio color token is not uniquely declared: ${tokenName}`)
+  }
+  const tokenEdit = tokens[0]?.$cstNode === undefined
+    ? designMemberInsertionEdit(source, design, `${tokenName} ${value}`)
+    : {
+      end: tokens[0].$cstNode.end,
+      replacement: `${tokenName} ${value}`,
+      start: tokens[0].$cstNode.offset,
+    }
+  const exploration = requireRenderEntryByHead(render, head)
+  const content = applySourceEdits(source, [
+    tokenEdit,
+    {
+      end: exploration.$cstNode!.end,
+      replacement: `${head} ${tokenName}`,
+      start: exploration.$cstNode!.offset,
+    },
+  ])
+  return await Formatter.formatCode(content)
+}
+
+function requireRenderEntryByHead(render: AST.Render, head: StudioLayoutTermValue): AST.LayoutEntry {
+  const entry = render.layoutClause?.entries.findLast(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  if (entry?.$cstNode === undefined) {
+    throw new Errors.UserInputError(`Selected render no longer has inline design exploration '${head}'.`)
+  }
+  return entry
+}
+
+function uniqueDesignMemberName(base: string, names: ReadonlySet<string>): string {
+  if (!names.has(base)) {
+    return base
+  }
+  let suffix = 2
+  while (names.has(`${base}${suffix}`)) {
+    suffix += 1
+  }
+  return `${base}${suffix}`
+}
+
+function designMemberInsertionEdit(source: string, design: AST.DesignDeclaration, member: string): SourceEdit {
+  const cstNode = design.$cstNode
+  if (cstNode === undefined) {
+    throw new Errors.UserInputError('Cannot edit a design declaration without source coordinates.')
+  }
+  const closeBrace = source.lastIndexOf('}', cstNode.end - 1)
+  const insertionOffset = closeBrace === -1 ? cstNode.end : closeBrace
+  return { end: insertionOffset, replacement: `\n${member}\n`, start: insertionOffset }
+}
+
+function setLayoutClauseEntryEdit(source: string, layoutClause: AST.LayoutClause, entry: string): SourceEdit {
+  const head = layoutEntryHead(entry)
+  const existingEntry = layoutClause.entries.findLast(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  if (existingEntry?.$cstNode !== undefined) {
+    return {
+      end: existingEntry.$cstNode.end,
+      replacement: entry,
+      start: existingEntry.$cstNode.offset,
+    }
+  }
+  const closeBracket = source.lastIndexOf(']', layoutClause.$cstNode!.end - 1)
+  const insertionOffset = closeBracket === -1 ? layoutClause.$cstNode!.end : closeBracket
+  return {
+    end: insertionOffset,
+    replacement: layoutClause.entries.length === 0 ? entry : `, ${entry}`,
+    start: insertionOffset,
+  }
+}
+
+function removeLayoutClauseEntryEdit(source: string, render: AST.Render, entry: AST.LayoutEntry): SourceEdit {
+  const layoutClause = render.layoutClause!
+  const entries = layoutClause.entries
+  const index = entries.indexOf(entry)
+  if (entries.length === 1) {
+    let start = layoutClause.$cstNode!.offset
+    while (start > 0 && (source[start - 1] === ' ' || source[start - 1] === '\t')) {
+      start -= 1
+    }
+    return { end: layoutClause.$cstNode!.end, replacement: '', start }
+  }
+  if (index === entries.length - 1) {
+    return { end: entry.$cstNode!.end, replacement: '', start: entries[index - 1]!.$cstNode!.end }
+  }
+  return { end: entries[index + 1]!.$cstNode!.offset, replacement: '', start: entry.$cstNode!.offset }
+}
+
+const colorEntryHeads = new Set(['bg', 'border', 'fg'])
+const cssHexColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 
 /** wrapRender wraps a rendered node in a Studio-owned Stack() container. */
 async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
@@ -359,16 +817,38 @@ function requireInsertableProjectView(file: AST.TaoFile, viewName: string, targe
 }
 
 const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
+  Box: 'Box() {\n   Text("New box")\n}',
   Button: 'Button("New button") {\n   on press -> { }\n}',
+  Checkbox: 'Checkbox(Value: false, Label: "Checkbox") {\n   on change -> Value { }\n}',
+  Col: 'Col() [gap 8] {\n   Text("New column")\n}',
+  DatePicker: 'DatePicker(Value: now, Label: "Date") {\n   on change -> Value { }\n}',
+  FormButton: 'FormButton("Save") {\n   on press -> { }\n}',
+  Image: 'Image("image-url", Label: "Image")',
   Number: 'Number(0)',
+  Panes: 'Panes() {\n   Text("New pane")\n}',
+  Picker: 'Picker(Value: "First", Options: ["First", "Second"], Label: "Picker") {\n   on change -> Value { }\n}',
+  Progress: 'Progress(0)',
+  Row: 'Row() [gap 8] {\n   Text("New row")\n}',
+  ScrollView: 'ScrollView() {\n   Text("Scrollable content")\n}',
+  SegmentedControl:
+    'SegmentedControl(Value: "First", Options: ["First", "Second"], Label: "Options") {\n   on change -> Value { }\n}',
+  Slider: 'Slider(Value: 0, Label: "Slider") {\n   on change -> Value { }\n}',
+  Spinner: 'Spinner()',
   Stack: 'Stack() [gap 8, pad 8] {\n   Text("Nested text")\n}',
+  Switch: 'Switch(Value: false, Label: "Switch") {\n   on change -> Value { }\n}',
   Text: 'Text("New text")',
+  TextFrame: 'TextFrame("New text")',
+  TextInput: 'TextInput(Value: "", Label: "Text field") {\n   on change -> Value { }\n   on submit -> { }\n}',
+  TextMultiline: 'TextMultiline("New text")',
+  WrappingRow: 'WrappingRow() [gap 8] {\n   Text("New item")\n}',
 }
-const studioComponentKinds = new Set<StudioComponentKind>(['Button', 'Number', 'Stack', 'Text'])
+const studioComponentKinds = new Set<StudioComponentKind>(Object.keys(studioComponentSnippets) as StudioComponentKind[])
 
 function ensureUiComponentImport(source: string, file: AST.TaoFile, component: StudioComponentKind): string {
   const uses = file.statements.filter(AST.isUseStatement)
-  const required = component === 'Stack' ? ['Stack', 'Text'] : [component]
+  const required = [
+    ...new Set(studioComponentSnippets[component].includes('Text(') ? [component, 'Text'] : [component]),
+  ]
   const imported = new Set(uses.flatMap(statement =>
     statement.importPath === '@tao/ui'
       ? statement.importedDeclarations.map(reference => reference.$refText)
@@ -483,7 +963,6 @@ function requireRenderById(file: AST.TaoFile, id: string): AST.Render {
 }
 
 function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: string): string {
-  const head = layoutEntryHead(entry)
   const layoutClause = render.layoutClause
   if (layoutClause === undefined) {
     const insertionOffset = renderLayoutInsertionOffset(render)
@@ -493,6 +972,11 @@ function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: s
       start: insertionOffset,
     }])
   }
+  return setLayoutClauseEntrySource(source, layoutClause, entry)
+}
+
+function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClause, entry: string): string {
+  const head = layoutEntryHead(entry)
   const existingEntry = layoutClause.entries.findLast(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
   if (existingEntry !== undefined) {
     return applySourceEdits(source, [{
@@ -508,6 +992,52 @@ function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: s
     replacement: layoutClause.entries.length === 0 ? entry : `, ${entry}`,
     start: insertionOffset,
   }])
+}
+
+function formatStyleEntry(entry: StudioStyleEntry): string {
+  if (!Array.isArray(entry) || entry.length === 0 || typeof entry[0] !== 'string') {
+    throw new Errors.UserInputError(`Invalid Studio style entry: ${formatLayoutValues(entry)}`)
+  }
+  const values = entry as readonly StudioLayoutTermValue[]
+  if (isStudioLayoutEntry(values)) {
+    throw new Errors.UserInputError(`Studio style entry targets a layout clause: ${formatLayoutValues(entry)}`)
+  }
+  return values.map(formatLayoutTermValue).join(' ')
+}
+
+function formatDesignEntry(entry: StudioStyleEntry): string {
+  if (!Array.isArray(entry) || entry.length === 0 || typeof entry[0] !== 'string') {
+    throw new Errors.UserInputError(`Invalid Studio design entry: ${formatLayoutValues(entry)}`)
+  }
+  return (entry as readonly StudioLayoutTermValue[]).map(formatLayoutTermValue).join(' ')
+}
+
+const studioLayoutHeads = new Set([
+  'aligned',
+  'centered',
+  'claim',
+  'compress',
+  'content',
+  'fill',
+  'gap',
+  'height',
+  'hug',
+  'margin',
+  'pad',
+  'rigid',
+  'width',
+])
+
+function isStudioLayoutEntry(entry: readonly StudioLayoutTermValue[]): boolean {
+  return typeof entry[0] === 'string' && studioLayoutHeads.has(entry[0])
+}
+
+function isInlineDesignExploration(entry: readonly StudioLayoutTermValue[]): boolean {
+  if (isStudioLayoutEntry(entry)) {
+    return true
+  }
+  return entry.length === 2 && (typeof entry[1] === 'number'
+    || (typeof entry[1] === 'string' && entry[1].startsWith('#')))
 }
 
 function renderLayoutInsertionOffset(render: AST.Render): number {
@@ -736,6 +1266,9 @@ function formatLayoutTermValue(value: StudioLayoutTermValue): string {
   if (/^[A-Za-z_]\w*(?:-[A-Za-z_]\w*)*$/.test(value)) {
     return value
   }
+  if (cssHexColor.test(value)) {
+    return value
+  }
   throw new Errors.UserInputError(`Invalid layout word: ${value}`)
 }
 
@@ -950,6 +1483,56 @@ function statementContainsRenderId(statement: AST.Statement, renderId: string): 
 
 function studioComponentInsertionOffset(file: AST.TaoFile, text: string): number {
   return blockCloseBraceOffset(text, studioInsertionRender(file).block)
+}
+
+function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: StudioRenderGap): string {
+  const source = document.textDocument.getText()
+  if (gap.afterId === undefined && gap.beforeId === undefined) {
+    return insertStudioComponentSnippet(
+      source,
+      studioComponentInsertionOffset(document.parseResult.value, source),
+      snippet,
+    )
+  }
+  if (gap.afterId !== undefined) {
+    requireLocalRenderId(document, gap.afterId, 'insert renders')
+  }
+  if (gap.beforeId !== undefined) {
+    requireLocalRenderId(document, gap.beforeId, 'insert renders')
+  }
+  const after = gap.afterId === undefined ? undefined : requireRenderById(document.parseResult.value, gap.afterId)
+  const before = gap.beforeId === undefined ? undefined : requireRenderById(document.parseResult.value, gap.beforeId)
+  const afterStatement = after === undefined ? undefined : directViewRenderStatement(after)
+  const beforeStatement = before === undefined ? undefined : directViewRenderStatement(before)
+  const targetStatement = afterStatement ?? beforeStatement
+  if (
+    targetStatement === undefined
+    || !AST.isBlock(targetStatement.$container)
+    || (afterStatement !== undefined && afterStatement.$container !== targetStatement.$container)
+    || (beforeStatement !== undefined && beforeStatement.$container !== targetStatement.$container)
+  ) {
+    throw new Errors.UserInputError('Can only insert into a drop gap between direct child view renders.')
+  }
+  const block = targetStatement.$container
+  const slices = blockStatementSlices(source, block)
+  const insertIndex = insertionTargetIndex(slices, gap)
+  const target = slices[insertIndex] ?? slices[slices.length - 1]!
+  const indent = lineIndentAt(source, target.start)
+  const inserted = `${indentSnippet(snippet, indent)}\n`
+  const offset = insertIndex === slices.length ? target.end : target.start
+  return applySourceEdits(source, [{ end: offset, replacement: inserted, start: offset }])
+}
+
+function insertionTargetIndex(slices: BlockStatementSlice[], gap: StudioRenderGap): number {
+  const afterIndex = gap.afterId === undefined ? undefined : renderStatementIndex(slices, gap.afterId)
+  const beforeIndex = gap.beforeId === undefined ? undefined : renderStatementIndex(slices, gap.beforeId)
+  if (afterIndex === -1 || beforeIndex === -1) {
+    throw new Errors.UserInputError('Drop target is no longer between the requested render expressions.')
+  }
+  if (afterIndex !== undefined && beforeIndex !== undefined && beforeIndex !== afterIndex + 1) {
+    throw new Errors.UserInputError('Drop-gap anchors are no longer adjacent render expressions.')
+  }
+  return beforeIndex ?? (afterIndex === undefined ? slices.length : afterIndex + 1)
 }
 
 function studioInsertionRender(file: AST.TaoFile): AST.Render & { block: AST.Block } {

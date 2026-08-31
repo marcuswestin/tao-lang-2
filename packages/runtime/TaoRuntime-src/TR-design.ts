@@ -77,14 +77,25 @@ class RuntimeDesign implements TaoDesign {
   }
 }
 
-function resolve(design: TaoDesign | undefined, spec: TaoDesignSpec | undefined): TaoResolvedDesignSpec {
-  if (!spec || spec.entries.length === 0) {
+function resolve(
+  design: TaoDesign | undefined,
+  spec: TaoDesignSpec | undefined,
+  elementDefault?: string,
+): TaoResolvedDesignSpec {
+  const defaultSpec = elementDefault === undefined || design?.bundles[elementDefault] === undefined
+    ? undefined
+    : DesignControls.Spec([[elementDefault]])
+  if (defaultSpec === undefined && (!spec || spec.entries.length === 0)) {
     return {}
   }
 
   const layoutEntries: TaoLayoutEntry[] = []
   const style: TaoResolvedLayoutStyle = {}
-  for (const entry of expandEntries(design, spec, [])) {
+  const effectiveSpec = DesignControls.Spec([
+    ...(defaultSpec?.entries ?? []),
+    ...(spec?.entries ?? []),
+  ])
+  for (const entry of expandEntries(design, effectiveSpec, [])) {
     const head = entry[0]
     if (layoutHeads.has(head as TaoLayoutEntry[0])) {
       layoutEntries.push(entry as TaoLayoutEntry)
@@ -188,6 +199,9 @@ function resolveColorToken(design: TaoDesign | undefined, entry: TaoDesignSpecEn
   const tokenName = entry.length === 2 && typeof entry[1] === 'string' ? entry[1] : undefined
   if (!tokenName) {
     throw new Error(`Design clause '${entry[0]}' expects one color token.`)
+  }
+  if (tokenName.startsWith('#')) {
+    return tokenName
   }
   if (!design) {
     throw new Error(`Design token '${tokenName}' requires a mounted app design.`)

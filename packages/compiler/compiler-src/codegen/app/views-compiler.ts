@@ -1,8 +1,10 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
+import { foreignViewBindingName } from './injection-plan'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 export const ViewsCompiler = {
@@ -10,12 +12,23 @@ export const ViewsCompiler = {
   ViewDeclaration,
 
   /** ViewRegistrations registers every view before app configuration evaluates restorable positions. */
-  ViewRegistrations(taoFile: AST.TaoFile): Compiled {
+  ViewRegistrations(taoFile: AST.TaoFile, options: CodegenOptions = {}): Compiled {
     return gen.list(taoFile.statements.filter(AST.isViewDeclaration), view => {
       const canonical = canonicalDeclaration(view)
+      const cst = canonical.$cstNode
+      Assert.defined(cst, 'registered view has source coordinates')
       return gen`TR.Navigation.View({
         identity: ${compileDeclarationIdentity(view)},
         name: ${gen.jsLiteral(canonical.name)},
+        ${
+        options.studio
+          ? gen`source: {
+              path: ${gen.jsLiteral(AST.getDocument(canonical).uri.fsPath)},
+              start: ${cst.offset},
+              end: ${cst.end},
+            },`
+          : gen.noop()
+      }
         render: (_NavigationArguments, _NavigationProps, _NavigationHost) =>
           <${gen.scopeName(view)}${
         gen.join(AST.parametersOf(view), parameter => {
@@ -121,6 +134,9 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
   if (renderable.aliasTarget) {
     return gen.noop()
   }
+  if (renderable.foreign) {
+    return compileForeignView(renderable)
+  }
   const parameterList = Compile.ViewParameterList(renderable)
   const statements = renderable.block?.statements ?? []
   const renderIndex = statements.findIndex(AST.isRenderStatement)
@@ -134,11 +150,39 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
     : gen.noop()
   return gen`
     ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {
+      TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(renderable.name)})
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
         ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
         ${hostSlots}
         ${gen.list(renderStatements, statement => Compile.Statement(statement, options))}
+      })
+    }
+  `
+}
+
+/** A foreign component owns its native root, including applying Layout/Tag and placing content once. */
+function compileForeignView(view: AST.ViewDeclaration): Compiled {
+  const parameterList = Compile.ViewParameterList(view)
+  const implementation = { name: foreignViewBindingName(view) }
+  return gen`
+    ${gen.scopeName(view)} = function ${gen.Name(view)}(_ViewProps: ${parameterList}) {
+      TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(view.name)})
+      return TR.BlockScope(_Scope, _Scope => {
+        ${gen.list(AST.parametersOf(view), Compile.ViewParameterBinding)}
+        return <${gen.Name(implementation)}
+          ${
+    gen.list(AST.parametersOf(view), parameter => {
+      const name = Type.parameterName(parameter)
+      return gen`${name}={_Scope.${name}.evaluate().jsValue}`
+    })
+  }
+          Layout={TR.VisualLayout(_ViewProps.__tao)}
+          Tag={TR.VisualTag(_ViewProps.__tao)}
+          ${AST.renderSlotDeclarationsOf(view).length > 0 ? gen`Slots={_ViewProps.__taoSlots}` : gen.noop()}
+        >
+          ${view.foreign?.content === 'content' ? gen`{_ViewProps.children}` : gen.noop()}
+        </${gen.Name(implementation)}>
       })
     }
   `

@@ -1,6 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { AppValidator } from '../validator-src/validators/app-validator'
+import { StateValidator } from '../validator-src/validators/StateValidator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
   accepts,
@@ -15,6 +16,43 @@ import {
 } from './test-validate'
 
 Describe('validator: apps and views', () => {
+  Test(
+    'allows direct recursive view references without new syntax',
+    accepts(`
+    app RecursiveApp { view Recursive }
+    view Recursive() { render Recursive() }
+  `),
+  )
+  Test('accepts an app persisted number state as a SplitNav Width binding', async () => {
+    const result = await testValidateCode(`
+      use SplitNav from @tao/nav
+      app Workspace {
+        Name "Workspace"
+        state PaneWidth is number = 320 (persist)
+        Navigator SplitNav {
+          @pane { Content Pane Width PaneWidth Resizable true }
+        }
+      }
+      view Pane() { render Empty() }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toEqual([])
+  })
+
+  Test('requires app state to be typed and persisted', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app Workspace {
+        Name "Workspace"
+        state PaneWidth = 320
+        Navigator StackNav { Initial Pane }
+      }
+      view Pane() { Title "Pane" render Empty() }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.appStateMustPersist('PaneWidth'))
+    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.persistedTypeRequired('PaneWidth'))
+  })
   Test(
     'rejects unsupported top-level statements',
     rejects(

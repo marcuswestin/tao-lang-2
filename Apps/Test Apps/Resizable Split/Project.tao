@@ -1,0 +1,4 @@
+project {
+   id "resizable-split"
+   name "Resizable Split"
+}

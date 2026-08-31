@@ -7,7 +7,7 @@ import {
   type JsonObject,
 } from '@generation'
 import { Errors } from '@shared'
-import type { StudioPreviewManifestV1 } from './StudioPreviewManifest'
+import type { StudioPreviewManifestV2 } from './StudioPreviewManifest'
 import type { StudioFixturePlan, StudioFixtureValue } from './StudioProtocol'
 
 export type StudioFixtureGenerationResult =
@@ -27,7 +27,7 @@ export class StudioFixtureGeneration {
     return this.provider.availability()
   }
 
-  async generate(manifest: StudioPreviewManifestV1, input: unknown): Promise<StudioFixtureGenerationResult> {
+  async generate(manifest: StudioPreviewManifestV2, input: unknown): Promise<StudioFixtureGenerationResult> {
     const availability = await this.provider.availability()
     if (availability.status === 'unavailable') {
       return failed('model_unavailable', availability.reason)

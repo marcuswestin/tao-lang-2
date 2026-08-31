@@ -4,8 +4,18 @@ Living implementation ledger for Tao Studio v1. The prototype on `feat/studio` i
 not an integration branch. Each slice is re-derived against current `main`; the prototype branch is
 never merged, rebased, or changed.
 
+The v2 implementation supersedes this plan's Electron architecture, monolithic browser-client shape,
+single-project launch assumption, and dotted singular scenario syntax. Current status for those four
+workstreams is tracked in
+[Plan - Tao Studio v2](../Tao%20Studio%20v2/Plan%20-%20Tao%20Studio%20v2.md); the remaining v1 text is a
+historical ledger and should not be read as the current implementation target.
+
 ## Status
 
+- Studio v2 supersession checkpoint: Electrobun generation/tooling, the split browser-client boundary,
+  the multi-project session/Welcome server foundation, and grouped scenarios have landed. Native
+  execution/release, session-aware developer-launcher integration, and the complete browser interaction
+  pass remain unvalidated or deferred as detailed in the v2 ledger.
 - Milestone 0 reevaluation: complete on 2026-08-30.
 - Implementation branch: `feat/studio-v1`, based on `main` at `a5c5bf38`.
 - Slice 1 foundation checkpoint: implemented the protocol v1 boundary, serialized/coalescing compile
@@ -25,10 +35,11 @@ never merged, rebased, or changed.
 - Product gate: closed by Ro on 2026-08-30. Examples and named state use the decided fixture/scenario
   direction, with no `example` declaration or Studio-only authority. Scheme is a versioned, visibly
   inert Studio seam until reactive `Scheme`/appearance resolution exists.
-- Scenario-language checkpoint: implemented file-level `fixture` and `scenario`, typed fixture handles,
-  exact focused `render View(Parameter: Handle)`, mutually exclusive `run`/`render`, environment
-  clauses, formatter/validator coverage, Studio-only compiler metadata, and the matching absorbed
-  WordFlower tranche.
+- Scenario-language checkpoint: implemented file-level `fixture` and grouped `scenarios`, typed fixture
+  handles, exact focused `render View(Parameter: Handle)`, mutually exclusive `run`/`render`,
+  environment clauses, formatter/validator coverage, Studio-only compiler metadata, and the matching
+  absorbed WordFlower tranche. The former dotted singular spelling is retired; defaults can live on a
+  named group and entries override matching clauses.
 - Matrix/state/environment foundation checkpoint: implemented the versioned compiler and Studio
   manifests, one cell per authored scenario, full cell/instance revision identity, concurrent iframe
   grid creation, cell bootstrap/reconfiguration, deterministic state-domain composition, exact provider
@@ -36,10 +47,11 @@ never merged, rebased, or changed.
   an explicitly disabled Scheme control.
 - Focused-host checkpoint: the generated preview root now installs the cell-local provider/environment,
   executes fixture creates and ordered preparation, resolves fixture arguments, and mounts a focused
-  view. The generated real WordFlower `WorkspaceRow.novel` Studio host typechecks. Fixture setup through
+  view. The generated real WordFlower `states / novel` Studio host typechecks. Fixture setup through
   an action remains an explicit unsupported boundary.
 - Source-promotion checkpoint: per-cell argument controls can promote their current values into the
-  existing Tao `scenario` through one versioned, undoable `set-scenario-arguments` source action.
+  existing Tao scenario entry through one versioned, undoable `set-scenario-arguments` source action
+  addressed by group and entry name.
 - Capture checkpoint: each matrix cell converts its isolated provider snapshot into a dependency-ordered
   Tao fixture proposal, displays a client rendition for confirmation, and saves the plan through one
   versioned, undoable source action. Exact server-produced diff review and loading accepted captured
@@ -48,14 +60,15 @@ never merged, rebased, or changed.
   reentrant editor opens, abandoned drags, watcher deletions, imported data-catalog binding, stale
   write acknowledgements, Host validation, Electron executable detection/external-URL filtering, and
   compatible matrix override/instance carry-forward. Palette residue was removed from the forcing apps.
-- Next executable checkpoint: execute the explicit Chrome and Electron smokes outside the managed
-  listener-restricted sandbox and complete the manual interaction pass. The repository-level real-app
-  proof already compiles `HNReaderStub`, applies a semantic visual edit, recompiles, undoes, and restores
-  the copied HNReader source exactly.
-- Validation status: focused parser, validator, formatter, compiler, runtime, runtime-toolchain, and
-  Studio gates pass, and the latest complete repository gate passes across 16 suites.
-  Listener-dependent browser/Electron execution remains pending because this managed sandbox rejects the
-  local Studio listener before browser launch.
+- Next executable checkpoint: execute the explicit Chrome smoke and the replacement Electrobun runtime
+  probe outside the managed listener-restricted sandbox and complete the manual interaction pass. The
+  repository-level real-app proof already compiles `HNReaderStub`, applies a semantic visual edit,
+  recompiles, undoes, and restores the copied HNReader source exactly.
+- Validation status: the v1 focused gates and its historical complete repository gate passed. The later
+  grouped-scenario focused parser, validator, formatter, compiler, source-action, and Studio checks also
+  pass, but the current full repository gate is blocked by managed temporary-directory permissions and
+  the runtime-toolchain rerun is blocked by invalid installed Babel package metadata. Browser and real
+  Electrobun execution remain pending.
 
 ## Goal
 
@@ -85,10 +98,11 @@ runtime-only design state.
   `hug`, `compress`, `rigid`, `aligned`, and `centered`, plus `width max N`. There is no generic `fit`
   clause. Visual wrapping uses a real container such as `WrappingRow()` or `Stack()`; the prototype's
   emitted `Stack [..]` is stale dialect.
-- The current tranche implements the first `fixture` and `scenario` surface: accounts, ordered creates,
-  `through`/`for`, ordered preparation updates, app or focused-view subject, device/dimensions,
-  appearance, locale/pseudolocale, right-to-left direction, and online/offline network. The broader
-  Decisions dimensions remain future work. There is no separate `example` declaration.
+- The current tranche implements the first `fixture` and grouped `scenarios` surface: accounts, ordered
+  creates, `through`/`for`, inherited group defaults, entry overrides, ordered preparation updates, app
+  or focused-view subject, device/dimensions, appearance, locale/pseudolocale, right-to-left direction,
+  and online/offline network. The broader Decisions dimensions remain future work. There is no separate
+  `example` declaration.
 - Current design runtime implements flat tokens and bundles only. The future reactive `Scheme` and
   `Appearance` behavior is decided but not implemented.
 - `tao-runtime` now owns semantic/runtime behavior; Expo generation and testing live in
@@ -202,10 +216,11 @@ Slice 1 validation gates:
 
 Unblocked by Decision 1 on 2026-08-30.
 
-Implemented: the fixture/scenario language tranche, production-no-op/Studio-manifest compiler boundary,
-parameter schemas, source ranges, project/app/revision identity, one cell per scenario, isolated iframe
-creation, opaque instance bootstrap, fixture/preparation execution, resolved focused-view arguments, and
-the generated focused host are present. The real WordFlower host is the generated/typechecked proof.
+Implemented: the fixture/grouped-scenario language tranche, production-no-op/Studio-manifest compiler
+boundary, parameter schemas, source ranges, project/app/revision identity, one cell per scenario entry,
+isolated iframe creation, opaque instance bootstrap, fixture/preparation execution, resolved focused-view
+arguments, and the generated focused host are present. The real WordFlower host is the
+generated/typechecked proof.
 
 Remaining: prove multi-cell updates without remounting unaffected state. Fixture `through` execution
 remains outside the implemented host subset.
@@ -403,9 +418,11 @@ Alternative: make the design-system MVP a prerequisite and ship the toggle live.
 
 ### 3. Architecture amendments
 
-No amendment is recommended. Retain Electron, CodeMirror 6, shared Langium LSP, separate Studio
-protocol, Expo web/Fast Refresh, iframe preview, and the versioned source-action patch bus. Any
-replacement requires evidence and Ro's approval before implementation.
+**Superseded by Studio v2.** Electrobun replaces Electron, the browser client is split behind a thin
+entry boundary, and the server now has a multi-project session-manager and Welcome foundation. The
+shared Langium LSP, separate Studio protocol, Expo web/Fast Refresh, iframe preview, and versioned
+source-action patch bus remain. Native runtime/release execution and session-aware developer-launcher
+integration are not yet validated; see the v2 ledger rather than treating source scaffolding as proof.
 
 ## Done when
 

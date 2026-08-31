@@ -26,4 +26,34 @@ Describe('tao test CLI', () => {
       Expect(output).not.toContain('Test Suites:')
     })
   })
+
+  Test('stops every compiler worker after testing separate source directories', async () => {
+    const app = (name: string) => `
+      use Text from @tao/ui
+      app ${name} { view Main }
+      view Main() { render Text("${name}") }
+    `
+    const test = (name: string) => `
+      use ${name} from ./
+      test "${name}" {
+        test "runs" {
+          run ${name}
+          expect text "${name}"
+        }
+      }
+    `
+    await withTaoFixture({
+      'Project.tao': 'project { id "worker-lifecycle-test" name "Worker lifecycle test" }',
+      'One/App.tao': app('One'),
+      'One/App.test.tao': test('One'),
+      'Two/App.tao': app('Two'),
+      'Two/App.test.tao': test('Two'),
+    }, async rootDir => {
+      const result = await runTaoCliForTest(['test', rootDir])
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('Found 2 Tao test files')
+      Expect(result.stdout).toContain('Tao tests finished')
+    })
+  })
 })

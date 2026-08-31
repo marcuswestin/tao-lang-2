@@ -1,3 +1,4 @@
+import { existingTransactionResource, transactionResource } from './TR-action-transactions'
 import type {
   TaoConfiguredDatasource,
   TaoDataConnection,
@@ -56,10 +57,17 @@ type ConfiguredProviderBinding = Readonly<{
 }>
 type ProviderBinding = ConfiguredProviderBinding | 'test' | 'unbound' | undefined
 
+type ActionDataOverlay = {
+  base: StoredData
+  prepared?: StoredData
+  previous?: StoredData
+  working: StoredData
+}
+
 export class RuntimeDataSchema {
   readonly name: string
   private bufferedRemoteSnapshot: { stored: string | undefined } | undefined
-  private data: StoredData
+  private committedData: StoredData
   private error = ''
   private errorRecoverable = false
   private failedSaveSequence: number | undefined
@@ -72,6 +80,7 @@ export class RuntimeDataSchema {
   private nextSaveSequence = 0
   private connection: TaoDataConnection
   private completedSaveSequence = 0
+  private committedAccessDepth = 0
   private hasUsableSnapshot = false
   private providerBinding: ProviderBinding
   private providerUnsubscribe: (() => void) | undefined
@@ -88,7 +97,7 @@ export class RuntimeDataSchema {
     this.name = definition.name
     this.connection = connection
     this.providerBinding = providerBinding
-    this.data = emptyData(definition)
+    this.committedData = emptyData(definition)
     this.configure(connection, providerBinding)
   }
 
@@ -98,6 +107,64 @@ export class RuntimeDataSchema {
   }
 
   readonly snapshot = (): number => this.version
+
+  /** captureSnapshot returns the exact runtime-owned provider envelope without provider secrets. */
+  captureSnapshot(): string {
+    return JSON.stringify(envelope(this.committedData, this.definition))
+  }
+
+  canReset(): boolean {
+    return this.connection.reset !== undefined
+  }
+
+  captureIdentity(): string {
+    const binding = this.providerBinding
+    if (typeof binding !== 'object') {
+      return `${String(binding ?? 'unbound')}:${this.name}`
+    }
+    const declaration = binding.declaration.canonicalIdentity?.canonical ?? binding.declaration.name
+    const storageKey = this.validatedStorageKey(binding.declaration.name, binding.configuration)
+    return JSON.stringify([declaration, storageKey, this.name])
+  }
+
+  async resetFromRecovery(): Promise<void> {
+    if (!this.connection.reset) {
+      throw new Error(`Datasource '${this.name}' does not support reset.`)
+    }
+    await this.connection.reset()
+    this.configure(this.connection, this.providerBinding)
+    await this.settle()
+  }
+
+  async restoreCapturedSnapshot(snapshot: string): Promise<void> {
+    const previous = this.captureSnapshot()
+    try {
+      await this.connection.save(snapshot)
+      this.applySnapshot(snapshot)
+    } catch (error) {
+      this.applySnapshot(previous)
+      throw error
+    }
+  }
+
+  private get data(): StoredData {
+    return this.committedAccessDepth > 0
+      ? this.committedData
+      : existingTransactionResource<ActionDataOverlay>(this)?.working ?? this.committedData
+  }
+
+  private set data(value: StoredData) {
+    if (this.committedAccessDepth > 0) {
+      this.committedData = value
+      return
+    }
+    const overlay = existingTransactionResource<ActionDataOverlay>(this)
+    if (overlay) {
+      overlay.working = value
+      return
+    }
+    this.committedData = value
+  }
 
   serializeReference(handle: RuntimeEntityHandle): TaoEntityReferenceSnapshot {
     const metadata = this.requireOwnedHandle(handle)
@@ -200,7 +267,7 @@ export class RuntimeDataSchema {
     this.connection = connection
     this.providerBinding = providerBinding
     this.bufferedRemoteSnapshot = undefined
-    this.data = emptyData(this.definition)
+    this.committedData = emptyData(this.definition)
     this.handles.clear()
     this.fills.clear()
     this.error = ''
@@ -448,6 +515,10 @@ export class RuntimeDataSchema {
    * children within one fill.
    */
   upsertFromFill(entityName: string, rows: readonly Record<string, unknown>[]): void {
+    this.withCommittedData(() => this.upsertFromFillIntoCommittedStore(entityName, rows))
+  }
+
+  private upsertFromFillIntoCommittedStore(entityName: string, rows: readonly Record<string, unknown>[]): void {
     this.requireReady('fill')
     const entity = this.requireEntity(entityName)
     const uniqueField = Object.entries(entity.fields).find(([, field]) => field.unique)?.[0]
@@ -549,6 +620,7 @@ export class RuntimeDataSchema {
   }
 
   create(entityName: string, values: Record<string, unknown>): RuntimeEntityHandle {
+    this.ensureActionOverlay()
     this.requireReady('create')
     const entity = this.requireEntity(entityName)
     const fields = rowValues(entityName, entity, values, this)
@@ -566,6 +638,7 @@ export class RuntimeDataSchema {
   }
 
   update(handle: RuntimeEntityHandle, values: Record<string, unknown>): void {
+    this.ensureActionOverlay()
     this.requireReady('update')
     const metadata = this.requireOwnedHandle(handle)
     const entity = this.requireEntity(metadata.entity)
@@ -587,6 +660,7 @@ export class RuntimeDataSchema {
   }
 
   delete(handle: RuntimeEntityHandle): void {
+    this.ensureActionOverlay()
     this.requireReady('delete')
     const metadata = this.requireOwnedHandle(handle)
     if (!this.storedRow(metadata.entity, metadata.id)) {
@@ -600,8 +674,10 @@ export class RuntimeDataSchema {
       }),
     )
     this.data = { nextId: this.data.nextId, rows }
-    for (const target of targets.values()) {
-      this.handles.delete(handleKey(target.entity, target.id))
+    if (!existingTransactionResource<ActionDataOverlay>(this)) {
+      for (const target of targets.values()) {
+        this.handles.delete(handleKey(target.entity, target.id))
+      }
     }
     this.commit()
   }
@@ -709,6 +785,9 @@ export class RuntimeDataSchema {
   }
 
   private commit(): void {
+    if (this.committedAccessDepth === 0 && existingTransactionResource<ActionDataOverlay>(this)) {
+      return
+    }
     const generation = this.generation
     const connection = this.connection
     const saveSequence = ++this.nextSaveSequence
@@ -744,6 +823,33 @@ export class RuntimeDataSchema {
         }
       }
     })
+  }
+
+  private ensureActionOverlay(): void {
+    transactionResource<ActionDataOverlay>(
+      this,
+      () => ({
+        base: cloneStoredData(this.committedData),
+        working: cloneStoredData(this.committedData),
+      }),
+      overlay => {
+        if (!overlay.prepared) {
+          throw new Error('Action data transaction committed without preparing its deltas.')
+        }
+        overlay.previous = this.committedData
+        this.committedData = overlay.prepared
+        this.commit()
+      },
+      overlay => {
+        overlay.prepared = applyStoredDataDelta(overlay.base, overlay.working, this.committedData)
+      },
+      overlay => {
+        if (overlay.previous) {
+          this.committedData = overlay.previous
+          this.commit()
+        }
+      },
+    )
   }
 
   /** replayBufferedSnapshot re-delivers the latest remote event suppressed during pending saves. */
@@ -799,7 +905,7 @@ export class RuntimeDataSchema {
 
   /** applySnapshot replaces the store with one parsed snapshot; a parse failure throws unapplied. */
   private applySnapshot(stored: string | undefined): void {
-    this.data = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
+    this.committedData = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
     this.failedSaveSequence = undefined
     this.errorRecoverable = false
     this.hasUsableSnapshot = true
@@ -848,8 +954,10 @@ export class RuntimeDataSchema {
       this.bufferedRemoteSnapshot = { stored }
       return
     }
-    const serialized = JSON.stringify(envelope(this.data, this.definition))
-    const matchesLocal = stored === serialized || (stored === undefined && this.isEmpty())
+    const serialized = JSON.stringify(envelope(this.committedData, this.definition))
+    const matchesLocal = stored === serialized || (
+      stored === undefined && Object.values(this.committedData.rows).every(rows => rows.length === 0)
+    )
     if (matchesLocal && this.status === 'ready') {
       return
     }
@@ -867,10 +975,6 @@ export class RuntimeDataSchema {
       // rather than blocking the app behind the load-recovery overlay.
       this.failSubscription(generation, error)
     }
-  }
-
-  private isEmpty(): boolean {
-    return Object.values(this.data.rows).every(rows => rows.length === 0)
   }
 
   private handle(entity: string, id: string): RuntimeEntityHandle {
@@ -949,6 +1053,66 @@ export class RuntimeDataSchema {
   private storedRow(entity: string, id: string): StoredRow | undefined {
     return this.data.rows[entity]?.find(row => row.Id === id)
   }
+
+  private withCommittedData<ResultT>(body: () => ResultT): ResultT {
+    this.committedAccessDepth += 1
+    try {
+      return body()
+    } finally {
+      this.committedAccessDepth -= 1
+    }
+  }
+}
+
+function cloneStoredData(data: StoredData): StoredData {
+  return {
+    nextId: data.nextId,
+    rows: Object.fromEntries(
+      Object.entries(data.rows).map(([entity, rows]) => [
+        entity,
+        rows.map(row => ({ ...row })),
+      ]),
+    ),
+  }
+}
+
+/** Applies field/row deltas to the latest committed snapshot, never publishing the private overlay. */
+function applyStoredDataDelta(base: StoredData, working: StoredData, current: StoredData): StoredData {
+  const rows: Record<string, StoredRow[]> = {}
+  for (const entity of Object.keys(current.rows)) {
+    const baseRows = new Map((base.rows[entity] ?? []).map(row => [row.Id, row]))
+    const workingRows = new Map((working.rows[entity] ?? []).map(row => [row.Id, row]))
+    const currentRows = new Map((current.rows[entity] ?? []).map(row => [row.Id, { ...row }]))
+
+    for (const [id, baseRow] of baseRows) {
+      const workingRow = workingRows.get(id)
+      if (!workingRow) {
+        currentRows.delete(id)
+        continue
+      }
+      const currentRow = currentRows.get(id)
+      if (!currentRow) {
+        throw new Error(`Cannot commit action update because ${entity} '${id}' was deleted concurrently.`)
+      }
+      for (const [field, value] of Object.entries(workingRow)) {
+        if (!Object.is(value, baseRow[field])) {
+          currentRow[field] = value
+        }
+      }
+    }
+
+    for (const [id, workingRow] of workingRows) {
+      if (baseRows.has(id)) {
+        continue
+      }
+      if (currentRows.has(id)) {
+        throw new Error(`Cannot commit action create because ${entity} '${id}' now exists.`)
+      }
+      currentRows.set(id, { ...workingRow })
+    }
+    rows[entity] = [...currentRows.values()]
+  }
+  return { nextId: Math.max(current.nextId, working.nextId), rows }
 }
 
 /** brokenConnection carries a configuration or connect failure into load-time error state. */

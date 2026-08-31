@@ -47,14 +47,14 @@ DeclarationSlotBlock:
 // bare visual/slot uses. Keep every other broad statement parseable in an app body for a semantic
 // placement diagnostic, while leaving those inherently overlapping bare forms to visual blocks.
 AppBlockDiagnosticStatement:
-    Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioDeclaration | RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | EntityQueryDeclaration | CommandDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
+    Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration | RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | EntityQueryDeclaration | CommandDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 Declaration:
     PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
-type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioDeclaration;
-type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioDeclaration;
+type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration;
+type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration;
 // View statements are the declarations and render sites accepted by view/layout bodies.
 ViewStatement returns Statement:
     ParsedStatement | DeclarationSlotFill;
