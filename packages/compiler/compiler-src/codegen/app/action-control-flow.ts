@@ -30,5 +30,19 @@ export function actionInvocationRequiresAsync(
 
 /** Whether this callback must be allowed to interrupt a suspended `ask`. */
 export function actionBlockContainsRespond(block: AST.ActionBlock | undefined): boolean {
-  return block !== undefined && AST.streamAllContents(block).some(AST.isRespondStatement)
+  return block?.statements.some(statement => {
+    if (AST.isRespondStatement(statement)) {
+      return true
+    }
+    if (AST.isAsyncActionStatement(statement)) {
+      return actionBlockContainsRespond(statement.block)
+    }
+    if (AST.isIfActionStatement(statement)) {
+      return actionBlockContainsRespond(statement.block)
+    }
+    if (AST.isGuardActionStatement(statement)) {
+      return ASTUtils.guardBranches(statement).some(branch => actionBlockContainsRespond(branch.block))
+    }
+    return false
+  }) ?? false
 }

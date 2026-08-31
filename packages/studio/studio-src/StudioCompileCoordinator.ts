@@ -193,6 +193,17 @@ export class StudioCompileCoordinator {
       message.identity.project !== this.#project.project
       || message.identity.appName !== this.#project.appName
       || message.identity.previewInstanceId !== this.#previewInstanceId
+    ) {
+      return false
+    }
+    return this.acknowledgeCompiledRevision(message)
+  }
+
+  /** Matrix sessions authenticate cell-instance identity before advancing the shared applied revision. */
+  acknowledgeCompiledRevision(message: StudioPreviewAppliedMessage): boolean {
+    if (
+      message.identity.project !== this.#project.project
+      || message.identity.appName !== this.#project.appName
       || message.compileRevision !== message.appliedRevision
       || message.appliedRevision <= this.#appliedRevision
       || !this.#compiledRevisions.has(message.appliedRevision)
@@ -247,18 +258,17 @@ export class StudioCompileCoordinator {
       while (this.#pending !== undefined) {
         const batch = this.#pending
         this.#pending = undefined
-        const completion = await this.#compileBatch(batch)
-        for (const waiter of batch.waiters) {
-          waiter.resolve(completion)
+        try {
+          const completion = await this.#compileBatch(batch)
+          for (const waiter of batch.waiters) {
+            waiter.resolve(completion)
+          }
+        } catch (error) {
+          for (const waiter of batch.waiters) {
+            waiter.reject(error)
+          }
         }
       }
-    } catch (error) {
-      const abandoned = this.#pending
-      this.#pending = undefined
-      for (const waiter of abandoned?.waiters ?? []) {
-        waiter.reject(error)
-      }
-      throw error
     } finally {
       this.#working = false
       if (this.#pending !== undefined) {

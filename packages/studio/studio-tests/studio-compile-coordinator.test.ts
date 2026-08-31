@@ -158,6 +158,26 @@ Describe('Studio compile coordinator', () => {
     Expect(states).toContain(compiled.compileRevision)
   })
 
+  Test('tracks an authenticated matrix revision without replacing the legacy preview instance', async () => {
+    const coordinator = new StudioCompileCoordinator({
+      appName: 'Garden',
+      async compile() {},
+      project: '/workspace/garden',
+    })
+    coordinator.setPreviewInstance('legacy-preview')
+    const compiled = await coordinator.requestInitialCompile()
+    const message = appliedMessage('matrix-preview', compiled.compileRevision)
+
+    Expect(coordinator.acknowledgeCompiledRevision(message)).toBe(true)
+    Expect(coordinator.snapshot().appliedRevision).toBe(compiled.compileRevision)
+    Expect(coordinator.acknowledgeCompiledRevision(message)).toBe(false)
+    Expect(coordinator.acknowledgeCompiledRevision({
+      ...message,
+      appliedRevision: compiled.compileRevision + 1,
+      compileRevision: compiled.compileRevision + 1,
+    })).toBe(false)
+  })
+
   Test('continues with a queued revision after a compile error', async () => {
     const gate = deferred<void>()
     const requests: StudioCompileRequest[] = []
@@ -214,6 +234,24 @@ Describe('Studio compile coordinator', () => {
       },
     }])
     Expect(coordinator.snapshot().diagnostics).toEqual(completion.diagnostics)
+  })
+
+  Test('rejects every waiter when an observer fails and remains usable', async () => {
+    let failObserver = true
+    const coordinator = new StudioCompileCoordinator({
+      appName: 'Garden',
+      async compile() {},
+      onState(state) {
+        if (failObserver && state.status === 'compiling') {
+          failObserver = false
+          throw new Error('observer failed')
+        }
+      },
+      project: '/workspace/garden',
+    })
+
+    await Expect(coordinator.requestInitialCompile()).rejects.toThrow('observer failed')
+    await Expect(coordinator.requestInitialCompile()).resolves.toMatchObject({ status: 'compiled' })
   })
 })
 

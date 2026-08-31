@@ -1,6 +1,8 @@
 import { EditorState, type Extension } from '@codemirror/state'
-import { basicSetup } from 'codemirror'
+import { basicSetup, EditorView } from 'codemirror'
+import type { StudioDraftFile } from '../StudioDraftSync'
 import type { StudioEditorSnippet } from '../StudioInspector'
+import type { StudioSourceIdentity, StudioSourceRange } from '../StudioProtocol'
 import type { StudioDiagnosticRange } from './StudioApiClient'
 
 export type StudioOpenFileAttempt = {
@@ -15,6 +17,11 @@ export const StudioCodeEditor = {
   ] as Extension,
 } as const
 
+/** Identifies Studio's explicit save shortcut without consuming unrelated browser commands. */
+export function isStudioSaveShortcut(event: Pick<KeyboardEvent, 'altKey' | 'ctrlKey' | 'key' | 'metaKey'>): boolean {
+  return !event.altKey && (event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 's'
+}
+
 /** Invalidates async file opens as soon as a newer navigation begins. */
 export class StudioOpenFileLifecycle {
   #revision = 0
@@ -24,6 +31,41 @@ export class StudioOpenFileLifecycle {
     return { isCurrent: () => revision === this.#revision }
   }
 }
+
+export type StudioSourceEditor = {
+  editor: EditorView
+  file: StudioDraftFile
+}
+
+/** Opens the exact Tao source observed by a preview, selects its range, and centers it in the editor. */
+export const StudioSourceNavigation = {
+  async openAndSelect(options: {
+    identity: StudioSourceIdentity
+    openFile: (path: string) => Promise<StudioSourceEditor | undefined>
+    project: string
+    range: StudioSourceRange
+  }): Promise<StudioSourceEditor | undefined> {
+    const path = projectSourcePath(options.project, options.identity.path)
+    if (path === undefined || !validSourceRange(options.range)) {
+      return undefined
+    }
+    const opened = await options.openFile(path)
+    if (
+      opened === undefined
+      || opened.file.path !== path
+      || opened.file.sourceVersion !== options.identity.sourceVersion
+      || options.range.end > opened.editor.state.doc.length
+    ) {
+      return undefined
+    }
+    opened.editor.dispatch({
+      effects: EditorView.scrollIntoView(options.range.start, { y: 'center' }),
+      selection: { anchor: options.range.start, head: options.range.end },
+    })
+    opened.editor.focus()
+    return opened
+  },
+} as const
 
 /** Converts a zero-based compiler range into a bounded CodeMirror selection. */
 export const StudioDiagnosticNavigation = {
@@ -78,6 +120,29 @@ export function absoluteSourcePath(project: string, path: string): string {
 export function projectRelativePath(project: string, sourcePath: string): string | undefined {
   const prefix = `${project.replace(/\/$/, '')}/`
   return sourcePath.startsWith(prefix) ? sourcePath.slice(prefix.length) : undefined
+}
+
+/** Accepts canonical absolute identities and project-relative identities without navigating outside the project. */
+function projectSourcePath(project: string, sourcePath: string): string | undefined {
+  const relative = projectRelativePath(project, sourcePath)
+  if (relative !== undefined) {
+    return validProjectRelativePath(relative) ? relative : undefined
+  }
+  return validProjectRelativePath(sourcePath) ? sourcePath : undefined
+}
+
+function validProjectRelativePath(path: string): boolean {
+  return path !== ''
+    && !path.startsWith('/')
+    && !path.includes('\\')
+    && path.split('/').every(part => part !== '' && part !== '.' && part !== '..')
+}
+
+function validSourceRange(range: StudioSourceRange): boolean {
+  return Number.isInteger(range.start)
+    && Number.isInteger(range.end)
+    && range.start >= 0
+    && range.end >= range.start
 }
 
 export function sanitizeLspHtml(html: string): string {

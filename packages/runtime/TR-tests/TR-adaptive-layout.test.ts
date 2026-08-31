@@ -2,8 +2,8 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 
 Describe('TR adaptive layout', () => {
-  Test('lowers width max to React Native maxWidth', () => {
-    Expect(TR.Layout.resolve({ entries: [['width', 'max', 720]] })).toEqual({ maxWidth: 720 })
+  Test('keeps width max fluid below its React Native maximum', () => {
+    Expect(TR.Layout.resolve({ entries: [['width', 'max', 720]] })).toEqual({ maxWidth: 720, width: '100%' })
   })
 
   Test('replaces a concrete width with a later width maximum', () => {
@@ -13,7 +13,7 @@ Describe('TR adaptive layout', () => {
     )
 
     Expect(merged?.entries).toEqual([['width', 'max', 720]])
-    Expect(TR.Layout.resolve({ entries: merged?.entries ?? [] })).toEqual({ maxWidth: 720 })
+    Expect(TR.Layout.resolve({ entries: merged?.entries ?? [] })).toEqual({ maxWidth: 720, width: '100%' })
   })
 
   Test('replaces repeated direct dimensions before lowering their distinct native effects', () => {
@@ -24,7 +24,9 @@ Describe('TR adaptive layout', () => {
     ])
 
     Expect(layout.entries).toEqual([['width', 'max', 720]])
-    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'row' })).toEqual({ maxWidth: 720 })
+    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'row' })).toEqual({
+      maxWidth: 720,
+    })
   })
 
   Test('keeps a later overlay at the end of the semantic list', () => {
@@ -99,5 +101,24 @@ Describe('TR adaptive layout', () => {
 
     Expect(TR.Layout.resolve({ entries: fillThenMaximum.entries, parentDirection: 'row' })).toEqual(expected)
     Expect(TR.Layout.resolve({ entries: maximumThenFill.entries, parentDirection: 'row' })).toEqual(expected)
+  })
+
+  Test('caps row claims without turning each sibling into a full-row width', () => {
+    const layout = TR.Layout.create([['claim', 2], ['width', 'max', 720]])
+
+    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'row' })).toEqual({
+      flexGrow: 2,
+      maxWidth: 720,
+    })
+  })
+
+  Test('keeps a centered column fluid across its parent cross axis up to the maximum', () => {
+    const layout = TR.Layout.create([['width', 'max', 720], ['centered']])
+
+    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'column' })).toEqual({
+      alignSelf: 'center',
+      maxWidth: 720,
+      width: '100%',
+    })
   })
 })

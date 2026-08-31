@@ -11,6 +11,18 @@ import type { StudioCanonicalSourceAction } from '../StudioProtocol'
 
 export type StudioInspectorContext = 'Actions' | 'Data' | 'Layout' | 'Style'
 
+export const studioInspectorContexts: readonly StudioInspectorContext[] = ['Layout', 'Style', 'Data', 'Actions']
+
+type StudioInspectorPanelOptions = {
+  busy: boolean
+  canUndo: boolean
+  currentSourceVersion?: string
+  inspection?: StudioRenderInspection
+  onAction: (action: StudioCanonicalSourceAction) => void
+  onUndo: () => void
+  selection?: StudioInspectorSelection
+}
+
 export type StudioPaletteDragItem =
   | {
     component: (typeof studioPaletteComponents)[number]['component']
@@ -142,16 +154,10 @@ export function renderProjectViews(
   }))
 }
 
-export function renderInspectorPanel(parent: HTMLElement, options: {
-  busy: boolean
-  canUndo: boolean
-  context: StudioInspectorContext
-  currentSourceVersion?: string
-  inspection?: StudioRenderInspection
-  onAction: (action: StudioCanonicalSourceAction) => void
-  onUndo: () => void
-  selection?: StudioInspectorSelection
-}): void {
+export function renderInspectorPanel(
+  parent: HTMLElement,
+  options: StudioInspectorPanelOptions & { context: StudioInspectorContext },
+): void {
   const heading = document.createElement('h2')
   heading.textContent = options.context
   const undo = document.createElement('button')
@@ -175,16 +181,91 @@ export function renderInspectorPanel(parent: HTMLElement, options: {
   appendInspectorRow(summary, 'Source', projectPathLabel(selection.identity.path))
   appendInspectorRow(summary, 'Range', `${selection.range.start}–${selection.range.end}`)
   appendInspectorRow(summary, 'Version', current ? 'Current' : 'Waiting for refreshed preview')
-  const content = options.inspection === undefined
+  const content = renderInspectorContext(options.context, selection, options)
+  parent.replaceChildren(heading, undo, summary, content)
+}
+
+/** Renders every visual editing context as an independently collapsible, initially open section. */
+export function renderInspectorAccordions(parent: HTMLElement, options: StudioInspectorPanelOptions): void {
+  const previousOpen = new Map(
+    [...parent.querySelectorAll<HTMLDetailsElement>('[data-tao-studio-inspector-context]')].map(details => [
+      details.dataset['taoStudioInspectorContext'] as StudioInspectorContext,
+      details.open,
+    ]),
+  )
+  const heading = document.createElement('h2')
+  heading.textContent = 'Visual properties'
+  const undo = document.createElement('button')
+  undo.className = 'studio-inspector-button studio-undo'
+  undo.dataset['taoStudioUndo'] = 'true'
+  undo.disabled = options.busy || !options.canUndo
+  undo.textContent = 'Undo visual edit'
+  undo.type = 'button'
+  undo.addEventListener('click', options.onUndo)
+  const selection = options.selection
+  const empty = selection === undefined
+    ? (() => {
+      const note = document.createElement('p')
+      note.className = 'studio-inspector-empty'
+      note.textContent = 'Select a rendered element in the preview.'
+      return note
+    })()
+    : undefined
+  const source = selection === undefined
+    ? undefined
+    : (() => {
+      const current = selection.identity.sourceVersion === options.currentSourceVersion
+      const summary = document.createElement('dl')
+      summary.className = 'studio-inspector-summary'
+      appendInspectorRow(summary, 'Source', projectPathLabel(selection.identity.path))
+      appendInspectorRow(summary, 'Range', `${selection.range.start}–${selection.range.end}`)
+      appendInspectorRow(summary, 'Version', current ? 'Current' : 'Waiting for refreshed preview')
+      return summary
+    })()
+  const accordions = document.createElement('div')
+  accordions.className = 'studio-inspector-accordions'
+  accordions.append(...studioInspectorContexts.map(context => {
+    const details = document.createElement('details')
+    details.className = 'studio-inspector-accordion'
+    details.dataset['taoStudioInspectorContext'] = context
+    details.open = previousOpen.get(context) ?? true
+    const label = document.createElement('summary')
+    label.textContent = context
+    const content = document.createElement('div')
+    content.className = 'studio-inspector-accordion-content'
+    content.append(
+      selection === undefined
+        ? inspectorNote('Select an element to edit this context.')
+        : renderInspectorContext(context, selection, options),
+    )
+    details.append(label, content)
+    return details
+  }))
+  const children: Node[] = [heading, undo]
+  if (empty !== undefined) {
+    children.push(empty)
+  }
+  if (source !== undefined) {
+    children.push(source)
+  }
+  children.push(accordions)
+  parent.replaceChildren(...children)
+}
+
+function renderInspectorContext(
+  context: StudioInspectorContext,
+  selection: StudioInspectorSelection,
+  options: StudioInspectorPanelOptions,
+): HTMLElement {
+  return options.inspection === undefined
     ? inspectorNote('Reading parsed render values…')
-    : options.context === 'Layout'
+    : context === 'Layout'
     ? renderLayoutControls(options.inspection, selection, options)
-    : options.context === 'Style'
+    : context === 'Style'
     ? renderStyleControls(options.inspection, selection, options)
-    : options.context === 'Actions'
+    : context === 'Actions'
     ? renderActionControls(selection, options)
     : inspectorNote('No data binding metadata is published for this render yet.')
-  parent.replaceChildren(heading, undo, summary, content)
 }
 
 function renderLayoutControls(
@@ -227,10 +308,11 @@ function numericLayoutControl(
   input.step = '1'
   input.type = 'number'
   input.value = String(layoutEntry(inspection, head)?.[1] ?? 8)
-  input.addEventListener(
-    'change',
-    () => apply({ entry: [head, input.valueAsNumber], kind: 'set-layout-entry', renderId }),
-  )
+  input.addEventListener('change', () => {
+    if (Number.isFinite(input.valueAsNumber)) {
+      apply({ entry: [head, input.valueAsNumber], kind: 'set-layout-entry', renderId })
+    }
+  })
   return inspectorField(label, input)
 }
 
@@ -257,12 +339,12 @@ function dimensionLayoutControl(
   value.min = '1'
   value.type = 'number'
   value.value = String(typeof current?.[1] === 'number' ? current[1] : 320)
-  const commit = (): void =>
-    apply({
-      entry: [head, mode.value === 'fill' ? 'fill' : value.valueAsNumber],
-      kind: 'set-layout-entry',
-      renderId,
-    })
+  const commit = (): void => {
+    const next = mode.value === 'fill' ? 'fill' : value.valueAsNumber
+    if (next === 'fill' || Number.isFinite(next)) {
+      apply({ entry: [head, next], kind: 'set-layout-entry', renderId })
+    }
+  }
   mode.addEventListener('change', () => {
     value.disabled = disabled || mode.value !== 'fixed'
     commit()

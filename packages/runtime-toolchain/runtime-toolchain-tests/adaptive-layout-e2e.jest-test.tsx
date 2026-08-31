@@ -56,7 +56,7 @@ Describe('Expo runtime adaptive layout', () => {
         Expect(primaryContentStyle?.flexGrow).not.toBe(2)
 
         const readable = screen.getByTestId('readableColumn')
-        Expect(RN.StyleSheet.flatten(readable.props.style)).toMatchObject({ maxWidth: 720 })
+        Expect(RN.StyleSheet.flatten(readable.props.style)).toMatchObject({ maxWidth: 720, width: '100%' })
 
         const secondary = screen.getByTestId('secondaryPane')
         Expect(RN.StyleSheet.flatten(secondary.props.style)).toMatchObject({ flexGrow: 1 })

@@ -263,20 +263,23 @@ function renderData(
   capture.type = 'button'
   capture.addEventListener('click', options.onCaptureFixture)
   toolbar.append(refresh, capture)
-  if (options.dataLoading) {
-    parent.replaceChildren(toolbar, note('Capturing live app data from the active preview…'))
-    return
-  }
-  if (options.dataError !== undefined) {
-    parent.replaceChildren(toolbar, unavailable('Data', options.dataError))
-    return
-  }
   const tables = options.data.flatMap(table => {
     const heading = document.createElement('h3')
     heading.textContent = `${table.datasource} · ${table.entity}`
     return [heading, dataTable(table.rows)]
   })
-  parent.replaceChildren(toolbar, ...(tables.length === 0 ? [note('No live datasource rows.')] : tables))
+  const status = options.dataLoading
+    ? note(
+      options.data.length === 0
+        ? 'Capturing live app data from the active preview…'
+        : 'Refreshing live app data…',
+    )
+    : options.dataError !== undefined
+    ? unavailable('Data', options.dataError)
+    : tables.length === 0
+    ? note('No live datasource rows.')
+    : undefined
+  parent.replaceChildren(toolbar, ...(status === undefined ? [] : [status]), ...tables)
 }
 
 function dataTable(rows: readonly Readonly<Record<string, unknown>>[]): HTMLElement {

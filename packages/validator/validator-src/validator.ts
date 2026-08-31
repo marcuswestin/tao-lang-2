@@ -35,7 +35,10 @@ function createContext(
 }
 
 /** validateParseResult validates an existing parse result. */
-function validateParseResult(parseResult: ParseResult, context: ValidationRunContext): ValidationResult {
+async function validateParseResult(
+  parseResult: ParseResult,
+  context: ValidationRunContext,
+): Promise<ValidationResult> {
   if (Diagnostics.hasError(parseResult.diagnostics, 'lexer', 'parser')) {
     return validationResultFromParse(parseResult, parseResult.diagnostics)
   }
@@ -53,6 +56,7 @@ function validateParseResult(parseResult: ParseResult, context: ValidationRunCon
   for (const file of context.workspaceFiles) {
     const nodes = Validate.TaoFile(file, ctx)
     Validate.TypirProblems(file, nodes, context.typir, ctx)
+    await Validate.ForeignImplementationFiles(file, ctx)
   }
 
   return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])

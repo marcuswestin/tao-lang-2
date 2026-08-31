@@ -24,10 +24,12 @@ type TransactionResource<ValueT> = {
 }
 
 class ActionTransaction {
+  readonly afterCommit: Array<() => void> = []
   readonly detached: Array<() => PromiseLike<unknown>> = []
   readonly frames: string[] = []
   readonly resources = new Map<object, TransactionResource<any>>()
   externalEffects = false
+  committed = false
 
   resource<ValueT>(
     key: object,
@@ -59,6 +61,7 @@ class ActionTransaction {
         committed.push(resource)
         resource.commit(resource.value)
       }
+      this.committed = true
     } catch (error) {
       for (const resource of committed.reverse()) {
         resource.rollbackCommit?.(resource.value)
@@ -174,6 +177,17 @@ function finishRootFailure(
 function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
   activeTransaction = suspendedTransaction
   transaction.frames.pop()
+  if (transaction.committed) {
+    for (const effect of transaction.afterCommit) {
+      try {
+        effect()
+      } catch (error) {
+        // The transaction is already durable. Surface each unowned publication failure without
+        // rejecting the committed action or preventing remaining cleanup/effects.
+        reportUnownedFailure(error)
+      }
+    }
+  }
   for (const detached of transaction.detached) {
     void enqueueDetached(detached)
   }
@@ -250,6 +264,15 @@ export function deferDetached(body: () => PromiseLike<unknown>): void {
   // Host-authored detached work outside a Tao action preserves the established immediate behavior.
   // A generated `async` statement is always encountered inside an action and takes the branch above.
   void (async () => await body())().catch(reportUnownedFailure)
+}
+
+/** deferTransactionCommit publishes an effect only after the current transaction commits and yields ownership. */
+export function deferTransactionCommit(effect: () => void): void {
+  if (activeTransaction) {
+    activeTransaction.afterCommit.push(effect)
+    return
+  }
+  effect()
 }
 
 /** markExternalEffect makes a transaction ineligible for automatic retry. */

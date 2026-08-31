@@ -75,7 +75,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     children: [
       navigator.ownsWindowSurface()
         ? content
-        : React.createElement(AppSurfaceFrame, { key: 'content' }, content),
+        : React.createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, content),
       React.Children.count(toasts) > 0
         ? React.createElement(runtime.View, {
           children: toasts,

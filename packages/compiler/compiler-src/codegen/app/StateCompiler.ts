@@ -60,6 +60,15 @@ function compilePersistedType(type: ASTUtils.TaoType): Compiled {
   if (type.kind === 'list') {
     return gen`{ kind: "list"${type.element ? gen`, element: ${compilePersistedType(type.element)}` : gen``} }`
   }
+  if (type.kind === 'enum') {
+    const identity = compileDeclarationIdentity(type.declaration)
+    return gen`{ kind: "enum", declaration: ${identity}.canonical, cases: [${
+      gen.join(
+        AST.caseSetCasesOf(type.declaration),
+        caseSetCase => gen`${gen.jsLiteral(AST.caseSetCaseName(caseSetCase))}`,
+      )
+    }] }`
+  }
   if (type.kind === 'item' && type.item) {
     return gen`{ kind: "item", properties: {
       ${

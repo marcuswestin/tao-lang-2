@@ -125,6 +125,11 @@ Describe('Studio matrix session', () => {
     })
     Expect(rebased.cell('phone').cell.environment.viewport).toEqual({ height: 600, width: 600 })
     Expect(rebased.cell('phone').identity).toMatchObject({ compileRevision: 8, manifestRevision: 'manifest-8' })
+    Expect(rebased.publishedManifest().cells.find(cell => cell.cellId === 'phone')).toMatchObject({
+      args: { title: 'Preserved' },
+      cellRevision: 1,
+      stateLayers: ['loading'],
+    })
     Expect(() => rebased.instance('phone-instance')).toThrow('no longer current')
     Expect(() => rebased.assertCurrentInstance(phoneInstance)).toThrow('stale manifest revision')
   })

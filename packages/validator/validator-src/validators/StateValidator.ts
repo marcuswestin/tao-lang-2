@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { type ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationProblemAcceptor } from 'typir'
 import { DeclarationOrder } from '../DeclarationOrder'
@@ -18,6 +18,8 @@ const stateValidationMessages = {
   persistedOnlyInApp: (state: string) => `Persisted state '${state}' is only allowed directly inside an app.`,
   appStateMustPersist: (state: string) => `App state '${state}' must declare (persist).`,
   persistedTypeRequired: (state: string) => `Persisted state '${state}' must declare its type with 'is'.`,
+  persistedTypeUnsupported: (state: string, type: string) =>
+    `Persisted state '${state}' cannot use nonpersistable type '${type}'.`,
   initialTypeMismatch: (state: string, expected: string, actual: string) =>
     `State '${state}' declares ${expected}, got initial value ${actual}.`,
 } as const
@@ -43,12 +45,51 @@ function reportStatePlacement(state: AST.StateDeclaration, ctx: ValidationContex
     }
     if (!state.type) {
       ctx.error(stateValidationMessages.persistedTypeRequired(state.name), state)
+    } else {
+      const type = Type.ofReference(state.type)
+      if (type.kind !== 'unresolved' && !isPersistableType(type)) {
+        ctx.error(stateValidationMessages.persistedTypeUnsupported(state.name, Type.displayName(type)), state.type)
+      }
     }
     return
   }
   if (state.persist) {
     ctx.error(stateValidationMessages.persistedOnlyInApp(state.name), state)
   }
+}
+
+function isPersistableType(
+  type: ASTUtils.TaoType,
+  seen: ReadonlySet<AST.TypeDefinition> = new Set(),
+): boolean {
+  const nominal = persistableNominal(type)
+  if (nominal && seen.has(nominal)) {
+    return false
+  }
+  const nextSeen = nominal ? new Set([...seen, nominal]) : seen
+  if (type.kind === 'primitive') {
+    return ['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive)
+  }
+  if (type.kind === 'list') {
+    return type.element === undefined || isPersistableType(type.element, nextSeen)
+  }
+  if (type.kind === 'item') {
+    return type.item !== undefined
+      && type.item.properties.every(property => isPersistableType(Type.ofProperty(property), nextSeen))
+  }
+  if (type.kind === 'enum') {
+    return true
+  }
+  if (type.kind === 'union') {
+    return type.members.every(member => isPersistableType(member, nextSeen))
+  }
+  return false
+}
+
+function persistableNominal(type: ASTUtils.TaoType): AST.TypeDefinition | undefined {
+  return type.kind === 'primitive' || type.kind === 'list' || type.kind === 'item'
+    ? type.nominal
+    : undefined
 }
 
 function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext): void {

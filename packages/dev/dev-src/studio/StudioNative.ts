@@ -1,15 +1,25 @@
-import { CLI, Errors, FS, HCI, Repo, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { StudioClientAssets } from '@studio'
 import { Workspace } from '@workspace'
 import { createHash } from 'node:crypto'
+import { delimiter as pathDelimiter } from 'node:path'
 import {
-  StudioElectrobunSpike,
-  type StudioElectrobunSpikeProject,
-} from './StudioElectrobunSpike'
+  StudioElectrobun,
+  type StudioElectrobunProject,
+} from './StudioElectrobun'
+import {
+  finalizeStudioProcessTree,
+  processGroupKillSpec,
+  startStudioProcessTree,
+  stopStudioProcessTree,
+  type StudioProcessTree,
+} from './StudioProcessTree'
 
-const stopTimeoutMs = 3_000
 const probeTimeoutMs = 30_000
 const defaultAppName = 'Tao Studio'
 const defaultBundleIdentifier = 'dev.tao-lang.studio'
+const defaultHutchCommand = 'hutch'
+const hutchInstallUrl = 'https://hutch.blackboard.sh/hutch/install.sh'
 
 export type StudioNativeOptions = {
   artifactRoot?: string
@@ -28,7 +38,7 @@ export type StudioNativeProbeResult = {
 }
 
 export type StartedStudioNative = {
-  project: StudioElectrobunSpikeProject
+  project: StudioElectrobunProject
   stop(): Promise<void>
   waitForClose(): Promise<number>
   waitForProbe(): Promise<StudioNativeProbeResult>
@@ -52,24 +62,35 @@ export type PackagedStudioNative = {
   projectRoot: string
 }
 
-type StoppableCommand = Pick<
-  CLI.StartedCommand,
-  'closeOutput' | 'dispose' | 'exitCode' | 'kill' | 'signalCode' | 'waitForClose'
->
+type StoppableCommand = StudioProcessTree
 
 type WaitForNativeClose = () => Promise<number>
 type CommandRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
+type Sleep = (milliseconds: number) => Promise<void>
+type NativeRuntimeCloseResult = {
+  exitCode: number
+  message: string
+}
 
 /** StudioNative owns Tao Studio's Electrobun shell process and release builds. */
 export const StudioNative = {
   packageApp,
+  resolveHutchExecutablePath,
   start,
   testing: {
     installedHutchExecutablePath,
     installStudioServicePayload,
     materializeStudioNodeRuntime,
     materializeStudioServicePayload,
+    nativeRuntimeCloseResult,
+    nativeDevelopmentProcessIds,
     prepareElectrobun,
+    portableStudioClientBundle,
+    processGroupKillSpec,
+    resolveHutchExecutablePath,
+    stageStudioClientBundle,
+    stageStudioPackagedServiceBundle,
+    stopExistingNativeDevelopmentProcesses,
     stopCommand,
     validateStudioRelease,
     waitForProbeResult,
@@ -77,8 +98,18 @@ export const StudioNative = {
 } as const
 
 async function start(options: StudioNativeOptions): Promise<StartedStudioNative> {
+  const hutchPath = await resolveHutchExecutablePath(options.hutchPath)
   const artifactRoot = FS.resolvePath(options.artifactRoot ?? '.artifacts/user/studio-native', Repo.getRoot())
-  const project = await StudioElectrobunSpike.create({
+  const stoppedNativeProcesses = await stopExistingNativeDevelopmentProcesses(artifactRoot)
+  if (stoppedNativeProcesses > 0) {
+    HCI.logProcessInfo(
+      'studio-native',
+      `Stopped ${stoppedNativeProcesses} existing native Studio ${
+        stoppedNativeProcesses === 1 ? 'process' : 'processes'
+      }.`,
+    )
+  }
+  const project = await StudioElectrobun.create({
     appName: defaultAppName,
     bundleIdentifier: defaultBundleIdentifier,
     outputRoot: artifactRoot,
@@ -89,28 +120,53 @@ async function start(options: StudioNativeOptions): Promise<StartedStudioNative>
     studioUrl: options.studioUrl,
   })
   await FS.remove(project.runtimeResultPath)
-  const hutchPath = options.hutchPath ?? 'hutch'
   await prepareElectrobun(hutchPath, project.root)
-  const command = CLI.start(hutchPath, {
+  let finishRuntimeClose: ((result: NativeRuntimeCloseResult) => void) | undefined
+  const runtimeClosed = new Promise<NativeRuntimeCloseResult>(resolve => {
+    finishRuntimeClose = resolve
+  })
+  const outputRemainders: Record<CLI.CommandOutputStream, string> = { stderr: '', stdout: '' }
+  const command = startStudioProcessTree(hutchPath, {
     args: ['electrobun', 'dev', '--watch'],
     cwd: project.root,
     env: project.dev.env,
+    onError: error => HCI.logProcessError('studio-native', error.message),
     onOutput(stream, chunk) {
-      for (const line of chunk.toString('utf8').split(/\r?\n/).filter(Boolean)) {
+      const lines = `${outputRemainders[stream]}${chunk.toString('utf8')}`.split(/\r?\n/)
+      outputRemainders[stream] = lines.pop() ?? ''
+      for (const line of lines.filter(Boolean)) {
         HCI.logProcessOutput('studio-native', line, { stderr: stream === 'stderr' })
+        const runtimeClose = nativeRuntimeCloseResult(line)
+        if (runtimeClose !== undefined) {
+          finishRuntimeClose?.(runtimeClose)
+        }
       }
     },
-    stdio: 'pipe',
   })
-  command.onceError(error => HCI.logProcessError('studio-native', error.message))
-  const waitForClose = finalizeCommand(command)
+  const waitForHutchClose = finalizeCommand(command)
   let stopping: Promise<void> | undefined
+  let closing: Promise<number> | undefined
+  const stopHutch = () => {
+    stopping ??= stopCommand(command, Time.sleep, waitForHutchClose)
+    return stopping
+  }
+  const handledRuntimeClose = runtimeClosed.then(async result => {
+    if (result.message !== '') {
+      HCI.logProcessError('studio-native', result.message)
+    }
+    await stopHutch()
+    return result
+  })
+  const waitForClose = () => {
+    closing ??= Promise.race([
+      waitForHutchClose().then(exitCode => ({ exitCode, message: '' })),
+      handledRuntimeClose,
+    ]).then(result => result.exitCode)
+    return closing
+  }
   return {
     project,
-    stop() {
-      stopping ??= stopCommand(command, Time.sleep, waitForClose)
-      return stopping
-    },
+    stop: stopHutch,
     waitForClose,
     waitForProbe() {
       if (options.probe !== true) {
@@ -121,28 +177,120 @@ async function start(options: StudioNativeOptions): Promise<StartedStudioNative>
   }
 }
 
+/** Stops a prior dev watcher and app so neither can reclaim the generated shell or its build lock. */
+async function stopExistingNativeDevelopmentProcesses(
+  artifactRoot: string,
+  runner: CommandRunner = CLI.run,
+  sleep: Sleep = Time.sleep,
+): Promise<number> {
+  const result = await runner('/usr/sbin/lsof', { args: ['-nP', '-d', 'cwd', '-Fpcn'] })
+  if (result.exitCode !== 0 && result.stdout.trim() === '') {
+    throw new Errors.UnexpectedBehaviorError(
+      `Could not inspect existing native Studio processes: ${result.stderr.trim() || 'lsof failed'}`,
+    )
+  }
+  const processIds = nativeDevelopmentProcessIds(result.stdout, artifactRoot)
+  if (processIds.length === 0) {
+    return 0
+  }
+
+  const terminated = await runner('/bin/kill', { args: ['-TERM', ...processIds.map(String)] })
+  assertNativeProcessesSignalable(terminated, processIds)
+  let remaining = processIds
+  for (let attempt = 0; attempt < 30 && remaining.length > 0; attempt += 1) {
+    remaining = await runningProcessIds(remaining, runner)
+    if (remaining.length > 0) {
+      await sleep(100)
+    }
+  }
+  if (remaining.length > 0) {
+    const killed = await runner('/bin/kill', { args: ['-KILL', ...remaining.map(String)] })
+    assertNativeProcessesSignalable(killed, remaining)
+  }
+  return processIds.length
+}
+
+function nativeDevelopmentProcessIds(output: string, artifactRoot: string): number[] {
+  const buildRoot = FS.resolvePath('build', artifactRoot)
+  const processIds = new Set<number>()
+  let processId: number | undefined
+  let command: string | undefined
+  for (const line of output.split(/\r?\n/)) {
+    if (line.startsWith('p')) {
+      const parsed = Number(line.slice(1))
+      processId = Number.isInteger(parsed) && parsed > 1 ? parsed : undefined
+      command = undefined
+    } else if (line.startsWith('c')) {
+      command = line.slice(1)
+    } else if (line.startsWith('n') && processId !== undefined) {
+      const cwd = line.slice(1).replace(/ \(deleted\)$/, '')
+      const relative = FS.relativePath(buildRoot, cwd)
+      const isNativeApp = /^dev-[^/]+\/[^/]+-dev\.app\/Contents\/MacOS$/.test(relative)
+      const isHutchEngine = cwd === FS.resolvePath(artifactRoot) && command === 'hutch-engine'
+      if (isNativeApp || isHutchEngine) {
+        processIds.add(processId)
+      }
+    }
+  }
+  return [...processIds].sort((left, right) => left - right)
+}
+
+async function runningProcessIds(processIds: readonly number[], runner: CommandRunner): Promise<number[]> {
+  const probes = await Promise.all(processIds.map(async processId => ({
+    processId,
+    result: await runner('/bin/kill', { args: ['-0', String(processId)] }),
+  })))
+  for (const probe of probes) {
+    assertNativeProcessesSignalable(probe.result, [probe.processId])
+  }
+  return probes.filter(probe => probe.result.exitCode === 0).map(probe => probe.processId)
+}
+
+function assertNativeProcessesSignalable(result: CLI.CommandResult, processIds: readonly number[]): void {
+  if (result.exitCode !== 0 && /operation not permitted/i.test(result.stderr)) {
+    throw new Errors.UnexpectedBehaviorError(
+      `Existing native Studio processes could not be stopped (${processIds.join(', ')}). Close Tao Studio and retry.`,
+    )
+  }
+}
+
+function nativeRuntimeCloseResult(line: string): NativeRuntimeCloseResult | undefined {
+  const exited = /Child process exited with code:\s*(\d+)/.exec(line)
+  if (exited?.[1] !== undefined) {
+    const exitCode = Number(exited[1])
+    return {
+      exitCode,
+      message: exitCode === 0 ? '' : `Native Studio runtime exited with code ${exitCode}.`,
+    }
+  }
+  const signaled = /Child process terminated by signal:\s*(\d+)/.exec(line)
+  if (signaled?.[1] === undefined) {
+    return undefined
+  }
+  const signal = Number(signaled[1])
+  if (signal === 15) {
+    return undefined
+  }
+  return {
+    exitCode: 1,
+    message: `Native Studio runtime terminated by signal ${signal}.`,
+  }
+}
+
 async function packageApp(options: StudioNativePackageOptions): Promise<PackagedStudioNative> {
   const outputRoot = FS.resolvePath(options.outputRoot ?? '.artifacts/build/studio-native', Repo.getRoot())
   const projectRoot = FS.resolvePath('project', outputRoot)
   const serviceStageRoot = FS.resolvePath('service-stage', outputRoot)
   const channel = options.channel ?? 'stable'
   const releaseBaseUrl = requiredHttpsUrl(options.releaseBaseUrl).href
+  const hutchPath = await resolveHutchExecutablePath(options.hutchPath)
   await validateStudioRelease()
   await FS.remove(serviceStageRoot)
   await FS.mkdir(serviceStageRoot)
   const serviceBundlePath = FS.resolvePath('service.js', serviceStageRoot)
-  const bundle = await Bun.build({
-    entrypoints: [Repo.resolvePath('packages/dev/dev-src/studio/StudioPackagedService.ts')],
-    minify: true,
-    target: 'bun',
-  })
-  const serviceBundle = bundle.outputs[0]
-  if (!bundle.success || serviceBundle === undefined) {
-    throw new Errors.UnexpectedBehaviorError(
-      `Could not bundle the packaged Studio service: ${bundle.logs.map(log => log.message).join('\n')}`,
-    )
-  }
-  await FS.writeText(serviceBundlePath, await serviceBundle.text())
+  await stageStudioPackagedServiceBundle(serviceBundlePath)
+  const studioClientBundlePath = FS.resolvePath('studio.js', serviceStageRoot)
+  await stageStudioClientBundle(studioClientBundlePath)
   const testCommandBundlePath = FS.resolvePath('test-command.js', serviceStageRoot)
   const testCommandBundle = await Bun.build({
     entrypoints: [Repo.resolvePath('packages/dev/dev-src/studio/StudioPackagedTestCommand.ts')],
@@ -157,14 +305,14 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   }
   await FS.writeText(testCommandBundlePath, await testCommandOutput.text())
   const servicePayloadRoot = FS.resolvePath('payload', serviceStageRoot)
-  await materializeStudioServicePayload(servicePayloadRoot)
+  await materializeStudioServicePayload(servicePayloadRoot, { 'studio.js': studioClientBundlePath })
   await FS.copyFile(testCommandBundlePath, FS.resolvePath('test-command.js', servicePayloadRoot))
   await materializeStudioNodeRuntime(
     options.nodePath ?? Repo.resolvePath('.devenv/profile/bin/node'),
     servicePayloadRoot,
   )
   await validatePackagedTestRuntime(servicePayloadRoot)
-  const project = await StudioElectrobunSpike.create({
+  const project = await StudioElectrobun.create({
     appName: options.appName ?? defaultAppName,
     bundleIdentifier: options.bundleIdentifier ?? defaultBundleIdentifier,
     outputRoot: projectRoot,
@@ -176,7 +324,6 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
     version: options.version,
   })
   await FS.copyDirectory(servicePayloadRoot, FS.resolvePath('service/payload', project.root))
-  const hutchPath = options.hutchPath ?? 'hutch'
   const artifactsRoot = FS.resolvePath('artifacts', project.root)
   await FS.remove(artifactsRoot)
   await prepareElectrobun(hutchPath, project.root)
@@ -184,6 +331,54 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   const artifactPaths = await builtArtifacts(artifactsRoot)
   verifyReleaseArtifacts(artifactPaths, channel)
   return { artifactPaths, artifactsRoot, channel, projectRoot }
+}
+
+async function stageStudioPackagedServiceBundle(serviceBundlePath: string): Promise<void> {
+  const bundle = await Bun.build({
+    define: {
+      __DEV__: 'false',
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    },
+    entrypoints: [Repo.resolvePath('packages/dev/dev-src/studio/StudioPackagedService.ts')],
+    minify: true,
+    plugins: [prebuiltStudioClientAssetsPlugin()],
+    target: 'bun',
+  })
+  const serviceBundle = bundle.outputs[0]
+  if (!bundle.success || serviceBundle === undefined) {
+    throw new Errors.UnexpectedBehaviorError(
+      `Could not bundle the packaged Studio service: ${bundle.logs.map(log => log.message).join('\n')}`,
+    )
+  }
+  await FS.writeText(serviceBundlePath, await serviceBundle.text())
+}
+
+/**
+ * The packaged service installs a prebuilt browser bundle before starting the Studio server, so
+ * StudioClientAssets' runtime compiler is deliberately unavailable in this artifact. Keeping that
+ * compiler would pull React Native's development-only WebSocket client into the Bun service.
+ */
+function prebuiltStudioClientAssetsPlugin(): Bun.BunPlugin {
+  const namespace = 'tao-studio-prebuilt-client-runtime'
+  return {
+    name: namespace,
+    setup(build) {
+      build.onResolve({ filter: /^@runtime-toolchain$/ }, args =>
+        args.importer.endsWith('/StudioClientAssets.ts')
+          ? { namespace, path: args.path }
+          : undefined)
+      build.onLoad({ filter: /.*/, namespace }, () => ({
+        contents: `
+          export default {
+            async generateApp() {
+              throw new Error('The packaged Tao Studio service requires its prebuilt browser bundle.')
+            },
+          }
+        `,
+        loader: 'js',
+      }))
+    },
+  }
 }
 
 /** validateStudioRelease applies the compiler's targeted release gates before native packaging mutates output. */
@@ -210,7 +405,10 @@ function verifyReleaseArtifacts(artifactPaths: readonly string[], channel: 'cana
   }
 }
 
-async function materializeStudioServicePayload(payloadRoot: string): Promise<void> {
+async function materializeStudioServicePayload(
+  payloadRoot: string,
+  additionalFiles: Readonly<Record<string, string>>,
+): Promise<void> {
   const packagesRoot = Repo.resolvePath('packages')
   const packageRoots = new Map<string, string>()
   for (const directory of await FS.listDir(packagesRoot)) {
@@ -260,6 +458,9 @@ async function materializeStudioServicePayload(payloadRoot: string): Promise<voi
       await FS.copyFile(FS.resolvePath('package.json', sourceRoot), FS.resolvePath('package.json', targetRoot))
     }
   }
+  for (const [relativePath, sourcePath] of Object.entries(additionalFiles)) {
+    await FS.copyFile(sourcePath, FS.resolvePath(relativePath, payloadRoot))
+  }
 
   await FS.copyDirectory(payloadRoot, verificationRoot)
   try {
@@ -277,6 +478,27 @@ async function materializeStudioServicePayload(payloadRoot: string): Promise<voi
   } finally {
     await FS.remove(verificationRoot)
   }
+}
+
+async function stageStudioClientBundle(path: string): Promise<void> {
+  const source = portableStudioClientBundle(await StudioClientAssets.bundle({ validationMode: 'release' }))
+  if (source.trim() === '') {
+    throw new Errors.UnexpectedBehaviorError('Studio browser bundling produced an empty artifact.')
+  }
+  await FS.writeText(path, source)
+}
+
+function portableStudioClientBundle(source: string): string {
+  const repositoryPrefix = `${FS.slashPath(Repo.getRoot()).replace(/\/$/, '')}/`
+  const sourcePathPrefix = new RegExp(
+    `(source\\s*:\\s*\\{\\s*path\\s*:\\s*["'])${escapeRegularExpression(repositoryPrefix)}`,
+    'g',
+  )
+  return source.replace(sourcePathPrefix, (_match, property: string) => property)
+}
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 async function materializeStudioNodeRuntime(
@@ -489,6 +711,7 @@ async function validateStudioServicePayload(payloadRoot: string): Promise<void> 
     'packages/runtime-toolchain/app.json',
     'packages/runtime-toolchain/index.ts',
     'packages/runtime-toolchain/metro.config.cjs',
+    'studio.js',
     'node_modules/expo/package.json',
     'node_modules/tao-runtime/package.json',
     'node_modules/tao-shared/package.json',
@@ -520,6 +743,45 @@ async function prepareElectrobun(
 ): Promise<void> {
   await runHutchCommand(hutchPath, ['install'], projectRoot, runner)
   await runHutchCommand(hutchPath, ['electrobun', 'prepare'], projectRoot, runner)
+}
+
+async function resolveHutchExecutablePath(
+  requestedPath = defaultHutchCommand,
+  environment: {
+    homeDirectory?: string
+    path?: string
+  } = {},
+): Promise<string> {
+  if (requestedPath !== defaultHutchCommand) {
+    const explicitPath = FS.resolvePath(requestedPath)
+    if (await FS.isFile(explicitPath)) {
+      return explicitPath
+    }
+    throw missingHutchError(`The Hutch executable specified by --hutch was not found: ${explicitPath}`)
+  }
+
+  const executableNames = ['hutch', 'hutch.exe']
+  const candidates = (environment.path ?? Platform.runtimeProcess.env['PATH'] ?? '')
+    .split(pathDelimiter)
+    .filter(directory => directory.length > 0)
+    .flatMap(directory => executableNames.map(name => FS.resolvePath(name, directory)))
+  const homeDirectory = environment.homeDirectory ?? FS.homeDir()
+  candidates.push(...executableNames.map(name => FS.resolvePath(`.hutch/bin/${name}`, homeDirectory)))
+  const installed = await installedHutchExecutablePath(candidates)
+  if (installed !== undefined) {
+    return installed
+  }
+  throw missingHutchError('Hutch is not installed or is not available on PATH.')
+}
+
+function missingHutchError(reason: string): Errors.UserInputError {
+  const installedPath = FS.resolvePath('.hutch/bin/hutch', FS.homeDir())
+  return new Errors.UserInputError([
+    `${reason} Native Tao Studio requires the Hutch launcher; its generated project pins Hutch CLI 0.24.3.`,
+    `Install Hutch with the official verified installer: curl -fsSL ${hutchInstallUrl} | sh`,
+    `Then open a new terminal, or retry now with --hutch ${installedPath}`,
+    'To use Studio without the native shell, run ./dev studio instead.',
+  ].join('\n'))
 }
 
 async function runHutchCommand(
@@ -616,29 +878,14 @@ async function stopCommand(
   sleep: (milliseconds: number) => Promise<void> = Time.sleep,
   waitForClose: WaitForNativeClose = finalizeCommand(command),
 ): Promise<void> {
-  if (command.exitCode === null && command.signalCode === null) {
-    command.kill('SIGTERM')
-    await Promise.race([waitForClose(), sleep(stopTimeoutMs)])
-    if (command.exitCode === null && command.signalCode === null) {
-      command.kill('SIGKILL')
-    }
-  }
-  await waitForClose()
+  await stopStudioProcessTree(command, { sleep, waitForClose })
 }
 
 function finalizeCommand(command: StoppableCommand): WaitForNativeClose {
-  let finalizing: Promise<number> | undefined
-  return () => {
-    finalizing ??= (async () => {
-      try {
-        const result = await command.waitForClose()
-        return result.exitCode ?? (result.signal === 'SIGINT' ? 130 : 0)
-      } finally {
-        await command.closeOutput()
-        command.dispose()
-      }
-    })()
-    return finalizing
+  const waitForResult = finalizeStudioProcessTree(command)
+  return async () => {
+    const result = await waitForResult()
+    return result.exitCode ?? (result.signal === 'SIGINT' ? 130 : 0)
   }
 }
 

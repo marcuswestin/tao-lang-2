@@ -1,5 +1,6 @@
 use Interval from @tao/time
-use Col, FormButton, Text from @tao/ui
+use Col, Text from @tao/ui
+use FormButton from @tao/ui/basic
 
 // A focused writing session: pick a length, write until the clock runs out, pause and resume, or
 // stop early. The clock is a library value — `Interval` ticks every second from mount to unmount —
@@ -27,7 +28,7 @@ view FocusSession() {
    action Finish() {
       set Focusing = false
    }
-   render Col() [gap 6] {
+   render Col() [subtlePanel] {
       when Focusing {
          true -> {
             Text(when Left > 0 Left.Clock / not "Time's up") [title]
@@ -44,14 +45,14 @@ view FocusSession() {
             }  }  }
 
             #stopFocus
-            FormButton("Stop") {
+            FormButton("Stop") [buttonDanger] {
                on press Finish
          }  }
          otherwise -> {
-            Text("Focused writing") [title]
+            Text("Focused writing") [sectionTitle]
 
             #focusFive
-            FormButton("Focus for 5 min") {
+            FormButton("Focus for 5 min") [buttonSecondary] {
                on press -> { do Start(5.min) }
             }
 

@@ -35,11 +35,13 @@ never choose it. A check drives whatever the running app presents, including ove
 `render` subjects, authored row seeding, remote-provider adapters, and direct action/value tests remain
 deferred in the test runner.
 
-Tao now accepts file-level `fixture` and `scenario` declarations for source-owned Studio examples.
-Those declarations are typechecked and emitted into Studio preview metadata, but ordinary production
-compilation treats them as metadata and `tao test` does not execute them yet. In particular, a
-scenario's focused `render View(Parameter: FixtureHandle)` subject must not be confused with a test
-check's `run AppName` subject. See `Tao Studio.md` for the implemented source and manifest contract.
+Tao now accepts file-level `fixture` declarations and named `scenarios` groups for source-owned Studio
+examples. Group clauses provide defaults inherited by their scenario entries; an entry may override the
+matching subject or environment clause. These declarations are typechecked and emitted into Studio
+preview metadata, but ordinary production compilation treats them as metadata and `tao test` does not
+execute them yet. In particular, a scenario entry's focused
+`render View(Parameter: FixtureHandle)` subject must not be confused with a test check's `run AppName`
+subject. See `Tao Studio.md` for the implemented source and manifest contract.
 
 `tao test [path]` discovers inline and sidecar tests, compiles them to structured test-plan IR, and
 runs the plans through the repository's runtime Jest harness. Richer filtering, watch, JSON,

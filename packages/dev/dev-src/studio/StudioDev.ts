@@ -17,6 +17,7 @@ import {
 } from '@studio'
 import betterOpen from 'better-opn'
 import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
+import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { StudioNative } from './StudioNative'
 import type { StartedStudioNative } from './StudioNative'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from './StudioPreviewRuntime'
@@ -39,9 +40,10 @@ export type StudioDevOptions = {
 /** StudioDev exposes narrow lifecycle seams for focused developer-tool tests. */
 export const StudioDev = {
   testing: {
+    addStopSignalHandlers,
     cleanup: cleanupStudioDev,
     createProjectOpeners,
-    createRecentProjectStore,
+    preferredExpoPort,
     withCleanup,
   },
 }
@@ -59,23 +61,27 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       finish?.(exitCode)
     }
   }
-  const removeSigint = Platform.onProcessSignal('SIGINT', () => stop(130))
-  const removeSigterm = Platform.onProcessSignal('SIGTERM', () => stop(143))
+  const removeStopSignalHandlers = addStopSignalHandlers(stop)
   let native: StartedStudioNative | undefined
   let server: StartedStudioServer | undefined
   let foundationModels: AppleFoundationModelsService | undefined
   let manager: StudioSessionManager | undefined
+  let studioClientReload: StartedStudioClientDevReload | undefined
   const recentProjects = createRecentProjectStore(
     FS.resolvePath('recent-projects.json', options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')),
   )
 
   try {
+    const nativeHutchPath = options.native
+      ? await StudioNative.resolveHutchExecutablePath(options.nativeHutchPath)
+      : undefined
     const projects = createProjectOpeners(
       options.entryPath,
       async (request, entryPath) =>
         await openStudioProjectResource(request, {
           entryPath,
           isStopping: () => requestedStop,
+          preferredExpoPort: preferredExpoPort(),
           stop,
           testCommandPath: Repo.resolvePath('tao'),
         }),
@@ -103,7 +109,10 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     })
     const initial = manager.add(initialResource)
     HCI.logProcessInfo('studio', `Project: ${initial.project}`)
+    studioClientReload = options.native ? undefined : await startStudioClientDevReload()
     server = await startStudioSessionServer(manager, {
+      clientAssets: studioClientReload?.clientAssets,
+      clientReloadRevision: studioClientReload?.revision,
       compileOnStart: false,
       generationProvider: foundationModels.provider,
       hostname: options.hostname,
@@ -115,7 +124,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     if (options.native && !requestedStop) {
       native = await StudioNative.start({
         artifactRoot: options.nativeArtifactRoot,
-        hutchPath: options.nativeHutchPath,
+        hutchPath: nativeHutchPath,
         previewUrl: initialResource.previewUrl ?? 'http://127.0.0.1:1',
         projectUrl,
         probe: options.nativeProbe,
@@ -137,10 +146,10 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     HCI.logProcessError('studio', Errors.formatForLog(error))
     return 1
   } finally {
-    removeSigint()
-    removeSigterm()
+    removeStopSignalHandlers()
     await cleanupStudioDev([
       () => native?.stop(),
+      () => studioClientReload?.close(),
       () => server?.stop(),
       () => manager?.closeAll(),
       () => foundationModels?.stop(),
@@ -152,6 +161,26 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   }
 }
 
+function addStopSignalHandlers(
+  stop: (exitCode: number) => void,
+  onSignal = Platform.onProcessSignal,
+): () => void {
+  const removeHandlers = [
+    onSignal('SIGHUP', () => stop(129)),
+    onSignal('SIGINT', () => stop(130)),
+    onSignal('SIGTERM', () => stop(143)),
+  ]
+  return () => {
+    for (const removeHandler of removeHandlers) {
+      removeHandler()
+    }
+  }
+}
+
+function preferredExpoPort(): number {
+  return 0
+}
+
 export async function openStudioProjectResource(
   request: StudioProjectOpenRequest,
   options: {
@@ -159,16 +188,21 @@ export async function openStudioProjectResource(
     isStopping: () => boolean
     logRoot?: string
     previewArtifactRoot?: string
+    preferredExpoPort?: number
     runtimeToolchainRoot?: string
     stop: (exitCode: number) => void
     testCommandArgs?: (projectRoot: string) => readonly string[]
+    expoCommand?: {
+      argsPrefix?: readonly string[]
+      executable: string
+    }
     testCommandEnv?: Readonly<Record<string, string>>
     testCommandPath?: string
     validationMode?: 'development' | 'release'
   },
 ): Promise<StudioSessionResource> {
   const project = await resolveStudioProjectRoot(request.projectPath)
-  const expo = await ExpoRunner.createSessionWithAvailablePort()
+  const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort)
   let expoServer: ReturnType<typeof ExpoRunner.createServer> | undefined
   let previewRuntime: CreatedStudioPreviewRuntime | undefined
   let preview: StudioPreviewSession | undefined
@@ -185,6 +219,7 @@ export async function openStudioProjectResource(
     const runtimeToolchainRoot = options.runtimeToolchainRoot ?? Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
     previewRuntime = await StudioPreviewRuntime.create(runtimeToolchainRoot, options.previewArtifactRoot)
     expoServer = expo.createServer(previewRuntime.root, {
+      command: options.expoCommand,
       logRoot: options.logRoot,
       runtimeToolchainSourceRoot: runtimeToolchainRoot,
     })
@@ -258,13 +293,13 @@ function withCleanup<Value extends object>(
   }
 }
 
-type RecentProjectStore = {
+export type RecentProjectStore = {
   flush(): Promise<void>
   load(): Promise<readonly StudioRecentProject[]>
   save(recent: readonly StudioRecentProject[]): Promise<void>
 }
 
-function createRecentProjectStore(path: string): RecentProjectStore {
+export function createRecentProjectStore(path: string): RecentProjectStore {
   let pending = Promise.resolve()
   return {
     flush() {

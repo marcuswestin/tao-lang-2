@@ -33,6 +33,29 @@ Describe('Studio server request boundary', () => {
   Test('formats IPv4 and IPv6 bound origins without trusting the request Host', () => {
     Expect(StudioServerTesting.serverOrigin('http:', '127.0.0.1', 5678)).toBe(boundOrigin)
     Expect(StudioServerTesting.serverOrigin('http:', '::1', 5678)).toBe('http://[::1]:5678')
+    Expect(StudioServerTesting.serverOrigin('http:', '127.0.0.1', 80)).toBe('http://127.0.0.1')
+    Expect(StudioServerTesting.serverOrigin('https:', 'localhost', 443)).toBe('https://localhost')
+  })
+
+  Test('injects client revision polling only for development Studio servers', () => {
+    const clientAssets = {
+      async bundle() {
+        return 'client'
+      },
+      html() {
+        return '<html><body>Studio</body></html>'
+      },
+    }
+    const production = StudioServerTesting.studioClientHtml({ clientAssets })
+    const development = StudioServerTesting.studioClientHtml({
+      clientAssets,
+      clientReloadRevision: () => 7,
+    })
+
+    Expect(production).toBe('<html><body>Studio</body></html>')
+    Expect(development).toContain("fetch('/studio-dev/revision', { cache: 'no-store' })")
+    Expect(development).toContain('let revision = 7')
+    Expect(development).toContain('window.location.reload()')
   })
 
   Test('serves injected availability and generated fixtures over the Studio HTTP surface', async () => {
@@ -77,6 +100,42 @@ Describe('Studio server request boundary', () => {
       },
       status: 'ready',
     })
+  })
+
+  Test('returns the server-canonical source-action proposal without applying it', async () => {
+    const requests: unknown[] = []
+    const proposal = {
+      content: 'fixture CapturedState { }\n',
+      diff: '--- Garden.tao\n+++ Garden.tao (proposed)',
+      edits: [{ end: 0, replacement: 'fixture CapturedState { }\n', start: 0 }],
+      path: 'Garden.tao',
+      proposedSourceVersion: 'source-proposed',
+      requestId: 'proposal-request',
+      sourceVersion: 'source-current',
+    }
+    const session = {
+      async proposeSourceAction(request: unknown) {
+        requests.push(request)
+        return proposal
+      },
+      subscribe: () => () => {},
+    } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/source-action/propose')
+    const response = await StudioServerTesting.handleRequest(
+      session,
+      {} as StudioFixtureGeneration,
+      new Request(url, {
+        body: JSON.stringify({ requestId: 'proposal-request', type: 'source-action' }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }),
+      url,
+      {},
+    )
+
+    Expect(response.status).toBe(200)
+    Expect(await response.json()).toEqual(proposal)
+    Expect(requests).toEqual([{ requestId: 'proposal-request', type: 'source-action' }])
   })
 })
 
@@ -263,4 +322,25 @@ Test('Studio test endpoints expose capability and structured project-owned runs'
 
   Expect(await status?.json()).toEqual({ available: true, running: false })
   Expect(await result?.json()).toEqual(run)
+})
+
+Test('Studio event sockets close cleanly when their initial handshake cannot be built', async () => {
+  const closes: Array<[number, string]> = []
+  const sent: string[] = []
+  await StudioServerTesting.initializeEventSocket({
+    close(code, reason) {
+      closes.push([code ?? -1, reason ?? ''])
+    },
+    send(value) {
+      sent.push(String(value))
+      return 0
+    },
+  }, {
+    async handshake() {
+      throw new Error('File disappeared during handshake')
+    },
+  })
+
+  Expect(sent).toEqual([])
+  Expect(closes).toEqual([[1011, 'Could not initialize Studio events']])
 })

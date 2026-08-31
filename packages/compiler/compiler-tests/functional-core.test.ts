@@ -100,7 +100,8 @@ Describe('compiler: functional core', () => {
     `)
 
     const code = compiled.files[0]?.code ?? ''
-    Expect(code).toContain('_Scope.ConfirmResult = TR.Enum(["Confirmed", "Cancelled"])')
+    Expect(code).toContain('_Scope.ConfirmResult = TR.Enum(TR.Navigation.Identity(')
+    Expect(code).toContain('["Confirmed", "Cancelled"])')
     Expect(code).toContain('TR.IsCase(_Scope.Result.evaluate(), _Scope.ConfirmResult.Confirmed)')
     Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(true))')
     Expect(code).toContain('TR.IsCase(TR.Member(_Scope.Document.evaluate(), ["Final"]), TR.Value(false))')

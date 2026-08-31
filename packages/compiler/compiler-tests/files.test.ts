@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Compiler, { type CompiledFile } from '../compiler-src/compiler'
@@ -444,6 +445,43 @@ Describe('compiler: files and packages', () => {
     )
   })
 
+  Test('reports an unresolved nested sidecar import as a located compiler diagnostic', async () => {
+    await withTaoFiles('tao-compiler-sidecar-diagnostic-', {
+      'Project.tao': 'project { id "sidecar-diagnostic" name "Sidecar diagnostic" }',
+      'Main.tao': `
+        app SidecarDiagnostic { view Main }
+        view Main() {
+          action Publish() from ./Api.ts
+          render Empty()
+        }
+        view Empty() { render inject \`\`\`ts return null \`\`\` }
+      `,
+      'Api.ts': [
+        "import { helper } from './Missing'",
+        'export function Publish() { helper() }',
+        "export { helper as missingHelper } from './Missing'",
+      ].join('\n'),
+    }, async paths => {
+      try {
+        await Workspace.compile(paths['Main.tao']!)
+        throw new Error('Expected the unresolved sidecar import to fail compilation.')
+      } catch (error) {
+        Expect(Errors.isTaoError(error)).toBe(true)
+        const diagnostics = (error as { details?: { diagnostics?: Array<Record<string, unknown>> } })
+          .details?.diagnostics ?? []
+        Expect(diagnostics).toEqual([Expect['objectContaining']({
+          filePath: paths['Api.ts'],
+          message: "Sidecar relative import './Missing' could not be resolved.",
+          severity: 'error',
+          source: 'compiler',
+          range: Expect['objectContaining']({
+            start: { line: 0, character: 23 },
+          }),
+        })])
+      }
+    })
+  })
+
   Test('compiles indexed local package modules', async () => {
     await withCompiledFiles(
       'Main.tao',
@@ -529,6 +567,29 @@ Describe('compiler: files and packages', () => {
       compiled => {
         Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
         Expect(compiled['Types.tao'].relativePath).toBe('modules/Types.tao.tsx')
+      },
+    )
+  })
+
+  Test('compiles cross-file derived primitive persisted state through its underlying codec', async () => {
+    await withCompiledFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use PaneWidth from ./Types.tao
+          use StackNav from @tao/nav
+          app Workspace {
+            Name "Workspace"
+            state Width is PaneWidth = PaneWidth 320 (persist)
+            Navigator StackNav { Initial Pane }
+          }
+          view Pane() { Title "Pane" render Empty() }
+          view Empty() { render inject \`\`\`ts return null \`\`\` }
+        `,
+        'Types.tao': 'workspace type PaneWidth is number',
+      },
+      compiled => {
+        Expect(compiled['Main.tao'].code).toContain('{ kind: "primitive", name: "number" }')
       },
     )
   })

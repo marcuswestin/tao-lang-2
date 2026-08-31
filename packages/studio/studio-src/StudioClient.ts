@@ -1,6 +1,7 @@
 import { mountStudio } from './client/StudioApp'
 
 export {
+  isStudioSaveShortcut,
   StudioCodeEditor,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
@@ -9,5 +10,5 @@ export {
 } from './client/StudioEditor'
 
 if (typeof document !== 'undefined') {
-  void mountStudio()
+  void mountStudio().catch(error => console.error('Could not mount Tao Studio.', error))
 }

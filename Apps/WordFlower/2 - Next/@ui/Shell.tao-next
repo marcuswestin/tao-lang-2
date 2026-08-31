@@ -1,21 +1,24 @@
 use SignedOutNav from @nav
-use Col, FormButton, Row, Text from @tao/ui
+use Col, Row, Text, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
 
 // The screens the app shell mounts directly.
 workspace
 view Settings() {
    Title "Settings"
    render Scroller() [screen] {
-      Col() [width max 720, centered, gap 10] {
-         Toolbar() {
-            Text("Settings") [title]
+      Col() [width max 720, centered, gap 20] {
+         Col() [hero] {
+            Text("WORDFLOWER") [eyebrow]
+            Text("Settings") [display]
+            TextMultiline("A few quiet controls for the way you write.") [body]
          }
          Card(Title: "Writing session") {
             WordBadge(SessionGoal)
             Collapsible() {
-               Text("Build { BuildStamp }") [body] // a typed injected value, not a render
+               TextMultiline("Build { BuildStamp }") [body] // a typed injected value, not a render
             }
-            @actions FormButton("Reset to signed out") {
+            @actions FormButton("Reset to signed out") [buttonDanger] {
                #resetSignedOut
                on press -> { replace SignedOutNav in app }
 }  }  }  }  }
@@ -65,14 +68,14 @@ view Collapsible() {
       when Expanded {
          true -> {
             #collapseDetails
-            FormButton("Hide details") {
+            FormButton("Hide details") [buttonSecondary] {
                on press -> { set Expanded = false }
             }
             @@content
          }
          otherwise -> {
             #expandDetails
-            FormButton("Show details") {
+            FormButton("Show details") [buttonSecondary] {
                on press -> { set Expanded = true }
 }  }  }  }  }
 

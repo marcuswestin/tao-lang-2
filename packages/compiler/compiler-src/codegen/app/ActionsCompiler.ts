@@ -253,8 +253,22 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
   const foreign = action.foreign
   Assert.defined(foreign, 'foreign action has an implementation')
   const implementation = { name: foreignActionBindingName(action) }
+  const parameters = actionParameters(action)
+  const requiredArguments = parameters.filter(({ parameter }) => parameter.defaultValue === undefined).length
+  const adaptedImplementation = parameters.some(({ parameter }) => parameter.defaultValue !== undefined)
+    ? gen`(${gen.join(parameters, parameter => actionRuntimeParameterName(parameter.index))}) =>
+      TR.BlockScope(_Scope, _Scope => {
+        ${gen.list(parameters, compileForeignActionParameterBinding)}
+        return ${gen.Name(implementation)}(${
+      gen.join(parameters, ({ parameter }) => {
+        const name = { name: Type.parameterName(parameter) }
+        return gen`${gen.scopeName(name)}.evaluate().jsValue`
+      })
+    })
+      })`
+    : gen.Name(implementation)
   return gen`${gen.scopeName(action)} = TR.ForeignAction(
-    ${gen.Name(implementation)},
+    ${adaptedImplementation},
     ${gen.jsLiteral(action.name)},
     [${
     gen.join(foreign.failures, failure =>
@@ -263,6 +277,16 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
       sentence: ${gen.jsLiteral(failure.sentence)},
     }`)
   }],
-    ${action.runsLatest ? gen`{ runs: "latest" }` : gen`{}`},
+    { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments} },
   )`
+}
+
+function compileForeignActionParameterBinding(parameter: ActionParameter): Compiled {
+  const runtimeParameter = actionRuntimeParameterName(parameter.index)
+  const name = { name: Type.parameterName(parameter.parameter) }
+  return parameter.parameter.defaultValue === undefined
+    ? gen`${gen.scopeName(name)} = TR.Value(${runtimeParameter})`
+    : gen`${gen.scopeName(name)} = ${runtimeParameter} == null
+      ? ${Compile.Expression(parameter.parameter.defaultValue)}
+      : TR.Value(${runtimeParameter})`
 }

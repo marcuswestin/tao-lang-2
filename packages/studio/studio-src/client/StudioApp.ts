@@ -8,6 +8,10 @@ import {
   studioPaletteComponents,
 } from '../StudioInspector'
 import type { StudioPreviewManifestV2 } from '../StudioPreviewManifest'
+import {
+  publishStudioProductHostState,
+  registerStudioProductHostActions,
+} from '../StudioProductHostProtocol'
 import type { StudioDesignValue } from '../StudioProjectSession'
 import {
   type StudioCanonicalSourceAction,
@@ -22,9 +26,11 @@ import {
   type StudioCompileDiagnostic,
   type StudioCompileState,
   type StudioFile,
+  type StudioLspTransport,
 } from './StudioApiClient'
 import {
   fileUri,
+  isStudioSaveShortcut,
   projectRelativePath,
   sanitizeLspHtml,
   StudioCodeEditor,
@@ -38,6 +44,7 @@ import {
   configureInteractionMode,
   connectPreviews,
   currentSourceIdentity,
+  disconnectPreviews,
   handlePreviewMessage,
   postEditorSelection,
   refreshCellPreviews,
@@ -69,11 +76,10 @@ import {
 } from './StudioShell'
 import {
   renderComponentPalette,
-  renderInspectorPanel,
+  renderInspectorAccordions,
   renderProjectViews,
   showSourceActionError,
   sourceActionLabel,
-  type StudioInspectorContext,
   studioPaletteMime,
   StudioPaletteTransfer,
 } from './StudioVisualEditing'
@@ -125,33 +131,46 @@ export class StudioDataFillCoordinator {
   }
 }
 
-export async function mountStudio(): Promise<void> {
-  const root = document.querySelector<HTMLElement>('#tao-studio-root')
+export type StudioMountOptions = Readonly<{ embedded?: boolean; root?: HTMLElement; signal?: AbortSignal }>
+
+export async function mountStudio(options: StudioMountOptions = {}): Promise<() => void> {
+  const root = options.root ?? document.querySelector<HTMLElement>('#tao-studio-root')
   if (root === null) {
     throw new Error('Tao Studio root is missing.')
   }
 
   const config = window.TaoStudioConfig ?? {}
-  const view = createStudioShell(root, config)
+  const view = createStudioShell(root, config, { embedded: options.embedded })
+  const partialOpenTabs = new Map<string, StudioOpenEditorTab>()
+  let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
+  let partialLanguageClient: LSPClient | undefined
+  let partialTransport: StudioLspTransport | undefined
   try {
-    const handshake = await StudioApiClient.handshake()
-    view.project.textContent = `${handshake.identity.appName} — ${handshake.identity.project}`
+    throwIfMountAborted(options.signal)
+    const handshake = await StudioApiClient.handshake(options.signal)
+    throwIfMountAborted(options.signal)
+    view.project.textContent = StudioProjectContext.label(handshake.identity.project, handshake.identity.appName)
     updateStatus(view.status, handshake.compile, diagnostic => void openCompileDiagnostic(diagnostic))
-    const previews = await connectPreviews(view.preview, config.previewUrl, handshake)
+    const previews = await connectPreviews(view.preview, config.previewUrl, handshake, options.signal)
+    partialPreviews = previews
+    throwIfMountAborted(options.signal)
     const activePreview = new StudioActivePreview(previews)
     configureInteractionMode(view.interactionMode, previews, handshake)
 
-    const transport = await StudioApiClient.lspTransport()
+    const transport = await StudioApiClient.lspTransport(options.signal)
+    partialTransport = transport
+    throwIfMountAborted(options.signal)
     const languageClient = new LSPClient({
       extensions: languageServerExtensions(),
       rootUri: fileUri(handshake.identity.project),
       sanitizeHTML: sanitizeLspHtml,
       timeout: 10_000,
     }).connect(transport)
+    partialLanguageClient = languageClient
     await languageClient.initializing
+    throwIfMountAborted(options.signal)
 
     let editor: EditorView | undefined
-    let draftSync: StudioDraftSync | undefined
     let compileState = handshake.compile
     let dataError: string | undefined
     let dataLoading = false
@@ -168,17 +187,18 @@ export async function mountStudio(): Promise<void> {
     let fileTree: ReturnType<typeof mountStudioFileTree> | undefined
     let inspected: StudioInspectorSelection | undefined
     let inspection: StudioRenderInspection | undefined
-    let inspectorContext: StudioInspectorContext = 'Layout'
     let inspectorRequestRevision = 0
     let previewManifest = handshake.previewManifest
+    const searchDocuments = new Map<string, { content: string; sourceVersion: string }>()
     let searchRevision = 0
+    let searchTimer: ReturnType<typeof setTimeout> | undefined
     let sourceActionBusy = false
     let testError: string | undefined
     let testStatus: StudioTestStatus | undefined
     let testWatch = false
     const undoCheckpoints: Array<{ id: string; path: string }> = []
     const openFileLifecycle = new StudioOpenFileLifecycle()
-    const openTabs = new Map<string, StudioOpenEditorTab>()
+    const openTabs = partialOpenTabs
     const editorTabs = new StudioEditorTabs({
       appName: handshake.identity.appName,
       availablePaths: projectFiles.map(file => file.path),
@@ -188,20 +208,62 @@ export async function mountStudio(): Promise<void> {
     let preparedActiveMutationPath: string | undefined
     let preparedOpenMutationPath: string | undefined
 
+    function publishProductHostState(): void {
+      const preview = activePreview.current()
+      const selection = editor?.state.selection.main
+      publishStudioProductHostState({
+        activeCell: preview?.cell === undefined
+          ? undefined
+          : {
+            cellId: preview.cell.cellId,
+            cellRevision: preview.cell.cellRevision,
+            networkErrorMessage: preview.cell.environment.network.error?.message,
+            networkErrorStatus: preview.cell.environment.network.error?.status,
+            networkLatencyMs: preview.cell.environment.network.latencyMs,
+            networkOutcome: preview.cell.environment.network.outcome,
+            scenarioId: preview.cell.scenarioId,
+            schemeRequested: preview.cell.environment.scheme.requested,
+            schemeStatus: preview.cell.environment.scheme.status,
+            viewportHeight: preview.cell.environment.viewport.height,
+            viewportPresetId: preview.cell.environment.viewport.presetId,
+            viewportWidth: preview.cell.environment.viewport.width,
+          },
+        activeFile: activeFile === undefined || editor === undefined
+          ? undefined
+          : {
+            content: editor.state.doc.toString(),
+            path: activeFile.path,
+            selectionAnchor: selection?.anchor ?? 0,
+            selectionHead: selection?.head ?? selection?.anchor ?? 0,
+            sourceVersion: activeFile.sourceVersion,
+          },
+        projectRoot: handshake.identity.project,
+        selectedRender: inspected === undefined
+          ? undefined
+          : {
+            path: inspected.identity.path,
+            renderId: inspected.renderId,
+            sourceVersion: inspected.identity.sourceVersion,
+          },
+      })
+    }
+
     async function openFile(path: string, refresh = false): Promise<StudioOpenFile | undefined> {
       if (path === activePath && !refresh) {
         return { editor: editor!, file: activeFile! }
       }
       const attempt = openFileLifecycle.begin()
       if (!refresh) {
-        const result = await draftSync?.flush()
-        if (!attempt.isCurrent()) {
-          return undefined
-        }
-        if (result?.saved === false) {
-          view.status.dataset['state'] = 'error'
-          view.status.textContent = 'Fix or revert the invalid Tao draft before switching files.'
-          return { editor: editor!, file: activeFile! }
+        const evictionPath = editorTabs.evictionCandidate(path)
+        const eviction = evictionPath === undefined ? undefined : openTabs.get(evictionPath)
+        if (evictionPath !== undefined && eviction !== undefined && evictionPath !== activePath) {
+          if (eviction.dirty || eviction.editor.state.doc.toString() !== eviction.file.content) {
+            editorTabs.activate(evictionPath)
+            activateEditorTab(evictionPath)
+            view.status.dataset['state'] = 'error'
+            view.status.textContent = 'Save this file with ⌘S before opening another tab.'
+            return eviction
+          }
         }
         const existing = openTabs.get(path)
         if (existing !== undefined && !existing.stale) {
@@ -210,7 +272,7 @@ export async function mountStudio(): Promise<void> {
           return existing
         }
       }
-      const file = await StudioApiClient.file(path)
+      const file = await StudioApiClient.file(path, options.signal)
       if (!attempt.isCurrent()) {
         return undefined
       }
@@ -222,10 +284,11 @@ export async function mountStudio(): Promise<void> {
           }
           if (result.saved) {
             current.file = result.file
-            current.dirty = false
+            current.dirty = current.editor.state.doc.toString() !== result.file.content
             if (activePath === path) {
               activeFile = result.file
               postEditorSelection(activePreview.current(), handshake, activeFile, current.editor)
+              publishProductHostState()
             }
           } else {
             current.dirty = true
@@ -249,15 +312,21 @@ export async function mountStudio(): Promise<void> {
               fileTab.dirty = true
               fileDraftSync.update(content)
               renderEditorTabs()
+              view.status.dataset['state'] = 'idle'
+              view.status.textContent = 'Unsaved changes — press ⌘S to save.'
               scheduleHighlight(update.view, content)
             }
             if (editor === update.view && update.selectionSet && !update.docChanged) {
               postEditorSelection(activePreview.current(), handshake, activeFile, update.view)
             }
+            if (editor === update.view && (update.docChanged || update.selectionSet)) {
+              publishProductHostState()
+            }
           }),
           EditorView.theme({
             '&': { backgroundColor: '#171918', color: '#e8e7e3' },
-            '.cm-content': { caretColor: '#f3c969' },
+            '.cm-content': { caretColor: '#f8fafc' },
+            '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#f8fafc', borderLeftWidth: '2px' },
             '.cm-gutters': { backgroundColor: '#202321', border: 'none', color: '#6f786f' },
             '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#252a26' },
           }, { dark: true }),
@@ -291,7 +360,6 @@ export async function mountStudio(): Promise<void> {
       }
       activeFile = tab.file
       activePath = path
-      draftSync = tab.draft
       editor = tab.editor
       designValues = []
       fileTree?.render()
@@ -300,6 +368,7 @@ export async function mountStudio(): Promise<void> {
       renderProjectViews(view.projectViews, previewManifest, insertProjectView)
       scheduleHighlight(tab.editor, tab.editor.state.doc.toString(), 0)
       renderInspector()
+      publishProductHostState()
       const designRevision = ++designRequestRevision
       void StudioApiClient.design({ path: tab.file.path, sourceVersion: tab.file.sourceVersion }).then(values => {
         if (designRevision === designRequestRevision && activeFile?.sourceVersion === tab.file.sourceVersion) {
@@ -353,12 +422,11 @@ export async function mountStudio(): Promise<void> {
       if (tab === undefined) {
         return
       }
-      const result = await tab.draft.flush()
-      if (result?.saved === false) {
+      if (tab.dirty || tab.editor.state.doc.toString() !== tab.file.content) {
         editorTabs.activate(path)
         activateEditorTab(path)
         view.status.dataset['state'] = 'error'
-        view.status.textContent = 'Fix or revert the invalid Tao draft before closing this tab.'
+        view.status.textContent = 'Save this file with ⌘S before closing its tab.'
         return
       }
       const wasActive = path === activePath
@@ -367,7 +435,6 @@ export async function mountStudio(): Promise<void> {
       tab.editor.destroy()
       if (wasActive) {
         editor = undefined
-        draftSync = undefined
         activeFile = undefined
         activePath = undefined
         if (snapshot.activePath !== undefined) {
@@ -376,19 +443,19 @@ export async function mountStudio(): Promise<void> {
           view.breadcrumbs.replaceChildren()
           fileTree?.render()
           renderInspector()
+          publishProductHostState()
         }
       }
       renderEditorTabs()
     }
 
-    async function flushAllTabs(message: string): Promise<boolean> {
+    function requireAllTabsSaved(message: string): boolean {
       for (const path of editorTabs.snapshot().paths) {
         const tab = openTabs.get(path)
         if (tab === undefined) {
           continue
         }
-        const result = await tab.draft.flush()
-        if (result?.saved === false) {
+        if (tab.dirty || tab.editor.state.doc.toString() !== tab.file.content) {
           editorTabs.activate(path)
           activateEditorTab(path)
           view.status.dataset['state'] = 'error'
@@ -418,8 +485,8 @@ export async function mountStudio(): Promise<void> {
         const option = document.createElement('option')
         option.value = String(index)
         option.textContent = duplicateNames.has(app.appName)
-          ? `${app.appName} — ${app.entryPath}`
-          : app.appName
+          ? `app ${app.appName} — ${app.entryPath}`
+          : `app ${app.appName}`
         option.selected = app.appName === handshake.identity.appName && app.entryPath === handshake.entryPath
         return option
       }))
@@ -428,7 +495,7 @@ export async function mountStudio(): Promise<void> {
     }
 
     async function selectProject(): Promise<void> {
-      if (!await flushAllTabs('Fix or revert invalid Tao drafts before choosing another project.')) {
+      if (!requireAllTabsSaved('Save or revert unsaved files before choosing another project.')) {
         return
       }
       view.project.disabled = true
@@ -457,13 +524,20 @@ export async function mountStudio(): Promise<void> {
       ) {
         return
       }
-      if (!await flushAllTabs('Fix or revert invalid Tao drafts before switching app variants.')) {
+      if (!requireAllTabsSaved('Save or revert unsaved files before switching app variants.')) {
         view.appPicker.value = String(currentIndex)
         return
       }
       view.appPicker.disabled = true
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = `Opening ${selected.appName}…`
+      const loadingTimer = setTimeout(() => {
+        const heading = view.globalLoading.querySelector<HTMLElement>('strong')
+        if (heading !== null) {
+          heading.textContent = `Switching to ${selected.appName}…`
+        }
+        view.globalLoading.hidden = false
+      }, 300)
       try {
         const transition = await StudioApiClient.switchApp({
           appName: selected.appName,
@@ -472,6 +546,8 @@ export async function mountStudio(): Promise<void> {
         })
         window.location.assign(StudioApiRoutes.transitionUrl(transition, new URL(window.location.href)))
       } catch (error) {
+        clearTimeout(loadingTimer)
+        view.globalLoading.hidden = true
         view.appPicker.disabled = false
         view.appPicker.value = String(currentIndex)
         showSourceActionError(view.status, error)
@@ -553,7 +629,7 @@ export async function mountStudio(): Promise<void> {
       try {
         documents = await Promise.all(projectFiles.map(async file => ({
           content: openTabs.get(file.path)?.editor.state.doc.toString()
-            ?? (await StudioApiClient.file(file.path)).content,
+            ?? await cachedSearchDocument(file),
           path: file.path,
         })))
       } catch (error) {
@@ -570,6 +646,21 @@ export async function mountStudio(): Promise<void> {
         StudioRailPanels.search(documents, compileState.diagnostics ?? [], query),
         result => void openSearchResult(result),
       )
+    }
+
+    async function cachedSearchDocument(file: StudioFile): Promise<string> {
+      const cached = searchDocuments.get(file.path)
+      if (cached?.sourceVersion === file.sourceVersion) {
+        return cached.content
+      }
+      const opened = await StudioApiClient.file(file.path, options.signal)
+      searchDocuments.set(file.path, { content: opened.content, sourceVersion: opened.sourceVersion })
+      return opened.content
+    }
+
+    function scheduleSearch(delayMs = 150): void {
+      clearTimeout(searchTimer)
+      searchTimer = setTimeout(() => void searchProject(), delayMs)
     }
 
     function scheduleHighlight(target: EditorView, content: string, delayMs = 60): void {
@@ -594,11 +685,10 @@ export async function mountStudio(): Promise<void> {
       const scenarioPanel = document.createElement('section')
       scenarioPanel.className = 'studio-scenario-inspector'
       renderScenarioInspector(scenarioPanel, activePreview.current())
-      const sourcePanel = document.createElement('section')
-      renderInspectorPanel(sourcePanel, {
+      view.scenarioInspector.replaceChildren(scenarioPanel)
+      renderInspectorAccordions(view.inspector, {
         busy: sourceActionBusy,
         canUndo: undoCheckpoints.at(-1)?.path === activePath,
-        context: inspectorContext,
         currentSourceVersion: activeFile?.sourceVersion,
         inspection,
         onAction: action => {
@@ -609,7 +699,6 @@ export async function mountStudio(): Promise<void> {
         onUndo: () => void undoLatestSourceAction(),
         selection: inspected,
       })
-      view.inspector.replaceChildren(scenarioPanel, sourcePanel)
       renderDesignEditor()
     }
 
@@ -661,8 +750,8 @@ export async function mountStudio(): Promise<void> {
 
     function selectDrawer(tab: StudioDrawerTab): void {
       drawerTab = tab
-      for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('button')) {
-        if (button.textContent === tab) {
+      for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
+        if (button.dataset['drawerTab'] === tab) {
           button.setAttribute('aria-current', 'true')
         } else {
           button.removeAttribute('aria-current')
@@ -850,6 +939,7 @@ export async function mountStudio(): Promise<void> {
         }
         inspected = undefined
         inspection = undefined
+        publishProductHostState()
         await openFile(result.path, true)
         view.status.textContent = 'Source action applied; compiling preview…'
       } catch (error) {
@@ -864,7 +954,7 @@ export async function mountStudio(): Promise<void> {
       action: StudioCanonicalSourceAction,
       identity: StudioPreviewSourceIdentity,
     ): Promise<void> {
-      if (sourceActionBusy || !await flushVisualEditDraft()) {
+      if (sourceActionBusy || !requireVisualEditDraftSaved()) {
         return
       }
       if (activeFile === undefined || identity.sourceVersion !== activeFile.sourceVersion) {
@@ -882,7 +972,7 @@ export async function mountStudio(): Promise<void> {
     }
 
     async function submitPreviewAction(envelope: StudioSourceActionEnvelope): Promise<void> {
-      if (sourceActionBusy || !await flushVisualEditDraft()) {
+      if (sourceActionBusy || !requireVisualEditDraftSaved()) {
         return
       }
       const path = projectRelativePath(handshake.identity.project, envelope.identity.path)
@@ -900,7 +990,10 @@ export async function mountStudio(): Promise<void> {
     async function undoLatestSourceAction(): Promise<void> {
       const checkpoint = undoCheckpoints.at(-1)
       if (
-        checkpoint === undefined || checkpoint.path !== activePath || sourceActionBusy || !await flushVisualEditDraft()
+        checkpoint === undefined
+        || checkpoint.path !== activePath
+        || sourceActionBusy
+        || !requireVisualEditDraftSaved()
       ) {
         return
       }
@@ -919,6 +1012,7 @@ export async function mountStudio(): Promise<void> {
         undoCheckpoints.pop()
         inspected = undefined
         inspection = undefined
+        publishProductHostState()
         await openFile(result.path, true)
         view.status.textContent = 'Visual source edit undone; compiling preview…'
       } catch (error) {
@@ -929,13 +1023,12 @@ export async function mountStudio(): Promise<void> {
       }
     }
 
-    async function flushVisualEditDraft(): Promise<boolean> {
-      await draftSync?.flush()
+    function requireVisualEditDraftSaved(): boolean {
       if (activeFile !== undefined && editor?.state.doc.toString() === activeFile.content) {
         return true
       }
       view.status.dataset['state'] = 'error'
-      view.status.textContent = 'Finish the invalid Tao draft before applying a visual source edit.'
+      view.status.textContent = 'Save this file with ⌘S before applying a visual source edit.'
       return false
     }
 
@@ -951,8 +1044,22 @@ export async function mountStudio(): Promise<void> {
     }
 
     function publishProjectFiles(files: readonly StudioFile[]): void {
+      const previousFiles = projectFiles
       projectFiles = files
       const available = new Set(files.map(file => file.path))
+      if (preparedOpenMutationPath !== undefined && !available.has(preparedOpenMutationPath)) {
+        const previousPaths = new Set(previousFiles.map(file => file.path))
+        const added = files.filter(file => !previousPaths.has(file.path))
+        if (added.length === 1) {
+          editorTabs.rename(preparedOpenMutationPath, added[0]!.path)
+        }
+      }
+      for (const [path, cached] of searchDocuments) {
+        const file = files.find(candidate => candidate.path === path)
+        if (file === undefined || file.sourceVersion !== cached.sourceVersion) {
+          searchDocuments.delete(path)
+        }
+      }
       const snapshot = editorTabs.reconcile([...available])
       let activeWasRemoved = false
       for (const [path, tab] of openTabs) {
@@ -974,9 +1081,9 @@ export async function mountStudio(): Promise<void> {
       }
       if (activeWasRemoved) {
         editor = undefined
-        draftSync = undefined
         activeFile = undefined
         activePath = undefined
+        publishProductHostState()
         if (snapshot.activePath !== undefined && openTabs.has(snapshot.activePath)) {
           activateEditorTab(snapshot.activePath)
         } else {
@@ -986,7 +1093,7 @@ export async function mountStudio(): Promise<void> {
       renderEditorTabs()
       renderCommands()
       if (view.searchInput.value.trim() !== '') {
-        void searchProject()
+        scheduleSearch()
       }
       if (drawerTab === 'Data') {
         void loadData()
@@ -1000,12 +1107,11 @@ export async function mountStudio(): Promise<void> {
       if (tab === undefined) {
         return projectFiles.find(candidate => candidate.path === file.path)
       }
-      const result = await tab.draft.flush()
-      if (result?.saved === false || tab.editor.state.doc.toString() !== tab.file.content) {
+      if (tab.dirty || tab.editor.state.doc.toString() !== tab.file.content) {
         editorTabs.activate(file.path)
         activateEditorTab(file.path)
         view.status.dataset['state'] = 'error'
-        view.status.textContent = 'Fix or revert the invalid Tao draft before changing this file.'
+        view.status.textContent = 'Save this file with ⌘S before changing it.'
         return undefined
       }
       await fileTree?.refresh()
@@ -1015,11 +1121,19 @@ export async function mountStudio(): Promise<void> {
     const wirePreview = (preview: (typeof previews)[number]): void => {
       preview.changed = () => {
         if (preview === activePreview.current()) {
+          publishProductHostState()
           renderInspector()
+          if (drawerTab === 'Data') {
+            void loadData()
+          } else if (drawerTab === 'Logs') {
+            renderDrawer()
+          }
         }
       }
     }
     activePreview.subscribe(() => {
+      dataResult = []
+      publishProductHostState()
       renderInspector()
       renderDrawer()
       if (drawerTab === 'Data') {
@@ -1029,7 +1143,7 @@ export async function mountStudio(): Promise<void> {
     activePreview.reconcile(wirePreview)
     renderScreens(view.screens, previewManifest, item => void openScreen(item))
     renderSearchResults(view.searchResults, [], result => void openSearchResult(result))
-    view.searchInput.addEventListener('input', () => void searchProject())
+    view.searchInput.addEventListener('input', () => scheduleSearch())
 
     renderComponentPalette(view.components, insertComponent)
     view.preview.addEventListener('dragover', event => {
@@ -1053,18 +1167,8 @@ export async function mountStudio(): Promise<void> {
       )
     })
 
-    for (const button of view.inspectorTabs.querySelectorAll<HTMLButtonElement>('button')) {
-      button.addEventListener('click', () => {
-        inspectorContext = button.textContent as StudioInspectorContext
-        view.inspectorTabs.querySelectorAll('button').forEach(candidate => candidate.removeAttribute('aria-current'))
-        button.setAttribute('aria-current', 'true')
-        renderInspector()
-      })
-    }
-    view.inspectorTabs.querySelector<HTMLButtonElement>('button')?.setAttribute('aria-current', 'true')
-
-    for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('button')) {
-      button.addEventListener('click', () => selectDrawer(button.textContent as StudioDrawerTab))
+    for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
+      button.addEventListener('click', () => selectDrawer(button.dataset['drawerTab'] as StudioDrawerTab))
     }
     view.rail.addEventListener('click', event => {
       const panel = (event.target as HTMLElement).closest<HTMLElement>('[data-panel]')?.dataset['panel']
@@ -1109,22 +1213,26 @@ export async function mountStudio(): Promise<void> {
       },
       prepareMutation: prepareFileMutation,
       protectedPath: handshake.entryPath,
+      renderDom: options.embedded !== true,
     })
     configureProjectAndAppPickers()
     const restoredTabs = editorTabs.snapshot()
     const restoredPaths = restoredTabs.paths.length === 0 ? [handshake.entryPath] : restoredTabs.paths
     for (const path of restoredPaths) {
       await openFile(path)
+      throwIfMountAborted(options.signal)
     }
     if (restoredTabs.activePath !== undefined && restoredTabs.activePath !== activePath) {
       await openFile(restoredTabs.activePath)
+      throwIfMountAborted(options.signal)
     }
-    connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
+    throwIfMountAborted(options.signal)
+    const disconnectEvents = connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
       onCompile(state) {
         compileState = state
         renderDrawer()
         if (view.searchInput.value.trim() !== '') {
-          void searchProject()
+          scheduleSearch()
         }
         if (state.status !== 'compiling') {
           void fileTree?.refresh().catch(error => showSourceActionError(view.status, error))
@@ -1188,8 +1296,9 @@ export async function mountStudio(): Promise<void> {
         view.status.textContent = 'Reloading preview…'
       }
     })
+    let previewMessageListener: ((event: MessageEvent) => void) | undefined
     if (previews.length > 0) {
-      window.addEventListener('message', event => {
+      previewMessageListener = event => {
         const connection = previews.find(candidate => candidate.iframe.contentWindow === event.source)
         if (connection === undefined) {
           return
@@ -1207,10 +1316,12 @@ export async function mountStudio(): Promise<void> {
           },
           inspect(selection) {
             inspected = selection
+            publishProductHostState()
             void inspectSelection(selection)
           },
         })
-      })
+      }
+      window.addEventListener('message', previewMessageListener)
     }
     function commandItems(): readonly StudioCommandItem[] {
       return StudioCommandPalette.items({
@@ -1283,28 +1394,134 @@ export async function mountStudio(): Promise<void> {
         view.commandResults.querySelector<HTMLButtonElement>('button')?.click()
       }
     })
-    window.addEventListener('keydown', event => {
-      if (event.metaKey && event.key.toLocaleLowerCase() === 'k') {
+    const saveActiveFile = async (): Promise<void> => {
+      const tab = activePath === undefined ? undefined : openTabs.get(activePath)
+      if (tab === undefined || !tab.dirty) {
+        view.status.dataset['state'] = 'idle'
+        view.status.textContent = 'No unsaved changes.'
+        return
+      }
+      try {
+        await tab.draft.save()
+      } catch (error) {
+        showSourceActionError(view.status, error)
+      }
+    }
+    const keydownListener = (event: KeyboardEvent): void => {
+      if (isStudioSaveShortcut(event)) {
+        event.preventDefault()
+        void saveActiveFile()
+      } else if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
         event.preventDefault()
         toggleCommands()
       } else if (event.key === 'Escape' && !view.commandOverlay.hidden) {
         closeCommands()
       }
+    }
+    window.addEventListener('keydown', keydownListener, { capture: true })
+    const beforeUnloadListener = (event: BeforeUnloadEvent): void => {
+      if ([...openTabs.values()].some(tab => tab.dirty)) {
+        event.preventDefault()
+        event.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', beforeUnloadListener)
+    const unregisterProductHost = registerStudioProductHostActions({
+      async applyActiveCellEnvironment(environment) {
+        const preview = activePreview.current()
+        if (preview?.cell === undefined || preview.reconfigureEnvironment === undefined) {
+          throw new Error('Select a Studio scenario cell before changing its environment.')
+        }
+        await preview.reconfigureEnvironment({
+          network: environment.network,
+          scheme: preview.cell.environment.scheme,
+          viewport: environment.viewport,
+        })
+      },
+      changeActiveFile(content) {
+        if (editor === undefined || editor.state.doc.toString() === content) {
+          return
+        }
+        editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: content } })
+      },
+      async createFile(path) {
+        await fileTree!.create(path)
+      },
+      async deleteFile(path, sourceVersion) {
+        await fileTree!.delete(path, sourceVersion)
+      },
+      async openFile(path) {
+        if (!projectFiles.some(file => file.path === path)) {
+          throw new Error(`Tao Studio file is no longer available: ${path}`)
+        }
+        await openFile(path)
+      },
+      async renameFile(path, sourceVersion, targetPath) {
+        await fileTree!.rename(path, sourceVersion, targetPath)
+      },
+      selectActiveFile(anchor, head) {
+        if (editor === undefined) {
+          return
+        }
+        const safeAnchor = Math.min(anchor, editor.state.doc.length)
+        const safeHead = Math.min(head, editor.state.doc.length)
+        if (editor.state.selection.main.anchor !== safeAnchor || editor.state.selection.main.head !== safeHead) {
+          editor.dispatch({ selection: { anchor: safeAnchor, head: safeHead } })
+        }
+      },
     })
-    window.addEventListener('beforeunload', () => {
+    let disposed = false
+    const cleanup = (): void => {
+      if (disposed) {
+        return
+      }
+      disposed = true
+      unregisterProductHost()
+      publishStudioProductHostState({})
+      disconnectEvents()
+      window.removeEventListener('keydown', keydownListener, { capture: true })
+      window.removeEventListener('beforeunload', beforeUnloadListener)
+      if (previewMessageListener !== undefined) {
+        window.removeEventListener('message', previewMessageListener)
+      }
       clearTimeout(highlightTimer)
+      clearTimeout(searchTimer)
       if (dataTimer !== undefined) {
         clearInterval(dataTimer)
       }
       for (const tab of openTabs.values()) {
         tab.editor.destroy()
       }
+      disconnectPreviews(previews)
       languageClient.disconnect()
-    })
+      transport.close()
+    }
+    return cleanup
   } catch (error) {
-    view.status.dataset['state'] = 'error'
-    view.status.textContent = error instanceof Error ? error.message : String(error)
+    for (const tab of partialOpenTabs.values()) {
+      tab.editor.destroy()
+    }
+    disconnectPreviews(partialPreviews)
+    partialLanguageClient?.disconnect()
+    partialTransport?.close()
+    if (!isAbortError(error)) {
+      view.status.dataset['state'] = 'error'
+      view.status.textContent = error instanceof Error ? error.message : String(error)
+    }
+    throw error
   }
+}
+
+function throwIfMountAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    const error = new Error('Tao Studio product host mount was cancelled.')
+    error.name = 'AbortError'
+    throw error
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function connectEvents(
@@ -1316,21 +1533,52 @@ function connectEvents(
     onFiles: (files: readonly StudioFile[]) => void
     onManifest: (manifest: StudioPreviewManifestV2) => void
   },
-): WebSocket {
-  return StudioApiClient.connectEvents({
-    onCompile: state => {
-      updateStatus(status, state, openDiagnostic)
-      handlers.onCompile(state)
-    },
-    onDisconnect() {
-      status.dataset['state'] = 'error'
-      status.textContent = 'Studio server disconnected; reconnecting…'
-      setTimeout(() => connectEvents(status, openDiagnostic, handlers), 500)
-    },
-    onFile: handlers.onFile,
-    onFiles: handlers.onFiles,
-    onManifest: handlers.onManifest,
-  })
+): () => void {
+  const initialReconnectDelayMs = 500
+  const maximumReconnectDelayMs = 10_000
+  let reconnectDelayMs = initialReconnectDelayMs
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  let socket: WebSocket | undefined
+  let stopped = false
+  const connect = (): void => {
+    socket = StudioApiClient.connectEvents({
+      onConnect() {
+        status.dataset['state'] = 'idle'
+        status.textContent = 'Studio server connected; synchronizing…'
+      },
+      onCompile: state => {
+        updateStatus(status, state, openDiagnostic)
+        handlers.onCompile(state)
+      },
+      onDisconnect() {
+        if (stopped) {
+          return
+        }
+        status.dataset['state'] = 'error'
+        status.textContent = 'Studio server disconnected; reconnecting…'
+        reconnectTimer = setTimeout(connect, reconnectDelayMs)
+        reconnectDelayMs = Math.min(maximumReconnectDelayMs, reconnectDelayMs * 2)
+      },
+      onFile: handlers.onFile,
+      onFiles: handlers.onFiles,
+      onHandshake(handshake) {
+        reconnectDelayMs = initialReconnectDelayMs
+        updateStatus(status, handshake.compile, openDiagnostic)
+        handlers.onCompile(handshake.compile)
+        handlers.onFiles(handshake.files)
+        if (handshake.previewManifest !== undefined) {
+          handlers.onManifest(handshake.previewManifest)
+        }
+      },
+      onManifest: handlers.onManifest,
+    })
+  }
+  connect()
+  return () => {
+    stopped = true
+    clearTimeout(reconnectTimer)
+    socket?.close()
+  }
 }
 
 function updateStatus(
@@ -1360,9 +1608,21 @@ function updateStatus(
 
 function showDraftResult(element: HTMLElement, result: StudioDraftSyncResult): void {
   if (result.saved) {
+    element.dataset['state'] = 'compiling'
     element.textContent = 'Saved; compiling preview…'
     return
   }
   element.dataset['state'] = 'error'
   element.textContent = result.diagnostics[0] ?? 'Draft is not valid Tao yet; preview kept the last good source.'
 }
+
+export const StudioProjectContext = {
+  label(projectPath: string, fallback: string): string {
+    const segments = projectPath.split('/').filter(Boolean)
+    const leaf = segments.at(-1)
+    if (leaf === undefined) {
+      return fallback
+    }
+    return /^\d+\s*-\s*/.test(leaf) ? segments.at(-2) ?? fallback : leaf
+  },
+} as const

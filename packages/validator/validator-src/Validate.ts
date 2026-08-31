@@ -7,7 +7,10 @@ import { AppValidator } from './validators/app-validator'
 import { bridgeValidationChecks } from './validators/bridge-validator'
 import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
-import { configurationValidationChecks } from './validators/configuration-validator'
+import {
+  configurationValidationChecks,
+  validateConfigurationSidecarFiles,
+} from './validators/configuration-validator'
 import {
   configuredValueValidationChecks,
   validateConfiguredValuesFile,
@@ -89,9 +92,16 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   return nodes
 }
 
+async function validateForeignImplementationFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
+  await ActionsValidator.validateForeignFiles(file, ctx)
+  await ViewsValidator.validateForeignFiles(file, ctx)
+  await validateConfigurationSidecarFiles(file, ctx)
+}
+
 /** Validate exposes Tao AST validation passes. */
 export const Validate = {
   App: AppValidator.validate,
+  ForeignImplementationFiles: validateForeignImplementationFiles,
   TaoFile: validateTaoFile,
   TypirProblems: ExpressionsValidator.validateTypirProblems,
   UseStatements: validateUseStatements,

@@ -1,8 +1,13 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Expect, Test } from '@shared/test'
-import { StudioApiRoutes, type StudioHandshake } from '../studio-src/client/StudioApiClient'
-import { StudioDataFillCoordinator } from '../studio-src/client/StudioApp'
+import {
+  StudioApiError,
+  StudioApiEventStream,
+  StudioApiRoutes,
+  type StudioHandshake,
+} from '../studio-src/client/StudioApiClient'
+import { StudioDataFillCoordinator, StudioProjectContext } from '../studio-src/client/StudioApp'
 import { StudioEditorTabs } from '../studio-src/client/StudioEditorTabs'
 import {
   StudioFileTreeController,
@@ -11,6 +16,7 @@ import {
 } from '../studio-src/client/StudioFileTree'
 import {
   currentSourceIdentity,
+  disconnectPreviews,
   handlePreviewMessage,
   runtimeCaptureWithEnvironment,
   StudioActivePreview,
@@ -18,8 +24,10 @@ import {
   StudioFixtureProposal,
   StudioMatrixLayout,
   type StudioPreviewConnection,
+  StudioPreviewFrameUrl,
   StudioPreviewSuspension,
   studioReplayConfiguration,
+  StudioRetainedPreview,
   StudioRuntimeData,
 } from '../studio-src/client/StudioMatrixView'
 import {
@@ -27,8 +35,15 @@ import {
   StudioProductCapabilities,
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
-import { StudioPaneSizes } from '../studio-src/client/StudioShell'
 import {
+  StudioPaneMinimums,
+  StudioPaneSizes,
+  studioShellMarkup,
+  studioShellRailPanels,
+} from '../studio-src/client/StudioShell'
+import { studioInspectorContexts } from '../studio-src/client/StudioVisualEditing'
+import {
+  isStudioSaveShortcut,
   StudioCodeEditor,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
@@ -42,14 +57,29 @@ import {
 } from '../studio-src/StudioDraftSync'
 import { StudioInspector } from '../studio-src/StudioInspector'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
+import {
+  publishStudioProductHostState,
+  registerStudioProductHostActions,
+  rejectPendingStudioProductHostActions,
+  requestStudioProductHostChangeActiveFile,
+  requestStudioProductHostCreateFile,
+  requestStudioProductHostOpenFile,
+  requestStudioProductHostSelectActiveFile,
+  studioProductHostState,
+  subscribeStudioProductHostState,
+  validStudioProductHostPath,
+} from '../studio-src/StudioProductHostProtocol'
 import { studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
 import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
-  const bundle = await StudioClientAssets.bundle()
+  const bundle = await StudioClientAssets.bundle({ validationMode: 'release' })
+  const moduleInputs = await StudioClientAssets.testing.moduleInputs('release')
   const html = StudioClientAssets.html({
     previewUrl: 'http://127.0.0.1:55102/?value=</script><script>bad()</script>',
   })
+  Expect(html).toContain('overscroll-behavior-x: contain')
+  Expect(html).toContain('flex: none')
 
   Expect(bundle).toContain('Tao Studio root is missing')
   Expect(bundle).toContain('/api/language/lsp')
@@ -61,14 +91,20 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('/api/file/delete')
   Expect(bundle).toContain('New Tao file')
   Expect(bundle).toContain('/api/source-action/undo')
+  Expect(bundle).toContain('/api/source-action/propose')
+  Expect(bundle).toContain('Validating canonical Tao source')
+  Expect(bundle).toContain('/api/data/fill')
+  Expect(bundle).toContain('Loading Studio files')
+  Expect(bundle).toContain('tao-studio-product-host')
   Expect(bundle).toContain('/api/ai/availability')
   Expect(bundle).toContain('/api/ai/fixture')
-  Expect(bundle).not.toContain('/api/data/fill')
   Expect(bundle).toContain('/api/tests/status')
   Expect(bundle).toContain('/api/tests/run')
   Expect(bundle).toContain('capture-runtime')
   Expect(bundle).toContain('No console messages from the active preview.')
   Expect(bundle).toContain('/api/design')
+  Expect(moduleInputs.some(path => path.includes('/react@19.1.0/'))).toBe(true)
+  Expect(moduleInputs.some(path => path.includes('/react@19.2.8/'))).toBe(false)
   Expect(bundle).toContain('Reload preview')
   Expect(bundle).toContain('Mode: Edit')
   Expect(bundle).toContain('Mode: Run')
@@ -76,10 +112,18 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Layout presets')
   Expect(bundle).toContain('Editor breadcrumbs')
   Expect(bundle).toContain('Bottom drawer')
-  Expect(bundle).toContain('tao-studio:pane-sizes:v2')
+  Expect(bundle).toContain('Control+K')
+  Expect(bundle).toContain('Refreshing live app data')
+  Expect(bundle).toContain('Collapse inspector')
+  Expect(bundle).toContain('Switching app…')
+  Expect(bundle).toContain('studio-global-loading-spinner')
+  Expect(bundle).toContain('studio-inspector-accordion')
+  Expect(bundle).toContain('Collapse bottom drawer')
+  Expect(bundle).toContain('tao-studio:pane-sizes:v4')
   Expect(bundle).toContain('tao-studio:editor-tabs:v1')
   Expect(bundle).toContain('/switch')
-  Expect(bundle).toContain('Fix or revert invalid Tao drafts before switching app variants.')
+  Expect(bundle).toContain('Save or revert unsaved files before switching app variants.')
+  Expect(bundle).toContain('Unsaved changes — press ⌘S to save.')
   Expect(bundle).toContain('set-interaction-mode')
   Expect(bundle).toContain('Undo visual edit')
   Expect(bundle).toContain('/api/preview/cell/reconfigure')
@@ -108,11 +152,63 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Injected Studio network failure')
   Expect(bundle).toContain('Inert — runtime Scheme support is not available yet.')
   Expect(bundle).toContain('taoStudioPreviewInstanceId')
+  Expect(bundle).toContain('taoStudioSessionId')
   Expect(bundle).not.toContain('taoStudioArgs')
   Expect(bundle).not.toContain('taoStudioState')
+  Expect(bundle).not.toContain('sourceMappingURL=data:')
+  Expect(html).toContain('--studio-accent: #5b8def')
+  Expect(html).toContain('<div id="tao-studio-viewport"></div>')
+  Expect(html).toContain('position: fixed !important')
+  Expect(html).toContain('height: auto !important')
+  Expect(html).toContain('.studio-editor[data-tao-editor-mounted="true"] > .cm-editor { display: none !important; }')
+  Expect(html).toContain('overflow: clip')
+  Expect(html).toContain('min-height: 0; min-width: 0; position: fixed; width: 100%')
+  Expect(html).toContain('@media (max-width: 1400px)')
+  Expect(html).toContain('@media (max-width: 760px)')
+  Expect(html).toContain('grid-column: 4;')
+  Expect(html).toContain('grid-template-columns: 0 0 0 0 minmax(0, 1fr)')
+  Expect(html).toContain('--studio-preview-size')
+  Expect(html).toContain('.tao-studio-product-host[data-layout-preset="code"]')
+  Expect(html).not.toContain('#tao-studio-root[data-layout-preset=')
+  Expect(html).toContain('rel="icon" href="data:image/svg+xml,')
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
   Expect(html).toContain('\\u003c/script>')
+})
+
+Test('Studio client bundle cache retries Tao compilation after serving a development fallback', async () => {
+  const cache = new Map()
+  let builds = 0
+  const build = async () => {
+    builds += 1
+    return builds === 1
+      ? { cacheable: false, source: 'direct fallback' }
+      : { cacheable: true, source: 'Tao client' }
+  }
+
+  Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('direct fallback')
+  Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('Tao client')
+  Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('Tao client')
+  Expect(builds).toBe(2)
+})
+
+Test('Studio events dispatch typed handshakes so startup scenario manifests are not missed', () => {
+  const handshake = {
+    type: 'handshake',
+  } as StudioHandshake
+  let received: StudioHandshake | undefined
+
+  StudioApiEventStream.dispatch(handshake, {
+    onCompile() {},
+    onDisconnect() {},
+    onFile() {},
+    onHandshake(value) {
+      received = value
+    },
+    onManifest() {},
+  })
+
+  Expect(received).toBe(handshake)
 })
 
 Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
@@ -158,29 +254,121 @@ Test('Studio generated fixture failures include actionable validation issues', (
 })
 
 Test('Studio browser assets bundle one CodeMirror view singleton', async () => {
-  const inputs = await StudioClientAssets.testing.moduleInputs()
+  const inputs = await StudioClientAssets.testing.moduleInputs('release')
   const viewModules = inputs.filter(path =>
     path.includes('@codemirror+view@') && path.endsWith('/@codemirror/view/dist/index.js')
   )
 
   Expect(viewModules).toHaveLength(1)
-  Expect(inputs.filter(path => path.includes('/studio-src/client/')).map(path => path.split('/').at(-1)).sort())
-    .toEqual([
-      'StudioApiClient.ts',
-      'StudioApp.ts',
-      'StudioEditor.ts',
-      'StudioEditorTabs.ts',
-      'StudioFileTree.ts',
-      'StudioMatrixView.ts',
-      'StudioProductPanels.ts',
-      'StudioRailPanels.ts',
-      'StudioShell.ts',
-      'StudioVisualEditing.ts',
-    ])
+  Expect(inputs.some(path => path.endsWith('/studio-src/TaoStudioBrowser.tsx'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/_gen_tao-app/App.tsx'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/TaoStudioProductHost.tsx'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/client/StudioApp.ts'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/client/StudioFileTree.ts'))).toBe(true)
+  Expect(inputs.some(path => path.endsWith('/studio-src/StudioClient.ts'))).toBe(false)
+})
+
+Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and preserves Conflict failures', async () => {
+  const calls: string[] = []
+  let stateUpdates = 0
+  const unsubscribeState = subscribeStudioProductHostState(() => stateUpdates += 1)
+  const earlyOpen = requestStudioProductHostOpenFile('Queued.tao')
+  const unregister = registerStudioProductHostActions({
+    async applyActiveCellEnvironment() {},
+    changeActiveFile(content) {
+      calls.push(`change:${content}`)
+    },
+    async createFile(path) {
+      calls.push(`create:${path}`)
+      throw new StudioApiError('server conflict', 409)
+    },
+    async deleteFile(path, sourceVersion) {
+      calls.push(`delete:${path}:${sourceVersion}`)
+    },
+    async openFile(path) {
+      calls.push(`open:${path}`)
+    },
+    async renameFile(path, sourceVersion, targetPath) {
+      calls.push(`rename:${path}:${sourceVersion}:${targetPath}`)
+    },
+    selectActiveFile(anchor, head) {
+      calls.push(`select:${anchor}:${head}`)
+    },
+  })
+  try {
+    await earlyOpen
+    await Expect(requestStudioProductHostCreateFile('Conflict.tao')).rejects.toMatchObject({
+      caseName: 'Conflict',
+      message: 'This file changed under this edit.',
+    })
+    Expect(calls).toEqual(['open:Queued.tao', 'create:Conflict.tao'])
+    Expect(validStudioProductHostPath('Folder/File.tao')).toBe(true)
+    Expect(validStudioProductHostPath('Folder\\File.tao')).toBe(false)
+    await Expect(requestStudioProductHostOpenFile('../Outside.tao')).rejects.toThrow('project-relative Tao')
+    const previousRevision = studioProductHostState().revision
+    const state = publishStudioProductHostState({
+      activeFile: {
+        content: 'view Main() { }',
+        path: 'Main.tao',
+        selectionAnchor: 4,
+        selectionHead: 8,
+        sourceVersion: 'version:1',
+      },
+      projectRoot: '/project',
+    })
+    Expect(state.revision).toBe(previousRevision + 1)
+    Expect(Object.isFrozen(state)).toBe(true)
+    Expect(Object.isFrozen(state.activeFile)).toBe(true)
+    Expect(stateUpdates).toBe(1)
+    requestStudioProductHostChangeActiveFile('changed')
+    requestStudioProductHostSelectActiveFile(2, 5)
+    Expect(calls.slice(-2)).toEqual(['change:changed', 'select:2:5'])
+  } finally {
+    unsubscribeState()
+    unregister()
+  }
+  const abandoned = requestStudioProductHostOpenFile('Abandoned.tao')
+  const cancellation = new Error('host unmounted')
+  cancellation.name = 'AbortError'
+  rejectPendingStudioProductHostActions(cancellation)
+  await Expect(abandoned).rejects.toMatchObject({ name: 'AbortError' })
+})
+
+Test('Studio preview teardown releases observers and pending capture work', () => {
+  let disconnected = 0
+  let rejected = ''
+  const preview = {
+    iframe: { src: 'http://127.0.0.1:55102/' } as HTMLIFrameElement,
+    interactionMode: 'edit',
+    origin: 'http://127.0.0.1:55102',
+    previewInstanceId: 'preview-1',
+    runtimeCaptureRequest: {
+      reject(error: Error) {
+        rejected = error.message
+      },
+      requestId: 'capture-1',
+      resolve() {},
+      timeout: setTimeout(() => {}, 10_000),
+    },
+    visibilityObserver: {
+      disconnect() {
+        disconnected += 1
+      },
+    } as IntersectionObserver,
+  } satisfies StudioPreviewConnection
+
+  disconnectPreviews([preview], 'Studio host unmounted.')
+
+  Expect(disconnected).toBe(1)
+  Expect(rejected).toBe('Studio host unmounted.')
+  Expect(preview.iframe.src).toBe('about:blank')
+  Expect(preview.runtimeCaptureRequest).toBeUndefined()
+  Expect(preview.visibilityObserver).toBeUndefined()
 })
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
-  let stored: string | null = '{"left":312,"right":296,"bottom":205}'
+  Expect(StudioPaneMinimums).toEqual({ bottom: 96, left: 180, preview: 280, right: 320 })
+  let stored: string | null = '{"left":312,"right":296,"bottom":205,"preview":516}'
   const storage = {
     getItem: () => stored,
     setItem: (_key: string, value: string) => {
@@ -188,11 +376,51 @@ Test('Studio pane sizes load safe defaults and persist all divider dimensions', 
     },
   }
 
-  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 205, left: 312, right: 296 })
-  StudioPaneSizes.save(storage, { bottom: 164, left: 244, right: 320 })
-  Expect(stored).toBe('{"bottom":164,"left":244,"right":320}')
+  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 205, left: 312, preview: 516, right: 296 })
+  StudioPaneSizes.save(storage, { bottom: 164, left: 244, preview: 560, right: 320 })
+  Expect(stored).toBe('{"bottom":164,"left":244,"preview":560,"right":320}')
   stored = '{"left":"wide","right":null}'
-  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 180, left: 260, right: 280 })
+  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 180, left: 360, preview: 440, right: 440 })
+})
+
+Test('Embedded Studio keeps one Files portal target and every contextual rail panel', () => {
+  const markup = studioShellMarkup({ embedded: true })
+  Expect(studioShellRailPanels.map(item => item.panel)).toEqual([
+    'files',
+    'components',
+    'screens',
+    'tokens',
+    'data',
+    'search',
+  ])
+  Expect(markup.match(/class="studio-files"/g)).toHaveLength(1)
+  for (const item of studioShellRailPanels) {
+    Expect(markup).toContain(`data-panel="${item.panel}"`)
+  }
+  Expect(markup).toContain('studio-toolbar-context')
+  Expect(markup).toContain('studio-toolbar-mode')
+  Expect(markup).toContain('studio-toolbar-actions')
+  Expect(markup).toContain('studio-window-controls')
+  Expect(studioInspectorContexts).toEqual(['Layout', 'Style', 'Data', 'Actions'])
+  Expect(markup).toContain('aria-label="Environment and scenario"')
+  Expect(markup).toContain('aria-label="Layout, style, data, and actions"')
+  Expect(markup).toContain('studio-scenario-inspector-content')
+  Expect(markup).toContain('studio-global-loading')
+  Expect(markup).toContain('data-drawer-tab="Problems"')
+  Expect(markup).toContain('aria-label="Collapse inspector"')
+  Expect(markup).toContain('aria-label="Collapse bottom drawer"')
+  Expect(markup).toContain('aria-label="Resize code and preview"')
+  Expect(markup.indexOf('studio-inspector studio-pane-right')).toBeLessThan(markup.indexOf('studio-editor-pane'))
+  Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-preview'))
+  Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-divider-preview'))
+  Expect(markup.indexOf('studio-divider-preview')).toBeLessThan(markup.indexOf('studio-preview'))
+  Expect(markup).toContain('studio-shell studio-shell--embedded')
+})
+
+Test('Studio toolbar keeps project and app context compact', () => {
+  Expect(StudioProjectContext.label('/projects/Garden', 'Fallback')).toBe('Garden')
+  Expect(StudioProjectContext.label('/repo/Apps/WordFlower/1 - Current', 'WordFlower')).toBe('WordFlower')
+  Expect(StudioProjectContext.label('/', 'Fallback')).toBe('Fallback')
 })
 
 Test('Studio editor tabs restore only available Tao paths and persist active order safely', () => {
@@ -246,7 +474,7 @@ Test('Studio editor tabs follow rename/delete metadata and ignore corrupt device
   }
   const tabs = new StudioEditorTabs({
     appName: 'Garden',
-    availablePaths: ['First.tao', 'Second.tao', 'Renamed.tao'],
+    availablePaths: ['First.tao', 'Second.tao'],
     project: '/projects/Garden',
     storage,
   })
@@ -259,6 +487,30 @@ Test('Studio editor tabs follow rename/delete metadata and ignore corrupt device
     paths: ['First.tao', 'Renamed.tao'],
   })
   Expect(tabs.reconcile(['Renamed.tao'])).toEqual({ activePath: 'Renamed.tao', paths: ['Renamed.tao'] })
+})
+
+Test('Studio editor tabs rename onto an existing tab without corrupting order and expose safe eviction', () => {
+  const paths = Array.from({ length: 22 }, (_, index) => `File${index}.tao`)
+  const tabs = new StudioEditorTabs({
+    appName: 'Garden',
+    availablePaths: paths,
+    project: '/projects/Garden',
+    storage: { getItem: () => null, setItem() {} },
+  })
+  tabs.open('File0.tao')
+  tabs.open('File1.tao')
+  tabs.open('File2.tao')
+  Expect(tabs.rename('File2.tao', 'File0.tao')).toEqual({
+    activePath: 'File0.tao',
+    paths: ['File1.tao', 'File0.tao'],
+  })
+  for (const path of paths.slice(3, 21)) {
+    tabs.open(path)
+  }
+  Expect(tabs.evictionCandidate('File21.tao')).toBe('File1.tao')
+  tabs.activate('File1.tao')
+  Expect(tabs.evictionCandidate('File21.tao')).toBe('File0.tao')
+  Expect(tabs.evictionCandidate('File0.tao')).toBe(undefined)
 })
 
 Test('Studio preview cells suspend outside the canvas viewport and resume on return', () => {
@@ -343,6 +595,82 @@ Test('Studio API routes stay legacy-compatible and bind project windows to one o
       new URL('http://127.0.0.1:4276/sessions/window_one'),
     )
   ).toThrow('invalid managed session URL')
+})
+
+Test('Studio preview frames carry their managed session into cross-origin bootstrap requests', () => {
+  const managed = new URL(StudioPreviewFrameUrl.create(
+    'http://127.0.0.1:8081/?expo=true',
+    'preview-one',
+    { origin: 'http://127.0.0.1:4276', pathname: '/sessions/window_one' },
+    true,
+  ))
+  Expect(managed.origin).toBe('http://127.0.0.1:8081')
+  Expect(managed.searchParams.get('expo')).toBe('true')
+  Expect(managed.searchParams.get('taoStudioCell')).toBe('1')
+  Expect(managed.searchParams.get('taoStudioParentOrigin')).toBe('http://127.0.0.1:4276')
+  Expect(managed.searchParams.get('taoStudioPreviewInstanceId')).toBe('preview-one')
+  Expect(managed.searchParams.get('taoStudioSessionId')).toBe('window_one')
+
+  const legacy = new URL(StudioPreviewFrameUrl.create(
+    'http://127.0.0.1:8081',
+    'preview-two',
+    { origin: 'http://127.0.0.1:4276', pathname: '/' },
+  ))
+  Expect(legacy.searchParams.has('taoStudioCell')).toBe(false)
+  Expect(legacy.searchParams.has('taoStudioSessionId')).toBe(false)
+})
+
+Test('Studio retained previews preserve independent cell revisions and safely fall back to a new base', async () => {
+  const retainedCell = cell('novel')
+  const manifest = {
+    cells: [retainedCell],
+    compileRevision: 2,
+    manifestRevision: 'compile:2',
+    project: { appName: 'Garden', entryPath: '/workspace/Garden.tao', root: '/workspace' },
+  } as unknown as StudioPreviewManifestV2
+  const previous = {
+    appName: 'Garden',
+    cellId: 'novel',
+    cellRevision: 3,
+    compileRevision: 1,
+    manifestRevision: 'compile:1',
+    project: '/workspace',
+  }
+  const identities = StudioRetainedPreview.registrationIdentities(manifest, retainedCell, previous)
+  Expect(identities.map(identity => ({
+    cellRevision: identity.cellRevision,
+    compileRevision: identity.compileRevision,
+    manifestRevision: identity.manifestRevision,
+  }))).toEqual([
+    { cellRevision: 3, compileRevision: 2, manifestRevision: 'compile:2' },
+    { cellRevision: 0, compileRevision: 2, manifestRevision: 'compile:2' },
+  ])
+
+  const retainedAttempts: number[] = []
+  const retained = await StudioRetainedPreview.register(identities, 'preview-retained', async identity => {
+    retainedAttempts.push(identity.cellRevision)
+    return { ...retainedCell, cellRevision: identity.cellRevision }
+  })
+  Expect(retainedAttempts).toEqual([3])
+  Expect(retained.cellRevision).toBe(3)
+
+  const fallbackAttempts: number[] = []
+  const fallback = await StudioRetainedPreview.register(identities, 'preview-fallback', async identity => {
+    fallbackAttempts.push(identity.cellRevision)
+    if (identity.cellRevision === 3) {
+      throw new StudioApiError('Studio cell targets a stale configuration revision.', 409)
+    }
+    return { ...retainedCell, cellRevision: identity.cellRevision }
+  })
+  Expect(fallbackAttempts).toEqual([3, 0])
+  Expect(fallback.cellRevision).toBe(0)
+
+  const failedAttempts: number[] = []
+  await Expect(StudioRetainedPreview.register(identities, 'preview-offline', async identity => {
+    failedAttempts.push(identity.cellRevision)
+    throw new StudioApiError('Studio server is unavailable.', 503)
+  })).rejects.toThrow('Studio server is unavailable.')
+  Expect(failedAttempts).toEqual([3])
 })
 
 Test('Studio file tree groups real paths while preserving dirty and diagnostic metadata', () => {
@@ -662,6 +990,59 @@ Test('Studio selection from a second scenario group makes that cell active for t
   })
 })
 
+Test('Studio passive preview startup and console messages do not steal the active canvas cell', async () => {
+  const firstWindow = {}
+  const secondWindow = {}
+  const previews = [
+    previewConnection('preview-first', 'first', firstWindow),
+    previewConnection('preview-second', 'second', secondWindow),
+  ]
+  const active = new StudioActivePreview(previews)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  let activations = 0
+  const actions = {
+    activate() {
+      activations += 1
+      active.activate(previews[1]!)
+    },
+    async applySourceAction() {},
+    inspect() {},
+  }
+  const identity = {
+    ...previews[1]!.cellIdentity,
+    previewInstanceId: previews[1]!.previewInstanceId,
+  }
+
+  for (
+    const data of [{
+      channel: studioProtocolChannel,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-applied',
+    }, {
+      arguments: ['mounted'],
+      channel: studioProtocolChannel,
+      identity,
+      level: 'log',
+      protocolVersion: studioProtocolVersion,
+      timestamp: 1_788_100_000_000,
+      type: 'preview-console',
+    }] as const
+  ) {
+    await handlePreviewMessage(
+      { data, origin: previews[1]!.origin, source: secondWindow } as MessageEvent,
+      previews[1]!,
+      handshake,
+      async () => undefined,
+      actions,
+    )
+  }
+
+  Expect(activations).toBe(0)
+  Expect(active.current()).toBe(previews[0])
+  Expect(previews[1]!.runtimeLogs?.map(log => log.arguments)).toEqual([['mounted']])
+})
+
 Test('Studio active preview rewires added cells and falls back when the active cell is removed', () => {
   const first = previewConnection('preview-first', 'first', {})
   const second = previewConnection('preview-second', 'second', {})
@@ -874,7 +1255,7 @@ Test('Studio editor insertion preserves indentation and selects the first requir
   Expect(transaction.selection).toEqual({ anchor: position + 12, head: position + 18 })
 })
 
-Test('Studio draft sync coalesces pending edits and advances the optimistic version serially', async () => {
+Test('Studio draft sync writes only explicit saves and advances the optimistic version serially', async () => {
   const firstWrite = deferred<StudioDraftSyncResult>()
   const writes: StudioDraftSyncRequest[] = []
   const sync = new StudioDraftSync({
@@ -882,7 +1263,6 @@ Test('Studio draft sync coalesces pending edits and advances the optimistic vers
     path: 'Garden.tao',
     sourceVersion: 'source-1',
   }, {
-    delayMs: 60_000,
     async write(request) {
       writes.push(request)
       if (writes.length === 1) {
@@ -894,12 +1274,15 @@ Test('Studio draft sync coalesces pending edits and advances the optimistic vers
 
   sync.update('draft-a')
   sync.update('draft-b')
-  const flushing = sync.flush()
+  await Promise.resolve()
+  Expect(writes).toHaveLength(0)
+  const firstSave = sync.save()
   await until(() => writes.length === 1)
   sync.update('draft-c')
   firstWrite.resolve(saved(writes[0]!, 'source-2'))
-  await flushing
-  await sync.flush()
+  await firstSave
+  Expect(writes).toHaveLength(1)
+  await sync.save()
 
   Expect(writes.map(write => write.content)).toEqual(['draft-b', 'draft-c'])
   Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-2'])
@@ -913,7 +1296,6 @@ Test('Studio draft sync keeps the last saved version after an invalid draft', as
     path: 'Garden.tao',
     sourceVersion: 'source-1',
   }, {
-    delayMs: 60_000,
     onResult: result => results.push(result),
     async write(request) {
       writes.push(request)
@@ -928,12 +1310,47 @@ Test('Studio draft sync keeps the last saved version after an invalid draft', as
   })
 
   sync.update('invalid')
-  Expect((await sync.flush())?.saved).toBe(false)
-  sync.update('valid again')
-  Expect((await sync.flush())?.saved).toBe(true)
+  Expect((await sync.save())?.saved).toBe(false)
+  Expect((await sync.save())?.saved).toBe(true)
 
   Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-1'])
+  Expect(writes.map(write => write.content)).toEqual(['invalid', 'invalid'])
   Expect(results.map(result => result.saved)).toEqual([false, true])
+})
+
+Test('Studio draft sync restores a rejected save without overwriting newer editor content', async () => {
+  const firstWrite = deferred<StudioDraftSyncResult>()
+  const writes: StudioDraftSyncRequest[] = []
+  const sync = new StudioDraftSync({
+    content: 'before',
+    path: 'Garden.tao',
+    sourceVersion: 'source-1',
+  }, {
+    async write(request) {
+      writes.push(request)
+      if (writes.length === 1) {
+        return await firstWrite.promise
+      }
+      return saved(request, 'source-2')
+    },
+  })
+
+  sync.update('first draft')
+  const firstSave = sync.save()
+  await until(() => writes.length === 1)
+  sync.update('newer draft')
+  firstWrite.reject(new Error('Connection closed.'))
+  await Expect(firstSave).rejects.toThrow('Connection closed.')
+  await sync.save()
+
+  Expect(writes.map(write => write.content)).toEqual(['first draft', 'newer draft'])
+})
+
+Test('Studio recognizes command and control save without consuming modified shortcuts', () => {
+  Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: false, key: 's', metaKey: true })).toBe(true)
+  Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: true, key: 'S', metaKey: false })).toBe(true)
+  Expect(isStudioSaveShortcut({ altKey: true, ctrlKey: false, key: 's', metaKey: true })).toBe(false)
+  Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: false, key: 's', metaKey: false })).toBe(false)
 })
 
 function saved(request: StudioDraftSyncRequest, sourceVersion: string): StudioDraftSyncResult {
@@ -944,12 +1361,14 @@ function saved(request: StudioDraftSyncRequest, sourceVersion: string): StudioDr
   }
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void; resolve: (value: T) => void } {
+  let reject!: (reason?: unknown) => void
   let resolve!: (value: T) => void
-  const promise = new Promise<T>(promiseResolve => {
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    reject = promiseReject
     resolve = promiseResolve
   })
-  return { promise, resolve }
+  return { promise, reject, resolve }
 }
 
 async function until(predicate: () => boolean): Promise<void> {

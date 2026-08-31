@@ -105,4 +105,19 @@ Describe('compiler: minimal design', () => {
       Expect(theme?.code).toContain('export const Theme = _Scope.Theme')
     })
   })
+
+  Test('compiles a mounted design override in an app refinement', async () => {
+    await TestCompiler.compileCode(
+      `
+      use StackNav from @tao/nav
+      design Light { canvas #fff screen [bg canvas] }
+      design Dark { canvas #111 screen [bg canvas] }
+      view Main() { Title "Main" render Surface() [screen] }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Light }
+      app DemoDark = Demo with { Name "Demo Dark" Design Dark }
+    `,
+      { appName: 'DemoDark' },
+    )
+  })
 })

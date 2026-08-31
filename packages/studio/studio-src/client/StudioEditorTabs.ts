@@ -39,6 +39,12 @@ export class StudioEditorTabs {
     return { ...(this.#activePath === undefined ? {} : { activePath: this.#activePath }), paths: [...this.#paths] }
   }
 
+  evictionCandidate(path: string): string | undefined {
+    return !this.#paths.includes(path) && this.#paths.length >= maximumTabs
+      ? this.#paths.find(candidate => candidate !== this.#activePath)
+      : undefined
+  }
+
   open(path: string): StudioEditorTabSnapshot {
     this.#requireAvailable(path)
     if (!this.#paths.includes(path)) {
@@ -69,13 +75,18 @@ export class StudioEditorTabs {
   }
 
   rename(previousPath: string, nextPath: string): StudioEditorTabSnapshot {
-    this.#requireAvailable(nextPath)
+    if (!validPath(nextPath)) {
+      throw new Error(`Studio editor tab path is not a valid Tao file: ${nextPath}`)
+    }
     const index = this.#paths.indexOf(previousPath)
     if (index < 0) {
       return this.snapshot()
     }
-    this.#paths = this.#paths.filter(path => path !== nextPath)
-    this.#paths[index] = nextPath
+    this.#available.delete(previousPath)
+    this.#available.add(nextPath)
+    const nextIndex = this.#paths.slice(0, index).filter(path => path !== nextPath).length
+    this.#paths = this.#paths.filter(path => path !== previousPath && path !== nextPath)
+    this.#paths.splice(nextIndex, 0, nextPath)
     if (this.#activePath === previousPath) {
       this.#activePath = nextPath
     }

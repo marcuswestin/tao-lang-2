@@ -51,6 +51,26 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.UsePersistedState(_Scope.PaneWidth)')
   })
 
+  Test('lowers persisted case sets with a stable declaration identity', async () => {
+    const compiled = await Compiler.compileCode(`
+      use StackNav from @tao/nav
+      type Theme is one of Light, Dark
+      app Workspace {
+        Name "Workspace"
+        state CurrentTheme is Theme = Light (persist)
+        Navigator StackNav { Initial Main }
+      }
+      view Main() { Title "Main" render Empty() }
+      view Empty() { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain('_Scope.Theme = TR.Enum(TR.Navigation.Identity(')
+    Expect(compiled.code).toContain('["tao.declaration",1,')
+    Expect(compiled.code).toContain('["Light", "Dark"])')
+    Expect(compiled.code).toContain('{ kind: "enum", declaration: TR.Navigation.Identity(')
+    Expect(compiled.code).toContain('.canonical, cases: ["Light", "Dark"] }')
+  })
+
   Test('guards every generated recursive view frame at runtime', async () => {
     const compiled = await Compiler.compileCode(`
       app RecursiveApp { view Recursive }
@@ -58,6 +78,17 @@ Describe('compiler: language lowering', () => {
     `)
     Expect(compiled.code).toContain('TR.AssertViewDepth(_ViewProps.__tao, "Recursive")')
     Expect(compiled.code).toContain('TR.ViewTaoProps(')
+  })
+
+  Test('propagates view depth through nested render statements without inheriting layout props', async () => {
+    const compiled = await Compiler.compileCode(`
+      app RecursiveApp { view Recursive }
+      view Recursive() {
+        render Frame() { if true { render Recursive() } }
+      }
+      view Frame() { render inject Content @@content \`\`\`ts return Content \`\`\` }
+    `)
+    Expect(compiled.code).toContain('}, _ViewProps.__tao, false)} />')
   })
   Test('compiles bare app slot blocks through their inferred declaration identities', async () => {
     const compiled = await Compiler.compileCode(`

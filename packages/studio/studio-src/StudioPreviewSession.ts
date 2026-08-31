@@ -1,4 +1,5 @@
 import Runtime from '@runtime-toolchain'
+import { Errors, FS } from '@shared'
 import type {
   StudioParameterSchema,
   StudioPreviewManifestV2,
@@ -65,6 +66,10 @@ export function matrixManifest(
   if (compiler === undefined || publication === undefined) {
     throw new Error('Tao Studio matrix manifests require a preview compilation.')
   }
+  const previewScenarios = compiler.scenarios.filter(scenario =>
+    scenario.subject.kind !== 'app' || scenario.subject.appName === session.appName
+  )
+  validatePreviewScenarios(session, previewScenarios)
   const subjects: StudioScenarioSubject[] = [
     ...compiler.apps.map(app => ({
       appName: app.name,
@@ -93,7 +98,7 @@ export function matrixManifest(
       ] as const
     ),
   ])
-  const scenarios = compiler.scenarios.map(scenario => ({
+  const scenarios = previewScenarios.map(scenario => ({
     args: scenario.subject.kind === 'view'
       ? jsonObject(scenario.subject.arguments)
       : {},
@@ -111,7 +116,7 @@ export function matrixManifest(
       captureDomains: ['action-history', 'data', 'environment', 'navigation', 'persisted-state'],
       scheme: 'inert',
     },
-    cells: compiler.scenarios.map(scenario => ({
+    cells: previewScenarios.map(scenario => ({
       args: scenario.subject.kind === 'view' ? jsonObject(scenario.subject.arguments) : {},
       cellId: `${scenario.id}#cell`,
       cellRevision: 0,
@@ -153,6 +158,32 @@ export function matrixManifest(
     states: [],
     subjects,
     version: 2,
+  }
+}
+
+function validatePreviewScenarios(
+  session: Pick<StudioProjectSession, 'appName' | 'entryPath' | 'projectRoot'>,
+  scenarios: NonNullable<
+    Awaited<ReturnType<typeof Runtime.generateApp>>['studioManifest']
+  >['scenarios'],
+): void {
+  const entryPath = FS.resolvePath(session.entryPath)
+  for (const scenario of scenarios) {
+    if (FS.resolvePath(scenario.source.path, session.projectRoot) !== entryPath) {
+      throw new Errors.UserInputError(
+        `Tao Studio cannot preview scenario "${scenario.group} / ${scenario.name}" because it is declared outside the selected app entry file. Move the scenario into ${
+          FS.basename(entryPath)
+        } until imported scenario hosts are supported.`,
+      )
+    }
+    if (scenario.subject.kind !== 'app') {
+      continue
+    }
+    if (scenario.subject.destination !== undefined) {
+      throw new Errors.UserInputError(
+        `Tao Studio cannot run ${scenario.subject.appName} at destination ${scenario.subject.destination} yet. Remove the destination until destination routing is supported.`,
+      )
+    }
   }
 }
 

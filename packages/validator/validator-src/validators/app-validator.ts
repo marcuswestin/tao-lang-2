@@ -77,7 +77,7 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
       !AST.isAppProperty(statement)
       && !AST.isAppAuxiliaryNavigator(statement)
       && !AST.isRestorationPolicy(statement)
-      && !(AST.isStateDeclaration(statement) && statement.persist)
+      && !AST.isStateDeclaration(statement)
     ) {
       ctx.error(appValidationMessages.appBlock(app.name), statement)
     }

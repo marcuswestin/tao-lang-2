@@ -144,7 +144,7 @@ export class StudioSessionManager {
       return await managed.closeAttempt
     }
     managed.status = 'closing'
-    const closeAttempt = this.#closeManaged(managed)
+    const closeAttempt = Promise.resolve().then(async () => await this.#closeManaged(managed))
     managed.closeAttempt = closeAttempt
     return await closeAttempt
   }

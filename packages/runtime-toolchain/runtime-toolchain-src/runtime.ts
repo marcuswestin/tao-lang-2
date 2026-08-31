@@ -62,8 +62,14 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const generatedFiles = preview === undefined
       ? compiled.files
       : filesWithStablePreviewRoot(compiled.files, preview)
+    const previousPreview = preview === undefined ? undefined : previewPublications.get(generatedAppRoot)
 
-    await writeGeneratedFiles(generatedAppRoot, generatedFiles)
+    await writeGeneratedFiles(
+      generatedAppRoot,
+      generatedFiles,
+      preview === undefined ? undefined : 'TaoStudioActivePreview.ts',
+      previousPreview === undefined ? [] : [`revisions/revision-${previousPreview.revision}`],
+    )
     if (preview === undefined) {
       previewPublications.delete(generatedAppRoot)
     } else {
@@ -133,11 +139,27 @@ function serializeGeneration<ResultT>(outputRoot: string, generate: () => Promis
 async function writeGeneratedFiles(
   outputRoot: string,
   files: Array<{ relativePath: string; code: string }>,
+  publishLast?: string,
+  preserveRoots: readonly string[] = [],
 ): Promise<void> {
-  await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)))
+  const publication = publishLast === undefined
+    ? undefined
+    : files.find(file => file.relativePath === publishLast)
+  Assert(
+    publishLast === undefined || publication !== undefined,
+    'generated publication marker is present',
+    { publishLast },
+  )
   for (const file of files) {
+    if (file === publication) {
+      continue
+    }
     await writeGeneratedApp(FS.resolvePath(file.relativePath, outputRoot), file.code)
   }
+  if (publication !== undefined) {
+    await publishGeneratedApp(FS.resolvePath(publication.relativePath, outputRoot), publication.code)
+  }
+  await removeStaleGeneratedFiles(outputRoot, new Set(files.map(file => file.relativePath)), preserveRoots)
   await removeEmptyGeneratedDirectories(outputRoot)
 }
 
@@ -145,6 +167,7 @@ function filesWithStablePreviewRoot(
   files: Array<{ relativePath: string; code: string }>,
   preview: StudioPreviewPublication,
 ): Array<{ relativePath: string; code: string }> {
+  const revisionRoot = `revisions/revision-${preview.revision}`
   return [
     {
       relativePath: 'App.tsx',
@@ -168,20 +191,54 @@ function filesWithStablePreviewRoot(
         })
       } as const\n\nexport default TaoStudioProject\n`,
     },
-    ...files.map(file => {
-      if (file.relativePath === 'App.tsx') {
-        return { ...file, relativePath: 'TaoApp.tsx' }
-      }
-      const appImport = relativeModuleImport(file.relativePath, 'App.tsx')
-      const taoAppImport = relativeModuleImport(file.relativePath, 'TaoApp.tsx')
-      return {
-        ...file,
-        code: file.code
-          .replaceAll(`'${appImport}'`, `'${taoAppImport}'`)
-          .replaceAll(`"${appImport}"`, `"${taoAppImport}"`),
-      }
-    }),
+    ...files.map(previewCompatibilityFile),
+    ...files.map(file => previewRevisionFile(file, revisionRoot)),
+    {
+      relativePath: 'TaoStudioActivePreview.ts',
+      code: activePreviewSource(revisionRoot, preview),
+    },
   ]
+}
+
+function previewRevisionFile(
+  file: { relativePath: string; code: string },
+  revisionRoot: string,
+): { relativePath: string; code: string } {
+  const transformed = previewCompatibilityFile(file)
+  return { ...transformed, relativePath: `${revisionRoot}/${transformed.relativePath}` }
+}
+
+/** Compatibility copies keep the current generated graph inspectable without joining the live Metro import chain. */
+function previewCompatibilityFile(
+  file: { relativePath: string; code: string },
+): { relativePath: string; code: string } {
+  if (file.relativePath === 'App.tsx') {
+    return { ...file, relativePath: 'TaoApp.tsx' }
+  }
+  const appImport = relativeModuleImport(file.relativePath, 'App.tsx')
+  const taoAppImport = relativeModuleImport(file.relativePath, 'TaoApp.tsx')
+  return {
+    ...file,
+    code: file.code
+      .replaceAll(`'${appImport}'`, `'${taoAppImport}'`)
+      .replaceAll(`"${appImport}"`, `"${taoAppImport}"`),
+  }
+}
+
+function activePreviewSource(revisionRoot: string, preview: StudioPreviewPublication): string {
+  const publication = {
+    appName: preview.appName,
+    compileRevision: preview.revision,
+    project: preview.project,
+    sourceVersions: preview.sourceVersions,
+  }
+  return `import TaoApp from './${revisionRoot}/TaoApp'
+import TaoStudioManifest from './${revisionRoot}/TaoStudioManifest'
+
+const TaoStudioPublication = ${JSON.stringify(publication)} as const
+
+export { TaoApp, TaoStudioManifest, TaoStudioPublication }
+`
 }
 
 function relativeModuleImport(fromOutputPath: string, toOutputPath: string): string {
@@ -192,14 +249,13 @@ function relativeModuleImport(fromOutputPath: string, toOutputPath: string): str
 function stablePreviewRootSource(): string {
   return `import React from 'react'
 import TR from '@runtime/TR'
-import TaoApp from './TaoApp'
-import TaoStudioManifest from './TaoStudioManifest'
-import TaoStudioProject from './TaoStudioProject'
-import TaoStudioRevision from './TaoStudioRevision'
+import { TaoApp, TaoStudioManifest, TaoStudioPublication } from './TaoStudioActivePreview'
 
 const TaoStudioPreviewBootstrap = typeof window === 'undefined'
   ? undefined
   : studioPreviewBootstrap(window.location.href)
+const TaoStudioProtocolChannel = 'tao-studio'
+const TaoStudioProtocolVersion = 1
 
 export default function App() {
   const [cell, setCell] = React.useState<any>()
@@ -207,28 +263,47 @@ export default function App() {
   React.useEffect(() => {
     if (TaoStudioPreviewBootstrap?.cell !== true) return
     let cancelled = false
-    const url = new URL('/api/preview/cell/bootstrap', TaoStudioPreviewBootstrap.parentOrigin)
+    setBootstrapError(undefined)
+    const bootstrapPath = TaoStudioPreviewBootstrap.sessionId === undefined
+      ? '/api/preview/cell/bootstrap'
+      : '/sessions/' + encodeURIComponent(TaoStudioPreviewBootstrap.sessionId) + '/api/preview/cell/bootstrap'
+    const url = new URL(bootstrapPath, TaoStudioPreviewBootstrap.parentOrigin)
     url.searchParams.set('previewInstanceId', TaoStudioPreviewBootstrap.previewInstanceId)
     void fetch(url).then(async response => {
       if (!response.ok) throw new Error('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
-      if (!cancelled) setCell(nextCell)
+      if (!cancelled && runtimeMatchesPublication(nextCell, TaoStudioPublication)) setCell(nextCell)
     }).catch(error => {
       if (!cancelled) setBootstrapError(error)
     })
     return () => { cancelled = true }
-  }, [])
+  }, [TaoStudioPublication.compileRevision])
+  React.useEffect(() => {
+    if (TaoStudioPreviewBootstrap?.cell !== true || typeof window === 'undefined') return
+    const receiveRuntime = (event: MessageEvent) => {
+      if (
+        event.origin !== TaoStudioPreviewBootstrap.parentOrigin
+        || event.source !== window.parent
+        || !isRuntimeUpdate(event.data, TaoStudioPreviewBootstrap, TaoStudioPublication)
+      ) return
+      setBootstrapError(undefined)
+      setCell(event.data.runtime)
+    }
+    window.addEventListener('message', receiveRuntime)
+    return () => window.removeEventListener('message', receiveRuntime)
+  }, [TaoStudioPublication])
+  const waitingForCell = TaoStudioPreviewBootstrap?.cell === true
+    && !runtimeMatchesPublication(cell, TaoStudioPublication)
   const TaoStudioPreviewConfig = TaoStudioPreviewBootstrap === undefined
     ? undefined
-    : TaoStudioPreviewBootstrap.cell === true && cell === undefined
+    : waitingForCell
     ? undefined
     : {
-      ...TaoStudioProject,
-      ...TaoStudioRevision,
       ...TaoStudioPreviewBootstrap,
       ...(cell?.identity ?? {}),
+      ...TaoStudioPublication,
     }
-  if (TaoStudioPreviewBootstrap?.cell === true && cell === undefined) {
+  if (waitingForCell) {
     return bootstrapError === undefined
       ? <TR.Studio.Pending />
       : <TR.Studio.Failure error={bootstrapError} />
@@ -237,7 +312,12 @@ export default function App() {
     return <TaoApp />
   }
   return (
-    <TR.Studio.ErrorBoundary key={String(TaoStudioPreviewConfig.compileRevision) + ':' + TaoStudioPreviewConfig.previewInstanceId}>
+    <TR.Studio.ErrorBoundary key={[
+      TaoStudioPreviewConfig.compileRevision,
+      TaoStudioPreviewConfig.cellRevision,
+      TaoStudioPreviewConfig.manifestRevision,
+      TaoStudioPreviewConfig.previewInstanceId,
+    ].join(':')}>
       <StudioPreviewContent cell={cell} config={TaoStudioPreviewConfig} />
     </TR.Studio.ErrorBoundary>
   )
@@ -253,7 +333,7 @@ function StudioPreviewContent({ cell, config }: any) {
       version: 1,
     })
   }, [cell])
-  const TaoStudioCell = cell === undefined ? undefined : studioCellRuntime(cell)
+  const TaoStudioCell = cell === undefined ? undefined : studioCellRuntime(cell, TaoStudioManifest)
   return (
     TaoStudioCell === undefined
       ? <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
@@ -265,8 +345,7 @@ function StudioPreviewContent({ cell, config }: any) {
   )
 }
 
-function studioCellRuntime(runtime: any) {
-  const manifest: any = TaoStudioManifest
+function studioCellRuntime(runtime: any, manifest: any) {
   const scenario = manifest.scenarios.find((candidate: any) => candidate.id === runtime.cell.scenarioId)
   if (scenario === undefined) throw new Error('Tao Studio scenario bootstrap is stale.')
   const fixture = manifest.fixtures.find((candidate: any) => candidate.id === scenario.fixtureId)
@@ -301,13 +380,42 @@ function studioCellRuntime(runtime: any) {
   } as any
 }
 
+function runtimeMatchesPublication(runtime: any, publication: any) {
+  const identity = runtime?.identity
+  return identity?.appName === publication.appName
+    && identity?.compileRevision === publication.compileRevision
+    && identity?.project === publication.project
+}
+
+function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {
+  const identity = value?.identity
+  const runtimeIdentity = value?.runtime?.identity
+  return value?.channel === TaoStudioProtocolChannel
+    && value?.protocolVersion === TaoStudioProtocolVersion
+    && value?.type === 'preview-runtime-update'
+    && identity?.previewInstanceId === bootstrap.previewInstanceId
+    && identity?.appName === publication.appName
+    && identity?.compileRevision === publication.compileRevision
+    && identity?.project === publication.project
+    && runtimeIdentity?.appName === identity.appName
+    && runtimeIdentity?.cellId === identity.cellId
+    && runtimeIdentity?.cellRevision === identity.cellRevision
+    && runtimeIdentity?.compileRevision === identity.compileRevision
+    && runtimeIdentity?.manifestRevision === identity.manifestRevision
+    && runtimeIdentity?.project === identity.project
+}
+
 function studioPreviewBootstrap(href: string) {
   const params = new URL(href).searchParams
   const parentOrigin = params.get('taoStudioParentOrigin')
   const previewInstanceId = params.get('taoStudioPreviewInstanceId')
+  const requestedSessionId = params.get('taoStudioSessionId')
+  const sessionId = requestedSessionId !== null && /^[A-Za-z0-9_-]{1,128}$/.test(requestedSessionId)
+    ? requestedSessionId
+    : undefined
   return parentOrigin === null || previewInstanceId === null
     ? undefined
-    : { cell: params.get('taoStudioCell') === '1', parentOrigin, previewInstanceId }
+    : { cell: params.get('taoStudioCell') === '1', parentOrigin, previewInstanceId, sessionId }
 }
 `
 }
@@ -365,13 +473,18 @@ function canonicalSourceVersions(
   return canonical
 }
 
-async function removeStaleGeneratedFiles(outputRoot: string, currentRelativePaths: ReadonlySet<string>): Promise<void> {
+async function removeStaleGeneratedFiles(
+  outputRoot: string,
+  currentRelativePaths: ReadonlySet<string>,
+  preserveRoots: readonly string[] = [],
+): Promise<void> {
   if (!await FS.exists(outputRoot)) {
     return
   }
   for await (const path of FS.walk(outputRoot)) {
     const relativePath = FS.relativePath(outputRoot, path)
-    if (!currentRelativePaths.has(relativePath)) {
+    const preserved = preserveRoots.some(root => relativePath === root || relativePath.startsWith(`${root}/`))
+    if (!currentRelativePaths.has(relativePath) && !preserved) {
       await FS.remove(path)
     }
   }
@@ -405,6 +518,22 @@ async function writeGeneratedApp(path: string, code: string): Promise<void> {
     }
   }
   await FS.writeText(path, code)
+}
+
+/** publishGeneratedApp atomically switches the one module that makes a complete revision live. */
+async function publishGeneratedApp(path: string, code: string): Promise<void> {
+  try {
+    if (await FS.readText(path) === code) {
+      return
+    }
+  } catch (error) {
+    if (!isMissingPathError(error)) {
+      throw error
+    }
+  }
+  const nextPath = `${path}.next`
+  await FS.writeText(nextPath, code)
+  await FS.move(nextPath, path)
 }
 
 function isMissingPathError(error: unknown): boolean {

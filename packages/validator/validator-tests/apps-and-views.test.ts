@@ -5,6 +5,7 @@ import { StateValidator } from '../validator-src/validators/StateValidator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
   accepts,
+  acceptsFiles,
   fence,
   rejects,
   stubContainer,
@@ -39,6 +40,21 @@ Describe('validator: apps and views', () => {
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
+  Test('accepts an app persisted case-set state', async () => {
+    const result = await testValidateCode(`
+      use StackNav from @tao/nav
+      type Theme is one of Light, Dark
+      app Workspace {
+        Name "Workspace"
+        state CurrentTheme is Theme = Light (persist)
+        Navigator StackNav { Initial Main }
+      }
+      view Main() { Title "Main" render Empty() }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toEqual([])
+  })
+
   Test('requires app state to be typed and persisted', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
@@ -50,9 +66,77 @@ Describe('validator: apps and views', () => {
       view Pane() { Title "Pane" render Empty() }
       ${stubView('Empty')}
     `)
-    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.appStateMustPersist('PaneWidth'))
-    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.persistedTypeRequired('PaneWidth'))
+    Expect(validationErrorMessages(result)).toEqual([
+      StateValidator.messages.appStateMustPersist('PaneWidth'),
+      StateValidator.messages.persistedTypeRequired('PaneWidth'),
+    ])
   })
+
+  Test('rejects persisted state whose declared runtime shape cannot be encoded', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app Workspace {
+        Name "Workspace"
+        state OnSave is action() = action { } (persist)
+        Navigator StackNav { Initial Pane }
+      }
+      view Pane() { Title "Pane" render Empty() }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.persistedTypeUnsupported('OnSave', 'action()'),
+    )
+  })
+
+  Test('rejects self-referential persisted items without recursing forever', async () => {
+    const result = await testValidateCodeWithErrors(`
+      type Person is { Friend Person }
+      app Cyclic {
+        state Current is Person = "invalid" (persist)
+        view Main
+      }
+      view Main() { render Empty() }
+      ${stubView('Empty')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.persistedTypeUnsupported('Current', 'Person'),
+    )
+  })
+
+  Test('rejects persisted item aliases whose runtime shape is unresolved', async () => {
+    const result = await testValidateCodeWithErrors(`
+      type Bag is item
+      app Shapeless {
+        state Current is Bag = "invalid" (persist)
+        view Main
+      }
+      view Main() { render Empty() }
+      ${stubView('Empty')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.persistedTypeUnsupported('Current', 'Bag'),
+    )
+  })
+
+  Test(
+    'accepts cross-file derived primitive types for persisted app state',
+    acceptsFiles({
+      'Main.tao': `
+        use PaneWidth from ./Types.tao
+        use StackNav from @tao/nav
+        app Workspace {
+          Name "Workspace"
+          state Width is PaneWidth = PaneWidth 320 (persist)
+          Navigator StackNav { Initial Pane }
+        }
+        view Pane() { Title "Pane" render Empty() }
+        ${stubView('Empty')}
+      `,
+      'Types.tao': 'workspace type PaneWidth is number',
+    }),
+  )
   Test(
     'rejects unsupported top-level statements',
     rejects(

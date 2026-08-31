@@ -177,6 +177,11 @@ function applyDimension(
 ): void {
   const [dimension, term] = entry
   if (dimension === 'width' && term === 'max') {
+    // A centered cross-axis child needs an explicit fluid width because centering disables the
+    // parent's default stretch. On a row's main axis, 100% would instead over-claim sibling space.
+    if (parentDirection !== mainAxisDirection) {
+      style['width'] = '100%'
+    }
     style['maxWidth'] = entry[2]
     return
   }

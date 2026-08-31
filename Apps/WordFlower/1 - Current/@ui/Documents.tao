@@ -1,6 +1,7 @@
 use Documents, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, FormButton, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
+use Checkbox, Col, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.
 // This one-case enum is deliberate: `ConfirmResult` is a nominal type, `Confirmed` is its one
@@ -16,16 +17,16 @@ view DocumentScreen(Document) {
       guard Document {
          loading -> { Spinner() }
          missing -> {
-            Text("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
+            TextMultiline("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
          }
-         error -> Message { Text("The document could not be loaded: { Message }") [body] }
+         error -> Message { TextMultiline("The document could not be loaded: { Message }") [body] }
       }
       DocumentEditor(Document)
 }  }
 
 // Typed TS injection also stays the permanent escape hatch for rendering Tao does not own.
 view WordCountLabel(Value text) {
-   render Text("Words: { CountWords(Value) }") [body]
+   render TextMultiline("Words: { CountWords(Value) }") [body]
 }
 
 view DocumentEditor(Document) {
@@ -86,11 +87,12 @@ view DocumentEditor(Document) {
          dismiss
    }  }
    // Editing and the paragraph outline sit side by side on a wide screen and stack on a narrow one.
-   render Panes() [screen, gap 16] {
+   render Panes() [screen, gap 20] {
       ScrollView() [claim 2] {
-         Col() [width max 720, gap 10] {
-            Text(DocumentLabel(Document.Title)) [title]
-            Text("Workspace: { Document.Workspace.Name }") [body]
+         Col() [width max 720, panel] {
+            Text("DOCUMENT") [eyebrow]
+            Text(DocumentLabel(Document.Title)) [display]
+            TextMultiline("Workspace: { Document.Workspace.Name }") [body]
 
             #editDocumentTitle
             TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
@@ -116,24 +118,25 @@ view DocumentEditor(Document) {
             FormButton("Save document", Disabled: TitleDraft is empty) {
                on press SaveDocument
             }
-            Text("Saved title: { Document.Title }") [body]
-            Text("Saved body: { Document.Body }") [body]
-            Text("Saves this session: { SaveCount }") [body]
+            TextMultiline("Saved title: { Document.Title }") [body]
+            TextMultiline("Saved body: { Document.Body }") [body]
+            TextMultiline("Saves this session: { SaveCount }") [body]
 
             #closeDocument
-            FormButton("Close document") {
+            FormButton("Close document") [buttonSecondary] {
                on press CloseDocument
       }  }  }
-      Col() [gap 10] {
-         Text("Paragraphs: { Paragraphs.Count }") [title]
+      Col() [panel] {
+         Text("OUTLINE") [eyebrow]
+         Text("Paragraphs: { Paragraphs.Count }") [sectionTitle]
          guard Paragraphs {
             loading -> { Spinner() }
-            error -> Message { Text("Could not load paragraphs: { Message }") [body] }
+            error -> Message { TextMultiline("Could not load paragraphs: { Message }") [body] }
          }
 
          // `Progress` takes a fraction between 0 and 1.
          Progress(Value: GoalFraction(Paragraphs.Count))
-         Text("Goal: { ParagraphGoal } paragraphs") [body]
+         TextMultiline("Goal: { ParagraphGoal } paragraphs") [body]
 
          #newParagraph
          TextInput(Value: ParagraphText, Label: "New paragraph", Placeholder: "Add a paragraph") {
@@ -142,16 +145,16 @@ view DocumentEditor(Document) {
 
          #paragraphs
          loop Paragraphs / Paragraph {
-            Col() [gap 6, pad 10] {
-               Text(Paragraph.Text) [body]
+            Col() [card] {
+               TextMultiline(Paragraph.Text) [body]
 }  }  }  }  }
 
 view SavedToast(Revert action()) {
-   render Row() [gap 6] {
-      Text("Saved") [body]
+   render Row() [gap 10] {
+      TextMultiline("Saved") [body]
 
       #revertSave
-      FormButton("Revert") {
+      FormButton("Revert") [buttonSecondary] {
          on press Revert
 }  }  }
 
@@ -159,16 +162,17 @@ view SavedToast(Revert action()) {
 // none. Each ask is an independent stacked occurrence. Back or plain dismissal answers none before
 // removal.
 view ConfirmCloseDialogue(Document) responds ConfirmResult {
-   render Col() [gap 6, pad 10] {
-      Text("Close { Document.Title }?") [title]
+   render Col() [panel, width max 420] {
+      Text("Close { Document.Title }?") [sectionTitle]
+      TextMultiline("Your latest unsaved changes will stay in this session until you return.") [body]
 
       #confirmClose
-      FormButton("Close") {
+      FormButton("Close") [buttonDanger] {
          on press -> { respond Confirmed }
       }
 
       #cancelClose
-      FormButton("Cancel") {
+      FormButton("Cancel") [buttonSecondary] {
          on press -> {
             respond // bare respond answers none
 }  }  }  }

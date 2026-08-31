@@ -27,6 +27,7 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(handshake.capabilities.sourceActions).toEqual({
       canonicalEnvelope: true,
       checkpoints: true,
+      proposals: true,
       undo: true,
       version: studioSourceActionVersion,
     })
@@ -35,10 +36,13 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/rename' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/delete' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/inspect' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/propose' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/data/fill' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/design' })
     Expect(handshake.endpoints).toContainEqual({ method: 'WS', path: '/api/language/lsp' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/language/highlight' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/tests/status' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/tests/run' })
     Expect(handshake.files.map(candidate => candidate.path)).toEqual([
       'Garden.tao',
       'Project.tao',
@@ -435,7 +439,7 @@ Test('Studio saves a captured provider state as a named Tao fixture through the 
   await withStudioProject(async session => {
     session.registerPreview({ previewInstanceId: 'capture-preview' })
     const file = await session.readFile('Garden.tao')
-    const applied = await session.applySourceAction({
+    const envelope = {
       action: {
         fixtureName: 'CapturedState',
         kind: 'insert-captured-fixture',
@@ -456,12 +460,31 @@ Test('Studio saves a captured provider state as a named Tao fixture through the 
       requestId: 'captured-fixture-request',
       sourceActionVersion: studioSourceActionVersion,
       type: 'source-action',
-    })
+    } as const
+    const proposal = await session.proposeSourceAction(envelope)
+
+    Expect(proposal.diff).toContain('+++ Garden.tao (proposed)')
+    Expect(proposal.diff).toContain('+fixture CapturedState')
+    Expect(proposal.content).toContain('fixture CapturedState')
+    Expect((await session.readFile('Garden.tao')).content).toBe(file.content)
+
+    const applied = await session.applySourceAction(envelope)
 
     Expect(applied.content).toContain('fixture CapturedState')
     Expect(applied.content).toContain('Account1 = create Account {')
     Expect(applied.content).toContain('Name: "Captured"')
   })
+})
+
+Test('Studio source-action proposals anchor pure insertions as a valid unified diff hunk', () => {
+  const diff = StudioProjectSession.testing.sourceActionProposalDiff(
+    'Garden.tao',
+    'first\nlast',
+    'first\ninserted\nlast',
+  )
+
+  Expect(diff).toContain('@@ -1,0 +2,1 @@')
+  Expect(diff).toContain('+inserted')
 })
 
 Test('Studio restores the original Tao source when a captured fixture fails compilation', async () => {
@@ -582,6 +605,45 @@ Test('Studio groups a visual gesture into one checkpoint and undoes its exact cu
   })
 })
 
+Test('Studio commits an abandoned visual gesture before accepting the next checkpoint', async () => {
+  await withStudioProject(async session => {
+    session.registerPreview({ previewInstanceId: 'preview-recovery' })
+    const original = await session.readFile('Garden.tao')
+    const identity = {
+      ...session.identity(),
+      path: original.path,
+      previewInstanceId: 'preview-recovery',
+      sourceVersion: original.sourceVersion,
+    }
+    const abandoned = await session.applySourceAction({
+      action: { component: 'Text', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'abandoned-gesture', phase: 'begin' },
+      identity,
+      protocolVersion: studioProtocolVersion,
+      requestId: 'abandoned-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })
+    const next = await session.applySourceAction({
+      action: { component: 'Number', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'next-action', phase: 'single' },
+      identity: { ...identity, sourceVersion: abandoned.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'next-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })
+
+    Expect(next.checkpoint).toEqual({ id: 'next-action', status: 'committed' })
+    Expect(session.checkpoints().map(checkpoint => [checkpoint.id, checkpoint.status])).toEqual([
+      ['abandoned-gesture', 'committed'],
+      ['next-action', 'committed'],
+    ])
+  })
+})
+
 Test('Studio registers one preview instance and acknowledges only its compiled revision', async () => {
   await withStudioProject(async session => {
     session.registerPreview({ previewInstanceId: 'preview-1' })
@@ -612,6 +674,7 @@ Test('Studio registers one preview instance and acknowledges only its compiled r
 
 Test('Studio project session exposes concurrent matrix cells and rejects stale reconfiguration', async () => {
   await withStudioProject(async session => {
+    const compiled = await session.compileInitial()
     const cell = {
       args: {},
       cellId: 'cell:phone',
@@ -627,7 +690,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     const manifest = {
       capabilities: { captureDomains: ['data'], scheme: 'inert' as const },
       cells: [cell],
-      compileRevision: 0,
+      compileRevision: compiled.compileRevision,
       fixtures: [{
         fixtureId: 'fixture:base',
         label: 'Base',
@@ -666,6 +729,22 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     session.setMatrixManifest(manifest)
     const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
     const registered = session.registerCellPreview({ ...identity, previewInstanceId: 'cell-preview-1' })
+    const applied = {
+      appliedRevision: compiled.compileRevision,
+      channel: studioProtocolChannel,
+      compileRevision: compiled.compileRevision,
+      identity: { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-applied',
+    }
+    Expect(session.acknowledgePreview(applied)).toBe(true)
+    Expect(session.compileSnapshot().appliedRevision).toBe(compiled.compileRevision)
+    Expect(() =>
+      session.acknowledgePreview({
+        ...applied,
+        identity: { ...applied.identity, previewInstanceId: 'stale-cell-preview' },
+      })
+    ).toThrow('no longer current')
     const replay = {
       capturedAt: 1_788_100_000_000,
       domains: [{ domain: 'data', value: { snapshots: {} }, version: 1 }],
@@ -685,7 +764,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     session.setMatrixManifest({
       ...manifest,
       cells: [{ ...cell, cellRevision: 0 }],
-      compileRevision: 1,
+      compileRevision: compiled.compileRevision + 1,
       manifestRevision: 'manifest-2',
     })
     unsubscribe()
@@ -701,7 +780,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     })
     Expect(refreshed.identity).toMatchObject({
       cellRevision: 1,
-      compileRevision: 1,
+      compileRevision: compiled.compileRevision + 1,
       manifestRevision: 'manifest-2',
     })
     Expect(refreshed.cell.environment.network.latencyMs).toBe(250)

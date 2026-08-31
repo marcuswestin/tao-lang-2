@@ -19,7 +19,7 @@ import {
   StudioForeignActionFailure,
   studioServerForeignActionContract,
   StudioServerForeignActions,
-} from '../studio-src/StudioServerForeignActions'
+} from '../studio-src/TaoStudioServerActions'
 
 Test('StudioServer datasource fills file metadata without leaking contents and pushes dirty invalidation', async () => {
   await withSession(async session => {
@@ -50,6 +50,7 @@ Test('StudioServer datasource fills file metadata without leaking contents and p
     const dirty = after.rows[0] as StudioServerFileRow
 
     Expect(invalid.saved).toBe(false)
+    Expect(after.revision).toBeGreaterThan(before.revision)
     Expect(dirty.Dirty).toBe(true)
     Expect(dirty.Diagnostics.every(diagnostic => diagnostic.Source === 'draft')).toBe(true)
     Expect(invalidations).toContainEqual(['Files'])

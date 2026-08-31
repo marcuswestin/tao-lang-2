@@ -18,8 +18,12 @@
     "@shikijs/langs": "^4.3.0",
     "@shikijs/themes": "^4.3.0",
     "@shikijs/types": "^4.3.0",
+    "@tao/code-editor": "workspace:*",
     "chokidar": "^5.0.0",
     "codemirror": "^6.0.2",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native-web": "~0.21.0",
     "tao-generation": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-parser": "workspace:*",
@@ -27,5 +31,9 @@
     "tao-shared": "workspace:*",
     "tao-source-actions": "workspace:*",
     "tao-workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "@types/react-dom": "~19.1.7"
   }
 }

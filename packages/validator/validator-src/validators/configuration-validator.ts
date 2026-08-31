@@ -38,6 +38,42 @@ export const configurationValidationChecks = {
   [AST.DatasourceDeclaration.$type]: (declaration, ctx) => validatePrimitiveValue(declaration, 'datasource', ctx),
 } satisfies NodeValidationChecks
 
+/** validateConfigurationSidecarFiles checks sidecar existence and exports without blocking structural validation. */
+export async function validateConfigurationSidecarFiles(
+  file: AST.TaoFile,
+  ctx: ValidationContext,
+): Promise<void> {
+  for (const implementation of AST.streamAllContents(file).filter(AST.isConfigurationImplementation)) {
+    if (!sidecarLocationIsValid(implementation)) {
+      continue
+    }
+    const sidecarPath = implementation.path!
+    const documentDirectory = FS.resolvePath(FS.dirname(AST.getDocument(implementation).uri.path))
+    const resolvedSidecarPath = FS.resolvePath(sidecarPath, documentDirectory)
+    // A synthetic in-memory document has no directory to read, so only path-shape rules apply.
+    if (!await FS.isDirectory(documentDirectory)) {
+      continue
+    }
+    if (!await FS.exists(resolvedSidecarPath)) {
+      ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
+      continue
+    }
+    let sidecarSource: string
+    try {
+      sidecarSource = await FS.readText(resolvedSidecarPath)
+    } catch {
+      ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
+      continue
+    }
+    if (!hasNamedExport(sidecarSource, implementation.exportName)) {
+      ctx.error(
+        configurationValidationMessages.sidecarNamedExport(sidecarPath, implementation.exportName),
+        implementation,
+      )
+    }
+  }
+}
+
 function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {
   const primitive = AST.configurationPrimitiveOf(declaration)
   if (primitive === 'app') {
@@ -119,7 +155,7 @@ function validateConfigurationImplementations(declaration: AST.ConfigurableDecla
     if (implementation.protocol !== expectedProtocol) {
       ctx.error(configurationValidationMessages.protocol(declaration.name, expectedProtocol), implementation)
     }
-    validateSidecarImplementation(implementation, ctx)
+    validateSidecarLocation(implementation, ctx)
   }
 }
 
@@ -180,13 +216,19 @@ function ownTypeSlots(declaration: AST.TypeDeclaration): AST.ItemTypeExpression 
     : undefined
 }
 
-function validateSidecarImplementation(
+function validateSidecarLocation(
   implementation: AST.ConfigurationImplementation,
   ctx: ValidationContext,
 ): void {
+  if (!sidecarLocationIsValid(implementation) && implementation.path !== undefined) {
+    ctx.error(configurationValidationMessages.sidecarLocation(implementation.path), implementation)
+  }
+}
+
+function sidecarLocationIsValid(implementation: AST.ConfigurationImplementation): boolean {
   const sidecarPath = implementation.path
   if (sidecarPath === undefined) {
-    return
+    return false
   }
 
   const documentPath = AST.getDocument(implementation).uri.path
@@ -198,32 +240,9 @@ function validateSidecarImplementation(
     || sidecarPath.endsWith('.d.ts')
     || FS.dirname(resolvedSidecarPath) !== documentDirectory
   ) {
-    ctx.error(configurationValidationMessages.sidecarLocation(sidecarPath), implementation)
-    return
+    return false
   }
-  // A synthetic in-memory document has no directory to read, so only the path-shape rules above
-  // apply to it. The compiler still asserts the sidecar exists before emitting.
-  if (!FS.existsSync(documentDirectory)) {
-    return
-  }
-  if (!FS.existsSync(resolvedSidecarPath)) {
-    ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
-    return
-  }
-
-  let sidecarSource: string
-  try {
-    sidecarSource = FS.readTextSync(resolvedSidecarPath)
-  } catch {
-    ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
-    return
-  }
-  if (!hasNamedExport(sidecarSource, implementation.exportName)) {
-    ctx.error(
-      configurationValidationMessages.sidecarNamedExport(sidecarPath, implementation.exportName),
-      implementation,
-    )
-  }
+  return true
 }
 
 function isAbsolutePath(path: string): boolean {

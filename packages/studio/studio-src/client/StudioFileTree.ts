@@ -3,7 +3,7 @@ import type {
   StudioDeleteFileResult,
   StudioRenameFileResult,
 } from '../StudioProjectSession'
-import { StudioApiClient, type StudioFile } from './StudioApiClient'
+import { StudioApiClient, StudioApiError, type StudioFile } from './StudioApiClient'
 
 export type StudioFileTreeFolder = {
   children: readonly StudioFileTreeNode[]
@@ -39,7 +39,17 @@ export type StudioFileTreeOptions = {
   prepareMutation?: (file: StudioFile) => Promise<StudioFile | undefined>
   prompt?: (message: string, initial: string) => string | null
   protectedPath?: string
+  renderDom?: boolean
 }
+
+export type MountedStudioFileTree = Readonly<{
+  create: (path: string) => Promise<void>
+  delete: (path: string, sourceVersion: string) => Promise<void>
+  refresh: () => Promise<void>
+  rename: (path: string, sourceVersion: string, targetPath: string) => Promise<void>
+  render: () => void
+  setFiles: (files: readonly StudioFile[]) => void
+}>
 
 export const StudioFileTreeModel = {
   build(files: readonly StudioFile[]): readonly StudioFileTreeNode[] {
@@ -173,16 +183,19 @@ export class StudioFileTreeController {
 export function mountStudioFileTree(
   parent: HTMLElement,
   options: StudioFileTreeOptions,
-): { refresh: () => Promise<void>; render: () => void; setFiles: (files: readonly StudioFile[]) => void } {
+): MountedStudioFileTree {
   const root = document.createElement('section')
   root.className = 'studio-file-tree'
+  const renderDom = options.renderDom !== false
   const confirm = options.confirm ?? (message => window.confirm(message))
   const prompt = options.prompt ?? ((message, initial) => window.prompt(message, initial))
   const controller = new StudioFileTreeController({
     ...options,
     onFiles(files) {
       options.onFiles?.(files)
-      render()
+      if (renderDom) {
+        render()
+      }
     },
   })
   const run = (action: () => Promise<unknown>): void => {
@@ -259,14 +272,36 @@ export function mountStudioFileTree(
     return list
   }
 
-  parent.append(root)
-  render()
+  if (renderDom) {
+    parent.append(root)
+    render()
+  }
   return {
+    async create(path) {
+      await controller.create(path)
+    },
+    async delete(path, sourceVersion) {
+      await controller.delete(currentFile(path, sourceVersion))
+    },
     refresh: async () => await controller.refresh(),
+    async rename(path, sourceVersion, targetPath) {
+      await controller.rename(currentFile(path, sourceVersion), targetPath)
+    },
     render,
     setFiles(files) {
       controller.setFiles(files)
     },
+  }
+
+  function currentFile(path: string, sourceVersion: string): StudioFile {
+    const file = controller.files.find(candidate => candidate.path === path)
+    if (file === undefined) {
+      throw new Error(`Tao Studio file is no longer available: ${path}`)
+    }
+    if (file.sourceVersion !== sourceVersion) {
+      throw new StudioApiError('This file changed under this edit.', 409)
+    }
+    return file
   }
 }
 

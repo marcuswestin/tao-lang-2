@@ -24,7 +24,9 @@ view MainView() {
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()
   await FS.mkdir(artifactParent)
-  const projectRoot = await FS.mkTmpDir(FS.resolvePath('simulated-user-', artifactParent))
+  // The smoke artifact root normally lives under the repository's ignored `.artifacts` tree.
+  // Project discovery intentionally honors Git ignores, so keep the synthetic project outside it.
+  const projectRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-simulated-user-', FS.tmpdir()))
   const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
   let browser: StudioCdp | undefined
   let native: StartedStudioNative | undefined
@@ -63,6 +65,20 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     } else {
       browser = await StudioCdp.launchChrome()
       await browser.goto(projectUrl)
+      await browser.waitFor(
+        `(() => {
+        const shell = document.querySelector('.studio-shell')
+        const viewport = document.querySelector('#tao-studio-viewport')
+        if (!(shell instanceof HTMLElement) || !(viewport instanceof HTMLElement)) return false
+        const shellRect = shell.getBoundingClientRect()
+        const viewportRect = viewport.getBoundingClientRect()
+        return shellRect.top === 0
+          && shellRect.height === viewportRect.height
+          && shellRect.height === window.innerHeight
+          && shellRect.width === window.innerWidth
+      })()`,
+        { timeoutMs: 30_000 },
+      )
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
         timeoutMs: 30_000,
       })
@@ -120,6 +136,13 @@ function previewHtml(): string {
     const query = new URLSearchParams(location.search)
     const parentOrigin = query.get('taoStudioParentOrigin')
     const previewInstanceId = query.get('taoStudioPreviewInstanceId')
+    const requestedSessionId = query.get('taoStudioSessionId')
+    const sessionId = requestedSessionId && /^[A-Za-z0-9_-]{1,128}$/.test(requestedSessionId)
+      ? requestedSessionId
+      : undefined
+    const studioBase = sessionId === undefined
+      ? parentOrigin
+      : parentOrigin + '/sessions/' + encodeURIComponent(sessionId)
     const renderId = (path, content, label) => {
       const source = 'Text("' + label + '")'
       const start = content.indexOf(source)
@@ -127,8 +150,8 @@ function previewHtml(): string {
       return path + ':' + start + ':' + (start + source.length)
     }
     document.querySelector('#move-third').addEventListener('click', async () => {
-      const protocol = await fetch(parentOrigin + '/api/protocol').then(response => response.json())
-      const file = await fetch(parentOrigin + '/api/file?path=' + encodeURIComponent(protocol.entryPath))
+      const protocol = await fetch(studioBase + '/api/protocol').then(response => response.json())
+      const file = await fetch(studioBase + '/api/file?path=' + encodeURIComponent(protocol.entryPath))
         .then(response => response.json())
       const project = protocol.identity.project.endsWith('/')
         ? protocol.identity.project.slice(0, -1)

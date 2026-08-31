@@ -19,8 +19,13 @@ type ExpoServerProcess = {
 }
 
 export type ExpoServerOptions = {
+  command?: {
+    argsPrefix?: readonly string[]
+    executable: string
+  }
   logRoot?: string
   runtimeToolchainSourceRoot?: string
+  stopTimeoutMs?: number
 }
 
 export type ExpoRunnerSession = ReturnType<typeof createSessionFromConfig>

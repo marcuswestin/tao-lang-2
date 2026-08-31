@@ -188,6 +188,17 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(source).not.toContain('BUN_TMPDIR=')
   })
 
+  Test('activates the pinned profile before the developer CLI starts', async () => {
+    const source = await FS.readText(Repo.resolvePath('dev'))
+    const activation = source.indexOf('tao_activate_devenv_profile')
+    const launch = source.indexOf('exec bun run')
+
+    Expect(source).toContain('source "$SCRIPT_DIR/packages/dev/dev-src/cli/agent-worktree-profile.zsh"')
+    Expect(activation).toBeGreaterThan(0)
+    Expect(launch).toBeGreaterThan(activation)
+    Expect(source).toContain('direnv allow && direnv exec . ./agent setup')
+  })
+
   Test('repairs incomplete dependency graphs from repository-local Bun storage', async () => {
     const source = await FS.readText(Repo.resolvePath('Justfile'))
 

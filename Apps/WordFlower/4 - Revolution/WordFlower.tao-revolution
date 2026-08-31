@@ -23,7 +23,7 @@ use every, Interval from @tao/time
 // and `default` properties; case-valued and unit-typed state; optional self-referential relations;
 // query field selection; time and lifecycle automation; presentation results and presentation
 // serialization with migration; platform-conditional declarations; the `unsafe ts` native
-// boundary; asset literals; richer stdlib primitives; and design `scenario` declarations.
+// boundary; asset literals; richer stdlib primitives; and grouped `scenarios` declarations.
 //
 // TODO — intended functionality with no settled syntax yet. Add usage here as each is decided.
 //
@@ -724,6 +724,7 @@ view DocumentEditor(Document) {
    state TitleDraft = Document.Title
    state BodyDraft = Document.Body
    state ParagraphText = ""
+   state DetachedParagraphText = ""
    state SaveCount = 0
    query Paragraphs from Document.Paragraphs { }
    action SetBodyDraft(Value text) {
@@ -744,9 +745,12 @@ view DocumentEditor(Document) {
    }
    action AddParagraph() {
       guard ParagraphText empty
+      // `async` starts as a later root, so capture the submitted value before clearing the input.
+      // A failed detached write enters the datasource error state.
+      set DetachedParagraphText = ParagraphText
       async {
          create Paragraph {
-            Text: ParagraphText
+            Text: DetachedParagraphText
             Ordering: Paragraphs.Count + 1
             Document
          }

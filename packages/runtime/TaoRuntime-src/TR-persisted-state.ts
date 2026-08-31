@@ -8,6 +8,7 @@ import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-
 type EvaluableValue<T> = Readonly<{ evaluate(): EvaluableValue<T>; jsValue: T }>
 
 export type TaoPersistedStateType =
+  | Readonly<{ cases: readonly string[]; declaration: string; kind: 'enum' }>
   | Readonly<{ kind: 'list'; element?: TaoPersistedStateType }>
   | Readonly<{ kind: 'primitive'; name: 'boolean' | 'duration' | 'none' | 'number' | 'text' | 'time' }>
   | Readonly<{
@@ -31,7 +32,20 @@ export type TaoWritableState<T> = Readonly<{
 
 const states = new Map<string, RuntimePersistedState<unknown>>()
 const pendingRestore = new Map<string, unknown>()
+const enumCases = new Map<string, Map<string, PersistedEnumCaseIdentity>>()
 let storageOverride: TaoKeyValueStorage | undefined
+
+type PersistedEnumCaseIdentity = Readonly<{ caseName: string; declaration: string; identity: symbol }>
+
+/** registerPersistedEnumCase links one stable declaration/case name to its current runtime token. */
+export function registerPersistedEnumCase(value: PersistedEnumCaseIdentity): void {
+  let declarationCases = enumCases.get(value.declaration)
+  if (declarationCases === undefined) {
+    declarationCases = new Map()
+    enumCases.set(value.declaration, declarationCases)
+  }
+  declarationCases.set(value.caseName, value)
+}
 
 /** RuntimePersistedState owns one device-local value independently of preference semantics. */
 export class RuntimePersistedState<T> implements TaoWritableState<T> {
@@ -60,8 +74,9 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     this.#type = type
     this.key = `tao.persisted-state.v1:${identity.canonical}:${name}`
     const restored = pendingRestore.get(this.key)
-    if (restored !== undefined && matchesPersistedType(restored, this.#type)) {
-      this.#value = restored as T
+    const decoded = restored === undefined ? { ok: false as const } : decodePersistedValue(restored, this.#type)
+    if (decoded.ok) {
+      this.#value = decoded.value as T
     }
   }
 
@@ -121,12 +136,13 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
   }
 
   capture(): unknown {
-    return this.#value
+    return encodePersistedValue(this.#value, this.#type)
   }
 
   restore(next: unknown): void {
-    if (matchesPersistedType(next, this.#type)) {
-      this.#replace(next as T)
+    const decoded = decodePersistedValue(next, this.#type)
+    if (decoded.ok) {
+      this.#replace(decoded.value as T)
     }
   }
 
@@ -138,7 +154,11 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
       this.#dirtyBeforeLoad = true
     }
     this.#replace(next)
-    const envelope: PersistedEnvelope = { formatVersion: 1, type: this.#type, value: next }
+    const envelope: PersistedEnvelope = {
+      formatVersion: 1,
+      type: this.#type,
+      value: encodePersistedValue(next, this.#type),
+    }
     const encoded = JSON.stringify(envelope)
     const targetStorage = storage()
     this.#persistQueue = this.#persistQueue
@@ -166,12 +186,15 @@ function decodeEnvelope(
       || typeof envelope !== 'object'
       || envelope.formatVersion !== 1
       || JSON.stringify(envelope.type) !== JSON.stringify(expectedType)
-      || !matchesPersistedType(envelope.value, expectedType)
     ) {
       warnPersistence('Ignored persisted state whose version or runtime type no longer matches.', undefined)
       return { ok: false }
     }
-    return { ok: true, value: envelope.value }
+    const decoded = decodePersistedValue(envelope.value, expectedType)
+    if (!decoded.ok) {
+      warnPersistence('Ignored persisted state whose value no longer matches its runtime type.', undefined)
+    }
+    return decoded
   } catch (error) {
     warnPersistence('Ignored corrupt persisted state.', error)
     return { ok: false }
@@ -179,6 +202,15 @@ function decodeEnvelope(
 }
 
 function matchesPersistedType(value: unknown, type: TaoPersistedStateType): boolean {
+  if (type.kind === 'enum') {
+    if (!isPlainRecord(value)) {
+      return false
+    }
+    return value['declaration'] === type.declaration
+      && typeof value['caseName'] === 'string'
+      && type.cases.includes(value['caseName'])
+      && typeof value['identity'] === 'symbol'
+  }
   if (type.kind === 'primitive') {
     if (type.name === 'none') {
       return value === null
@@ -205,6 +237,101 @@ function matchesPersistedType(value: unknown, type: TaoPersistedStateType): bool
     && Object.entries(type.properties).every(([name, property]) =>
       (property.optional && !(name in value)) || (name in value && matchesPersistedType(value[name], property.type))
     )
+}
+
+function encodePersistedValue(value: unknown, type: TaoPersistedStateType): unknown {
+  if (type.kind === 'enum') {
+    if (!matchesPersistedType(value, type)) {
+      throw new Error('Persisted enum value does not match its generated runtime type.')
+    }
+    return { caseName: (value as PersistedEnumCaseIdentity).caseName, declaration: type.declaration }
+  }
+  if (type.kind === 'list') {
+    return type.element === undefined
+      ? value
+      : (value as unknown[]).map(item => encodePersistedValue(item, type.element!))
+  }
+  if (type.kind === 'union') {
+    const member = type.members.find(candidate => matchesPersistedType(value, candidate))
+    if (member === undefined) {
+      throw new Error('Persisted union value does not match its generated runtime type.')
+    }
+    return encodePersistedValue(value, member)
+  }
+  if (type.kind === 'item') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([name, item]) => [
+        name,
+        encodePersistedValue(item, type.properties[name]!.type),
+      ]),
+    )
+  }
+  return value
+}
+
+function decodePersistedValue(
+  value: unknown,
+  type: TaoPersistedStateType,
+): { ok: true; value: unknown } | { ok: false } {
+  if (type.kind === 'enum') {
+    if (
+      !isPlainRecord(value)
+      || value['declaration'] !== type.declaration
+      || typeof value['caseName'] !== 'string'
+      || !type.cases.includes(value['caseName'])
+    ) {
+      return { ok: false }
+    }
+    const restored = enumCases.get(type.declaration)?.get(value['caseName'])
+    return restored === undefined ? { ok: false } : { ok: true, value: restored }
+  }
+  if (type.kind === 'primitive') {
+    return matchesPersistedType(value, type) ? { ok: true, value } : { ok: false }
+  }
+  if (type.kind === 'list') {
+    if (!Array.isArray(value)) {
+      return { ok: false }
+    }
+    if (type.element === undefined) {
+      return { ok: true, value }
+    }
+    const restored: unknown[] = []
+    for (const item of value) {
+      const decoded = decodePersistedValue(item, type.element)
+      if (!decoded.ok) {
+        return decoded
+      }
+      restored.push(decoded.value)
+    }
+    return { ok: true, value: restored }
+  }
+  if (type.kind === 'union') {
+    for (const member of type.members) {
+      const decoded = decodePersistedValue(value, member)
+      if (decoded.ok) {
+        return decoded
+      }
+    }
+    return { ok: false }
+  }
+  if (!isPlainRecord(value) || Object.keys(value).some(name => !(name in type.properties))) {
+    return { ok: false }
+  }
+  const restored: Record<string, unknown> = {}
+  for (const [name, property] of Object.entries(type.properties)) {
+    if (!(name in value)) {
+      if (property.optional) {
+        continue
+      }
+      return { ok: false }
+    }
+    const decoded = decodePersistedValue(value[name], property.type)
+    if (!decoded.ok) {
+      return decoded
+    }
+    restored[name] = decoded.value
+  }
+  return { ok: true, value: restored }
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

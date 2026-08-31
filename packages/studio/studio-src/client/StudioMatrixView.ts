@@ -13,6 +13,7 @@ import {
   type StudioFixtureValue,
   type StudioJsonObject,
   type StudioJsonValue,
+  type StudioPreviewRuntimeUpdateMessage,
   type StudioPreviewSourceIdentity,
   StudioProtocol,
   studioProtocolChannel,
@@ -20,8 +21,14 @@ import {
   type StudioRuntimeCaptureArtifact,
   type StudioSourceActionEnvelope,
 } from '../StudioProtocol'
-import { StudioApiClient, type StudioHandshake } from './StudioApiClient'
-import { absoluteSourcePath, projectRelativePath } from './StudioEditor'
+import {
+  StudioApiClient,
+  StudioApiError,
+  StudioApiRoutes,
+  type StudioCellRuntimeResponse,
+  type StudioHandshake,
+} from './StudioApiClient'
+import { absoluteSourcePath, projectRelativePath, StudioSourceNavigation } from './StudioEditor'
 
 export type StudioMatrixCell<Item> = {
   id: string
@@ -72,6 +79,61 @@ export const StudioMatrixLayout = {
   },
 } as const
 
+export const StudioPreviewFrameUrl = {
+  create(
+    previewUrl: string,
+    previewInstanceId: string,
+    studioLocation: Pick<Location, 'origin' | 'pathname'>,
+    cell = false,
+  ): string {
+    const url = new URL(previewUrl)
+    if (cell) {
+      url.searchParams.set('taoStudioCell', '1')
+    }
+    url.searchParams.set('taoStudioParentOrigin', studioLocation.origin)
+    url.searchParams.set('taoStudioPreviewInstanceId', previewInstanceId)
+    const sessionId = StudioApiRoutes.currentSessionId(studioLocation.pathname)
+    if (sessionId !== undefined) {
+      url.searchParams.set('taoStudioSessionId', sessionId)
+    }
+    return url.toString()
+  },
+} as const
+
+export const StudioRetainedPreview = {
+  registrationIdentities(
+    manifest: StudioPreviewManifestV2,
+    cell: StudioPreviewCell,
+    previous: StudioCellIdentity | undefined,
+  ): readonly StudioCellIdentity[] {
+    const base = cellIdentity(manifest, cell)
+    if (previous === undefined || previous.cellRevision <= base.cellRevision) {
+      return [base]
+    }
+    return [{ ...base, cellRevision: previous.cellRevision }, base]
+  },
+  async register<Result>(
+    identities: readonly StudioCellIdentity[],
+    previewInstanceId: string,
+    request: (identity: StudioCellIdentity & { previewInstanceId: string }) => Promise<Result>,
+  ): Promise<Result> {
+    for (const [index, identity] of identities.entries()) {
+      try {
+        return await request({ ...identity, previewInstanceId })
+      } catch (error) {
+        if (
+          index === identities.length - 1
+          || !(error instanceof StudioApiError)
+          || error.status !== 409
+        ) {
+          throw error
+        }
+      }
+    }
+    throw new Error('Studio retained preview has no registration identity.')
+  },
+} as const
+
 /** Keyed DOM host for scenario-group rows and their left-to-right preview cells. */
 export const StudioMatrixView = {
   render<Item>(
@@ -118,18 +180,32 @@ function reconcileMatrix<Item>(
       render(frame, cell.item)
       return frame
     })
-    cells.replaceChildren(...nextFrames)
-    row.replaceChildren(heading, cells)
+    reconcileElementChildren(cells, nextFrames)
+    reconcileElementChildren(row, [heading, cells])
     return row
   })
-  canvas.replaceChildren(...nextRows)
+  reconcileElementChildren(canvas, nextRows)
   if (!parent.contains(canvas)) {
     parent.replaceChildren(canvas)
   }
 }
 
+/** Moves keyed matrix nodes in place so retained preview iframes keep their browsing contexts. */
+function reconcileElementChildren(parent: HTMLElement, next: readonly HTMLElement[]): void {
+  for (const [index, element] of next.entries()) {
+    const current = parent.children.item(index)
+    if (current !== element) {
+      parent.insertBefore(element, current)
+    }
+  }
+  while (parent.children.length > next.length) {
+    parent.lastElementChild?.remove()
+  }
+}
+
 export type StudioPreviewConnection = {
   activate?: () => void
+  appliedRevision?: number
   capture?: {
     button: HTMLButtonElement
     fixtureName: string
@@ -145,9 +221,12 @@ export type StudioPreviewConnection = {
   frame?: HTMLElement
   iframe: HTMLIFrameElement
   interactionMode: StudioInteractionMode
+  expectedRevision?: number
   origin: string
   previewInstanceId: string
+  reconfigureEnvironment?: (environment: StudioCellEnvironment) => Promise<void>
   refresh?: Promise<void>
+  revisionTimeout?: ReturnType<typeof setTimeout>
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
   runtimeCaptureRequest?: {
     reject: (error: Error) => void
@@ -163,6 +242,30 @@ export type StudioPreviewConnection = {
   suspended?: boolean
   suspendedSource?: string
   visibilityObserver?: IntersectionObserver
+}
+
+export function disconnectPreviews(
+  previews: readonly StudioPreviewConnection[],
+  reason = 'The Tao Studio preview was disconnected.',
+): void {
+  for (const preview of previews) {
+    if (preview.revisionTimeout !== undefined) {
+      clearTimeout(preview.revisionTimeout)
+      preview.revisionTimeout = undefined
+    }
+    if (preview.capture !== undefined) {
+      clearTimeout(preview.capture.timeout)
+      preview.capture = undefined
+    }
+    if (preview.runtimeCaptureRequest !== undefined) {
+      clearTimeout(preview.runtimeCaptureRequest.timeout)
+      preview.runtimeCaptureRequest.reject(new Error(reason))
+      preview.runtimeCaptureRequest = undefined
+    }
+    preview.visibilityObserver?.disconnect()
+    preview.visibilityObserver = undefined
+    preview.iframe.src = 'about:blank'
+  }
 }
 
 export type StudioRuntimeLog = Readonly<{
@@ -296,6 +399,7 @@ export async function connectPreviews(
   parent: HTMLElement,
   previewUrl: string | undefined,
   handshake: StudioHandshake,
+  signal?: AbortSignal,
 ): Promise<StudioPreviewConnection[]> {
   if (previewUrl === undefined) {
     return []
@@ -313,6 +417,7 @@ export async function connectPreviews(
         handshake,
         manifest,
         cell,
+        signal,
       )
     ))
     StudioMatrixView.render(
@@ -326,12 +431,9 @@ export async function connectPreviews(
     return connections
   }
   const previewInstanceId = crypto.randomUUID()
-  await StudioApiClient.previewInstance({ previewInstanceId })
-  const url = new URL(previewUrl)
-  url.searchParams.set('taoStudioParentOrigin', window.location.origin)
-  url.searchParams.set('taoStudioPreviewInstanceId', previewInstanceId)
+  await StudioApiClient.previewInstance({ previewInstanceId }, signal)
   const iframe = document.createElement('iframe')
-  iframe.src = url.toString()
+  iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location)
   iframe.title = `${handshake.identity.appName} live preview`
   parent.replaceChildren(iframe)
   return [{ iframe, interactionMode: 'edit', origin, previewInstanceId }]
@@ -362,6 +464,7 @@ async function connectCellPreview(
   handshake: StudioHandshake,
   manifest: StudioPreviewManifestV2,
   cell: StudioPreviewCell,
+  signal?: AbortSignal,
 ): Promise<StudioPreviewConnection> {
   const previewInstanceId = crypto.randomUUID()
   const cellIdentity: StudioCellIdentity = {
@@ -372,11 +475,21 @@ async function connectCellPreview(
     manifestRevision: manifest.manifestRevision,
     project: handshake.identity.project,
   }
-  await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId })
+  await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId }, signal)
   const iframe = document.createElement('iframe')
-  iframe.src = cellPreviewUrl(previewUrl, previewInstanceId)
+  iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location, true)
   iframe.title = `${cell.scenarioId} live preview`
-  return { cell, cellIdentity, iframe, interactionMode: 'edit', origin, previewInstanceId }
+  const connection: StudioPreviewConnection = {
+    cell,
+    cellIdentity,
+    expectedRevision: manifest.compileRevision,
+    iframe,
+    interactionMode: 'edit',
+    origin,
+    previewInstanceId,
+  }
+  schedulePreviewRevisionFallback(connection)
+  return connection
 }
 
 export function configureInteractionMode(
@@ -420,6 +533,24 @@ function postInteractionMode(preview: StudioPreviewConnection, handshake: Studio
     protocolVersion: studioProtocolVersion,
     type: 'set-interaction-mode',
   }, preview.origin)
+}
+
+function postPreviewRuntimeUpdate(
+  preview: StudioPreviewConnection,
+  runtime: StudioCellRuntimeResponse,
+): void {
+  const target = preview.iframe.contentWindow
+  if (target === null) {
+    return
+  }
+  const message: StudioPreviewRuntimeUpdateMessage<StudioCellRuntimeResponse> = {
+    channel: studioProtocolChannel,
+    identity: { ...runtime.identity, previewInstanceId: preview.previewInstanceId },
+    protocolVersion: studioProtocolVersion,
+    runtime,
+    type: 'preview-runtime-update',
+  }
+  target.postMessage(message, preview.origin)
 }
 
 function renderCellPreview(
@@ -527,25 +658,41 @@ function renderCellPreview(
   viewport.append(connection.iframe)
   observePreviewVisibility(frame, connection)
 
-  connection.replayRuntimeCapture = async rawCapture => {
+  const remount = async (
+    configuration: Readonly<{
+      args?: StudioJsonObject
+      environment?: StudioCellEnvironment
+      replay?: StudioRuntimeCaptureArtifact
+    }>,
+  ): Promise<void> => {
     if (connection.cellIdentity === undefined) {
-      throw new Error('Studio cell identity is unavailable for replay.')
+      throw new Error('Studio cell identity is unavailable for remounting.')
     }
-    const currentEnvironment = connection.cell?.environment ?? cell.environment
-    const configured = studioReplayConfiguration(rawCapture, currentEnvironment)
     const runtime = await StudioApiClient.reconfigureCell({
       ...connection.cellIdentity,
-      environment: configured.environment,
-      replay: configured.replay,
+      ...configuration,
     })
     connection.cell = runtime.cell
     connection.cellIdentity = runtime.identity
-    connection.runtimeFailure = undefined
     const previewInstanceId = crypto.randomUUID()
     await StudioApiClient.cellInstance({ ...runtime.identity, previewInstanceId })
     connection.previewInstanceId = previewInstanceId
-    setPreviewSource(connection, cellPreviewUrl(previewUrl, previewInstanceId))
+    setPreviewSource(connection, StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location, true))
     renderCellPreview(frame, connection, previewUrl, manifest)
+  }
+
+  connection.reconfigureEnvironment = async environment => {
+    await remount({ environment })
+  }
+
+  connection.replayRuntimeCapture = async rawCapture => {
+    const currentEnvironment = connection.cell?.environment ?? cell.environment
+    const configured = studioReplayConfiguration(rawCapture, currentEnvironment)
+    connection.runtimeFailure = undefined
+    await remount({
+      environment: configured.environment,
+      replay: configured.replay,
+    })
   }
 
   loadReplay.addEventListener('click', () => replayFile.click())
@@ -605,8 +752,7 @@ function renderCellPreview(
     status.textContent = 'Remounting…'
     void (async () => {
       try {
-        const runtime = await StudioApiClient.reconfigureCell({
-          ...connection.cellIdentity,
+        await remount({
           args: argumentControls.read(),
           environment: {
             network: networkControls.read(),
@@ -614,13 +760,6 @@ function renderCellPreview(
             viewport: viewportControls.read(),
           },
         })
-        connection.cell = runtime.cell
-        connection.cellIdentity = runtime.identity
-        const previewInstanceId = crypto.randomUUID()
-        await StudioApiClient.cellInstance({ ...runtime.identity, previewInstanceId })
-        connection.previewInstanceId = previewInstanceId
-        setPreviewSource(connection, cellPreviewUrl(previewUrl, previewInstanceId))
-        renderCellPreview(frame, connection, previewUrl, manifest)
       } catch (error) {
         apply.disabled = false
         status.dataset['state'] = 'error'
@@ -682,8 +821,16 @@ function renderCellPreview(
         status.textContent = generatedFixtureFailureMessage(result)
         return
       }
-      const proposal = fixtureProposalSource(name, result.fixture)
-      if (!window.confirm(`Save this generated Tao fixture?\n\n${proposal}`)) {
+      const envelope = fixtureProposalSourceAction({
+        fixtureName: name,
+        identity,
+        origin: 'generated',
+        plan: result.fixture,
+        requestId,
+      })
+      status.textContent = 'Validating canonical Tao source…'
+      const proposal = await StudioApiClient.sourceActionProposal(envelope)
+      if (!window.confirm(`Save this generated Tao fixture?\n\n${proposal.diff}`)) {
         connection.generation = undefined
         generate.disabled = false
         status.dataset['state'] = 'idle'
@@ -692,13 +839,7 @@ function renderCellPreview(
       }
       connection.generation = { phase: 'saving', requestId }
       status.textContent = 'Saving generated state as Tao source…'
-      await StudioApiClient.sourceAction(fixtureProposalSourceAction({
-        fixtureName: name,
-        identity,
-        origin: 'generated',
-        plan: result.fixture,
-        requestId,
-      }))
+      await StudioApiClient.sourceAction(envelope)
       if (connection.generation?.requestId === requestId) {
         connection.generation = undefined
         status.dataset['state'] = 'busy'
@@ -821,7 +962,8 @@ async function promoteScenarioArguments(
     throw new Error('Studio cell identity is unavailable.')
   }
   const sourceVersion = manifest.sourceVersions[scenario.source.path]
-  if (sourceVersion === undefined) {
+  const sourcePath = projectRelativePath(manifest.project.root, scenario.source.path)
+  if (sourceVersion === undefined || sourcePath === undefined) {
     throw new Error('Studio scenario source version is unavailable.')
   }
   const requestId = crypto.randomUUID()
@@ -836,7 +978,7 @@ async function promoteScenarioArguments(
     checkpoint: { id: `scenario-arguments:${requestId}`, phase: 'single' },
     identity: {
       ...identity,
-      path: projectRelativePath(manifest.project.root, scenario.source.path),
+      path: sourcePath,
       previewInstanceId: connection.previewInstanceId,
       sourceVersion,
     },
@@ -1122,14 +1264,6 @@ function networkLabel(environment: StudioCellEnvironment): string {
   return `${environment.network.outcome}${latency} · Scheme ${environment.scheme.status}`
 }
 
-function cellPreviewUrl(previewUrl: string, previewInstanceId: string): string {
-  const url = new URL(previewUrl)
-  url.searchParams.set('taoStudioCell', '1')
-  url.searchParams.set('taoStudioParentOrigin', window.location.origin)
-  url.searchParams.set('taoStudioPreviewInstanceId', previewInstanceId)
-  return url.toString()
-}
-
 function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewConnection): void {
   connection.visibilityObserver?.disconnect()
   if (typeof IntersectionObserver === 'undefined') {
@@ -1150,9 +1284,10 @@ function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewC
       connection.suspendedSource = undefined
       if (source !== undefined) {
         connection.iframe.src = source
+        schedulePreviewRevisionFallback(connection)
       }
     }
-  }, { rootMargin: '600px 600px' })
+  }, { root: frame.closest<HTMLElement>('.studio-preview-grid'), rootMargin: '600px' })
   observer.observe(frame)
   connection.visibilityObserver = observer
 }
@@ -1163,6 +1298,41 @@ function setPreviewSource(connection: StudioPreviewConnection, source: string): 
   } else {
     connection.iframe.src = source
   }
+}
+
+function expectPreviewRevision(connection: StudioPreviewConnection, compileRevision: number): void {
+  connection.expectedRevision = compileRevision
+  if (connection.revisionTimeout !== undefined) {
+    clearTimeout(connection.revisionTimeout)
+    connection.revisionTimeout = undefined
+  }
+  schedulePreviewRevisionFallback(connection)
+}
+
+function schedulePreviewRevisionFallback(connection: StudioPreviewConnection): void {
+  const expected = connection.expectedRevision
+  if (
+    expected === undefined
+    || (connection.appliedRevision ?? -1) >= expected
+    || connection.suspended === true
+    || connection.revisionTimeout !== undefined
+  ) {
+    return
+  }
+  connection.revisionTimeout = setTimeout(() => {
+    connection.revisionTimeout = undefined
+    if (
+      connection.expectedRevision !== expected
+      || (connection.appliedRevision ?? -1) >= expected
+      || connection.suspended === true
+    ) {
+      return
+    }
+    const source = connection.iframe.src
+    if (source !== '' && source !== 'about:blank') {
+      connection.iframe.src = source
+    }
+  }, 750)
 }
 
 /** Adds Studio-owned viewport/network state without allowing unregistered domains into a capture. */
@@ -1321,7 +1491,6 @@ export async function handlePreviewMessage(
   if (message === undefined) {
     return
   }
-  actions.activate?.()
   if (message.type === 'preview-console') {
     preview.runtimeLogs = [...(preview.runtimeLogs ?? []), {
       arguments: message.arguments,
@@ -1347,17 +1516,37 @@ export async function handlePreviewMessage(
   }
   if (message.type === 'preview-applied') {
     postInteractionMode(preview, handshake)
-    if (preview.cellIdentity !== undefined) {
+    const identity = preview.cellIdentity
+    const currentCell = identity === undefined || (
+      message.identity.cellId === identity.cellId
+      && message.identity.cellRevision === identity.cellRevision
+      && message.identity.compileRevision === identity.compileRevision
+      && message.identity.manifestRevision === identity.manifestRevision
+    )
+    if (!currentCell) {
       return
+    }
+    if (identity !== undefined) {
+      preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
+      if (
+        preview.expectedRevision !== undefined
+        && preview.appliedRevision >= preview.expectedRevision
+        && preview.revisionTimeout !== undefined
+      ) {
+        clearTimeout(preview.revisionTimeout)
+        preview.revisionTimeout = undefined
+      }
     }
     await StudioApiClient.previewApplied(message)
     return
   }
   if (message.type === 'source-action') {
+    actions.activate?.()
     await actions.applySourceAction(message)
     return
   }
   if (message.type === 'preview-runtime-failure') {
+    actions.activate?.()
     const capture = runtimeCaptureWithEnvironment(
       message.capture,
       preview.cell?.environment,
@@ -1384,15 +1573,7 @@ export async function handlePreviewMessage(
       capture.status.textContent = message.error
       return
     }
-    const proposal = fixtureProposalSource(capture.fixtureName, message.fixture)
-    if (!window.confirm(`Save this captured Tao fixture?\n\n${proposal}`)) {
-      capture.button.disabled = false
-      capture.status.dataset['state'] = 'idle'
-      capture.status.textContent = 'Captured fixture was not saved.'
-      return
-    }
-    capture.status.textContent = 'Saving captured state as Tao source…'
-    await actions.applySourceAction(StudioInspector.singleAction({
+    const envelope = StudioInspector.singleAction({
       action: {
         fixtureName: capture.fixtureName,
         kind: 'insert-captured-fixture',
@@ -1401,7 +1582,25 @@ export async function handlePreviewMessage(
       checkpointId: `captured-fixture:${capture.requestId}`,
       identity: capture.identity,
       requestId: capture.requestId,
-    }))
+    })
+    capture.status.textContent = 'Validating canonical Tao source…'
+    let proposal: Awaited<ReturnType<typeof StudioApiClient.sourceActionProposal>>
+    try {
+      proposal = await StudioApiClient.sourceActionProposal(envelope)
+    } catch (error) {
+      capture.button.disabled = false
+      capture.status.dataset['state'] = 'error'
+      capture.status.textContent = error instanceof Error ? error.message : String(error)
+      return
+    }
+    if (!window.confirm(`Save this captured Tao fixture?\n\n${proposal.diff}`)) {
+      capture.button.disabled = false
+      capture.status.dataset['state'] = 'idle'
+      capture.status.textContent = 'Captured fixture was not saved.'
+      return
+    }
+    capture.status.textContent = 'Saving captured state as Tao source…'
+    await actions.applySourceAction(envelope)
     capture.status.dataset['state'] = 'busy'
     capture.status.textContent = 'Saved; waiting for the compiled manifest…'
     return
@@ -1409,28 +1608,17 @@ export async function handlePreviewMessage(
   if (message.type !== 'preview-select-source') {
     return
   }
-  const path = projectRelativePath(handshake.identity.project, message.identity.path)
-  if (path === undefined) {
-    return
-  }
-  const opened = await openFile(path)
+  actions.activate?.()
+  const opened = await StudioSourceNavigation.openAndSelect({
+    identity: message.identity,
+    openFile,
+    project: handshake.identity.project,
+    range: message.range,
+  })
   if (opened === undefined) {
     return
   }
-  const { editor, file } = opened
-  if (
-    file.path !== path
-    || message.identity.sourceVersion !== file.sourceVersion
-    || message.range.end > editor.state.doc.length
-  ) {
-    return
-  }
   actions.inspect(StudioInspector.selection(message))
-  editor.dispatch({
-    effects: EditorView.scrollIntoView(message.range.start, { y: 'center' }),
-    selection: { anchor: message.range.start, head: message.range.end },
-  })
-  editor.focus()
 }
 
 export function requestRuntimeCapture(
@@ -1652,15 +1840,7 @@ export async function refreshCellPreviews(
     if (preview.cell !== undefined && nextIds.has(preview.cell.cellId)) {
       continue
     }
-    if (preview.capture !== undefined) {
-      clearTimeout(preview.capture.timeout)
-    }
-    if (preview.runtimeCaptureRequest !== undefined) {
-      clearTimeout(preview.runtimeCaptureRequest.timeout)
-      preview.runtimeCaptureRequest.reject(new Error('The preview cell was removed before live data arrived.'))
-      preview.runtimeCaptureRequest = undefined
-    }
-    preview.visibilityObserver?.disconnect()
+    disconnectPreviews([preview], 'The preview cell was removed before live data arrived.')
   }
   previews.splice(0, previews.length, ...nextConnections)
   StudioMatrixView.reconcile(parent, connectionGroups(manifest, nextConnections), (frame, connection) => {
@@ -1673,16 +1853,25 @@ export async function refreshCellPreviews(
     if (!previousByCell.has(cell.cellId)) {
       return
     }
-    const identity = cellIdentity(manifest, cell)
+    const identities = StudioRetainedPreview.registrationIdentities(manifest, cell, preview.cellIdentity)
+    const pendingIdentity = identities[0]!
     if (preview.generation?.phase === 'generating') {
       preview.generation = undefined
       preview.generationNotice = 'The Tao source changed while generation was running; its result was ignored.'
     }
-    preview.cellIdentity = identity
+    preview.cellIdentity = pendingIdentity
+    preview.expectedRevision = manifest.compileRevision
+    if (preview.revisionTimeout !== undefined) {
+      clearTimeout(preview.revisionTimeout)
+      preview.revisionTimeout = undefined
+    }
     const refresh = async (): Promise<void> => {
-      const previewInstanceId = crypto.randomUUID()
-      await StudioApiClient.cellInstance({ ...identity, previewInstanceId })
-      if (preview.cellIdentity !== identity) {
+      const runtime = await StudioRetainedPreview.register<StudioCellRuntimeResponse>(
+        identities,
+        preview.previewInstanceId,
+        async identity => await StudioApiClient.cellInstance(identity) as StudioCellRuntimeResponse,
+      )
+      if (preview.cellIdentity !== pendingIdentity) {
         return
       }
       if (preview.capture !== undefined) {
@@ -1694,10 +1883,12 @@ export async function refreshCellPreviews(
         preview.runtimeCaptureRequest.reject(new Error('The preview remounted before live data arrived.'))
         preview.runtimeCaptureRequest = undefined
       }
-      preview.cell = cell
-      preview.previewInstanceId = previewInstanceId
-      preview.iframe.title = `${cell.scenarioId} live preview`
-      setPreviewSource(preview, cellPreviewUrl(previewUrl, previewInstanceId))
+      preview.cell = runtime.cell
+      preview.cellIdentity = runtime.identity
+      preview.iframe.title = `${runtime.cell.scenarioId} live preview`
+      expectPreviewRevision(preview, runtime.identity.compileRevision)
+      postPreviewRuntimeUpdate(preview, runtime)
+      postInteractionMode(preview, handshake)
       if (preview.frame !== undefined) {
         renderCellPreview(preview.frame, preview, previewUrl, manifest)
       }

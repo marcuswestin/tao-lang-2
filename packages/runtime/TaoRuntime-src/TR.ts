@@ -77,6 +77,7 @@ import {
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import {
   capturePersistedState,
+  registerPersistedEnumCase,
   RuntimePersistedState,
   setPersistedStateStorageForTests,
   type TaoWritableState,
@@ -115,6 +116,7 @@ import * as TRTaoProps from './TR-TaoProps'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
 
+let ephemeralEnumDeclaration = 0
 const warnedUnhonoredLayouts = new Set<string>()
 
 /** TR exposes the generated-code runtime API used by generated apps. */
@@ -146,12 +148,27 @@ class TR {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
   }
 
-  /** Enum creates declaration-owned case identities without a process-global name registry. */
-  static Enum(caseNames: readonly string[]): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>> {
-    return Object.freeze(Object.fromEntries(caseNames.map(caseName => [
-      caseName,
-      new RuntimeValue(Object.freeze({ identity: Symbol(caseName) })),
-    ])))
+  /** Enum creates declaration-owned case identities and registers their stable persistence names. */
+  static Enum(
+    declaration: TR.DeclarationIdentity,
+    caseNames: readonly string[],
+  ): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>>
+  /** @deprecated Generated code should supply its stable declaration identity. */
+  static Enum(caseNames: readonly string[]): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>>
+  static Enum(
+    declarationOrCases: TR.DeclarationIdentity | readonly string[],
+    suppliedCases?: readonly string[],
+  ): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>> {
+    const declaration = Array.isArray(declarationOrCases)
+      ? `tao.enum.ephemeral:${++ephemeralEnumDeclaration}`
+      : (declarationOrCases as TR.DeclarationIdentity).canonical
+    const caseNames = Array.isArray(declarationOrCases) ? declarationOrCases : suppliedCases ?? []
+    const cases = Object.freeze(Object.fromEntries(caseNames.map(caseName => {
+      const value = Object.freeze({ caseName, declaration, identity: Symbol(caseName) })
+      registerPersistedEnumCase(value)
+      return [caseName, new RuntimeValue(value)]
+    })))
+    return cases
   }
 
   /** IsCase tests built-in subject states, declared boolean cases, and enum identity values. */
@@ -255,15 +272,17 @@ class TR {
     }
     return values.map((value, index) => {
       const runtimeValue = new RuntimeValue(value)
+      let capturedArguments: TaoRuntimeJson | undefined
+      const diagnosticsArguments = () => capturedArguments ??= captureArguments({ index, value })
       return React.createElement(
         TaoErrorBoundary,
         {
           boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${
             String(stableListKey(value, index))
           }`,
-          frame: { ...frame, arguments: captureArguments({ index, value }), boundary: 'item' },
+          frame: () => ({ ...frame, arguments: diagnosticsArguments(), boundary: 'item' as const }),
           key: stableListKey(value, index),
-          stateKey: JSON.stringify(captureArguments({ index, value })),
+          stateKey: () => JSON.stringify(diagnosticsArguments()),
         },
         React.createElement(ForEachItem, { index, render, runtimeValue, select }),
       )
@@ -279,17 +298,27 @@ class TR {
   }
 
   /** ForeignAction adapts a named TypeScript effect and its declared Tao failure contract. */
-  static ForeignAction<Args extends TR.Evaluable[]>(
+  static ForeignAction<Args extends Array<TR.Evaluable | undefined>>(
     implementation: (...arguments_: any[]) => unknown,
     name: string,
     failures: readonly TaoDeclaredFailure[],
-    options: Readonly<{ runs?: 'latest' }> = {},
+    options: Readonly<{ requiredArguments?: number; runs?: 'latest' }> = {},
   ): TR.Action<Args> {
+    const requiredArguments = options.requiredArguments ?? implementation.length
     return new RuntimeAction(
       async (...arguments_: Args) => {
+        const missingRequired = Array.from(
+          { length: requiredArguments },
+          (_, index) => index,
+        ).find(index => arguments_[index] === undefined)
+        if (missingRequired !== undefined) {
+          throw new Error(
+            `Foreign action '${name}' is missing required argument ${missingRequired + 1} of ${requiredArguments}.`,
+          )
+        }
         markExternalEffect()
         try {
-          await implementation(...arguments_.map(argument => argument.evaluate().jsValue))
+          await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
             throw error
@@ -886,7 +915,7 @@ namespace TR {
   /** DeclarationIdentity is the stable owner-relative identity used by persisted runtime domains. */
   export type DeclarationIdentity = TaoDeclarationIdentity
   /** EnumCaseIdentity is the opaque runtime token owned by one enum declaration and case. */
-  export type EnumCaseIdentity = Readonly<{ identity: symbol }>
+  export type EnumCaseIdentity = Readonly<{ caseName: string; declaration: string; identity: symbol }>
   /** SubjectCaseName declares runtime-recognized built-in subject states. */
   export type SubjectCaseName =
     | 'empty'

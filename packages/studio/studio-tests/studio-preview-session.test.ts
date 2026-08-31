@@ -90,6 +90,142 @@ Test(
   },
 )
 
+Test('Studio preview session rejects scenarios declared outside the selected app entry file', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-imported-scenario-runtime-')
+  try {
+    await withTaoFiles(
+      'tao-studio-imported-scenario-project-',
+      {
+        'Garden.tao': `
+          use Imported from ./Imported.tao
+          app Garden { view Main }
+          view Main() { render Imported() }
+        `,
+        'Imported.tao': `
+          use Text from @tao/ui
+          workspace view Imported() { render Text("Imported") }
+          fixture Empty { }
+          scenarios Imported "imported" {
+            fixture Empty
+            device phone
+            scenario "phone" { render Imported() }
+          }
+        `,
+      },
+      async (paths, root) => {
+        const preview = await openStudioPreviewSession({
+          entryPath: paths['Garden.tao'],
+          previewRuntimeRoot,
+          projectRoot: root,
+        })
+        try {
+          const compiled = await preview.session.compileInitial()
+          Expect(compiled.status).toBe('error')
+          Expect(compiled.message).toContain('declared outside the selected app entry file')
+          Expect(preview.session.previewManifest()).toBeUndefined()
+        } finally {
+          await preview.close()
+        }
+      },
+    )
+  } finally {
+    await FS.remove(previewRuntimeRoot)
+  }
+})
+
+Test('Studio preview session scopes app scenarios to the selected variant and keeps focused views', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-selected-app-scenarios-runtime-')
+  try {
+    await withTaoFiles(
+      'tao-studio-selected-app-scenarios-project-',
+      {
+        'Garden.tao': `
+          use Text from @tao/ui
+          app Garden { view Main }
+          app GardenDark { view Main }
+          view Main() { render Text("Garden") }
+          fixture Empty { }
+          scenarios Garden "garden app" {
+            fixture Empty
+            device phone
+            scenario "garden" { }
+          }
+          scenarios GardenDark "dark app" {
+            fixture Empty
+            device phone
+            scenario "dark" { }
+          }
+          scenarios Main "states" {
+            fixture Empty
+            device phone
+            scenario "focused" { render Main() }
+          }
+        `,
+      },
+      async (paths, root) => {
+        const preview = await openStudioPreviewSession({
+          appName: 'Garden',
+          entryPath: paths['Garden.tao'],
+          previewRuntimeRoot,
+          projectRoot: root,
+        })
+        try {
+          const compiled = await preview.session.compileInitial()
+          if (compiled.status !== 'compiled') {
+            throw new Error(compiled.message)
+          }
+          Expect(compiled.status).toBe('compiled')
+          Expect(preview.session.previewManifest()?.scenarios.map(scenario => scenario.label))
+            .toEqual(['garden', 'focused'])
+        } finally {
+          await preview.close()
+        }
+      },
+    )
+  } finally {
+    await FS.remove(previewRuntimeRoot)
+  }
+})
+
+Test('Studio preview session rejects app destinations instead of silently running the default app', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-destination-runtime-')
+  try {
+    await withTaoFiles(
+      'tao-studio-destination-project-',
+      {
+        'Garden.tao': `
+          use Text from @tao/ui
+          app Garden { view Main }
+          view Main() { render Text("Garden") }
+          fixture Empty { }
+          scenarios Garden "destinations" {
+            fixture Empty
+            device phone
+            scenario "detail" { run at Detail() }
+          }
+        `,
+      },
+      async (paths, root) => {
+        const preview = await openStudioPreviewSession({
+          entryPath: paths['Garden.tao'],
+          previewRuntimeRoot,
+          projectRoot: root,
+        })
+        try {
+          const compiled = await preview.session.compileInitial()
+          Expect(compiled.status).toBe('error')
+          Expect(compiled.message).toContain('cannot run Garden at destination Detail yet')
+          Expect(preview.session.previewManifest()).toBeUndefined()
+        } finally {
+          await preview.close()
+        }
+      },
+    )
+  } finally {
+    await FS.remove(previewRuntimeRoot)
+  }
+})
+
 Test('Studio file watching acknowledges its own write once and compiles later external changes', async () => {
   const previewRuntimeRoot = await mkTestDir('tao-studio-watch-runtime-')
   try {

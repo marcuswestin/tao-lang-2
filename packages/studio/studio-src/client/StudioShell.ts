@@ -16,8 +16,8 @@ export type StudioClientView = {
   editor: HTMLElement
   editorTabs: HTMLElement
   files: HTMLElement
+  globalLoading: HTMLElement
   inspector: HTMLElement
-  inspectorTabs: HTMLElement
   interactionMode: HTMLButtonElement
   preview: HTMLElement
   project: HTMLButtonElement
@@ -25,15 +25,29 @@ export type StudioClientView = {
   rail: HTMLElement
   reload: HTMLButtonElement
   screens: HTMLElement
+  scenarioInspector: HTMLElement
   searchInput: HTMLInputElement
   searchResults: HTMLElement
   status: HTMLElement
 }
 
-type PaneName = 'bottom' | 'left' | 'right'
+export type StudioShellOptions = Readonly<{ embedded?: boolean }>
 
-const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 260, right: 280 }
-const paneStorageKey = 'tao-studio:pane-sizes:v2'
+type PaneName = 'bottom' | 'left' | 'preview' | 'right'
+
+const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, preview: 440, right: 440 }
+const paneStorageKey = 'tao-studio:pane-sizes:v4'
+
+export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
+
+export const studioShellRailPanels = [
+  { icon: '🗂️', label: 'Files', panel: 'files' },
+  { icon: '▦', label: 'Components', panel: 'components' },
+  { icon: '🧭', label: 'Screens', panel: 'screens' },
+  { icon: '🎨', label: 'Design tokens', panel: 'tokens' },
+  { icon: '🗄️', label: 'Data', panel: 'data' },
+  { icon: '🔍', label: 'Search', panel: 'search' },
+] as const
 
 export const StudioPaneSizes = {
   load(storage: Pick<Storage, 'getItem'>): Record<PaneName, number> {
@@ -42,6 +56,7 @@ export const StudioPaneSizes = {
       return {
         bottom: validSize(parsed.bottom, paneDefaults.bottom),
         left: validSize(parsed.left, paneDefaults.left),
+        preview: validSize(parsed.preview, paneDefaults.preview),
         right: validSize(parsed.right, paneDefaults.right),
       }
     } catch {
@@ -53,31 +68,35 @@ export const StudioPaneSizes = {
   },
 } as const
 
-export function createStudioShell(root: HTMLElement, config: StudioClientConfig): StudioClientView {
-  root.innerHTML = `
-    <section class="studio-shell">
+export function studioShellMarkup(options: StudioShellOptions = {}): string {
+  const embedded = options.embedded === true
+  return `
+    <section class="studio-shell${embedded ? ' studio-shell--embedded' : ''}">
       <header class="studio-toolbar">
-        <span class="studio-wordmark">Tao Studio</span>
-        <button class="studio-project studio-picker" type="button" title="Project picker"></button>
-        <select class="studio-app-picker studio-picker" aria-label="App variant" title="App variant" disabled></select>
-        <nav class="studio-layout-presets" aria-label="Layout presets">
-          <button data-preset="design" type="button">Design</button>
-          <button data-preset="code" type="button">Code</button>
-          <button data-preset="run" type="button">Run</button>
-        </nav>
-        <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K">⌘K</button>
-        <button class="studio-interaction-mode" type="button">Mode: Edit</button>
-        <button class="studio-reload" type="button">Reload preview</button>
-        <span class="studio-status" role="status">Connecting…</span>
+        <div class="studio-toolbar-context">
+          <span class="studio-window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+          <button class="studio-project studio-picker" type="button" title="Project picker"></button>
+          <select class="studio-app-picker studio-picker" aria-label="App variant" title="App variant" disabled></select>
+        </div>
+        <div class="studio-toolbar-mode">
+          <nav class="studio-layout-presets" aria-label="Layout presets">
+            <button data-preset="design" type="button">Design</button>
+            <button data-preset="code" type="button">Code</button>
+            <button data-preset="run" type="button">Run</button>
+          </nav>
+          <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K Control+K">⌘K</button>
+        </div>
+        <div class="studio-toolbar-actions">
+          <button class="studio-interaction-mode" type="button">Mode: Edit</button>
+          <button class="studio-reload" type="button">Reload preview</button>
+          <span class="studio-status" role="status">Connecting…</span>
+        </div>
       </header>
       <section class="studio-body">
         <nav class="studio-rail" aria-label="Studio panels">
-          ${railButton('files', 'Files', 'F')}
-          ${railButton('components', 'Components', 'C')}
-          ${railButton('screens', 'Screens', 'S')}
-          ${railButton('tokens', 'Design tokens', 'T')}
-          ${railButton('data', 'Data', 'D')}
-          ${railButton('search', 'Search', '⌕')}
+          ${studioShellRailPanels.map(item => railButton(item.panel, item.label, item.icon)).join('')}
         </nav>
         <aside class="studio-sidebar studio-pane-left">
           <header class="studio-pane-header"><strong>Files</strong><button class="studio-collapse-left" type="button" aria-label="Collapse left panel">‹</button></header>
@@ -96,36 +115,58 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
         </aside>
         <div class="studio-divider studio-divider-left" data-divider="left" role="separator" aria-orientation="vertical"></div>
         <section class="studio-center">
+          <aside class="studio-inspector studio-pane-right" aria-label="Inspector">
+            <section class="studio-inspector-pane studio-environment-pane" aria-label="Environment and scenario">
+              <header class="studio-inspector-pane-header"><strong>Environment &amp; scenario</strong></header>
+              <div class="studio-scenario-inspector-content"></div>
+            </section>
+            <section class="studio-inspector-pane studio-visual-pane" aria-label="Layout, style, data, and actions">
+              <header class="studio-inspector-pane-header">
+                <strong>Selection</strong>
+                <button class="studio-pane-collapse studio-collapse-right" type="button" aria-label="Collapse inspector" title="Collapse inspector">‹</button>
+              </header>
+              <div class="studio-inspector-tao-context"></div>
+              <div class="studio-inspector-content"></div>
+            </section>
+          </aside>
+          <div class="studio-divider studio-divider-right" data-divider="right" role="separator" aria-orientation="vertical"></div>
           <section class="studio-workbench">
             <section class="studio-editor-pane">
               <nav class="studio-editor-tabs" aria-label="Open files"></nav>
               <nav class="studio-breadcrumbs" aria-label="Editor breadcrumbs"></nav>
               <section class="studio-editor" aria-label="Tao source editor"></section>
             </section>
+            <div class="studio-divider studio-divider-preview" data-divider="preview" role="separator" aria-label="Resize code and preview" aria-orientation="vertical"></div>
             <section class="studio-preview" aria-label="Preview canvas"></section>
           </section>
           <div class="studio-divider studio-divider-bottom" data-divider="bottom" role="separator" aria-orientation="horizontal"></div>
           <section class="studio-drawer">
             <nav class="studio-drawer-tabs" aria-label="Bottom drawer">
               ${['Problems', 'Tests', 'Data', 'Logs', 'Compile'].map(drawerTab).join('')}
+              <button class="studio-pane-collapse studio-collapse-bottom" type="button" aria-label="Collapse bottom drawer" title="Collapse bottom drawer">⌄</button>
             </nav>
             <div class="studio-drawer-content"></div>
           </section>
         </section>
-        <div class="studio-divider studio-divider-right" data-divider="right" role="separator" aria-orientation="vertical"></div>
-        <aside class="studio-inspector studio-pane-right" aria-label="Inspector">
-          <nav class="studio-inspector-tabs" aria-label="Inspector contexts">
-            ${drawerTab('Layout')}${drawerTab('Style')}${drawerTab('Data')}${drawerTab('Actions')}
-          </nav>
-          <div class="studio-inspector-content"></div>
-        </aside>
       </section>
       <section class="studio-command-overlay" hidden aria-label="Command palette">
         <label><span>Command</span><input type="search" placeholder="Files, views, scenarios, commands, insertions"></label>
         <div class="studio-command-results" role="listbox"></div>
       </section>
+      <section class="studio-global-loading" hidden aria-live="assertive" aria-label="Studio is loading" role="status">
+        <span class="studio-global-loading-spinner" aria-hidden="true"></span>
+        <span><strong>Switching app…</strong><small>Please wait while Studio prepares the new preview.</small></span>
+      </section>
     </section>
   `
+}
+
+export function createStudioShell(
+  root: HTMLElement,
+  config: StudioClientConfig,
+  options: StudioShellOptions = {},
+): StudioClientView {
+  root.innerHTML = studioShellMarkup(options)
   const preview = requiredElement(root, '.studio-preview')
   preview.innerHTML = config.previewUrl === undefined
     ? '<div class="studio-empty">Preview host is not connected.</div>'
@@ -147,8 +188,8 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     editor: requiredElement(root, '.studio-editor'),
     editorTabs: requiredElement(root, '.studio-editor-tabs'),
     files: requiredElement(root, '.studio-files'),
+    globalLoading: requiredElement(root, '.studio-global-loading'),
     inspector: requiredElement(root, '.studio-inspector-content'),
-    inspectorTabs: requiredElement(root, '.studio-inspector-tabs'),
     interactionMode: requiredButton(root, '.studio-interaction-mode'),
     preview,
     project: requiredButton(root, '.studio-project'),
@@ -156,6 +197,7 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     rail: requiredElement(root, '.studio-rail'),
     reload: requiredButton(root, '.studio-reload'),
     screens: requiredElement(root, '.studio-screens'),
+    scenarioInspector: requiredElement(root, '.studio-scenario-inspector-content'),
     searchInput: requiredInput(root, '.studio-search-input'),
     searchResults: requiredElement(root, '.studio-search-results'),
     status: requiredElement(root, '.studio-status'),
@@ -182,26 +224,82 @@ function railButton(panel: string, label: string, icon: string): string {
 }
 
 function drawerTab(label: string): string {
-  return `<button type="button">${label}</button>`
+  return `<button data-drawer-tab="${label}" type="button">${label}</button>`
 }
 
 function configurePanes(root: HTMLElement): { showLeft: () => void } {
   const sizes = StudioPaneSizes.load(window.localStorage)
+  const lastExpanded = {
+    bottom: sizes.bottom > 0 ? sizes.bottom : paneDefaults.bottom,
+    left: sizes.left > 0 ? sizes.left : paneDefaults.left,
+    preview: sizes.preview > 0 ? sizes.preview : paneDefaults.preview,
+    right: sizes.right > 0 ? sizes.right : paneDefaults.right,
+  }
   const shell = requiredElement(root, '.studio-body')
   const center = requiredElement(root, '.studio-center')
   const left = requiredElement(root, '.studio-pane-left')
+  const right = requiredElement(root, '.studio-pane-right')
+  const preview = requiredElement(root, '.studio-preview')
+  const bottom = requiredElement(root, '.studio-drawer')
   const apply = (): void => {
-    shell.style.setProperty('--studio-left-size', `${left.hidden ? 0 : sizes.left}px`)
+    left.hidden = sizes.left === 0
+    right.hidden = sizes.right === 0
+    preview.hidden = sizes.preview === 0
+    bottom.hidden = sizes.bottom === 0
+    shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
     shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
+    center.style.setProperty('--studio-preview-size', `${sizes.preview}px`)
     center.style.setProperty('--studio-bottom-size', `${sizes.bottom}px`)
+    for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
+      const pane = divider.dataset['divider'] as PaneName
+      divider.setAttribute('aria-valuemin', '0')
+      divider.setAttribute('aria-valuenow', String(Math.round(sizes[pane])))
+      divider.setAttribute('title', `Drag to resize ${pane} pane; double-click or press Enter to collapse or restore`)
+      divider.tabIndex = 0
+    }
   }
+  const save = (): void => StudioPaneSizes.save(window.localStorage, sizes)
+  const setSize = (pane: PaneName, value: number): void => {
+    if (value > 0) {
+      lastExpanded[pane] = value
+    }
+    sizes[pane] = value
+    apply()
+    save()
+  }
+  const toggle = (pane: PaneName): void => setSize(pane, sizes[pane] === 0 ? lastExpanded[pane] : 0)
   apply()
   requiredButton(root, '.studio-collapse-left').addEventListener('click', () => {
-    left.hidden = !left.hidden
-    apply()
+    toggle('left')
   })
+  requiredButton(root, '.studio-collapse-right').addEventListener('click', () => toggle('right'))
+  requiredButton(root, '.studio-collapse-bottom').addEventListener('click', () => toggle('bottom'))
   for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
     const pane = divider.dataset['divider'] as PaneName
+    divider.addEventListener('dblclick', () => toggle(pane))
+    divider.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        toggle(pane)
+        return
+      }
+      const direction = pane === 'bottom'
+        ? event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0
+        : pane === 'preview'
+        ? event.key === 'ArrowLeft' ? 1 : event.key === 'ArrowRight' ? -1 : 0
+        : event.key === 'ArrowRight'
+        ? 1
+        : event.key === 'ArrowLeft'
+        ? -1
+        : 0
+      if (direction === 0) {
+        return
+      }
+      event.preventDefault()
+      const minimum = StudioPaneMinimums[pane]
+      const base = sizes[pane] === 0 ? minimum : sizes[pane]
+      setSize(pane, Math.max(minimum, base + direction * (event.shiftKey ? 40 : 12)))
+    })
     divider.addEventListener('pointerdown', event => {
       event.preventDefault()
       const start = pane === 'bottom' ? event.clientY : event.clientX
@@ -210,15 +308,19 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
       const move = (moveEvent: PointerEvent): void => {
         const delta = pane === 'bottom'
           ? start - moveEvent.clientY
-          : pane === 'right'
+          : pane === 'preview'
           ? start - moveEvent.clientX
           : moveEvent.clientX - start
-        sizes[pane] = Math.max(pane === 'bottom' ? 96 : 180, initial + delta)
+        const minimum = StudioPaneMinimums[pane]
+        sizes[pane] = Math.max(minimum, initial + delta)
         apply()
       }
       const finish = (): void => {
         divider.removeEventListener('pointermove', move)
-        StudioPaneSizes.save(window.localStorage, sizes)
+        if (sizes[pane] > 0) {
+          lastExpanded[pane] = sizes[pane]
+        }
+        save()
       }
       divider.addEventListener('pointermove', move)
       divider.addEventListener('pointerup', finish, { once: true })
@@ -227,8 +329,9 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
   }
   return {
     showLeft() {
-      left.hidden = false
-      apply()
+      if (sizes.left === 0) {
+        setSize('left', lastExpanded.left)
+      }
     },
   }
 }

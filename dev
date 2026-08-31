@@ -5,5 +5,14 @@ set -e
 # Repository development tooling: package tests and Expo device preparation.
 # This is not the Tao CLI; `./tao dev` runs the app development loop.
 SCRIPT_DIR="${0:A:h}"
+DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
+
+source "$SCRIPT_DIR/packages/dev/dev-src/cli/agent-worktree-profile.zsh"
+
+if ! tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE"; then
+  echo "Tao's pinned devenv profile is unavailable." >&2
+  echo "Create the worktree with Worktrunk, or run: direnv allow && direnv exec . ./agent setup" >&2
+  exit 1
+fi
 
 exec bun run "$SCRIPT_DIR/packages/dev/dev-src/dev.ts" "$@"

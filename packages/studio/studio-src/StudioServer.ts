@@ -1,6 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { Errors } from '@shared'
-import { StudioClientAssets } from './StudioClientAssets'
+import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
 import { StudioLsp, type StudioLspSession } from './StudioLsp'
@@ -16,7 +16,6 @@ import {
 } from './StudioProjectSession'
 import {
   StudioServerDatasource,
-  studioServerEntitiesForEvent,
   type StudioServerFillRequest,
   type StudioServerInvalidation,
 } from './StudioServerDatasource'
@@ -29,6 +28,8 @@ import { StudioWelcome } from './StudioWelcome'
 
 export type StudioServerOptions = {
   allowedOrigins?: readonly string[]
+  clientAssets?: StudioClientAssetProvider
+  clientReloadRevision?: () => number
   compileOnStart?: boolean
   generationProvider?: GenerationProvider
   hostname?: string
@@ -84,26 +85,30 @@ async function startManagedStudioServer(
     options.generationProvider
       ?? new UnavailableGenerationProvider('Apple Foundation Models is not configured for this Studio server.'),
   )
+  const clientAssets = options.clientAssets ?? StudioClientAssets
 
   const eventClients = new Map<string, Set<StudioSocket>>()
-  const dataRevisions = new Map<string, number>()
+  const dataSources = new Map<string, StudioServerDatasource>()
+  const dataSourceSubscriptions = new Map<string, () => void>()
   const sessionSubscriptions = new Map<string, () => void>()
   const subscribeSession = (sessionId: string): void => {
     if (sessionSubscriptions.has(sessionId)) {
       return
     }
     const resource = manager.require(sessionId)
+    const datasource = new StudioServerDatasource(resource.session)
+    dataSources.set(sessionId, datasource)
+    dataSourceSubscriptions.set(
+      sessionId,
+      datasource.subscribe(invalidation => {
+        broadcast(eventClients.get(sessionId) ?? new Set(), { ...invalidation, type: 'data-invalidated' })
+      }),
+    )
     sessionSubscriptions.set(
       sessionId,
       resource.session.subscribe(event => {
         const clients = eventClients.get(sessionId) ?? new Set()
         broadcast(clients, event)
-        const entities = studioServerEntitiesForEvent(event)
-        if (entities.length > 0) {
-          const revision = (dataRevisions.get(sessionId) ?? 0) + 1
-          dataRevisions.set(sessionId, revision)
-          broadcast(clients, { entities, revision, type: 'data-invalidated' })
-        }
       }),
     )
   }
@@ -120,7 +125,10 @@ async function startManagedStudioServer(
     }
     sessionSubscriptions.get(sessionId)?.()
     sessionSubscriptions.delete(sessionId)
-    dataRevisions.delete(sessionId)
+    dataSourceSubscriptions.get(sessionId)?.()
+    dataSourceSubscriptions.delete(sessionId)
+    dataSources.get(sessionId)?.close()
+    dataSources.delete(sessionId)
   }
   const unsubscribeManager = manager.subscribe(event => {
     if (event.type === 'opened') {
@@ -152,6 +160,13 @@ async function startManagedStudioServer(
         return response(request, url, requestOptions, null, 204)
       }
       try {
+        if (
+          request.method === 'GET'
+          && url.pathname === '/studio-dev/revision'
+          && options.clientReloadRevision !== undefined
+        ) {
+          return response(request, url, requestOptions, { revision: options.clientReloadRevision() })
+        }
         const managerResponse = await handleManagerRequest(
           manager,
           request,
@@ -165,12 +180,18 @@ async function startManagedStudioServer(
           return managerResponse
         }
         if (request.method === 'GET' && url.pathname === '/studio.js') {
-          return javascriptResponse(await StudioClientAssets.bundle())
+          return javascriptResponse(await clientAssets.bundle())
         }
         if (route === undefined) {
           return response(request, url, requestOptions, { error: 'Studio endpoint not found.' }, 404)
         }
-        const resource = manager.require(route.sessionId)
+        const resource = manager.get(route.sessionId)
+        if (resource === undefined) {
+          if (request.method === 'GET' && url.searchParams.get('native-window') === 'project') {
+            return htmlResponse(StudioWelcome.sessionUnavailable(), 404)
+          }
+          return response(request, url, requestOptions, { error: 'Studio session not found.' }, 404)
+        }
         subscribeSession(route.sessionId)
         const testResponse = await handleTestRequest(resource, request, url, requestOptions, route.pathname)
         if (testResponse !== undefined) {
@@ -189,10 +210,17 @@ async function startManagedStudioServer(
         }
         const sessionUrl = new URL(url)
         sessionUrl.pathname = route.pathname
-        return await handleRequest(resource.session, fixtureGeneration, request, sessionUrl, {
-          ...requestOptions,
-          previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
-        })
+        return await handleRequest(
+          resource.session,
+          dataSources.get(route.sessionId)!,
+          fixtureGeneration,
+          request,
+          sessionUrl,
+          {
+            ...requestOptions,
+            previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
+          },
+        )
       } catch (error) {
         return errorResponse(request, url, requestOptions, error)
       }
@@ -222,7 +250,7 @@ async function startManagedStudioServer(
           const clients = eventClients.get(socket.data.sessionId) ?? new Set<StudioSocket>()
           clients.add(socket)
           eventClients.set(socket.data.sessionId, clients)
-          void resource.session.handshake().then(handshake => socket.send(JSON.stringify(handshake)))
+          void initializeEventSocket(socket, resource.session)
         } else {
           socket.data.session = StudioLsp.createSession(resource.session.projectRoot, socket)
         }
@@ -243,6 +271,14 @@ async function startManagedStudioServer(
         unsubscribe()
       }
       sessionSubscriptions.clear()
+      for (const unsubscribe of dataSourceSubscriptions.values()) {
+        unsubscribe()
+      }
+      dataSourceSubscriptions.clear()
+      for (const datasource of dataSources.values()) {
+        datasource.close()
+      }
+      dataSources.clear()
       for (const clients of eventClients.values()) {
         for (const client of clients) {
           client.close(1001, 'Studio server stopped')
@@ -252,6 +288,17 @@ async function startManagedStudioServer(
       server.stop(true)
     },
     url,
+  }
+}
+
+async function initializeEventSocket(
+  socket: Pick<StudioSocket, 'close' | 'send'>,
+  session: Pick<StudioProjectSession, 'handshake'>,
+): Promise<void> {
+  try {
+    socket.send(JSON.stringify(await session.handshake()))
+  } catch {
+    socket.close(1011, 'Could not initialize Studio events')
   }
 }
 
@@ -375,16 +422,17 @@ function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
 
 async function handleRequest(
   session: StudioProjectSession,
+  datasource: StudioServerDatasource,
   fixtureGeneration: StudioFixtureGeneration,
   request: Request,
   url: URL,
   options: StudioServerOptions,
 ): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/') {
-    return htmlResponse(StudioClientAssets.html({ previewUrl: options.previewUrl }))
+    return htmlResponse(studioClientHtml(options))
   }
   if (request.method === 'GET' && url.pathname === '/studio.js') {
-    return javascriptResponse(await StudioClientAssets.bundle())
+    return javascriptResponse(await (options.clientAssets ?? StudioClientAssets).bundle())
   }
   if (request.method === 'GET' && url.pathname === '/api/protocol') {
     return response(request, url, options, await session.handshake())
@@ -408,12 +456,7 @@ async function handleRequest(
     return response(request, url, options, await session.syncDraft(draftWriteRequest(await request.json())))
   }
   if (request.method === 'POST' && url.pathname === '/api/data/fill') {
-    const datasource = new StudioServerDatasource(session)
-    try {
-      return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
-    } finally {
-      datasource.close()
-    }
+    return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
   }
   if (request.method === 'POST' && url.pathname === '/api/design') {
     return response(request, url, options, await session.inspectDesign(designRequest(await request.json())))
@@ -426,6 +469,9 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/inspect') {
     return response(request, url, options, await session.inspectRender(inspectRenderRequest(await request.json())))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/source-action/propose') {
+    return response(request, url, options, await session.proposeSourceAction(await request.json()))
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
@@ -504,8 +550,9 @@ function dataFillRequest(value: unknown): StudioServerFillRequest {
   }
 }
 
-function htmlResponse(html: string): Response {
+function htmlResponse(html: string, status = 200): Response {
   return new Response(html, {
+    status,
     headers: {
       'content-type': 'text/html; charset=utf-8',
       'x-content-type-options': 'nosniff',
@@ -698,7 +745,8 @@ function previewOriginPath(pathname: string): boolean {
 
 function serverOrigin(protocol: string, hostname: string, port: number): string {
   const host = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
-  return `${protocol}//${host}:${port}`
+  const defaultPort = (protocol === 'http:' && port === 80) || (protocol === 'https:' && port === 443)
+  return `${protocol}//${host}${defaultPort ? '' : `:${port}`}`
 }
 
 function forbiddenResponse(message: string): Response {
@@ -712,15 +760,60 @@ function forbiddenResponse(message: string): Response {
 }
 
 export const StudioServerTesting = {
-  handleRequest,
+  handleRequest: handleRequestForTesting,
   handleTestRequest,
+  initializeEventSocket,
   managerRequestPath,
   originAuthorization,
   previewOriginPath,
   requestAllowed,
   serverOrigin,
+  studioClientHtml,
   studioSessionRoute,
 } as const
+
+function studioClientHtml(options: StudioServerOptions): string {
+  const source = (options.clientAssets ?? StudioClientAssets).html({ previewUrl: options.previewUrl })
+  const revision = options.clientReloadRevision?.()
+  if (revision === undefined) {
+    return source
+  }
+  const reload = `<script>
+(() => {
+  let revision = ${JSON.stringify(revision)}
+  const poll = async () => {
+    try {
+      const response = await fetch('/studio-dev/revision', { cache: 'no-store' })
+      if (response.ok) {
+        const next = await response.json()
+        if (next.revision !== revision) {
+          window.location.reload()
+          return
+        }
+      }
+    } catch {}
+    window.setTimeout(poll, 250)
+  }
+  window.setTimeout(poll, 250)
+})()
+</script>`
+  return source.replace('</body>', `${reload}\n</body>`)
+}
+
+async function handleRequestForTesting(
+  session: StudioProjectSession,
+  fixtureGeneration: StudioFixtureGeneration,
+  request: Request,
+  url: URL,
+  options: StudioServerOptions,
+): Promise<Response> {
+  const datasource = new StudioServerDatasource(session)
+  try {
+    return await handleRequest(session, datasource, fixtureGeneration, request, url, options)
+  } finally {
+    datasource.close()
+  }
+}
 
 function broadcast(
   clients: Set<StudioSocket>,

@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
+import { FS, Switch } from '@shared'
 import type { ValidationProblemAcceptor } from 'typir'
 import type { NodeValidationChecks } from '../node-validation'
 import { type TaoSpecifics, type TaoTypirServices } from '../TypeSystemHelpers'
@@ -39,6 +39,7 @@ const actionValidationMessages = {
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
   asyncPlacement: '`async` is allowed only inside an action block.',
   foreignActionPath: 'A foreign action implementation path must name a relative TypeScript or TSX module.',
+  foreignActionMissing: (path: string) => `Foreign action implementation '${path}' does not exist.`,
   runsLatestNative: '`runs latest` is allowed only on a foreign action.',
 }
 
@@ -51,8 +52,10 @@ export const ActionsValidator = {
       if (action.runsLatest && !action.foreign) {
         ctx.error(actionValidationMessages.runsLatestNative, action)
       }
-      if (action.foreign && !/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
-        ctx.error(actionValidationMessages.foreignActionPath, action.foreign)
+      if (action.foreign) {
+        if (!/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
+          ctx.error(actionValidationMessages.foreignActionPath, action.foreign)
+        }
       }
     },
     [AST.AsyncActionStatement.$type]: (statement, ctx) => {
@@ -64,7 +67,24 @@ export const ActionsValidator = {
   } satisfies NodeValidationChecks,
   messages: actionValidationMessages,
   registerTypeValidation,
+  validateForeignFiles: validateForeignActionFiles,
 } as const
+
+async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
+  for (const action of AST.streamAllContents(file).filter(AST.isActionDeclaration)) {
+    const foreign = action.foreign
+    if (!foreign || !/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
+      continue
+    }
+    const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
+    if (
+      await FS.isDirectory(documentDirectory)
+      && !await FS.exists(FS.resolvePath(foreign.path, documentDirectory))
+    ) {
+      ctx.error(actionValidationMessages.foreignActionMissing(foreign.path), foreign)
+    }
+  }
+}
 
 function registerTypeValidation(typir: TaoTypirServices): void {
   typir.validation.Collector.addValidationRulesForAstNodes({

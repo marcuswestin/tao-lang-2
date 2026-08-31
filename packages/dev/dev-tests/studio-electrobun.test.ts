@@ -1,6 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { StudioElectrobunSpike } from '../dev-src/studio/StudioElectrobunSpike'
+import { StudioElectrobun } from '../dev-src/studio/StudioElectrobun'
 
 const options = {
   outputRoot: '/tmp/unused-by-source-tests',
@@ -8,21 +8,16 @@ const options = {
   studioUrl: 'http://127.0.0.1:55101',
 } as const
 
-Describe('Studio Electrobun feasibility spike', () => {
-  Test('generates a direct-Hutch Bun app covering every settled spike capability', () => {
-    const generated = StudioElectrobunSpike.sources(options)
+Describe('Studio Electrobun project', () => {
+  Test('generates a direct-Hutch Bun application that builds without Hutch', async () => {
+    const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-build-', FS.tmpdir()))
+    const generated = StudioElectrobun.sources(options)
 
-    Expect(StudioElectrobunSpike.capabilities(generated)).toEqual({
-      differentialUpdates: true,
-      fileDialogs: true,
-      iframeToMetroOrigin: true,
-      multiWindow: true,
-      nativeMenus: true,
-      shortcuts: true,
-      signedMacBuildConfigured: true,
-      websocketToStudioServer: true,
-    })
     Expect(generated.config).toContain("mainProcess: 'bun'")
+    Expect(generated.config).toContain('exitOnLastWindowClosed: true')
+    Expect(generated.config.indexOf('exitOnLastWindowClosed: true')).toBeLessThan(
+      generated.config.indexOf('build: {'),
+    )
     Expect(generated.config).toContain("entrypoint: 'src/bun/index.ts'")
     Expect(generated.main).toContain('import Electrobun, {')
     Expect(generated.main).toContain("} from 'electrobun/main'")
@@ -33,21 +28,37 @@ Describe('Studio Electrobun feasibility spike', () => {
     Expect(generated.hutchConfig).toContain('// @hutch cli=0.24.3 cottontail=0.5.0')
     Expect(generated.hutchConfig).toContain('electrobun: { version: "2.0.2-beta.12" }')
     Expect(generated.hutchConfig).not.toContain('packageManager')
+    Expect(generated.packageJson).toMatchObject({
+      devDependencies: { '@types/bun': '1.4.0', ws: '8.21.0' },
+    })
     Expect(() => new Bun.Transpiler({ loader: 'ts' }).transformSync(generated.main)).not.toThrow()
+    try {
+      const project = await StudioElectrobun.create({ ...options, outputRoot })
+      Expect(project.dev.env).not.toHaveProperty('TAO_STUDIO_PROJECT_URL')
+      const build = await Bun.build({
+        entrypoints: [project.mainPath],
+        external: ['electrobun/main'],
+        target: 'bun',
+      })
+      Expect(build.success).toBe(true)
+    } finally {
+      await FS.remove(outputRoot)
+    }
   })
 
   Test('copies the packaged service beside the generated Bun entrypoint and drains it before quit', () => {
-    const generated = StudioElectrobunSpike.sources({ ...options, packagedService: true })
+    const generated = StudioElectrobun.sources({ ...options, packagedService: true })
 
     Expect(generated.config).toContain("copy: { 'service/payload': 'service' }")
     Expect(generated.main).toContain("import.meta.dir + '/../service/packages/runtime-toolchain'")
+    Expect(generated.main).toContain("studioClientBundlePath: import.meta.dir + '/../service/studio.js'")
     Expect(generated.main).toContain('event.response = { allow: false }')
     Expect(generated.main).toContain('quitting ??= packagedService.stop()')
     Expect(generated.main).toContain('quitAfterCleanup = true')
   })
 
   Test('routes native project opens and window closes through opaque Studio sessions', () => {
-    const main = StudioElectrobunSpike.sources(options).main
+    const main = StudioElectrobun.sources(options).main
 
     Expect(main).toContain("fetch(new URL('/api/sessions/open', studioUrl)")
     Expect(main).toContain('projectSessionUrl(process.env.TAO_STUDIO_PROJECT_URL)')
@@ -60,12 +71,43 @@ Describe('Studio Electrobun feasibility spike', () => {
     Expect(main).toContain("navigated?.pathname === '/welcome'")
   })
 
-  Test('materializes an executable spike project and exact Hutch commands', async () => {
+  Test('installs the quit accelerator before creating native windows', () => {
+    const main = StudioElectrobun.sources(options).main
+    const menuIndex = main.indexOf('ApplicationMenu.setApplicationMenu([')
+    const quitIndex = main.indexOf("{ role: 'quit', accelerator: 'q' }")
+    const closeIndex = main.indexOf("{ role: 'close', accelerator: 'w' }")
+    const welcomeWindowIndex = main.indexOf("createStudioWindow('Welcome')")
+
+    Expect(menuIndex).toBeGreaterThan(-1)
+    Expect(quitIndex).toBeGreaterThan(menuIndex)
+    Expect(closeIndex).toBeGreaterThan(menuIndex)
+    Expect(welcomeWindowIndex).toBeGreaterThan(quitIndex)
+  })
+
+  Test('opens one initial native window', () => {
+    const main = StudioElectrobun.sources(options).main
+
+    Expect(main).toContain(
+      "const projectWindow = initialProjectUrl === undefined ? undefined : createStudioWindow('Project')",
+    )
+    Expect(main).toContain(
+      "const welcomeWindow = projectWindow === undefined ? createStudioWindow('Welcome') : undefined",
+    )
+    Expect(main).not.toContain("const welcomeWindow = createStudioWindow('Welcome')")
+  })
+
+  Test('materializes a clean executable project and exact Hutch commands', async () => {
     const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-', FS.tmpdir()))
     try {
-      const project = await StudioElectrobunSpike.create({
+      const unrelatedPath = FS.resolvePath('keep.txt', outputRoot)
+      const stalePayloadPath = FS.resolvePath('service/payload/stale.txt', outputRoot)
+      await FS.mkdir(FS.dirname(stalePayloadPath))
+      await FS.writeText(unrelatedPath, 'keep')
+      await FS.writeText(stalePayloadPath, 'stale')
+      const project = await StudioElectrobun.create({
         ...options,
         outputRoot,
+        projectUrl: options.studioUrl + '/sessions/initial',
         runProbe: true,
         showWindow: false,
       })
@@ -75,6 +117,8 @@ Describe('Studio Electrobun feasibility spike', () => {
       Expect(await FS.isFile(FS.resolvePath('hutch.config.ts', project.root))).toBe(true)
       Expect(await FS.isFile(FS.resolvePath('package.json', project.root))).toBe(true)
       Expect(await FS.isFile(FS.resolvePath('tsconfig.json', project.root))).toBe(true)
+      Expect(await FS.isFile(unrelatedPath)).toBe(true)
+      Expect(await FS.exists(stalePayloadPath)).toBe(false)
       Expect(project.install).toEqual({ args: ['install'], command: 'hutch', cwd: project.root })
       Expect(project.prepare).toEqual({ args: ['electrobun', 'prepare'], command: 'hutch', cwd: project.root })
       Expect(project.sync).toEqual({ args: ['electrobun', 'sync'], command: 'hutch', cwd: project.root })
@@ -83,10 +127,11 @@ Describe('Studio Electrobun feasibility spike', () => {
         command: 'hutch',
         cwd: project.root,
         env: {
+          TAO_STUDIO_ELECTROBUN_RESULT_PATH: project.runtimeResultPath,
           TAO_STUDIO_ELECTROBUN_RUN_PROBE: 'true',
           TAO_STUDIO_ELECTROBUN_SHOW_WINDOWS: 'false',
           TAO_STUDIO_PREVIEW_URL: 'http://localhost:8081/',
-          TAO_STUDIO_PROJECT_URL: 'http://127.0.0.1:55101/',
+          TAO_STUDIO_PROJECT_URL: 'http://127.0.0.1:55101/sessions/initial',
           TAO_STUDIO_URL: 'http://127.0.0.1:55101/',
         },
       })
@@ -99,13 +144,13 @@ Describe('Studio Electrobun feasibility spike', () => {
 
   Test('refuses non-loopback shell and preview URLs', () => {
     Expect(() =>
-      StudioElectrobunSpike.sources({
+      StudioElectrobun.sources({
         ...options,
         studioUrl: 'https://studio.example.com',
       })
     ).toThrow('Studio server must be a loopback HTTP URL.')
     Expect(() =>
-      StudioElectrobunSpike.sources({
+      StudioElectrobun.sources({
         ...options,
         previewUrl: 'http://192.168.1.20:8081',
       })

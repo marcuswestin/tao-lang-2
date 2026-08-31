@@ -1,6 +1,6 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
-import { LayoutControls, type TaoLayoutEntry } from './TR-layout'
+import { LayoutControls, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 import RuntimeSwitch from './TR-switch'
@@ -10,6 +10,8 @@ type TaoButtonProps = TaoViewProps & {
   action?: {
     invoke(): unknown
   }
+  /** defaultStyle is component chrome applied below mounted design and render-site overrides. */
+  defaultStyle?: TaoResolvedLayoutStyle
   disabled?: boolean
   title: string
 }
@@ -52,6 +54,7 @@ type TaoTextInputProps = TaoViewProps & {
 type TaoPrimitiveKind = 'Image' | 'Pressable' | 'Spinner' | 'Text' | 'View'
 
 type TaoPrimitiveElementProps = {
+  readonly defaultStyle?: TaoResolvedLayoutStyle
   readonly kind: TaoPrimitiveKind
   readonly nativePropOverrides?: Record<string, unknown>
   readonly pressableTitle?: string
@@ -95,6 +98,7 @@ export const Views = {
 
   Pressable(props: TaoButtonProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     return React.createElement(TaoPrimitiveElement, {
+      defaultStyle: props.defaultStyle,
       kind: 'Pressable',
       nativePropOverrides: {
         onPress: () => props.disabled === true ? undefined : props.action?.invoke(),
@@ -185,7 +189,12 @@ function TaoCheckbox({ props, runtimeProps }: {
     pointerEvents: 'none',
     value: props.value,
   })
-  const label = createReactElement(runtime, runtime.Text, { accessible: false }, props.label)
+  const label = createReactElement(
+    runtime,
+    runtime.Text,
+    { accessible: false, style: textStyle(merged.props?.style) },
+    props.label,
+  )
   const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
   return createReactElement(
     runtime,
@@ -341,12 +350,13 @@ function TaoProgress({ props, runtimeProps }: {
   const runtime = requireReactNativeRuntime()
   const parentDirection = ParentDirectionContext.use()
   const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
-  const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
+  const themedStyle = merged.props?.style
+  const wrapperProps = TaoPropsControls.nativePropsWithStyle(withoutVisualStyle(merged))
   const value = normalizedProgress(props.value)
   const fill = createReactElement(runtime, runtime.View, {
     accessible: false,
     style: {
-      backgroundColor: '#2f6b4f',
+      backgroundColor: themedStyle?.['color'] ?? '#2f6b4f',
       height: '100%',
       width: `${value * 100}%`,
     },
@@ -362,6 +372,7 @@ function TaoProgress({ props, runtimeProps }: {
       style: [
         wrapperProps['style'],
         { backgroundColor: '#d9dfda', borderRadius: 999, height: 8, overflow: 'hidden' },
+        themedStyle,
       ],
     },
     fill,
@@ -379,6 +390,7 @@ function TaoTextInput({ props, runtimeProps }: {
   const runtime = requireReactNativeRuntime()
   const parentDirection = ParentDirectionContext.use()
   const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
+  const themedStyle = merged.props?.style
   const input = createReactElement(runtime, runtime.TextInput, {
     accessibilityLabel: props.label,
     accessibilityState: { disabled: props.disabled === true },
@@ -386,27 +398,19 @@ function TaoTextInput({ props, runtimeProps }: {
     onChangeText: props.disabled ? undefined : props.onChange,
     onSubmitEditing: props.disabled ? undefined : props.onSubmit,
     placeholder: props.placeholder,
-    style: {
-      borderColor: '#a8b0aa',
-      borderRadius: 8,
-      borderWidth: 1,
-      color: '#17201a',
-      fontSize: 16,
-      minHeight: 44,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
+    placeholderTextColor: translucentColor(themedStyle?.['color'], 0.55),
+    style: [textInputStyle, themedStyle],
     testID: props.id || undefined,
     value: props.value,
   })
   const label = createReactElement(
     runtime,
     runtime.Text,
-    { style: { color: '#314238', fontSize: 14, fontWeight: '600' } },
+    { style: [textInputLabelStyle, textStyle(themedStyle)] },
     props.label,
   )
   const children = React.createElement(React.Fragment, null, label, input)
-  const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
+  const wrapperProps = TaoPropsControls.nativePropsWithStyle(withoutVisualStyle(merged))
   return createReactElement(
     runtime,
     runtime.View,
@@ -426,7 +430,10 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
     ...TaoPropsControls.nativePropsWithStyle(merged),
     ...props.nativePropOverrides,
   }
-  const elementChildren = nativeChildren(runtime, props, merged.children)
+  if (props.defaultStyle !== undefined) {
+    elementProps['style'] = [props.defaultStyle, elementProps['style']]
+  }
+  const elementChildren = nativeChildren(runtime, props, merged.children, merged.props?.style)
   const providedChildren = props.providesParentDirection
     ? ParentDirectionContext.childrenForLayoutParent(elementChildren, elementProps['style'])
     : elementChildren
@@ -452,11 +459,66 @@ function nativeChildren(
   runtime: ReactNativeRuntime,
   props: TaoPrimitiveElementProps,
   children: React.ReactNode,
+  style: TaoResolvedLayoutStyle | undefined,
 ): React.ReactNode {
   return props.pressableTitle === undefined
     ? children
-    : createReactElement(runtime, runtime.Text, {}, props.pressableTitle)
+    : createReactElement(
+      runtime,
+      runtime.Text,
+      { style: [textStyle(props.defaultStyle), textStyle(style)] },
+      props.pressableTitle,
+    )
 }
+
+function withoutVisualStyle(merged: MergedTaoViewProps): MergedTaoViewProps {
+  return merged.props?.style
+    ? { ...merged, props: { ...merged.props, style: undefined } }
+    : merged
+}
+
+function textStyle(style: TaoResolvedLayoutStyle | undefined): TaoResolvedLayoutStyle | undefined {
+  if (!style) {
+    return undefined
+  }
+  const text: TaoResolvedLayoutStyle = {}
+  const mutableText = text as Record<string, unknown>
+  for (const property of ['color', 'fontSize', 'fontWeight', 'lineHeight'] as const) {
+    const value = style[property]
+    if (value !== undefined) {
+      mutableText[property] = value
+    }
+  }
+  return Object.keys(text).length > 0 ? text : undefined
+}
+
+function translucentColor(
+  color: TaoResolvedLayoutStyle['color'] | undefined,
+  opacity: number,
+): string | undefined {
+  if (typeof color !== 'string') {
+    return undefined
+  }
+  const match = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(color)
+  if (!match) {
+    return color
+  }
+  const alpha = Math.round(Math.max(0, Math.min(1, opacity)) * 255).toString(16).padStart(2, '0')
+  return `#${match[1]}${alpha}`
+}
+
+const textInputStyle = {
+  borderColor: '#a8b0aa',
+  borderRadius: 8,
+  borderWidth: 1,
+  color: '#17201a',
+  fontSize: 16,
+  minHeight: 44,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+} as const
+
+const textInputLabelStyle = { color: '#314238', fontSize: 14, fontWeight: '600' } as const
 
 function createReactElement(
   runtime: ReactNativeRuntime,

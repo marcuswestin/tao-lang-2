@@ -286,6 +286,15 @@ app WordFlowerDrawer = WordFlower with {
       Display "drawer"
 }  }
 
+// The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
+// every target, so the preview does not depend on the host operating system's current appearance.
+app WordFlowerDark = WordFlower with {
+   Name "WordFlower - Dark"
+   Design WordFlowerDarkDesign
+   Navigator with {
+      Display "tabs"
+}  }
+
 app WordFlowerInstantDB = WordFlower with {
    Name "WordFlower - InstantDB"
    Datasource WordFlowerInstantDBStore
@@ -315,16 +324,6 @@ fixture StudioWorkspace {
       Name: "Novel"
 }  }
 
-scenarios WorkspaceRow "states" {
-   fixture StudioWorkspace
-   device phone
-   appearance light
-   network online
-   locale "en"
-   scenario "novel" {
-      render (Workspace: Novel)
-}  }
-
 scenarios WordFlower "devices" {
    fixture StudioWorkspace
    scenario "phone" {
@@ -340,6 +339,25 @@ scenarios WordFlower "devices" {
       locale pseudolocale
       direction rightToLeft
 }  }
+
+scenarios WorkspaceRow "states" {
+   fixture StudioWorkspace
+   device phone
+   appearance light
+   network online
+   locale "en"
+   scenario "novel" {
+      render (Workspace: Novel)
+}  }
+
+scenarios WordFlowerDark "dark theme" {
+   fixture StudioWorkspace
+   device tablet 1024 x 1366
+   appearance dark
+   network offline
+   locale "en"
+   scenario "library" { }
+}
 
 // A configured datasource is a named value like any other. The bare constructor block is the
 // canonical surface spelling for the same refinement operation that explicit `with` exposes;

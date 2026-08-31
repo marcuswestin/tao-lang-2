@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileDeclarationIdentity } from './declaration-identity'
 
 type FunctionParameter = {
   index: number
@@ -13,7 +14,7 @@ type FunctionParameter = {
 export const FunctionalCoreCompiler = {
   /** CaseSetDeclaration creates declaration-owned runtime case identities. */
   CaseSetDeclaration(declaration: AST.TypeDeclaration): Compiled {
-    return gen`${gen.scopeName(declaration)} = TR.Enum([${
+    return gen`${gen.scopeName(declaration)} = TR.Enum(${compileDeclarationIdentity(declaration)}, [${
       gen.join(AST.caseSetCasesOf(declaration), caseSetCase => gen`${gen.jsLiteral(AST.caseSetCaseName(caseSetCase))}`)
     }])`
   },

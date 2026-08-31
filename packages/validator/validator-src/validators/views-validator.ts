@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { FS } from '@shared'
 import { viewValidationCodes } from '../diagnostic-codes'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -22,6 +23,7 @@ const viewValidationMessages = {
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
   foreignViewPath: 'A foreign view implementation path must name a relative TypeScript or TSX module.',
+  foreignViewMissing: (path: string) => `Foreign view implementation '${path}' does not exist.`,
   foreignViewAccepts: '`accepts` must declare content, one or more named slots, or both.',
   callerContentCount: (name: string) => `View '${name}' may place caller content at most once with @@content.`,
   callerContentPlacement: '@@content is only available inside the render tree of a view.',
@@ -52,6 +54,7 @@ export const ViewsValidator = {
     [AST.TagStatement.$type]: validateTag,
   } satisfies NodeValidationChecks,
   messages: viewValidationMessages,
+  validateForeignFiles: validateForeignViewFiles,
 }
 
 function validateLoopSelectHandler(handler: AST.LoopSelectHandler, ctx: ValidationContext): void {
@@ -119,6 +122,22 @@ function validateForeignView(view: AST.ViewDeclaration, ctx: ValidationContext):
   }
   if (foreign.content !== undefined && foreign.content !== 'content') {
     ctx.error(viewValidationMessages.foreignViewAccepts, foreign)
+  }
+}
+
+async function validateForeignViewFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
+  for (const view of AST.streamAllContents(file).filter(AST.isViewDeclaration)) {
+    const foreign = view.foreign
+    if (!foreign || !/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
+      continue
+    }
+    const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
+    if (
+      await FS.isDirectory(documentDirectory)
+      && !await FS.exists(FS.resolvePath(foreign.path, documentDirectory))
+    ) {
+      ctx.error(viewValidationMessages.foreignViewMissing(foreign.path), foreign)
+    }
   }
 }
 

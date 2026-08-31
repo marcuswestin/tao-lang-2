@@ -164,12 +164,13 @@ snapshots and rejects two different snapshots for the same storage key.
 The domain codecs, deterministic composition, diagnostics, exact provider seed, and exact provider
 capture are implemented library contracts. Resolved data state is passed into the generated cell host
 and seeds its provider overlay. A matrix cell can convert its current provider rows into a dependency-
-ordered named fixture proposal, present a client rendition for confirmation, and save the accepted plan
-through the versioned, undoable source-action bus. The server independently emits the canonical Tao
-source; returning that exact pending source or diff before acceptance remains open. Relations become
-fixture-handle references; missing or cyclic relations, non-scalar fields, and conflicting snapshots are
-rejected. Loading an accepted captured fixture through the Tao test harness is still open, and the current
-generated manifest consequently publishes no separate named state entries.
+ordered named fixture proposal and save the accepted plan through the versioned, undoable source-action
+bus. Before confirmation, the client submits the exact source-action envelope to the server's proposal
+endpoint; the server validates the current project/source/cell identity, applies the canonical patch without
+writing or reserving a checkpoint, and returns the pending content, edits, version, and compact diff shown to
+the user. Relations become fixture-handle references; missing or cyclic relations, non-scalar fields, and
+conflicting snapshots are rejected. Loading an accepted captured fixture through the Tao test harness is
+still open, and the current generated manifest consequently publishes no separate named state entries.
 
 Unexpected runtime failures use a second, versioned capture artifact. Its explicitly registered runtime
 domains are `action-history`, `data`, `navigation`, and `persisted-state`; Studio adds the active cell's
@@ -238,11 +239,12 @@ Occurrence-level `render inject` remains a separate supported mechanism.
 
 The runtime-toolchain copies the sidecar's transitive relative TypeScript, TSX, JavaScript, JSX, and JSON
 module graph while leaving installed packages external. `@tao/code-editor` is the implemented reusable
-foreign component for CodeMirror 6: it accepts Tao-owned content and a `Change` action and can attach the
-existing JSON-over-WebSocket LSP transport. Studio's current browser editor still mounts CodeMirror
-directly; using the Tao-authored foreign view inside Studio remains product integration work. The exact
-named-slot declaration spelling and `Slots` record shape remain proposed wording rather than an adopted
-Tao Revolution decision.
+foreign component for CodeMirror 6: it accepts Tao-owned content and selection, publishes change/selection
+actions, and can attach the existing JSON-over-WebSocket LSP transport. Studio mounts this foreign view in
+the production editor slot. The legacy workbench editor remains as the hidden controller for file lifecycle,
+draft synchronization, tabs, diagnostics, and source actions while a typed ProductHost protocol mirrors its
+versioned ephemeral buffer and selection into Tao. The exact named-slot declaration spelling and `Slots`
+record shape remain proposed wording rather than an adopted Tao Revolution decision.
 
 ## Product workbench and design
 
@@ -280,26 +282,26 @@ relocated Node plus native-library closure rather than relying on the developer 
 
 ## Executable Tao client strangler
 
-`packages/studio/studio-src/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. It
-selects a local `StudioDesign`, mounts a persisted resizable Files pane, and renders the real StudioServer
-file hierarchy through recursive Tao `FileTree` and Studio-local `Disclosure` views. Create, rename, and
-confirmed delete call the real foreign actions; `SyncDraft` is declared `runs latest`, so an in-flight
-write retains only the newest waiting draft. File contents remain outside the entity model.
+`packages/studio/studio-src/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
+named ProductHost slots render the real StudioServer file hierarchy through recursive Tao `FileTree` and
+Studio-local `Disclosure` views, mount the `@tao/code-editor` foreign view, and compose the inspector's
+live file/scenario/viewport/render context. Create, rename, and confirmed delete call the real foreign
+actions. The ProductHost editor routes changes through the same workbench draft controller and LSP
+transport, preserving versioned writes without putting file contents into the entity model.
 
 The server event stream now publishes explicit entity-family invalidations. The Tao provider consumes
 them through the existing full-snapshot subscription seam and replaces a complete validated mirror, so
 renames and deletions cannot leave rows stranded by fill-only upserts. `ServerOrigin` can name an explicit
 HTTP session base for a native host; an empty value preserves same-origin browser/session routing.
 
-This remains a strangler slice rather than a second product shell. The production browser Files tree is
-still TypeScript-owned, and the Tao client does not host the scenario canvas, inspector, scenario
-controls, drawer, or native window chrome. It imports `CodeEditor` from the public `@tao/code-editor` Tao
-package and compiles a real `EditorBoundary` whose Change action calls `SyncDraft`, but does not mount it:
-the current Tao/server contract has no active-file selection plus ephemeral content-loading bridge.
-Folder expansion remains view-local because persisted view-instance keying is explicitly deferred;
-only the mounted Files pane width is `(persist)` state in this slice. The action sidecars still use
-same-origin session routing, so a separately hosted native Tao surface needs the corresponding write-origin
-injection before the editor boundary can be mounted there.
+This remains a strangler slice rather than a second product shell. Tao owns the production Files tree,
+editor foreign-view slot, and a typed inspector context view; TypeScript still owns the toolbar, rail,
+scenario canvas and controls, detailed inspector controls, drawer, editor/file controller, and native window
+chrome. The ProductHost protocol publishes revisioned active-file content and selection, selected-render
+identity, and active-cell environment as transient typed view parameters. They are browser-local UI state,
+not StudioServer entities or durable project authority. Folder expansion remains view-local because
+persisted view-instance keying is explicitly deferred. The action sidecars still use same-origin session
+routing, so a separately hosted cross-origin Tao surface would need corresponding write-origin injection.
 
 ## Current boundary
 
@@ -342,10 +344,12 @@ and HTTPS-release contracts are tested. `hutch install` owns `hutch.lock`; ordin
 then use `hutch electrobun prepare`, which preserves an existing valid projection. `hutch electrobun sync`
 is an explicit upgrade operation and is not part of ordinary launch or release builds.
 
-Hutch is not installed in the current environment, so the generated devkit has not been projected or
-typechecked and the shell has not run as a real Electrobun application. Native windows, menus, the real
-directory picker, WebSocket/iframe bridge, shortcut, signed/notarized `.app`, DMG, differential update,
-packaged resource layout, and HTTPS release-host round trip are therefore not validated product behavior.
+Hutch is installed at its installer-owned user path, and native startup resolves either `PATH` or that
+location before creating artifacts. The real command projects and builds the generated Electrobun app, uses
+an ephemeral Metro port, and tears down Studio and Metro when the native child exits. AppKit application
+registration aborts when launched under the Codex host coalition, so visible windows, menus, the real
+directory picker, WebSocket/iframe bridge, shortcut, signed/notarized `.app`, DMG, differential update, and
+HTTPS release-host round trip still require an ordinary Terminal and release credentials.
 
 Per-cell argument controls can save their current values back into the authored focused scenario entry
 as one reviewable and undoable source action. Each matrix cell also exposes `Capture fixture`: Studio
@@ -353,18 +357,18 @@ asks for a Tao fixture name, captures only the isolated provider state, shows th
 source, and writes only after confirmation. The following remain open before the scenario matrix is a
 complete user feature:
 
-- support fixture setup through actions;
+- define the fixture-through-action result/handle contract, then execute those plans;
 - load accepted captured state through the test harness;
-- prove concurrent examples preserve independent compatible state during edits;
-- complete the multi-group browser smoke and real Electrobun interaction passes;
-- return the exact server-produced fixture source or diff before capture acceptance;
-- migrate Studio's direct CodeMirror editor onto the Tao-authored `@tao/code-editor` foreign-view
-  boundary;
-- continue replacing TypeScript panels with Tao views, including push invalidation and native-safe server
-  origin injection for the executable client;
-- mount or reject scenarios declared in imported files instead of publishing blank cells, and execute
-  or reject authored `run App at Destination(...)` subjects rather than silently using the default
-  route.
+- complete the remaining wide-screen inspector smoke and real Electrobun interaction passes; live file
+  CRUD, independent retained cell state across two recompiles, drawer data/log/compile surfaces, and the
+  WordFlower Tao test run have browser evidence;
+- continue replacing detailed inspector/scenario controls with Tao views while keeping server-canonical
+  source-action proposals and same-origin browser/native routes; a future cross-origin host will require
+  explicit origin injection.
+
+Scenarios declared in imported files and authored `run App at Destination(...)` subjects are rejected during
+Studio compilation with actionable messages. This satisfies the current mount-or-reject and execute-or-reject
+boundary without publishing blank cells or silently substituting the selected app's default route.
 
 A phone or other native device is not currently a Studio renderer. The feasible follow-up design and
 required real-iPhone proof are recorded in
