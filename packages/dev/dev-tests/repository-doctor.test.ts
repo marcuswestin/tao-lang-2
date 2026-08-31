@@ -70,7 +70,7 @@ Describe('repository doctor', () => {
     }))
 
     Expect(check(report, 'watchman')?.status).toBe('warn')
-    Expect(check(report, 'watchman')?.detail).toContain('fall back to polling')
+    Expect(check(report, 'watchman')?.detail).toContain('EMFILE')
     Expect(check(report, 'direnv')?.status).toBe('warn')
     Expect(report.status).toBe('warn')
   })

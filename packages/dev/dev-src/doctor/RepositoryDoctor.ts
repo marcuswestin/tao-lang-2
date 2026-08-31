@@ -287,16 +287,19 @@ function dependencyCompatibilityCheck(facts: DoctorFacts): DoctorCheck {
 function watchmanCheck(facts: DoctorFacts): DoctorCheck {
   if (facts.watchmanVersion === undefined) {
     return {
-      // Metro falls back to its own crawler, so a missing Watchman is slow, not broken.
-      detail: 'watchman is not installed; Metro will fall back to polling the filesystem',
+      // Metro then watches through the OS directly, which this repository exceeds: the
+      // preview process dies with EMFILE partway through its first bundle.
+      detail: 'watchman is not answering; Metro will watch through the OS and can fail with EMFILE',
       name: 'watchman',
-      remediation: 'Optional. It ships in the pinned devenv profile: direnv exec . watchman version',
+      remediation: 'It ships in the pinned devenv profile: direnv exec . watchman version',
       status: 'warn',
     }
   }
   if (facts.watchmanHealthy === false) {
     return {
-      detail: `watchman ${facts.watchmanVersion} is installed but not answering`,
+      // Same consequence as a missing Watchman: Metro falls back and this repository trips EMFILE.
+      detail: `watchman ${facts.watchmanVersion} is installed but not answering; `
+        + 'Metro will watch through the OS and can fail with EMFILE',
       name: 'watchman',
       remediation: 'Restart it with: watchman shutdown-server',
       status: 'warn',
