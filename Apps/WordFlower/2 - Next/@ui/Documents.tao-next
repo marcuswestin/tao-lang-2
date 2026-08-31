@@ -1,6 +1,6 @@
 use Documents, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
+use Checkbox, Col, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.
@@ -17,16 +17,16 @@ view DocumentScreen(Document) {
       guard Document {
          loading -> { Spinner() }
          missing -> {
-            Text("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
+            TextMultiline("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
          }
-         error -> Message { Text("The document could not be loaded: { Message }") [body] }
+         error -> Message { TextMultiline("The document could not be loaded: { Message }") [body] }
       }
       DocumentEditor(Document)
 }  }
 
 // Typed TS injection also stays the permanent escape hatch for rendering Tao does not own.
 view WordCountLabel(Value text) {
-   render Text("Words: { CountWords(Value) }") [body]
+   render TextMultiline("Words: { CountWords(Value) }") [body]
 }
 
 view DocumentEditor(Document) {
@@ -92,7 +92,7 @@ view DocumentEditor(Document) {
          Col() [width max 720, panel] {
             Text("DOCUMENT") [eyebrow]
             Text(DocumentLabel(Document.Title)) [display]
-            Text("Workspace: { Document.Workspace.Name }") [body]
+            TextMultiline("Workspace: { Document.Workspace.Name }") [body]
 
             #editDocumentTitle
             TextInput(Value: TitleDraft, Label: "Document title", Placeholder: "Document title") {
@@ -118,9 +118,9 @@ view DocumentEditor(Document) {
             FormButton("Save document", Disabled: TitleDraft is empty) {
                on press SaveDocument
             }
-            Text("Saved title: { Document.Title }") [body]
-            Text("Saved body: { Document.Body }") [body]
-            Text("Saves this session: { SaveCount }") [body]
+            TextMultiline("Saved title: { Document.Title }") [body]
+            TextMultiline("Saved body: { Document.Body }") [body]
+            TextMultiline("Saves this session: { SaveCount }") [body]
 
             #closeDocument
             FormButton("Close document") [buttonSecondary] {
@@ -131,12 +131,12 @@ view DocumentEditor(Document) {
          Text("Paragraphs: { Paragraphs.Count }") [sectionTitle]
          guard Paragraphs {
             loading -> { Spinner() }
-            error -> Message { Text("Could not load paragraphs: { Message }") [body] }
+            error -> Message { TextMultiline("Could not load paragraphs: { Message }") [body] }
          }
 
          // `Progress` takes a fraction between 0 and 1.
          Progress(Value: GoalFraction(Paragraphs.Count))
-         Text("Goal: { ParagraphGoal } paragraphs") [body]
+         TextMultiline("Goal: { ParagraphGoal } paragraphs") [body]
 
          #newParagraph
          TextInput(Value: ParagraphText, Label: "New paragraph", Placeholder: "Add a paragraph") {
@@ -146,12 +146,12 @@ view DocumentEditor(Document) {
          #paragraphs
          loop Paragraphs / Paragraph {
             Col() [card] {
-               Text(Paragraph.Text) [body]
+               TextMultiline(Paragraph.Text) [body]
 }  }  }  }  }
 
 view SavedToast(Revert action()) {
    render Row() [gap 10] {
-      Text("Saved") [body]
+      TextMultiline("Saved") [body]
 
       #revertSave
       FormButton("Revert") [buttonSecondary] {
@@ -164,7 +164,7 @@ view SavedToast(Revert action()) {
 view ConfirmCloseDialogue(Document) responds ConfirmResult {
    render Col() [panel, width max 420] {
       Text("Close { Document.Title }?") [sectionTitle]
-      Text("Your latest unsaved changes will stay in this session until you return.") [body]
+      TextMultiline("Your latest unsaved changes will stay in this session until you return.") [body]
 
       #confirmClose
       FormButton("Close") [buttonDanger] {

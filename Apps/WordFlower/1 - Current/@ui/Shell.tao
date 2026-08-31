@@ -1,5 +1,5 @@
 use SignedOutNav from @nav
-use Col, Row, Text from @tao/ui
+use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // The screens the app shell mounts directly.
@@ -11,12 +11,12 @@ view Settings() {
          Col() [hero] {
             Text("WORDFLOWER") [eyebrow]
             Text("Settings") [display]
-            Text("A few quiet controls for the way you write.") [body]
+            TextMultiline("A few quiet controls for the way you write.") [body]
          }
          Card(Title: "Writing session") {
             WordBadge(SessionGoal)
             Collapsible() {
-               Text("Build { BuildStamp }") [body] // a typed injected value, not a render
+               TextMultiline("Build { BuildStamp }") [body] // a typed injected value, not a render
             }
             @actions FormButton("Reset to signed out") [buttonDanger] {
                #resetSignedOut

@@ -1,7 +1,7 @@
 use Documents, Workspaces from @data
 use WorkspaceNav from @nav
 use Join from @tao/text
-use Col, Image, Panes, ScrollView, Spinner, Text, TextInput from @tao/ui
+use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 use DocumentScreen from ./
 
@@ -43,19 +43,19 @@ view WorkspaceList() {
          Col() [hero] {
             Text("YOUR WRITING HOME") [eyebrow]
             Text("WordFlower") [display]
-            Text(WordFlowerTagline) [body]
+            TextMultiline(WordFlowerTagline) [body]
          }
          guard Workspaces {
             loading -> { Spinner() }
             error -> Message {
                Text("Could not load WordFlower") [title]
-               Text(Message) [body]
+               TextMultiline(Message) [body]
          }  }
          Panes() [gap 20] {
             Col() [panel] {
                Text("CREATE A SPACE") [eyebrow]
                Text("Begin somewhere quiet") [sectionTitle]
-               Text("Give this collection a name. You can change it whenever the writing takes a new shape.") [body]
+               TextMultiline("Give this collection a name. You can change it whenever the writing takes a new shape.") [body]
 
                #workspaceName
                TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Home") {
@@ -83,7 +83,7 @@ view WorkspaceList() {
             Col() [panel] {
                Text("YOUR LIBRARY") [eyebrow]
                Text("Recent workspaces") [sectionTitle]
-               Text("Open a writing space or clear one you no longer need.") [body]
+               TextMultiline("Open a writing space or clear one you no longer need.") [body]
                guard Workspaces empty -> { NoWorkspacesYet() }
 
                #workspaces
@@ -95,7 +95,7 @@ view WorkspaceList() {
 view WorkspaceNameNotice() {
    render Col() [panel, width max 420] {
       Text("A workspace needs a name") [sectionTitle]
-      Text("Add a short name before creating this writing space.") [body]
+      TextMultiline("Add a short name before creating this writing space.") [body]
 
       #dismissNotice
       FormButton("Dismiss") {
@@ -136,16 +136,16 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
          Col() [hero] {
             Text("WORKSPACE") [eyebrow]
             Text(Workspace.Name) [display]
-            Text("Workspace: { Workspace.Name }") [caption]
-            Text("Shape the space, then keep the words moving.") [body]
+            TextMultiline("Workspace: { Workspace.Name }") [caption]
+            TextMultiline("Shape the space, then keep the words moving.") [body]
          }
          guard Drafts { // a guard takes exactly one subject; guard each query separately
             loading -> { Spinner() }
-            error -> Message { Text("Could not load documents: { Message }") [body] }
+            error -> Message { TextMultiline("Could not load documents: { Message }") [body] }
          }
          guard FinishedDocuments {
             loading -> { Spinner() }
-            error -> Message { Text("Could not load documents: { Message }") [body] }
+            error -> Message { TextMultiline("Could not load documents: { Message }") [body] }
          }
          Panes() [gap 20] {
             Col() [panel] {
@@ -171,7 +171,7 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
                }
                when DocumentTitle {
                   empty -> { Text("Document title is required") [validation] }
-                  otherwise -> { Text("Ready to write { DocumentTitle }") [caption] }
+                  otherwise -> { TextMultiline("Ready to write { DocumentTitle }") [caption] }
                }
 
                #addDocument
@@ -184,7 +184,7 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
             Col() [panel] {
                Text("DRAFTS") [eyebrow]
                Text("Drafts: { Drafts.Count }") [sectionTitle]
-               guard Drafts empty -> { Text("No drafts") [body] }
+               guard Drafts empty -> { TextMultiline("No drafts") [body] }
                // A tagged list can be selected by 1-based row index: #drafts[INDEX] { press #edit }
                #drafts
                loop Drafts / Document {
@@ -193,7 +193,7 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
             Col() [panel] {
                Text("ARCHIVE") [eyebrow]
                Text("Finished") [sectionTitle]
-               guard FinishedDocuments empty -> { Text("No finished documents") [body] }
+               guard FinishedDocuments empty -> { TextMultiline("No finished documents") [body] }
 
                #finishedDocuments
                loop FinishedDocuments / Document {
@@ -207,9 +207,9 @@ view WorkspaceChooser() {
       Col() [hero] {
          Text("YOUR LIBRARY") [eyebrow]
          Text("Choose a workspace") [display]
-         Text("Pick up where you left off.") [body]
+         TextMultiline("Pick up where you left off.") [body]
       }
-      guard Workspaces empty -> { Text("No workspaces yet") [body] }
+      guard Workspaces empty -> { TextMultiline("No workspaces yet") [body] }
       // A loop with `on select` makes each row selectable. Its singular name scopes both the template and
       // `on select`, so a selectable collection needs no stdlib List or per-row button.
       #chooseWorkspace
@@ -225,7 +225,7 @@ view WorkspaceDocuments(Workspace) {
          Text("{ Workspace.Name }") [eyebrow]
          Text("Documents in { Workspace.Name }") [display]
       }
-      guard Documents empty -> { Text("No documents yet") [body] }
+      guard Documents empty -> { TextMultiline("No documents yet") [body] }
 
       #workspaceDocuments
       loop Documents / Document {
@@ -246,7 +246,7 @@ let StarterPrompt = WritingPrompt {
 }
 
 view TagSummary(Tags PromptTags) {
-   render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
+   render TextMultiline("Tagged: { Join(Tags, Separator: ", ") }") [body]
 }
 
 // Shown while the library is empty: what WordFlower is for, and something to start from.
@@ -256,9 +256,9 @@ view NoWorkspacesYet() {
       // paths.
       Image("./images/empty-workspaces.png", Decorative: true) [width 160, centered]
       Text("No workspaces yet") [sectionTitle]
-      Text("Create one to start capturing documents.") [body]
-      Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
-      Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
+      TextMultiline("Create one to start capturing documents.") [body]
+      TextMultiline("Starter prompt: { StarterPrompt.PromptTitle }") [body]
+      TextMultiline("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
       TagSummary(StarterPrompt.PromptTags)
 }  }
 
@@ -268,7 +268,7 @@ workspace
 view WorkspaceRow(Workspace) {
    render Col() [card] {
       Text(Workspace.Name) [sectionTitle]
-      Text("A quiet place to collect drafts and finished work.") [caption]
+      TextMultiline("A quiet place to collect drafts and finished work.") [caption]
 
       #deleteWorkspace
       FormButton("Delete workspace") [buttonDanger] {
